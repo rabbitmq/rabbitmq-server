@@ -42,6 +42,7 @@
                  [exchange_scratches, ha_mirrors]}).
 -rabbit_upgrade({sync_slave_pids,       mnesia, [policy]}).
 -rabbit_upgrade({no_mirror_nodes,       mnesia, [sync_slave_pids]}).
+-rabbit_upgrade({gm_pids,               mnesia, [no_mirror_nodes]}).
 
 %% -------------------------------------------------------------------
 
@@ -66,6 +67,7 @@
 -spec(policy/0                :: () -> 'ok').
 -spec(sync_slave_pids/0       :: () -> 'ok').
 -spec(no_mirror_nodes/0       :: () -> 'ok').
+-spec(gm_pids/0               :: () -> 'ok').
 
 -endif.
 
@@ -267,6 +269,19 @@ no_mirror_nodes() ->
                      pid, slave_pids, sync_slave_pids, policy])
      || T <- Tables],
     ok.
+
+gm_pids() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    AddGMPidsFun =
+        fun ({amqqueue, N, D, AD, O, A, Pid, SPids, SSPids, Pol}) ->
+                {amqqueue, N, D, AD, O, A, Pid, SPids, SSPids, Pol, []}
+        end,
+    [ok = transform(T, AddGMPidsFun,
+                    [name, durable, auto_delete, exclusive_owner, arguments,
+                     pid, slave_pids, sync_slave_pids, policy, gm_pids])
+     || T <- Tables],
+    ok.
+
 
 
 %%--------------------------------------------------------------------

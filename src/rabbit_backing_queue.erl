@@ -84,12 +84,16 @@
 %% Called for messages which have already been passed straight
 %% out to a client. The queue will be empty for these calls
 %% (i.e. saves the round trip through the backing queue).
--callback publish_delivered(true, rabbit_types:basic_message(),
+-callback publish_delivered(rabbit_types:basic_message(),
                             rabbit_types:message_properties(), pid(), state())
-                           -> {ack(), state()};
-                           (false, rabbit_types:basic_message(),
-                            rabbit_types:message_properties(), pid(), state())
-                           -> {undefined, state()}.
+                           -> {ack(), state()}.
+
+%% Called to inform the BQ about messages which have reached the
+%% queue, but are not going to be further passed to BQ for some
+%% reason. Note that this may be invoked for messages for which
+%% BQ:is_duplicate/2 has already returned {'published' | 'discarded',
+%% BQS}.
+-callback discard(rabbit_types:msg_id(), pid(), state()) -> state().
 
 %% Return ids of messages which have been confirmed since the last
 %% invocation of this function (or initialisation).
@@ -200,13 +204,6 @@
 -callback is_duplicate(rabbit_types:basic_message(), state())
                       -> {'false'|'published'|'discarded', state()}.
 
-%% Called to inform the BQ about messages which have reached the
-%% queue, but are not going to be further passed to BQ for some
-%% reason. Note that this is may be invoked for messages for which
-%% BQ:is_duplicate/2 has already returned {'published' | 'discarded',
-%% BQS}.
--callback discard(rabbit_types:basic_message(), pid(), state()) -> state().
-
 -else.
 
 -export([behaviour_info/1]).
@@ -214,12 +211,11 @@
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
      {delete_and_terminate, 2}, {purge, 1}, {publish, 4},
-     {publish_delivered, 5}, {drain_confirmed, 1}, {dropwhile, 3},
+     {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1}, {dropwhile, 3},
      {fetch, 2}, {ack, 2}, {fold, 3}, {requeue, 2}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
-     {handle_pre_hibernate, 1}, {status, 1}, {invoke, 3}, {is_duplicate, 2},
-     {discard, 3}];
+     {handle_pre_hibernate, 1}, {status, 1}, {invoke, 3}, {is_duplicate, 2}] ;
 behaviour_info(_Other) ->
     undefined.
 

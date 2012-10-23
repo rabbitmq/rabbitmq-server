@@ -15,22 +15,32 @@
 %%
 
 -module(rabbit_mirror_queue_misc).
+-behaviour(rabbit_policy_validator).
 
--export([remove_from_queue/2, on_node_up/0, add_mirrors/2, add_mirror/2,
+-export([remove_from_queue/3, on_node_up/0, add_mirrors/2, add_mirror/2,
          report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
-         is_mirrored/1, update_mirrors/2]).
+         is_mirrored/1, update_mirrors/2, validate_policy/1]).
 
 %% for testing only
 -export([suggested_queue_nodes/4]).
 
 -include("rabbit.hrl").
 
+-rabbit_boot_step({?MODULE,
+                   [{description, "HA policy validation"},
+                    {mfa, {rabbit_registry, register,
+                           [policy_validator, <<"ha-mode">>, ?MODULE]}},
+                    {mfa, {rabbit_registry, register,
+                           [policy_validator, <<"ha-params">>, ?MODULE]}},
+                    {requires, rabbit_registry},
+                    {enables, recovery}]}).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(remove_from_queue/2 ::
-        (rabbit_amqqueue:name(), [pid()])
+-spec(remove_from_queue/3 ::
+        (rabbit_amqqueue:name(), pid(), [pid()])
         -> {'ok', pid(), [pid()]} | {'error', 'not_found'}).
 -spec(on_node_up/0 :: () -> 'ok').
 -spec(add_mirrors/2 :: (rabbit_amqqueue:name(), [node()]) -> 'ok').
@@ -57,9 +67,7 @@
 %% slave (now master) receives messages it's not ready for (for
 %% example, new consumers).
 %% Returns {ok, NewMPid, DeadPids}
-
-remove_from_queue(QueueName, DeadGMPids) ->
-    DeadNodes = [node(DeadGMPid) || DeadGMPid <- DeadGMPids],
+remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -67,20 +75,27 @@ remove_from_queue(QueueName, DeadGMPids) ->
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
                   [Q = #amqqueue { pid        = QPid,
-                                   slave_pids = SPids }] ->
-                      Alive = [Pid || Pid <- [QPid | SPids],
-                                  not lists:member(node(Pid), DeadNodes)],
+                                   slave_pids = SPids,
+                                   gm_pids    = GMPids }] ->
+                      {Dead, GMPids1} = lists:partition(
+                                          fun ({GM, _}) ->
+                                                  lists:member(GM, DeadGMPids)
+                                          end, GMPids),
+                      DeadPids = [Pid || {_GM, Pid} <- Dead],
+                      Alive = [QPid | SPids] -- DeadPids,
                       {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
+                              GMPids = GMPids1, %% ASSERTION
                               {ok, QPid1, []};
-                          _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
+                          _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
                               %% become the master.
                               store_updated_slaves(
                                 Q #amqqueue { pid        = QPid1,
-                                              slave_pids = SPids1 }),
+                                              slave_pids = SPids1,
+                                              gm_pids    = GMPids1 }),
                               {ok, QPid1, [QPid | SPids] -- Alive};
                           _ ->
                               %% Master has changed, and we're not it,
@@ -156,10 +171,8 @@ add_mirror(QName, MirrorNode) ->
                       start_child(Name, MirrorNode, Q);
                   [SPid] ->
                       case rabbit_misc:is_process_alive(SPid) of
-                          true ->
-                              {ok, already_mirrored};
-                          false ->
-                              start_child(Name, MirrorNode, Q)
+                          true  -> {ok, already_mirrored};
+                          false -> start_child(Name, MirrorNode, Q)
                       end
               end
       end).
@@ -325,3 +338,35 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     add_mirrors(QName, NewNodes -- OldNodes),
     drop_mirrors(QName, OldNodes -- NewNodes),
     ok.
+
+%%----------------------------------------------------------------------------
+
+validate_policy(KeyList) ->
+    validate_policy(
+      proplists:get_value(<<"ha-mode">>,   KeyList),
+      proplists:get_value(<<"ha-params">>, KeyList, none)).
+
+validate_policy(<<"all">>, none) ->
+    ok;
+validate_policy(<<"all">>, _Params) ->
+    {error, "ha-mode=\"all\" does not take parameters", []};
+
+validate_policy(<<"nodes">>, []) ->
+    {error, "ha-mode=\"nodes\" list must be non-empty", []};
+validate_policy(<<"nodes">>, Nodes) when is_list(Nodes) ->
+    case [I || I <- Nodes, not is_binary(I)] of
+        []      -> ok;
+        Invalid -> {error, "ha-mode=\"nodes\" takes a list of strings, "
+                    "~p was not a string", [Invalid]}
+    end;
+validate_policy(<<"nodes">>, Params) ->
+    {error, "ha-mode=\"nodes\" takes a list, ~p given", [Params]};
+
+validate_policy(<<"exactly">>, N) when is_integer(N) andalso N > 0 ->
+    ok;
+validate_policy(<<"exactly">>, Params) ->
+    {error, "ha-mode=\"exactly\" takes an integer, ~p given", [Params]};
+
+validate_policy(Mode, _Params) ->
+    {error, "~p is not a valid ha-mode value", [Mode]}.
+

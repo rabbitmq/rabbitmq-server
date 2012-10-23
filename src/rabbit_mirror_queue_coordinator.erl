@@ -326,7 +326,9 @@ ensure_monitoring(CPid, Pids) ->
 init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
     GM1 = case GM of
               undefined ->
-                  {ok, GM2} = gm:start_link(QueueName, ?MODULE, [self()]),
+                  {ok, GM2} = gm:start_link(
+                                QueueName, ?MODULE, [self()],
+                                fun rabbit_misc:execute_mnesia_transaction/1),
                   receive {joined, GM2, _Members} ->
                           ok
                   end,
@@ -349,7 +351,7 @@ handle_call(get_gm, _From, State = #state { gm = GM }) ->
 handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName, pid = MPid } })
   when node(MPid) =:= node() ->
-    case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
+    case rabbit_mirror_queue_misc:remove_from_queue(QueueName, MPid, Deaths) of
         {ok, MPid, DeadPids} ->
             rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName,
                                                    DeadPids),

@@ -298,7 +298,10 @@ i(durable,     #exchange{durable     = Durable})    -> Durable;
 i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
 i(internal,    #exchange{internal    = Internal})   -> Internal;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
-i(policy,      X)                                   -> rabbit_policy:name(X);
+i(policy,      X) ->  case rabbit_policy:name(X) of
+                          none   -> '';
+                          Policy -> Policy
+                      end;
 i(Item, _) -> throw({bad_argument, Item}).
 
 info(X = #exchange{}) -> infos(?INFO_KEYS, X).

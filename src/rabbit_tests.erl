@@ -57,6 +57,7 @@ all_tests() ->
     passed = test_dynamic_mirroring(),
     passed = test_user_management(),
     passed = test_runtime_parameters(),
+    passed = test_policy_validation(),
     passed = test_server_status(),
     passed = test_confirms(),
     passed =
@@ -774,7 +775,9 @@ test_log_management_during_startup() ->
     ok = case catch control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotation_tty_no_handlers_test});
-             {error, {cannot_log_to_tty, _, _}} -> ok
+             {badrpc, {'EXIT', {rabbit,failure_during_boot,
+               {error,{cannot_log_to_tty,
+                       _, not_installed}}}}} -> ok
          end,
 
     %% fix sasl logging
@@ -798,7 +801,9 @@ test_log_management_during_startup() ->
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotation_no_write_permission_dir_test});
-             {error, {cannot_log_to_file, _, _}} -> ok
+             {badrpc, {'EXIT',
+               {rabbit, failure_during_boot,
+                {error, {cannot_log_to_file, _, _}}}}} -> ok
          end,
 
     %% start application with logging to a subdirectory which
@@ -809,8 +814,11 @@ test_log_management_during_startup() ->
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotatation_parent_dirs_test});
-             {error, {cannot_log_to_file, _,
-                      {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
+             {badrpc,
+              {'EXIT', {rabbit,failure_during_boot,
+                {error, {cannot_log_to_file, _,
+                  {error,
+                   {cannot_create_parent_dirs, _, eacces}}}}}}} -> ok
          end,
     ok = set_permissions(TmpDir, 8#00700),
     ok = set_permissions(TmpLog, 8#00600),
@@ -1039,6 +1047,26 @@ test_runtime_parameters() ->
     rabbit_runtime_parameters_test:unregister(),
     passed.
 
+test_policy_validation() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
+    SetPol =
+        fun (Key, Val) ->
+                control_action(
+                  set_policy,
+                  ["name", ".*", rabbit_misc:format("{\"~s\":~p}", [Key, Val])])
+        end,
+
+    ok                 = SetPol("testeven", []),
+    ok                 = SetPol("testeven", [1, 2]),
+    ok                 = SetPol("testeven", [1, 2, 3, 4]),
+    ok                 = SetPol("testpos",  [2, 5, 5678]),
+
+    {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
+    {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
+
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
+    passed.
+
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
@@ -1100,8 +1128,8 @@ test_server_status() ->
     ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
 
     %% eval
-    {parse_error, _} = control_action(eval, ["\""]),
-    {parse_error, _} = control_action(eval, ["a("]),
+    {error_string, _} = control_action(eval, ["\""]),
+    {error_string, _} = control_action(eval, ["a("]),
     ok = control_action(eval, ["a."]),
 
     %% cleanup

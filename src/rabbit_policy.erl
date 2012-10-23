@@ -22,11 +22,13 @@
 
 -include("rabbit.hrl").
 
--import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_misc, [pget/2]).
 
 -export([register/0]).
 -export([name/1, get/2, set/1]).
 -export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
+-export([parse_set/5, set/5, delete/2, lookup/2, list/0, list/1,
+         list_formatted/1, info_keys/0]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "policy parameters"},
@@ -55,13 +57,88 @@ get(Name, EntityName = #resource{virtual_host = VHost}) ->
     get0(Name, match(EntityName, list(VHost))).
 
 get0(_Name, undefined) -> {error, not_found};
-get0(Name, List)       -> case pget(<<"policy">>, List) of
+get0(Name, List)       -> case pget(definition, List) of
                               undefined -> {error, not_found};
                               Policy    -> case pget(Name, Policy) of
                                                undefined -> {error, not_found};
                                                Value    -> {ok, Value}
                                            end
                           end.
+
+%%----------------------------------------------------------------------------
+
+parse_set(VHost, Name, Pattern, Definition, undefined) ->
+    parse_set0(VHost, Name, Pattern, Definition, 0);
+parse_set(VHost, Name, Pattern, Definition, Priority) ->
+    try list_to_integer(Priority) of
+        Num -> parse_set0(VHost, Name, Pattern, Definition, Num)
+    catch
+        error:badarg -> {error, "~p priority must be a number", [Priority]}
+    end.
+
+parse_set0(VHost, Name, Pattern, Defn, Priority) ->
+    case rabbit_misc:json_decode(Defn) of
+        {ok, JSON} ->
+            set0(VHost, Name,
+                 [{<<"pattern">>,    list_to_binary(Pattern)},
+                  {<<"definition">>, rabbit_misc:json_to_term(JSON)},
+                  {<<"priority">>,   Priority}]);
+        error ->
+            {error_string, "JSON decoding error"}
+    end.
+
+set(VHost, Name, Pattern, Definition, Priority) ->
+    PolicyProps = [{<<"pattern">>,    Pattern},
+                   {<<"definition">>, Definition},
+                   {<<"priority">>,   case Priority of
+                                          undefined -> 0;
+                                          _         -> Priority
+                                      end}],
+    set0(VHost, Name, PolicyProps).
+
+set0(VHost, Name, Term) ->
+    rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term).
+
+delete(VHost, Name) ->
+    rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Name).
+
+lookup(VHost, Name) ->
+    case rabbit_runtime_parameters:lookup(VHost, <<"policy">>, Name) of
+        not_found  -> not_found;
+        P          -> p(P, fun ident/1)
+    end.
+
+list() ->
+    list('_').
+
+list(VHost) ->
+    list0(VHost, fun ident/1).
+
+list_formatted(VHost) ->
+    order_policies(list0(VHost, fun format/1)).
+
+list0(VHost, DefnFun) ->
+    [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
+
+order_policies(PropList) ->
+    lists:sort(fun (A, B) -> pget(priority, A) < pget(priority, B) end,
+               PropList).
+
+p(Parameter, DefnFun) ->
+    Value = pget(value, Parameter),
+    [{vhost,      pget(vhost, Parameter)},
+     {name,       pget(name, Parameter)},
+     {pattern,    pget(<<"pattern">>, Value)},
+     {definition, DefnFun(pget(<<"definition">>, Value))},
+     {priority,   pget(<<"priority">>, Value)}].
+
+format(Term) ->
+    {ok, JSON} = rabbit_misc:json_encode(rabbit_misc:term_to_json(Term)),
+    list_to_binary(JSON).
+
+ident(X) -> X.
+
+info_keys() -> [vhost, name, pattern, definition, priority].
 
 %%----------------------------------------------------------------------------
 
@@ -79,10 +156,6 @@ notify_clear(VHost, <<"policy">>, _Name) ->
     update_policies(VHost).
 
 %%----------------------------------------------------------------------------
-
-list(VHost) ->
-    [[{<<"name">>, pget(key, P)} | pget(value, P)]
-     || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
 update_policies(VHost) ->
     Policies = list(VHost),
@@ -127,13 +200,52 @@ match(Name, Policies) ->
     end.
 
 matches(#resource{name = Name}, Policy) ->
-    match =:= re:run(Name, pget(<<"pattern">>, Policy), [{capture, none}]).
+    match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]).
 
-sort_pred(A, B) -> pget(<<"priority">>, A, 0) >= pget(<<"priority">>, B, 0).
+sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
 
 %%----------------------------------------------------------------------------
 
 policy_validation() ->
-    [{<<"priority">>, fun rabbit_parameter_validation:number/2, optional},
-     {<<"pattern">>,  fun rabbit_parameter_validation:regex/2,  mandatory},
-     {<<"policy">>,   fun rabbit_parameter_validation:list/2,   mandatory}].
+    [{<<"priority">>,   fun rabbit_parameter_validation:number/2, mandatory},
+     {<<"pattern">>,    fun rabbit_parameter_validation:regex/2,  mandatory},
+     {<<"definition">>, fun validation/2,                         mandatory}].
+
+validation(_Name, []) ->
+    {error, "no policy provided", []};
+validation(_Name, Terms) when is_list(Terms) ->
+    {Keys, Modules} = lists:unzip(
+                        rabbit_registry:lookup_all(policy_validator)),
+    [] = dups(Keys), %% ASSERTION
+    Validators = lists:zipwith(fun (M, K) ->  {M, a2b(K)} end, Modules, Keys),
+    {TermKeys, _} = lists:unzip(Terms),
+    case dups(TermKeys) of
+        []   -> validation0(Validators, Terms);
+        Dup  -> {error, "~p duplicate keys not allowed", [Dup]}
+    end;
+validation(_Name, Term) ->
+    {error, "parse error while reading policy: ~p", [Term]}.
+
+validation0(Validators, Terms) ->
+    case lists:foldl(
+           fun (Mod, {ok, TermsLeft}) ->
+                   ModKeys = proplists:get_all_values(Mod, Validators),
+                   case [T || {Key, _} = T <- TermsLeft,
+                              lists:member(Key, ModKeys)] of
+                       []    -> {ok, TermsLeft};
+                       Scope -> {Mod:validate_policy(Scope), TermsLeft -- Scope}
+                   end;
+               (_, Acc) ->
+                   Acc
+           end, {ok, Terms}, proplists:get_keys(Validators)) of
+         {ok, []} ->
+             ok;
+         {ok, Unvalidated} ->
+             {error, "~p are not recognised policy settings", [Unvalidated]};
+         {Error, _} ->
+             Error
+    end.
+
+a2b(A) -> list_to_binary(atom_to_list(A)).
+
+dups(L) -> L -- lists:usort(L).
