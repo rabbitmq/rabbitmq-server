@@ -313,8 +313,8 @@
               linkend="stop_app"><command>stop_app</command></link>.
             </para>
             <para>
-              Cluster nodes can be of two types: disk or RAM. Disk nodes
-              replicate data in RAM and on disk, thus providing redundancy in
+              Cluster nodes can be of two types: disc or RAM. Disc nodes
+              replicate data in RAM and on disc, thus providing redundancy in
               the event of node failure and recovery from global events such
               as power failure across all nodes. RAM nodes replicate data in
               RAM only (with the exception of queue contents, which can reside
@@ -322,10 +322,10 @@
               and are mainly used for scalability. RAM nodes are more
               performant only when managing resources (e.g. adding/removing
               queues, exchanges, or bindings). A cluster must always have at
-              least one disk node, and usually should have more than one.
+              least one disc node, and usually should have more than one.
             </para>
             <para>
-              The node will be a disk node by default. If you wish to
+              The node will be a disc node by default. If you wish to
               create a RAM node, provide the <command>--ram</command> flag.
             </para>
             <para>
@@ -367,18 +367,18 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>change_cluster_node_type</command> <arg choice="req">disk | ram</arg></cmdsynopsis>
+          <term><cmdsynopsis><command>change_cluster_node_type</command> <arg choice="req">disc | ram</arg></cmdsynopsis>
           </term>
           <listitem>
             <para>
               Changes the type of the cluster node. The node must be stopped for
               this operation to succeed, and when turning a node into a RAM node
-              the node must not be the only disk node in the cluster.
+              the node must not be the only disc node in the cluster.
             </para>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl change_cluster_node_type disk</screen>
+            <screen role="example">rabbitmqctl change_cluster_node_type disc</screen>
             <para role="example">
-              This command will turn a RAM node into a disk node.
+              This command will turn a RAM node into a disc node.
             </para>
           </listitem>
         </varlistentry>
