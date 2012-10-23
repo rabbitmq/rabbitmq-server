@@ -23,10 +23,10 @@ parse_auth_header(Header) ->
     case Header of
         "Basic " ++ Base64 ->
             Str = base64:mime_decode_to_string(Base64),
-            Tokens = [list_to_binary(S) || S <- string:tokens(Str, ":")],
-            case length(Tokens) of
-                2 -> Tokens;
-                _ -> invalid
+            case string:chr(Str, $:) of
+                0 -> invalid;
+                N -> [list_to_binary(string:sub_string(Str, 1, N - 1)),
+                      list_to_binary(string:sub_string(Str, N + 1))]
             end;
          _ ->
             invalid
