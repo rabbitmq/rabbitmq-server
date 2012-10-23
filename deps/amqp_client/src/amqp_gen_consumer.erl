@@ -241,8 +241,7 @@ handle_info(Info, State = #state{module_state = MState,
         {ok, NewMState} ->
             {noreply, State#state{module_state = NewMState}};
         {error, Reason, NewMState} ->
-            {stop, {error, Reason}, {error, Reason},
-             State#state{module_state = NewMState}}
+            {stop, {error, Reason}, State#state{module_state = NewMState}}
     end.
 
 terminate(Reason, #state{module = ConsumerModule, module_state = MState}) ->
