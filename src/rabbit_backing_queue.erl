@@ -90,7 +90,7 @@
 
 %% Called to inform the BQ about messages which have reached the
 %% queue, but are not going to be further passed to BQ for some
-%% reason. Note that this is may be invoked for messages for which
+%% reason. Note that this may be invoked for messages for which
 %% BQ:is_duplicate/2 has already returned {'published' | 'discarded',
 %% BQS}.
 -callback discard(rabbit_types:msg_id(), pid(), state()) -> state().
