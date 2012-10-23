@@ -1,0 +1,54 @@
+<div class="updatable">
+<%
+   var partitions = [];
+   for (var i = 0; i < nodes.length; i++) {
+     var node = nodes[i];
+     if (node.partitions != undefined && node.partitions.length != 0) {
+       partitions.push({'node': node.name,
+                        'others': node.partitions});
+     }
+   }
+   if (partitions.length > 0) {
+%>
+<p class="status-error">
+  Network partition detected<br/><br/>
+  Mnesia reports that this RabbitMQ cluster has experienced a network partition. This is a dangerous situation. RabbitMQ clusters should not be installed on networks which can experience partitions.
+</p>
+<p>
+  The nature of the partition is as follows:
+</p>
+  <table class="list">
+    <tr>
+      <th>Node</th><th>Was partitioned from</th>
+    </tr>
+
+<%
+   for (var i = 0; i < partitions.length; i++) {
+     var partition = partitions[i];
+%>
+    <tr<%= alt_rows(i)%>>
+      <td><%= partition.node %></td>
+      <td>
+<%
+   for (var j = 0; j < partition.others.length; j++) {
+     var other = partition.others[j];
+%>
+          <%= other %><br/>
+<% } %>
+      </td>
+    </tr>
+<% } %>
+  </table>
+<p>
+  While running in this partitioned state, changes (such as queue or
+  exchange declaration and binding) which take place in one partition
+  will not be visible to other partition(s). Other behaviour is not
+  guaranteed.
+</p>
+<p>
+  <a target="_blank"
+  href="http://www.rabbitmq.com/partitions.html">More information on
+  network partitions.</a>
+</p>
+<% } %>
+</div>
