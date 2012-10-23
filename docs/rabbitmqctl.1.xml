@@ -637,7 +637,7 @@
             </para>
             <para>
               Deleting a virtual host deletes all its exchanges,
-              queues, bindings, user permissions and parameters.
+              queues, bindings, user permissions, parameters and policies.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl delete_vhost test</screen>
@@ -806,8 +806,8 @@
         Certain features of RabbitMQ (such as the federation plugin)
         are controlled by dynamic,
         cluster-wide <emphasis>parameters</emphasis>. Each parameter
-        consists of a component name, a key and a value, and is
-        associated with a virtual host. The component name and key are
+        consists of a component name, a name and a value, and is
+        associated with a virtual host. The component name and name are
         strings, and the value is an Erlang term. Parameters can be
         set, cleared and listed. In general you should refer to the
         documentation for the feature in question to see how to set
@@ -815,7 +815,7 @@
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_parameter</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_parameter</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Sets a parameter.
@@ -829,24 +829,24 @@
                 </para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>key</term>
+                <term>name</term>
                 <listitem><para>
-                    The key for which the parameter is being set.
+                    The name of the parameter being set.
                 </para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>value</term>
                 <listitem><para>
-                    The value for the parameter, as an
-                    Erlang term. In most shells you are very likely to
+                    The value for the parameter, as a
+                    JSON term. In most shells you are very likely to
                     need to quote this.
                 </para></listitem>
               </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl set_parameter federation local_username '&lt;&lt;"guest">>'</screen>
+            <screen role="example">rabbitmqctl set_parameter federation local_username '"guest"'</screen>
             <para role="example">
-              This command sets the parameter <command>local_username</command> for the <command>federation</command> component in the default virtual host to the Erlang term <command>&lt;&lt;"guest">></command>.
+              This command sets the parameter <command>local_username</command> for the <command>federation</command> component in the default virtual host to the JSON term <command>"guest"</command>.
             </para>
           </listitem>
         </varlistentry>
@@ -865,9 +865,9 @@
                 </para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>key</term>
+                <term>name</term>
                 <listitem><para>
-                    The key for which the parameter is being cleared.
+                    The name of the parameter being cleared.
                 </para></listitem>
               </varlistentry>
             </variablelist>
@@ -888,6 +888,93 @@
             <screen role="example">rabbitmqctl list_parameters</screen>
             <para role="example">
               This command lists all parameters in the default virtual host.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Policy Management</title>
+      <para>
+        Policies are used to control and modify the behaviour of queues
+        and exchanges on a cluster-wide basis. Policies apply within a
+        given vhost, and consist of a name, pattern, definition and an
+        optional priority. Policies can be set, cleared and listed.
+      </para>
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg> <arg choice="opt"><replaceable>priority</replaceable></arg> </cmdsynopsis></term>
+          <listitem>
+            <para>
+              Sets a policy.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>
+                    The name of the policy.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>pattern</term>
+                <listitem><para>
+                    The regular expression, which when matches on a given resources causes the policy to apply.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>definition</term>
+                <listitem><para>
+                    The definition of the policy, as a
+                    JSON term. In most shells you are very likely to
+                    need to quote this.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>priority</term>
+                <listitem><para>
+                    The priority of the policy as an integer, defaulting to 0. Higher numbers indicate greater precedence.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_policy federate-me "^amq." '{"federation-upstream-set":"all"}'</screen>
+            <para role="example">
+              This command sets the policy <command>federate-me</command> in the default virtual host so that built-in exchanges are federated.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Clears a policy.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>
+                    The name of the policy being cleared.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_policy federate-me</screen>
+            <para role="example">
+              This command clears the <command>federate-me</command> policy in the default virtual host.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>list_policies</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Lists all policies for a virtual host.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_policies</screen>
+            <para role="example">
+              This command lists all policies in the default virtual host.
             </para>
           </listitem>
         </varlistentry>
