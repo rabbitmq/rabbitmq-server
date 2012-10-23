@@ -61,18 +61,19 @@
 -type(ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 -type(routing_result() :: 'routed' | 'unroutable').
--type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
+-type(queue_or_absent() :: rabbit_types:amqqueue() |
+                           {'absent', rabbit_types:amqqueue()}).
 
 -spec(start/0 :: () -> [name()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
-        -> {'new' | 'existing', rabbit_types:amqqueue()} |
+        -> {'new' | 'existing' | 'absent', rabbit_types:amqqueue()} |
            rabbit_types:channel_exit()).
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
+        -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).
 -spec(update/2 ::
         (name(),
          fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue())) -> 'ok').
@@ -223,10 +224,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                      gm_pids         = []}),
     {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
     Q1 = start_queue_process(Node, Q0),
-    case gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity) of
-        not_found -> rabbit_misc:not_found(QueueName);
-        Q2        -> Q2
-    end.
+    gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity).
 
 internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
@@ -237,12 +235,12 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   [] ->
                       case mnesia:read({rabbit_durable_queue, QueueName}) of
-                          []  -> Q1 = rabbit_policy:set(Q),
-                                 ok = store_queue(Q1),
-                                 B = add_default_binding(Q1),
-                                 fun () -> B(), Q1 end;
+                          []   -> Q1 = rabbit_policy:set(Q),
+                                  ok = store_queue(Q1),
+                                  B = add_default_binding(Q1),
+                                  fun () -> B(), Q1 end;
                           %% Q exists on stopped node
-                          [_] -> rabbit_misc:const(not_found)
+                          [Q1] -> rabbit_misc:const({absent, Q1})
                       end;
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
