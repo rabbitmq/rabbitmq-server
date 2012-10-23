@@ -407,15 +407,13 @@ Content-Length: 0</pre>
       </tr>
       <tr>
         <td>X</td>
-        <td>X</td>
+        <td></td>
         <td>X</td>
         <td></td>
         <td class="path">/api/bindings/<i>vhost</i>/e/<i>exchange</i>/q/<i>queue</i>/<i>props</i></td>
         <td>An individual binding between an exchange and a queue.
         The <i>props</i> part of the URI is a "name" for the binding
-        composed of its routing key and properties. While you can
-        create a binding by PUTing to this URI, it may be more
-        convenient to POST to the URI above.</td>
+        composed of its routing key and a hash of its arguments.</td>
       </tr>
       <tr>
         <td>X</td>

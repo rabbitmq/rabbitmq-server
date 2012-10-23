@@ -20,7 +20,7 @@
 -export([parameter/1, timestamp/1, timestamp_ms/1, strip_pids/1]).
 -export([node_from_pid/1, protocol/1, resource/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
--export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
+-export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
 -export([record/2, to_basic_properties/1]).
 -export([addr/1, port/1]).
@@ -167,55 +167,22 @@ listener(#listener{node = Node, protocol = Protocol,
      {port, Port}].
 
 pack_binding_props(<<"">>, []) ->
-    <<"_">>;
+    <<"~">>;
+pack_binding_props(Key, []) ->
+    list_to_binary(quote_binding(Key));
 pack_binding_props(Key, Args) ->
-    Dict = dict:from_list([{K, V} || {K, _, V} <- Args]),
-    ArgsKeys = lists:sort(dict:fetch_keys(Dict)),
-    PackedArgs =
-        string:join(
-          [quote_binding(K) ++ "_" ++
-               quote_binding(dict:fetch(K, Dict)) || K <- ArgsKeys],
-          "_"),
-    list_to_binary(quote_binding(Key) ++
-                       case PackedArgs of
-                           "" -> "";
-                           _  -> "_" ++ PackedArgs
-                       end).
+    ArgsEnc = rabbit_mgmt_wm_binding:args_hash(Args),
+    list_to_binary(quote_binding(Key) ++ "~" ++ quote_binding(ArgsEnc)).
 
 quote_binding(Name) ->
-    binary_to_list(
-      iolist_to_binary(
-        re:replace(mochiweb_util:quote_plus(Name), "_", "%5F", [global]))).
+    re:replace(mochiweb_util:quote_plus(Name), "~", "%7E", [global]).
 
-unpack_binding_props(B) when is_binary(B) ->
-    unpack_binding_props(binary_to_list(B));
-unpack_binding_props(Str) ->
-    unpack_binding_props0(tokenise(Str)).
-
-unpack_binding_props0([Key | Args]) ->
-    try
-        {unquote_binding(Key), to_amqp_table(unpack_binding_args(Args))}
-    catch E -> E
-    end;
-unpack_binding_props0([]) ->
-    {bad_request, empty_properties}.
-
-unpack_binding_args([]) ->
-    [];
-unpack_binding_args([K]) ->
-    throw({bad_request, {no_value, K}});
-unpack_binding_args([K, V | Rest]) ->
-    [{unquote_binding(K), unquote_binding(V)} | unpack_binding_args(Rest)].
-
-unquote_binding(Name) ->
-    list_to_binary(mochiweb_util:unquote(Name)).
-
-%% Unfortunately string:tokens("foo__bar", "_"). -> ["foo","bar"], we lose
-%% the fact that there's a double _.
+%% Unfortunately string:tokens("foo~~bar", "~"). -> ["foo","bar"], we lose
+%% the fact that there's a double ~.
 tokenise("") ->
     [];
 tokenise(Str) ->
-    Count = string:cspan(Str, "_"),
+    Count = string:cspan(Str, "~"),
     case length(Str) of
         Count -> [Str];
         _     -> [string:sub_string(Str, 1, Count) |
@@ -260,7 +227,7 @@ queue(#amqqueue{name            = Name,
                 auto_delete     = AutoDelete,
                 exclusive_owner = ExclusiveOwner,
                 arguments       = Arguments,
-                pid             = Pid} = Q) ->
+                pid             = Pid}) ->
     format(
       [{name,        Name},
        {durable,     Durable},
