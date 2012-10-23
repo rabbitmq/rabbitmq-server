@@ -88,10 +88,10 @@ is_authorized(ReqData, Context, Fun) ->
                         true  -> {true, ReqData,
                                   Context#context{user     = User,
                                                   password = Password}};
-                        false -> {?AUTH_REALM, ReqData, Context}
+                        false -> not_authorised(not_mgmt_user, ReqData, Context)
                     end;
-                _       ->
-                    {?AUTH_REALM, ReqData, Context}
+                _       -> not_authorised(login_failed, ReqData, Context)
+
             end;
         _ ->
             {?AUTH_REALM, ReqData, Context}
