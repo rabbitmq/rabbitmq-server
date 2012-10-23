@@ -1,0 +1,43 @@
+<div id="header">
+  <div id="login-version">
+    <div id="login-details"></div>
+    <form action="#/logout" method="put">
+      <input type="submit" value="Log out"/>
+    </form>
+  </div>
+  <div id="logo">
+    <a href="#/">
+      <img src="img/rabbitmqlogo.png" width="204" height="37"/>
+    </a>
+  </div>
+  <div id="menu">
+    <p id="vhost-form">
+      <label for="show-vhost">Virtual host: </label>
+      <select id="show-vhost">
+        <option value="">All</option>
+      </select>
+    </p>
+    <ul id="tabs">
+    </ul>
+  </div>
+</div>
+<div id="rhs"></div>
+<div id="main"></div>
+<div id="footer">
+  <div id="footer-nav">
+    <ul>
+      <li><a href="api/">HTTP API</a></li>
+      <li><a href="cli/">Command Line</a></li>
+    </ul>
+  </div>
+  <div id="update-form">
+    <label for="update-every">Update </label>
+    <select id="update-every">
+      <option value="5000">every 5 seconds</option>
+      <option value="30000">every 30 seconds</option>
+      <option value="300000">every 5 minutes</option>
+      <option value="">never</option>
+    </select>
+  </div>
+</div>
+<div id="status"></div>
