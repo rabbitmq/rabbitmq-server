@@ -57,21 +57,7 @@ make_loop() ->
     WMLoop = rabbit_webmachine:makeloop(Dispatch),
     LocalPaths = [filename:join(module_path(M), ?STATIC_PATH) ||
                      M <- rabbit_mgmt_dispatcher:modules()],
-    fun(PL, Req) ->
-            Unauthorized = {401, [{"WWW-Authenticate", ?AUTH_REALM}], ""},
-            Auth = Req:get_header_value("authorization"),
-            case rabbit_mochiweb_util:parse_auth_header(Auth) of
-                [Username, Password] ->
-                    case rabbit_access_control:check_user_pass_login(
-                           Username, Password) of
-                        {ok, _} -> respond(Req, LocalPaths, PL, WMLoop);
-                        _       -> Req:respond(Unauthorized)
-                    end;
-                _ ->
-                    Req:respond(Unauthorized)
-            end
-
-    end.
+    fun(PL, Req) -> respond(Req, LocalPaths, PL, WMLoop) end.
 
 module_path(Module) ->
     {file, Here} = code:is_loaded(Module),

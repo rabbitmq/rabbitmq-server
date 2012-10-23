@@ -78,19 +78,23 @@ is_authorized_user(ReqData, Context, Item) ->
       end).
 
 is_authorized(ReqData, Context, Fun) ->
-    %% Note that we've already done authentication in the Mochiweb
-    %% world, so we know we're authorised. Unfortunately we can't
-    %% influence ReqData or Context from Mochiweb, so we have to
-    %% invoke check_user_pass_login again to see what kind of user we
-    %% have.
-    [Username, Password] = rabbit_mochiweb_util:parse_auth_header(
-                             wrq:get_req_header("authorization", ReqData)),
-    {ok, User = #user{tags = Tags}} =
-        rabbit_access_control:check_user_pass_login(Username, Password),
-    case is_mgmt_user(Tags) andalso Fun(User) of
-        true  -> {true, ReqData, Context#context{user     = User,
-                                                 password = Password}};
-        false -> {?AUTH_REALM, ReqData, Context}
+    case rabbit_mochiweb_util:parse_auth_header(
+           wrq:get_req_header("authorization", ReqData)) of
+        [Username, Password] ->
+            case rabbit_access_control:check_user_pass_login(
+                   Username, Password) of
+                {ok, User = #user{tags = Tags}} ->
+                    case is_mgmt_user(Tags) andalso Fun(User) of
+                        true  -> {true, ReqData,
+                                  Context#context{user     = User,
+                                                  password = Password}};
+                        false -> {?AUTH_REALM, ReqData, Context}
+                    end;
+                _       ->
+                    {?AUTH_REALM, ReqData, Context}
+            end;
+        _ ->
+            {?AUTH_REALM, ReqData, Context}
     end.
 
 vhost(ReqData) ->
