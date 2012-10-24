@@ -338,27 +338,6 @@ is_clustered() -> AllNodes = cluster_nodes(all),
 
 cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 
-cluster_status(WhichNodes) ->
-    {AllNodes, DiscNodes, RunningNodes} = Nodes =
-        case cluster_status_from_mnesia() of
-            {ok, Nodes0} ->
-                Nodes0;
-            {error, _Reason} ->
-                {AllNodes0, DiscNodes0, RunningNodes0} =
-                    rabbit_node_monitor:read_cluster_status(),
-                %% The cluster status file records the status when the node is
-                %% online, but we know for sure that the node is offline now, so
-                %% we can remove it from the list of running nodes.
-                {AllNodes0, DiscNodes0, nodes_excl_me(RunningNodes0)}
-        end,
-    case WhichNodes of
-        status  -> Nodes;
-        all     -> AllNodes;
-        disc    -> DiscNodes;
-        ram     -> AllNodes -- DiscNodes;
-        running -> RunningNodes
-    end.
-
 %% This function is the actual source of information, since it gets
 %% the data from mnesia. Obviously it'll work only when mnesia is
 %% running.
@@ -388,6 +367,27 @@ cluster_status_from_mnesia() ->
                          {ok, {AllNodes, DiscNodes, RunningNodes}};
                 false -> {error, tables_not_present}
             end
+    end.
+
+cluster_status(WhichNodes) ->
+    {AllNodes, DiscNodes, RunningNodes} = Nodes =
+        case cluster_status_from_mnesia() of
+            {ok, Nodes0} ->
+                Nodes0;
+            {error, _Reason} ->
+                {AllNodes0, DiscNodes0, RunningNodes0} =
+                    rabbit_node_monitor:read_cluster_status(),
+                %% The cluster status file records the status when the node is
+                %% online, but we know for sure that the node is offline now, so
+                %% we can remove it from the list of running nodes.
+                {AllNodes0, DiscNodes0, nodes_excl_me(RunningNodes0)}
+        end,
+    case WhichNodes of
+        status  -> Nodes;
+        all     -> AllNodes;
+        disc    -> DiscNodes;
+        ram     -> AllNodes -- DiscNodes;
+        running -> RunningNodes
     end.
 
 node_info() ->
@@ -720,7 +720,6 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-%% when mnesia is stopped
 is_running_remote() -> {mnesia:system_info(is_running) =:= yes, node()}.
 
 check_consistency(OTP, Rabbit) ->
