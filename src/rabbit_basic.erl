@@ -181,8 +181,8 @@ append_table_header(Name, Info, undefined) ->
     append_table_header(Name, Info, []);
 append_table_header(Name, Info, Headers) ->
     Prior = case rabbit_misc:table_lookup(Headers, Name) of
-                undefined          -> [];
-                {array, Existing}  -> Existing
+                {array, Existing}  -> Existing;
+                _                  -> []
             end,
     rabbit_misc:set_table_value(Headers, Name, array, [{table, Info} | Prior]).
 
