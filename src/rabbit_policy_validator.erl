@@ -29,7 +29,7 @@
 
 behaviour_info(callbacks) ->
     [
-     {validate_policy, 1},
+     {validate_policy, 1}
     ];
 behaviour_info(_Other) ->
     undefined.
