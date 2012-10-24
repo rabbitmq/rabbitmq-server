@@ -355,6 +355,7 @@ cluster_status(WhichNodes) ->
         status  -> Nodes;
         all     -> AllNodes;
         disc    -> DiscNodes;
+        ram     -> AllNodes -- DiscNodes;
         running -> RunningNodes
     end.
 
