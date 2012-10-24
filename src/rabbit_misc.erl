@@ -63,6 +63,7 @@
 -export([version/0]).
 -export([sequence_error/1]).
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
+-export([base64url/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -227,6 +228,7 @@
 -spec(json_decode/1 :: (string()) -> {'ok', any()} | 'error').
 -spec(json_to_term/1 :: (any()) -> any()).
 -spec(term_to_json/1 :: (any()) -> any()).
+-spec(base64url/1 :: (binary()) -> string()).
 
 -endif.
 
@@ -987,3 +989,10 @@ term_to_json(L) when is_list(L) ->
 term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
+
+base64url(In) ->
+    lists:reverse(lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
+                                  ($\/, Acc) -> [$\_ | Acc];
+                                  ($\=, Acc) -> Acc;
+                                  (Chr, Acc) -> [Chr | Acc]
+                              end, [], base64:encode_to_string(In))).

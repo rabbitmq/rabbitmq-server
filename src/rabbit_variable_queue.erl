@@ -17,11 +17,11 @@
 -module(rabbit_variable_queue).
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
-         publish/4, publish_delivered/5, drain_confirmed/1,
+         publish/4, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
          depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, discard/3, multiple_routing_keys/0, fold/3]).
+         is_duplicate/2, multiple_routing_keys/0, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -545,17 +545,8 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                                           ram_msg_count    = RamMsgCount + 1,
                                           unconfirmed      = UC1 })).
 
-publish_delivered(false, #basic_message { id = MsgId },
-                  #message_properties { needs_confirming = NeedsConfirming },
-                  _ChPid, State = #vqstate { async_callback = Callback,
-                                             len = 0 }) ->
-    case NeedsConfirming of
-        true  -> blind_confirm(Callback, gb_sets:singleton(MsgId));
-        false -> ok
-    end,
-    {undefined, a(State)};
-publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
-                                               id = MsgId },
+publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
+                                         id = MsgId },
                   MsgProps = #message_properties {
                     needs_confirming = NeedsConfirming },
                   _ChPid, State = #vqstate { len              = 0,
@@ -578,6 +569,8 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                   in_counter       = InCount  + 1,
                                   persistent_count = PCount1,
                                   unconfirmed      = UC1 }))}.
+
+discard(_MsgId, _ChPid, State) -> State.
 
 drain_confirmed(State = #vqstate { confirmed = C }) ->
     case gb_sets:is_empty(C) of
@@ -820,8 +813,6 @@ status(#vqstate {
 invoke(?MODULE, Fun, State) -> Fun(?MODULE, State).
 
 is_duplicate(_Msg, State) -> {false, State}.
-
-discard(_Msg, _ChPid, State) -> State.
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -1325,12 +1316,9 @@ must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
     %% subtraction.
     not (gb_sets:is_empty(UC) orelse gb_sets:is_subset(UC, MIOD)).
 
-blind_confirm(Callback, MsgIdSet) ->
-    Callback(?MODULE,
-             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end).
-
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
-    blind_confirm(Callback, MsgIdSet);
+    Callback(?MODULE,
+             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->
     Callback(?MODULE,
              fun (?MODULE, State = #vqstate { msgs_on_disk        = MOD,

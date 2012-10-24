@@ -285,6 +285,9 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
     end.
 
 remove_node_offline_node(Node) ->
+    %% We want the running nodes *now*, so we don't call
+    %% `cluster_nodes(running)' which will just get what's in the cluster status
+    %% file.
     case {running_nodes(cluster_nodes(all)) -- [Node], node_type()} of
         {[], disc} ->
             %% Note that while we check if the nodes was the last to
@@ -298,9 +301,13 @@ remove_node_offline_node(Node) ->
             case cluster_nodes(running) -- [node(), Node] of
                 [] -> start_mnesia(),
                       try
+                          %% What we want to do here is replace the last node to
+                          %% go down with the current node.  The way we do this
+                          %% is by force loading the table, and making sure that
+                          %% they are loaded.
                           rabbit_table:force_load(),
-                          forget_cluster_node(Node, false),
-                          ensure_mnesia_running()
+                          rabbit_table:wait_for_replicated(),
+                          forget_cluster_node(Node, false)
                       after
                           stop_mnesia()
                       end;
@@ -322,9 +329,16 @@ status() ->
     [{nodes, (IfNonEmpty(disc, cluster_nodes(disc)) ++
                   IfNonEmpty(ram, cluster_nodes(ram)))}] ++
         case mnesia:system_info(is_running) of
-            yes -> [{running_nodes, cluster_nodes(running)}];
+            yes -> RunningNodes = cluster_nodes(running),
+                   [{running_nodes, cluster_nodes(running)},
+                    {partitions,    mnesia_partitions(RunningNodes)}];
             no  -> []
         end.
+
+mnesia_partitions(Nodes) ->
+    {Replies, _BadNodes} = rpc:multicall(
+                             Nodes, rabbit_node_monitor, partitions, []),
+    [Reply || Reply = {_, R} <- Replies, R =/= []].
 
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
@@ -675,13 +689,12 @@ remove_node_if_mnesia_running(Node) ->
     end.
 
 leave_cluster() ->
-    RunningNodes = running_nodes(nodes_excl_me(cluster_nodes(all))),
-    case not is_clustered() andalso RunningNodes =:= [] of
-        true  -> ok;
-        false -> case lists:any(fun leave_cluster/1, RunningNodes) of
-                     true  -> ok;
-                     false -> e(no_running_cluster_nodes)
-                 end
+    case nodes_excl_me(cluster_nodes(all)) of
+        []       -> ok;
+        AllNodes -> case lists:any(fun leave_cluster/1, AllNodes) of
+                        true  -> ok;
+                        false -> e(no_running_cluster_nodes)
+                    end
     end.
 
 leave_cluster(Node) ->

@@ -57,6 +57,7 @@ all_tests() ->
     passed = test_dynamic_mirroring(),
     passed = test_user_management(),
     passed = test_runtime_parameters(),
+    passed = test_policy_validation(),
     passed = test_server_status(),
     passed = test_confirms(),
     passed =
@@ -774,7 +775,9 @@ test_log_management_during_startup() ->
     ok = case catch control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotation_tty_no_handlers_test});
-             {error, {cannot_log_to_tty, _, _}} -> ok
+             {badrpc, {'EXIT', {rabbit,failure_during_boot,
+               {error,{cannot_log_to_tty,
+                       _, not_installed}}}}} -> ok
          end,
 
     %% fix sasl logging
@@ -798,7 +801,9 @@ test_log_management_during_startup() ->
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotation_no_write_permission_dir_test});
-             {error, {cannot_log_to_file, _, _}} -> ok
+             {badrpc, {'EXIT',
+               {rabbit, failure_during_boot,
+                {error, {cannot_log_to_file, _, _}}}}} -> ok
          end,
 
     %% start application with logging to a subdirectory which
@@ -809,8 +814,11 @@ test_log_management_during_startup() ->
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotatation_parent_dirs_test});
-             {error, {cannot_log_to_file, _,
-                      {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
+             {badrpc,
+              {'EXIT', {rabbit,failure_during_boot,
+                {error, {cannot_log_to_file, _,
+                  {error,
+                   {cannot_create_parent_dirs, _, eacces}}}}}}} -> ok
          end,
     ok = set_permissions(TmpDir, 8#00700),
     ok = set_permissions(TmpLog, 8#00600),
@@ -886,37 +894,48 @@ test_arguments_parser() ->
 test_dynamic_mirroring() ->
     %% Just unit tests of the node selection logic, see multi node
     %% tests for the rest...
-    Test = fun ({NewM, NewSs}, Policy, Params, {OldM, OldSs}, All) ->
+    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, {OldM, OldSs}, All) ->
                    {NewM, NewSs0} =
                        rabbit_mirror_queue_misc:suggested_queue_nodes(
                          Policy, Params, {OldM, OldSs}, All),
-                   NewSs = lists:sort(NewSs0)
+                   NewSs1 = lists:sort(NewSs0),
+                   case dm_list_match(NewSs, NewSs1, ExtraSs) of
+                       ok    -> ok;
+                       error -> exit({no_match, NewSs, NewSs1, ExtraSs})
+                   end
            end,
 
-    Test({a,[b,c]},<<"all">>,'_',{a,[]},   [a,b,c]),
-    Test({a,[b,c]},<<"all">>,'_',{a,[b,c]},[a,b,c]),
-    Test({a,[b,c]},<<"all">>,'_',{a,[d]},  [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[]},   [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c]},[a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[d]},  [a,b,c]),
 
     %% Add a node
-    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
-    Test({b,[a,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
+    Test({b,[a,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
     %% Add two nodes and drop one
-    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
     %% Promote slave to master by policy
-    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
     %% Don't try to include nodes that are not running
-    Test({a,[b]},  <<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
+    Test({a,[b],  0},<<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
     %% If we can't find any of the nodes listed then just keep the master
-    Test({a,[]},   <<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
+    Test({a,[],   0},<<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
 
-    Test({a,[b]},  <<"exactly">>,2,{a,[]},   [a,b,c,d]),
-    Test({a,[b,c]},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
-    Test({a,[c]},  <<"exactly">>,2,{a,[c]},  [a,b,c,d]),
-    Test({a,[b,c]},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
-    Test({a,[c]},  <<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
-    Test({a,[c,d]},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
+    Test({a,[],   1},<<"exactly">>,2,{a,[]},   [a,b,c,d]),
+    Test({a,[],   2},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c]},  [a,b,c,d]),
+    Test({a,[c],  1},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
+    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
 
     passed.
+
+%% Does the first list match the second where the second is required
+%% to have exactly Extra superfluous items?
+dm_list_match([],     [],      0)     -> ok;
+dm_list_match(_,      [],     _Extra) -> error;
+dm_list_match([H|T1], [H |T2], Extra) -> dm_list_match(T1, T2, Extra);
+dm_list_match(L1,     [_H|T2], Extra) -> dm_list_match(L1, T2, Extra - 1).
 
 test_user_management() ->
 
@@ -1028,6 +1047,26 @@ test_runtime_parameters() ->
     rabbit_runtime_parameters_test:unregister(),
     passed.
 
+test_policy_validation() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
+    SetPol =
+        fun (Key, Val) ->
+                control_action(
+                  set_policy,
+                  ["name", ".*", rabbit_misc:format("{\"~s\":~p}", [Key, Val])])
+        end,
+
+    ok                 = SetPol("testeven", []),
+    ok                 = SetPol("testeven", [1, 2]),
+    ok                 = SetPol("testeven", [1, 2, 3, 4]),
+    ok                 = SetPol("testpos",  [2, 5, 5678]),
+
+    {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
+    {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
+
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
+    passed.
+
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
@@ -1089,8 +1128,8 @@ test_server_status() ->
     ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
 
     %% eval
-    {parse_error, _} = control_action(eval, ["\""]),
-    {parse_error, _} = control_action(eval, ["a("]),
+    {error_string, _} = control_action(eval, ["\""]),
+    {error_string, _} = control_action(eval, ["a("]),
     ok = control_action(eval, ["a."]),
 
     %% cleanup

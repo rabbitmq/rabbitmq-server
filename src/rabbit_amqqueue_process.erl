@@ -26,7 +26,7 @@
 
 -export([start_link/1, info_keys/0]).
 
--export([init_with_backing_queue_state/8]).
+-export([init_with_backing_queue_state/7]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -76,8 +76,8 @@
 -spec(start_link/1 ::
         (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(init_with_backing_queue_state/8 ::
-        (rabbit_types:amqqueue(), atom(), tuple(), any(), [any()],
+-spec(init_with_backing_queue_state/7 ::
+        (rabbit_types:amqqueue(), atom(), tuple(), any(),
          [rabbit_types:delivery()], pmon:pmon(), dict()) -> #q{}).
 
 -endif.
@@ -86,12 +86,14 @@
 
 -define(STATISTICS_KEYS,
         [pid,
+         policy,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
          messages_ready,
          messages_unacknowledged,
          messages,
          consumers,
+         active_consumers,
          memory,
          slave_pids,
          synchronised_slave_pids,
@@ -144,7 +146,7 @@ init(Q) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
-                              RateTRef, AckTags, Deliveries, Senders, MTC) ->
+                              RateTRef, Deliveries, Senders, MTC) ->
     case Owner of
         none -> ok;
         _    -> erlang:monitor(process, Owner)
@@ -166,9 +168,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                delayed_stop        = undefined,
                queue_monitors      = pmon:new(),
                msg_id_to_channel   = MTC},
-    State1 = requeue_and_run(AckTags, process_args(
-                                        rabbit_event:init_stats_timer(
-                                          State, #q.stats_timer))),
+    State1 = process_args(rabbit_event:init_stats_timer(State, #q.stats_timer)),
     lists:foldl(fun (Delivery, StateN) ->
                         deliver_or_enqueue(Delivery, true, StateN)
                 end, State1, Deliveries).
@@ -497,32 +497,29 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
     rabbit_misc:gb_trees_foreach(fun rabbit_misc:confirm_to_sender/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
 
-should_confirm_message(#delivery{msg_seq_no = undefined}, _State) ->
-    never;
-should_confirm_message(#delivery{sender     = SenderPid,
+send_or_record_confirm(#delivery{msg_seq_no = undefined}, State) ->
+    {never, State};
+send_or_record_confirm(#delivery{sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
                                    is_persistent = true,
                                    id            = MsgId}},
-                       #q{q = #amqqueue{durable = true}}) ->
-    {eventually, SenderPid, MsgSeqNo, MsgId};
-should_confirm_message(#delivery{sender     = SenderPid,
-                                 msg_seq_no = MsgSeqNo},
-                       _State) ->
-    {immediately, SenderPid, MsgSeqNo}.
-
-needs_confirming({eventually, _, _, _}) -> true;
-needs_confirming(_)                     -> false.
-
-maybe_record_confirm_message({eventually, SenderPid, MsgSeqNo, MsgId},
-                             State = #q{msg_id_to_channel = MTC}) ->
-    State#q{msg_id_to_channel =
-                gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC)};
-maybe_record_confirm_message({immediately, SenderPid, MsgSeqNo}, State) ->
+                       State = #q{q                 = #amqqueue{durable = true},
+                                  msg_id_to_channel = MTC}) ->
+    MTC1 = gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC),
+    {eventually, State#q{msg_id_to_channel = MTC1}};
+send_or_record_confirm(#delivery{sender     = SenderPid,
+                                 msg_seq_no = MsgSeqNo}, State) ->
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
-    State;
-maybe_record_confirm_message(_Confirm, State) ->
-    State.
+    {immediately, State}.
+
+discard(#delivery{sender = SenderPid, message = #basic_message{id = MsgId}},
+        State) ->
+    %% fake an 'eventual' confirm from BQ; noop if not needed
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+        confirm_messages([MsgId], State),
+    BQS1 = BQ:discard(MsgId, SenderPid, BQS),
+    State1#q{backing_queue_state = BQS1}.
 
 run_message_queue(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -532,58 +529,50 @@ run_message_queue(State) ->
                             BQ:is_empty(BQS), State1),
     State2.
 
-attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
+attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
+                 Props = #message_properties{delivered = Delivered},
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     case BQ:is_duplicate(Message, BQS) of
         {false, BQS1} ->
             deliver_msgs_to_consumers(
-              fun (AckRequired, State1 = #q{backing_queue_state = BQS2}) ->
+              fun (true, State1 = #q{backing_queue_state = BQS2}) ->
                       {AckTag, BQS3} = BQ:publish_delivered(
-                                         AckRequired, Message, Props,
-                                         SenderPid, BQS2),
-                      {{Message, Props#message_properties.delivered, AckTag},
-                       true, State1#q{backing_queue_state = BQS3}}
+                                         Message, Props, SenderPid, BQS2),
+                      {{Message, Delivered, AckTag},
+                       true, State1#q{backing_queue_state = BQS3}};
+                  (false, State1) ->
+                      {{Message, Delivered, undefined},
+                       true, discard(Delivery, State1)}
               end, false, State#q{backing_queue_state = BQS1});
-        {Duplicate, BQS1} ->
-            %% if the message has previously been seen by the BQ then
-            %% it must have been seen under the same circumstances as
-            %% now: i.e. if it is now a deliver_immediately then it
-            %% must have been before.
-            {case Duplicate of
-                 published -> true;
-                 discarded -> false
-             end,
-             State#q{backing_queue_state = BQS1}}
+        {published, BQS1} ->
+            {true,  State#q{backing_queue_state = BQS1}};
+        {discarded, BQS1} ->
+            {false, State#q{backing_queue_state = BQS1}}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message    = Message,
-                                        sender     = SenderPid}, Delivered,
-                   State) ->
-    Confirm = should_confirm_message(Delivery, State),
+deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
+                   Delivered, State) ->
+    {Confirm, State1} = send_or_record_confirm(Delivery, State),
     Props = message_properties(Confirm, Delivered, State),
-    case attempt_delivery(Delivery, Props, State) of
-        {true, State1} ->
-            maybe_record_confirm_message(Confirm, State1);
-        %% the next one is an optimisations
-        %% TODO: optimise the Confirm =/= never case too
-        {false, State1 = #q{ttl = 0, dlx = undefined}} when Confirm == never ->
-            discard_delivery(Delivery, State1);
-        {false, State1} ->
-            State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-                maybe_record_confirm_message(Confirm, State1),
+    case attempt_delivery(Delivery, Props, State1) of
+        {true, State2} ->
+            State2;
+        %% The next one is an optimisation
+        {false, State2 = #q{ttl = 0, dlx = undefined}} ->
+            discard(Delivery, State2);
+        {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,
                              State2#q{backing_queue_state = BQS1})
     end.
 
-requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
-    run_backing_queue(BQ, fun (M, BQS) ->
-                                  {_MsgIds, BQS1} = M:requeue(AckTags, BQS),
-                                  BQS1
-                          end, State).
+requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
+                                    backing_queue_state = BQS}) ->
+    {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
+    run_message_queue(State#q{backing_queue_state = BQS1}).
 
-fetch(AckRequired, State = #q{backing_queue_state = BQS,
-                              backing_queue       = BQ}) ->
+fetch(AckRequired, State = #q{backing_queue       = BQ,
+                              backing_queue_state = BQS}) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     {Result, State#q{backing_queue_state = BQS1}}.
 
@@ -677,12 +666,9 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-backing_queue_timeout(State = #q{backing_queue = BQ}) ->
-    run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
-
-run_backing_queue(Mod, Fun, State = #q{backing_queue = BQ,
-                                       backing_queue_state = BQS}) ->
-    run_message_queue(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)}).
+backing_queue_timeout(State = #q{backing_queue       = BQ,
+                                 backing_queue_state = BQS}) ->
+    State#q{backing_queue_state = BQ:timeout(BQS)}.
 
 subtract_acks(ChPid, AckTags, State, Fun) ->
     case lookup_ch(ChPid) of
@@ -694,15 +680,9 @@ subtract_acks(ChPid, AckTags, State, Fun) ->
             Fun(State)
     end.
 
-discard_delivery(#delivery{sender = SenderPid,
-                           message = Message},
-                 State = #q{backing_queue = BQ,
-                            backing_queue_state = BQS}) ->
-    State#q{backing_queue_state = BQ:discard(Message, SenderPid, BQS)}.
-
 message_properties(Confirm, Delivered, #q{ttl = TTL}) ->
     #message_properties{expiry           = calculate_msg_expiry(TTL),
-                        needs_confirming = needs_confirming(Confirm),
+                        needs_confirming = Confirm == eventually,
                         delivered        = Delivered}.
 
 calculate_msg_expiry(undefined) -> undefined;
@@ -715,16 +695,15 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     Now = now_micros(),
     DLXFun = dead_letter_fun(expired, State),
     ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
-    {Props, BQS1} =
-        case DLXFun of
-            undefined ->
-                {Next, undefined, BQS2} = BQ:dropwhile(ExpirePred, false, BQS),
-                {Next, BQS2};
-            _  ->
-                {Next, Msgs,      BQS2} = BQ:dropwhile(ExpirePred, true,  BQS),
-                DLXFun(Msgs),
-                {Next, BQS2}
-        end,
+    {Props, BQS1} = case DLXFun of
+                        undefined -> {Next, undefined, BQS2} =
+                                         BQ:dropwhile(ExpirePred, false, BQS),
+                                     {Next, BQS2};
+                        _         -> {Next, Msgs,      BQS2} =
+                                         BQ:dropwhile(ExpirePred, true,  BQS),
+                                     DLXFun(Msgs),
+                                     {Next, BQS2}
+                    end,
     ensure_ttl_timer(case Props of
                          undefined                          -> undefined;
                          #message_properties{expiry = Exp}  -> Exp
@@ -895,6 +874,12 @@ i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
 i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
     ExclusiveOwner;
+i(policy,    #q{q = #amqqueue{name = Name}}) ->
+    {ok, Q} = rabbit_amqqueue:lookup(Name),
+    case rabbit_policy:name(Q) of
+        none   -> '';
+        Policy -> Policy
+    end;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';
 i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
@@ -912,6 +897,8 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     consumer_count();
+i(active_consumers, _) ->
+    active_consumer_count();
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
@@ -1032,10 +1019,10 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State) ->
     reply(consumers(State), State);
 
-handle_call({deliver, Delivery}, From, State) ->
+handle_call({deliver, Delivery, Delivered}, From, State) ->
     %% Synchronous, "mandatory" deliver mode.
     gen_server2:reply(From, ok),
-    noreply(deliver_or_enqueue(Delivery, false, State));
+    noreply(deliver_or_enqueue(Delivery, Delivered, State));
 
 handle_call({notify_down, ChPid}, From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
@@ -1192,10 +1179,12 @@ handle_cast({confirm, MsgSeqNos, QPid}, State = #q{unconfirmed = UC}) ->
 handle_cast(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
     noreply(State);
 
-handle_cast({run_backing_queue, Mod, Fun}, State) ->
-    noreply(run_backing_queue(Mod, Fun, State));
+handle_cast({run_backing_queue, Mod, Fun},
+            State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    noreply(run_message_queue(
+              State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)}));
 
-handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow},
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
             State = #q{senders = Senders}) ->
     %% Asynchronous, non-"mandatory" deliver mode.
     Senders1 = case Flow of
@@ -1204,7 +1193,7 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow},
                    noflow -> Senders
                end,
     State1 = State#q{senders = Senders1},
-    noreply(deliver_or_enqueue(Delivery, false, State1));
+    noreply(deliver_or_enqueue(Delivery, Delivered, State1));
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(subtract_acks(
