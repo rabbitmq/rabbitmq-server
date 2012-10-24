@@ -1178,14 +1178,10 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                  (_X, #exchange{}) ->
                      ok
              end) of
-        {error, source_not_found} ->
-            rabbit_misc:not_found(ExchangeName);
-        {error, destination_not_found} ->
-            rabbit_misc:not_found(DestinationName);
-        {error, source_and_destination_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s and no ~s", [rabbit_misc:rs(ExchangeName),
-                                             rabbit_misc:rs(DestinationName)]);
+        {error, {resources_missing, [{not_found, Name} | _]}} ->
+            rabbit_misc:not_found(Name);
+        {error, {resources_missing, [{absent, Q} | _]}} ->
+            rabbit_misc:absent(Q);
         {error, binding_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no binding ~s between ~s and ~s",

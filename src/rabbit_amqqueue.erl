@@ -18,7 +18,7 @@
 
 -export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
 -export([pseudo_queue/2]).
--export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
+-export([lookup/1, lookup_absent/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
@@ -81,6 +81,9 @@
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found');
         ([name()]) -> [rabbit_types:amqqueue()]).
+-spec(lookup_absent/1 ::
+        (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
+                    rabbit_types:error('not_found')).
 -spec(with/2 :: (name(), qfun(A)) ->
                      A | rabbit_types:error(
                            'not_found' | {'absent', rabbit_types:amqqueue()})).
@@ -236,13 +239,14 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   [] ->
-                      case mnesia:read({rabbit_durable_queue, QueueName}) of
-                          []   -> Q1 = rabbit_policy:set(Q),
-                                  ok = store_queue(Q1),
-                                  B = add_default_binding(Q1),
-                                  fun () -> B(), Q1 end;
-                          %% Q exists on stopped node
-                          [Q1] -> rabbit_misc:const({absent, Q1})
+                      case lookup_absent(QueueName) of
+                          {error, not_found} ->
+                              Q1 = rabbit_policy:set(Q),
+                              ok = store_queue(Q1),
+                              B = add_default_binding(Q1),
+                              fun () -> B(), Q1 end;
+                          {ok, Q1} ->
+                              rabbit_misc:const({absent, Q1})
                       end;
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
@@ -295,6 +299,14 @@ lookup(Names) when is_list(Names) ->
     lists:append([ets:lookup(rabbit_queue, Name) || Name <- Names]);
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_queue, Name}).
+
+lookup_absent(Name) ->
+    %% NB: we assume that the caller has already performed a lookup on
+    %% rabbit_queue and not found anything
+    case mnesia:read({rabbit_durable_queue, Name}) of
+        []  -> {error, not_found};
+        [Q] -> {ok, Q} %% Q exists on stopped node
+    end.
 
 with(Name, F, E) ->
     case lookup(Name) of
