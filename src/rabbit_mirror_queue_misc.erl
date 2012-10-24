@@ -268,7 +268,11 @@ policy(Policy, Q) ->
 suggested_queue_nodes(<<"all">>, _Params, {MNode, _SNodes}, Possible) ->
     {MNode, Possible -- [MNode]};
 suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, Possible) ->
-    Nodes = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
+    Nodes1 = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
+    %% If the current master is currently not in the nodes specified,
+    %% act like it is for the purposes below - otherwise we will not
+    %% return it in the results...
+    Nodes = lists:usort([MNode | Nodes1]),
     Unavailable = Nodes -- Possible,
     Available = Nodes -- Unavailable,
     case Available of

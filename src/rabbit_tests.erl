@@ -914,12 +914,12 @@ test_dynamic_mirroring() ->
     Test({b,[a,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
     %% Add two nodes and drop one
     Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
-    %% Promote slave to master by policy
-    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
     %% Don't try to include nodes that are not running
     Test({a,[b],  0},<<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
     %% If we can't find any of the nodes listed then just keep the master
     Test({a,[],   0},<<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
+    %% And once that's happened, still keep the master even when not listed
+    Test({a,[b,c],0},<<"nodes">>,[<<"b">>,<<"c">>],        {a,[]}, [a,b,c,d]),
 
     Test({a,[],   1},<<"exactly">>,2,{a,[]},   [a,b,c,d]),
     Test({a,[],   2},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
