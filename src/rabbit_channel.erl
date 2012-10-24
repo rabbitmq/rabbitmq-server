@@ -423,15 +423,6 @@ precondition_failed(Format) -> precondition_failed(Format, []).
 precondition_failed(Format, Params) ->
     rabbit_misc:protocol_error(precondition_failed, Format, Params).
 
-absent(#amqqueue{name = QueueName, pid = QPid, durable = true}) ->
-    %% The assertion of durability is mainly there because we mention
-    %% durability in the error message. That way we will hopefully
-    %% notice if at some future point our logic changes s.t. we get
-    %% here with non-durable queues.
-    rabbit_misc:protocol_error(
-      not_found, "home node '~s' of durable ~s is down or inaccessible",
-      [node(QPid), rabbit_misc:rs(QueueName)]).
-
 return_queue_declare_ok(#resource{name = ActualName},
                         NoWait, MessageCount, ConsumerCount, State) ->
     return_ok(State#ch{most_recently_declared_queue = ActualName}, NoWait,
@@ -971,8 +962,10 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     %% declare. Loop around again.
                     handle_method(Declare, none, State);
                 {absent, Q} ->
-                    absent(Q)
-            end
+                    rabbit_misc:absent(Q)
+            end;
+        {error, {absent, Q}} ->
+            rabbit_misc:absent(Q)
     end;
 
 handle_method(#'queue.declare'{queue   = QueueNameBin,
