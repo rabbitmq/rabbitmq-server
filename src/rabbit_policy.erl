@@ -43,7 +43,7 @@ name(#amqqueue{policy = Policy}) -> name0(Policy);
 name(#exchange{policy = Policy}) -> name0(Policy).
 
 name0(undefined) -> none;
-name0(Policy)    -> pget(<<"name">>, Policy).
+name0(Policy)    -> pget(name, Policy).
 
 set(Q = #amqqueue{name = Name}) -> Q#amqqueue{policy = set0(Name)};
 set(X = #exchange{name = Name}) -> X#exchange{policy = set0(Name)}.
