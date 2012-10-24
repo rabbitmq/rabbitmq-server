@@ -35,9 +35,11 @@
 
 -type(key() :: binary()).
 
--type(bind_errors() :: rabbit_types:error('source_not_found' |
-                                          'destination_not_found' |
-                                          'source_and_destination_not_found')).
+-type(bind_errors() :: rabbit_types:error(
+                         {'resources_missing',
+                          [{'not_found', (rabbit_types:binding_source() |
+                                          rabbit_types:binding_destination())} |
+                           {'absent', rabbit_types:amqqueue()}]})).
 -type(bind_ok_or_error() :: 'ok' | bind_errors() |
                             rabbit_types:error('binding_not_found')).
 -type(bind_res() :: bind_ok_or_error() | rabbit_misc:thunk(bind_ok_or_error())).
@@ -330,20 +332,31 @@ sync_transient_route(Route, Fun) ->
 call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
-    ErrFun = fun (Err) -> rabbit_misc:const({error, Err}) end,
+    ErrFun = fun (Names) ->
+                     Errs = [not_found_or_absent(Name) || Name <- Names],
+                     rabbit_misc:const({error, {resources_missing, Errs}})
+             end,
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case {mnesia:read({SrcTable, SrcName}),
                     mnesia:read({DstTable, DstName})} of
                   {[Src], [Dst]} -> Fun(Src, Dst);
-                  {[],    [_]  } -> ErrFun(source_not_found);
-                  {[_],   []   } -> ErrFun(destination_not_found);
-                  {[],    []   } -> ErrFun(source_and_destination_not_found)
-               end
+                  {[],    [_]  } -> ErrFun([SrcName]);
+                  {[_],   []   } -> ErrFun([DstName]);
+                  {[],    []   } -> ErrFun([SrcName, DstName])
+              end
       end).
 
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
 table_for_resource(#resource{kind = queue})    -> rabbit_queue.
+
+not_found_or_absent(#resource{kind = exchange} = Name) ->
+    {not_found, Name};
+not_found_or_absent(#resource{kind = queue}    = Name) ->
+    case rabbit_amqqueue:lookup_absent(Name) of
+        {error, not_found} -> {not_found, Name};
+        {ok, Q}            -> {absent, Q}
+    end.
 
 contains(Table, MatchHead) ->
     continue(mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read)).

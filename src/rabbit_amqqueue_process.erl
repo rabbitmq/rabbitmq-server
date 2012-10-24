@@ -196,9 +196,7 @@ declare(Recover, From, State = #q{q                   = Q,
                                   backing_queue       = BQ,
                                   backing_queue_state = undefined}) ->
     case rabbit_amqqueue:internal_declare(Q, Recover) of
-        not_found ->
-            {stop, normal, not_found, State};
-        Q1 ->
+        #amqqueue{} = Q1 ->
             case matches(Recover, Q, Q1) of
                 true ->
                     gen_server2:reply(From, {new, Q}),
@@ -216,8 +214,10 @@ declare(Recover, From, State = #q{q                   = Q,
                     noreply(State1);
                 false ->
                     {stop, normal, {existing, Q1}, State}
-            end
-     end.
+            end;
+        Err ->
+            {stop, normal, Err, State}
+    end.
 
 matches(true, Q, Q) -> true;
 matches(true, _Q, _Q1) -> false;
