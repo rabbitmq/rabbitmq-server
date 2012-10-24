@@ -381,6 +381,8 @@ cluster_status_from_mnesia() ->
                                          disc -> nodes_incl_me(DiscCopies);
                                          ram  -> DiscCopies
                                      end,
+                         %% `mnesia:system_info(running_db_nodes)' is safe since
+                         %% we know that mnesia is running
                          RunningNodes = mnesia:system_info(running_db_nodes),
                          {ok, {AllNodes, DiscNodes, RunningNodes}};
                 false -> {error, tables_not_present}
