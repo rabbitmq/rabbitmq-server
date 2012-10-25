@@ -58,7 +58,7 @@
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
 
--spec(append_table_header/3 ::
+-spec(prepend_table_header/3 ::
         (binary(), rabbit_framing:amqp_table(), headers()) -> headers()).
 
 -spec(extract_headers/1 :: (rabbit_types:content()) -> headers()).
