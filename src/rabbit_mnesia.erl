@@ -817,20 +817,20 @@ e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 error_description(clustering_only_disc_node) ->
     "You cannot cluster a node if it is the only disc node in its existing "
         " cluster. If new nodes joined while this node was offline, use "
-        "\"update_cluster_nodes\" to add them manually.";
+        "'update_cluster_nodes' to add them manually.";
 error_description(resetting_only_disc_node) ->
     "You cannot reset a node when it is the only disc node in a cluster. "
         "Please convert another node of the cluster to a disc node first.";
 error_description(already_clustered) ->
     "You are already clustered with the nodes you have selected.  If the "
-        "node you're trying to cluster with is not present in the current node "
-        "status, use 'update_cluster_nodes'.";
+        "node you are trying to cluster with is not present in the current "
+        "node status, use 'update_cluster_nodes'.";
 error_description(not_clustered) ->
     "Non-clustered nodes can only be disc nodes.";
 error_description(cannot_connect_to_cluster) ->
     "Could not connect to the cluster nodes present in this node's "
         "status file. If the cluster has changed, you can use the "
-        "\"update_cluster_nodes\" command to point to the new cluster nodes.";
+        "'update_cluster_nodes' command to point to the new cluster nodes.";
 error_description(no_online_cluster_nodes) ->
     "Could not find any online cluster nodes. If the cluster has changed, "
         "you can use the 'recluster' command.";
@@ -848,11 +848,11 @@ error_description(offline_node_no_offline_flag) ->
         "but can be done with the --offline flag. Please consult the manual "
         "for rabbitmqctl for more information.";
 error_description(not_last_node_to_go_down) ->
-    "The node you're trying to remove from was not the last to go down "
+    "The node you are trying to remove from was not the last to go down "
         "(excluding the node you are removing). Please use the the last node "
         "to go down to remove nodes when the cluster is offline.";
 error_description(removing_node_from_offline_node) ->
-    "To remove a node remotely from an offline node, the node you're removing "
+    "To remove a node remotely from an offline node, the node you are removing "
         "from must be a disc node and all the other nodes must be offline.";
 error_description(no_running_cluster_nodes) ->
     "You cannot leave a cluster if no online nodes are present.".
