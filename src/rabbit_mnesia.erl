@@ -110,10 +110,22 @@ init() ->
 init_from_config() ->
     {TryNodes, NodeType} =
         case application:get_env(rabbit, cluster_nodes) of
-            {ok, {TryNodes, disc} = C} when is_list(TryNodes) ->
+            {ok, {Nodes, disc} = C} when is_list(Nodes) ->
                 C;
-            {ok, {TryNodes, ram } = C} when is_list(TryNodes) ->
+            {ok, {Nodes, ram } = C} when is_list(Nodes) ->
                 C;
+            {ok, Nodes} when is_list(Nodes) ->
+                rabbit_log:info("blahblah ~p~n", [Nodes]),
+                %% Legacy config
+                rabbit_log:warning(
+                  "Legacy 'cluster_nodes' configuration, use "
+                  "{Nodes, NodeType}, where Nodes contains the nodes that the "
+                  "node will try to cluster with, and NodeType is either "
+                  "'disc' or 'ram'."),
+                {Nodes -- [node()], case lists:member(node(), Nodes) of
+                                        true  -> disc;
+                                        false -> ram
+                                    end};
             _ ->
                 e(invalid_cluster_config)
     end,
