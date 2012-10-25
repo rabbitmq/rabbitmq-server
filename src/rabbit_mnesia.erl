@@ -174,7 +174,7 @@ join_cluster(DiscoveryNode, NodeType) ->
     %% this case - we're joining a new cluster with new nodes which
     %% are not in synch with the current node. I also lifts the burden
     %% of reseting the node from the user.
-    reset(false),
+    reset_gracefully(),
 
     %% Join the cluster
     rabbit_misc:local_info_msg("Clustering with ~p as ~p node~n",
@@ -188,39 +188,35 @@ join_cluster(DiscoveryNode, NodeType) ->
 %% cluster, has no cluster configuration, no local database, and no
 %% persisted messages
 reset() ->
+    ensure_mnesia_not_running(),
     rabbit_misc:local_info_msg("Resetting Rabbit~n", []),
-    reset(false).
+    reset_gracefully().
 
 force_reset() ->
-    rabbit_misc:local_info_msg("Resetting Rabbit forcefully~n", []),
-    reset(true).
-
-reset(Force) ->
     ensure_mnesia_not_running(),
-    Nodes = case Force of
-                true ->
-                    cluster_nodes(all);
-                false ->
-                    AllNodes = cluster_nodes(all),
-                    %% Reconnecting so that we will get an up to date
-                    %% nodes.  We don't need to check for consistency
-                    %% because we are resetting.  Force=true here so
-                    %% that reset still works when clustered with a
-                    %% node which is down.
-                    init_db_with_mnesia(AllNodes, node_type(), false, false),
-                    case is_only_clustered_disc_node() of
-                        true  -> e(resetting_only_disc_node);
-                        false -> ok
-                    end,
-                    leave_cluster(),
-                    rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
-                                          cannot_delete_schema),
-                    cluster_nodes(all)
-            end,
+    rabbit_misc:local_info_msg("Resetting Rabbit forcefully~n", []),
+    wipe().
+
+reset_gracefully() ->
+    AllNodes = cluster_nodes(all),
+    %% Reconnecting so that we will get an up to date nodes.  We don't
+    %% need to check for consistency because we are resetting.
+    %% Force=true here so that reset still works when clustered with a
+    %% node which is down.
+    init_db_with_mnesia(AllNodes, node_type(), false, false),
+    case is_only_clustered_disc_node() of
+        true  -> e(resetting_only_disc_node);
+        false -> ok
+    end,
+    leave_cluster(),
+    rabbit_misc:ensure_ok(mnesia:delete_schema([node()]), cannot_delete_schema),
+    wipe().
+
+wipe() ->
     %% We need to make sure that we don't end up in a distributed
     %% Erlang system with nodes while not being in an Mnesia cluster
     %% with them. We don't handle that well.
-    [erlang:disconnect_node(N) || N <- Nodes],
+    [erlang:disconnect_node(N) || N <- cluster_nodes(all)],
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok = rabbit_node_monitor:reset_cluster_status(),
