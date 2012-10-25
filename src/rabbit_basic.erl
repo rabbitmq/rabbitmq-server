@@ -19,7 +19,7 @@
 -include("rabbit_framing.hrl").
 
 -export([publish/4, publish/5, publish/1,
-         message/3, message/4, properties/1, append_table_header/3,
+         message/3, message/4, properties/1, prepend_table_header/3,
          extract_headers/1, map_headers/2, delivery/3, header_routes/1]).
 -export([build_content/2, from_content/1]).
 
@@ -177,9 +177,9 @@ properties(P) when is_list(P) ->
                         end
                 end, #'P_basic'{}, P).
 
-append_table_header(Name, Info, undefined) ->
-    append_table_header(Name, Info, []);
-append_table_header(Name, Info, Headers) ->
+prepend_table_header(Name, Info, undefined) ->
+    prepend_table_header(Name, Info, []);
+prepend_table_header(Name, Info, Headers) ->
     case rabbit_misc:table_lookup(Headers, Name) of
         {array, Existing} ->
             prepend_table(Headers, Name, Info, Existing);

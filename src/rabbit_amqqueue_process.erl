@@ -847,8 +847,8 @@ make_dead_letter_msg(Reason,
                         {<<"time">>,         timestamp, TimeSec},
                         {<<"exchange">>,     longstr,   Exchange#resource.name},
                         {<<"routing-keys">>, array,     RKs1}],
-                HeadersFun1(rabbit_basic:append_table_header(<<"x-death">>,
-                                                             Info, Headers))
+                HeadersFun1(rabbit_basic:prepend_table_header(<<"x-death">>,
+                                                              Info, Headers))
         end,
     Content1 = rabbit_basic:map_headers(HeadersFun2, Content),
     Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
