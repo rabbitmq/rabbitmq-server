@@ -180,11 +180,26 @@ properties(P) when is_list(P) ->
 append_table_header(Name, Info, undefined) ->
     append_table_header(Name, Info, []);
 append_table_header(Name, Info, Headers) ->
-    Prior = case rabbit_misc:table_lookup(Headers, Name) of
-                {array, Existing}  -> Existing;
-                _                  -> []
-            end,
+    case rabbit_misc:table_lookup(Headers, Name) of
+        {array, Existing} ->
+            prepend_table(Headers, Name, Info, Existing);
+        undefined ->
+            prepend_table(Headers, Name, Info, []);
+        Other ->
+            Headers2 = prepend_table(Headers, Name, Info, []),
+            set_invalid_header(Name, Other, Headers2)
+    end.
+
+prepend_table(Headers, Name, Info, Prior) ->
     rabbit_misc:set_table_value(Headers, Name, array, [{table, Info} | Prior]).
+
+set_invalid_header(Name, {_, _}=Value, Headers) when is_list(Headers) ->
+    case rabbit_misc:table_lookup(Headers, ?INVALID_HEADERS_KEY) of
+        undefined ->
+            Invalid = [{Name, array, [Value]}],
+            rabbit_misc:set_table_value(Headers, ?INVALID_HEADERS_KEY,
+                                        table, Invalid)
+    end.
 
 extract_headers(Content) ->
     #content{properties = #'P_basic'{headers = Headers}} =
