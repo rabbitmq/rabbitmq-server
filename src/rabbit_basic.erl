@@ -198,7 +198,27 @@ set_invalid_header(Name, {_, _}=Value, Headers) when is_list(Headers) ->
         undefined ->
             Invalid = [{Name, array, [Value]}],
             rabbit_misc:set_table_value(Headers, ?INVALID_HEADERS_KEY,
-                                        table, Invalid)
+                                        table, Invalid);
+        {table, InvalidEntries} ->
+            case rabbit_misc:table_lookup(InvalidEntries, Name) of
+                undefined ->
+                    rabbit_misc:set_table_value(
+                      Headers, ?INVALID_HEADERS_KEY, table,
+                      rabbit_misc:set_table_value(InvalidEntries,
+                                                  Name, array, [Value]));
+                {array, Prior} ->
+                    rabbit_misc:set_table_value(
+                      Headers, ?INVALID_HEADERS_KEY, table,
+                      rabbit_misc:set_table_value(InvalidEntries,
+                                                  Name, array, [Value | Prior]))
+            end;
+        Other ->
+            %% somehow the x-invalid-headers header is corrupt
+            set_invalid_header(
+              Name, Value,
+              rabbit_misc:set_table_value(
+                Headers, ?INVALID_HEADERS_KEY,
+                table, [{?INVALID_HEADERS_KEY, array, [Other]}]))
     end.
 
 extract_headers(Content) ->
