@@ -108,8 +108,6 @@ init() ->
     ok.
 
 init_from_config() ->
-    {ok, {TryNodes, NodeType}} =
-        application:get_env(rabbit, cluster_nodes),
     {TryNodes, NodeType} =
         case application:get_env(rabbit, cluster_nodes) of
             {ok, {TryNodes, disc} = C} when is_list(TryNodes) ->
