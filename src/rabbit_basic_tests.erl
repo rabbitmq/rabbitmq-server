@@ -26,11 +26,30 @@
          {<<"exchange">>,     longstr,   <<"my-exchange">>},
          {<<"routing-keys">>, array,     []}]).
 
-write_table_with_invalid_existing_type_test() ->
-    assertInvalid(<<"x-death">>, {longstr, <<"this should be a table!!!">>},
-                  ?XDEATH_TABLE).
+-define(ROUTE_TABLE, [{<<"redelivered">>, bool, <<"true">>}]).
 
-assertInvalid(HeaderKey, {TBin, VBin}=InvalidEntry, HeaderTable) ->
+write_table_with_invalid_existing_type_test_() ->
+    [{"existing entries with invalid types are moved to a table "
+      "stored as <<\"x-invalid-headers header\">>",
+      assert_invalid(<<"x-death">>,
+                    {longstr, <<"this should be a table!!!">>},
+                    ?XDEATH_TABLE)},
+     {"if invalid existing headers are moved, newly added "
+      "ones are still stored correctly",
+      begin
+          BadHeaders = [{<<"x-received-from">>,
+                         longstr, <<"this should be a table!!!">>}],
+          Headers = rabbit_basic:append_table_header(
+                      <<"x-received-from">>, ?ROUTE_TABLE, BadHeaders),
+          ?_assertEqual({array, [{table, ?ROUTE_TABLE}]},
+                        rabbit_misc:table_lookup(Headers, <<"x-received-from">>))
+      end}
+    ].
+
+assert_invalid(HeaderKey, Entry, Table) ->
+    fun() -> check_invalid(HeaderKey, Entry, Table) end.
+
+check_invalid(HeaderKey, {TBin, VBin}=InvalidEntry, HeaderTable) ->
     Headers = rabbit_basic:append_table_header(HeaderKey, HeaderTable,
                                                [{HeaderKey, TBin, VBin}]),
     InvalidHeaders = rabbit_misc:table_lookup(Headers, ?INVALID_HEADERS_KEY),
@@ -39,5 +58,6 @@ assertInvalid(HeaderKey, {TBin, VBin}=InvalidEntry, HeaderTable) ->
     InvalidArrayForKey = rabbit_misc:table_lookup(Invalid, HeaderKey),
     ?assertMatch({array, _}, InvalidArrayForKey),
     {_, Array} = InvalidArrayForKey,
-    ?assertMatch([InvalidEntry], Array).
+    ?assertMatch([InvalidEntry], Array),
+    Headers.
 
