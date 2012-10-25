@@ -202,7 +202,7 @@ reset(Force) ->
     ensure_mnesia_not_running(),
     Nodes = case Force of
                 true ->
-                    cluster_nodes(All);
+                    cluster_nodes(all);
                 false ->
                     AllNodes = cluster_nodes(all),
                     %% Reconnecting so that we will get an up to date
