@@ -34,6 +34,7 @@
 all_tests() ->
     ok = setup_cluster(),
     ok = supervisor2_tests:test_all(),
+    ok = rabbit_basic_tests:test(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
