@@ -230,7 +230,9 @@ change_cluster_node_type(Type) ->
                                {ok, Status}     -> Status;
                                {error, _Reason} -> e(cannot_connect_to_cluster)
                            end,
-    Node = case RunningNodes of
+    %% We might still be marked as running by a remote node since the
+    %% information of us going down might not have propagated yet.
+    Node = case RunningNodes -- [node()] of
                []        -> e(no_online_cluster_nodes);
                [Node0|_] -> Node0
            end,
@@ -285,18 +287,18 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
     end.
 
 remove_node_offline_node(Node) ->
-    %% We want the running nodes *now*, so we don't call
-    %% `cluster_nodes(running)' which will just get what's in the cluster status
-    %% file.
-    case {running_nodes(cluster_nodes(all)) -- [Node], node_type()} of
+    %% Here `mnesia:system_info(running_db_nodes)' will RPC, but that's what we
+    %% want - we need to know the running nodes *now*.  If the current node is a
+    %% RAM node it will return bogus results, but we don't care since we only do
+    %% this operation from disc nodes.
+    case {mnesia:system_info(running_db_nodes) -- [Node], node_type()} of
         {[], disc} ->
-            %% Note that while we check if the nodes was the last to
-            %% go down, apart from the node we're removing from, this
-            %% is still unsafe.  Consider the situation in which A and
-            %% B are clustered. A goes down, and records B as the
-            %% running node. Then B gets clustered with C, C goes down
-            %% and B goes down. In this case, C is the second-to-last,
-            %% but we don't know that and we'll remove B from A
+            %% Note that while we check if the nodes was the last to go down,
+            %% apart from the node we're removing from, this is still unsafe.
+            %% Consider the situation in which A and B are clustered. A goes
+            %% down, and records B as the running node. Then B gets clustered
+            %% with C, C goes down and B goes down. In this case, C is the
+            %% second-to-last, but we don't know that and we'll remove B from A
             %% anyway, even if that will lead to bad things.
             case cluster_nodes(running) -- [node(), Node] of
                 [] -> start_mnesia(),
@@ -348,7 +350,7 @@ cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 %% This function is the actual source of information, since it gets
 %% the data from mnesia. Obviously it'll work only when mnesia is
 %% running.
-mnesia_nodes() ->
+cluster_status_from_mnesia() ->
     case mnesia:system_info(is_running) of
         no ->
             {error, mnesia_not_running};
@@ -368,39 +370,33 @@ mnesia_nodes() ->
                                          disc -> nodes_incl_me(DiscCopies);
                                          ram  -> DiscCopies
                                      end,
-                         {ok, {AllNodes, DiscNodes}};
+                         %% `mnesia:system_info(running_db_nodes)' is safe since
+                         %% we know that mnesia is running
+                         RunningNodes = mnesia:system_info(running_db_nodes),
+                         {ok, {AllNodes, DiscNodes, RunningNodes}};
                 false -> {error, tables_not_present}
             end
     end.
 
 cluster_status(WhichNodes) ->
-    %% I don't want to call `running_nodes/1' unless if necessary, since it's
-    %% pretty expensive.
-    {AllNodes1, DiscNodes1, RunningNodesThunk} =
-        case mnesia_nodes() of
-            {ok, {AllNodes, DiscNodes}} ->
-                {AllNodes, DiscNodes, fun() -> running_nodes(AllNodes) end};
+    {AllNodes, DiscNodes, RunningNodes} = Nodes =
+        case cluster_status_from_mnesia() of
+            {ok, Nodes0} ->
+                Nodes0;
             {error, _Reason} ->
-                {AllNodes, DiscNodes, RunningNodes} =
+                {AllNodes0, DiscNodes0, RunningNodes0} =
                     rabbit_node_monitor:read_cluster_status(),
                 %% The cluster status file records the status when the node is
                 %% online, but we know for sure that the node is offline now, so
                 %% we can remove it from the list of running nodes.
-                {AllNodes, DiscNodes, fun() -> nodes_excl_me(RunningNodes) end}
+                {AllNodes0, DiscNodes0, nodes_excl_me(RunningNodes0)}
         end,
     case WhichNodes of
-        status  -> {AllNodes1, DiscNodes1, RunningNodesThunk()};
-        all     -> AllNodes1;
-        disc    -> DiscNodes1;
-        ram     -> AllNodes1 -- DiscNodes1;
-        running -> RunningNodesThunk()
-    end.
-
-cluster_status_from_mnesia() ->
-    case mnesia_nodes() of
-        {ok, {AllNodes, DiscNodes}} -> {ok, {AllNodes, DiscNodes,
-                                             running_nodes(AllNodes)}};
-        {error, _} = Err            -> Err
+        status  -> Nodes;
+        all     -> AllNodes;
+        disc    -> DiscNodes;
+        ram     -> AllNodes -- DiscNodes;
+        running -> RunningNodes
     end.
 
 node_info() ->
@@ -734,14 +730,6 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
         {{ok, Nodes}, _} ->
             Nodes
     end.
-
-%% We're not using `mnesia:system_info(running_db_nodes)' directly
-%% because if the node is a RAM node it won't know about other nodes
-%% when mnesia is stopped
-running_nodes(Nodes) ->
-    {Replies, _BadNodes} = rpc:multicall(Nodes,
-                                         rabbit_mnesia, is_running_remote, []),
-    [Node || {Running, Node} <- Replies, Running].
 
 is_running_remote() -> {mnesia:system_info(is_running) =:= yes, node()}.
 
