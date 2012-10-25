@@ -65,9 +65,20 @@ case "$(uname -s)" in
   CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
            # will not be able to make sense of it anyway
            ;;
-  *)       mkdir -p $(dirname ${RABBITMQ_PID_FILE});
-           echo $$ > ${RABBITMQ_PID_FILE}
-           ;;
+  *)       # When -detached is passed, we don't write the pid, since it'd be the
+           # wrong one
+           detached=""
+           for opt in "$@"; do
+               if [ "$opt" = "-detached" ]; then
+                   detached="true"
+               fi
+           done
+           if [ $detached ]; then
+               echo "Warning: PID file not written; -detached was passed." 1>&2
+           else
+               mkdir -p $(dirname ${RABBITMQ_PID_FILE});
+               echo $$ > ${RABBITMQ_PID_FILE}
+           fi
 esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"

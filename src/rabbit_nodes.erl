@@ -70,8 +70,8 @@ diagnostics0() ->
 diagnostics_host(Host) ->
     case names(Host) of
         {error, EpmdReason} ->
-            {"- unable to connect to epmd on ~s: ~w",
-             [Host, EpmdReason]};
+            {"- unable to connect to epmd on ~s: ~w (~s)",
+             [Host, EpmdReason, rabbit_misc:format_inet_error(EpmdReason)]};
         {ok, NamePorts} ->
             {"- ~s: ~p",
              [Host, [{list_to_atom(Name), Port} ||

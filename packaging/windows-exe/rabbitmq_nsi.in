@@ -101,7 +101,9 @@ Section "RabbitMQ Service" RabbitService
   ExpandEnvStrings $0 %COMSPEC%
   ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" install'
   ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" start'
-  CopyFiles "$WINDIR\.erlang.cookie" "$PROFILE\.erlang.cookie"
+  ReadEnvStr $1 "HOMEDRIVE"
+  ReadEnvStr $2 "HOMEPATH"
+  CopyFiles "$WINDIR\.erlang.cookie" "$1$2\.erlang.cookie"
 SectionEnd
 
 ;--------------------------------

@@ -21,7 +21,7 @@
 -type(tx() :: 'transaction' | 'none').
 -type(serial() :: pos_integer() | tx()).
 
--callback description() -> [proplist:property()].
+-callback description() -> [proplists:property()].
 
 %% Should Rabbit ensure that all binding events that are
 %% delivered to an individual exchange can be serialised? (they
@@ -54,13 +54,13 @@
 
 %% called when comparing exchanges for equivalence - should return ok or
 %% exit with #amqp_error{}
--callback assert_args_equivalence (rabbit_types:exchange(),
-                                   rabbit_framing:amqp_table()) ->
+-callback assert_args_equivalence(rabbit_types:exchange(),
+                                  rabbit_framing:amqp_table()) ->
     'ok' | rabbit_types:connection_exit().
 
 %% called when the policy attached to this exchange changes.
--callback policy_changed (
-            serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
+-callback policy_changed(serial(), rabbit_types:exchange(),
+                         rabbit_types:exchange()) -> 'ok'.
 
 -else.
 
