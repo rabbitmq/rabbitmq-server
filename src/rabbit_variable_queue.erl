@@ -17,11 +17,11 @@
 -module(rabbit_variable_queue).
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
-         publish/4, publish_delivered/5, drain_confirmed/1,
+         publish/4, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
-         set_ram_duration_target/2, ram_duration/1, needs_timeout/1,
-         timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, discard/3, multiple_routing_keys/0, fold/3]).
+         depth/1, set_ram_duration_target/2, ram_duration/1,
+         needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
+         is_duplicate/2, multiple_routing_keys/0, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -545,17 +545,8 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                                           ram_msg_count    = RamMsgCount + 1,
                                           unconfirmed      = UC1 })).
 
-publish_delivered(false, #basic_message { id = MsgId },
-                  #message_properties { needs_confirming = NeedsConfirming },
-                  _ChPid, State = #vqstate { async_callback = Callback,
-                                             len = 0 }) ->
-    case NeedsConfirming of
-        true  -> blind_confirm(Callback, gb_sets:singleton(MsgId));
-        false -> ok
-    end,
-    {undefined, a(State)};
-publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
-                                               id = MsgId },
+publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
+                                         id = MsgId },
                   MsgProps = #message_properties {
                     needs_confirming = NeedsConfirming },
                   _ChPid, State = #vqstate { len              = 0,
@@ -579,6 +570,8 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                   persistent_count = PCount1,
                                   unconfirmed      = UC1 }))}.
 
+discard(_MsgId, _ChPid, State) -> State.
+
 drain_confirmed(State = #vqstate { confirmed = C }) ->
     case gb_sets:is_empty(C) of
         true  -> {[], State}; %% common case
@@ -589,12 +582,12 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
 dropwhile(Pred, AckRequired, State) -> dropwhile(Pred, AckRequired, State, []).
 
 dropwhile(Pred, AckRequired, State, Msgs) ->
-    End = fun(S) when AckRequired -> {lists:reverse(Msgs), S};
-             (S)                  -> {undefined, S}
+    End = fun(Next, S) when AckRequired -> {Next, lists:reverse(Msgs), S};
+             (Next, S)                  -> {Next, undefined, S}
           end,
     case queue_out(State) of
         {empty, State1} ->
-            End(a(State1));
+            End(undefined, a(State1));
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case {Pred(MsgProps), AckRequired} of
                 {true, true} ->
@@ -606,7 +599,7 @@ dropwhile(Pred, AckRequired, State, Msgs) ->
                     {_, State2} = internal_fetch(false, MsgStatus, State1),
                     dropwhile(Pred, AckRequired, State2, undefined);
                 {false, _} ->
-                    End(a(in_r(MsgStatus, State1)))
+                    End(MsgProps, a(in_r(MsgStatus, State1)))
             end
     end.
 
@@ -680,6 +673,9 @@ requeue(AckTags, #vqstate { delta      = Delta,
 len(#vqstate { len = Len }) -> Len.
 
 is_empty(State) -> 0 == len(State).
+
+depth(State = #vqstate { pending_ack = Ack }) ->
+    len(State) + gb_trees:size(Ack).
 
 set_ram_duration_target(
   DurationTarget, State = #vqstate {
@@ -818,8 +814,6 @@ invoke(?MODULE, Fun, State) -> Fun(?MODULE, State).
 
 is_duplicate(_Msg, State) -> {false, State}.
 
-discard(_Msg, _ChPid, State) -> State.
-
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
@@ -871,9 +865,10 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
-           MsgProps) ->
+           MsgProps = #message_properties { delivered = Delivered }) ->
+    %% TODO would it make sense to remove #msg_status.is_delivered?
     #msg_status { seq_id = SeqId, msg_id = MsgId, msg = Msg,
-                  is_persistent = IsPersistent, is_delivered = false,
+                  is_persistent = IsPersistent, is_delivered = Delivered,
                   msg_on_disk = false, index_on_disk = false,
                   msg_props = MsgProps }.
 
@@ -1321,12 +1316,9 @@ must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
     %% subtraction.
     not (gb_sets:is_empty(UC) orelse gb_sets:is_subset(UC, MIOD)).
 
-blind_confirm(Callback, MsgIdSet) ->
-    Callback(?MODULE,
-             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end).
-
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
-    blind_confirm(Callback, MsgIdSet);
+    Callback(?MODULE,
+             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->
     Callback(?MODULE,
              fun (?MODULE, State = #vqstate { msgs_on_disk        = MOD,

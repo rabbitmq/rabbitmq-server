@@ -17,8 +17,7 @@
 -module(rabbit_plugins).
 -include("rabbit.hrl").
 
--export([setup/0, active/0, read_enabled/1,
-         list/1, dependencies/3]).
+-export([setup/0, active/0, read_enabled/1, list/1, dependencies/3]).
 
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
@@ -36,28 +35,25 @@
 
 -ifdef(use_specs).
 
--spec(setup/0 :: () -> [atom()]).
--spec(active/0 :: () -> [atom()]).
+-type(plugin_name() :: atom()).
+
+-spec(setup/0 :: () -> [plugin_name()]).
+-spec(active/0 :: () -> [plugin_name()]).
 -spec(list/1 :: (string()) -> [#plugin{}]).
--spec(read_enabled/1 :: (file:filename()) -> [atom()]).
--spec(dependencies/3 ::
-            (boolean(), [atom()], [#plugin{}]) -> [atom()]).
+-spec(read_enabled/1 :: (file:filename()) -> [plugin_name()]).
+-spec(dependencies/3 :: (boolean(), [plugin_name()], [#plugin{}]) ->
+                             [plugin_name()]).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-%%
 %% @doc Prepares the file system and installs all enabled plugins.
-%%
 setup() ->
-    {ok, PluginDir} = application:get_env(rabbit, plugins_dir),
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    {ok, EnabledPluginsFile} = application:get_env(rabbit,
-                                                   enabled_plugins_file),
-    prepare_plugins(EnabledPluginsFile, PluginDir, ExpandDir),
-    [prepare_dir_plugin(PluginName) ||
-            PluginName <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
+    {ok, PluginDir}   = application:get_env(rabbit, plugins_dir),
+    {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
+    {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
+    prepare_plugins(EnabledFile, PluginDir, ExpandDir).
 
 %% @doc Lists the plugins which are currently running.
 active() ->
@@ -77,8 +73,7 @@ list(PluginsDir) ->
                         (Plugin = #plugin{}, {Plugins1, Problems1}) ->
                             {[Plugin|Plugins1], Problems1}
                     end, {[], []},
-                    [get_plugin_info(PluginsDir, Plug) ||
-                        Plug <- EZs ++ FreeApps]),
+                    [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
     case Problems of
         [] -> ok;
         _  -> io:format("Warning: Problem reading some plugins: ~p~n",
@@ -98,11 +93,9 @@ read_enabled(PluginsFile) ->
                                           PluginsFile, Reason}})
     end.
 
-%%
 %% @doc Calculate the dependency graph from <i>Sources</i>.
 %% When Reverse =:= true the bottom/leaf level applications are returned in
 %% the resulting list, otherwise they're skipped.
-%%
 dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
@@ -118,42 +111,38 @@ dependencies(Reverse, Sources, AllPlugins) ->
 
 %%----------------------------------------------------------------------------
 
-prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
+prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
     AllPlugins = list(PluginsDistDir),
-    Enabled = read_enabled(EnabledPluginsFile),
+    Enabled = read_enabled(EnabledFile),
     ToUnpack = dependencies(false, Enabled, AllPlugins),
     ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
 
-    Missing = Enabled -- plugin_names(ToUnpackPlugins),
-    case Missing of
-        [] -> ok;
-        _  -> io:format("Warning: the following enabled plugins were "
-                       "not found: ~p~n", [Missing])
+    case Enabled -- plugin_names(ToUnpackPlugins) of
+        []      -> ok;
+        Missing -> io:format("Warning: the following enabled plugins were "
+                             "not found: ~p~n", [Missing])
     end,
 
     %% Eliminate the contents of the destination directory
-    case delete_recursively(DestDir) of
-        ok         -> ok;
-        {error, E} -> rabbit_misc:quit("Could not delete dir ~s (~p)",
-                                            [DestDir, E])
-    end,
-    case filelib:ensure_dir(DestDir ++ "/") of
+    case delete_recursively(ExpandDir) of
         ok          -> ok;
-        {error, E2} -> rabbit_misc:quit("Could not create dir ~s (~p)",
-                                             [DestDir, E2])
+        {error, E1} -> throw({error, {cannot_delete_plugins_expand_dir,
+                                      [ExpandDir, E1]}})
+    end,
+    case filelib:ensure_dir(ExpandDir ++ "/") of
+        ok          -> ok;
+        {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
+                                      [ExpandDir, E2]}})
     end,
 
-    [prepare_plugin(Plugin, DestDir) || Plugin <- ToUnpackPlugins].
+    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ToUnpackPlugins],
 
-prepare_dir_plugin(PluginAppDescFn) ->
-    %% Add the plugin ebin directory to the load path
-    PluginEBinDirN = filename:dirname(PluginAppDescFn),
-    code:add_path(PluginEBinDirN),
+    [prepare_dir_plugin(PluginAppDescPath) ||
+        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
 
-    %% We want the second-last token
-    NameTokens = string:tokens(PluginAppDescFn,"/."),
-    PluginNameString = lists:nth(length(NameTokens) - 1, NameTokens),
-    list_to_atom(PluginNameString).
+prepare_dir_plugin(PluginAppDescPath) ->
+    code:add_path(filename:dirname(PluginAppDescPath)),
+    list_to_atom(filename:basename(PluginAppDescPath, ".app")).
 
 %%----------------------------------------------------------------------------
 
@@ -164,22 +153,19 @@ delete_recursively(Fn) ->
         Error              -> Error
     end.
 
-prepare_plugin(#plugin{type = ez, location = Location}, PluginDestDir) ->
-    zip:unzip(Location, [{cwd, PluginDestDir}]);
+prepare_plugin(#plugin{type = ez, location = Location}, ExpandDir) ->
+    zip:unzip(Location, [{cwd, ExpandDir}]);
 prepare_plugin(#plugin{type = dir, name = Name, location = Location},
-              PluginsDestDir) ->
-    rabbit_file:recursive_copy(Location,
-                              filename:join([PluginsDestDir, Name])).
+               ExpandDir) ->
+    rabbit_file:recursive_copy(Location, filename:join([ExpandDir, Name])).
 
-%% Get the #plugin{} from an .ez.
-get_plugin_info(Base, {ez, EZ0}) ->
+plugin_info(Base, {ez, EZ0}) ->
     EZ = filename:join([Base, EZ0]),
     case read_app_file(EZ) of
         {application, Name, Props} -> mkplugin(Name, Props, ez, EZ);
         {error, Reason}            -> {error, EZ, Reason}
     end;
-%% Get the #plugin{} from an .app.
-get_plugin_info(Base, {app, App0}) ->
+plugin_info(Base, {app, App0}) ->
     App = filename:join([Base, App0]),
     case rabbit_file:read_term_file(App) of
         {ok, [{application, Name, Props}]} ->
@@ -198,7 +184,6 @@ mkplugin(Name, Props, Type, Location) ->
     #plugin{name = Name, version = Version, description = Description,
             dependencies = Dependencies, location = Location, type = Type}.
 
-%% Read the .app file from an ez.
 read_app_file(EZ) ->
     case zip:list_dir(EZ) of
         {ok, [_|ZippedFiles]} ->
@@ -214,13 +199,11 @@ read_app_file(EZ) ->
             {error, {invalid_ez, Reason}}
     end.
 
-%% Return the path of the .app files in ebin/.
 find_app_files(ZippedFiles) ->
     {ok, RE} = re:compile("^.*/ebin/.*.app$"),
     [Path || {zip_file, Path, _, _, _, _} <- ZippedFiles,
              re:run(Path, RE, [{capture, none}]) =:= match].
 
-%% Parse a binary into a term.
 parse_binary(Bin) ->
     try
         {ok, Ts, _} = erl_scan:string(binary_to_list(Bin)),
@@ -230,13 +213,10 @@ parse_binary(Bin) ->
         Err -> {error, {invalid_app, Err}}
     end.
 
-%% Filter out applications that can be loaded *right now*.
 filter_applications(Applications) ->
     [Application || Application <- Applications,
                     not is_available_app(Application)].
 
-%% Return whether is application is already available (and hence
-%% doesn't need enabling).
 is_available_app(Application) ->
     case application:load(Application) of
         {error, {already_loaded, _}} -> true;
@@ -245,10 +225,8 @@ is_available_app(Application) ->
         _                            -> false
     end.
 
-%% Return the names of the given plugins.
 plugin_names(Plugins) ->
     [Name || #plugin{name = Name} <- Plugins].
 
-%% Find plugins by name in a list of plugins.
 lookup_plugins(Names, AllPlugins) ->
     [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].

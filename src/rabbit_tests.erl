@@ -32,6 +32,8 @@
 -define(TIMEOUT, 5000).
 
 all_tests() ->
+    ok = setup_cluster(),
+    ok = supervisor2_tests:test_all(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
@@ -52,36 +54,63 @@ all_tests() ->
     passed = test_log_management_during_startup(),
     passed = test_statistics(),
     passed = test_arguments_parser(),
-    passed = test_cluster_management(),
+    passed = test_dynamic_mirroring(),
     passed = test_user_management(),
     passed = test_runtime_parameters(),
+    passed = test_policy_validation(),
     passed = test_server_status(),
     passed = test_confirms(),
-    passed = maybe_run_cluster_dependent_tests(),
+    passed =
+        do_if_secondary_node(
+          fun run_cluster_dependent_tests/1,
+          fun (SecondaryNode) ->
+                  io:format("Skipping cluster dependent tests with node ~p~n",
+                            [SecondaryNode]),
+                  passed
+          end),
     passed = test_configurable_server_properties(),
     passed.
 
-maybe_run_cluster_dependent_tests() ->
+do_if_secondary_node(Up, Down) ->
     SecondaryNode = rabbit_nodes:make("hare"),
 
     case net_adm:ping(SecondaryNode) of
-        pong -> passed = run_cluster_dependent_tests(SecondaryNode);
-        pang -> io:format("Skipping cluster dependent tests with node ~p~n",
-                          [SecondaryNode])
-    end,
-    passed.
+        pong -> Up(SecondaryNode);
+        pang -> Down(SecondaryNode)
+    end.
+
+setup_cluster() ->
+    do_if_secondary_node(
+      fun (SecondaryNode) ->
+              cover:stop(SecondaryNode),
+              ok = control_action(stop_app, []),
+              %% 'cover' does not cope at all well with nodes disconnecting,
+              %% which happens as part of reset. So we turn it off
+              %% temporarily. That is ok even if we're not in general using
+              %% cover, it just turns the engine on / off and doesn't log
+              %% anything.  Note that this way cover won't be on when joining
+              %% the cluster, but this is OK since we're testing the clustering
+              %% interface elsewere anyway.
+              cover:stop(nodes()),
+              ok = control_action(join_cluster,
+                                  [atom_to_list(SecondaryNode)]),
+              cover:start(nodes()),
+              ok = control_action(start_app, []),
+              ok = control_action(start_app, SecondaryNode, [], [])
+      end,
+      fun (_) -> ok end).
+
+maybe_run_cluster_dependent_tests() ->
+    do_if_secondary_node(
+      fun (SecondaryNode) ->
+              passed = run_cluster_dependent_tests(SecondaryNode)
+      end,
+      fun (SecondaryNode) ->
+              io:format("Skipping cluster dependent tests with node ~p~n",
+                        [SecondaryNode])
+      end).
 
 run_cluster_dependent_tests(SecondaryNode) ->
-    SecondaryNodeS = atom_to_list(SecondaryNode),
-
-    cover:stop(SecondaryNode),
-    ok = control_action(stop_app, []),
-    ok = control_action(reset, []),
-    ok = control_action(cluster, [SecondaryNodeS]),
-    ok = control_action(start_app, []),
-    cover:start(SecondaryNode),
-    ok = control_action(start_app, SecondaryNode, [], []),
-
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
@@ -629,7 +658,6 @@ test_topic_expect_match(X, List) ->
                                              #'P_basic'{}, <<>>),
               Res = rabbit_exchange_type_topic:route(
                       X, #delivery{mandatory = false,
-                                   immediate = false,
                                    sender    = self(),
                                    message   = Message}),
               ExpectedRes = lists:map(
@@ -747,7 +775,9 @@ test_log_management_during_startup() ->
     ok = case catch control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotation_tty_no_handlers_test});
-             {error, {cannot_log_to_tty, _, _}} -> ok
+             {badrpc, {'EXIT', {rabbit,failure_during_boot,
+               {error,{cannot_log_to_tty,
+                       _, not_installed}}}}} -> ok
          end,
 
     %% fix sasl logging
@@ -771,7 +801,9 @@ test_log_management_during_startup() ->
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotation_no_write_permission_dir_test});
-             {error, {cannot_log_to_file, _, _}} -> ok
+             {badrpc, {'EXIT',
+               {rabbit, failure_during_boot,
+                {error, {cannot_log_to_file, _, _}}}}} -> ok
          end,
 
     %% start application with logging to a subdirectory which
@@ -782,8 +814,11 @@ test_log_management_during_startup() ->
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotatation_parent_dirs_test});
-             {error, {cannot_log_to_file, _,
-                      {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
+             {badrpc,
+              {'EXIT', {rabbit,failure_during_boot,
+                {error, {cannot_log_to_file, _,
+                  {error,
+                   {cannot_create_parent_dirs, _, eacces}}}}}}} -> ok
          end,
     ok = set_permissions(TmpDir, 8#00700),
     ok = set_permissions(TmpLog, 8#00600),
@@ -856,199 +891,51 @@ test_arguments_parser() ->
 
     passed.
 
-test_cluster_management() ->
-    %% 'cluster' and 'reset' should only work if the app is stopped
-    {error, _} = control_action(cluster, []),
-    {error, _} = control_action(reset, []),
-    {error, _} = control_action(force_reset, []),
+test_dynamic_mirroring() ->
+    %% Just unit tests of the node selection logic, see multi node
+    %% tests for the rest...
+    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, {OldM, OldSs}, All) ->
+                   {NewM, NewSs0} =
+                       rabbit_mirror_queue_misc:suggested_queue_nodes(
+                         Policy, Params, {OldM, OldSs}, All),
+                   NewSs1 = lists:sort(NewSs0),
+                   case dm_list_match(NewSs, NewSs1, ExtraSs) of
+                       ok    -> ok;
+                       error -> exit({no_match, NewSs, NewSs1, ExtraSs})
+                   end
+           end,
 
-    ok = control_action(stop_app, []),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[]},   [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c]},[a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[d]},  [a,b,c]),
 
-    %% various ways of creating a standalone node
-    NodeS = atom_to_list(node()),
-    ClusteringSequence = [[],
-                          [NodeS],
-                          ["invalid@invalid", NodeS],
-                          [NodeS, "invalid@invalid"]],
+    %% Add a node
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
+    Test({b,[a,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
+    %% Add two nodes and drop one
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    %% Promote slave to master by policy
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
+    %% Don't try to include nodes that are not running
+    Test({a,[b],  0},<<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
+    %% If we can't find any of the nodes listed then just keep the master
+    Test({a,[],   0},<<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
 
-    ok = control_action(reset, []),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(force_cluster, Arg),
-                          ok
-                  end,
-                  ClusteringSequence),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(reset, []),
-                          ok = control_action(force_cluster, Arg),
-                          ok
-                  end,
-                  ClusteringSequence),
-    ok = control_action(reset, []),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(force_cluster, Arg),
-                          ok = control_action(start_app, []),
-                          ok = control_action(stop_app, []),
-                          ok
-                  end,
-                  ClusteringSequence),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(reset, []),
-                          ok = control_action(force_cluster, Arg),
-                          ok = control_action(start_app, []),
-                          ok = control_action(stop_app, []),
-                          ok
-                  end,
-                  ClusteringSequence),
-
-    %% convert a disk node into a ram node
-    ok = control_action(reset, []),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_disc_node(),
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    ok = assert_ram_node(),
-
-    %% join a non-existing cluster as a ram node
-    ok = control_action(reset, []),
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    ok = assert_ram_node(),
-
-    ok = control_action(reset, []),
-
-    SecondaryNode = rabbit_nodes:make("hare"),
-    case net_adm:ping(SecondaryNode) of
-        pong -> passed = test_cluster_management2(SecondaryNode);
-        pang -> io:format("Skipping clustering tests with node ~p~n",
-                          [SecondaryNode])
-    end,
-
-    ok = control_action(start_app, []),
-    passed.
-
-test_cluster_management2(SecondaryNode) ->
-    NodeS = atom_to_list(node()),
-    SecondaryNodeS = atom_to_list(SecondaryNode),
-
-    %% make a disk node
-    ok = control_action(cluster, [NodeS]),
-    ok = assert_disc_node(),
-    %% make a ram node
-    ok = control_action(reset, []),
-    ok = control_action(cluster, [SecondaryNodeS]),
-    ok = assert_ram_node(),
-
-    %% join cluster as a ram node
-    ok = control_action(reset, []),
-    ok = control_action(force_cluster, [SecondaryNodeS, "invalid1@invalid"]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_ram_node(),
-
-    %% ram node will not start by itself
-    ok = control_action(stop_app, []),
-    ok = control_action(stop_app, SecondaryNode, [], []),
-    {error, _} = control_action(start_app, []),
-    ok = control_action(start_app, SecondaryNode, [], []),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-
-    %% change cluster config while remaining in same cluster
-    ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-
-    %% join non-existing cluster as a ram node
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    {error, _} = control_action(start_app, []),
-    ok = assert_ram_node(),
-
-    %% join empty cluster as a ram node (converts to disc)
-    ok = control_action(cluster, []),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_disc_node(),
-
-    %% make a new ram node
-    ok = control_action(reset, []),
-    ok = control_action(force_cluster, [SecondaryNodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_ram_node(),
-
-    %% turn ram node into disk node
-    ok = control_action(cluster, [SecondaryNodeS, NodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_disc_node(),
-
-    %% convert a disk node into a ram node
-    ok = assert_disc_node(),
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    ok = assert_ram_node(),
-
-    %% make a new disk node
-    ok = control_action(force_reset, []),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_disc_node(),
-
-    %% turn a disk node into a ram node
-    ok = control_action(reset, []),
-    ok = control_action(cluster, [SecondaryNodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_ram_node(),
-
-    %% NB: this will log an inconsistent_database error, which is harmless
-    %% Turning cover on / off is OK even if we're not in general using cover,
-    %% it just turns the engine on / off, doesn't actually log anything.
-    cover:stop([SecondaryNode]),
-    true = disconnect_node(SecondaryNode),
-    pong = net_adm:ping(SecondaryNode),
-    cover:start([SecondaryNode]),
-
-    %% leaving a cluster as a ram node
-    ok = control_action(reset, []),
-    %% ...and as a disk node
-    ok = control_action(cluster, [SecondaryNodeS, NodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    cover:stop(SecondaryNode),
-    ok = control_action(reset, []),
-    cover:start(SecondaryNode),
-
-    %% attempt to leave cluster when no other node is alive
-    ok = control_action(cluster, [SecondaryNodeS, NodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, SecondaryNode, [], []),
-    ok = control_action(stop_app, []),
-    {error, {no_running_cluster_nodes, _, _}} =
-        control_action(reset, []),
-
-    %% attempt to change type when no other node is alive
-    {error, {no_running_cluster_nodes, _, _}} =
-        control_action(cluster, [SecondaryNodeS]),
-
-    %% leave system clustered, with the secondary node as a ram node
-    ok = control_action(force_reset, []),
-    ok = control_action(start_app, []),
-    %% Yes, this is rather ugly. But since we're a clustered Mnesia
-    %% node and we're telling another clustered node to reset itself,
-    %% we will get disconnected half way through causing a
-    %% badrpc. This never happens in real life since rabbitmqctl is
-    %% not a clustered Mnesia node.
-    cover:stop(SecondaryNode),
-    {badrpc, nodedown} = control_action(force_reset, SecondaryNode, [], []),
-    pong = net_adm:ping(SecondaryNode),
-    cover:start(SecondaryNode),
-    ok = control_action(cluster, SecondaryNode, [NodeS], []),
-    ok = control_action(start_app, SecondaryNode, [], []),
+    Test({a,[],   1},<<"exactly">>,2,{a,[]},   [a,b,c,d]),
+    Test({a,[],   2},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c]},  [a,b,c,d]),
+    Test({a,[c],  1},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
+    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
 
     passed.
+
+%% Does the first list match the second where the second is required
+%% to have exactly Extra superfluous items?
+dm_list_match([],     [],      0)     -> ok;
+dm_list_match(_,      [],     _Extra) -> error;
+dm_list_match([H|T1], [H |T2], Extra) -> dm_list_match(T1, T2, Extra);
+dm_list_match(L1,     [_H|T2], Extra) -> dm_list_match(L1, T2, Extra - 1).
 
 test_user_management() ->
 
@@ -1135,22 +1022,21 @@ test_runtime_parameters() ->
     Bad  = fun(L) -> {error_string, _} = control_action(set_parameter, L) end,
 
     %% Acceptable for bijection
-    Good(["test", "good", "<<\"ignore\">>"]),
+    Good(["test", "good", "\"ignore\""]),
     Good(["test", "good", "123"]),
     Good(["test", "good", "true"]),
     Good(["test", "good", "false"]),
     Good(["test", "good", "null"]),
-    Good(["test", "good", "[{<<\"key\">>, <<\"value\">>}]"]),
+    Good(["test", "good", "{\"key\": \"value\"}"]),
 
-    %% Various forms of fail due to non-bijectability
+    %% Invalid json
     Bad(["test", "good", "atom"]),
-    Bad(["test", "good", "{tuple, foo}"]),
-    Bad(["test", "good", "[{<<\"key\">>, <<\"value\">>, 1}]"]),
-    Bad(["test", "good", "[{key, <<\"value\">>}]"]),
+    Bad(["test", "good", "{\"foo\": \"bar\""]),
+    Bad(["test", "good", "{foo: \"bar\"}"]),
 
     %% Test actual validation hook
-    Good(["test", "maybe", "<<\"good\">>"]),
-    Bad(["test", "maybe", "<<\"bad\">>"]),
+    Good(["test", "maybe", "\"good\""]),
+    Bad(["test", "maybe", "\"bad\""]),
 
     ok = control_action(list_parameters, []),
 
@@ -1159,6 +1045,26 @@ test_runtime_parameters() ->
     {error_string, _} =
         control_action(clear_parameter, ["test", "neverexisted"]),
     rabbit_runtime_parameters_test:unregister(),
+    passed.
+
+test_policy_validation() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
+    SetPol =
+        fun (Key, Val) ->
+                control_action(
+                  set_policy,
+                  ["name", ".*", rabbit_misc:format("{\"~s\":~p}", [Key, Val])])
+        end,
+
+    ok                 = SetPol("testeven", []),
+    ok                 = SetPol("testeven", [1, 2]),
+    ok                 = SetPol("testeven", [1, 2, 3, 4]),
+    ok                 = SetPol("testpos",  [2, 5, 5678]),
+
+    {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
+    {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
+
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
     passed.
 
 test_server_status() ->
@@ -1216,7 +1122,15 @@ test_server_status() ->
     ok = control_action(list_consumers, []),
 
     %% set vm memory high watermark
+    HWM = vm_memory_monitor:get_vm_memory_high_watermark(),
+    ok = control_action(set_vm_memory_high_watermark, ["1"]),
     ok = control_action(set_vm_memory_high_watermark, ["1.0"]),
+    ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
+
+    %% eval
+    {error_string, _} = control_action(eval, ["\""]),
+    {error_string, _} = control_action(eval, ["a("]),
+    ok = control_action(eval, ["a."]),
 
     %% cleanup
     [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
@@ -1672,15 +1586,15 @@ clean_logs(Files, Suffix) ->
     ok.
 
 assert_ram_node() ->
-    case rabbit_mnesia:is_disc_node() of
-        true  -> exit('not_ram_node');
-        false -> ok
+    case rabbit_mnesia:node_type() of
+        disc -> exit('not_ram_node');
+        ram  -> ok
     end.
 
 assert_disc_node() ->
-    case rabbit_mnesia:is_disc_node() of
-        true  -> ok;
-        false -> exit('not_disc_node')
+    case rabbit_mnesia:node_type() of
+        disc -> ok;
+        ram  -> exit('not_disc_node')
     end.
 
 delete_file(File) ->
@@ -2354,8 +2268,8 @@ publish_and_confirm(Q, Payload, Count) ->
          Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
                                     <<>>, #'P_basic'{delivery_mode = 2},
                                     Payload),
-         Delivery = #delivery{mandatory = false, immediate = false,
-                              sender = self(), message = Msg, msg_seq_no = Seq},
+         Delivery = #delivery{mandatory = false, sender = self(),
+                              message = Msg, msg_seq_no = Seq},
          {routed, _} = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
@@ -2447,10 +2361,10 @@ test_dropwhile(VQ0) ->
             fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
 
     %% drop the first 5 messages
-    {undefined, VQ2} = rabbit_variable_queue:dropwhile(
-                         fun(#message_properties { expiry = Expiry }) ->
-                                 Expiry =< 5
-                         end, false, VQ1),
+    {_, undefined, VQ2} = rabbit_variable_queue:dropwhile(
+                            fun(#message_properties { expiry = Expiry }) ->
+                                    Expiry =< 5
+                            end, false, VQ1),
 
     %% fetch five now
     VQ3 = lists:foldl(fun (_N, VQN) ->
@@ -2467,11 +2381,11 @@ test_dropwhile(VQ0) ->
 test_dropwhile_varying_ram_duration(VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
-    {undefined, VQ3} = rabbit_variable_queue:dropwhile(
-                         fun(_) -> false end, false, VQ2),
+    {_, undefined, VQ3} = rabbit_variable_queue:dropwhile(
+                            fun(_) -> false end, false, VQ2),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_publish(false, 1, VQ4),
-    {undefined, VQ6} =
+    {_, undefined, VQ6} =
         rabbit_variable_queue:dropwhile(fun(_) -> false end, false, VQ5),
     VQ6.
 

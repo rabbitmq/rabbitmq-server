@@ -14,19 +14,14 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_runtime_parameter).
+-module(rabbit_policy_validator).
 
 -ifdef(use_specs).
 
 -type(validate_results() ::
         'ok' | {error, string(), [term()]} | [validate_results()]).
 
--callback validate(rabbit_types:vhost(), binary(), binary(),
-                   term()) -> validate_results().
--callback validate_clear(rabbit_types:vhost(), binary(),
-                         binary()) -> validate_results().
--callback notify(rabbit_types:vhost(), binary(), binary(), term()) -> 'ok'.
--callback notify_clear(rabbit_types:vhost(), binary(), binary()) -> 'ok'.
+-callback validate_policy([{binary(), term()}]) -> validate_results().
 
 -else.
 
@@ -34,10 +29,7 @@
 
 behaviour_info(callbacks) ->
     [
-     {validate, 4},
-     {validate_clear, 3},
-     {notify, 4},
-     {notify_clear, 3}
+     {validate_policy, 1}
     ];
 behaviour_info(_Other) ->
     undefined.

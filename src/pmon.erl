@@ -27,37 +27,39 @@
 
 -opaque(?MODULE()    :: dict()).
 
+-type(item()         :: pid() | {atom(), node()}).
+
 -spec(new/0          :: () -> ?MODULE()).
--spec(monitor/2      :: (pid(), ?MODULE()) -> ?MODULE()).
--spec(monitor_all/2  :: ([pid()], ?MODULE()) -> ?MODULE()).
--spec(demonitor/2    :: (pid(), ?MODULE()) -> ?MODULE()).
--spec(is_monitored/2 :: (pid(), ?MODULE()) -> boolean()).
--spec(erase/2        :: (pid(), ?MODULE()) -> ?MODULE()).
--spec(monitored/1    :: (?MODULE()) -> [pid()]).
+-spec(monitor/2      :: (item(), ?MODULE()) -> ?MODULE()).
+-spec(monitor_all/2  :: ([item()], ?MODULE()) -> ?MODULE()).
+-spec(demonitor/2    :: (item(), ?MODULE()) -> ?MODULE()).
+-spec(is_monitored/2 :: (item(), ?MODULE()) -> boolean()).
+-spec(erase/2        :: (item(), ?MODULE()) -> ?MODULE()).
+-spec(monitored/1    :: (?MODULE()) -> [item()]).
 -spec(is_empty/1     :: (?MODULE()) -> boolean()).
 
 -endif.
 
 new() -> dict:new().
 
-monitor(Pid, M) ->
-    case dict:is_key(Pid, M) of
+monitor(Item, M) ->
+    case dict:is_key(Item, M) of
         true  -> M;
-        false -> dict:store(Pid, erlang:monitor(process, Pid), M)
+        false -> dict:store(Item, erlang:monitor(process, Item), M)
     end.
 
-monitor_all(Pids, M) -> lists:foldl(fun monitor/2, M, Pids).
+monitor_all(Items, M) -> lists:foldl(fun monitor/2, M, Items).
 
-demonitor(Pid, M) ->
-    case dict:find(Pid, M) of
+demonitor(Item, M) ->
+    case dict:find(Item, M) of
         {ok, MRef} -> erlang:demonitor(MRef),
-                      dict:erase(Pid, M);
+                      dict:erase(Item, M);
         error      -> M
     end.
 
-is_monitored(Pid, M) -> dict:is_key(Pid, M).
+is_monitored(Item, M) -> dict:is_key(Item, M).
 
-erase(Pid, M) -> dict:erase(Pid, M).
+erase(Item, M) -> dict:erase(Item, M).
 
 monitored(M) -> dict:fetch_keys(M).
 

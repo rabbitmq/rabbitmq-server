@@ -15,17 +15,21 @@
 %%
 -module(app_utils).
 
--export([load_applications/1, start_applications/1,
-         stop_applications/1, app_dependency_order/2,
+-export([load_applications/1, start_applications/1, start_applications/2,
+         stop_applications/1, stop_applications/2, app_dependency_order/2,
          wait_for_applications/1]).
 
 -ifdef(use_specs).
 
--spec load_applications([atom()])               -> 'ok'.
--spec start_applications([atom()])              -> 'ok'.
--spec stop_applications([atom()])               -> 'ok'.
--spec wait_for_applications([atom()])           -> 'ok'.
--spec app_dependency_order([atom()], boolean()) -> [digraph:vertex()].
+-type error_handler() :: fun((atom(), any()) -> 'ok').
+
+-spec load_applications([atom()])                   -> 'ok'.
+-spec start_applications([atom()])                  -> 'ok'.
+-spec stop_applications([atom()])                   -> 'ok'.
+-spec start_applications([atom()], error_handler()) -> 'ok'.
+-spec stop_applications([atom()], error_handler())  -> 'ok'.
+-spec wait_for_applications([atom()])               -> 'ok'.
+-spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
 
 -endif.
 
@@ -37,20 +41,33 @@ load_applications(Apps) ->
     ok.
 
 start_applications(Apps) ->
+    start_applications(
+      Apps, fun (App, Reason) ->
+                    throw({error, {cannot_start_application, App, Reason}})
+            end).
+
+stop_applications(Apps) ->
+    stop_applications(
+      Apps, fun (App, Reason) ->
+                    throw({error, {cannot_stop_application, App, Reason}})
+            end).
+
+start_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldl/3,
                         fun application:start/1,
                         fun application:stop/1,
                         already_started,
-                        cannot_start_application,
+                        ErrorHandler,
                         Apps).
 
-stop_applications(Apps) ->
+stop_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldr/3,
                         fun application:stop/1,
                         fun application:start/1,
                         not_started,
-                        cannot_stop_application,
+                        ErrorHandler,
                         Apps).
+
 
 wait_for_applications(Apps) ->
     [wait_for_application(App) || App <- Apps], ok.
@@ -107,14 +124,14 @@ app_dependencies(App) ->
         {ok, Lst} -> Lst
     end.
 
-manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
+manage_applications(Iterate, Do, Undo, SkipError, ErrorHandler, Apps) ->
     Iterate(fun (App, Acc) ->
                     case Do(App) of
                         ok -> [App | Acc];
                         {error, {SkipError, _}} -> Acc;
                         {error, Reason} ->
                             lists:foreach(Undo, Acc),
-                            throw({error, {ErrorTag, App, Reason}})
+                            ErrorHandler(App, Reason)
                     end
             end, [], Apps),
     ok.

@@ -119,7 +119,7 @@ qc_publish_multiple(#state{}) ->
 
 qc_publish_delivered(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish_delivered,
-     [boolean(), qc_message(), #message_properties{}, self(), BQ]}.
+     [qc_message(), #message_properties{}, self(), BQ]}.
 
 qc_fetch(#state{bqstate = BQ}) ->
     {call, ?BQMOD, fetch, [boolean(), BQ]}.
@@ -199,7 +199,7 @@ next_state(S, _BQ, {call, ?MODULE, publish_multiple, [PublishCount]}) ->
 
 next_state(S, Res,
            {call, ?BQMOD, publish_delivered,
-            [AckReq, Msg, MsgProps, _Pid, _BQ]}) ->
+            [Msg, MsgProps, _Pid, _BQ]}) ->
     #state{confirms = Confirms, acks = Acks, next_seq_id = NextSeq} = S,
     AckTag = {call, erlang, element, [1, Res]},
     BQ1    = {call, erlang, element, [2, Res]},
@@ -213,10 +213,7 @@ next_state(S, Res,
                            true -> gb_sets:add(MsgId, Confirms);
                            _    -> Confirms
                        end,
-            acks = case AckReq of
-                       true  -> [{AckTag, {NextSeq, {MsgProps, Msg}}}|Acks];
-                       false -> Acks
-                   end
+            acks = [{AckTag, {NextSeq, {MsgProps, Msg}}}|Acks]
            };
 
 next_state(S, Res, {call, ?BQMOD, fetch, [AckReq, _BQ]}) ->
@@ -268,7 +265,7 @@ next_state(S, Res, {call, ?BQMOD, drain_confirmed, _Args}) ->
     S#state{bqstate = BQ1};
 
 next_state(S, Res, {call, ?BQMOD, dropwhile, _Args}) ->
-    BQ = {call, erlang, element, [2, Res]},
+    BQ = {call, erlang, element, [3, Res]},
     #state{messages = Messages} = S,
     Msgs1 = drop_messages(Messages),
     S#state{bqstate = BQ, len = gb_trees:size(Msgs1), messages = Msgs1};
@@ -390,5 +387,14 @@ drop_messages(Messages) ->
                 false -> Messages
             end
     end.
+
+-else.
+
+-export([prop_disabled/0]).
+
+prop_disabled() ->
+    exit({compiled_without_proper,
+          "PropEr was not present during compilation of the test module. "
+          "Hence all tests are disabled."}).
 
 -endif.

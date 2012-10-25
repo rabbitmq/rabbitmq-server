@@ -19,7 +19,7 @@
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, async_recv/3, port_command/2, getopts/2, setopts/2, send/2,
-         close/1, maybe_fast_close/1, sockname/1, peername/1, peercert/1,
+         close/1, fast_close/1, sockname/1, peername/1, peercert/1,
          tune_buffer_size/1, connection_string/2]).
 
 %%---------------------------------------------------------------------------
@@ -59,7 +59,7 @@
 -spec(setopts/2 :: (socket(), opts()) -> ok_or_any_error()).
 -spec(send/2 :: (socket(), binary() | iolist()) -> ok_or_any_error()).
 -spec(close/1 :: (socket()) -> ok_or_any_error()).
--spec(maybe_fast_close/1 :: (socket()) -> ok_or_any_error()).
+-spec(fast_close/1 :: (socket()) -> ok_or_any_error()).
 -spec(sockname/1 ::
         (socket())
         -> ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()})).
@@ -76,6 +76,8 @@
 -endif.
 
 %%---------------------------------------------------------------------------
+
+-define(SSL_CLOSE_TIMEOUT, 5000).
 
 -define(IS_SSL(Sock), is_record(Sock, ssl_socket)).
 
@@ -148,8 +150,31 @@ send(Sock, Data) when is_port(Sock) -> gen_tcp:send(Sock, Data).
 close(Sock)      when ?IS_SSL(Sock) -> ssl:close(Sock#ssl_socket.ssl);
 close(Sock)      when is_port(Sock) -> gen_tcp:close(Sock).
 
-maybe_fast_close(Sock) when ?IS_SSL(Sock) -> ok;
-maybe_fast_close(Sock) when is_port(Sock) -> erlang:port_close(Sock), ok.
+fast_close(Sock) when ?IS_SSL(Sock) ->
+    %% We cannot simply port_close the underlying tcp socket since the
+    %% TLS protocol is quite insistent that a proper closing handshake
+    %% should take place (see RFC 5245 s7.2.1). So we call ssl:close
+    %% instead, but that can block for a very long time, e.g. when
+    %% there is lots of pending output and there is tcp backpressure,
+    %% or the ssl_connection process has entered the the
+    %% workaround_transport_delivery_problems function during
+    %% termination, which, inexplicably, does a gen_tcp:recv(Socket,
+    %% 0), which may never return if the client doesn't send a FIN or
+    %% that gets swallowed by the network. Since there is no timeout
+    %% variant of ssl:close, we construct our own.
+    {Pid, MRef} = spawn_monitor(fun () -> ssl:close(Sock#ssl_socket.ssl) end),
+    erlang:send_after(?SSL_CLOSE_TIMEOUT, self(), {Pid, ssl_close_timeout}),
+    receive
+        {Pid, ssl_close_timeout} ->
+            erlang:demonitor(MRef, [flush]),
+            exit(Pid, kill);
+        {'DOWN', MRef, process, Pid, _Reason} ->
+            ok
+    end,
+    catch port_close(Sock#ssl_socket.tcp),
+    ok;
+fast_close(Sock) when is_port(Sock) ->
+    catch port_close(Sock), ok.
 
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock#ssl_socket.ssl);
 sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).

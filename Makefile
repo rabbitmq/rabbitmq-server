@@ -103,7 +103,7 @@ endif
 
 all: $(TARGETS)
 
-.PHONY: plugins
+.PHONY: plugins check-xref
 ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
 	[ -d "$(PLUGINS_SRC_DIR)/rabbitmq-server" ] || ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
@@ -111,9 +111,19 @@ plugins:
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIR)" VERSION=$(VERSION)
 	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIR)/README
 	rm -f $(PLUGINS_DIR)/rabbit_common*.ez
+
+# add -q to remove printout of warnings....
+check-xref: $(BEAM_TARGETS) $(PLUGINS_DIR)
+	rm -rf lib
+	./check_xref $(PLUGINS_DIR) -q
+
 else
 plugins:
 # Not building plugins
+
+check-xref:
+	$(info xref checks are disabled)
+
 endif
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -137,7 +147,7 @@ $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_c
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	dialyzer --plt $(BASIC_PLT) --no_native --fullpath \
-	  -Wrace_conditions $(BEAM_TARGETS)
+	   $(BEAM_TARGETS)
 
 # rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
 create-plt: $(RABBIT_PLT)
@@ -217,11 +227,11 @@ stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
 set-resource-alarm: all
-	echo "alarm_handler:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
+	echo "rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
 	$(ERL_CALL)
 
 clear-resource-alarm: all
-	echo "alarm_handler:clear_alarm({resource_limit, $(SOURCE), node()})." | \
+	echo "rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()})." | \
 	$(ERL_CALL)
 
 stop-node:

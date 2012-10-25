@@ -105,9 +105,9 @@ with_fhc_handle(Fun) ->
     with_fhc_handle(1, Fun).
 
 with_fhc_handle(N, Fun) ->
-    [ ok = file_handle_cache:obtain() || _ <- lists:seq(1, N)],
+    ok = file_handle_cache:obtain(N),
     try Fun()
-    after [ ok = file_handle_cache:release() || _ <- lists:seq(1, N)]
+    after ok = file_handle_cache:release(N)
     end.
 
 read_term_file(File) ->
