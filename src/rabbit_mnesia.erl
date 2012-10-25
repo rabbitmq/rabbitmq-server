@@ -829,7 +829,9 @@ error_description(resetting_only_disc_node) ->
     "You cannot reset a node when it is the only disc node in a cluster. "
         "Please convert another node of the cluster to a disc node first.";
 error_description(already_clustered) ->
-    "You are already clustered with the nodes you have selected.";
+    "You are already clustered with the nodes you have selected.  If the "
+        "node you're trying to cluster with is not present in the current node "
+        "status, use 'upgrade_cluster_nodes'.";
 error_description(not_clustered) ->
     "Non-clustered nodes can only be disc nodes.";
 error_description(cannot_connect_to_cluster) ->
