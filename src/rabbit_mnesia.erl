@@ -110,25 +110,22 @@ init() ->
 init_from_config() ->
     {TryNodes, NodeType} =
         case application:get_env(rabbit, cluster_nodes) of
-            {ok, {Nodes, disc} = C} when is_list(Nodes) ->
-                C;
-            {ok, {Nodes, ram } = C} when is_list(Nodes) ->
-                C;
             {ok, Nodes} when is_list(Nodes) ->
-                rabbit_log:info("blahblah ~p~n", [Nodes]),
-                %% Legacy config
-                rabbit_log:warning(
-                  "Legacy 'cluster_nodes' configuration, use "
+                Config = {Nodes -- [node()], case lists:member(node(), Nodes) of
+                                                 true  -> disc;
+                                                 false -> ram
+                                             end},
+                error_logger:warning_msg(
+                  "Converting legacy 'cluster_nodes' configuration~n    ~w~n"
+                  "to~n    ~w.~n~n"
+                  "Please update the configuration to the new format "
                   "{Nodes, NodeType}, where Nodes contains the nodes that the "
                   "node will try to cluster with, and NodeType is either "
-                  "'disc' or 'ram'."),
-                {Nodes -- [node()], case lists:member(node(), Nodes) of
-                                        true  -> disc;
-                                        false -> ram
-                                    end};
-            _ ->
-                e(invalid_cluster_config)
-    end,
+                  "'disc' or 'ram'~n", [Nodes, Config]),
+                Config;
+            {ok, Config} ->
+                Config
+        end,
     case find_good_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
             rabbit_log:info("Node '~p' selected for clustering from "
@@ -862,7 +859,4 @@ error_description(removing_node_from_offline_node) ->
     "To remove a node remotely from an offline node, the node you're removing "
         "from must be a disc node and all the other nodes must be offline.";
 error_description(no_running_cluster_nodes) ->
-    "You cannot leave a cluster if no online nodes are present.";
-error_description(invalid_cluster_config) ->
-    "Invalid or missing cluster configuration. Check the 'cluster_nodes' field "
-        "in your config file.".
+    "You cannot leave a cluster if no online nodes are present.".
