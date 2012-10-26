@@ -108,8 +108,24 @@ init() ->
     ok.
 
 init_from_config() ->
-    {ok, {TryNodes, NodeType}} =
-        application:get_env(rabbit, cluster_nodes),
+    {TryNodes, NodeType} =
+        case application:get_env(rabbit, cluster_nodes) of
+            {ok, Nodes} when is_list(Nodes) ->
+                Config = {Nodes -- [node()], case lists:member(node(), Nodes) of
+                                                 true  -> disc;
+                                                 false -> ram
+                                             end},
+                error_logger:warning_msg(
+                  "Converting legacy 'cluster_nodes' configuration~n    ~w~n"
+                  "to~n    ~w.~n~n"
+                  "Please update the configuration to the new format "
+                  "{Nodes, NodeType}, where Nodes contains the nodes that the "
+                  "node will try to cluster with, and NodeType is either "
+                  "'disc' or 'ram'~n", [Nodes, Config]),
+                Config;
+            {ok, Config} ->
+                Config
+        end,
     case find_good_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
             rabbit_log:info("Node '~p' selected for clustering from "
@@ -158,7 +174,7 @@ join_cluster(DiscoveryNode, NodeType) ->
     %% this case - we're joining a new cluster with new nodes which
     %% are not in synch with the current node. I also lifts the burden
     %% of reseting the node from the user.
-    reset(false),
+    reset_gracefully(),
 
     %% Join the cluster
     rabbit_misc:local_info_msg("Clustering with ~p as ~p node~n",
@@ -172,39 +188,35 @@ join_cluster(DiscoveryNode, NodeType) ->
 %% cluster, has no cluster configuration, no local database, and no
 %% persisted messages
 reset() ->
+    ensure_mnesia_not_running(),
     rabbit_misc:local_info_msg("Resetting Rabbit~n", []),
-    reset(false).
+    reset_gracefully().
 
 force_reset() ->
-    rabbit_misc:local_info_msg("Resetting Rabbit forcefully~n", []),
-    reset(true).
-
-reset(Force) ->
     ensure_mnesia_not_running(),
-    Nodes = case Force of
-                true ->
-                    nodes();
-                false ->
-                    AllNodes = cluster_nodes(all),
-                    %% Reconnecting so that we will get an up to date
-                    %% nodes.  We don't need to check for consistency
-                    %% because we are resetting.  Force=true here so
-                    %% that reset still works when clustered with a
-                    %% node which is down.
-                    init_db_with_mnesia(AllNodes, node_type(), false, false),
-                    case is_only_clustered_disc_node() of
-                        true  -> e(resetting_only_disc_node);
-                        false -> ok
-                    end,
-                    leave_cluster(),
-                    rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
-                                          cannot_delete_schema),
-                    cluster_nodes(all)
-            end,
+    rabbit_misc:local_info_msg("Resetting Rabbit forcefully~n", []),
+    wipe().
+
+reset_gracefully() ->
+    AllNodes = cluster_nodes(all),
+    %% Reconnecting so that we will get an up to date nodes.  We don't
+    %% need to check for consistency because we are resetting.
+    %% Force=true here so that reset still works when clustered with a
+    %% node which is down.
+    init_db_with_mnesia(AllNodes, node_type(), false, false),
+    case is_only_clustered_disc_node() of
+        true  -> e(resetting_only_disc_node);
+        false -> ok
+    end,
+    leave_cluster(),
+    rabbit_misc:ensure_ok(mnesia:delete_schema([node()]), cannot_delete_schema),
+    wipe().
+
+wipe() ->
     %% We need to make sure that we don't end up in a distributed
     %% Erlang system with nodes while not being in an Mnesia cluster
     %% with them. We don't handle that well.
-    [erlang:disconnect_node(N) || N <- Nodes],
+    [erlang:disconnect_node(N) || N <- cluster_nodes(all)],
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok = rabbit_node_monitor:reset_cluster_status(),
@@ -221,7 +233,9 @@ change_cluster_node_type(Type) ->
                                {ok, Status}     -> Status;
                                {error, _Reason} -> e(cannot_connect_to_cluster)
                            end,
-    Node = case RunningNodes of
+    %% We might still be marked as running by a remote node since the
+    %% information of us going down might not have propagated yet.
+    Node = case RunningNodes -- [node()] of
                []        -> e(no_online_cluster_nodes);
                [Node0|_] -> Node0
            end,
@@ -276,18 +290,18 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
     end.
 
 remove_node_offline_node(Node) ->
-    %% We want the running nodes *now*, so we don't call
-    %% `cluster_nodes(running)' which will just get what's in the cluster status
-    %% file.
-    case {running_nodes(cluster_nodes(all)) -- [Node], node_type()} of
+    %% Here `mnesia:system_info(running_db_nodes)' will RPC, but that's what we
+    %% want - we need to know the running nodes *now*.  If the current node is a
+    %% RAM node it will return bogus results, but we don't care since we only do
+    %% this operation from disc nodes.
+    case {mnesia:system_info(running_db_nodes) -- [Node], node_type()} of
         {[], disc} ->
-            %% Note that while we check if the nodes was the last to
-            %% go down, apart from the node we're removing from, this
-            %% is still unsafe.  Consider the situation in which A and
-            %% B are clustered. A goes down, and records B as the
-            %% running node. Then B gets clustered with C, C goes down
-            %% and B goes down. In this case, C is the second-to-last,
-            %% but we don't know that and we'll remove B from A
+            %% Note that while we check if the nodes was the last to go down,
+            %% apart from the node we're removing from, this is still unsafe.
+            %% Consider the situation in which A and B are clustered. A goes
+            %% down, and records B as the running node. Then B gets clustered
+            %% with C, C goes down and B goes down. In this case, C is the
+            %% second-to-last, but we don't know that and we'll remove B from A
             %% anyway, even if that will lead to bad things.
             case cluster_nodes(running) -- [node(), Node] of
                 [] -> start_mnesia(),
@@ -339,7 +353,7 @@ cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 %% This function is the actual source of information, since it gets
 %% the data from mnesia. Obviously it'll work only when mnesia is
 %% running.
-mnesia_nodes() ->
+cluster_status_from_mnesia() ->
     case mnesia:system_info(is_running) of
         no ->
             {error, mnesia_not_running};
@@ -359,39 +373,33 @@ mnesia_nodes() ->
                                          disc -> nodes_incl_me(DiscCopies);
                                          ram  -> DiscCopies
                                      end,
-                         {ok, {AllNodes, DiscNodes}};
+                         %% `mnesia:system_info(running_db_nodes)' is safe since
+                         %% we know that mnesia is running
+                         RunningNodes = mnesia:system_info(running_db_nodes),
+                         {ok, {AllNodes, DiscNodes, RunningNodes}};
                 false -> {error, tables_not_present}
             end
     end.
 
 cluster_status(WhichNodes) ->
-    %% I don't want to call `running_nodes/1' unless if necessary, since it's
-    %% pretty expensive.
-    {AllNodes1, DiscNodes1, RunningNodesThunk} =
-        case mnesia_nodes() of
-            {ok, {AllNodes, DiscNodes}} ->
-                {AllNodes, DiscNodes, fun() -> running_nodes(AllNodes) end};
+    {AllNodes, DiscNodes, RunningNodes} = Nodes =
+        case cluster_status_from_mnesia() of
+            {ok, Nodes0} ->
+                Nodes0;
             {error, _Reason} ->
-                {AllNodes, DiscNodes, RunningNodes} =
+                {AllNodes0, DiscNodes0, RunningNodes0} =
                     rabbit_node_monitor:read_cluster_status(),
                 %% The cluster status file records the status when the node is
                 %% online, but we know for sure that the node is offline now, so
                 %% we can remove it from the list of running nodes.
-                {AllNodes, DiscNodes, fun() -> nodes_excl_me(RunningNodes) end}
+                {AllNodes0, DiscNodes0, nodes_excl_me(RunningNodes0)}
         end,
     case WhichNodes of
-        status  -> {AllNodes1, DiscNodes1, RunningNodesThunk()};
-        all     -> AllNodes1;
-        disc    -> DiscNodes1;
-        ram     -> AllNodes1 -- DiscNodes1;
-        running -> RunningNodesThunk()
-    end.
-
-cluster_status_from_mnesia() ->
-    case mnesia_nodes() of
-        {ok, {AllNodes, DiscNodes}} -> {ok, {AllNodes, DiscNodes,
-                                             running_nodes(AllNodes)}};
-        {error, _} = Err            -> Err
+        status  -> Nodes;
+        all     -> AllNodes;
+        disc    -> DiscNodes;
+        ram     -> AllNodes -- DiscNodes;
+        running -> RunningNodes
     end.
 
 node_info() ->
@@ -726,14 +734,6 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-%% We're not using `mnesia:system_info(running_db_nodes)' directly
-%% because if the node is a RAM node it won't know about other nodes
-%% when mnesia is stopped
-running_nodes(Nodes) ->
-    {Replies, _BadNodes} = rpc:multicall(Nodes,
-                                         rabbit_mnesia, is_running_remote, []),
-    [Node || {Running, Node} <- Replies, Running].
-
 is_running_remote() -> {mnesia:system_info(is_running) =:= yes, node()}.
 
 check_consistency(OTP, Rabbit) ->
@@ -817,21 +817,23 @@ e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 error_description(clustering_only_disc_node) ->
     "You cannot cluster a node if it is the only disc node in its existing "
         " cluster. If new nodes joined while this node was offline, use "
-        "\"update_cluster_nodes\" to add them manually.";
+        "'update_cluster_nodes' to add them manually.";
 error_description(resetting_only_disc_node) ->
     "You cannot reset a node when it is the only disc node in a cluster. "
         "Please convert another node of the cluster to a disc node first.";
 error_description(already_clustered) ->
-    "You are already clustered with the nodes you have selected.";
+    "You are already clustered with the nodes you have selected.  If the "
+        "node you are trying to cluster with is not present in the current "
+        "node status, use 'update_cluster_nodes'.";
 error_description(not_clustered) ->
     "Non-clustered nodes can only be disc nodes.";
 error_description(cannot_connect_to_cluster) ->
     "Could not connect to the cluster nodes present in this node's "
         "status file. If the cluster has changed, you can use the "
-        "\"update_cluster_nodes\" command to point to the new cluster nodes.";
+        "'update_cluster_nodes' command to point to the new cluster nodes.";
 error_description(no_online_cluster_nodes) ->
     "Could not find any online cluster nodes. If the cluster has changed, "
-        "you can use the 'recluster' command.";
+        "you can use the 'update_cluster_nodes' command.";
 error_description(cannot_connect_to_node) ->
     "Could not connect to the cluster node provided.";
 error_description(inconsistent_cluster) ->
@@ -846,11 +848,11 @@ error_description(offline_node_no_offline_flag) ->
         "but can be done with the --offline flag. Please consult the manual "
         "for rabbitmqctl for more information.";
 error_description(not_last_node_to_go_down) ->
-    "The node you're trying to remove from was not the last to go down "
+    "The node you are trying to remove from was not the last to go down "
         "(excluding the node you are removing). Please use the the last node "
         "to go down to remove nodes when the cluster is offline.";
 error_description(removing_node_from_offline_node) ->
-    "To remove a node remotely from an offline node, the node you're removing "
+    "To remove a node remotely from an offline node, the node you are removing "
         "from must be a disc node and all the other nodes must be offline.";
 error_description(no_running_cluster_nodes) ->
     "You cannot leave a cluster if no online nodes are present.".
