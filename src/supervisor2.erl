@@ -85,6 +85,20 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3]).
 -export([handle_cast/2]).
 
+%%--------------------------------------------------------------------------
+%% Records - here we differ from supervisor.erl in that we do not
+%% embed type specifications directly in our records, so that -D use_specs
+%% can be used to turn this off for older versions of Erlang
+%%--------------------------------------------------------------------------
+
+-record(child, {pid = undefined,  % pid is undefined when child is not running
+		name,
+		mfa,
+		restart_type,
+		shutdown,
+		child_type,
+		modules = []}).
+
 -define(DICT, dict).
 
 -record(state, {name,
@@ -96,14 +110,6 @@
 		restarts = [],
 	        module,
 	        args}).
-
--record(child, {pid = undefined,  % pid is undefined when child is not running
-		name,
-		mfa,
-		restart_type,
-		shutdown,
-		child_type,
-		modules = []}).
 
 -define(is_simple(State), State#state.strategy =:= simple_one_for_one orelse
         State#state.strategy =:= simple_one_for_one_terminate).
