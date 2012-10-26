@@ -441,11 +441,11 @@ federate_unfederate_test() ->
               assert_connections(Xs, []),
 
               %% Federate them - links appear
-              set_param("policy", "dyn", policy("^dyn.", "all")),
+              set_pol("dyn", "^dyn\\.", policy("all")),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Unfederate them - links disappear
-              clear_param("policy", "dyn"),
+              clear_pol("dyn"),
               assert_connections(Xs, [])
       end, [x(<<"dyn.exch1">>), x(<<"dyn.exch2">>)]).
 
@@ -490,11 +490,17 @@ stop_other_node({Name, _Port}) ->
                       " stop-other-node"),
     timer:sleep(1000).
 
-set_param(Component, Key, Value) ->
-    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Key, Value])).
+set_param(Component, Name, Value) ->
+    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).
 
-clear_param(Component, Key) ->
-    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Key])).
+clear_param(Component, Name) ->
+    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Name])).
+
+set_pol(Name, Pattern, Defn) ->
+    rabbitmqctl(fmt("set_policy ~s \"~s\" '~s'", [Name, Pattern, Defn])).
+
+clear_pol(Name) ->
+    rabbitmqctl(fmt("clear_policy ~s ", [Name])).
 
 fmt(Fmt, Args) ->
     string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
@@ -504,10 +510,8 @@ rabbitmqctl(Args) ->
        plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
     timer:sleep(100).
 
-policy(Pattern, UpstreamSet) ->
-    rabbit_misc:format("{\"pattern\": \"~s\","
-                       " \"policy\":  {\"federation-upstream-set\": \"~s\"}}",
-                       [Pattern, UpstreamSet]).
+policy(UpstreamSet) ->
+    rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
 
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),

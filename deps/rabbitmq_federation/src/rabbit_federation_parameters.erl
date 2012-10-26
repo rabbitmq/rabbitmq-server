@@ -16,11 +16,12 @@
 
 -module(rabbit_federation_parameters).
 -behaviour(rabbit_runtime_parameter).
+-behaviour(rabbit_policy_validator).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
--export([register/0]).
+-export([register/0, validate_policy/1]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "federation parameters"},
@@ -29,22 +30,23 @@
                     {enables, recovery}]}).
 
 register() ->
-    [rabbit_registry:register(runtime_parameter, Name, ?MODULE) ||
-        Name <- [<<"federation">>,
-                 <<"federation-upstream">>,
-                 <<"federation-upstream-set">>]].
+    [rabbit_registry:register(Class, Name, ?MODULE) ||
+        {Class, Name} <- [{runtime_parameter, <<"federation">>},
+                          {runtime_parameter, <<"federation-upstream">>},
+                          {runtime_parameter, <<"federation-upstream-set">>},
+                          {policy_validator,  <<"federation-upstream-set">>}]].
 
-validate(_VHost, <<"federation-upstream-set">>, Key, Term) ->
+validate(_VHost, <<"federation-upstream-set">>, Name, Term) ->
     [rabbit_parameter_validation:proplist(
-       Key,
+       Name,
        [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory},
         {<<"exchange">>, fun rabbit_parameter_validation:binary/2, optional} |
         shared_validation()], Upstream)
      || Upstream <- Term];
 
-validate(_VHost, <<"federation-upstream">>, Key, Term) ->
+validate(_VHost, <<"federation-upstream">>, Name, Term) ->
     rabbit_parameter_validation:proplist(
-      Key, [{<<"uri">>, fun validate_uri/2, mandatory} |
+      Name, [{<<"uri">>, fun validate_uri/2, mandatory} |
             shared_validation()], Term);
 
 validate(_VHost, <<"federation">>, <<"local-nodename">>, Term) ->
@@ -53,13 +55,13 @@ validate(_VHost, <<"federation">>, <<"local-nodename">>, Term) ->
 validate(_VHost, <<"federation">>, <<"local-username">>, Term) ->
     rabbit_parameter_validation:binary(<<"local-username">>, Term);
 
-validate(_VHost, _Component, Key, _Term) ->
-    {error, "key not recognised: ~p", [Key]}.
+validate(_VHost, _Component, Name, _Term) ->
+    {error, "name not recognised: ~p", [Name]}.
 
-validate_clear(_VHost, <<"federation-upstream-set">>, _Key) ->
+validate_clear(_VHost, <<"federation-upstream-set">>, _Name) ->
     ok;
 
-validate_clear(_VHost, <<"federation-upstream">>, _Key) ->
+validate_clear(_VHost, <<"federation-upstream">>, _Name) ->
     ok;
 
 validate_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
@@ -68,14 +70,14 @@ validate_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
 validate_clear(_VHost, <<"federation">>, <<"local-username">>) ->
     ok;
 
-validate_clear(_VHost, _Component, Key) ->
-    {error, "key not recognised: ~p", [Key]}.
+validate_clear(_VHost, _Component, Name) ->
+    {error, "name not recognised: ~p", [Name]}.
 
-notify(_VHost, <<"federation-upstream-set">>, Key, _Term) ->
-    rabbit_federation_link_sup_sup:adjust({upstream_set, Key});
+notify(_VHost, <<"federation-upstream-set">>, Name, _Term) ->
+    rabbit_federation_link_sup_sup:adjust({upstream_set, Name});
 
-notify(_VHost, <<"federation-upstream">>, Key, _Term) ->
-    rabbit_federation_link_sup_sup:adjust({upstream, Key});
+notify(_VHost, <<"federation-upstream">>, Name, _Term) ->
+    rabbit_federation_link_sup_sup:adjust({upstream, Name});
 
 notify(_VHost, <<"federation">>, <<"local-nodename">>, _Term) ->
     rabbit_federation_link_sup_sup:adjust(everything);
@@ -83,11 +85,11 @@ notify(_VHost, <<"federation">>, <<"local-nodename">>, _Term) ->
 notify(_VHost, <<"federation">>, <<"local-username">>, _Term) ->
     rabbit_federation_link_sup_sup:adjust(everything).
 
-notify_clear(_VHost, <<"federation-upstream-set">>, Key) ->
-    rabbit_federation_link_sup_sup:adjust({clear_upstream_set, Key});
+notify_clear(_VHost, <<"federation-upstream-set">>, Name) ->
+    rabbit_federation_link_sup_sup:adjust({clear_upstream_set, Name});
 
-notify_clear(_VHost, <<"federation-upstream">>, Key) ->
-    rabbit_federation_link_sup_sup:adjust({clear_upstream, Key});
+notify_clear(_VHost, <<"federation-upstream">>, Name) ->
+    rabbit_federation_link_sup_sup:adjust({clear_upstream, Name});
 
 notify_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
     rabbit_federation_link_sup_sup:adjust(everything);
@@ -115,3 +117,12 @@ validate_uri(Name, Term) ->
               end;
         E  -> E
     end.
+
+%%----------------------------------------------------------------------------
+
+validate_policy([{<<"federation-upstream-set">>, Value}])
+  when is_binary(Value) ->
+    ok;
+validate_policy([{<<"federation-upstream-set">>, Value}]) ->
+    {error, "~p is not a valid federation upstream set name", [Value]}.
+

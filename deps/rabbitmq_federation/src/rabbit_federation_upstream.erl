@@ -61,7 +61,7 @@ from_set(SetName, X, UpstName) ->
 from_set(<<"all">>, X) ->
     Connections = rabbit_runtime_parameters:list(
                     vhost(X), <<"federation-upstream">>),
-    Set = [[{<<"upstream">>, pget(key, C)}] || C <- Connections],
+    Set = [[{<<"upstream">>, pget(name, C)}] || C <- Connections],
     from_set_contents(Set, X);
 
 from_set(SetName, X) ->
