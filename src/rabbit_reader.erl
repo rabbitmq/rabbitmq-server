@@ -613,6 +613,16 @@ post_process_frame(_Frame, _ChPid, State) ->
 
 %%--------------------------------------------------------------------------
 
+%% We allow clients to exceed the frame size a little bit since quite
+%% a few get it wrong - off-by 1 or 8 (empty frame size) are typical.
+-define(FRAME_SIZE_FUDGE, ?EMPTY_FRAME_SIZE).
+
+handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>,
+             State = #v1{connection = #connection{frame_max = FrameMax}})
+  when FrameMax /= 0 andalso
+       PayloadSize > FrameMax - ?EMPTY_FRAME_SIZE + ?FRAME_SIZE_FUDGE ->
+    frame_error({frame_too_large, PayloadSize, FrameMax - ?EMPTY_FRAME_SIZE},
+                Type, Channel, <<>>, State);
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},

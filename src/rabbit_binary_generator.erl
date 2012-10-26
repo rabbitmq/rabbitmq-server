@@ -18,20 +18,11 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
-%% EMPTY_CONTENT_BODY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
-%%  - 1 byte of frame type
-%%  - 2 bytes of channel number
-%%  - 4 bytes of frame payload length
-%%  - 1 byte of payload trailer FRAME_END byte
-%% See definition of check_empty_content_body_frame_size/0,
-%% an assertion called at startup.
--define(EMPTY_CONTENT_BODY_FRAME_SIZE, 8).
-
 -export([build_simple_method_frame/3,
          build_simple_content_frames/4,
          build_heartbeat_frame/0]).
 -export([generate_table/1, encode_properties/2]).
--export([check_empty_content_body_frame_size/0]).
+-export([check_empty_frame_size/0]).
 -export([ensure_content_encoded/2, clear_encoded_content/1]).
 -export([map_exception/3]).
 
@@ -53,7 +44,7 @@
 -spec(generate_table/1 :: (rabbit_framing:amqp_table()) -> binary()).
 -spec(encode_properties/2 ::
         ([rabbit_framing:amqp_property_type()], [any()]) -> binary()).
--spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
+-spec(check_empty_frame_size/0 :: () -> 'ok').
 -spec(ensure_content_encoded/2 ::
         (rabbit_types:content(), rabbit_types:protocol()) ->
                                        rabbit_types:encoded_content()).
@@ -88,10 +79,8 @@ build_simple_content_frames(ChannelInt, Content, FrameMax, Protocol) ->
     [HeaderFrame | ContentFrames].
 
 build_content_frames(FragsRev, FrameMax, ChannelInt) ->
-    BodyPayloadMax = if FrameMax == 0 ->
-                             iolist_size(FragsRev);
-                        true ->
-                             FrameMax - ?EMPTY_CONTENT_BODY_FRAME_SIZE
+    BodyPayloadMax = if FrameMax == 0 -> iolist_size(FragsRev);
+                        true          -> FrameMax - ?EMPTY_FRAME_SIZE
                      end,
     build_content_frames(0, [], BodyPayloadMax, [],
                          lists:reverse(FragsRev), BodyPayloadMax, ChannelInt).
@@ -257,15 +246,13 @@ encode_property(timestamp, Int) ->
 encode_property(table, Table) ->
     table_to_binary(Table).
 
-check_empty_content_body_frame_size() ->
-    %% Intended to ensure that EMPTY_CONTENT_BODY_FRAME_SIZE is
-    %% defined correctly.
+check_empty_frame_size() ->
+    %% Intended to ensure that EMPTY_FRAME_SIZE is defined correctly.
     ComputedSize = iolist_size(create_frame(?FRAME_BODY, 0, <<>>)),
-    if ComputedSize == ?EMPTY_CONTENT_BODY_FRAME_SIZE ->
+    if ComputedSize == ?EMPTY_FRAME_SIZE ->
             ok;
        true ->
-            exit({incorrect_empty_content_body_frame_size,
-                  ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
+            exit({incorrect_empty_frame_size, ComputedSize, ?EMPTY_FRAME_SIZE})
     end.
 
 ensure_content_encoded(Content = #content{properties_bin = PropBin,
