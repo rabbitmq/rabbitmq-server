@@ -111,15 +111,14 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     NewImplicitlyEnabled = rabbit_plugins:dependencies(false,
                                                        NewEnabled, AllPlugins),
-    MissingDeps = NewImplicitlyEnabled -- plugin_names(AllPlugins),
+    MissingDeps = (NewImplicitlyEnabled -- plugin_names(AllPlugins)) -- Missing,
     case {Missing, MissingDeps} of
         {[],   []} -> ok;
-        {Miss, []} -> throw({error_string,
-                             fmt_list("The following plugins "
-                                      "could not be found:", Miss)});
-        {[], Miss} -> throw({error_string,
-                             fmt_list("The following plugin dependencies "
-                                      "could not be found:", Miss)})
+        {Miss, []} -> throw({error_string, fmt_missing("plugins",      Miss)});
+        {[], Miss} -> throw({error_string, fmt_missing("dependencies", Miss)});
+        {_,     _} -> throw({error_string,
+                             fmt_missing("plugins", Missing) ++
+                                 fmt_missing("dependencies", MissingDeps)})
     end,
     write_enabled_plugins(PluginsFile, NewEnabled),
     maybe_warn_mochiweb(NewImplicitlyEnabled),
@@ -239,6 +238,9 @@ print_list(Header, Plugins) ->
 fmt_list(Header, Plugins) ->
     lists:flatten(
       [Header, $\n, [io_lib:format("  ~s~n", [P]) || P <- Plugins]]).
+
+fmt_missing(Desc, Missing) ->
+    fmt_list("The following " ++ Desc ++ " could not be found:", Missing).
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
