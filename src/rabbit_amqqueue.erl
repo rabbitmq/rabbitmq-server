@@ -18,7 +18,7 @@
 
 -export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
 -export([pseudo_queue/2]).
--export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
+-export([lookup/1, with/2, with/3, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
@@ -81,6 +81,7 @@
                     rabbit_types:error('not_found');
         ([name()]) -> [rabbit_types:amqqueue()]).
 -spec(with/2 :: (name(), qfun(A)) -> A | rabbit_types:error('not_found')).
+-spec(with/3 :: (name(), qfun(A), fun(() -> B)) -> A | B).
 -spec(with_or_die/2 ::
         (name(), qfun(A)) -> A | rabbit_types:channel_exit()).
 -spec(assert_equivalence/5 ::

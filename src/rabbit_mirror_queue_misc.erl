@@ -137,7 +137,7 @@ on_node_up() ->
     ok.
 
 drop_mirrors(QName, Nodes) ->
-    [ok = drop_mirror(QName, Node)  || Node <- Nodes],
+    [{ok, _} = drop_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 drop_mirror(QName, MirrorNode) ->
@@ -154,7 +154,7 @@ drop_mirror(QName, MirrorNode) ->
                         "Dropping queue mirror on node ~p for ~s~n",
                         [MirrorNode, rabbit_misc:rs(Name)]),
                       exit(Pid, {shutdown, dropped}),
-                      ok
+                      {ok, dropped}
               end
       end).
 
@@ -212,7 +212,8 @@ if_mirrored_queue(QName, Fun) ->
                                             false -> ok;
                                             true  -> Fun(Q)
                                         end
-                                end).
+                                end,
+                         rabbit_misc:const({ok, not_found})).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
