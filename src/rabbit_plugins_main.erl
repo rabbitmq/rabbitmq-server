@@ -186,7 +186,7 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     EnabledImplicitly =
         rabbit_plugins:dependencies(false, EnabledExplicitly,
                                     AvailablePlugins) -- EnabledExplicitly,
-    Missing = [#plugin{name = Name} ||
+    Missing = [#plugin{name = Name, dependencies = []} ||
                   Name <- ((EnabledExplicitly ++ EnabledImplicitly) --
                                plugin_names(AvailablePlugins))],
     {ok, RE} = re:compile(Pattern),
@@ -220,15 +220,26 @@ format_plugin(#plugin{name = Name, version = Version,
             end,
     case Format of
         minimal -> io:format("~s~n", [Name]);
-        normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++
-                                 "w ~s~n", [Glyph, Name, Version]);
+        normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++ "w ~s~n",
+                             [Glyph, Name, case Version of
+                                               undefined -> "";
+                                               _         -> Version
+                                           end]);
         verbose -> io:format("~s ~w~n", [Glyph, Name]),
-                   io:format("    Version:    \t~s~n", [Version]),
+                   case Version of
+                       undefined -> ok;
+                       _         -> io:format("    Version:    \t~s~n",
+                                              [Version])
+                   end,
                    case Deps of
                        [] -> ok;
                        _  -> io:format("    Dependencies:\t~p~n", [Deps])
                    end,
-                   io:format("    Description:\t~s~n", [Description]),
+                   case Description of
+                       undefined -> ok;
+                       _         -> io:format("    Description:\t~s~n",
+                                              [Description])
+                   end,
                    io:format("~n")
     end.
 
