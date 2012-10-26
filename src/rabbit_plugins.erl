@@ -97,22 +97,16 @@ read_enabled(PluginsFile) ->
 %% When Reverse =:= true the bottom/leaf level applications are returned in
 %% the resulting list, otherwise they're skipped.
 dependencies(Reverse, Sources, AllPlugins) ->
-    %% A dict here is used en lieu of sets to dedup each Name, while
-    %% still maintaining the Deps list for each whose deps are
-    %% known. Missing plugins' dependencies cannot be known.
-    DepMap = lists:foldl(
-               fun({Name, Deps}, Acc) ->
-                       dict:append_list(Name, Deps, Acc)
-               end,
-               dict:new(),
-               [{Name, Deps} || #plugin{name         = Name,
-                                        dependencies = Deps} <- AllPlugins] ++
-                   [{Dep,  []}   || #plugin{dependencies = Deps} <- AllPlugins,
-                                    Dep                          <- Deps]),
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
-                dict:to_list(DepMap)),
+                lists:ukeysort(
+                  1, [{Name, Deps} ||
+                         #plugin{name         = Name,
+                                 dependencies = Deps} <- AllPlugins] ++
+                      [{Dep,   []} ||
+                          #plugin{dependencies = Deps} <- AllPlugins,
+                          Dep                          <- Deps])),
     Dests = case Reverse of
                 false -> digraph_utils:reachable(Sources, G);
                 true  -> digraph_utils:reaching(Sources, G)
