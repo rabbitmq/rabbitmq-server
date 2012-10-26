@@ -102,7 +102,7 @@
 -type shutdown() :: 'brutal_kill' | timeout().
 -type worker() :: 'worker' | 'supervisor'.
 -type sup_name() :: {'local', Name :: atom()} | {'global', Name :: atom()}.
--type sup_ref() :: (Name :: atom())
+-type sup_ref()  :: (Name :: atom())
                   | {Name :: atom(), Node :: node()}
                   | {'global', Name :: atom()}
                   | pid().
@@ -119,8 +119,9 @@
 
 %%--------------------------------------------------------------------------
 
--record(child, {pid = undefined,  % pid is undefined when child is not running
-		name,
+-record(child, {% pid is undefined when child is not running
+	    pid = undefined,	
+        name,
 		mfa,
 		restart_type,
 		shutdown,
@@ -592,7 +593,7 @@ update_childspec1([], Children, KeepOld) ->
     lists:reverse(Children ++ KeepOld).
 
 update_chsp(OldCh, Children) ->
-    case lists:map(fun (Ch) when OldCh#child.name =:= Ch#child.name ->
+    case lists:map(fun(Ch) when OldCh#child.name =:= Ch#child.name ->
 			   Ch#child{pid = OldCh#child.pid};
 		      (Ch) ->
 			   Ch
@@ -603,7 +604,7 @@ update_chsp(OldCh, Children) ->
 	NewC ->
 	    {ok, NewC}
     end.
-
+    
 %%% ---------------------------------------------------
 %%% Start a new child.
 %%% ---------------------------------------------------
@@ -893,7 +894,7 @@ shutdown(Pid, brutal_kill) ->
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
 		    {error, OtherReason}
 	    end;
-	{error, Reason} ->
+	{error, Reason} ->      
 	    {error, Reason}
     end;
 
@@ -902,7 +903,7 @@ shutdown(Pid, Time) ->
     case monitor_child(Pid) of
 	ok ->
 	    exit(Pid, shutdown), %% Try to shutdown gracefully
-	    receive
+	    receive 
 		{'DOWN', _MRef, process, Pid, shutdown} ->
 		    ok;
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
@@ -914,14 +915,14 @@ shutdown(Pid, Time) ->
 			    {error, OtherReason}
 		    end
 	    end;
-	{error, Reason} ->
+	{error, Reason} ->      
 	    {error, Reason}
     end.
 
 %% Help function to shutdown/2 switches from link to monitor approach
 monitor_child(Pid) ->
-
-    %% Do the monitor operation first so that if the child dies
+    
+    %% Do the monitor operation first so that if the child dies 
     %% before the monitoring is done causing a 'DOWN'-message with
     %% reason noproc, we will get the real reason in the 'EXIT'-message
     %% unless a naughty child has already done unlink...
@@ -931,19 +932,19 @@ monitor_child(Pid) ->
     receive
 	%% If the child dies before the unlik we must empty
 	%% the mail-box of the 'EXIT'-message and the 'DOWN'-message.
-	{'EXIT', Pid, Reason} ->
-	    receive
+	{'EXIT', Pid, Reason} -> 
+	    receive 
 		{'DOWN', _, process, Pid, _} ->
 		    {error, Reason}
 	    end
-    after 0 ->
+    after 0 -> 
 	    %% If a naughty child did unlink and the child dies before
 	    %% monitor the result will be that shutdown/2 receives a
 	    %% 'DOWN'-message with reason noproc.
 	    %% If the child should die after the unlink there
 	    %% will be a 'DOWN'-message with a correct reason
-	    %% that will be handled in shutdown/2.
-	    ok
+	    %% that will be handled in shutdown/2. 
+	    ok   
     end.
 
 
@@ -1021,11 +1022,11 @@ init_state1(SupName, {Strategy, MaxIntensity, Period}, Mod, Args) ->
     validIntensity(MaxIntensity),
     validPeriod(Period),
     {ok, #state{name = supname(SupName,Mod),
-	       strategy = Strategy,
-	       intensity = MaxIntensity,
-	       period = Period,
-	       module = Mod,
-	       args = Args}};
+		strategy = Strategy,
+		intensity = MaxIntensity,
+		period = Period,
+		module = Mod,
+		args = Args}};
 init_state1(_SupName, Type, _, _) ->
     {invalid_type, Type}.
 
@@ -1038,14 +1039,14 @@ validStrategy(What)                         -> throw({invalid_strategy, What}).
 
 validIntensity(Max) when is_integer(Max),
                          Max >=  0 -> true;
-validIntensity(What)              -> throw({invalid_intensity, What}).
+validIntensity(What)               -> throw({invalid_intensity, What}).
 
 validPeriod(Period) when is_integer(Period),
                          Period > 0 -> true;
 validPeriod(What)                   -> throw({invalid_period, What}).
 
-supname(self,Mod) -> {self(),Mod};
-supname(N,_)      -> N.
+supname(self, Mod) -> {self(), Mod};
+supname(N, _)      -> N.
 
 %%% ------------------------------------------------------
 %%% Check that the children start specification is valid.
@@ -1124,7 +1125,7 @@ validShutdown(Shutdown, _)             -> throw({invalid_shutdown, Shutdown}).
 
 validMods(dynamic) -> true;
 validMods(Mods) when is_list(Mods) ->
-    lists:foreach(fun (Mod) ->
+    lists:foreach(fun(Mod) ->
 		    if
 			is_atom(Mod) -> ok;
 			true -> throw({invalid_module, Mod})
@@ -1142,7 +1143,7 @@ validMods(Mods) -> throw({invalid_modules, Mods}).
 %%% Returns: {ok, State'} | {terminate, State'}
 %%% ------------------------------------------------------
 
-add_restart(State) ->
+add_restart(State) ->  
     I = State#state.intensity,
     P = State#state.period,
     R = State#state.restarts,
