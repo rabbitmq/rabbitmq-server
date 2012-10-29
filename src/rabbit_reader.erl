@@ -39,19 +39,18 @@
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state, conserve_resources,
-             last_blocked_by, last_blocked_at}).
+             last_blocked_by, last_blocked_at, host, peer_host}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
                           channels]).
 
--define(CREATION_EVENT_KEYS, [pid, name, address, port, peer_address, peer_port,
-                              ssl, peer_cert_subject, peer_cert_issuer,
-                              peer_cert_validity, auth_mechanism,
-                              ssl_protocol, ssl_key_exchange,
-                              ssl_cipher, ssl_hash,
-                              protocol, user, vhost, timeout, frame_max,
-                              client_properties]).
+-define(CREATION_EVENT_KEYS,
+        [pid, name, address, port, peer_address, peer_port, host,
+        peer_host, ssl, peer_cert_subject, peer_cert_issuer,
+        peer_cert_validity, auth_mechanism, ssl_protocol,
+        ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
+        timeout, frame_max, client_properties]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -198,8 +197,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     Name = name(Sock),
     log(info, "accepting AMQP connection ~p (~s)~n", [self(), Name]),
     ClientSock = socket_op(Sock, SockTransform),
-    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
-                      handshake_timeout),
+    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(), handshake_timeout),
+    {Host, PeerHost} = rabbit_net:rdns(Sock, inbound),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
                 name                = Name,
@@ -225,7 +224,9 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 auth_state          = none,
                 conserve_resources  = false,
                 last_blocked_by     = none,
-                last_blocked_at     = never},
+                last_blocked_at     = never,
+                host                = Host,
+                peer_host           = PeerHost},
     try
         ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
@@ -893,6 +894,8 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
 i(name,               #v1{name = Name}) -> list_to_binary(Name);
+i(host,               #v1{host = Host}) -> list_to_binary(Host);
+i(peer_host,          #v1{peer_host = PeerHost}) -> list_to_binary(PeerHost);
 i(address,            S) -> socket_info(fun rabbit_net:sockname/1,
                                         fun ({A, _}) -> A end, S);
 i(port,               S) -> socket_info(fun rabbit_net:sockname/1,
