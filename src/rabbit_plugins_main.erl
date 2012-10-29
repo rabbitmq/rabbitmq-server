@@ -223,14 +223,14 @@ format_plugin(#plugin{name = Name, version = Version,
           end,
     case Format of
         minimal -> io:format("~s~n", [Name]);
-        normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++ "w",
+        normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++ "w ",
                              [Glyph, Name]),
                    Opt("~s", Version, undefined),
                    io:format("~n");
         verbose -> io:format("~s ~w~n", [Glyph, Name]),
-                   Opt("    Version:    \t~s~n",  Version,     undefined),
+                   Opt("    Version:     \t~s~n", Version,     undefined),
                    Opt("    Dependencies:\t~p~n", Deps,        []),
-                   Opt("    Description:\t~s~n",  Description, undefined),
+                   Opt("    Description: \t~s~n", Description, undefined),
                    io:format("~n")
     end.
 
