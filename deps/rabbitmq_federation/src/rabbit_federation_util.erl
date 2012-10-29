@@ -58,8 +58,8 @@ should_forward(undefined, _MaxHops) ->
     true;
 should_forward(Headers, MaxHops) ->
     case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
-        undefined  -> true;
-        {array, A} -> length(A) < MaxHops
+        {array, A} -> length(A) < MaxHops;
+        _          -> true
     end.
 
 find_upstreams(Name, Upstreams) ->
