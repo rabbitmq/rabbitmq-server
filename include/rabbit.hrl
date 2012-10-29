@@ -110,5 +110,6 @@
 -define(DESIRED_HIBERNATE,         10000).
 -define(CREDIT_DISC_BOUND,   {2000, 500}).
 
+-define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
 -define(DELETED_HEADER, <<"BCC">>).
