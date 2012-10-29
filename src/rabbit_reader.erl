@@ -896,9 +896,9 @@ i(pid, #v1{}) ->
 i(name, #v1{sock = Sock}) ->
     list_to_binary(name(Sock));
 i(host, #v1{host = Host}) ->
-    Host;
+    list_to_binary(Host);
 i(peer_host, #v1{peer_host = PeerHost}) ->
-    PeerHost;
+    list_to_binary(PeerHost);
 i(address, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
 i(port, #v1{sock = Sock}) ->
