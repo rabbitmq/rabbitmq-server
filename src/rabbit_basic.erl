@@ -196,30 +196,25 @@ prepend_table(Headers, Name, Info, Prior) ->
 set_invalid_header(Name, {_, _}=Value, Headers) when is_list(Headers) ->
     case rabbit_misc:table_lookup(Headers, ?INVALID_HEADERS_KEY) of
         undefined ->
-            Invalid = [{Name, array, [Value]}],
-            set_invalid(Headers, Invalid);
-        {table, InvalidEntries} ->
-            case rabbit_misc:table_lookup(InvalidEntries, Name) of
-                undefined ->
-                    set_invalid(Headers, InvalidEntries, Name, [Value]);
-                {array, Prior} ->
-                    set_invalid(Headers, InvalidEntries, Name, [Value | Prior])
-            end;
+            set_invalid(Headers, [{Name, array, [Value]}]);
+        {table, ExistingHdr} ->
+            update_invalid(Headers, ExistingHdr, Name, Value);
         Other ->
             %% somehow the x-invalid-headers header is corrupt
             Invalid = [{?INVALID_HEADERS_KEY, array, [Other]}],
             set_invalid_header(Name, Value, set_invalid(Headers, Invalid))
     end.
 
-set_invalid(Headers, Invalid) ->
-    rabbit_misc:set_table_value(Headers, ?INVALID_HEADERS_KEY,
-                                table, Invalid).
+set_invalid(Headers, NewHdr) ->
+    rabbit_misc:set_table_value(Headers, ?INVALID_HEADERS_KEY, table, NewHdr).
 
-set_invalid(Headers, InvalidEntries, Name, Values) ->
-    rabbit_misc:set_table_value(
-      Headers, ?INVALID_HEADERS_KEY, table,
-      rabbit_misc:set_table_value(InvalidEntries,
-                                  Name, array, Values)).
+update_invalid(Headers, ExistingHdr, Name, Value) ->
+    Values = case rabbit_misc:table_lookup(ExistingHdr, Name) of
+                 undefined      -> [Value];
+                 {array, Prior} -> [Value | Prior]
+             end,
+    NewHdr = rabbit_misc:set_table_value(ExistingHdr, Name, array, Values),
+    set_invalid(Headers, NewHdr).
 
 extract_headers(Content) ->
     #content{properties = #'P_basic'{headers = Headers}} =
