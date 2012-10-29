@@ -197,29 +197,29 @@ set_invalid_header(Name, {_, _}=Value, Headers) when is_list(Headers) ->
     case rabbit_misc:table_lookup(Headers, ?INVALID_HEADERS_KEY) of
         undefined ->
             Invalid = [{Name, array, [Value]}],
-            rabbit_misc:set_table_value(Headers, ?INVALID_HEADERS_KEY,
-                                        table, Invalid);
+            set_invalid(Headers, Invalid);
         {table, InvalidEntries} ->
             case rabbit_misc:table_lookup(InvalidEntries, Name) of
                 undefined ->
-                    rabbit_misc:set_table_value(
-                      Headers, ?INVALID_HEADERS_KEY, table,
-                      rabbit_misc:set_table_value(InvalidEntries,
-                                                  Name, array, [Value]));
+                    set_invalid(Headers, InvalidEntries, Name, [Value]);
                 {array, Prior} ->
-                    rabbit_misc:set_table_value(
-                      Headers, ?INVALID_HEADERS_KEY, table,
-                      rabbit_misc:set_table_value(InvalidEntries,
-                                                  Name, array, [Value | Prior]))
+                    set_invalid(Headers, InvalidEntries, Name, [Value | Prior])
             end;
         Other ->
             %% somehow the x-invalid-headers header is corrupt
-            set_invalid_header(
-              Name, Value,
-              rabbit_misc:set_table_value(
-                Headers, ?INVALID_HEADERS_KEY,
-                table, [{?INVALID_HEADERS_KEY, array, [Other]}]))
+            Invalid = [{?INVALID_HEADERS_KEY, array, [Other]}],
+            set_invalid_header(Name, Value, set_invalid(Headers, Invalid))
     end.
+
+set_invalid(Headers, Invalid) ->
+    rabbit_misc:set_table_value(Headers, ?INVALID_HEADERS_KEY,
+                                table, Invalid).
+
+set_invalid(Headers, InvalidEntries, Name, Values) ->
+    rabbit_misc:set_table_value(
+      Headers, ?INVALID_HEADERS_KEY, table,
+      rabbit_misc:set_table_value(InvalidEntries,
+                                  Name, array, Values)).
 
 extract_headers(Content) ->
     #content{properties = #'P_basic'{headers = Headers}} =
