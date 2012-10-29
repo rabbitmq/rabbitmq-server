@@ -141,7 +141,7 @@ drop_mirrors(QName, Nodes) ->
     ok.
 
 drop_mirror(QName, MirrorNode) ->
-    if_mirrored_queue(
+    rabbit_amqqueue:with(
       QName,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids }) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
@@ -163,7 +163,7 @@ add_mirrors(QName, Nodes) ->
     ok.
 
 add_mirror(QName, MirrorNode) ->
-    if_mirrored_queue(
+    rabbit_amqqueue:with(
       QName,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
@@ -205,14 +205,6 @@ start_child(Name, MirrorNode, Q) ->
         Other ->
             Other
     end.
-
-if_mirrored_queue(QName, Fun) ->
-    rabbit_amqqueue:with(QName, fun (Q) ->
-                                        case is_mirrored(Q) of
-                                            false -> ok;
-                                            true  -> Fun(Q)
-                                        end
-                                end).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
