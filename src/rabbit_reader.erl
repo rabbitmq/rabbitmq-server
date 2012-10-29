@@ -890,83 +890,70 @@ auth_phase(Response,
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(pid, #v1{}) ->
-    self();
-i(name, #v1{sock = Sock}) ->
-    list_to_binary(name(Sock));
-i(address, #v1{sock = Sock}) ->
-    socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
-i(port, #v1{sock = Sock}) ->
-    socket_info(fun rabbit_net:sockname/1, fun ({_, P}) -> P end, Sock);
-i(peer_address, #v1{sock = Sock}) ->
-    socket_info(fun rabbit_net:peername/1, fun ({A, _}) -> A end, Sock);
-i(peer_port, #v1{sock = Sock}) ->
-    socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
-i(ssl, #v1{sock = Sock}) ->
-    rabbit_net:is_ssl(Sock);
-i(ssl_protocol, #v1{sock = Sock}) ->
-    ssl_info(fun ({P, _}) -> P end, Sock);
-i(ssl_key_exchange, #v1{sock = Sock}) ->
-    ssl_info(fun ({_, {K, _, _}}) -> K end, Sock);
-i(ssl_cipher, #v1{sock = Sock}) ->
-    ssl_info(fun ({_, {_, C, _}}) -> C end, Sock);
-i(ssl_hash, #v1{sock = Sock}) ->
-    ssl_info(fun ({_, {_, _, H}}) -> H end, Sock);
-i(peer_cert_issuer, #v1{sock = Sock}) ->
-    cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
-i(peer_cert_subject, #v1{sock = Sock}) ->
-    cert_info(fun rabbit_ssl:peer_cert_subject/1, Sock);
-i(peer_cert_validity, #v1{sock = Sock}) ->
-    cert_info(fun rabbit_ssl:peer_cert_validity/1, Sock);
-i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
-                                   SockStat =:= recv_cnt;
-                                   SockStat =:= send_oct;
-                                   SockStat =:= send_cnt;
-                                   SockStat =:= send_pend ->
-    socket_info(fun (S) -> rabbit_net:getstat(S, [SockStat]) end,
-                fun ([{_, I}]) -> I end, Sock);
-i(state, #v1{connection_state = S}) ->
-    S;
-i(last_blocked_by, #v1{last_blocked_by = By}) ->
-    By;
-i(last_blocked_age, #v1{last_blocked_at = never}) ->
+i(pid,                #v1{}) -> self();
+i(name,               #v1{sock = Sock}) -> list_to_binary(name(Sock));
+i(address,            S) -> socket_info(fun rabbit_net:sockname/1,
+                                        fun ({A, _}) -> A end, S);
+i(port,               S) -> socket_info(fun rabbit_net:sockname/1,
+                                        fun ({_, P}) -> P end, S);
+i(peer_address,       S) -> socket_info(fun rabbit_net:peername/1,
+                                        fun ({A, _}) -> A end, S);
+i(peer_port,          S) -> socket_info(fun rabbit_net:peername/1,
+                                        fun ({_, P}) -> P end, S);
+i(SockStat,           S) when SockStat =:= recv_oct;
+                              SockStat =:= recv_cnt;
+                              SockStat =:= send_oct;
+                              SockStat =:= send_cnt;
+                              SockStat =:= send_pend ->
+    socket_info(fun (Sock) -> rabbit_net:getstat(Sock, [SockStat]) end,
+                fun ([{_, I}]) -> I end, S);
+i(ssl,                #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
+i(ssl_protocol,       S) -> ssl_info(fun ({P,         _}) -> P end, S);
+i(ssl_key_exchange,   S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
+i(ssl_cipher,         S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
+i(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
+i(peer_cert_issuer,   S) -> cert_info(fun rabbit_ssl:peer_cert_issuer/1,   S);
+i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
+i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
+i(state,              #v1{connection_state = CS}) -> CS;
+i(last_blocked_by,    #v1{last_blocked_by = By}) -> By;
+i(last_blocked_age,   #v1{last_blocked_at = never}) ->
     infinity;
-i(last_blocked_age, #v1{last_blocked_at = T}) ->
+i(last_blocked_age,   #v1{last_blocked_at = T}) ->
     timer:now_diff(erlang:now(), T) / 1000000;
-i(channels, #v1{}) ->
-    length(all_channels());
-i(auth_mechanism, #v1{auth_mechanism = none}) ->
+i(channels,           #v1{}) -> length(all_channels());
+i(auth_mechanism,     #v1{auth_mechanism = none}) ->
     none;
-i(auth_mechanism, #v1{auth_mechanism = Mechanism}) ->
+i(auth_mechanism,     #v1{auth_mechanism = Mechanism}) ->
     proplists:get_value(name, Mechanism:description());
-i(protocol,          #v1{connection = #connection{protocol = none}}) ->
+i(protocol,           #v1{connection = #connection{protocol = none}}) ->
     none;
-i(protocol,          #v1{connection = #connection{protocol = Protocol}}) ->
+i(protocol,           #v1{connection = #connection{protocol = Protocol}}) ->
     Protocol:version();
-i(user,              #v1{connection = #connection{user = none}}) ->
+i(user,               #v1{connection = #connection{user = none}}) ->
     '';
-i(user,              #v1{connection = #connection{user = #user{
-                                                    username = Username}}}) ->
+i(user,               #v1{connection = #connection{user = #user{
+                                                     username = Username}}}) ->
     Username;
-i(vhost,             #v1{connection = #connection{vhost = VHost}}) ->
+i(vhost,              #v1{connection = #connection{vhost = VHost}}) ->
     VHost;
-i(timeout,           #v1{connection = #connection{timeout_sec = Timeout}}) ->
+i(timeout,            #v1{connection = #connection{timeout_sec = Timeout}}) ->
     Timeout;
-i(frame_max,         #v1{connection = #connection{frame_max = FrameMax}}) ->
+i(frame_max,          #v1{connection = #connection{frame_max = FrameMax}}) ->
     FrameMax;
-i(client_properties, #v1{connection = #connection{client_properties =
-                                                      ClientProperties}}) ->
+i(client_properties,  #v1{connection = #connection{client_properties =
+                                                       ClientProperties}}) ->
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 
-socket_info(Get, Select, Sock) ->
+socket_info(Get, Select, #v1{sock = Sock}) ->
     case Get(Sock) of
         {ok,    T} -> Select(T);
         {error, _} -> ''
     end.
 
-ssl_info(F, Sock) ->
+ssl_info(F, #v1{sock = Sock}) ->
     %% The first ok form is R14
     %% The second is R13 - the extra term is exportability (by inspection,
     %% the docs are wrong)
@@ -977,7 +964,7 @@ ssl_info(F, Sock) ->
         {ok, {P, {K, C, H, _}}} -> F({P, {K, C, H}})
     end.
 
-cert_info(F, Sock) ->
+cert_info(F, #v1{sock = Sock}) ->
     case rabbit_net:peercert(Sock) of
         nossl                -> '';
         {error, no_peercert} -> '';
