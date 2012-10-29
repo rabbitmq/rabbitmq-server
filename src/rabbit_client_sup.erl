@@ -44,5 +44,5 @@ start_link(SupName, Callback) ->
     supervisor2:start_link(SupName, ?MODULE, Callback).
 
 init({M,F,A}) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}}.
