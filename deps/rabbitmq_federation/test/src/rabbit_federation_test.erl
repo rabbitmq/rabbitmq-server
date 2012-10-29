@@ -34,6 +34,11 @@
 -define(MOPSY,      {"mopsy",      5675}).
 -define(COTTONTAIL, {"cottontail", 5676}).
 
+%% Used in binding_propagation_test
+-define(DYLAN,   {"dylan",   5674}).
+-define(BUGS,    {"bugs",    5675}).
+-define(JESSICA, {"jessica", 5676}).
+
 simple_test() ->
     with_ch(
       fun (Ch) ->
@@ -211,13 +216,15 @@ binding_recovery_test() ->
     ok.
 
 suffix({Nodename, _}, XName) ->
-    {_, NodeHost} = rabbit_nodes:parts(node()),
-    Node = rabbit_nodes:make({Nodename, NodeHost}),
     X = #exchange{name = r(list_to_binary(XName))},
-    rpc:call(Node, rabbit_federation_db, get_active_suffix,
+    rpc:call(n(Nodename), rabbit_federation_db, get_active_suffix,
              [r(<<"fed.downstream">>),
               #upstream{name     = list_to_binary(Nodename),
                         exchange = X}, none]).
+
+n(Nodename) ->
+    {_, NodeHost} = rabbit_nodes:parts(node()),
+    rabbit_nodes:make({Nodename, NodeHost}).
 
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
@@ -289,6 +296,68 @@ max_hops_test() ->
     stop_other_node(?FLOPSY),
     stop_other_node(?MOPSY),
     stop_other_node(?COTTONTAIL),
+    ok.
+
+%% Arrows indicate message flow. Numbers indicate max_hops.
+%%
+%% Dylan ---1--> Bugs ---2--> Jessica
+%% |^                              |^
+%% |\--------------1---------------/|
+%% \---------------1----------------/
+%%
+%%
+%% We want to demonstrate that if we bind a queue locally at each
+%% broker, (exactly) the following bindings propagate:
+%%
+%% Bugs binds to Dylan
+%% Jessica binds to Bugs, which then propagates on to Dylan
+%% Jessica binds to Dylan directly
+%% Dylan binds to Jessica.
+%%
+%% i.e. Dylan has two bindings from Jessica and one from Bugs
+%%      Bugs has one binding from Jessica
+%%      Jessica has one binding from Dylan
+%%
+%% So we tag each binding with its original broker and see how far it gets
+%%
+%% Also we check that when we tear down the original bindings
+%% that we get rid of everything again.
+
+binding_propagation_test() ->
+    Dylan   = start_other_node(?DYLAN),
+    Bugs    = start_other_node(?BUGS),
+    Jessica = start_other_node(?JESSICA),
+
+    declare_exchange(Dylan,   x(<<"x">>)),
+    declare_exchange(Bugs,    x(<<"x">>)),
+    declare_exchange(Jessica, x(<<"x">>)),
+
+    Q1 = bind_queue(Dylan,   <<"x">>, <<"dylan">>),
+    Q2 = bind_queue(Bugs,    <<"x">>, <<"bugs">>),
+    Q3 = bind_queue(Jessica, <<"x">>, <<"jessica">>),
+
+    %% Wait for bindings to propagate
+    timer:sleep(5000),
+
+    assert_bindings("dylan",   <<"x">>, [<<"jessica">>, <<"jessica">>,
+                                         <<"bugs">>, <<"dylan">>]),
+    assert_bindings("bugs",    <<"x">>, [<<"jessica">>, <<"bugs">>]),
+    assert_bindings("jessica", <<"x">>, [<<"dylan">>, <<"jessica">>]),
+
+    delete_queue(Dylan,   Q1),
+    delete_queue(Bugs,    Q2),
+    delete_queue(Jessica, Q3),
+
+    %% Wait for bindings to propagate
+    timer:sleep(5000),
+
+    assert_bindings("dylan",   <<"x">>, []),
+    assert_bindings("bugs",    <<"x">>, []),
+    assert_bindings("jessica", <<"x">>, []),
+
+    stop_other_node(?DYLAN),
+    stop_other_node(?BUGS),
+    stop_other_node(?JESSICA),
     ok.
 
 upstream_has_no_federation_test() ->
@@ -531,6 +600,25 @@ publish_expect(Ch, X, Key, Q, Payload) ->
 expect_empty(Ch, Q) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
+
+assert_bindings(Nodename, X, BindingsExp) ->
+    Bindings0 = rpc:call(n(Nodename), rabbit_binding, list_for_source, [r(X)]),
+    BindingsAct = [Key || #binding{key = Key} <- Bindings0],
+    assert_list(BindingsExp, BindingsAct).
+
+assert_list(Exp, Act) ->
+    case assert_list0(Exp, Act) of
+        ok   -> ok;
+        fail -> exit({assert_failed, Exp, Act})
+    end.
+
+assert_list0([],  [])      -> ok;
+assert_list0(Exp, [])      -> fail;
+assert_list0([],  Act)     -> fail;
+assert_list0(Exp, [H | T]) -> case lists:member(H, Exp) of
+                                  true  -> assert_list0(Exp -- [H], T);
+                                  false -> fail
+                              end.
 
 %%----------------------------------------------------------------------------
 

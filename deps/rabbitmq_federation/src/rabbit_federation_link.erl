@@ -279,51 +279,127 @@ open(Params) ->
         E -> E
     end.
 
-add_binding(B = #binding{key = Key, args = Args},
-            State = #state{channel = Ch, internal_exchange = IntXNameBin,
-                           upstream = #upstream{exchange = X}}) ->
-    case check_add_binding(B, State) of
-        {true,  State1} -> State1;
-        {false, State1} -> amqp_channel:call(
-                             Ch, #'exchange.bind'{
-                               destination = IntXNameBin,
-                               source      = name(X),
-                               routing_key = Key,
-                               arguments   = Args}),
-                           State1
+add_binding(B, State) ->
+    binding_op(fun record_binding/2, bind_cmd(bind, B, State), B, State).
+
+remove_binding(B, State) ->
+    binding_op(fun forget_binding/2, bind_cmd(unbind, B, State), B, State).
+
+record_binding(B = #binding{destination = Dest},
+               State = #state{bindings = Bs}) ->
+    {DoIt, Set} = case dict:find(key(B), Bs) of
+                      error       -> {true,  sets:from_list([Dest])};
+                      {ok, Dests} -> {false, sets:add_element(
+                                               Dest, Dests)}
+                  end,
+    {DoIt, State#state{bindings = dict:store(key(B), Set, Bs)}}.
+
+forget_binding(B = #binding{destination = Dest},
+               State = #state{bindings = Bs}) ->
+    Dests = sets:del_element(Dest, dict:fetch(key(B), Bs)),
+    {DoIt, Bs1} = case sets:size(Dests) of
+                      0 -> {true,  dict:erase(key(B), Bs)};
+                      _ -> {false, dict:store(key(B), Dests, Bs)}
+                  end,
+    {DoIt, State#state{bindings = Bs1}}.
+
+binding_op(UpdateFun, Cmd, B = #binding{args = Args},
+           State = #state{channel = Ch}) ->
+    {DoIt, State1} =
+        case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
+            undefined  -> UpdateFun(B, State);
+            {array, _} -> {Cmd =/= ignore, State}
+        end,
+    case DoIt of
+        true  -> amqp_channel:call(Ch, Cmd);
+        false -> ok
+    end,
+    State1.
+
+bind_cmd(Type, #binding{key = Key, args = Args},
+         State = #state{internal_exchange = IntXNameBin,
+                        upstream          = Upstream}) ->
+    #upstream{exchange = X} = Upstream,
+    case update_binding(Args, State) of
+        ignore  -> ignore;
+        NewArgs -> bind_cmd0(Type, name(X), IntXNameBin, Key, NewArgs)
     end.
 
-check_add_binding(B = #binding{destination = Dest},
-                  State = #state{bindings = Bs}) ->
-    K = key(B),
-    {Res, Set} = case dict:find(K, Bs) of
-                     {ok, Dests} -> {true,  sets:add_element(Dest, Dests)};
-                     error       -> {false, sets:from_list([Dest])}
-                 end,
-    {Res, State#state{bindings = dict:store(K, Set, Bs)}}.
+bind_cmd0(bind, Source, Destination, RoutingKey, Arguments) ->
+    #'exchange.bind'{source      = Source,
+                     destination = Destination,
+                     routing_key = RoutingKey,
+                     arguments   = Arguments};
 
-remove_binding(B = #binding{key = Key, args = Args},
-               State = #state{channel = Ch,
-                              internal_exchange = IntXNameBin,
-                              upstream = #upstream{exchange = X}}) ->
-    case check_remove_binding(B, State) of
-        {true,  State1} -> State1;
-        {false, State1} -> amqp_channel:call(
-                             Ch, #'exchange.unbind'{
-                               destination = IntXNameBin,
-                               source      = name(X),
-                               routing_key = Key,
-                               arguments   = Args}),
-                           State1
-    end.
+bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
+    #'exchange.unbind'{source      = Source,
+                       destination = Destination,
+                       routing_key = RoutingKey,
+                       arguments   = Arguments}.
 
-check_remove_binding(B = #binding{destination = Dest},
-                     State = #state{bindings = Bs}) ->
-    K = key(B),
-    Dests = sets:del_element(Dest, dict:fetch(K, Bs)),
-    case sets:size(Dests) of
-        0 -> {false, State#state{bindings = dict:erase(K, Bs)}};
-        _ -> {true,  State#state{bindings = dict:store(K, Dests, Bs)}}
+%% This function adds information about the current node to the
+%% binding arguments, or returns 'ignore' if it determines the binding
+%% should propagate no further. The interesting part is the latter.
+%%
+%% We want bindings to propagate in the same way as messages
+%% w.r.t. max_hops - if we determine that a message can get from node
+%% A to B (assuming bindings are in place) then it follows that a
+%% binding at B should propagate back to A, and no further. There is
+%% no point in propagating bindings past the point where messages
+%% would propagate, and we will lose messages if bindings don't
+%% propagate as far.
+%%
+%% Note that we still want to have limits on how far messages can
+%% propagate: limiting our bindings is not enough, since other
+%% bindings from other nodes can overlap.
+%%
+%% So in short we want bindings to obey max_hops. However, they can't
+%% just obey the max_hops of the current link, since they are
+%% travelling in the opposite direction to messages! Consider the
+%% following federation:
+%%
+%%  A -----------> B -----------> C
+%%     max_hops=1     max_hops=2
+%%
+%% where the arrows indicate message flow. A binding created at C
+%% should propagate to B, then to A, and no further. Therefore every
+%% time we traverse a link, we keep a count of the number of hops that
+%% a message could have made so far to reach this point, and still be
+%% able to propagate. When this number ("hops" below) reaches 0 we
+%% propagate no further.
+%%
+%% hops(link(N)) is given by:
+%%
+%%   min(hops(link(N-1))-1, max_hops(link(N)))
+%%
+%% where link(N) is the link that bindings propagate over after N
+%% steps (e.g. link(1) is CB above, link(2) is BA).
+%%
+%% In other words, we count down to 0 from the link with the most
+%% restrictive max_hops we have yet passed through.
+
+update_binding(Args, #state{downstream_exchange = X,
+                            upstream            = Upstream}) ->
+    #upstream{max_hops = MaxHops} = Upstream,
+    Hops = case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
+               undefined    -> MaxHops;
+               {array, All} -> [{table, Prev} | _] = All,
+                               {short, PrevHops} =
+                                   rabbit_misc:table_lookup(Prev, <<"hops">>),
+                               lists:min([PrevHops - 1, MaxHops])
+           end,
+    case Hops of
+        0 -> ignore;
+        _ -> Node = rabbit_federation_util:local_nodename(vhost(X)),
+             ABSuffix = rabbit_federation_db:get_active_suffix(
+                          X, Upstream, <<"A">>),
+             DVHost = vhost(X),
+             DName = name(X),
+             Down = <<Node/binary, ":", DVHost/binary,":", DName/binary, " ",
+                      ABSuffix/binary>>,
+             Info = [{<<"downstream">>, longstr, Down},
+                     {<<"hops">>,       short,   Hops}],
+             rabbit_basic:append_table_header(?BINDING_HEADER, Info, Args)
     end.
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
@@ -474,8 +550,8 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
     ensure_internal_exchange(IntXNameBin, State),
     amqp_channel:call(Ch, #'queue.bind'{exchange = IntXNameBin, queue = Q}),
     State1 = State#state{internal_exchange = IntXNameBin},
-    State2 = lists:foldl(fun add_binding/2, State1, Bindings),
     rabbit_federation_db:set_active_suffix(DownXName, Upstream, Suffix),
+    State2 = lists:foldl(fun add_binding/2, State1, Bindings),
     OldIntXNameBin = upstream_exchange_name(
                        name(X), vhost(Params), DownXName, OldSuffix),
     delete_upstream_exchange(Conn, OldIntXNameBin),
