@@ -31,10 +31,19 @@
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 -define(TIMEOUT, 5000).
 
+
+-define(XDEATH_TABLE,
+        [{<<"reason">>,       longstr,   <<"blah">>},
+         {<<"queue">>,        longstr,   <<"foo.bar.baz">>},
+         {<<"exchange">>,     longstr,   <<"my-exchange">>},
+         {<<"routing-keys">>, array,     []}]).
+
+-define(ROUTE_TABLE, [{<<"redelivered">>, bool, <<"true">>}]).
+
 all_tests() ->
     ok = setup_cluster(),
     ok = supervisor2_tests:test_all(),
-    ok = rabbit_basic_tests:test(),
+    ok = rabbit_basic_tests(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
@@ -71,6 +80,80 @@ all_tests() ->
           end),
     passed = test_configurable_server_properties(),
     passed.
+
+rabbit_basic_tests() ->
+    ok = write_table_with_invalid_existing_type_test(),
+    ok = invalid_existing_headers_test(),
+    ok = disparate_invalid_header_entries_accumulate_separately_test(),
+    ok = corrupt_or_invalid_headers_are_overwritten_test(),
+    ok = invalid_same_header_entry_accumulation_test().
+
+write_table_with_invalid_existing_type_test() ->
+    check_invalid(<<"x-death">>,
+                  {longstr, <<"this should be a table!!!">>},
+                  ?XDEATH_TABLE),
+    ok.
+
+invalid_existing_headers_test() ->
+    BadHeaders = [{<<"x-received-from">>,
+                   longstr, <<"this should be a table!!!">>}],
+    Headers = rabbit_basic:prepend_table_header(
+                <<"x-received-from">>, ?ROUTE_TABLE, BadHeaders),
+    {array, [{table, ?ROUTE_TABLE}]} =
+        rabbit_misc:table_lookup(Headers, <<"x-received-from">>),
+    ok.
+
+disparate_invalid_header_entries_accumulate_separately_test() ->
+    BadHeaders = [{<<"x-received-from">>,
+                   longstr, <<"this should be a table!!!">>}],
+    Headers = rabbit_basic:prepend_table_header(
+                <<"x-received-from">>, ?ROUTE_TABLE, BadHeaders),
+    BadHeaders2 = rabbit_basic:prepend_table_header(
+                    <<"x-death">>, ?XDEATH_TABLE,
+                    [{<<"x-death">>,
+                      longstr, <<"and so should this!!!">>}|Headers]),
+
+    {table, [{<<"x-death">>, array, [{longstr, <<"and so should this!!!">>}]},
+             {<<"x-received-from">>,
+              array, [{longstr, <<"this should be a table!!!">>}]}]} =
+        rabbit_misc:table_lookup(BadHeaders2, ?INVALID_HEADERS_KEY),
+    ok.
+
+corrupt_or_invalid_headers_are_overwritten_test() ->
+    Headers0 = [{<<"x-death">>, longstr, <<"this should be a table">>},
+                {?INVALID_HEADERS_KEY, longstr, <<"what the!?">>}],
+    Headers1 = rabbit_basic:prepend_table_header(
+                 <<"x-death">>, ?XDEATH_TABLE, Headers0),
+    {table,[{<<"x-death">>, array,
+             [{longstr, <<"this should be a table">>}]},
+            {?INVALID_HEADERS_KEY, array,
+             [{longstr, <<"what the!?">>}]}]} =
+        rabbit_misc:table_lookup(Headers1, ?INVALID_HEADERS_KEY),
+    ok.
+
+invalid_same_header_entry_accumulation_test() ->
+    Key = <<"x-received-from">>,
+    BadHeader1 = {longstr, <<"this should be a table!!!">>},
+    Headers = check_invalid(Key, BadHeader1, ?ROUTE_TABLE),
+    Headers2 = rabbit_basic:prepend_table_header(
+                 Key,
+                 ?ROUTE_TABLE,
+                 [{Key, longstr,
+                   <<"this should also be a table!!!">>}|Headers]),
+    Invalid = rabbit_misc:table_lookup(Headers2, ?INVALID_HEADERS_KEY),
+    {table, InvalidHeaders} = Invalid,
+    {array, [{longstr, <<"this should also be a table!!!">>},BadHeader1]} =
+        rabbit_misc:table_lookup(InvalidHeaders, Key),
+    ok.
+
+check_invalid(HeaderKey, {TBin, VBin}=InvalidEntry, HeaderTable) ->
+    Headers = rabbit_basic:prepend_table_header(HeaderKey, HeaderTable,
+                                               [{HeaderKey, TBin, VBin}]),
+    InvalidHeaders = rabbit_misc:table_lookup(Headers, ?INVALID_HEADERS_KEY),
+    {table, Invalid} = InvalidHeaders,
+    InvalidArrayForKey = rabbit_misc:table_lookup(Invalid, HeaderKey),
+    {array, [InvalidEntry]} = InvalidArrayForKey,
+    Headers.
 
 do_if_secondary_node(Up, Down) ->
     SecondaryNode = rabbit_nodes:make("hare"),
