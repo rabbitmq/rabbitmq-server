@@ -491,6 +491,14 @@ handle_exception(State, Channel, Reason) ->
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
     throw({handshake_error, State#v1.connection_state, Channel, Reason}).
 
+%% we've "lost sync" with the client and hence must not accept any
+%% more input
+fatal_frame_error(Error, Type, Channel, Payload, State) ->
+    frame_error(Error, Type, Channel, Payload, State),
+    %% grace period to allow transmission of error
+    timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+    throw(fatal_frame_error).
+
 frame_error(Error, Type, Channel, Payload, State) ->
     {Str, Bin} = payload_snippet(Payload),
     handle_exception(State, Channel,
@@ -621,8 +629,9 @@ handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>,
              State = #v1{connection = #connection{frame_max = FrameMax}})
   when FrameMax /= 0 andalso
        PayloadSize > FrameMax - ?EMPTY_FRAME_SIZE + ?FRAME_SIZE_FUDGE ->
-    frame_error({frame_too_large, PayloadSize, FrameMax - ?EMPTY_FRAME_SIZE},
-                Type, Channel, <<>>, State);
+    fatal_frame_error(
+      {frame_too_large, PayloadSize, FrameMax - ?EMPTY_FRAME_SIZE},
+      Type, Channel, <<>>, State);
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
@@ -633,8 +642,8 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
     case EndMarker of
         ?FRAME_END -> State1 = handle_frame(Type, Channel, Payload, State),
                       switch_callback(State1, frame_header, 7);
-        _          -> frame_error({invalid_frame_end_marker, EndMarker},
-                                  Type, Channel, Payload, State)
+        _          -> fatal_frame_error({invalid_frame_end_marker, EndMarker},
+                                        Type, Channel, Payload, State)
     end;
 
 %% The two rules pertaining to version negotiation:
