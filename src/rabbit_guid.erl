@@ -144,11 +144,7 @@ gen_secure() ->
 %% employs base64url encoding, which is safer in more contexts than
 %% plain base64.
 string(G, Prefix) ->
-    Prefix ++ "-" ++ lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
-                                     ($\/, Acc) -> [$\_ | Acc];
-                                     ($\=, Acc) -> Acc;
-                                     (Chr, Acc) -> [Chr | Acc]
-                                 end, [], base64:encode_to_string(G)).
+    Prefix ++ "-" ++ rabbit_misc:base64url(G).
 
 binary(G, Prefix) ->
     list_to_binary(string(G, Prefix)).

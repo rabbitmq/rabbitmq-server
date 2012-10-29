@@ -36,7 +36,7 @@
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
-                                   check_empty_content_body_frame_size,
+                                   check_empty_frame_size,
                                    []}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
@@ -303,7 +303,6 @@ start() ->
                      ok = ensure_working_log_handlers(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
-                     exit(bang),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
                      ok = print_plugin_info(rabbit_plugins:active())

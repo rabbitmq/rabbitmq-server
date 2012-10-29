@@ -513,6 +513,14 @@ send_or_record_confirm(#delivery{sender     = SenderPid,
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
 
+discard(#delivery{sender = SenderPid, message = #basic_message{id = MsgId}},
+        State) ->
+    %% fake an 'eventual' confirm from BQ; noop if not needed
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+        confirm_messages([MsgId], State),
+    BQS1 = BQ:discard(MsgId, SenderPid, BQS),
+    State1#q{backing_queue_state = BQS1}.
+
 run_message_queue(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         drop_expired_messages(State),
@@ -521,17 +529,20 @@ run_message_queue(State) ->
                             BQ:is_empty(BQS), State1),
     State2.
 
-attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
+attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
+                 Props = #message_properties{delivered = Delivered},
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     case BQ:is_duplicate(Message, BQS) of
         {false, BQS1} ->
             deliver_msgs_to_consumers(
-              fun (AckRequired, State1 = #q{backing_queue_state = BQS2}) ->
+              fun (true, State1 = #q{backing_queue_state = BQS2}) ->
                       {AckTag, BQS3} = BQ:publish_delivered(
-                                         AckRequired, Message, Props,
-                                         SenderPid, BQS2),
-                      {{Message, Props#message_properties.delivered, AckTag},
-                       true, State1#q{backing_queue_state = BQS3}}
+                                         Message, Props, SenderPid, BQS2),
+                      {{Message, Delivered, AckTag},
+                       true, State1#q{backing_queue_state = BQS3}};
+                  (false, State1) ->
+                      {{Message, Delivered, undefined},
+                       true, discard(Delivery, State1)}
               end, false, State#q{backing_queue_state = BQS1});
         {published, BQS1} ->
             {true,  State#q{backing_queue_state = BQS1}};
@@ -548,11 +559,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
             State2;
         %% The next one is an optimisation
         {false, State2 = #q{ttl = 0, dlx = undefined}} ->
-            %% fake an 'eventual' confirm from BQ; noop if not needed
-            State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-                confirm_messages([Message#basic_message.id], State2),
-            BQS1 = BQ:discard(Message, SenderPid, BQS),
-            State3#q{backing_queue_state = BQS1};
+            discard(Delivery, State2);
         {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,
@@ -688,16 +695,15 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     Now = now_micros(),
     DLXFun = dead_letter_fun(expired, State),
     ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
-    {Props, BQS1} =
-        case DLXFun of
-            undefined ->
-                {Next, undefined, BQS2} = BQ:dropwhile(ExpirePred, false, BQS),
-                {Next, BQS2};
-            _  ->
-                {Next, Msgs,      BQS2} = BQ:dropwhile(ExpirePred, true,  BQS),
-                DLXFun(Msgs),
-                {Next, BQS2}
-        end,
+    {Props, BQS1} = case DLXFun of
+                        undefined -> {Next, undefined, BQS2} =
+                                         BQ:dropwhile(ExpirePred, false, BQS),
+                                     {Next, BQS2};
+                        _         -> {Next, Msgs,      BQS2} =
+                                         BQ:dropwhile(ExpirePred, true,  BQS),
+                                     DLXFun(Msgs),
+                                     {Next, BQS2}
+                    end,
     ensure_ttl_timer(case Props of
                          undefined                          -> undefined;
                          #message_properties{expiry = Exp}  -> Exp
@@ -847,8 +853,8 @@ make_dead_letter_msg(Reason,
                         {<<"time">>,         timestamp, TimeSec},
                         {<<"exchange">>,     longstr,   Exchange#resource.name},
                         {<<"routing-keys">>, array,     RKs1}],
-                HeadersFun1(rabbit_basic:append_table_header(<<"x-death">>,
-                                                             Info, Headers))
+                HeadersFun1(rabbit_basic:prepend_table_header(<<"x-death">>,
+                                                              Info, Headers))
         end,
     Content1 = rabbit_basic:map_headers(HeadersFun2, Content),
     Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
@@ -1303,11 +1309,11 @@ handle_info(drop_expired, State) ->
     noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
 
 handle_info(emit_stats, State) ->
-    %% Do not invoke noreply as it would see no timer and create a new one.
     emit_stats(State),
-    State1 = rabbit_event:reset_stats_timer(State, #q.stats_timer),
-    assert_invariant(State1),
-    {noreply, State1, hibernate};
+    {noreply, State1, Timeout} = noreply(State),
+    %% Need to reset *after* we've been through noreply/1 so we do not
+    %% just create another timer always and therefore never hibernate
+    {noreply, rabbit_event:reset_stats_timer(State1, #q.stats_timer), Timeout};
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->

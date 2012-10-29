@@ -15,15 +15,25 @@
 %%
 
 -module(rabbit_mirror_queue_misc).
+-behaviour(rabbit_policy_validator).
 
 -export([remove_from_queue/3, on_node_up/0, add_mirrors/2, add_mirror/2,
          report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
-         is_mirrored/1, update_mirrors/2]).
+         is_mirrored/1, update_mirrors/2, validate_policy/1]).
 
 %% for testing only
 -export([suggested_queue_nodes/4]).
 
 -include("rabbit.hrl").
+
+-rabbit_boot_step({?MODULE,
+                   [{description, "HA policy validation"},
+                    {mfa, {rabbit_registry, register,
+                           [policy_validator, <<"ha-mode">>, ?MODULE]}},
+                    {mfa, {rabbit_registry, register,
+                           [policy_validator, <<"ha-params">>, ?MODULE]}},
+                    {requires, rabbit_registry},
+                    {enables, recovery}]}).
 
 %%----------------------------------------------------------------------------
 
@@ -127,7 +137,7 @@ on_node_up() ->
     ok.
 
 drop_mirrors(QName, Nodes) ->
-    [ok = drop_mirror(QName, Node)  || Node <- Nodes],
+    [{ok, _} = drop_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 drop_mirror(QName, MirrorNode) ->
@@ -144,7 +154,7 @@ drop_mirror(QName, MirrorNode) ->
                         "Dropping queue mirror on node ~p for ~s~n",
                         [MirrorNode, rabbit_misc:rs(Name)]),
                       exit(Pid, {shutdown, dropped}),
-                      ok
+                      {ok, dropped}
               end
       end).
 
@@ -202,7 +212,8 @@ if_mirrored_queue(QName, Fun) ->
                                             false -> ok;
                                             true  -> Fun(Q)
                                         end
-                                end).
+                                end,
+                         rabbit_misc:const({ok, not_found})).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
@@ -258,7 +269,11 @@ policy(Policy, Q) ->
 suggested_queue_nodes(<<"all">>, _Params, {MNode, _SNodes}, Possible) ->
     {MNode, Possible -- [MNode]};
 suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, Possible) ->
-    Nodes = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
+    Nodes1 = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
+    %% If the current master is currently not in the nodes specified,
+    %% act like it is for the purposes below - otherwise we will not
+    %% return it in the results...
+    Nodes = lists:usort([MNode | Nodes1]),
     Unavailable = Nodes -- Possible,
     Available = Nodes -- Unavailable,
     case Available of
@@ -304,19 +319,12 @@ is_mirrored(Q) ->
         _             -> false
     end.
 
-
-%% [1] - rabbit_amqqueue:start_mirroring/1 will turn unmirrored to
-%% master and start any needed slaves. However, if node(QPid) is not
-%% in the nodes for the policy, it won't switch it. So this is for the
-%% case where we kill the existing queue and restart elsewhere. TODO:
-%% is this TRTTD? All alternatives seem ugly.
 update_mirrors(OldQ = #amqqueue{pid = QPid},
                NewQ = #amqqueue{pid = QPid}) ->
     case {is_mirrored(OldQ), is_mirrored(NewQ)} of
         {false, false} -> ok;
         {true,  false} -> rabbit_amqqueue:stop_mirroring(QPid);
-        {false, true}  -> rabbit_amqqueue:start_mirroring(QPid),
-                          update_mirrors0(OldQ, NewQ); %% [1]
+        {false, true}  -> rabbit_amqqueue:start_mirroring(QPid);
         {true, true}   -> update_mirrors0(OldQ, NewQ)
     end.
 
@@ -328,3 +336,35 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     add_mirrors(QName, NewNodes -- OldNodes),
     drop_mirrors(QName, OldNodes -- NewNodes),
     ok.
+
+%%----------------------------------------------------------------------------
+
+validate_policy(KeyList) ->
+    validate_policy(
+      proplists:get_value(<<"ha-mode">>,   KeyList),
+      proplists:get_value(<<"ha-params">>, KeyList, none)).
+
+validate_policy(<<"all">>, none) ->
+    ok;
+validate_policy(<<"all">>, _Params) ->
+    {error, "ha-mode=\"all\" does not take parameters", []};
+
+validate_policy(<<"nodes">>, []) ->
+    {error, "ha-mode=\"nodes\" list must be non-empty", []};
+validate_policy(<<"nodes">>, Nodes) when is_list(Nodes) ->
+    case [I || I <- Nodes, not is_binary(I)] of
+        []      -> ok;
+        Invalid -> {error, "ha-mode=\"nodes\" takes a list of strings, "
+                    "~p was not a string", [Invalid]}
+    end;
+validate_policy(<<"nodes">>, Params) ->
+    {error, "ha-mode=\"nodes\" takes a list, ~p given", [Params]};
+
+validate_policy(<<"exactly">>, N) when is_integer(N) andalso N > 0 ->
+    ok;
+validate_policy(<<"exactly">>, Params) ->
+    {error, "ha-mode=\"exactly\" takes an integer, ~p given", [Params]};
+
+validate_policy(Mode, _Params) ->
+    {error, "~p is not a valid ha-mode value", [Mode]}.
+

@@ -70,6 +70,10 @@
          {clear_parameter, [?VHOST_DEF]},
          {list_parameters, [?VHOST_DEF]},
 
+         {set_policy, [?VHOST_DEF]},
+         {clear_policy, [?VHOST_DEF]},
+         {list_policies, [?VHOST_DEF]},
+
          {list_queues, [?VHOST_DEF]},
          {list_exchanges, [?VHOST_DEF]},
          {list_bindings, [?VHOST_DEF]},
@@ -98,7 +102,9 @@
          {"Bindings",  rabbit_binding,  info_all, info_keys},
          {"Consumers", rabbit_amqqueue, consumers_all, consumer_info_keys},
          {"Permissions", rabbit_auth_backend_internal, list_vhost_permissions,
-          vhost_perms_info_keys}]).
+          vhost_perms_info_keys},
+         {"Policies",   rabbit_policy,             list_formatted, info_keys},
+         {"Parameters", rabbit_runtime_parameters, list_formatted, info_keys}]).
 
 %%----------------------------------------------------------------------------
 
@@ -457,6 +463,28 @@ action(list_parameters, Node, [], Opts, Inform) ->
     display_info_list(
       rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg]),
       rabbit_runtime_parameters:info_keys());
+
+action(set_policy, Node, [Key, Pattern, Defn | Prio], Opts, Inform)
+  when Prio == [] orelse length(Prio) == 1 ->
+    Msg = "Setting policy ~p for pattern ~p to ~p",
+    {InformMsg, Prio1} = case Prio of []  -> {Msg, undefined};
+                                      [P] -> {Msg ++ " with priority ~s", P}
+                         end,
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform(InformMsg, [Key, Pattern, Defn] ++ Prio),
+    rpc_call(Node, rabbit_policy, parse_set,
+             [VHostArg, list_to_binary(Key), Pattern, Defn, Prio1]);
+
+action(clear_policy, Node, [Key], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Clearing policy ~p", [Key]),
+    rpc_call(Node, rabbit_policy, delete, [VHostArg, list_to_binary(Key)]);
+
+action(list_policies, Node, [], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Listing policies", []),
+    display_info_list(rpc_call(Node, rabbit_policy, list_formatted, [VHostArg]),
+                      rabbit_policy:info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
     Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),

@@ -1153,10 +1153,6 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host = VHostPath,
                            conn_pid     = ConnPid }) ->
-    %% FIXME: connection exception (!) on failure??
-    %% (see rule named "failure" in spec-XML)
-    %% FIXME: don't allow binding to internal exchanges -
-    %% including the one named "" !
     {DestinationName, ActualRoutingKey} =
         expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
     check_write_permitted(DestinationName, State),

@@ -492,6 +492,14 @@ handle_exception(State, Channel, Reason) ->
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
     throw({handshake_error, State#v1.connection_state, Channel, Reason}).
 
+%% we've "lost sync" with the client and hence must not accept any
+%% more input
+fatal_frame_error(Error, Type, Channel, Payload, State) ->
+    frame_error(Error, Type, Channel, Payload, State),
+    %% grace period to allow transmission of error
+    timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+    throw(fatal_frame_error).
+
 frame_error(Error, Type, Channel, Payload, State) ->
     {Str, Bin} = payload_snippet(Payload),
     handle_exception(State, Channel,
@@ -614,6 +622,17 @@ post_process_frame(_Frame, _ChPid, State) ->
 
 %%--------------------------------------------------------------------------
 
+%% We allow clients to exceed the frame size a little bit since quite
+%% a few get it wrong - off-by 1 or 8 (empty frame size) are typical.
+-define(FRAME_SIZE_FUDGE, ?EMPTY_FRAME_SIZE).
+
+handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>,
+             State = #v1{connection = #connection{frame_max = FrameMax}})
+  when FrameMax /= 0 andalso
+       PayloadSize > FrameMax - ?EMPTY_FRAME_SIZE + ?FRAME_SIZE_FUDGE ->
+    fatal_frame_error(
+      {frame_too_large, PayloadSize, FrameMax - ?EMPTY_FRAME_SIZE},
+      Type, Channel, <<>>, State);
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
@@ -624,8 +643,8 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
     case EndMarker of
         ?FRAME_END -> State1 = handle_frame(Type, Channel, Payload, State),
                       switch_callback(State1, frame_header, 7);
-        _          -> frame_error({invalid_frame_end_marker, EndMarker},
-                                  Type, Channel, Payload, State)
+        _          -> fatal_frame_error({invalid_frame_end_marker, EndMarker},
+                                        Type, Channel, Payload, State)
     end;
 
 %% The two rules pertaining to version negotiation:
@@ -921,26 +940,27 @@ i(last_blocked_age, #v1{last_blocked_at = T}) ->
     timer:now_diff(erlang:now(), T) / 1000000;
 i(channels, #v1{}) ->
     length(all_channels());
-i(protocol, #v1{connection = #connection{protocol = none}}) ->
-    none;
-i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
-    Protocol:version();
 i(auth_mechanism, #v1{auth_mechanism = none}) ->
     none;
 i(auth_mechanism, #v1{auth_mechanism = Mechanism}) ->
     proplists:get_value(name, Mechanism:description());
-i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
-    Username;
-i(user, #v1{connection = #connection{user = none}}) ->
+i(protocol,          #v1{connection = #connection{protocol = none}}) ->
+    none;
+i(protocol,          #v1{connection = #connection{protocol = Protocol}}) ->
+    Protocol:version();
+i(user,              #v1{connection = #connection{user = none}}) ->
     '';
-i(vhost, #v1{connection = #connection{vhost = VHost}}) ->
+i(user,              #v1{connection = #connection{user = #user{
+                                                    username = Username}}}) ->
+    Username;
+i(vhost,             #v1{connection = #connection{vhost = VHost}}) ->
     VHost;
-i(timeout, #v1{connection = #connection{timeout_sec = Timeout}}) ->
+i(timeout,           #v1{connection = #connection{timeout_sec = Timeout}}) ->
     Timeout;
-i(frame_max, #v1{connection = #connection{frame_max = FrameMax}}) ->
+i(frame_max,         #v1{connection = #connection{frame_max = FrameMax}}) ->
     FrameMax;
-i(client_properties, #v1{connection = #connection{
-                           client_properties = ClientProperties}}) ->
+i(client_properties, #v1{connection = #connection{client_properties =
+                                                      ClientProperties}}) ->
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
