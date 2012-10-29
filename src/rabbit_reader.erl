@@ -35,7 +35,7 @@
 
 %%--------------------------------------------------------------------------
 
--record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
+-record(v1, {parent, sock, name, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state, conserve_resources,
@@ -195,13 +195,14 @@ name(Sock) ->
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    ConnStr = name(Sock),
-    log(info, "accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
+    Name = name(Sock),
+    log(info, "accepting AMQP connection ~p (~s)~n", [self(), Name]),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
+                name                = Name,
                 connection          = #connection{
                   protocol           = none,
                   user               = none,
@@ -230,13 +231,13 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
                                        State, #v1.stats_timer),
                                       handshake, 8)),
-        log(info, "closing AMQP connection ~p (~s)~n", [self(), ConnStr])
+        log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
         Ex -> log(case Ex of
                       connection_closed_abruptly -> warning;
                       _                          -> error
                   end, "closing AMQP connection ~p (~s):~n~p~n",
-                  [self(), ConnStr, Ex])
+                  [self(), Name, Ex])
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
@@ -521,7 +522,7 @@ payload_snippet(<<Snippet:16/binary, _/binary>>) ->
 %%--------------------------------------------------------------------------
 
 create_channel(Channel, State) ->
-    #v1{sock = Sock, queue_collector = Collector,
+    #v1{sock = Sock, name = Name, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
         connection = #connection{protocol     = Protocol,
                                  frame_max    = FrameMax,
@@ -530,7 +531,7 @@ create_channel(Channel, State) ->
                                  capabilities = Capabilities}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), name(Sock),
+          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
                        Protocol, User, VHost, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
     put({ch_pid, ChPid}, {Channel, MRef}),
@@ -891,7 +892,7 @@ auth_phase(Response,
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
-i(name,               #v1{sock = Sock}) -> list_to_binary(name(Sock));
+i(name,               #v1{name = Name}) -> list_to_binary(Name);
 i(address,            S) -> socket_info(fun rabbit_net:sockname/1,
                                         fun ({A, _}) -> A end, S);
 i(port,               S) -> socket_info(fun rabbit_net:sockname/1,
