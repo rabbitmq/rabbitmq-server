@@ -218,28 +218,19 @@ format_plugin(#plugin{name = Name, version = Version,
                 {_,        _,  true} -> "[!]";
                 _                    -> "[ ]"
             end,
+    Opt = fun (_F, A, A) -> ok;
+              ( F, A, _) -> io:format(F, [A])
+          end,
     case Format of
         minimal -> io:format("~s~n", [Name]);
-        normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++ "w ~s~n",
-                             [Glyph, Name, case Version of
-                                               undefined -> "";
-                                               _         -> Version
-                                           end]);
+        normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++ "w",
+                             [Glyph, Name]),
+                   Opt("~s", Version, undefined),
+                   io:format("~n");
         verbose -> io:format("~s ~w~n", [Glyph, Name]),
-                   case Version of
-                       undefined -> ok;
-                       _         -> io:format("    Version:    \t~s~n",
-                                              [Version])
-                   end,
-                   case Deps of
-                       [] -> ok;
-                       _  -> io:format("    Dependencies:\t~p~n", [Deps])
-                   end,
-                   case Description of
-                       undefined -> ok;
-                       _         -> io:format("    Description:\t~s~n",
-                                              [Description])
-                   end,
+                   Opt("    Version:    \t~s~n",  Version,     undefined),
+                   Opt("    Dependencies:\t~p~n", Deps,        []),
+                   Opt("    Description:\t~s~n",  Description, undefined),
                    io:format("~n")
     end.
 
