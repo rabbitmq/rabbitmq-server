@@ -100,8 +100,13 @@ dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
-                [{Name, Deps}
-                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins]),
+                lists:ukeysort(
+                  1, [{Name, Deps} ||
+                         #plugin{name         = Name,
+                                 dependencies = Deps} <- AllPlugins] ++
+                      [{Dep,   []} ||
+                          #plugin{dependencies = Deps} <- AllPlugins,
+                          Dep                          <- Deps])),
     Dests = case Reverse of
                 false -> digraph_utils:reachable(Sources, G);
                 true  -> digraph_utils:reaching(Sources, G)

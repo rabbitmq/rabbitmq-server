@@ -96,11 +96,13 @@
             </varlistentry>
           </variablelist>
           <para>
-            Lists available plugins, their versions, dependencies and
+            Lists all plugins, their versions, dependencies and
             descriptions. Each plugin is prefixed with a status
             indicator - [ ] to indicate that the plugin is not
             enabled, [E] to indicate that it is explicitly enabled,
-            and [e] to indicate that it is implicitly enabled.
+            [e] to indicate that it is implicitly enabled, and [!] to
+            indicate that it is enabled but missing and thus not
+            operational.
           </para>
           <para>
             If the optional pattern is given, only plugins whose
@@ -109,16 +111,15 @@
           <para role="example-prefix">For example:</para>
           <screen role="example">rabbitmq-plugins list</screen>
           <para role="example">
-            This command lists all the plugins available, on one line each.
+            This command lists all plugins, on one line each.
           </para>
           <screen role="example">rabbitmq-plugins list -v </screen>
           <para role="example">
-            This command lists all the plugins available.
+            This command lists all plugins.
           </para>
           <screen role="example">rabbitmq-plugins list -v management</screen>
           <para role="example">
-            This command lists all the plugins available, but does not
-            display plugins whose name does not contain "management".
+            This command lists all plugins whose name contains "management".
           </para>
           <screen role="example">rabbitmq-plugins list -e rabbit</screen>
           <para role="example">
