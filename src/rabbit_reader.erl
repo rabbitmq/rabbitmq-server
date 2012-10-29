@@ -935,26 +935,27 @@ i(last_blocked_age, #v1{last_blocked_at = T}) ->
     timer:now_diff(erlang:now(), T) / 1000000;
 i(channels, #v1{}) ->
     length(all_channels());
-i(protocol, #v1{connection = #connection{protocol = none}}) ->
-    none;
-i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
-    Protocol:version();
 i(auth_mechanism, #v1{auth_mechanism = none}) ->
     none;
 i(auth_mechanism, #v1{auth_mechanism = Mechanism}) ->
     proplists:get_value(name, Mechanism:description());
-i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
-    Username;
-i(user, #v1{connection = #connection{user = none}}) ->
+i(protocol,          #v1{connection = #connection{protocol = none}}) ->
+    none;
+i(protocol,          #v1{connection = #connection{protocol = Protocol}}) ->
+    Protocol:version();
+i(user,              #v1{connection = #connection{user = none}}) ->
     '';
-i(vhost, #v1{connection = #connection{vhost = VHost}}) ->
+i(user,              #v1{connection = #connection{user = #user{
+                                                    username = Username}}}) ->
+    Username;
+i(vhost,             #v1{connection = #connection{vhost = VHost}}) ->
     VHost;
-i(timeout, #v1{connection = #connection{timeout_sec = Timeout}}) ->
+i(timeout,           #v1{connection = #connection{timeout_sec = Timeout}}) ->
     Timeout;
-i(frame_max, #v1{connection = #connection{frame_max = FrameMax}}) ->
+i(frame_max,         #v1{connection = #connection{frame_max = FrameMax}}) ->
     FrameMax;
-i(client_properties, #v1{connection = #connection{
-                           client_properties = ClientProperties}}) ->
+i(client_properties, #v1{connection = #connection{client_properties =
+                                                      ClientProperties}}) ->
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
