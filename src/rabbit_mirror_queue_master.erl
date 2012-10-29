@@ -88,12 +88,10 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-init(Q = #amqqueue{name = QName}, Recover, AsyncCallback) ->
+init(Q, Recover, AsyncCallback) ->
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),
     State = #state{gm = GM} = init_with_existing_bq(Q, BQ, BQS),
-    {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
-    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
     ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
     State.
 
@@ -109,6 +107,8 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
                    ok = rabbit_amqqueue:store_queue(
                           Q1#amqqueue{gm_pids = [{GM, Self} | GMPids]})
            end),
+    {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
+    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
