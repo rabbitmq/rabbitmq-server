@@ -37,9 +37,7 @@ register_handler(Name, Listener, Selector, Handler, Link) ->
 %% link to display in the global context.
 register_context_handler(Name, Listener, Prefix, Handler, LinkText) ->
     register_handler(
-      Name, Listener, context_selector(Prefix),
-      fun (Req) -> Handler(Req) end,
-      {Prefix, LinkText}),
+      Name, Listener, context_selector(Prefix), Handler, {Prefix, LinkText}),
     {ok, Prefix}.
 
 %% @doc Convenience function registering a fully static context to
