@@ -399,7 +399,7 @@ update_binding(Args, #state{downstream_exchange = X,
                       ABSuffix/binary>>,
              Info = [{<<"downstream">>, longstr, Down},
                      {<<"hops">>,       short,   Hops}],
-             rabbit_basic:append_table_header(?BINDING_HEADER, Info, Args)
+             rabbit_basic:prepend_table_header(?BINDING_HEADER, Info, Args)
     end.
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
