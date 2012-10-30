@@ -42,8 +42,7 @@ ensure_listener(Listener) ->
             case supervisor:start_child(?SUP, Child) of
                 {ok,                      _}  -> new;
                 {error, {already_started, _}} -> existing;
-                {error, {E, _}}               -> exit({could_not_start_listener,
-                                                       Listener, E})
+                {error, {E, _}}               -> check_error(Listener, E)
             end
     end.
 
@@ -64,7 +63,9 @@ init([]) ->
 
 mochi_options(Listener) ->
     [{name, name(Listener)},
-     {loop, loopfun(Listener)} | easy_ssl(proplists:delete(name, Listener))].
+     {loop, loopfun(Listener)} |
+     easy_ssl(proplists:delete(
+                name, proplists:delete(ignore_in_use, Listener)))].
 
 loopfun(Listener) ->
     fun (Req) ->
@@ -93,4 +94,11 @@ easy_ssl(Options) ->
             [{ssl_opts, SSLOpts}|Options];
         _ ->
             Options
+    end.
+
+check_error(Listener, Error) ->
+    Ignore = proplists:get_value(ignore_in_use, Listener, false),
+    case {Error, Ignore} of
+        {eaddrinuse, true} -> ignore;
+        _                  -> exit({could_not_start_listener, Listener, Error})
     end.

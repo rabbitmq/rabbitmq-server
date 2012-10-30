@@ -65,17 +65,22 @@ init([]) ->
 
 handle_call({add, Name, Listener, Selector, Handler, Link}, _From,
             undefined) ->
-    case rabbit_mochiweb_sup:ensure_listener(Listener) of
-        new      -> ets:insert(
-                      ?ETS, {Listener, [],
-                             listing_fallback_handler(Listener)});
-        existing -> ok
+    Continue = case rabbit_mochiweb_sup:ensure_listener(Listener) of
+                   new      -> ets:insert(
+                                 ?ETS, {Listener, [],
+                                        listing_fallback_handler(Listener)}),
+                               true;
+                   existing -> true;
+                   ignore   -> false
+               end,
+    case Continue of
+        true  -> {Selectors, Fallback} = lookup_dispatch(Listener),
+                 set_dispatch(Listener,
+                              lists:keystore(Name, 1, Selectors,
+                                             {Name, Selector, Handler, Link}),
+                              Fallback);
+        false -> ok
     end,
-    {Selectors, Fallback} = lookup_dispatch(Listener),
-    set_dispatch(Listener,
-                 lists:keystore(Name, 1, Selectors,
-                                 {Name, Selector, Handler, Link}),
-                 Fallback),
     {reply, ok, undefined};
 
 handle_call({remove, Name}, _From,
