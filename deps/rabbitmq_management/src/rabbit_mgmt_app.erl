@@ -25,20 +25,10 @@
 -define(CONTEXT, rabbit_mgmt).
 -define(STATIC_PATH, "priv/www").
 
--ifdef(trace).
--define(SETUP_WM_TRACE, true).
--else.
--define(SETUP_WM_TRACE, false).
--endif.
-
 start(_Type, _StartArgs) ->
     {ok, Listener} = application:get_env(rabbitmq_management, listener),
     setup_wm_logging(),
     register_context(Listener),
-    case ?SETUP_WM_TRACE of
-        true -> setup_wm_trace_app();
-        _    -> ok
-    end,
     log_startup(Listener),
     rabbit_mgmt_sup:start_link().
 
@@ -122,19 +112,6 @@ setup_wm_logging() ->
             rabbit_webmachine:setup(webmachine_logger),
             webmachine_sup:start_logger(LogDir)
     end.
-
-%% This doesn't *entirely* seem to work. It fails to load a non-existent
-%% image which seems to partly break it, but some stuff is usable.
-setup_wm_trace_app() ->
-    Loop = rabbit_webmachine:makeloop([{["wmtrace", '*'],
-                                       wmtrace_resource,
-                                       [{trace_dir, "/tmp"}]}]),
-    rabbit_mochiweb:register_static_context(
-      rabbit_mgmt_trace_static, "wmtrace/static", ?MODULE,
-      "deps/webmachine/webmachine/priv/trace", none),
-    rabbit_mochiweb:register_context_handler(rabbit_mgmt_trace,
-                                             "wmtrace", Loop,
-                                             "Webmachine tracer").
 
 log_startup(Listener) ->
     rabbit_log:info("Management plugin started. Port: ~w~n",
