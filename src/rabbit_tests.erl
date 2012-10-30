@@ -178,7 +178,7 @@ test_rabbit_basic_header_handling() ->
 -define(ROUTE_TABLE, [{<<"redelivered">>, bool, <<"true">>}]).
 
 -define(BAD_HEADER(K), {<<K>>, longstr, <<"bad ", K>>}).
--define(BAD_HEADER(K, Suf), {<<K>>, longstr, <<"bad ", K, Suf>>}).
+-define(BAD_HEADER2(K, Suf), {<<K>>, longstr, <<"bad ", K, Suf>>}).
 -define(FOUND_BAD_HEADER(K), {<<K>>, array, [{longstr, <<"bad ", K>>}]}).
 
 write_table_with_invalid_existing_type_test() ->
@@ -212,10 +212,10 @@ corrupt_or_invalid_headers_are_overwritten_test() ->
     passed.
 
 invalid_same_header_entry_accumulation_test() ->
-    BadHeader1 = ?BAD_HEADER("header1", "a"),
+    BadHeader1 = ?BAD_HEADER2("header1", "a"),
     Headers = prepend_check(<<"header1">>, ?ROUTE_TABLE, [BadHeader1]),
     Headers2 = prepend_check(<<"header1">>, ?ROUTE_TABLE,
-                             [?BAD_HEADER("header1", "b") | Headers]),
+                             [?BAD_HEADER2("header1", "b") | Headers]),
     {table, InvalidHeaders} =
         rabbit_misc:table_lookup(Headers2, ?INVALID_HEADERS_KEY),
     {array, [{longstr,<<"bad header1b">>},
