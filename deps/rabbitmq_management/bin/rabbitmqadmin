@@ -181,7 +181,7 @@ def config_usage():
 
   [host_normal]
   hostname = localhost
-  port = 55672
+  port = 15672
   username = guest
   password = guest
   declare_vhost = / # Used as default for declare / delete only
@@ -189,7 +189,7 @@ def config_usage():
 
   [host_ssl]
   hostname = otherhost
-  port = 55672
+  port = 15672
   username = guest
   password = guest
   ssl = True
@@ -229,7 +229,7 @@ def fmt_usage_stanza(root, verb):
     return text
 
 default_options = { "hostname"        : "localhost",
-                    "port"            : "55672",
+                    "port"            : "15672",
                     "declare_vhost"   : "/",
                     "username"        : "guest",
                     "password"        : "guest",
