@@ -1,9 +1,6 @@
 Generic build instructions are at:
         http://www.rabbitmq.com/plugin-development.html
 
-For a binary version of this plugin for the latest released RabbitMQ,
-go to http://www.rabbitmq.com/plugins.html.
-
 When installed, point your broswer at:
 
 http://<server>:55672/
