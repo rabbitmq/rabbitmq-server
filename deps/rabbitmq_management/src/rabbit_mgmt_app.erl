@@ -39,7 +39,8 @@ stop(_State) ->
 
 register_context(Listener) ->
     rabbit_mochiweb:register_port_redirect(
-      ?CONTEXT_REDIRECT, [{port, 55672}], "", port(Listener)),
+      ?CONTEXT_REDIRECT, [{port,          55672},
+                          {ignore_in_use, true}], "", port(Listener)),
     rabbit_mochiweb:register_context_handler(
       ?CONTEXT, Listener, "", make_loop(), "RabbitMQ Management").
 
