@@ -20,8 +20,9 @@
 -export([start/2,stop/1]).
 
 start(_Type, _StartArgs) ->
+    {ok, Listener} = application:get_env(rabbitmq_web_stomp_examples, listener),
     {ok, _} = rabbit_mochiweb:register_static_context(
-                web_stomp_examples, "web-stomp-examples", ?MODULE,
+                web_stomp_examples, Listener, "web-stomp-examples", ?MODULE,
                 "priv", "WEB-STOMP: examples"),
     {ok, spawn(fun loop/0)}.
 
