@@ -40,7 +40,11 @@ start_other_node(Name, Port) ->
                      " OTHER_PORT=" ++ integer_to_list(Port) ++
                      " start-other-node ; echo $?"),
     LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
-    ?assertEqual("0", LastLine).
+    case LastLine of
+        "0" -> ok;
+        _   -> ?debugVal(Res),
+               ?assertEqual("0", LastLine)
+    end.
 
 cluster_other_node(Name) ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++
