@@ -73,8 +73,8 @@
 -spec(connection_string/2 ::
         (socket(), 'inbound' | 'outbound') -> ok_val_or_error(string())).
 -spec(rdns/2 ::
-        (socket(), 'inbound' | 'outbound') -> {string() | 'unknown',
-                                               string() | 'unknown'}).
+        (socket(), 'inbound' | 'outbound') -> {binary() | 'unknown',
+                                               binary() | 'unknown'}).
 
 -endif.
 
@@ -223,7 +223,8 @@ rdns_lookup(Sock, Fun) ->
     {ok, Lookup} = application:get_env(rabbit, reverse_dns_lookups),
     case Lookup of
         true -> case Fun(Sock) of
-                    {ok, {IP, _Port}} -> rabbit_networking:tcp_host(IP);
+                    {ok, {IP, _Port}} -> list_to_binary(
+                                             rabbit_networking:tcp_host(IP));
                     _                 -> unknown
                 end;
         _    -> unknown

@@ -201,7 +201,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     {Host, PeerHost} = rabbit_net:rdns(Sock, inbound),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
-                name                = Name,
+                name                = list_to_binary(Name),
                 connection          = #connection{
                   protocol           = none,
                   user               = none,
@@ -893,9 +893,9 @@ auth_phase(Response,
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
-i(name,               #v1{name = Name}) -> list_to_binary(Name);
-i(host,               #v1{host = Host}) -> list_to_binary(Host);
-i(peer_host,          #v1{peer_host = PeerHost}) -> list_to_binary(PeerHost);
+i(name,               #v1{name = Name}) -> Name;
+i(host,               #v1{host = Host}) -> Host;
+i(peer_host,          #v1{peer_host = PeerHost}) -> PeerHost;
 i(address,            S) -> socket_info(fun rabbit_net:sockname/1,
                                         fun ({A, _}) -> A end, S);
 i(port,               S) -> socket_info(fun rabbit_net:sockname/1,
