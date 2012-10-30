@@ -42,13 +42,9 @@ setup(LogModule, ErrorHandler) ->
     end.
 
 makeloop(Dispatch) ->
-    fun ({Prefix, _Listener}, MochiReq) ->
+    fun (MochiReq) ->
             Req = webmachine:new_request(mochiweb, MochiReq),
-            {Path0, _} = Req:path(),
-            Path = case string:substr(Path0, length(Prefix) + 2) of
-                       "" -> "/"; %% webmachine requires a leading "/"
-                       P  -> P    %% implicit "/"
-                   end,
+            {Path, _} = Req:path(),
             {ReqData, _} = Req:get_reqdata(),
             %% webmachine_mochiweb:loop/1 uses dispatch/4 here;
             %% however, we don't need to dispatch by the host name.

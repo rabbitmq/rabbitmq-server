@@ -21,54 +21,76 @@
 -define(SUP, ?MODULE).
 
 %% External exports
--export([start_link/1, upgrade/1, ensure_listener/1, stop_listener/1]).
+-export([start_link/0, ensure_listener/1, stop_listener/1]).
 
 %% supervisor callbacks
 -export([init/1]).
 
 %% @spec start_link() -> ServerRet
 %% @doc API for starting the supervisor.
-start_link(ListenerSpecs) ->
-    supervisor:start_link({local, ?SUP}, ?MODULE, [ListenerSpecs]).
+start_link() ->
+    supervisor:start_link({local, ?SUP}, ?MODULE, []).
 
-%% @spec upgrade([instance()]) -> ok
-%% @doc Add processes if necessary.
-upgrade(ListenerSpecs) ->
-    {ok, {_, Specs}} = init([ListenerSpecs]),
-
-    Old = sets:from_list(
-            [Name || {Name, _, _, _} <- supervisor:which_children(?MODULE)]),
-    New = sets:from_list([Name || {Name, _, _, _, _, _} <- Specs]),
-    Kill = sets:subtract(Old, New),
-
-    sets:fold(fun (Id, ok) ->
-                      supervisor:terminate_child(?SUP, Id),
-                      supervisor:delete_child(?SUP, Id),
-                      ok
-              end, ok, Kill),
-
-    [supervisor:start_child(?SUP, Spec) || Spec <- Specs],
-    ok.
-
-ensure_listener({Listener, Spec}) ->
-    Child = {{rabbit_mochiweb_web, Listener},
-             {rabbit_mochiweb_web, start, [{Listener, Spec}]},
-             transient, 5000, worker, dynamic},
-    case supervisor:start_child(?SUP, Child) of
-        {ok,                      Pid}  -> {ok, Pid};
-        {error, {already_started, Pid}} -> {ok, Pid};
-        {error, {E, _}}                 -> exit({could_not_start_http_listener,
-                                                 Spec, E})
+ensure_listener(Listener) ->
+    case proplists:get_value(port, Listener) of
+        undefined ->
+            {error, {no_port_given, Listener}};
+        _ ->
+            Child = {{rabbit_mochiweb_web, name(Listener)},
+                     {mochiweb_http, start, [mochi_options(Listener)]},
+                     transient, 5000, worker, dynamic},
+            case supervisor:start_child(?SUP, Child) of
+                {ok,                      _}  -> new;
+                {error, {already_started, _}} -> existing;
+                {error, {E, _}}               -> exit({could_not_start_listener,
+                                                       Listener, E})
+            end
     end.
 
-stop_listener({Listener, _Spec}) ->
-    ok = supervisor:terminate_child(?SUP, {rabbit_mochiweb_web, Listener}),
-    ok = supervisor:delete_child(?SUP, {rabbit_mochiweb_web, Listener}).
+stop_listener(Listener) ->
+    Name = name(Listener),
+    ok = supervisor:terminate_child(?SUP, {rabbit_mochiweb_web, Name}),
+    ok = supervisor:delete_child(?SUP, {rabbit_mochiweb_web, Name}).
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.
-init([ListenerSpecs]) ->
+init([]) ->
     Registry = {rabbit_mochiweb_registry,
-                {rabbit_mochiweb_registry, start_link, [ListenerSpecs]},
+                {rabbit_mochiweb_registry, start_link, []},
                 transient, 5000, worker, dynamic},
     {ok, {{one_for_one, 10, 10}, [Registry]}}.
+
+%% ----------------------------------------------------------------------
+
+mochi_options(Listener) ->
+    [{name, name(Listener)},
+     {loop, loopfun(Listener)} | easy_ssl(proplists:delete(name, Listener))].
+
+loopfun(Listener) ->
+    fun (Req) ->
+            case rabbit_mochiweb_registry:lookup(Listener, Req) of
+                no_handler ->
+                    Req:not_found();
+                {lookup_failure, Reason} ->
+                    Req:respond({500, [], "Registry Error: " ++ Reason});
+                {handler, Handler} ->
+                    Handler(Req)
+            end
+    end.
+
+name(Listener) ->
+    Port = proplists:get_value(port, Listener),
+    list_to_atom(atom_to_list(?MODULE) ++ "_" ++ integer_to_list(Port)).
+
+easy_ssl(Options) ->
+    case {proplists:get_value(ssl, Options),
+          proplists:get_value(ssl_opts, Options)} of
+        {true, undefined} ->
+            {ok, ServerOpts} = application:get_env(rabbit, ssl_options),
+            SSLOpts = [{K, V} ||
+                          {K, V} <- ServerOpts,
+                          not lists:member(K, [verify, fail_if_no_peer_cert])],
+            [{ssl_opts, SSLOpts}|Options];
+        _ ->
+            Options
+    end.
