@@ -23,6 +23,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(CONTEXT, rabbit_mgmt).
+-define(CONTEXT_REDIRECT, rabbit_mgmt_redirect).
 -define(STATIC_PATH, "priv/www").
 
 start(_Type, _StartArgs) ->
@@ -37,10 +38,13 @@ stop(_State) ->
     ok.
 
 register_context(Listener) ->
+    rabbit_mochiweb:register_port_redirect(
+      ?CONTEXT_REDIRECT, [{port, 55672}], "", port(Listener)),
     rabbit_mochiweb:register_context_handler(
       ?CONTEXT, Listener, "", make_loop(), "RabbitMQ Management").
 
 unregister_context() ->
+    rabbit_mochiweb:unregister_context(?CONTEXT_REDIRECT),
     rabbit_mochiweb:unregister_context(?CONTEXT).
 
 make_loop() ->
@@ -114,5 +118,7 @@ setup_wm_logging() ->
     end.
 
 log_startup(Listener) ->
-    rabbit_log:info("Management plugin started. Port: ~w~n",
-                    [proplists:get_value(port, Listener)]).
+    rabbit_log:info("Management plugin started. Port: ~w~n", [port(Listener)]).
+
+port(Listener) ->
+    proplists:get_value(port, Listener).
