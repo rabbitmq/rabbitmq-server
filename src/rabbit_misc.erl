@@ -982,5 +982,7 @@ term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
 
 check_expiry_size(N) when N > ?MAX_EXPIRY_TIMER ->
     {error, {value_too_big, N}};
+check_expiry_size(N) when N < 0 ->
+    {error, {negative_value, N}};
 check_expiry_size(N) ->
     ok.
