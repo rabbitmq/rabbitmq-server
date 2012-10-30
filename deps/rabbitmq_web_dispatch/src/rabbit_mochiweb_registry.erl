@@ -23,7 +23,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--define(APP, rabbitmq_mochiweb).
+-define(ETS, rabbitmq_mochiweb).
 
 %% This gen_server is merely to serialise modifications to the dispatch
 %% table for listeners.
@@ -36,7 +36,7 @@ add(Name, Listener, Selector, Handler, Link) ->
                     infinity).
 
 remove(Name) ->
-    gen_server:cast(?MODULE, {remove, Name}).
+    gen_server:call(?MODULE, {remove, Name}, infinity).
 
 set_fallback(Listener, FallbackHandler) ->
     gen_server:call(?MODULE, {set_fallback, Listener, FallbackHandler},
@@ -60,27 +60,40 @@ list_all() ->
 %% Callback Methods
 
 init([]) ->
+    ?ETS = ets:new(?ETS, [named_table, public]),
     {ok, undefined}.
 
 handle_call({add, Name, Listener, Selector, Handler, Link}, _From,
             undefined) ->
     case rabbit_mochiweb_sup:ensure_listener(Listener) of
-        new      -> application:set_env(
-                      ?APP, {dispatch, Listener},
-                      {[], listing_fallback_handler(Listener)});
+        new      -> ets:insert(
+                      ?ETS, {Listener, [],
+                             listing_fallback_handler(Listener)});
         existing -> ok
     end,
     {Selectors, Fallback} = lookup_dispatch(Listener),
     set_dispatch(Listener,
-                 {lists:keystore(Name, 1, Selectors,
+                 lists:keystore(Name, 1, Selectors,
                                  {Name, Selector, Handler, Link}),
-                  Fallback}),
+                 Fallback),
+    {reply, ok, undefined};
+
+handle_call({remove, Name}, _From,
+            undefined) ->
+    Listener = listener_by_name(Name),
+    {Selectors, Fallback} = lookup_dispatch(Listener),
+    Selectors1 = lists:keydelete(Name, 1, Selectors),
+    set_dispatch(Listener, Selectors1, Fallback),
+    case Selectors1 of
+        [] -> rabbit_mochiweb_sup:stop_listener(Listener);
+        _  -> ok
+    end,
     {reply, ok, undefined};
 
 handle_call({set_fallback, Listener, FallbackHandler}, _From,
             undefined) ->
     {Selectors, _OldFallback} = lookup_dispatch(Listener),
-    set_dispatch(Listener, {Selectors, FallbackHandler}),
+    set_dispatch(Listener, Selectors, FallbackHandler),
     {reply, ok, undefined};
 
 handle_call(list_all, _From, undefined) ->
@@ -90,19 +103,6 @@ handle_call(Req, _From, State) ->
     error_logger:format("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
     {stop, unknown_request, State}.
 
-%% This is a cast since it's likely to be called from the application
-%% stop callback, i.e. by the application controller - but it calls
-%% into the application controller. We do not want to deadlock.
-handle_cast({remove, Name}, undefined) ->
-    Listener = listener_by_name(Name),
-    {Selectors, Fallback} = lookup_dispatch(Listener),
-    Selectors1 = lists:keydelete(Name, 1, Selectors),
-    set_dispatch(Listener, {Selectors1, Fallback}),
-    case Selectors1 of
-        [] -> rabbit_mochiweb_sup:stop_listener(Listener);
-        _  -> ok
-    end,
-    {noreply, undefined};
 handle_cast(_, State) ->
 	{noreply, State}.
 
@@ -110,7 +110,8 @@ handle_info(_, State) ->
 	{noreply, State}.
 
 terminate(_, _) ->
-	ok.
+    true = ets:delete(?ETS),
+    ok.
 
 code_change(_, State, _) ->
 	{ok, State}.
@@ -120,13 +121,14 @@ code_change(_, State, _) ->
 %% Internal Methods
 
 lookup_dispatch(Listener) ->
-    case application:get_env(?APP, {dispatch, Listener}) of
-        {ok, Dispatch} -> Dispatch;
-        undefined      -> exit({no_record_for_listener, Listener})
+    case ets:lookup(?ETS, Listener) of
+        [{Listener, Selectors, Fallback}] -> {Selectors, Fallback};
+        []                                -> exit({no_record_for_listener,
+                                                   Listener})
     end.
 
-set_dispatch(Listener, Dispatch) ->
-    application:set_env(?APP, {dispatch, Listener}, Dispatch, infinity).
+set_dispatch(Listener, Selectors, Fallback) ->
+    ets:insert(?ETS, {Listener, Selectors, Fallback}).
 
 match_request([], _) ->
     no_handler;
@@ -137,19 +139,16 @@ match_request([{_Name, Selector, Handler, _Link}|Rest], Req) ->
     end.
 
 list() ->
-    [{Path, Desc, Listener} ||
-        {{dispatch, Listener}, {Selectors, _Fallback}}
-            <- application:get_all_env(),
+    [{Path, Desc, Listener} || {Listener, Selectors, _F} <- ets:tab2list(?ETS),
         {_N, _S, _H, {Path, Desc}} <- Selectors].
 
 listener_by_name(Name) ->
-    case [L || {{dispatch, L}, D} <- application:get_all_env(),
-                    contains_name(Name, D)] of
+    case [L || {L, S, _F} <- ets:tab2list(?ETS), contains_name(Name, S)] of
         [Listener] -> Listener;
         []         -> exit({not_found, Name})
     end.
 
-contains_name(Name, {Selectors, _Fallback}) ->
+contains_name(Name, Selectors) ->
     lists:member(Name, [N || {N, _S, _H, _L} <- Selectors]).
 
 list(Listener) ->
