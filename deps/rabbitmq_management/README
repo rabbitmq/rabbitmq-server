@@ -3,10 +3,10 @@ Generic build instructions are at:
 
 When installed, point your broswer at:
 
-http://<server>:55672/
+http://<server>:15672/
 
 and log in with AMQP credentials (guest/guest by default).
 
 Documentation for the HTTP API can be found at
 
-http://<server>:55672/api/
+http://<server>:15672/api/
