@@ -5,4 +5,4 @@
   {registered, []},
   {mod, {rabbit_web_stomp_examples_app, []}},
   {env, []},
-  {applications, [kernel, stdlib, rabbitmq_web_stomp, rabbitmq_mochiweb]}]}.
+  {applications, [kernel, stdlib, rabbitmq_mochiweb, rabbitmq_web_stomp]}]}.
