@@ -32,22 +32,23 @@
 -endif.
 
 start(_Type, _StartArgs) ->
+    {ok, Listener} = application:get_env(rabbitmq_management, listener),
     setup_wm_logging(),
-    register_context(),
+    register_context(Listener),
     case ?SETUP_WM_TRACE of
         true -> setup_wm_trace_app();
         _    -> ok
     end,
-    log_startup(),
+    log_startup(Listener),
     rabbit_mgmt_sup:start_link().
 
 stop(_State) ->
     unregister_context(),
     ok.
 
-register_context() ->
+register_context(Listener) ->
     rabbit_mochiweb:register_context_handler(
-      ?CONTEXT, "", make_loop(), "RabbitMQ Management").
+      ?CONTEXT, Listener, "", make_loop(), "RabbitMQ Management").
 
 unregister_context() ->
     rabbit_mochiweb:unregister_context(?CONTEXT).
@@ -57,14 +58,14 @@ make_loop() ->
     WMLoop = rabbit_webmachine:makeloop(Dispatch),
     LocalPaths = [filename:join(module_path(M), ?STATIC_PATH) ||
                      M <- rabbit_mgmt_dispatcher:modules()],
-    fun(PL, Req) ->
+    fun(Req) ->
             Unauthorized = {401, [{"WWW-Authenticate", ?AUTH_REALM}], ""},
             Auth = Req:get_header_value("authorization"),
             case rabbit_mochiweb_util:parse_auth_header(Auth) of
                 [Username, Password] ->
                     case rabbit_access_control:check_user_pass_login(
                            Username, Password) of
-                        {ok, _} -> respond(Req, LocalPaths, PL, WMLoop);
+                        {ok, _} -> respond(Req, LocalPaths, WMLoop);
                         _       -> Req:respond(Unauthorized)
                     end;
                 _ ->
@@ -77,17 +78,12 @@ module_path(Module) ->
     {file, Here} = code:is_loaded(Module),
     filename:dirname(filename:dirname(Here)).
 
-respond(Req, LocalPaths, PL = {Prefix, _}, WMLoop) ->
-    %% To get here we know Prefix matches the beginning of the path
-    RawPath = Req:get(raw_path),
-    Path = case Prefix of
-               "" -> RawPath;
-               _  -> string:substr(RawPath, string:len(Prefix) + 2)
-           end,
-    Redirect = fun(L) -> {301, [{"Location", Prefix ++ L}], ""} end,
+respond(Req, LocalPaths, WMLoop) ->
+    Path = Req:get(raw_path),
+    Redirect = fun(L) -> {301, [{"Location", L}], ""} end,
     case Path of
         "/api/" ++ Rest when length(Rest) > 0 ->
-            WMLoop(PL, Req);
+            WMLoop(Req);
         "" ->
             Req:respond(Redirect("/"));
         "/mgmt/" ->
@@ -140,15 +136,6 @@ setup_wm_trace_app() ->
                                              "wmtrace", Loop,
                                              "Webmachine tracer").
 
-log_startup() ->
-    rabbit_log:info(
-      "Management plugin started. Port: ~w, path: ~s~n",
-      [get_port(), rabbit_mochiweb:context_path(?CONTEXT, "/")]).
-
-get_port() ->
-    case rabbit_mochiweb:context_listener(?CONTEXT) of
-        undefined ->
-            exit(rabbit_mochiweb_listener_not_configured);
-        {_Instance, Options} ->
-            proplists:get_value(port, Options)
-    end.
+log_startup(Listener) ->
+    rabbit_log:info("Management plugin started. Port: ~w~n",
+                    [proplists:get_value(port, Listener)]).
