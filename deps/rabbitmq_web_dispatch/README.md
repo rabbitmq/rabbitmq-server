@@ -10,7 +10,7 @@ See http://www.rabbitmq.com/mochiweb.html for information on
 configuring web plugins.
 
 The most general registration procedure is
-`rabbit_mochiweb:register_context_handler/4`. This takes a callback
+`rabbit_mochiweb:register_context_handler/5`. This takes a callback
 procedure of the form
 
     loop(Request) ->
