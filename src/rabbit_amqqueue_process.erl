@@ -719,8 +719,6 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
         T         -> now_micros() + T * 1000
     end.
 
-drop_expired_messages(State = #q{ttl = undefined}) ->
-    State;
 drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue       = BQ }) ->
     Now = now_micros(),
@@ -742,8 +740,6 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
                      end, State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(undefined, State) ->
-    State;
-ensure_ttl_timer(_Expiry, State = #q{ttl = undefined}) ->
     State;
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref = undefined}) ->
     After = (case Expiry - now_micros() of
