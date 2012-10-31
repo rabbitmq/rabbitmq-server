@@ -1291,7 +1291,8 @@
               </varlistentry>
               <varlistentry>
                 <term>host</term>
-                <listitem><para>Server DNS host.</para></listitem>
+                <listitem><para>Server hostname obtained via reverse
+                DNS, or 'unknown'.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>peer_address</term>
@@ -1303,7 +1304,8 @@
               </varlistentry>
               <varlistentry>
                 <term>peer_host</term>
-                <listitem><para>Peer DNS host.</para></listitem>
+                <listitem><para>Peer hostname obtained via reverse
+                DNS, or 'unknown'.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>ssl</term>
