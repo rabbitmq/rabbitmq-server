@@ -90,9 +90,13 @@ process({method, MethodName, FieldsBin}, {method, Protocol}) ->
         end
     catch exit:#amqp_error{} = Reason -> {error, Reason}
     end;
-process(_Frame, {method, _Protocol}) ->
+process({content_header, ClassId, _Weight, _BodySize, _PropertiesBin},
+        {method, _Protocol}) ->
     unexpected_frame("expected method frame, "
-                     "got non method frame instead", [], none);
+                     "got content header for class ~w instead", [ClassId], none);
+process({content_body, _FragmentBin}, {method, _Protocol}) ->
+    unexpected_frame("expected method frame, got content body instead", [],
+                     none);
 process({content_header, ClassId, 0, 0, PropertiesBin},
         {content_header, Method, ClassId, Protocol}) ->
     Content = empty_content(ClassId, PropertiesBin, Protocol),
@@ -108,12 +112,13 @@ process({content_header, HeaderClassId, 0, _BodySize, _PropertiesBin},
                      [ClassId, HeaderClassId], Method);
 process({method, MethodName, _FieldsBin},
         {content_header, Method, ClassId, _Protocol}) ->
-    unexpected_frame("received unexpected method frame for method ~w "
-                     ", content header for class ~w expected",
-                     [MethodName, ClassId], Method);
-process(_Frame, {content_header, Method, ClassId, _Protocol}) ->
     unexpected_frame("expected content header for class ~w, "
-                     "got non content header frame instead", [ClassId], Method);
+                     "got method frame for method ~w instead",
+                     [ClassId, MethodName], Method);
+process({content_body, _FragmentBin},
+        {content_header, Method, ClassId, _Protocol}) ->
+    unexpected_frame("expected content header for class ~w, "
+                     "got content body instead", [ClassId], Method);
 process({content_body, FragmentBin},
         {content_body, Method, RemainingSize,
          Content = #content{payload_fragments_rev = Fragments}, Protocol}) ->
@@ -127,9 +132,14 @@ process({method, MethodName, _FieldsBin},
         {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
     unexpected_frame("received unexpected method frame for method ~w"
                      ", content body expected", [MethodName], Method);
-process(_Frame, {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
-    unexpected_frame("expected content body, "
-                     "got non content body frame instead", [], Method).
+process({content_header, ClassId, _Weight, _BodySize, _PropertiesBin},
+        {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
+    unexpected_frame("expected content body, got content header for class "
+                     "~w instead", [ClassId], Method);
+process({method, MethodName, _FieldsBin},
+        {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
+    unexpected_frame("expected content body, got method frame for method "
+                     "~w instead", [MethodName], Method).
 
 %%--------------------------------------------------------------------
 
