@@ -719,9 +719,6 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
         T         -> now_micros() + T * 1000
     end.
 
-drop_expired_messages(State = #q{ttl = undefined,
-                                 ttl_timer_ref = undefined}) ->
-    State;
 drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue       = BQ }) ->
     Now = now_micros(),
@@ -740,8 +737,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     ensure_ttl_timer(case Props of
                          undefined                          -> undefined;
                          #message_properties{expiry = Exp}  -> Exp
-                     end, State#q{backing_queue_state = BQS1,
-                                  ttl_timer_ref       = undefined}).
+                     end, State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(undefined, State) ->
     State;
@@ -1325,7 +1321,7 @@ handle_info(maybe_expire, State) ->
     end;
 
 handle_info(drop_expired, State) ->
-    noreply(drop_expired_messages(State));
+    noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
 
 handle_info(emit_stats, State) ->
     %% Do not invoke noreply as it would see no timer and create a new one.
