@@ -14,15 +14,24 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
+-module(rabbit_policy_validator).
+
 -ifdef(use_specs).
 
--spec(description/0 :: () -> [{atom(), any()}]).
--spec(should_offer/1 :: (rabbit_net:socket()) -> boolean()).
--spec(init/1 :: (rabbit_net:socket()) -> any()).
--spec(handle_response/2 :: (binary(), any()) ->
-                                {'ok', rabbit_types:user()} |
-                                {'challenge', binary(), any()} |
-                                {'protocol_error', string(), [any()]} |
-                                {'refused', string(), [any()]}).
+-type(validate_results() ::
+        'ok' | {error, string(), [term()]} | [validate_results()]).
+
+-callback validate_policy([{binary(), term()}]) -> validate_results().
+
+-else.
+
+-export([behaviour_info/1]).
+
+behaviour_info(callbacks) ->
+    [
+     {validate_policy, 1}
+    ];
+behaviour_info(_Other) ->
+    undefined.
 
 -endif.

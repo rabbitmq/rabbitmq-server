@@ -16,6 +16,31 @@
 
 -module(rabbit_msg_store_index).
 
+-include("rabbit_msg_store.hrl").
+
+-ifdef(use_specs).
+
+-type(dir() :: any()).
+-type(index_state() :: any()).
+-type(keyvalue() :: any()).
+-type(fieldpos() :: non_neg_integer()).
+-type(fieldvalue() :: any()).
+
+-callback new(dir()) -> index_state().
+-callback recover(dir()) -> rabbit_types:ok_or_error2(index_state(), any()).
+-callback lookup(rabbit_types:msg_id(), index_state()) -> ('not_found' | keyvalue()).
+-callback insert(keyvalue(), index_state()) -> 'ok'.
+-callback update(keyvalue(), index_state()) -> 'ok'.
+-callback update_fields(rabbit_types:msg_id(), ({fieldpos(), fieldvalue()} |
+                                                [{fieldpos(), fieldvalue()}]),
+                        index_state()) -> 'ok'.
+-callback delete(rabbit_types:msg_id(), index_state()) -> 'ok'.
+-callback delete_object(keyvalue(), index_state()) -> 'ok'.
+-callback delete_by_file(fieldvalue(), index_state()) -> 'ok'.
+-callback terminate(index_state()) -> any().
+
+-else.
+
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
@@ -30,3 +55,5 @@ behaviour_info(callbacks) ->
      {terminate,      1}];
 behaviour_info(_Other) ->
     undefined.
+
+-endif.

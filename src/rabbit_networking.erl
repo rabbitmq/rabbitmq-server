@@ -136,18 +136,13 @@ boot_ssl() ->
             ok
     end.
 
-start() ->
-    {ok,_} = supervisor2:start_child(
-               rabbit_sup,
-               {rabbit_tcp_client_sup,
-                {rabbit_client_sup, start_link,
-                 [{local, rabbit_tcp_client_sup},
-                  {rabbit_connection_sup,start_link,[]}]},
-                transient, infinity, supervisor, [rabbit_client_sup]}),
-    ok.
+start() -> rabbit_sup:start_supervisor_child(
+             rabbit_tcp_client_sup, rabbit_client_sup,
+             [{local, rabbit_tcp_client_sup},
+              {rabbit_connection_sup,start_link,[]}]).
 
 ensure_ssl() ->
-    ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
+    ok = app_utils:start_applications([crypto, public_key, ssl]),
     {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
 
     % unknown_ca errors are silently ignored prior to R14B unless we
@@ -165,7 +160,19 @@ ssl_transform_fun(SslOpts) ->
             case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
                 {ok, SslSock} ->
                     {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
+                {error, timeout} ->
+                    {error, {ssl_upgrade_error, timeout}};
                 {error, Reason} ->
+                    %% We have no idea what state the ssl_connection
+                    %% process is in - it could still be happily
+                    %% going, it might be stuck, or it could be just
+                    %% about to fail. There is little that our caller
+                    %% can do but close the TCP socket, but this could
+                    %% cause ssl alerts to get dropped (which is bad
+                    %% form, according to the TLS spec). So we give
+                    %% the ssl_connection a little bit of time to send
+                    %% such alerts.
+                    timer:sleep(?SSL_TIMEOUT * 1000),
                     {error, {ssl_upgrade_error, Reason}};
                 {'EXIT', Reason} ->
                     {error, {ssl_upgrade_failure, Reason}}
@@ -288,7 +295,7 @@ start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
 connections() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
 connections_local() ->
@@ -446,16 +453,19 @@ ipv6_status(TestPort) ->
                         {ok, LSock4}            -> gen_tcp:close(LSock4),
                                                    single_stack;
                         %% IPv6-only machine. Welcome to the future.
-                        {error, eafnosupport}   -> ipv6_only;
+                        {error, eafnosupport}   -> ipv6_only; %% Linux
+                        {error, eprotonosupport}-> ipv6_only; %% FreeBSD
                         %% Dual stack machine with something already
                         %% on IPv4.
                         {error, _}              -> ipv6_status(TestPort + 1)
                     end
             end;
-        {error, eafnosupport} ->
-            %% IPv4-only machine. Welcome to the 90s.
+        %% IPv4-only machine. Welcome to the 90s.
+        {error, eafnosupport} -> %% Linux
             ipv4_only;
+        {error, eprotonosupport} -> %% FreeBSD
+            ipv4_only;
+        %% Port in use
         {error, _} ->
-            %% Port in use
             ipv6_status(TestPort + 1)
     end.

@@ -18,8 +18,10 @@
 
 -export([init/2, shutdown_terms/1, recover/5,
          terminate/2, delete_and_terminate/1,
-         publish/5, deliver/2, ack/2, sync/1, sync/2, flush/1, read/3,
-         next_segment_boundary/1, bounds/1, recover/1]).
+         publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
+         read/3, next_segment_boundary/1, bounds/1, recover/1]).
+
+-export([scan/3]).
 
 -export([add_queue_ttl/0]).
 
@@ -207,7 +209,8 @@
                    -> qistate()).
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
--spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
+-spec(sync/1 :: (qistate()) -> qistate()).
+-spec(needs_sync/1 :: (qistate()) -> boolean()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_types:msg_id(), seq_id(),
@@ -217,6 +220,12 @@
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
+
+-spec(scan/3 :: (file:filename(),
+                 fun ((seq_id(), rabbit_types:msg_id(),
+                       rabbit_types:message_properties(), boolean(),
+                       ('del' | 'no_del'), ('ack' | 'no_ack'), A) -> A),
+                     A) -> A).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
@@ -283,20 +292,18 @@ deliver(SeqIds, State) ->
 ack(SeqIds, State) ->
     deliver_or_ack(ack, SeqIds, State).
 
-%% This is only called when there are outstanding confirms and the
-%% queue is idle.
-sync(State = #qistate { unsynced_msg_ids = MsgIds }) ->
-    sync_if(not gb_sets:is_empty(MsgIds), State).
+%% This is called when there are outstanding confirms or when the
+%% queue is idle and the journal needs syncing (see needs_sync/1).
+sync(State = #qistate { journal_handle = undefined }) ->
+    State;
+sync(State = #qistate { journal_handle = JournalHdl }) ->
+    ok = file_handle_cache:sync(JournalHdl),
+    notify_sync(State).
 
-sync(SeqIds, State) ->
-    %% The SeqIds here contains the SeqId of every publish and ack to
-    %% be sync'ed. Ideally we should go through these seqids and only
-    %% sync the journal if the pubs or acks appear in the
-    %% journal. However, this would be complex to do, and given that
-    %% the variable queue publishes and acks to the qi, and then
-    %% syncs, all in one operation, there is no possibility of the
-    %% seqids not being in the journal.
-    sync_if([] =/= SeqIds, State).
+needs_sync(#qistate { journal_handle = undefined }) ->
+    false;
+needs_sync(#qistate { journal_handle = JournalHdl }) ->
+    file_handle_cache:needs_sync(JournalHdl).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
@@ -379,7 +386,10 @@ all_queue_directory_names(Dir) ->
 %%----------------------------------------------------------------------------
 
 blank_state(QueueName) ->
-    Dir = filename:join(queues_dir(), queue_name_to_dir_name(QueueName)),
+    blank_state_dir(
+      filename:join(queues_dir(), queue_name_to_dir_name(QueueName))).
+
+blank_state_dir(Dir) ->
     {ok, MaxJournal} =
         application:get_env(rabbit, queue_index_max_journal_entries),
     #qistate { dir                 = Dir,
@@ -390,19 +400,19 @@ blank_state(QueueName) ->
                on_sync             = fun (_) -> ok end,
                unsynced_msg_ids    = gb_sets:new() }.
 
-clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
+clean_filename(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
 detect_clean_shutdown(Dir) ->
-    case rabbit_file:delete(clean_file_name(Dir)) of
+    case rabbit_file:delete(clean_filename(Dir)) of
         ok              -> true;
         {error, enoent} -> false
     end.
 
 read_shutdown_terms(Dir) ->
-    rabbit_file:read_term_file(clean_file_name(Dir)).
+    rabbit_file:read_term_file(clean_filename(Dir)).
 
 store_clean_shutdown(Terms, Dir) ->
-    CleanFileName = clean_file_name(Dir),
+    CleanFileName = clean_filename(Dir),
     ok = rabbit_file:ensure_dir(CleanFileName),
     rabbit_file:write_term_file(CleanFileName, Terms).
 
@@ -524,18 +534,33 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
     end.
 
 queue_index_walker_reader(QueueName, Gatherer) ->
-    State = #qistate { segments = Segments, dir = Dir } =
-        recover_journal(blank_state(QueueName)),
-    [ok = segment_entries_foldr(
-            fun (_RelSeq, {{MsgId, _MsgProps, true}, _IsDelivered, no_ack},
-                 ok) ->
-                    gatherer:in(Gatherer, {MsgId, 1});
-                (_RelSeq, _Value, Acc) ->
-                    Acc
-            end, ok, segment_find_or_new(Seg, Dir, Segments)) ||
-        Seg <- all_segment_nums(State)],
-    {_SegmentCounts, _State} = terminate(State),
+    State = blank_state(QueueName),
+    ok = scan_segments(
+           fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok) ->
+                   gatherer:sync_in(Gatherer, {MsgId, 1});
+               (_SeqId, _MsgId, _MsgProps, _IsPersistent, _IsDelivered,
+                _IsAcked, Acc) ->
+                   Acc
+           end, ok, State),
     ok = gatherer:finish(Gatherer).
+
+scan(Dir, Fun, Acc) ->
+    scan_segments(Fun, Acc, blank_state_dir(Dir)).
+
+scan_segments(Fun, Acc, State) ->
+    State1 = #qistate { segments = Segments, dir = Dir } =
+        recover_journal(State),
+    Result = lists:foldr(
+      fun (Seg, AccN) ->
+              segment_entries_foldr(
+                fun (RelSeq, {{MsgId, MsgProps, IsPersistent},
+                              IsDelivered, IsAcked}, AccM) ->
+                        Fun(reconstruct_seq_id(Seg, RelSeq), MsgId, MsgProps,
+                            IsPersistent, IsDelivered, IsAcked, AccM)
+                end, AccN, segment_find_or_new(Seg, Dir, Segments))
+      end, Acc, all_segment_nums(State1)),
+    {_SegmentCounts, _State} = terminate(State1),
+    Result.
 
 %%----------------------------------------------------------------------------
 %% expiry/binary manipulation
@@ -706,14 +731,6 @@ deliver_or_ack(Kind, SeqIds, State) ->
     maybe_flush_journal(lists:foldl(fun (SeqId, StateN) ->
                                             add_to_journal(SeqId, Kind, StateN)
                                     end, State1, SeqIds)).
-
-sync_if(false, State) ->
-    State;
-sync_if(_Bool, State = #qistate { journal_handle = undefined }) ->
-    State;
-sync_if(true, State = #qistate { journal_handle = JournalHdl }) ->
-    ok = file_handle_cache:sync(JournalHdl),
-    notify_sync(State).
 
 notify_sync(State = #qistate { unsynced_msg_ids = UG, on_sync = OnSyncFun }) ->
     OnSyncFun(UG),

@@ -139,6 +139,6 @@ notify_if(false, _Type, _Props) -> ok.
 notify(Type, Props) ->
     %% TODO: switch to os:timestamp() when we drop support for
     %% Erlang/OTP < R13B01
-    gen_event:notify(rabbit_event, #event{type = Type,
-                                          props = Props,
-                                          timestamp = now()}).
+    gen_event:notify(?MODULE, #event{type      = Type,
+                                     props     = Props,
+                                     timestamp = now()}).

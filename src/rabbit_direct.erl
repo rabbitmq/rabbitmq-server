@@ -17,7 +17,7 @@
 -module(rabbit_direct).
 
 -export([boot/0, force_event_refresh/0, list/0, connect/5,
-         start_channel/8, disconnect/2]).
+         start_channel/9, disconnect/2]).
 %% Internal
 -export([list_local/0]).
 
@@ -31,32 +31,26 @@
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
--spec(connect/5 :: (rabbit_types:username(), rabbit_types:vhost(),
-                    rabbit_types:protocol(), pid(),
+-spec(connect/5 :: ((rabbit_types:username() | rabbit_types:user() |
+                     {rabbit_types:username(), rabbit_types:password()}),
+                    rabbit_types:vhost(), rabbit_types:protocol(), pid(),
                     rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
--spec(start_channel/8 ::
-        (rabbit_channel:channel_number(), pid(), pid(), rabbit_types:protocol(),
-         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-         pid()) -> {'ok', pid()}).
-
+-spec(start_channel/9 ::
+        (rabbit_channel:channel_number(), pid(), pid(), string(),
+         rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
+         rabbit_framing:amqp_table(), pid()) -> {'ok', pid()}).
 -spec(disconnect/2 :: (pid(), rabbit_event:event_props()) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-boot() ->
-    {ok, _} =
-        supervisor2:start_child(
-          rabbit_sup,
-          {rabbit_direct_client_sup,
-           {rabbit_client_sup, start_link,
+boot() -> rabbit_sup:start_supervisor_child(
+            rabbit_direct_client_sup, rabbit_client_sup,
             [{local, rabbit_direct_client_sup},
-             {rabbit_channel_sup, start_link, []}]},
-           transient, infinity, supervisor, [rabbit_client_sup]}),
-    ok.
+             {rabbit_channel_sup, start_link, []}]).
 
 force_event_refresh() ->
     [Pid ! force_event_refresh || Pid<- list()],
@@ -66,39 +60,47 @@ list_local() ->
     pg_local:get_members(rabbit_direct).
 
 list() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_direct, list_local, []).
 
 %%----------------------------------------------------------------------------
 
+connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
+    try rabbit_access_control:check_vhost_access(User, VHost) of
+        ok -> ok = pg_local:join(rabbit_direct, Pid),
+              rabbit_event:notify(connection_created, Infos),
+              {ok, {User, rabbit_reader:server_properties(Protocol)}}
+    catch
+        exit:#amqp_error{name = access_refused} ->
+            {error, access_refused}
+    end;
+
+connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
+    connect0(check_user_pass_login, Username, Password, VHost, Protocol, Pid,
+             Infos);
+
 connect(Username, VHost, Protocol, Pid, Infos) ->
+    connect0(check_user_login, Username, [], VHost, Protocol, Pid, Infos).
+
+connect0(FunctionName, U, P, VHost, Protocol, Pid, Infos) ->
     case rabbit:is_running() of
         true  ->
-            case rabbit_access_control:check_user_login(Username, []) of
-                {ok, User} ->
-                    try rabbit_access_control:check_vhost_access(User, VHost) of
-                        ok -> ok = pg_local:join(rabbit_direct, Pid),
-                              rabbit_event:notify(connection_created, Infos),
-                              {ok, {User,
-                                    rabbit_reader:server_properties(Protocol)}}
-                    catch
-                        exit:#amqp_error{name = access_refused} ->
-                            {error, access_refused}
-                    end;
-                {refused, _Msg, _Args} ->
-                    {error, auth_failure}
+            case rabbit_access_control:FunctionName(U, P) of
+                {ok, User}        -> connect(User, VHost, Protocol, Pid, Infos);
+                {refused, _M, _A} -> {error, auth_failure}
             end;
         false ->
             {error, broker_not_found_on_node}
     end.
 
-start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
-              Capabilities, Collector) ->
+
+start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
+              VHost, Capabilities, Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
           rabbit_direct_client_sup,
-          [{direct, Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
-            Capabilities, Collector}]),
+          [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
+            User, VHost, Capabilities, Collector}]),
     {ok, ChannelPid}.
 
 disconnect(Pid, Infos) ->

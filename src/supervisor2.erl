@@ -9,15 +9,15 @@
 %%    terminated as per the shutdown component of the child_spec.
 %%
 %% 3) child specifications can contain, as the restart type, a tuple
-%%    {permanent, Delay} | {transient, Delay} where Delay >= 0. The
-%%    delay, in seconds, indicates what should happen if a child, upon
-%%    being restarted, exceeds the MaxT and MaxR parameters. Thus, if
-%%    a child exits, it is restarted as normal. If it exits
-%%    sufficiently quickly and often to exceed the boundaries set by
-%%    the MaxT and MaxR parameters, and a Delay is specified, then
-%%    rather than stopping the supervisor, the supervisor instead
-%%    continues and tries to start up the child again, Delay seconds
-%%    later.
+%%    {permanent, Delay} | {transient, Delay} | {intrinsic, Delay}
+%%    where Delay >= 0 (see point (4) below for intrinsic). The delay,
+%%    in seconds, indicates what should happen if a child, upon being
+%%    restarted, exceeds the MaxT and MaxR parameters. Thus, if a
+%%    child exits, it is restarted as normal. If it exits sufficiently
+%%    quickly and often to exceed the boundaries set by the MaxT and
+%%    MaxR parameters, and a Delay is specified, then rather than
+%%    stopping the supervisor, the supervisor instead continues and
+%%    tries to start up the child again, Delay seconds later.
 %%
 %%    Note that you can never restart more frequently than the MaxT
 %%    and MaxR parameters allow: i.e. you must wait until *both* the
@@ -30,6 +30,16 @@
 %%    essentially we have to wait for the delay to have passed and for
 %%    the MaxT and MaxR parameters to permit the child to be
 %%    restarted. This may require waiting for longer than Delay.
+%%
+%%    Sometimes, you may wish for a transient or intrinsic child to
+%%    exit abnormally so that it gets restarted, but still log
+%%    nothing. gen_server will log any exit reason other than
+%%    'normal', 'shutdown' or {'shutdown', _}. Thus the exit reason of
+%%    {'shutdown', 'restart'} is interpreted to mean you wish the
+%%    child to be restarted according to the delay parameters, but
+%%    gen_server will not log the error. Thus from gen_server's
+%%    perspective it's a normal exit, whilst from supervisor's
+%%    perspective, it's an abnormal exit.
 %%
 %% 4) Added an 'intrinsic' restart type. Like the transient type, this
 %%    type means the child should only be restarted if the child exits
@@ -71,8 +81,6 @@
 	 which_children/1, find_child/2,
 	 check_childspecs/1]).
 
--export([behaviour_info/1]).
-
 %% Internal exports
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3]).
 -export([handle_cast/2]).
@@ -102,10 +110,143 @@
 -define(is_terminate_simple(State),
         State#state.strategy =:= simple_one_for_one_terminate).
 
+-ifdef(use_specs).
+
+%%--------------------------------------------------------------------------
+%% Types
+%%--------------------------------------------------------------------------
+
+-export_type([child_spec/0, startchild_ret/0, strategy/0, sup_name/0]).
+
+-type child() :: 'undefined' | pid().
+-type child_id() :: term().
+-type mfargs() :: {M :: module(), F :: atom(), A :: [term()] | undefined}.
+-type modules() :: [module()] | 'dynamic'.
+-type delay() :: non_neg_integer().
+-type restart() :: 'permanent' | 'transient' | 'temporary' | 'intrinsic'
+                 | {'permanent', delay()} | {'transient', delay()}
+                 | {'intrinsic', delay()}.
+-type shutdown() :: 'brutal_kill' | timeout().
+-type worker() :: 'worker' | 'supervisor'.
+-type sup_name() :: {'local', Name :: atom()} | {'global', Name :: atom()}.
+-type sup_ref() :: (Name :: atom())
+                  | {Name :: atom(), Node :: node()}
+                  | {'global', Name :: atom()}
+                  | pid().
+-type child_spec() :: {Id :: child_id(),
+                       StartFunc :: mfargs(),
+                       Restart :: restart(),
+                       Shutdown :: shutdown(),
+                       Type :: worker(),
+                       Modules :: modules()}.
+
+
+-type strategy() :: 'one_for_all' | 'one_for_one'
+                  | 'rest_for_one' | 'simple_one_for_one'
+                  | 'simple_one_for_one_terminate'.
+
+-type child_rec() :: #child{pid :: child() | {restarting,pid()} | [pid()],
+                            name :: child_id(),
+                            mfa :: mfargs(),
+                            restart_type :: restart(),
+                            shutdown :: shutdown(),
+                            child_type :: worker(),
+                            modules :: modules()}.
+
+-type state() :: #state{strategy :: strategy(),
+                        children :: [child_rec()],
+                        dynamics :: ?DICT(),
+                        intensity :: non_neg_integer(),
+                        period :: pos_integer()}.
+
+%%--------------------------------------------------------------------------
+%% Callback behaviour
+%%--------------------------------------------------------------------------
+
+-callback init(Args :: term()) ->
+    {ok, {{RestartStrategy :: strategy(),
+           MaxR :: non_neg_integer(),
+           MaxT :: non_neg_integer()},
+           [ChildSpec :: child_spec()]}}
+    | ignore.
+
+%%--------------------------------------------------------------------------
+%% Specs
+%%--------------------------------------------------------------------------
+
+-type startchild_err() :: 'already_present'
+			| {'already_started', Child :: child()} | term().
+-type startchild_ret() :: {'ok', Child :: child()}
+                        | {'ok', Child :: child(), Info :: term()}
+			| {'error', startchild_err()}.
+
+-spec start_child(SupRef, ChildSpec) -> startchild_ret() when
+      SupRef :: sup_ref(),
+      ChildSpec :: child_spec() | (List :: [term()]).
+
+-spec restart_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: child_id(),
+      Result :: {'ok', Child :: child()}
+              | {'ok', Child :: child(), Info :: term()}
+              | {'error', Error},
+      Error :: 'running' | 'not_found' | 'simple_one_for_one' | term().
+
+-spec delete_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: child_id(),
+      Result :: 'ok' | {'error', Error},
+      Error :: 'running' | 'not_found' | 'simple_one_for_one'.
+
+-spec terminate_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: pid() | child_id(),
+      Result :: 'ok' | {'error', Error},
+      Error :: 'not_found' | 'simple_one_for_one'.
+
+-spec which_children(SupRef) -> [{Id,Child,Type,Modules}] when
+      SupRef :: sup_ref(),
+      Id :: child_id() | 'undefined',
+      Child :: child(),
+      Type :: worker(),
+      Modules :: modules().
+
+-spec check_childspecs(ChildSpecs) -> Result when
+      ChildSpecs :: [child_spec()],
+      Result :: 'ok' | {'error', Error :: term()}.
+
+-type init_sup_name() :: sup_name() | 'self'.
+
+-type stop_rsn() :: 'shutdown' | {'bad_return', {module(),'init', term()}}
+                  | {'bad_start_spec', term()} | {'start_spec', term()}
+                  | {'supervisor_data', term()}.
+
+-spec init({init_sup_name(), module(), [term()]}) ->
+        {'ok', state()} | 'ignore' | {'stop', stop_rsn()}.
+
+-type call() :: 'which_children'.
+-spec handle_call(call(), term(), state()) -> {'reply', term(), state()}.
+
+-spec handle_cast('null', state()) -> {'noreply', state()}.
+
+-spec handle_info(term(), state()) ->
+        {'noreply', state()} | {'stop', 'shutdown', state()}.
+
+-spec terminate(term(), state()) -> 'ok'.
+
+-spec code_change(term(), state(), term()) ->
+        {'ok', state()} | {'error', term()}.
+
+-else.
+
+-export([behaviour_info/1]).
+
 behaviour_info(callbacks) ->
     [{init,1}];
 behaviour_info(_Other) ->
     undefined.
+
+-endif.
 
 %%% ---------------------------------------------------
 %%% This is a general process supervisor built upon gen_server.erl.
@@ -114,10 +255,10 @@ behaviour_info(_Other) ->
 %%% ---------------------------------------------------
 start_link(Mod, Args) ->
     gen_server:start_link(?MODULE, {self, Mod, Args}, []).
- 
+
 start_link(SupName, Mod, Args) ->
     gen_server:start_link(SupName, ?MODULE, {SupName, Mod, Args}, []).
- 
+
 %%% ---------------------------------------------------
 %%% Interface functions.
 %%% ---------------------------------------------------
@@ -157,9 +298,9 @@ check_childspecs(ChildSpecs) when is_list(ChildSpecs) ->
 check_childspecs(X) -> {error, {badarg, X}}.
 
 %%% ---------------------------------------------------
-%%% 
+%%%
 %%% Initialize the supervisor.
-%%% 
+%%%
 %%% ---------------------------------------------------
 init({SupName, Mod, Args}) ->
     process_flag(trap_exit, true),
@@ -178,7 +319,7 @@ init({SupName, Mod, Args}) ->
 	Error ->
 	    {stop, {bad_return, {Mod, init, Error}}}
     end.
-	
+
 init_children(State, StartSpec) ->
     SupName = State#state.name,
     case check_startspec(StartSpec) of
@@ -208,7 +349,7 @@ init_dynamic(_State, StartSpec) ->
 %% Func: start_children/2
 %% Args: Children = [#child] in start order
 %%       SupName = {local, atom()} | {global, atom()} | {pid(),Mod}
-%% Purpose: Start all children.  The new list contains #child's 
+%% Purpose: Start all children.  The new list contains #child's
 %%          with pids.
 %% Returns: {ok, NChildren} | {error, NChildren}
 %%          NChildren = [#child] in termination order (reversed
@@ -240,7 +381,7 @@ do_start_child(SupName, Child) ->
 	    NChild = Child#child{pid = Pid},
 	    report_progress(NChild, SupName),
 	    {ok, Pid, Extra};
-	ignore -> 
+	ignore ->
 	    {ok, undefined};
 	{error, What} -> {error, What};
 	What -> {error, What}
@@ -259,23 +400,25 @@ do_start_child_i(M, F, A) ->
 	What ->
 	    {error, What}
     end.
-    
+
 
 %%% ---------------------------------------------------
-%%% 
+%%%
 %%% Callback functions.
-%%% 
+%%%
 %%% ---------------------------------------------------
 handle_call({start_child, EArgs}, _From, State) when ?is_simple(State) ->
     #child{mfa = {M, F, A}} = hd(State#state.children),
     Args = A ++ EArgs,
     case do_start_child_i(M, F, Args) of
+        {ok, undefined} ->
+            {reply, {ok, undefined}, State};
 	{ok, Pid} ->
-	    NState = State#state{dynamics = 
+	    NState = State#state{dynamics =
 				 ?DICT:store(Pid, Args, State#state.dynamics)},
 	    {reply, {ok, Pid}, NState};
 	{ok, Pid, Extra} ->
-	    NState = State#state{dynamics = 
+	    NState = State#state{dynamics =
 				 ?DICT:store(Pid, Args, State#state.dynamics)},
 	    {reply, {ok, Pid, Extra}, NState};
 	What ->
@@ -354,7 +497,7 @@ handle_call(which_children, _From, State) ->
 %%% Hopefully cause a function-clause as there is no API function
 %%% that utilizes cast.
 handle_cast(null, State) ->
-    error_logger:error_msg("ERROR: Supervisor received cast-message 'null'~n", 
+    error_logger:error_msg("ERROR: Supervisor received cast-message 'null'~n",
 			   []),
 
     {noreply, State}.
@@ -384,7 +527,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
     end;
 
 handle_info(Msg, State) ->
-    error_logger:error_msg("Supervisor received unexpected message: ~p~n", 
+    error_logger:error_msg("Supervisor received unexpected message: ~p~n",
 			   [Msg]),
     {noreply, State}.
 %%
@@ -434,13 +577,13 @@ check_flags({Strategy, MaxIntensity, Period}) ->
 check_flags(What) ->
     {bad_flags, What}.
 
-update_childspec(State, StartSpec)  when ?is_simple(State) -> 
-    case check_startspec(StartSpec) of                        
-        {ok, [Child]} ->                                      
-            {ok, State#state{children = [Child]}};            
-        Error ->                                              
-            {error, Error}                                    
-    end;                                                      
+update_childspec(State, StartSpec)  when ?is_simple(State) ->
+    case check_startspec(StartSpec) of
+        {ok, [Child]} ->
+            {ok, State#state{children = [Child]}};
+        Error ->
+            {error, Error}
+    end;
 
 update_childspec(State, StartSpec) ->
     case check_startspec(StartSpec) of
@@ -461,7 +604,7 @@ update_childspec1([Child|OldC], Children, KeepOld) ->
     end;
 update_childspec1([], Children, KeepOld) ->
     % Return them in (keeped) reverse start order.
-    lists:reverse(Children ++ KeepOld).  
+    lists:reverse(Children ++ KeepOld).
 
 update_chsp(OldCh, Children) ->
     case lists:map(fun (Ch) when OldCh#child.name =:= Ch#child.name ->
@@ -475,7 +618,7 @@ update_chsp(OldCh, Children) ->
 	NewC ->
 	    {ok, NewC}
     end.
-    
+
 %%% ---------------------------------------------------
 %%% Start a new child.
 %%% ---------------------------------------------------
@@ -487,12 +630,12 @@ handle_start_child(Child, State) ->
 		{ok, Pid} ->
 		    Children = State#state.children,
 		    {{ok, Pid},
-		     State#state{children = 
+		     State#state{children =
 				 [Child#child{pid = Pid}|Children]}};
 		{ok, Pid, Extra} ->
 		    Children = State#state.children,
 		    {{ok, Pid, Extra},
-		     State#state{children = 
+		     State#state{children =
 				 [Child#child{pid = Pid}|Children]}};
 		{error, What} ->
 		    {{error, {What, Child}}, State}
@@ -529,25 +672,23 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
-do_restart({RestartType, Delay}, Reason, Child, State) ->
-    case restart1(Child, State) of
-        {ok, NState} ->
-            {ok, NState};
-        {terminate, NState} ->
-            _TRef = erlang:send_after(trunc(Delay*1000), self(),
-				      {delayed_restart,
-				       {{RestartType, Delay}, Reason, Child}}),
-            {ok, state_del_child(Child, NState)}
-    end;
+do_restart({permanent = RestartType, Delay}, Reason, Child, State) ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(Type, normal, Child, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
+do_restart({RestartType, Delay}, {shutdown, restart} = Reason, Child, State)
+  when RestartType =:= transient orelse RestartType =:= intrinsic ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(Type, {shutdown, _}, Child, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
 do_restart(Type, shutdown, Child = #child{child_type = supervisor}, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
+do_restart({RestartType, Delay}, Reason, Child, State)
+  when RestartType =:= transient orelse RestartType =:= intrinsic ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(Type, Reason, Child, State) when Type =:= transient orelse
                                             Type =:= intrinsic ->
     report_error(child_terminated, Reason, Child, State#state.name),
@@ -557,7 +698,20 @@ do_restart(temporary, Reason, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState}.
 
+do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
+    case restart1(Child, State) of
+        {ok, NState} ->
+            {ok, NState};
+        {terminate, NState} ->
+            _TRef = erlang:send_after(trunc(Delay*1000), self(),
+                                      {delayed_restart,
+                                       {{RestartType, Delay}, Reason, Child}}),
+            {ok, state_del_child(Child, NState)}
+    end.
+
 del_child_and_maybe_shutdown(intrinsic, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
+del_child_and_maybe_shutdown({intrinsic, _Delay}, Child, State) ->
     {shutdown, state_del_child(Child, State)};
 del_child_and_maybe_shutdown(_, Child, State) ->
     {ok, state_del_child(Child, State)}.
@@ -591,6 +745,8 @@ restart(Strategy, Child, State, Restart)
     #child{mfa = {M, F, A}} = Child,
     Dynamics = ?DICT:erase(Child#child.pid, State#state.dynamics),
     case do_start_child_i(M, F, A) of
+        {ok, undefined} ->
+            {ok, State};
 	{ok, Pid} ->
 	    NState = State#state{dynamics = ?DICT:store(Pid, A, Dynamics)},
 	    {ok, NState};
@@ -660,29 +816,32 @@ terminate_simple_children(Child, Dynamics, SupName) ->
     {Replies, Timedout} =
         lists:foldl(
           fun (_Pid, {Replies, Timedout}) ->
-                  {Reply, Timedout1} =
+                  {Pid1, Reason1, Timedout1} =
                       receive
                           TimeoutMsg ->
                               Remaining = Pids -- [P || {P, _} <- Replies],
                               [exit(P, kill) || P <- Remaining],
-                              receive {'DOWN', _MRef, process, Pid, Reason} ->
-                                      {{error, Reason}, true}
+                              receive
+                                  {'DOWN', _MRef, process, Pid, Reason} ->
+                                      {Pid, Reason, true}
                               end;
                           {'DOWN', _MRef, process, Pid, Reason} ->
-                              {child_res(Child, Reason, Timedout), Timedout};
-                          {'EXIT', Pid, Reason} ->
-                              receive {'DOWN', _MRef, process, Pid, _} ->
-                                      {{error, Reason}, Timedout}
-                              end
+                              {Pid, Reason, Timedout}
                       end,
-                  {[{Pid, Reply} | Replies], Timedout1}
+                  {[{Pid1, child_res(Child, Reason1, Timedout1)} | Replies],
+                   Timedout1}
           end, {[], false}, Pids),
     timeout_stop(Child, TRef, TimeoutMsg, Timedout),
     ReportError = shutdown_error_reporter(SupName),
-    [case Reply of
-         {_Pid, ok}         -> ok;
-         {Pid,  {error, R}} -> ReportError(R, Child#child{pid = Pid})
-     end || Reply <- Replies],
+    Report = fun(_, ok)           -> ok;
+                (Pid, {error, R}) -> ReportError(R, Child#child{pid = Pid})
+             end,
+    [receive
+         {'EXIT', Pid, Reason} ->
+             Report(Pid, child_res(Child, Reason, Timedout))
+     after
+         0 -> Report(Pid, Reply)
+     end || {Pid, Reply} <- Replies],
     ok.
 
 child_exit_reason(#child{shutdown = brutal_kill}) -> kill;
@@ -707,7 +866,7 @@ timeout_stop(#child{shutdown = Time}, TRef, Msg, false) when is_integer(Time) ->
     after
         0 -> ok
     end;
-timeout_stop(#child{}, ok, _Msg, _Timedout) ->
+timeout_stop(#child{}, _TRef, _Msg, _Timedout) ->
     ok.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
@@ -729,17 +888,17 @@ do_terminate(Child, _SupName) ->
     Child.
 
 %%-----------------------------------------------------------------
-%% Shutdowns a child. We must check the EXIT value 
+%% Shutdowns a child. We must check the EXIT value
 %% of the child, because it might have died with another reason than
-%% the wanted. In that case we want to report the error. We put a 
-%% monitor on the child an check for the 'DOWN' message instead of 
-%% checking for the 'EXIT' message, because if we check the 'EXIT' 
-%% message a "naughty" child, who does unlink(Sup), could hang the 
-%% supervisor. 
+%% the wanted. In that case we want to report the error. We put a
+%% monitor on the child an check for the 'DOWN' message instead of
+%% checking for the 'EXIT' message, because if we check the 'EXIT'
+%% message a "naughty" child, who does unlink(Sup), could hang the
+%% supervisor.
 %% Returns: ok | {error, OtherReason}  (this should be reported)
 %%-----------------------------------------------------------------
 shutdown(Pid, brutal_kill) ->
-  
+
     case monitor_child(Pid) of
 	ok ->
 	    exit(Pid, kill),
@@ -749,16 +908,16 @@ shutdown(Pid, brutal_kill) ->
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
 		    {error, OtherReason}
 	    end;
-	{error, Reason} ->      
+	{error, Reason} ->
 	    {error, Reason}
     end;
 
 shutdown(Pid, Time) ->
-    
+
     case monitor_child(Pid) of
 	ok ->
 	    exit(Pid, shutdown), %% Try to shutdown gracefully
-	    receive 
+	    receive
 		{'DOWN', _MRef, process, Pid, shutdown} ->
 		    ok;
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
@@ -770,14 +929,14 @@ shutdown(Pid, Time) ->
 			    {error, OtherReason}
 		    end
 	    end;
-	{error, Reason} ->      
+	{error, Reason} ->
 	    {error, Reason}
     end.
 
 %% Help function to shutdown/2 switches from link to monitor approach
 monitor_child(Pid) ->
-    
-    %% Do the monitor operation first so that if the child dies 
+
+    %% Do the monitor operation first so that if the child dies
     %% before the monitoring is done causing a 'DOWN'-message with
     %% reason noproc, we will get the real reason in the 'EXIT'-message
     %% unless a naughty child has already done unlink...
@@ -787,22 +946,22 @@ monitor_child(Pid) ->
     receive
 	%% If the child dies before the unlik we must empty
 	%% the mail-box of the 'EXIT'-message and the 'DOWN'-message.
-	{'EXIT', Pid, Reason} -> 
-	    receive 
+	{'EXIT', Pid, Reason} ->
+	    receive
 		{'DOWN', _, process, Pid, _} ->
 		    {error, Reason}
 	    end
-    after 0 -> 
+    after 0 ->
 	    %% If a naughty child did unlink and the child dies before
-	    %% monitor the result will be that shutdown/2 receives a 
+	    %% monitor the result will be that shutdown/2 receives a
 	    %% 'DOWN'-message with reason noproc.
 	    %% If the child should die after the unlink there
 	    %% will be a 'DOWN'-message with a correct reason
-	    %% that will be handled in shutdown/2. 
-	    ok   
+	    %% that will be handled in shutdown/2.
+	    ok
     end.
-    
-   
+
+
 %%-----------------------------------------------------------------
 %% Child/State manipulating functions.
 %%-----------------------------------------------------------------
@@ -856,7 +1015,7 @@ remove_child(Child, State) ->
 %% Args: SupName = {local, atom()} | {global, atom()} | self
 %%       Type = {Strategy, MaxIntensity, Period}
 %%         Strategy = one_for_one | one_for_all | simple_one_for_one |
-%%                    rest_for_one 
+%%                    rest_for_one
 %%         MaxIntensity = integer()
 %%         Period = integer()
 %%       Mod :== atom()
@@ -911,7 +1070,8 @@ supname(N,_)      -> N.
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
 %%%       RestartType is permanent | temporary | transient |
 %%%                      intrinsic | {permanent, Delay} |
-%%%                      {transient, Delay} where Delay >= 0
+%%%                      {transient, Delay} | {intrinsic, Delay}
+%%                       where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
 %%%       Modules = [atom()] | dynamic
@@ -950,10 +1110,10 @@ validChildType(supervisor) -> true;
 validChildType(worker) -> true;
 validChildType(What) -> throw({invalid_child_type, What}).
 
-validName(_Name) -> true. 
+validName(_Name) -> true.
 
-validFunc({M, F, A}) when is_atom(M), 
-                          is_atom(F), 
+validFunc({M, F, A}) when is_atom(M),
+                          is_atom(F),
                           is_list(A) -> true;
 validFunc(Func)                      -> throw({invalid_mfa, Func}).
 
@@ -962,6 +1122,7 @@ validRestartType(temporary)          -> true;
 validRestartType(transient)          -> true;
 validRestartType(intrinsic)          -> true;
 validRestartType({permanent, Delay}) -> validDelay(Delay);
+validRestartType({intrinsic, Delay}) -> validDelay(Delay);
 validRestartType({transient, Delay}) -> validDelay(Delay);
 validRestartType(RestartType)        -> throw({invalid_restart_type,
                                                RestartType}).
@@ -970,7 +1131,7 @@ validDelay(Delay) when is_number(Delay),
                        Delay >= 0 -> true;
 validDelay(What)                  -> throw({invalid_delay, What}).
 
-validShutdown(Shutdown, _) 
+validShutdown(Shutdown, _)
   when is_integer(Shutdown), Shutdown > 0 -> true;
 validShutdown(infinity, supervisor)    -> true;
 validShutdown(brutal_kill, _)          -> true;
@@ -996,7 +1157,7 @@ validMods(Mods) -> throw({invalid_modules, Mods}).
 %%% Returns: {ok, State'} | {terminate, State'}
 %%% ------------------------------------------------------
 
-add_restart(State) ->  
+add_restart(State) ->
     I = State#state.intensity,
     P = State#state.period,
     R = State#state.restarts,

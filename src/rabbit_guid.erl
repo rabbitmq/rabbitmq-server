@@ -19,6 +19,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
+-export([filename/0]).
 -export([gen/0, gen_secure/0, string/2, binary/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -38,6 +39,7 @@
 -type(guid() :: binary()).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(filename/0 :: () -> string()).
 -spec(gen/0 :: () -> guid()).
 -spec(gen_secure/0 :: () -> guid()).
 -spec(string/2 :: (guid(), any()) -> string()).
@@ -51,8 +53,14 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE,
                           [update_disk_serial()], []).
 
+%% We use this to detect a (possibly rather old) Mnesia directory,
+%% since it has existed since at least 1.7.0 (as far back as I cared
+%% to go).
+filename() ->
+    filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME).
+
 update_disk_serial() ->
-    Filename = filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME),
+    Filename = filename(),
     Serial = case rabbit_file:read_term_file(Filename) of
                  {ok, [Num]}     -> Num;
                  {error, enoent} -> 0;
@@ -136,11 +144,7 @@ gen_secure() ->
 %% employs base64url encoding, which is safer in more contexts than
 %% plain base64.
 string(G, Prefix) ->
-    Prefix ++ "-" ++ lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
-                                     ($\/, Acc) -> [$\_ | Acc];
-                                     ($\=, Acc) -> Acc;
-                                     (Chr, Acc) -> [Chr | Acc]
-                                 end, [], base64:encode_to_string(G)).
+    Prefix ++ "-" ++ rabbit_misc:base64url(G).
 
 binary(G, Prefix) ->
     list_to_binary(string(G, Prefix)).

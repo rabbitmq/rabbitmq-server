@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
+<refentry lang="en">
+    <refentryinfo>
+        <productname>RabbitMQ Server</productname>
+        <authorgroup>
+            <corpauthor>The RabbitMQ Team &lt;<ulink url="mailto:info@rabbitmq.com"><email>info@rabbitmq.com</email></ulink>&gt;</corpauthor>
+        </authorgroup>
+    </refentryinfo>
+
+    <refmeta>
+        <refentrytitle>rabbitmq-echopid.bat</refentrytitle>
+        <refmiscinfo class="manual">RabbitMQ Server</refmiscinfo>
+    </refmeta>
+
+    <refnamediv>
+        <refname>rabbitmq-echopid.bat</refname>
+        <refpurpose>return the process id of the Erlang runtime hosting RabbitMQ</refpurpose>
+    </refnamediv>
+
+    <refsynopsisdiv>
+        <cmdsynopsis>
+          <command>rabbitmq-echopid.bat</command>
+          <arg choice="req">sname</arg>
+        </cmdsynopsis>
+    </refsynopsisdiv>
+
+    <refsect1>
+        <title>Description</title>
+        <para>
+           RabbitMQ is an implementation of AMQP, the emerging
+           standard for high performance enterprise messaging. The
+           RabbitMQ server is a robust and scalable implementation of
+           an AMQP broker.
+        </para>
+        <para>
+          Running <command>rabbitmq-echopid</command> will attempt to
+          discover and echo the process id (PID) of the Erlang runtime
+          process (erl.exe) that is hosting RabbitMQ. To allow erl.exe
+          time to start up and load RabbitMQ, the script will wait for
+          ten seconds before timing out if a suitable PID cannot be
+          found.
+        </para>
+        <para>
+          If a PID is discovered, the script will echo it to stdout
+          before exiting with a ERRORLEVEL of 0. If no PID is
+          discovered before the timeout, nothing is written to stdout
+          and the script exits setting ERRORLEVEL to 1.
+        </para>
+        <para>
+          Note that this script only exists on Windows due to the need
+          to wait for erl.exe and possibly time-out. To obtain the PID
+          on Unix set RABBITMQ_PID_FILE before starting
+          rabbitmq-server and do not use "-detached".
+        </para>
+    </refsect1>
+
+    <refsect1>
+      <title>Options</title>
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><arg choice="req">sname</arg></cmdsynopsis></term>
+          <listitem>
+            <para role="usage">
+The short-name form of the RabbitMQ node name.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect1>
+</refentry>

@@ -17,7 +17,7 @@ BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS) plugins
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
-WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
+WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
 USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 QC_MODULES := rabbit_backing_queue_qc
@@ -42,9 +42,9 @@ BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
-# our type specs rely on features and bug fixes in dialyzer that are
-# only available in R14B03 upwards (R14B03 is erts 5.8.4)
-USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8,4]), halt().')
+# our type specs rely on callback specs, which are available in R15B
+# upwards.
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,9]), halt().')
 endif
 
 ifndef USE_PROPER_QC
@@ -103,7 +103,7 @@ endif
 
 all: $(TARGETS)
 
-.PHONY: plugins
+.PHONY: plugins check-xref
 ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
 	[ -d "$(PLUGINS_SRC_DIR)/rabbitmq-server" ] || ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
@@ -111,9 +111,19 @@ plugins:
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIR)" VERSION=$(VERSION)
 	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIR)/README
 	rm -f $(PLUGINS_DIR)/rabbit_common*.ez
+
+# add -q to remove printout of warnings....
+check-xref: $(BEAM_TARGETS) $(PLUGINS_DIR)
+	rm -rf lib
+	./check_xref $(PLUGINS_DIR) -q
+
 else
 plugins:
 # Not building plugins
+
+check-xref:
+	$(info xref checks are disabled)
+
 endif
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -137,7 +147,7 @@ $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_c
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	dialyzer --plt $(BASIC_PLT) --no_native --fullpath \
-	  -Wrace_conditions $(BEAM_TARGETS)
+	   $(BEAM_TARGETS)
 
 # rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
 create-plt: $(RABBIT_PLT)
@@ -206,8 +216,8 @@ run-qc: all
 start-background-node: all
 	-rm -f $(RABBITMQ_MNESIA_DIR).pid
 	mkdir -p $(RABBITMQ_MNESIA_DIR)
-	setsid sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" &
-	sleep 1
+	nohup sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" > /dev/null &
+	./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_MNESIA_DIR).pid kernel
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
@@ -216,12 +226,12 @@ start-rabbit-on-node: all
 stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
-set-memory-alarm: all
-	echo "alarm_handler:set_alarm({{vm_memory_high_watermark, node()}, []})." | \
+set-resource-alarm: all
+	echo "rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
 	$(ERL_CALL)
 
-clear-memory-alarm: all
-	echo "alarm_handler:clear_alarm({vm_memory_high_watermark, node()})." | \
+clear-resource-alarm: all
+	echo "rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()})." | \
 	$(ERL_CALL)
 
 stop-node:
@@ -316,7 +326,7 @@ install_bin: all install_dirs
 	cp -r ebin include LICENSE* INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins; do \
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins rabbitmq-defaults; do \
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
@@ -350,7 +360,7 @@ $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 # automatic dependency generation for that target (e.g. cleandb).
 
 # We want to load the dep file if *any* target *doesn't* contain
-# "clean" - i.e. if removing all clean-like targets leaves something
+# "clean" - i.e. if removing all clean-like targets leaves something.
 
 ifeq "$(MAKECMDGOALS)" ""
 TESTABLEGOALS:=$(.DEFAULT_GOAL)

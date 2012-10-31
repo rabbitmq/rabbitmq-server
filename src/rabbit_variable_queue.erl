@@ -16,13 +16,12 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         dropwhile/2, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
-         set_ram_duration_target/2, ram_duration/1,
-         needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3,
-         multiple_routing_keys/0]).
+-export([init/3, terminate/2, delete_and_terminate/2, purge/1,
+         publish/4, publish_delivered/4, discard/3, drain_confirmed/1,
+         dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
+         depth/1, set_ram_duration_target/2, ram_duration/1,
+         needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
+         is_duplicate/2, multiple_routing_keys/0, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -324,7 +323,6 @@
 
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: seq_id()).
 
 -type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
                           ingress     :: {timestamp(), non_neg_integer()},
@@ -336,6 +334,13 @@
                           count        :: non_neg_integer(),
                           end_seq_id   :: non_neg_integer() }).
 
+%% The compiler (rightfully) complains that ack() and state() are
+%% unused. For this reason we duplicate a -spec from
+%% rabbit_backing_queue with the only intent being to remove
+%% warnings. The problem here is that we can't parameterise the BQ
+%% behaviour by these two types as we would like to. We still leave
+%% these here for documentation purposes.
+-type(ack() :: seq_id()).
 -type(state() :: #vqstate {
              q1                    :: ?QUEUE:?QUEUE(),
              q2                    :: ?QUEUE:?QUEUE(),
@@ -351,7 +356,7 @@
              durable               :: boolean(),
              transient_threshold   :: non_neg_integer(),
 
-             async_callback        :: async_callback(),
+             async_callback        :: rabbit_backing_queue:async_callback(),
 
              len                   :: non_neg_integer(),
              persistent_count      :: non_neg_integer(),
@@ -369,8 +374,8 @@
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              ack_rates             :: rates() }).
-
--include("rabbit_backing_queue_spec.hrl").
+%% Duplicated from rabbit_backing_queue
+-spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 -spec(multiple_routing_keys/0 :: () -> 'ok').
 
@@ -540,17 +545,8 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                                           ram_msg_count    = RamMsgCount + 1,
                                           unconfirmed      = UC1 })).
 
-publish_delivered(false, #basic_message { id = MsgId },
-                  #message_properties { needs_confirming = NeedsConfirming },
-                  _ChPid, State = #vqstate { async_callback = Callback,
-                                             len = 0 }) ->
-    case NeedsConfirming of
-        true  -> blind_confirm(Callback, gb_sets:singleton(MsgId));
-        false -> ok
-    end,
-    {undefined, a(State)};
-publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
-                                               id = MsgId },
+publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
+                                         id = MsgId },
                   MsgProps = #message_properties {
                     needs_confirming = NeedsConfirming },
                   _ChPid, State = #vqstate { len              = 0,
@@ -574,6 +570,8 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                   persistent_count = PCount1,
                                   unconfirmed      = UC1 }))}.
 
+discard(_MsgId, _ChPid, State) -> State.
+
 drain_confirmed(State = #vqstate { confirmed = C }) ->
     case gb_sets:is_empty(C) of
         true  -> {[], State}; %% common case
@@ -581,15 +579,27 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
                                         confirmed = gb_sets:new() }}
     end.
 
-dropwhile(Pred, State) ->
+dropwhile(Pred, AckRequired, State) -> dropwhile(Pred, AckRequired, State, []).
+
+dropwhile(Pred, AckRequired, State, Msgs) ->
+    End = fun(Next, S) when AckRequired -> {Next, lists:reverse(Msgs), S};
+             (Next, S)                  -> {Next, undefined, S}
+          end,
     case queue_out(State) of
         {empty, State1} ->
-            a(State1);
+            End(undefined, a(State1));
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
-            case Pred(MsgProps) of
-                true ->  {_, State2} = internal_fetch(false, MsgStatus, State1),
-                         dropwhile(Pred, State2);
-                false -> a(in_r(MsgStatus, State1))
+            case {Pred(MsgProps), AckRequired} of
+                {true, true} ->
+                    {MsgStatus1, State2} = read_msg(MsgStatus, State1),
+                    {{Msg, _, AckTag, _}, State3} =
+                         internal_fetch(true, MsgStatus1, State2),
+                    dropwhile(Pred, AckRequired, State3, [{Msg, AckTag} | Msgs]);
+                {true, false} ->
+                    {_, State2} = internal_fetch(false, MsgStatus, State1),
+                    dropwhile(Pred, AckRequired, State2, undefined);
+                {false, _} ->
+                    End(MsgProps, a(in_r(MsgStatus, State1)))
             end
     end.
 
@@ -628,11 +638,22 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-requeue(AckTags, #vqstate { delta = Delta,
-                                    q3         = Q3,
-                                    q4         = Q4,
-                                    in_counter = InCounter,
-                                    len        = Len } = State) ->
+fold(undefined, State, _AckTags) ->
+    State;
+fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
+    lists:foldl(
+      fun(SeqId, State1) ->
+              {MsgStatus, State2} =
+                  read_msg(gb_trees:get(SeqId, PA), State1),
+              MsgFun(MsgStatus#msg_status.msg, SeqId),
+              State2
+      end, State, AckTags).
+
+requeue(AckTags, #vqstate { delta      = Delta,
+                            q3         = Q3,
+                            q4         = Q4,
+                            in_counter = InCounter,
+                            len        = Len } = State) ->
     {SeqIds,  Q4a, MsgIds,  State1} = queue_merge(lists:sort(AckTags), Q4, [],
                                                   beta_limit(Q3),
                                                   fun publish_alpha/2, State),
@@ -652,6 +673,9 @@ requeue(AckTags, #vqstate { delta = Delta,
 len(#vqstate { len = Len }) -> Len.
 
 is_empty(State) -> 0 == len(State).
+
+depth(State = #vqstate { pending_ack = Ack }) ->
+    len(State) + gb_trees:size(Ack).
 
 set_ram_duration_target(
   DurationTarget, State = #vqstate {
@@ -731,21 +755,27 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_timeout(State) ->
-    case needs_index_sync(State) of
-        false -> case reduce_memory_use(
-                        fun (_Quota, State1) -> {0, State1} end,
-                        fun (_Quota, State1) -> State1 end,
-                        fun (_Quota, State1) -> {0, State1} end,
-                        State) of
-                     {true,  _State} -> idle;
-                     {false, _State} -> false
-                 end;
-        true  -> timed
+needs_timeout(State = #vqstate { index_state = IndexState }) ->
+    case must_sync_index(State) of
+        true  -> timed;
+        false ->
+            case rabbit_queue_index:needs_sync(IndexState) of
+                true  -> idle;
+                false -> case reduce_memory_use(
+                                fun (_Quota, State1) -> {0, State1} end,
+                                fun (_Quota, State1) -> State1 end,
+                                fun (_Quota, State1) -> {0, State1} end,
+                                State) of
+                             {true,  _State} -> idle;
+                             {false, _State} -> false
+                         end
+            end
     end.
 
-timeout(State) ->
-    a(reduce_memory_use(confirm_commit_index(State))).
+timeout(State = #vqstate { index_state = IndexState }) ->
+    IndexState1 = rabbit_queue_index:sync(IndexState),
+    State1 = State #vqstate { index_state = IndexState1 },
+    a(reduce_memory_use(State1)).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
@@ -783,8 +813,6 @@ status(#vqstate {
 invoke(?MODULE, Fun, State) -> Fun(?MODULE, State).
 
 is_duplicate(_Msg, State) -> {false, State}.
-
-discard(_Msg, _ChPid, State) -> State.
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -837,9 +865,10 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
-           MsgProps) ->
+           MsgProps = #message_properties { delivered = Delivered }) ->
+    %% TODO would it make sense to remove #msg_status.is_delivered?
     #msg_status { seq_id = SeqId, msg_id = MsgId, msg = Msg,
-                  is_persistent = IsPersistent, is_delivered = false,
+                  is_persistent = IsPersistent, is_delivered = Delivered,
                   msg_on_disk = false, index_on_disk = false,
                   msg_props = MsgProps }.
 
@@ -1262,24 +1291,18 @@ find_persistent_count(LensByStore) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-confirm_commit_index(State = #vqstate { index_state = IndexState }) ->
-    case needs_index_sync(State) of
-        true  -> State #vqstate {
-                   index_state = rabbit_queue_index:sync(IndexState) };
-        false -> State
-    end.
-
 record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
                                              msg_indices_on_disk = MIOD,
                                              unconfirmed         = UC,
                                              confirmed           = C }) ->
-    State #vqstate { msgs_on_disk        = gb_sets:difference(MOD,  MsgIdSet),
-                     msg_indices_on_disk = gb_sets:difference(MIOD, MsgIdSet),
-                     unconfirmed         = gb_sets:difference(UC,   MsgIdSet),
-                     confirmed           = gb_sets:union     (C,    MsgIdSet) }.
+    State #vqstate {
+      msgs_on_disk        = rabbit_misc:gb_sets_difference(MOD,  MsgIdSet),
+      msg_indices_on_disk = rabbit_misc:gb_sets_difference(MIOD, MsgIdSet),
+      unconfirmed         = rabbit_misc:gb_sets_difference(UC,   MsgIdSet),
+      confirmed           = gb_sets:union(C, MsgIdSet) }.
 
-needs_index_sync(#vqstate { msg_indices_on_disk = MIOD,
-                            unconfirmed = UC }) ->
+must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
+                           unconfirmed = UC }) ->
     %% If UC is empty then by definition, MIOD and MOD are also empty
     %% and there's nothing that can be pending a sync.
 
@@ -1293,12 +1316,9 @@ needs_index_sync(#vqstate { msg_indices_on_disk = MIOD,
     %% subtraction.
     not (gb_sets:is_empty(UC) orelse gb_sets:is_subset(UC, MIOD)).
 
-blind_confirm(Callback, MsgIdSet) ->
-    Callback(?MODULE,
-             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end).
-
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
-    blind_confirm(Callback, MsgIdSet);
+    Callback(?MODULE,
+             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->
     Callback(?MODULE,
              fun (?MODULE, State = #vqstate { msgs_on_disk        = MOD,
@@ -1438,16 +1458,14 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
             %% determined based on which is growing faster. Whichever
             %% comes second may very well get a quota of 0 if the
             %% first manages to push out the max number of messages.
-            S1 -> {_, State2} =
-                      lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
-                                          ReduceFun(QuotaN, StateN)
-                                  end,
-                                  {S1, State},
-                                  case (AvgAckIngress - AvgAckEgress) >
-                                      (AvgIngress - AvgEgress) of
-                                      true  -> [AckFun, AlphaBetaFun];
-                                      false -> [AlphaBetaFun, AckFun]
-                                  end),
+            S1 -> Funs = case ((AvgAckIngress - AvgAckEgress) >
+                                   (AvgIngress - AvgEgress)) of
+                             true  -> [AckFun, AlphaBetaFun];
+                             false -> [AlphaBetaFun, AckFun]
+                         end,
+                  {_, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
+                                                    ReduceFun(QuotaN, StateN)
+                                            end, {S1, State}, Funs),
                   {true, State2}
         end,
 

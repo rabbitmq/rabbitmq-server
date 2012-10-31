@@ -105,7 +105,9 @@ spawn_member() ->
               random:seed(MegaSecs, Secs, MicroSecs),
               %% start up delay of no more than 10 seconds
               timer:sleep(random:uniform(10000)),
-              {ok, Pid} = gm:start_link(?MODULE, ?MODULE, []),
+              {ok, Pid} = gm:start_link(
+                            ?MODULE, ?MODULE, [],
+                            fun rabbit_misc:execute_mnesia_transaction/1),
               Start = random:uniform(10000),
               send_loop(Pid, Start, Start + random:uniform(10000)),
               gm:leave(Pid),

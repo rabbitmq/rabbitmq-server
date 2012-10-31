@@ -1240,7 +1240,8 @@ client_confirm(CRef, MsgIds, ActionTaken, State) ->
               case dict:find(CRef, CTM) of
                   {ok, Gs} -> MsgOnDiskFun(gb_sets:intersection(Gs, MsgIds),
                                            ActionTaken),
-                              MsgIds1 = gb_sets:difference(Gs, MsgIds),
+                              MsgIds1 = rabbit_misc:gb_sets_difference(
+                                          Gs, MsgIds),
                               case gb_sets:is_empty(MsgIds1) of
                                   true  -> dict:erase(CRef, CTM);
                                   false -> dict:store(CRef, MsgIds1, CTM)
@@ -1393,7 +1394,7 @@ filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 
 filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 
-list_sorted_file_names(Dir, Ext) ->
+list_sorted_filenames(Dir, Ext) ->
     lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
                filelib:wildcard("*" ++ Ext, Dir)).
 
@@ -1530,8 +1531,8 @@ count_msg_refs(Gen, Seed, State) ->
     end.
 
 recover_crashed_compactions(Dir) ->
-    FileNames =    list_sorted_file_names(Dir, ?FILE_EXTENSION),
-    TmpFileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP),
+    FileNames =    list_sorted_filenames(Dir, ?FILE_EXTENSION),
+    TmpFileNames = list_sorted_filenames(Dir, ?FILE_EXTENSION_TMP),
     lists:foreach(
       fun (TmpFileName) ->
               NonTmpRelatedFileName =
@@ -1608,7 +1609,7 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     {ok, Pid} = gatherer:start_link(),
     case [filename_to_num(FileName) ||
-             FileName <- list_sorted_file_names(Dir, ?FILE_EXTENSION)] of
+             FileName <- list_sorted_filenames(Dir, ?FILE_EXTENSION)] of
         []     -> build_index(Pid, undefined, [State #msstate.current_file],
                               State);
         Files  -> {Offset, State1} = build_index(Pid, undefined, Files, State),
@@ -2022,7 +2023,7 @@ transform_dir(BaseDir, Store, TransformFun) ->
     CopyFile = fun (Src, Dst) -> {ok, _Bytes} = file:copy(Src, Dst), ok end,
     case filelib:is_dir(TmpDir) of
         true  -> throw({error, transform_failed_previously});
-        false -> FileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+        false -> FileList = list_sorted_filenames(Dir, ?FILE_EXTENSION),
                  foreach_file(Dir, TmpDir, TransformFile,     FileList),
                  foreach_file(Dir,         fun file:delete/1, FileList),
                  foreach_file(TmpDir, Dir, CopyFile,          FileList),

@@ -192,7 +192,7 @@ terminate(_, _) ->
     ok.
 
 code_change(_, State, _) ->
-    State.
+    {ok, State}.
 
 %%----------------------------------------------------------------------------
 %% Internal plumbing

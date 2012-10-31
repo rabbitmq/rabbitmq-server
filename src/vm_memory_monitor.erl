@@ -27,7 +27,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1]).
+-export([start_link/1, start_link/3]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -49,9 +49,11 @@
 
 -record(state, {total_memory,
                 memory_limit,
+                memory_fraction,
                 timeout,
                 timer,
-                alarmed
+                alarmed,
+                alarm_funs
                }).
 
 %%----------------------------------------------------------------------------
@@ -59,6 +61,8 @@
 -ifdef(use_specs).
 
 -spec(start_link/1 :: (float()) -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/3 :: (float(), fun ((any()) -> 'ok'),
+                       fun ((any()) -> 'ok')) -> rabbit_types:ok_pid_or_error()).
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
 -spec(get_vm_limit/0 :: () -> non_neg_integer()).
 -spec(get_check_interval/0 :: () -> non_neg_integer()).
@@ -73,11 +77,9 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-get_total_memory() ->
-    get_total_memory(os:type()).
+get_total_memory() -> get_total_memory(os:type()).
 
-get_vm_limit() ->
-    get_vm_limit(os:type()).
+get_vm_limit() -> get_vm_limit(os:type()).
 
 get_check_interval() ->
     gen_server:call(?MODULE, get_check_interval, infinity).
@@ -99,24 +101,27 @@ get_memory_limit() ->
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-start_link(Args) ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
+start_link(MemFraction) ->
+    start_link(MemFraction,
+               fun alarm_handler:set_alarm/1, fun alarm_handler:clear_alarm/1).
 
-init([MemFraction]) ->
+start_link(MemFraction, AlarmSet, AlarmClear) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE,
+                          [MemFraction, {AlarmSet, AlarmClear}], []).
+
+init([MemFraction, AlarmFuns]) ->
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
-    State = #state { timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
-                     timer = TRef,
-                     alarmed = false},
+    State = #state { timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
+                     timer      = TRef,
+                     alarmed    = false,
+                     alarm_funs = AlarmFuns },
     {ok, set_mem_limits(State, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From, State) ->
-    {reply, State#state.memory_limit / State#state.total_memory, State};
+    {reply, State#state.memory_fraction, State};
 
 handle_call({set_vm_memory_high_watermark, MemFraction}, _From, State) ->
-    State1 = set_mem_limits(State, MemFraction),
-    error_logger:info_msg("Memory alarm changed to ~p, ~p bytes.~n",
-                          [MemFraction, State1#state.memory_limit]),
-    {reply, ok, State1};
+    {reply, ok, set_mem_limits(State, MemFraction)};
 
 handle_call(get_check_interval, _From, State) ->
     {reply, State#state.timeout, State};
@@ -168,32 +173,41 @@ set_mem_limits(State, MemFraction) ->
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
         end,
-    MemLim = get_mem_limit(MemFraction, TotalMemory),
+    UsableMemory = case get_vm_limit() of
+                       Limit when Limit < TotalMemory ->
+                           error_logger:warning_msg(
+                             "Only ~pMB of ~pMB memory usable due to "
+                             "limited address space.~n",
+                             [trunc(V/?ONE_MB) || V <- [Limit, TotalMemory]]),
+                           Limit;
+                       _ ->
+                           TotalMemory
+                   end,
+    MemLim = trunc(MemFraction * UsableMemory),
     error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
                           [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
-    internal_update(State #state { total_memory = TotalMemory,
-                                   memory_limit = MemLim }).
+    internal_update(State #state { total_memory    = TotalMemory,
+                                   memory_limit    = MemLim,
+                                   memory_fraction = MemFraction}).
 
 internal_update(State = #state { memory_limit = MemLimit,
-                                 alarmed = Alarmed}) ->
+                                 alarmed      = Alarmed,
+                                 alarm_funs   = {AlarmSet, AlarmClear} }) ->
     MemUsed = erlang:memory(total),
     NewAlarmed = MemUsed > MemLimit,
     case {Alarmed, NewAlarmed} of
-        {false, true} ->
-            emit_update_info(set, MemUsed, MemLimit),
-            alarm_handler:set_alarm({{vm_memory_high_watermark, node()}, []});
-        {true, false} ->
-            emit_update_info(clear, MemUsed, MemLimit),
-            alarm_handler:clear_alarm({vm_memory_high_watermark, node()});
-        _ ->
-            ok
+        {false, true} -> emit_update_info(set, MemUsed, MemLimit),
+                         AlarmSet({{resource_limit, memory, node()}, []});
+        {true, false} -> emit_update_info(clear, MemUsed, MemLimit),
+                         AlarmClear({resource_limit, memory, node()});
+        _             -> ok
     end,
     State #state {alarmed = NewAlarmed}.
 
-emit_update_info(State, MemUsed, MemLimit) ->
+emit_update_info(AlarmState, MemUsed, MemLimit) ->
     error_logger:info_msg(
       "vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
-      [State, MemUsed, MemLimit]).
+      [AlarmState, MemUsed, MemLimit]).
 
 start_timer(Timeout) ->
     {ok, TRef} = timer:send_interval(Timeout, update),
@@ -207,7 +221,7 @@ get_vm_limit({win32,_OSname}) ->
         8 -> 8*1024*1024*1024*1024      %% 8 TB for 64 bits  2^42
     end;
 
-%% On a 32-bit machine, if you're using more than 2 gigs of RAM you're
+%% On a 32-bit machine, if you're using more than 4 gigs of RAM you're
 %% in big trouble anyway.
 get_vm_limit(_OsType) ->
     case erlang:system_info(wordsize) of
@@ -215,10 +229,6 @@ get_vm_limit(_OsType) ->
         8 -> 256*1024*1024*1024*1024    %% 256 TB for 64 bits 2^48
              %%http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
-
-get_mem_limit(MemFraction, TotalMemory) ->
-    AvMem = lists:min([TotalMemory, get_vm_limit()]),
-    trunc(AvMem * MemFraction).
 
 %%----------------------------------------------------------------------------
 %% Internal Helpers

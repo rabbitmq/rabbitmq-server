@@ -33,16 +33,14 @@
                  gm,
                  monitors,
                  death_fun,
-                 length_fun
+                 depth_fun
                }).
-
--define(ONE_SECOND, 1000).
 
 -ifdef(use_specs).
 
 -spec(start_link/4 :: (rabbit_types:amqqueue(), pid() | 'undefined',
                        rabbit_mirror_queue_master:death_fun(),
-                       rabbit_mirror_queue_master:length_fun()) ->
+                       rabbit_mirror_queue_master:depth_fun()) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(get_gm/1 :: (pid()) -> pid()).
 -spec(ensure_monitoring/2 :: (pid(), [pid()]) -> 'ok').
@@ -103,19 +101,25 @@
 %% channel during a publish, only some of the mirrors may receive that
 %% publish. As a result of this problem, the messages broadcast over
 %% the gm contain published content, and thus slaves can operate
-%% successfully on messages that they only receive via the gm. The key
-%% purpose of also sending messages directly from the channels to the
-%% slaves is that without this, in the event of the death of the
-%% master, messages could be lost until a suitable slave is promoted.
+%% successfully on messages that they only receive via the gm.
 %%
-%% However, that is not the only reason. For example, if confirms are
-%% in use, then there is no guarantee that every slave will see the
-%% delivery with the same msg_seq_no. As a result, the slaves have to
-%% wait until they've seen both the publish via gm, and the publish
-%% via the channel before they have enough information to be able to
-%% perform the publish to their own bq, and subsequently issue the
-%% confirm, if necessary. Either form of publish can arrive first, and
-%% a slave can be upgraded to the master at any point during this
+%% The key purpose of also sending messages directly from the channels
+%% to the slaves is that without this, in the event of the death of
+%% the master, messages could be lost until a suitable slave is
+%% promoted. However, that is not the only reason. A slave cannot send
+%% confirms for a message until it has seen it from the
+%% channel. Otherwise, it might send a confirm to a channel for a
+%% message that it might *never* receive from that channel. This can
+%% happen because new slaves join the gm ring (and thus receive
+%% messages from the master) before inserting themselves in the
+%% queue's mnesia record (which is what channels look at for routing).
+%% As it turns out, channels will simply ignore such bogus confirms,
+%% but relying on that would introduce a dangerously tight coupling.
+%%
+%% Hence the slaves have to wait until they've seen both the publish
+%% via gm, and the publish via the channel before they issue the
+%% confirm. Either form of publish can arrive first, and a slave can
+%% be upgraded to the master at any point during this
 %% process. Confirms continue to be issued correctly, however.
 %%
 %% Because the slave is a full process, it impersonates parts of the
@@ -134,25 +138,31 @@
 %% gm should be processed as normal, but fetches which are for
 %% messages the slave has never seen should be ignored. Similarly,
 %% acks for messages the slave never fetched should be
-%% ignored. Eventually, as the master is consumed from, the messages
-%% at the head of the queue which were there before the slave joined
-%% will disappear, and the slave will become fully synced with the
-%% state of the master. The detection of the sync-status of a slave is
-%% done entirely based on length: if the slave and the master both
-%% agree on the length of the queue after the fetch of the head of the
-%% queue (or a 'set_length' results in a slave having to drop some
-%% messages from the head of its queue), then the queues must be in
-%% sync. The only other possibility is that the slave's queue is
-%% shorter, and thus the fetch should be ignored. In case slaves are
-%% joined to an empty queue which only goes on to receive publishes,
-%% they start by asking the master to broadcast its length. This is
-%% enough for slaves to always be able to work out when their head
-%% does not differ from the master (and is much simpler and cheaper
-%% than getting the master to hang on to the guid of the msg at the
-%% head of its queue). When a slave is promoted to a master, it
-%% unilaterally broadcasts its length, in order to solve the problem
-%% of length requests from new slaves being unanswered by a dead
-%% master.
+%% ignored. Similarly, we don't republish rejected messages that we
+%% haven't seen. Eventually, as the master is consumed from, the
+%% messages at the head of the queue which were there before the slave
+%% joined will disappear, and the slave will become fully synced with
+%% the state of the master.
+%%
+%% The detection of the sync-status is based on the depth of the BQs,
+%% where the depth is defined as the sum of the length of the BQ (as
+%% per BQ:len) and the messages pending an acknowledgement. When the
+%% depth of the slave is equal to the master's, then the slave is
+%% synchronised. We only store the difference between the two for
+%% simplicity. Comparing the length is not enough since we need to
+%% take into account rejected messages which will make it back into
+%% the master queue but can't go back in the slave, since we don't
+%% want "holes" in the slave queue. Note that the depth, and the
+%% length likewise, must always be shorter on the slave - we assert
+%% that in various places. In case slaves are joined to an empty queue
+%% which only goes on to receive publishes, they start by asking the
+%% master to broadcast its depth. This is enough for slaves to always
+%% be able to work out when their head does not differ from the master
+%% (and is much simpler and cheaper than getting the master to hang on
+%% to the guid of the msg at the head of its queue). When a slave is
+%% promoted to a master, it unilaterally broadcasts its depth, in
+%% order to solve the problem of depth requests from new slaves being
+%% unanswered by a dead master.
 %%
 %% Obviously, due to the async nature of communication across gm, the
 %% slaves can fall behind. This does not matter from a sync pov: if
@@ -293,15 +303,15 @@
 %% if they have no mirrored content at all. This is not surprising: to
 %% achieve anything more sophisticated would require the master and
 %% recovering slave to be able to check to see whether they agree on
-%% the last seen state of the queue: checking length alone is not
+%% the last seen state of the queue: checking depth alone is not
 %% sufficient in this case.
 %%
 %% For more documentation see the comments in bug 23554.
 %%
 %%----------------------------------------------------------------------------
 
-start_link(Queue, GM, DeathFun, LengthFun) ->
-    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, LengthFun], []).
+start_link(Queue, GM, DeathFun, DepthFun) ->
+    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, DepthFun], []).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
@@ -313,10 +323,12 @@ ensure_monitoring(CPid, Pids) ->
 %% gen_server
 %% ---------------------------------------------------------------------------
 
-init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
+init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
     GM1 = case GM of
               undefined ->
-                  {ok, GM2} = gm:start_link(QueueName, ?MODULE, [self()]),
+                  {ok, GM2} = gm:start_link(
+                                QueueName, ?MODULE, [self()],
+                                fun rabbit_misc:execute_mnesia_transaction/1),
                   receive {joined, GM2, _Members} ->
                           ok
                   end,
@@ -325,12 +337,11 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
                   true = link(GM),
                   GM
           end,
-    ensure_gm_heartbeat(),
     {ok, #state { q          = Q,
                   gm         = GM1,
-                  monitors   = dict:new(),
+                  monitors   = pmon:new(),
                   death_fun  = DeathFun,
-                  length_fun = LengthFun },
+                  depth_fun  = DepthFun },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -340,7 +351,7 @@ handle_call(get_gm, _From, State = #state { gm = GM }) ->
 handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName, pid = MPid } })
   when node(MPid) =:= node() ->
-    case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
+    case rabbit_mirror_queue_misc:remove_from_queue(QueueName, MPid, Deaths) of
         {ok, MPid, DeadPids} ->
             rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName,
                                                    DeadPids),
@@ -349,34 +360,23 @@ handle_cast({gm_deaths, Deaths},
             {stop, normal, State}
     end;
 
-handle_cast(request_length, State = #state { length_fun = LengthFun }) ->
-    ok = LengthFun(),
+handle_cast(request_depth, State = #state { depth_fun = DepthFun }) ->
+    ok = DepthFun(),
     noreply(State);
 
-handle_cast({ensure_monitoring, Pids},
-            State = #state { monitors = Monitors }) ->
-    Monitors1 =
-        lists:foldl(fun (Pid, MonitorsN) ->
-                            case dict:is_key(Pid, MonitorsN) of
-                                true  -> MonitorsN;
-                                false -> MRef = erlang:monitor(process, Pid),
-                                         dict:store(Pid, MRef, MonitorsN)
-                            end
-                    end, Monitors, Pids),
-    noreply(State #state { monitors = Monitors1 }).
+handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
+    noreply(State #state { monitors = pmon:monitor_all(Pids, Mons) });
 
-handle_info(send_gm_heartbeat, State = #state{gm = GM}) ->
-    gm:broadcast(GM, heartbeat),
-    ensure_gm_heartbeat(),
-    noreply(State);
+handle_cast({delete_and_terminate, Reason}, State) ->
+    {stop, Reason, State}.
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
-            State = #state { monitors  = Monitors,
+            State = #state { monitors  = Mons,
                              death_fun = DeathFun }) ->
-    noreply(case dict:is_key(Pid, Monitors) of
+    noreply(case pmon:is_monitored(Pid, Mons) of
                 false -> State;
                 true  -> ok = DeathFun(Pid),
-                         State #state { monitors = dict:erase(Pid, Monitors) }
+                         State #state { monitors = pmon:erase(Pid, Mons) }
             end);
 
 handle_info(Msg, State) ->
@@ -405,12 +405,13 @@ members_changed([_CPid], _Births, []) ->
 members_changed([CPid], _Births, Deaths) ->
     ok = gen_server2:cast(CPid, {gm_deaths, Deaths}).
 
-handle_msg([_CPid], _From, heartbeat) ->
-    ok;
-handle_msg([CPid], _From, request_length = Msg) ->
+handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
+handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
+    ok = gen_server2:cast(CPid, Msg),
+    {stop, {shutdown, ring_shutdown}};
 handle_msg([_CPid], _From, _Msg) ->
     ok.
 
@@ -423,6 +424,3 @@ noreply(State) ->
 
 reply(Reply, State) ->
     {reply, Reply, State, hibernate}.
-
-ensure_gm_heartbeat() ->
-    erlang:send_after(?ONE_SECOND, self(), send_gm_heartbeat).

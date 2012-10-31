@@ -10,11 +10,13 @@
 # Provides:          rabbitmq-server
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
-# Default-Start:     3 4 5
+# Default-Start:     3 5
 # Default-Stop:      0 1 2 6
 # Description:       RabbitMQ broker
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
+
+@FUNCTION_LIBRARY@
 
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 NAME=rabbitmq-server
@@ -26,13 +28,16 @@ ROTATE_SUFFIX=
 INIT_LOG_DIR=/var/log/rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
 
-LOCK_FILE= # This is filled in when building packages
+START_PROG= # Set when building package
+LOCK_FILE=/var/lock/subsys/$NAME
 
 test -x $DAEMON || exit 0
 test -x $CONTROL || exit 0
 
 RETVAL=0
 set -e
+
+[ -f /etc/default/${NAME} ] && . /etc/default/${NAME}
 
 ensure_pid_dir () {
     PID_DIR=`dirname ${PID_FILE}`
@@ -56,7 +61,7 @@ start_rabbitmq () {
         RETVAL=0
         ensure_pid_dir
         set +e
-        RABBITMQ_PID_FILE=$PID_FILE setsid $DAEMON \
+        RABBITMQ_PID_FILE=$PID_FILE $START_PROG $DAEMON \
             > "${INIT_LOG_DIR}/startup_log" \
             2> "${INIT_LOG_DIR}/startup_err" \
             0<&- &
