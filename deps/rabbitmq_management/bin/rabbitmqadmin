@@ -25,6 +25,7 @@ from ConfigParser import Error as ConfigParserError
 from optparse import OptionParser, TitledHelpFormatter
 import httplib
 import urllib
+import urlparse
 import base64
 import json
 import os
@@ -370,16 +371,16 @@ class Management:
         self.args = args
 
     def get(self, path):
-        return self.http("GET", path, "")
+        return self.http("GET", "/api%s" % path, "")
 
     def put(self, path, body):
-        return self.http("PUT", path, body)
+        return self.http("PUT", "/api%s" % path, body)
 
     def post(self, path, body):
-        return self.http("POST", path, body)
+        return self.http("POST", "/api%s" % path, body)
 
     def delete(self, path):
-        return self.http("DELETE", path, "")
+        return self.http("DELETE", "/api%s" % path, "")
 
     def http(self, method, path, body):
         if self.options.ssl:
@@ -396,7 +397,7 @@ class Management:
         if body != "":
             headers["Content-Type"] = "application/json"
         try:
-            conn.request(method, "/api%s" % path, body, headers)
+            conn.request(method, path, body, headers)
         except socket.error, e:
             die("Could not connect: {0}".format(e))
         resp = conn.getresponse()
@@ -406,6 +407,12 @@ class Management:
             die("Access refused: {0}".format(path))
         if resp.status == 404:
             die("Not found: {0}".format(path))
+        if resp.status == 301:
+            url = urlparse.urlparse(resp.getheader('location'))
+            [host, port] = url.netloc.split(':')
+            self.options.hostname = host
+            self.options.port = int(port)
+            return self.http(method, url.path + '?' + url.query, body)
         if resp.status < 200 or resp.status > 400:
             raise Exception("Received %d %s for path %s\n%s"
                             % (resp.status, resp.reason, path, resp.read()))
