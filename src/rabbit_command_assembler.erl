@@ -90,13 +90,6 @@ process({method, MethodName, FieldsBin}, {method, Protocol}) ->
         end
     catch exit:#amqp_error{} = Reason -> {error, Reason}
     end;
-process({content_header, ClassId, _Weight, _BodySize, _PropertiesBin},
-        {method, _Protocol}) ->
-    unexpected_frame("expected method frame, "
-                     "got content header for class ~w instead", [ClassId], none);
-process({content_body, _FragmentBin}, {method, _Protocol}) ->
-    unexpected_frame("expected method frame, got content body instead", [],
-                     none);
 process({content_header, ClassId, 0, 0, PropertiesBin},
         {content_header, Method, ClassId, Protocol}) ->
     Content = empty_content(ClassId, PropertiesBin, Protocol),
@@ -107,18 +100,9 @@ process({content_header, ClassId, 0, BodySize, PropertiesBin},
     {ok, {content_body, Method, BodySize, Content, Protocol}};
 process({content_header, HeaderClassId, 0, _BodySize, _PropertiesBin},
         {content_header, Method, ClassId, _Protocol}) ->
-    unexpected_frame("expected content header for class ~w, "
+    unexpected_frame("expected content header for class ~w; "
                      "got one for class ~w instead",
                      [ClassId, HeaderClassId], Method);
-process({method, MethodName, _FieldsBin},
-        {content_header, Method, ClassId, _Protocol}) ->
-    unexpected_frame("expected content header for class ~w, "
-                     "got method frame for method ~w instead",
-                     [ClassId, MethodName], Method);
-process({content_body, _FragmentBin},
-        {content_header, Method, ClassId, _Protocol}) ->
-    unexpected_frame("expected content header for class ~w, "
-                     "got content body instead", [ClassId], Method);
 process({content_body, FragmentBin},
         {content_body, Method, RemainingSize,
          Content = #content{payload_fragments_rev = Fragments}, Protocol}) ->
@@ -128,18 +112,8 @@ process({content_body, FragmentBin},
         0  -> {ok, Method, NewContent, {method, Protocol}};
         Sz -> {ok, {content_body, Method, Sz, NewContent, Protocol}}
     end;
-process({method, MethodName, _FieldsBin},
-        {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
-    unexpected_frame("received unexpected method frame for method ~w"
-                     ", content body expected", [MethodName], Method);
-process({content_header, ClassId, _Weight, _BodySize, _PropertiesBin},
-        {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
-    unexpected_frame("expected content body, got content header for class "
-                     "~w instead", [ClassId], Method);
-process({method, MethodName, _FieldsBin},
-        {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
-    unexpected_frame("expected content body, got method frame for method "
-                     "~w instead", [MethodName], Method).
+process(Frame, State) ->
+    unexpected_frame_msg(Frame, State).
 
 %%--------------------------------------------------------------------
 
@@ -154,3 +128,28 @@ unexpected_frame(Format, Params, Method) when is_atom(Method) ->
     {error, rabbit_misc:amqp_error(unexpected_frame, Format, Params, Method)};
 unexpected_frame(Format, Params, Method) ->
     unexpected_frame(Format, Params, rabbit_misc:method_record_type(Method)).
+
+unexpected_frame_msg(Frame, State) ->
+    {ExpectedFmt, ExpectedParams, Method0} =
+        case State of
+            {method, _} ->
+                {"expected method frame; ", [], none};
+            {content_header, Method1, Class1, _} ->
+                {"expected content header frame for class ~w, method ~w; ",
+                 [Class1, Method1], Method1};
+            {content_body, Method1, BodySize1, Class1, _}  ->
+                {"expected content body frame for class ~w, method ~w, of "
+                 "size ~w; ", [Class1, Method1, BodySize1], Method1}
+        end,
+    {ReceivedFmt, ReceivedParams} =
+        case Frame of
+            {method, Method2, _} ->
+                {"got method frame for method ~w instead", [Method2]};
+            {content_header, Class2, _, BodySize2, _} ->
+                {"got content header frame for class ~w expecting body of size "
+                 "~w instead", [Class2, BodySize2]};
+            {content_body, _} ->
+                {"got content body frame instead", []}
+        end,
+    unexpected_frame(ExpectedFmt ++ ReceivedFmt,
+                     ExpectedParams ++ ReceivedParams, Method0).
