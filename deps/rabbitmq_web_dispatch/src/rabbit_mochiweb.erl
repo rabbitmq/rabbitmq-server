@@ -24,25 +24,22 @@
 %% Handler Registration
 
 %% Registers a dynamic selector and handler combination, with a link
-%% to display in lists. Assumes that context is configured; check with
-%% context_path first to make sure.
+%% to display in lists.
 register_handler(Name, Listener, Selector, Handler, Link) ->
     rabbit_mochiweb_registry:add(Name, Listener, Selector, Handler, Link).
 
 %% Methods for standard use cases
 
-%% @spec register_context_handler(Context, Path, Handler, LinkText) ->
-%% {ok, Path}
-%% @doc Registers a dynamic handler under a fixed context path, with
-%% link to display in the global context.
+%% Registers a dynamic handler under a fixed context path, with link
+%% to display in the global context.
 register_context_handler(Name, Listener, Prefix, Handler, LinkText) ->
     register_handler(
       Name, Listener, context_selector(Prefix), Handler, {Prefix, LinkText}),
     {ok, Prefix}.
 
-%% @doc Convenience function registering a fully static context to
-%% serve content from a module-relative directory, with
-%% link to display in the global context.
+%% Convenience function registering a fully static context to serve
+%% content from a module-relative directory, with link to display in
+%% the global context.
 register_static_context(Name, Listener, Prefix, Module, FSPath, LinkText) ->
     register_handler(Name, Listener,
                      context_selector(Prefix),
@@ -59,18 +56,18 @@ context_selector(Prefix) ->
             (Path == Prefix1) orelse (string:str(Path, Prefix1 ++ "/") == 1)
     end.
 
-%% Produces a handler for use with register_handler that serves
-%% up static content from a directory specified relative to the
-%% directory containing the ebin directory containing the named
-%% module's beam file.
+%% Produces a handler for use with register_handler that serves up
+%% static content from a directory specified relative to the directory
+%% containing the ebin directory containing the named module's beam
+%% file.
 static_context_handler(Prefix, Module, FSPath) ->
     {file, Here} = code:is_loaded(Module),
     ModuleRoot = filename:dirname(filename:dirname(Here)),
     LocalPath = filename:join(ModuleRoot, FSPath),
     static_context_handler(Prefix, LocalPath).
 
-%% @doc Produces a handler for use with register_handler that serves
-%% up static content from a specified directory.
+%% Produces a handler for use with register_handler that serves up
+%% static content from a specified directory.
 static_context_handler("", LocalPath) ->
     fun(Req) ->
             "/" ++ Path = Req:get(raw_path),
@@ -94,6 +91,7 @@ serve_file(Req, Path, LocalPath) ->
                          "Only GET or HEAD supported for static content"})
     end.
 
-unregister_context(Context) ->
-    rabbit_mochiweb_registry:remove(Context).
+%% The opposite of all those register_* functions.
+unregister_context(Name) ->
+    rabbit_mochiweb_registry:remove(Name).
 
