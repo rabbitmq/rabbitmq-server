@@ -353,9 +353,9 @@ table_for_resource(#resource{kind = queue})    -> rabbit_queue.
 not_found_or_absent(#resource{kind = exchange} = Name) ->
     {not_found, Name};
 not_found_or_absent(#resource{kind = queue}    = Name) ->
-    case rabbit_amqqueue:lookup_absent(Name) of
-        {error, not_found} -> {not_found, Name};
-        {ok, Q}            -> {absent, Q}
+    case rabbit_amqqueue:not_found_or_absent(Name) of
+        not_found        -> {not_found, Name};
+        {absent, _Q} = R -> R
     end.
 
 contains(Table, MatchHead) ->
