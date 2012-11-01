@@ -96,7 +96,7 @@ mainloop(ReaderPid, State) ->
     try
         mainloop1(ReaderPid, State)
     catch
-        exit:Error -> ReaderPid ! {channel_exit, #wstate.channel, Error}
+        exit:Error -> ReaderPid ! {channel_exit, State#wstate.channel, Error}
     end,
     done.
 
