@@ -18,24 +18,25 @@
 
 -behaviour(gen_server).
 
--export([start_link/1]).
--export([add/4, remove/1, set_fallback/2, lookup/2, list_all/0]).
+-export([start_link/0]).
+-export([add/5, remove/1, set_fallback/2, lookup/2, list_all/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--define(APP, rabbitmq_mochiweb).
+-define(ETS, rabbitmq_mochiweb).
 
 %% This gen_server is merely to serialise modifications to the dispatch
 %% table for listeners.
 
-start_link(ListenerSpecs) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [ListenerSpecs], []).
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-add(Context, Selector, Handler, Link) ->
-    gen_server:call(?MODULE, {add, Context, Selector, Handler, Link}, infinity).
+add(Name, Listener, Selector, Handler, Link) ->
+    gen_server:call(?MODULE, {add, Name, Listener, Selector, Handler, Link},
+                    infinity).
 
-remove(Context) ->
-    gen_server:cast(?MODULE, {remove, Context}).
+remove(Name) ->
+    gen_server:call(?MODULE, {remove, Name}, infinity).
 
 set_fallback(Listener, FallbackHandler) ->
     gen_server:call(?MODULE, {set_fallback, Listener, FallbackHandler},
@@ -53,80 +54,57 @@ lookup(Listener, Req) ->
             {lookup_failure, Err}
     end.
 
+%% This is called in a somewhat obfuscated manner in
+%% rabbit_mgmt_external_stats:rabbit_mochiweb_registry_list_all()
 list_all() ->
     gen_server:call(?MODULE, list_all, infinity).
 
 %% Callback Methods
 
-init([ListenerSpecs]) ->
-    [application:set_env(?APP, {dispatch, Listener},
-                         {[], listing_fallback_handler(Listener)})
-     || {Listener, _} <- ListenerSpecs],
+init([]) ->
+    ?ETS = ets:new(?ETS, [named_table, public]),
     {ok, undefined}.
 
-handle_call({add, Context, Selector, Handler, Link}, _From,
+handle_call({add, Name, Listener, Selector, Handler, Link}, _From,
             undefined) ->
-    ListenerSpec = {Listener, _Opts} =
-        rabbit_mochiweb:context_listener(Context),
-    rabbit_mochiweb_sup:ensure_listener(ListenerSpec),
-    case lookup_dispatch(Listener) of
-        {Selectors, Fallback} ->
-            set_dispatch(Listener,
-                         {lists:keystore(Context, 1, Selectors,
-                                         {Context, Selector, Handler, Link}),
-                         Fallback}),
-            {reply, ok, undefined};
-        Err ->
-            {stop, Err, undefined}
-    end;
+    case rabbit_mochiweb_sup:ensure_listener(Listener) of
+        new      -> ets:insert(
+                      ?ETS, {Listener, [],
+                             listing_fallback_handler(Listener)});
+        existing -> ok
+    end,
+    {Selectors, Fallback} = lookup_dispatch(Listener),
+    set_dispatch(Listener,
+                 lists:keystore(Name, 1, Selectors,
+                                 {Name, Selector, Handler, Link}),
+                 Fallback),
+    {reply, ok, undefined};
+
+handle_call({remove, Name}, _From,
+            undefined) ->
+    Listener = listener_by_name(Name),
+    {Selectors, Fallback} = lookup_dispatch(Listener),
+    Selectors1 = lists:keydelete(Name, 1, Selectors),
+    set_dispatch(Listener, Selectors1, Fallback),
+    case Selectors1 of
+        [] -> rabbit_mochiweb_sup:stop_listener(Listener);
+        _  -> ok
+    end,
+    {reply, ok, undefined};
+
 handle_call({set_fallback, Listener, FallbackHandler}, _From,
             undefined) ->
-    case lookup_dispatch(Listener) of
-        {Selectors, _OldFallback} ->
-            set_dispatch(Listener, {Selectors, FallbackHandler}),
-            {reply, ok, undefined};
-        Err ->
-            {stop, Err, undefined}
-    end;
-
-%% NB This isn't exposed by an exported procedure
-handle_call({list, Listener}, _From, undefined) ->
-    case lookup_dispatch(Listener) of
-        {Selectors, _Fallback} ->
-            {reply, [Link || {_C, _S, _H, Link} <- Selectors], undefined};
-        Err ->
-            {stop, Err, undefined}
-    end;
+    {Selectors, _OldFallback} = lookup_dispatch(Listener),
+    set_dispatch(Listener, Selectors, FallbackHandler),
+    {reply, ok, undefined};
 
 handle_call(list_all, _From, undefined) ->
-    Listeners = rabbit_mochiweb:all_listeners(),
-    Res = [{Path, Desc, proplists:get_value(Name, Listeners)} ||
-                {{dispatch, Name}, {V, _}} <- application:get_all_env(),
-                {_, _, _, {Path, Desc}} <- V],
-    {reply, Res, undefined};
+    {reply, list(), undefined};
 
 handle_call(Req, _From, State) ->
     error_logger:format("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
     {stop, unknown_request, State}.
 
-%% This is a cast since it's likely to be called from the application
-%% stop callback, i.e. by the application controller - but it calls
-%% into the application controller. We do not want to deadlock.
-handle_cast({remove, Context}, undefined) ->
-    ListenerSpec = {Listener, _Opts} =
-        rabbit_mochiweb:context_listener(Context),
-    case lookup_dispatch(Listener) of
-        {Selectors, Fallback} ->
-            Selectors1 = lists:keydelete(Context, 1, Selectors),
-            set_dispatch(Listener, {Selectors1, Fallback}),
-            case Selectors1 of
-                [] -> rabbit_mochiweb_sup:stop_listener(ListenerSpec);
-                _  -> ok
-            end,
-            {noreply, undefined};
-        Err ->
-            {stop, Err, undefined}
-    end;
 handle_cast(_, State) ->
 	{noreply, State}.
 
@@ -134,7 +112,8 @@ handle_info(_, State) ->
 	{noreply, State}.
 
 terminate(_, _) ->
-	ok.
+    true = ets:delete(?ETS),
+    ok.
 
 code_change(_, State, _) ->
 	{ok, State}.
@@ -144,21 +123,39 @@ code_change(_, State, _) ->
 %% Internal Methods
 
 lookup_dispatch(Listener) ->
-    case application:get_env(?APP, {dispatch, Listener}) of
-        {ok, Dispatch} -> Dispatch;
-        undefined      -> {no_record_for_listener, Listener}
+    case ets:lookup(?ETS, Listener) of
+        [{Listener, Selectors, Fallback}] -> {Selectors, Fallback};
+        []                                -> exit({no_record_for_listener,
+                                                   Listener})
     end.
 
-set_dispatch(Listener, Dispatch) ->
-    application:set_env(?APP, {dispatch, Listener}, Dispatch, infinity).
+set_dispatch(Listener, Selectors, Fallback) ->
+    ets:insert(?ETS, {Listener, Selectors, Fallback}).
 
 match_request([], _) ->
     no_handler;
-match_request([{_Context, Selector, Handler, _Link}|Rest], Req) ->
+match_request([{_Name, Selector, Handler, _Link}|Rest], Req) ->
     case Selector(Req) of
         true  -> Handler;
         false -> match_request(Rest, Req)
     end.
+
+list() ->
+    [{Path, Desc, Listener} || {Listener, Selectors, _F} <- ets:tab2list(?ETS),
+        {_N, _S, _H, {Path, Desc}} <- Selectors].
+
+listener_by_name(Name) ->
+    case [L || {L, S, _F} <- ets:tab2list(?ETS), contains_name(Name, S)] of
+        [Listener] -> Listener;
+        []         -> exit({not_found, Name})
+    end.
+
+contains_name(Name, Selectors) ->
+    lists:member(Name, [N || {N, _S, _H, _L} <- Selectors]).
+
+list(Listener) ->
+    {Selectors, _Fallback} = lookup_dispatch(Listener),
+    [{Path, Desc} || {_N, _S, _H, {Path, Desc}} <- Selectors].
 
 %%---------------------------------------------------------------------------
 
@@ -170,12 +167,11 @@ listing_fallback_handler(Listener) ->
                 "<body><h1>RabbitMQ Web Server</h1><p>Contexts available:</p><ul>",
             HTMLSuffix = "</ul></body></html>",
             {ReqPath, _, _} = mochiweb_util:urlsplit_path(Req:get(raw_path)),
-            Contexts = gen_server:call(?MODULE, {list, Listener}, infinity),
             List =
-                case Contexts of
+                case list(Listener) of
                     [] ->
                         "<li>No contexts installed</li>";
-                    _ ->
+                    Contexts ->
                         [handler_listing(Path, ReqPath, Desc)
                          || {Path, Desc} <- Contexts]
                 end,
