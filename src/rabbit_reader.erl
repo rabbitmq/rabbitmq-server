@@ -899,10 +899,10 @@ auth_phase(Response,
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
-i(name,               #v1{name = Name}) -> Name;
-i(host,               #v1{host = Host}) -> Host;
+i(name,               #v1{name      = Name})     -> Name;
+i(host,               #v1{host      = Host})     -> Host;
 i(peer_host,          #v1{peer_host = PeerHost}) -> PeerHost;
-i(port,               #v1{port = Port}) -> Port;
+i(port,               #v1{port      = Port})     -> Port;
 i(peer_port,          #v1{peer_port = PeerPort}) -> PeerPort;
 i(SockStat,           S) when SockStat =:= recv_oct;
                               SockStat =:= recv_cnt;
