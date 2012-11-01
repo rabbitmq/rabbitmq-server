@@ -20,7 +20,7 @@
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, async_recv/3, port_command/2, getopts/2, setopts/2, send/2,
          close/1, fast_close/1, sockname/1, peername/1, peercert/1,
-         tune_buffer_size/1, connection_string/2, rdns/2]).
+         tune_buffer_size/1, connection_string/2, socket_ends/2]).
 
 %%---------------------------------------------------------------------------
 
@@ -36,7 +36,7 @@
 -type(socket() :: port() | #ssl_socket{}).
 -type(opts() :: [{atom(), any()} |
                  {raw, non_neg_integer(), non_neg_integer(), binary()}]).
-
+-type(host_or_ip() :: binary() | inet:ip_address()).
 -spec(is_ssl/1 :: (socket()) -> boolean()).
 -spec(ssl_info/1 :: (socket())
                     -> 'nossl' | ok_val_or_error(
@@ -72,9 +72,10 @@
 -spec(tune_buffer_size/1 :: (socket()) -> ok_or_any_error()).
 -spec(connection_string/2 ::
         (socket(), 'inbound' | 'outbound') -> ok_val_or_error(string())).
--spec(rdns/2 ::
-        (socket(), 'inbound' | 'outbound') -> {binary() | 'unknown',
-                                               binary() | 'unknown'}).
+-spec(socket_ends/2 ::
+        (socket(), 'inbound' | 'outbound')
+        -> ok_val_or_error({host_or_ip(), rabbit_networking:ip_port(),
+                            host_or_ip(), rabbit_networking:ip_port()})).
 
 -endif.
 
@@ -196,38 +197,36 @@ tune_buffer_size(Sock) ->
     end.
 
 connection_string(Sock, Direction) ->
+    case socket_ends(Sock, Direction) of
+        {ok, {FromAddress, FromPort, ToAddress, ToPort}} ->
+            {ok, rabbit_misc:format(
+                   "~s:~p -> ~s:~p",
+                   [maybe_ntoab(FromAddress), FromPort,
+                    maybe_ntoab(ToAddress),   ToPort])};
+        Error ->
+            Error
+    end.
+
+socket_ends(Sock, Direction) ->
     {From, To} = sock_funs(Direction),
     case {From(Sock), To(Sock)} of
         {{ok, {FromAddress, FromPort}}, {ok, {ToAddress, ToPort}}} ->
-            {ok, rabbit_misc:format(
-                   "~s:~p -> ~s:~p",
-                   [maybe_rdns(FromAddress, Sock, From), FromPort,
-                    maybe_rdns(ToAddress,   Sock, To),   ToPort])};
+            {ok, {rdns(FromAddress), FromPort,
+                  rdns(ToAddress),   ToPort}};
         {{error, _Reason} = Error, _} ->
             Error;
         {_, {error, _Reason} = Error} ->
             Error
     end.
 
-rdns(Sock, Direction) ->
-    {From, To} = sock_funs(Direction),
-    {rdns_lookup(Sock, From), rdns_lookup(Sock, To)}.
+maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
+maybe_ntoab(Host)                     -> Host.
 
-maybe_rdns(Addr, Sock, Fun) ->
-    case rdns_lookup(Sock, Fun) of
-        unknown -> rabbit_misc:ntoab(Addr);
-        Host    -> Host
-    end.
-
-rdns_lookup(Sock, Fun) ->
+rdns(Addr) ->
     {ok, Lookup} = application:get_env(rabbit, reverse_dns_lookups),
     case Lookup of
-        true -> case Fun(Sock) of
-                    {ok, {IP, _Port}} -> list_to_binary(
-                                             rabbit_networking:tcp_host(IP));
-                    _                 -> unknown
-                end;
-        _    -> unknown
+        true -> list_to_binary(rabbit_networking:tcp_host(Addr));
+        _    -> Addr
     end.
 
 sock_funs(inbound)  -> {fun peername/1, fun sockname/1};

@@ -1282,21 +1282,14 @@
                 <listitem><para>Readable name for the connection.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>address</term>
-                <listitem><para>Server IP address.</para></listitem>
-              </varlistentry>
-              <varlistentry>
                 <term>port</term>
                 <listitem><para>Server port.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>host</term>
                 <listitem><para>Server hostname obtained via reverse
-                DNS, or 'unknown'.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>peer_address</term>
-                <listitem><para>Peer address.</para></listitem>
+                DNS, or its IP address if reverse DNS failed or was
+                not enabled.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>peer_port</term>
@@ -1305,7 +1298,8 @@
               <varlistentry>
                 <term>peer_host</term>
                 <listitem><para>Peer hostname obtained via reverse
-                DNS, or 'unknown'.</para></listitem>
+                DNS, or its IP address if reverse DNS failed or was
+                not enabled.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>ssl</term>
@@ -1424,7 +1418,7 @@
             </variablelist>
             <para>
               If no <command>connectioninfoitem</command>s are
-              specified then user, peer address, peer port, time since
+              specified then user, peer host, peer port, time since
               flow control and memory block state are displayed.
             </para>
 
