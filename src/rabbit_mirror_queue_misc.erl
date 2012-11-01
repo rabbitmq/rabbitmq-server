@@ -213,7 +213,7 @@ if_mirrored_queue(QName, Fun) ->
                                             true  -> Fun(Q)
                                         end
                                 end,
-                         rabbit_misc:const({ok, not_found})).
+                         fun (E) -> {ok, E} end).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;

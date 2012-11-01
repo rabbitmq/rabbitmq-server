@@ -18,7 +18,8 @@
 
 -export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
 -export([pseudo_queue/2]).
--export([lookup/1, with/2, with/3, with_or_die/2, assert_equivalence/5,
+-export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
+         assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
@@ -61,18 +62,20 @@
 -type(ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 -type(routing_result() :: 'routed' | 'unroutable').
--type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
-
+-type(queue_or_absent() :: rabbit_types:amqqueue() |
+                           {'absent', rabbit_types:amqqueue()}).
+-type(not_found_or_absent() :: 'not_found' |
+                               {'absent', rabbit_types:amqqueue()}).
 -spec(start/0 :: () -> [name()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
-        -> {'new' | 'existing', rabbit_types:amqqueue()} |
+        -> {'new' | 'existing' | 'absent', rabbit_types:amqqueue()} |
            rabbit_types:channel_exit()).
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
+        -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).
 -spec(update/2 ::
         (name(),
          fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue())) -> 'ok').
@@ -80,8 +83,10 @@
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found');
         ([name()]) -> [rabbit_types:amqqueue()]).
--spec(with/2 :: (name(), qfun(A)) -> A | rabbit_types:error('not_found')).
--spec(with/3 :: (name(), qfun(A), fun(() -> B)) -> A | B).
+-spec(not_found_or_absent/1 :: (name()) -> not_found_or_absent()).
+-spec(with/2 :: (name(), qfun(A)) ->
+                     A | rabbit_types:error(not_found_or_absent())).
+-spec(with/3 :: (name(), qfun(A), fun((not_found_or_absent()) -> B)) -> A | B).
 -spec(with_or_die/2 ::
         (name(), qfun(A)) -> A | rabbit_types:channel_exit()).
 -spec(assert_equivalence/5 ::
@@ -224,10 +229,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                      gm_pids         = []}),
     {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
     Q1 = start_queue_process(Node, Q0),
-    case gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity) of
-        not_found -> rabbit_misc:not_found(QueueName);
-        Q2        -> Q2
-    end.
+    gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity).
 
 internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
@@ -237,13 +239,12 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   [] ->
-                      case mnesia:read({rabbit_durable_queue, QueueName}) of
-                          []  -> Q1 = rabbit_policy:set(Q),
-                                 ok = store_queue(Q1),
-                                 B = add_default_binding(Q1),
-                                 fun () -> B(), Q1 end;
-                          %% Q exists on stopped node
-                          [_] -> rabbit_misc:const(not_found)
+                      case not_found_or_absent(QueueName) of
+                          not_found        -> Q1 = rabbit_policy:set(Q),
+                                              ok = store_queue(Q1),
+                                              B = add_default_binding(Q1),
+                                              fun () -> B(), Q1 end;
+                          {absent, _Q} = R -> rabbit_misc:const(R)
                       end;
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
@@ -297,28 +298,47 @@ lookup(Names) when is_list(Names) ->
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_queue, Name}).
 
+not_found_or_absent(Name) ->
+    %% NB: we assume that the caller has already performed a lookup on
+    %% rabbit_queue and not found anything
+    case mnesia:read({rabbit_durable_queue, Name}) of
+        []  -> not_found;
+        [Q] -> {absent, Q} %% Q exists on stopped node
+    end.
+
+not_found_or_absent_dirty(Name) ->
+    %% We should read from both tables inside a tx, to get a
+    %% consistent view. But the chances of an inconsistency are small,
+    %% and only affect the error kind.
+    case rabbit_misc:dirty_read({rabbit_durable_queue, Name}) of
+        {error, not_found} -> not_found;
+        {ok, Q}            -> {absent, Q}
+    end.
+
 with(Name, F, E) ->
     case lookup(Name) of
         {ok, Q = #amqqueue{pid = QPid}} ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
             %% with the QPid.
-            E1 = fun () ->
-                         case rabbit_misc:is_process_alive(QPid) of
-                             true  -> E();
-                             false -> timer:sleep(25),
-                                      with(Name, F, E)
-                         end
-                 end,
-            rabbit_misc:with_exit_handler(E1, fun () -> F(Q) end);
+            rabbit_misc:with_exit_handler(
+              fun () ->
+                      case rabbit_misc:is_process_alive(QPid) of
+                          true  -> E(not_found_or_absent_dirty(Name));
+                          false -> timer:sleep(25),
+                                   with(Name, F, E)
+                      end
+              end, fun () -> F(Q) end);
         {error, not_found} ->
-            E()
+            E(not_found_or_absent_dirty(Name))
     end.
 
-with(Name, F) ->
-    with(Name, F, fun () -> {error, not_found} end).
+with(Name, F) -> with(Name, F, fun (E) -> {error, E} end).
+
 with_or_die(Name, F) ->
-    with(Name, F, fun () -> rabbit_misc:not_found(Name) end).
+    with(Name, F, fun (not_found)   -> rabbit_misc:not_found(Name);
+                      ({absent, Q}) -> rabbit_misc:absent(Q)
+                  end).
 
 assert_equivalence(#amqqueue{durable     = Durable,
                              auto_delete = AutoDelete} = Q,
