@@ -38,15 +38,26 @@ stop(_State) ->
     ok.
 
 register_context(Listener) ->
-    rabbit_mochiweb:register_port_redirect(
-      ?CONTEXT_REDIRECT, [{port,          55672},
-                          {ignore_in_use, true}], "", port(Listener)),
+    if_redirect(
+      fun () ->
+              rabbit_mochiweb:register_port_redirect(
+                ?CONTEXT_REDIRECT, [{port,          55672},
+                                    {ignore_in_use, true}], "", port(Listener))
+      end),
     rabbit_mochiweb:register_context_handler(
       ?CONTEXT, Listener, "", make_loop(), "RabbitMQ Management").
 
 unregister_context() ->
-    rabbit_mochiweb:unregister_context(?CONTEXT_REDIRECT),
+    if_redirect(
+      fun () -> rabbit_mochiweb:unregister_context(?CONTEXT_REDIRECT) end),
     rabbit_mochiweb:unregister_context(?CONTEXT).
+
+if_redirect(Thunk) ->
+    {ok, Redir} = application:get_env(rabbitmq_management, redirect_old_port),
+    case Redir of
+        true  -> Thunk();
+        false -> ok
+    end.
 
 make_loop() ->
     Dispatch = rabbit_mgmt_dispatcher:build_dispatcher(),

@@ -4,8 +4,9 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_mgmt_app, []}},
-  {env, [{listener,         [{port, 15672}]},
-         {http_log_dir,     none},
-         {load_definitions, none}]},
+  {env, [{listener,          [{port, 15672}]},
+         {redirect_old_port, true},
+         {http_log_dir,      none},
+         {load_definitions,  none}]},
   {applications, [kernel, stdlib, rabbit, xmerl, rabbitmq_mochiweb, amqp_client,
                   rabbitmq_management_agent]}]}.
