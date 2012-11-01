@@ -56,13 +56,15 @@ register_port_redirect(Name, Listener, Prefix, RedirectPort) ->
     register_context_handler(
       Name, Listener, Prefix,
       fun (Req) ->
+              Host = case Req:get_header_value("host") of
+                         undefined -> {ok, {IP, _Port}} = rabbit_net:sockname(
+                                                            Req:get(socket)),
+                                      rabbit_misc:ntoa(IP);
+                         Header    -> hd(string:tokens(Header, ":"))
+                     end,
               URL = rabbit_misc:format(
                       "~s://~s:~B~s~n",
-                      [Req:get(scheme),
-                       hd(string:tokens(Req:get_header_value("host"), ":")),
-                       RedirectPort,
-                       Req:get(raw_path)
-                      ]),
+                      [Req:get(scheme), Host, RedirectPort, Req:get(raw_path)]),
               Req:respond({301, [{"Location", URL}], ""})
       end,
       rabbit_misc:format("Redirect to port ~B", [RedirectPort])).
