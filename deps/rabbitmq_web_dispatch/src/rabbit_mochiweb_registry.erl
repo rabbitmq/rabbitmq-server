@@ -54,6 +54,8 @@ lookup(Listener, Req) ->
             {lookup_failure, Err}
     end.
 
+%% This is called in a somewhat obfuscated manner in
+%% rabbit_mgmt_external_stats:rabbit_mochiweb_registry_list_all()
 list_all() ->
     gen_server:call(?MODULE, list_all, infinity).
 
