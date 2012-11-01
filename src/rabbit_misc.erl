@@ -63,12 +63,16 @@
 -export([version/0]).
 -export([sequence_error/1]).
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
+-export([check_expiry_size/1]).
 -export([base64url/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
         R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
             R =:= shutdown).
+
+%% This is dictated by `erlang:send_after' on which we depend to implement TTL.
+-define(MAX_EXPIRY_TIMER, 4294967295).
 
 %%----------------------------------------------------------------------------
 
@@ -229,6 +233,7 @@
 -spec(json_decode/1 :: (string()) -> {'ok', any()} | 'error').
 -spec(json_to_term/1 :: (any()) -> any()).
 -spec(term_to_json/1 :: (any()) -> any()).
+-spec(check_expiry_size/1 :: (integer()) -> rabbit_types:ok_or_error(any())).
 -spec(base64url/1 :: (binary()) -> string()).
 
 -endif.
@@ -999,6 +1004,13 @@ term_to_json(L) when is_list(L) ->
 term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
+
+check_expiry_size(N) when N > ?MAX_EXPIRY_TIMER ->
+    {error, {value_too_big, N}};
+check_expiry_size(N) when N < 0 ->
+    {error, {negative_value, N}};
+check_expiry_size(_N) ->
+    ok.
 
 base64url(In) ->
     lists:reverse(lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
