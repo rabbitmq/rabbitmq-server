@@ -611,7 +611,7 @@ display_info_list(Results, InfoItemKeys) when is_list(Results) ->
       fun (Result) -> display_row(
                         [format_info_item(proplists:get_value(X, Result)) ||
                             X <- InfoItemKeys])
-      end, Results),
+      end, lists:sort(Results)),
     ok;
 display_info_list(Other, _) ->
     Other.
