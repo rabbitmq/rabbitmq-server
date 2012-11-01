@@ -170,6 +170,12 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
+    sammy.put('#/logout', function() {
+            username = null;
+            password = null;
+            location.reload();
+        });
+
     sammy.get('#/import-succeeded', function() {
             render({}, 'import-succeeded', '#/overview');
         });
