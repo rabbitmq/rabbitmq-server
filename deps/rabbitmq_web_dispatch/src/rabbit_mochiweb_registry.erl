@@ -44,14 +44,14 @@ set_fallback(Listener, FallbackHandler) ->
 
 lookup(Listener, Req) ->
     case lookup_dispatch(Listener) of
-        {Selectors, Fallback} ->
+        {ok, {Selectors, Fallback}} ->
             case catch match_request(Selectors, Req) of
                 {'EXIT', Reason} -> {lookup_failure, Reason};
                 no_handler       -> {handler, Fallback};
                 Handler          -> {handler, Handler}
             end;
         Err ->
-            {lookup_failure, Err}
+            Err
     end.
 
 list_all() ->
@@ -63,22 +63,27 @@ init([]) ->
     ?ETS = ets:new(?ETS, [named_table, public]),
     {ok, undefined}.
 
-handle_call({add, Name, Listener, Selector, Handler, Link}, _From,
+handle_call({add, Name, Listener, Selector, Handler, Link = {_, Desc}}, _From,
             undefined) ->
     Continue = case rabbit_mochiweb_sup:ensure_listener(Listener) of
-                   new      -> ets:insert(
-                                 ?ETS, {Listener, [],
-                                        listing_fallback_handler(Listener)}),
+                   new      -> set_dispatch(
+                                 Listener, [],
+                                 listing_fallback_handler(Listener)),
                                true;
                    existing -> true;
                    ignore   -> false
                end,
     case Continue of
-        true  -> {Selectors, Fallback} = lookup_dispatch(Listener),
-                 set_dispatch(Listener,
-                              lists:keystore(Name, 1, Selectors,
-                                             {Name, Selector, Handler, Link}),
-                              Fallback);
+        true  -> case lookup_dispatch(Listener) of
+                     {ok, {Selectors, Fallback}} ->
+                         Selector2 = lists:keystore(
+                                       Name, 1, Selectors,
+                                       {Name, Selector, Handler, Link}),
+                         set_dispatch(Listener, Selector2, Fallback);
+                     {error, {different, Desc2, Listener2}} ->
+                         exit({incompatible_listeners,
+                               {Desc, Listener}, {Desc2, Listener2}})
+                 end;
         false -> ok
     end,
     {reply, ok, undefined};
@@ -86,7 +91,7 @@ handle_call({add, Name, Listener, Selector, Handler, Link}, _From,
 handle_call({remove, Name}, _From,
             undefined) ->
     Listener = listener_by_name(Name),
-    {Selectors, Fallback} = lookup_dispatch(Listener),
+    {ok, {Selectors, Fallback}} = lookup_dispatch(Listener),
     Selectors1 = lists:keydelete(Name, 1, Selectors),
     set_dispatch(Listener, Selectors1, Fallback),
     case Selectors1 of
@@ -97,7 +102,7 @@ handle_call({remove, Name}, _From,
 
 handle_call({set_fallback, Listener, FallbackHandler}, _From,
             undefined) ->
-    {Selectors, _OldFallback} = lookup_dispatch(Listener),
+    {ok, {Selectors, _OldFallback}} = lookup_dispatch(Listener),
     set_dispatch(Listener, Selectors, FallbackHandler),
     {reply, ok, undefined};
 
@@ -125,15 +130,19 @@ code_change(_, State, _) ->
 
 %% Internal Methods
 
-lookup_dispatch(Listener) ->
-    case ets:lookup(?ETS, Listener) of
-        [{Listener, Selectors, Fallback}] -> {Selectors, Fallback};
-        []                                -> exit({no_record_for_listener,
-                                                   Listener})
+port(Listener) -> proplists:get_value(port, Listener).
+
+lookup_dispatch(Lsnr) ->
+    case ets:lookup(?ETS, port(Lsnr)) of
+        [{_, Lsnr, S, F}]   -> {ok, {S, F}};
+        [{_, Lsnr2, S, _F}] -> {error, {different, first_desc(S), Lsnr2}};
+        []                  -> {error, {no_record_for_listener, Lsnr}}
     end.
 
+first_desc([{_N, _S, _H, {_, Desc}} | _]) -> Desc.
+
 set_dispatch(Listener, Selectors, Fallback) ->
-    ets:insert(?ETS, {Listener, Selectors, Fallback}).
+    ets:insert(?ETS, {port(Listener), Listener, Selectors, Fallback}).
 
 match_request([], _) ->
     no_handler;
@@ -144,11 +153,12 @@ match_request([{_Name, Selector, Handler, _Link}|Rest], Req) ->
     end.
 
 list() ->
-    [{Path, Desc, Listener} || {Listener, Selectors, _F} <- ets:tab2list(?ETS),
+    [{Path, Desc, Listener} ||
+        {_P, Listener, Selectors, _F} <- ets:tab2list(?ETS),
         {_N, _S, _H, {Path, Desc}} <- Selectors].
 
 listener_by_name(Name) ->
-    case [L || {L, S, _F} <- ets:tab2list(?ETS), contains_name(Name, S)] of
+    case [L || {_P, L, S, _F} <- ets:tab2list(?ETS), contains_name(Name, S)] of
         [Listener] -> Listener;
         []         -> exit({not_found, Name})
     end.
@@ -157,7 +167,7 @@ contains_name(Name, Selectors) ->
     lists:member(Name, [N || {N, _S, _H, _L} <- Selectors]).
 
 list(Listener) ->
-    {Selectors, _Fallback} = lookup_dispatch(Listener),
+    {ok, {Selectors, _Fallback}} = lookup_dispatch(Listener),
     [{Path, Desc} || {_N, _S, _H, {Path, Desc}} <- Selectors].
 
 %%---------------------------------------------------------------------------

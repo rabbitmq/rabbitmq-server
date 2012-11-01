@@ -72,7 +72,7 @@ loopfun(Listener) ->
             case rabbit_mochiweb_registry:lookup(Listener, Req) of
                 no_handler ->
                     Req:not_found();
-                {lookup_failure, Reason} ->
+                {error, Reason} ->
                     Req:respond({500, [], "Registry Error: " ++ Reason});
                 {handler, Handler} ->
                     Handler(Req)
