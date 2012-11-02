@@ -52,6 +52,10 @@ function start_app() {
     app.unload();
     app = $.sammy(dispatcher);
     app.run();
+    var url = this.location.toString();
+    if (url.indexOf('#') == -1) {
+        this.location = url + '#/';
+    }
 }
 
 function setup_constant_events() {
