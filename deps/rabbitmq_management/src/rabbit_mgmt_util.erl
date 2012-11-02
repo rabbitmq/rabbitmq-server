@@ -30,7 +30,7 @@
 -export([filter_conn_ch_list/3, filter_user/2]).
 -export([with_decode/5, decode/1, decode/2, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
--export([post_respond/1, columns/1, want_column/2, is_monitor/1]).
+-export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
@@ -160,30 +160,46 @@ get_dotted_value(Key, Item) ->
 get_dotted_value0([Key], Item) ->
     %% Put "nothing" before everything else, in number terms it usually
     %% means 0.
-    pget(list_to_atom(Key), Item, 0);
+    pget(list_to_binary(Key), Item, 0);
 get_dotted_value0([Key | Keys], Item) ->
-    get_dotted_value0(Keys, pget(list_to_atom(Key), Item, [])).
+    get_dotted_value0(Keys, pget(list_to_binary(Key), Item, [])).
 
 extract_columns(Items, ReqData) ->
     Cols = columns(ReqData),
     [extract_column_items(Item, Cols) || Item <- Items].
+
+columns(ReqData) ->
+    case wrq:get_qs_value("columns", ReqData) of
+        undefined -> all;
+        Str       -> [[list_to_binary(T) || T <- string:tokens(C, ".")]
+                      || C <- string:tokens(Str, ",")]
+    end.
 
 extract_column_items(Item, all) ->
     Item;
 extract_column_items({struct, L}, Cols) ->
     extract_column_items(L, Cols);
 extract_column_items(Item = [T | _], Cols) when is_tuple(T) ->
-    [{K, extract_column_items(V, descend_columns(K, Cols))} ||
+    [{K, extract_column_items(V, descend_columns(a2b(K), Cols))} ||
         {K, V} <- Item, want_column(K, Cols)];
 extract_column_items(L, Cols) when is_list(L) ->
     [extract_column_items(I, Cols) || I <- L];
 extract_column_items(O, _Cols) ->
     O.
 
+want_column(_Col, all) -> true;
+want_column(Col, Cols) when is_atom(Col) ->
+    want_column(list_to_binary(atom_to_list(Col)), Cols);
+want_column(Col, Cols) when is_binary(Col) ->
+    lists:any(fun([C|_]) -> C == Col end, Cols).
+
 descend_columns(_K, [])                -> [];
 descend_columns(K, [[K] | _Rest])      -> all;
 descend_columns(K, [[K | K2] | Rest])  -> [K2 | descend_columns(K, Rest)];
 descend_columns(K, [[_K2 | _] | Rest]) -> descend_columns(K, Rest).
+
+a2b(A) when is_atom(A) -> list_to_binary(atom_to_list(A));
+a2b(B)                 -> B.
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
@@ -422,16 +438,6 @@ post_respond({JSON, ReqData, Context}) ->
     {true, wrq:set_resp_header(
              "content-type", "application/json",
              wrq:append_to_response_body(JSON, ReqData)), Context}.
-
-columns(ReqData) ->
-    case wrq:get_qs_value("columns", ReqData) of
-        undefined -> all;
-        Str       -> [[list_to_atom(T) || T <- string:tokens(C, ".")]
-                      || C <- string:tokens(Str, ",")]
-    end.
-
-want_column(_Col, all) -> true;
-want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
 
 is_admin(T)     -> intersects(T, [administrator]).
 is_monitor(T)   -> intersects(T, [administrator, monitoring]).

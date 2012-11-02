@@ -89,7 +89,7 @@ tracing: False
         self.run_success(['declare', 'user', 'name=bar', 'password=pass', 'tags='])
         self.assert_table([['guest', '/']], ['list', 'permissions', 'user', 'vhost'])
         self.run_success(['declare', 'permission', 'user=bar', 'vhost=foo', 'configure=.*', 'write=.*', 'read=.*'])
-        self.assert_table([['guest', '/'], ['bar', 'foo']], ['list', 'permissions', 'user', 'vhost'])
+        self.assert_table([['bar', 'foo'], ['guest', '/']], ['list', 'permissions', 'user', 'vhost'])
         self.run_success(['delete', 'user', 'name=bar'])
         self.run_success(['delete', 'vhost', 'name=foo'])
 
