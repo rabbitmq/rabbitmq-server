@@ -27,6 +27,7 @@
              rabbit_nodes,
              rabbit_reader,
              rabbit_writer,
+             rabbit_event,
              rabbit_queue_collector,
              rabbit_amqqueue,
              supervisor2
