@@ -189,7 +189,7 @@ extract_column_items(O, _Cols) ->
 
 want_column(_Col, all) -> true;
 want_column(Col, Cols) when is_atom(Col) ->
-    want_column(list_to_binary(atom_to_list(Col)), Cols);
+    want_column(a2b(Col), Cols);
 want_column(Col, Cols) when is_binary(Col) ->
     lists:any(fun([C|_]) -> C == Col end, Cols).
 
