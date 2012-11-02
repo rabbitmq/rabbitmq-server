@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/5, start_link/5]).
+-export([start/5, start_link/5, start/6, start_link/6]).
 -export([send_command/2, send_command/3,
          send_command_sync/2, send_command_sync/3,
          send_command_and_notify/4, send_command_and_notify/5]).
@@ -43,6 +43,14 @@
 -spec(start_link/5 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid())
+        -> rabbit_types:ok(pid())).
+-spec(start/6 ::
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol(), pid(), boolean())
+        -> rabbit_types:ok(pid())).
+-spec(start_link/6 ::
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol(), pid(), boolean())
         -> rabbit_types:ok(pid())).
 -spec(send_command/2 ::
         (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
@@ -76,21 +84,32 @@
 %%---------------------------------------------------------------------------
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid),
-    {ok, proc_lib:spawn(?MODULE, mainloop, [State])}.
+    start(Sock, Channel, FrameMax, Protocol, ReaderPid, false).
 
 start_link(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid),
+    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, false).
+
+start(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
+    State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
+                          ReaderWantsStats),
+    {ok, proc_lib:spawn(?MODULE, mainloop, [State])}.
+
+start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
+    State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
+                          ReaderWantsStats),
     {ok, proc_lib:spawn_link(?MODULE, mainloop, [State])}.
 
-initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    rabbit_event:init_stats_timer(#wstate{sock      = Sock,
-                                          channel   = Channel,
-                                          frame_max = FrameMax,
-                                          protocol  = Protocol,
-                                          reader    = ReaderPid,
-                                          pending   = []},
-                                  #wstate.stats_timer).
+initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
+    (case ReaderWantsStats of
+         true  -> fun rabbit_event:init_stats_timer/2;
+         false -> fun rabbit_event:init_disabled_stats_timer/2
+     end)(#wstate{sock      = Sock,
+                  channel   = Channel,
+                  frame_max = FrameMax,
+                  protocol  = Protocol,
+                  reader    = ReaderPid,
+                  pending   = []},
+          #wstate.stats_timer).
 
 mainloop(State) ->
     try
