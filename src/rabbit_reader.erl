@@ -342,6 +342,8 @@ handle_other({'$gen_cast', force_event_refresh}, Deb, State)
 handle_other({'$gen_cast', force_event_refresh}, Deb, State) ->
     %% Ignore, we will emit a created event once we start running.
     mainloop(Deb, State);
+handle_other(ensure_stats, Deb, State) ->
+    mainloop(Deb, ensure_stats_timer(State));
 handle_other(emit_stats, Deb, State) ->
     mainloop(Deb, emit_stats(State));
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
