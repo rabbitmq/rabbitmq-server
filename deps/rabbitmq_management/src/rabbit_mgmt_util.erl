@@ -160,9 +160,9 @@ get_dotted_value(Key, Item) ->
 get_dotted_value0([Key], Item) ->
     %% Put "nothing" before everything else, in number terms it usually
     %% means 0.
-    pget(list_to_binary(Key), Item, 0);
+    pget(list_to_atom(Key), Item, 0);
 get_dotted_value0([Key | Keys], Item) ->
-    get_dotted_value0(Keys, pget(list_to_binary(Key), Item, [])).
+    get_dotted_value0(Keys, pget(list_to_atom(Key), Item, [])).
 
 extract_columns(Items, ReqData) ->
     Cols = columns(ReqData),
