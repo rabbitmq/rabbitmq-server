@@ -21,23 +21,31 @@ function start_app_login() {
         this.put('#/login', function() {
             username = this.params['username'];
             password = this.params['password'];
-            var user = JSON.parse(sync_get('/whoami'));
-            if (user == false) {
-                username = null;
-                password = null;
-                replace_content('login-status', '<p>Login failed</p>');
-            }
-            else {
-                replace_content('outer', format('layout', {}));
-                setup_global_vars(user);
-                setup_constant_events();
-                update_vhosts();
-                update_interval();
-                setup_extensions();
-            }
+            var b64 = base64.encode(username + ':' + password);
+            document.cookie = 'auth=' + encodeURIComponent(b64);
+            check_login();
         });
     });
     app.run();
+    if (get_cookie('auth') != '') {
+        check_login();
+    }
+}
+
+function check_login() {
+    var user = JSON.parse(sync_get('/whoami'));
+    if (user == false) {
+        document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        replace_content('login-status', '<p>Login failed</p>');
+    }
+    else {
+        replace_content('outer', format('layout', {}));
+        setup_global_vars(user);
+        setup_constant_events();
+        update_vhosts();
+        update_interval();
+        setup_extensions();
+    }
 }
 
 function start_app() {
@@ -602,7 +610,7 @@ function update_status(status) {
 }
 
 function auth_header() {
-    return "Basic " + base64.encode(username + ':' + password);
+    return "Basic " + decodeURIComponent(get_cookie('auth'));
 }
 
 function with_req(method, path, body, fun) {

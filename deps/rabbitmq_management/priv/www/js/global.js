@@ -71,10 +71,6 @@ var extension_count;
 // The dispatcher needs access to the Sammy app
 var app;
 
-// Store login details for HTTP auth
-var username;
-var password;
-
 // Used for the new exchange form, and to display broken exchange types
 var exchange_types;
 

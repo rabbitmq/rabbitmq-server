@@ -24,7 +24,7 @@ function section_pref(template, name) {
 // ---------------------------------------------------------------------------
 
 function parse_cookie() {
-    var c = get_cookie();
+    var c = get_cookie('m');
     var items = c.length == 0 ? [] : c.split('|');
 
     var start = 0;
@@ -46,11 +46,11 @@ function store_cookie(dict) {
     document.cookie = 'm=' + enc.join('|') + '; expires=' + date.toUTCString();
 }
 
-function get_cookie() {
+function get_cookie(key) {
     var cookies = document.cookie.split(';');
     for (var i in cookies) {
         var kv = jQuery.trim(cookies[i]).split('=');
-        if (kv[0] == 'm') return kv[1];
+        if (kv[0] == key) return kv[1];
     }
     return '';
 }
