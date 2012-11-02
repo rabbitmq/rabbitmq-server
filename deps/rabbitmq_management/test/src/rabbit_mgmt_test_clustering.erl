@@ -83,6 +83,7 @@ ha() ->
     assert_single_node(hare, pget(slave_nodes, Q2)),
     assert_single_node(hare, pget(synchronised_slave_nodes, Q2)),
     http_delete("/queues/%2f/ha-queue", ?NO_CONTENT),
+    http_delete("/policies/%2f/HA", ?NO_CONTENT),
     ok.
 
 %%----------------------------------------------------------------------------

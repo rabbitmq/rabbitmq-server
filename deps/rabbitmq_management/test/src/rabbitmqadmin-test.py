@@ -125,11 +125,11 @@ tracing: False
         self.run_success(['delete', 'policy', 'name=ha'])
 
     def test_parameters(self):
-        ctl(['eval', 'rabbit_runtime_parameters_test:register().'])
+        self.ctl(['eval', 'rabbit_runtime_parameters_test:register().'])
         self.run_success(['declare', 'parameter', 'component=test', 'name=good', 'value=123'])
         self.assert_table([['test', 'good', '/', '123']], ['list', 'parameters', 'component', 'name', 'vhost', 'value'])
         self.run_success(['delete', 'parameter', 'component=test', 'name=good'])
-        ctl(['eval', 'rabbit_runtime_parameters_test:unregister().'])
+        self.ctl(['eval', 'rabbit_runtime_parameters_test:unregister().'])
 
     def test_publish(self):
         self.run_success(['declare', 'queue', 'name=test'])
@@ -160,38 +160,46 @@ tracing: False
     # ---------------------------------------------------------------------------
 
     def run_success(self, args, **kwargs):
-        self.assertEqual(0, run(args, **kwargs)[1])
+        (stdout, ret) = self.admin(args, **kwargs)
+        if ret != 0:
+            self.fail(stdout)
 
     def run_fail(self, args):
-        self.assertNotEqual(0, run(args)[1])
+        (stdout, ret) = self.admin(args)
+        if ret == 0:
+            self.fail(stdout)
 
     def assert_output(self, expected, args):
-        self.assertEqual(expected, run(args)[0])
+        self.assertEqual(expected, self.admin(args)[0])
 
     def assert_list(self, expected, args0):
         args = ['-f', 'tsv', '-q']
         args.extend(args0)
-        self.assertEqual(expected, run(args)[0].splitlines())
+        self.assertEqual(expected, self.admin(args)[0].splitlines())
 
     def assert_table(self, expected, args0):
         args = ['-f', 'tsv', '-q']
         args.extend(args0)
-        self.assertEqual(expected, [l.split('\t') for l in run(args)[0].splitlines()])
+        self.assertEqual(expected, [l.split('\t') for l in self.admin(args)[0].splitlines()])
 
-def run(args, stdin=None):
-    return run0('../../../bin/rabbitmqadmin', args, stdin)
+    def admin(self, args, stdin=None):
+        return run('../../../bin/rabbitmqadmin', args, stdin)
 
-def ctl(args, stdin=None):
-    return run0('../../../../rabbitmq-server/scripts/rabbitmqctl', args, stdin)
+    def ctl(self, args0, stdin=None):
+        args = ['-n', 'rabbit-test']
+        args.extend(args0)
+        (stdout, ret) = run('../../../../rabbitmq-server/scripts/rabbitmqctl', args, stdin)
+        if ret != 0:
+            self.fail(stdout)
 
-def run0(cmd, args, stdin):
+def run(cmd, args, stdin):
     path = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], cmd))
     cmdline = [path]
     cmdline.extend(args)
     proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (stdout, stderr) = proc.communicate(stdin)
     returncode = proc.returncode
-    return (stdout, returncode)
+    return (stdout + stderr, returncode)
 
 def l(thing):
     return ['list', thing, 'name']
