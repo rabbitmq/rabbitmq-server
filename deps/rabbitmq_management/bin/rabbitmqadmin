@@ -57,8 +57,8 @@ URIS = {
     'vhost':      '/vhosts/{name}',
     'user':       '/users/{name}',
     'permission': '/permissions/{vhost}/{user}',
-    'parameter':  '/parameters/{component}/{key}',
-    'policy':     '/policies/{vhost}/{key}'
+    'parameter':  '/parameters/{component}/{vhost}/{name}',
+    'policy':     '/policies/{vhost}/{name}'
     }
 
 DECLARABLE = {
@@ -77,11 +77,11 @@ DECLARABLE = {
                    'optional':  {}},
     'permission': {'mandatory': ['vhost', 'user', 'configure', 'write', 'read'],
                    'optional':  {}},
-    'parameter':  {'mandatory': ['component', 'key', 'value'],
+    'parameter':  {'mandatory': ['component', 'name', 'value'],
                    'json':      ['value'],
                    'optional':  {}},
     # Priority is 'json' to convert to int
-    'policy':     {'mandatory': ['key', 'pattern', 'definition'],
+    'policy':     {'mandatory': ['name', 'pattern', 'definition'],
                    'json':      ['definition', 'priority'],
                    'optional':  {'priority' : 0}}
     }
@@ -94,8 +94,8 @@ DELETABLE = {
     'vhost':      {'mandatory': ['name']},
     'user':       {'mandatory': ['name']},
     'permission': {'mandatory': ['vhost', 'user']},
-    'parameter':  {'mandatory': ['component', 'key']},
-    'policy':     {'mandatory': ['vhost', 'key']}
+    'parameter':  {'mandatory': ['component', 'name']},
+    'policy':     {'mandatory': ['name']}
     }
 
 CLOSABLE = {

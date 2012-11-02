@@ -119,6 +119,18 @@ tracing: False
         self.assert_table([['', 'foo', 'queue', 'foo'], ['amq.direct', 'foo', 'queue', 'test']], ['list', 'bindings', 'source', 'destination', 'destination_type', 'routing_key'])
         self.run_success(['delete', 'queue', 'name=foo'])
 
+    def test_policies(self):
+        self.run_success(['declare', 'policy', 'name=ha', 'pattern=.*', 'definition={"ha-mode":"all"}'])
+        self.assert_table([['ha', '/', '.*', '{"ha-mode": "all"}']], ['list', 'policies', 'name', 'vhost', 'pattern', 'definition'])
+        self.run_success(['delete', 'policy', 'name=ha'])
+
+    def test_parameters(self):
+        ctl(['eval', 'rabbit_runtime_parameters_test:register().'])
+        self.run_success(['declare', 'parameter', 'component=test', 'name=good', 'value=123'])
+        self.assert_table([['test', 'good', '/', '123']], ['list', 'parameters', 'component', 'name', 'vhost', 'value'])
+        self.run_success(['delete', 'parameter', 'component=test', 'name=good'])
+        ctl(['eval', 'rabbit_runtime_parameters_test:unregister().'])
+
     def test_publish(self):
         self.run_success(['declare', 'queue', 'name=test'])
         self.run_success(['publish', 'routing_key=test', 'payload=test_1'])
@@ -167,7 +179,13 @@ tracing: False
         self.assertEqual(expected, [l.split('\t') for l in run(args)[0].splitlines()])
 
 def run(args, stdin=None):
-    path = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], '../../../bin/rabbitmqadmin'))
+    return run0('../../../bin/rabbitmqadmin', args, stdin)
+
+def ctl(args, stdin=None):
+    return run0('../../../../rabbitmq-server/scripts/rabbitmqctl', args, stdin)
+
+def run0(cmd, args, stdin):
+    path = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], cmd))
     cmdline = [path]
     cmdline.extend(args)
     proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
