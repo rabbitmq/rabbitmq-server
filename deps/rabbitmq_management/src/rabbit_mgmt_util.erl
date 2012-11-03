@@ -178,17 +178,14 @@ extract_column_items({struct, L}, Cols) ->
     extract_column_items(L, Cols);
 extract_column_items(Item = [T | _], Cols) when is_tuple(T) ->
     [{K, extract_column_items(V, descend_columns(a2b(K), Cols))} ||
-        {K, V} <- Item, want_column(K, Cols)];
+        {K, V} <- Item, want_column(a2b(K), Cols)];
 extract_column_items(L, Cols) when is_list(L) ->
     [extract_column_items(I, Cols) || I <- L];
 extract_column_items(O, _Cols) ->
     O.
 
 want_column(_Col, all) -> true;
-want_column(Col, Cols) when is_atom(Col) ->
-    want_column(a2b(Col), Cols);
-want_column(Col, Cols) when is_binary(Col) ->
-    lists:any(fun([C|_]) -> C == Col end, Cols).
+want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
 
 descend_columns(_K, [])                   -> [];
 descend_columns( K, [[K]        | _Rest]) -> all;
