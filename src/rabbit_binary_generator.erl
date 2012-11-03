@@ -215,9 +215,9 @@ encode_property(shortstr, String) ->
 encode_property(longstr,  String) -> Len = size(String),
                                      <<Len:32, String:Len/binary>>;
 encode_property(octet,       Int) -> <<Int:8/unsigned>>;
-encode_property(shortint,    Int) -> <<Int:16/unsigned>>;
-encode_property(longint,     Int) -> <<Int:32/unsigned>>;
-encode_property(longlongint, Int) -> <<Int:64/unsigned>>;
+encode_property(short,       Int) -> <<Int:16/unsigned>>;
+encode_property(long,        Int) -> <<Int:32/unsigned>>;
+encode_property(longlong,    Int) -> <<Int:64/unsigned>>;
 encode_property(timestamp,   Int) -> <<Int:64/unsigned>>;
 encode_property(table,     Table) -> table_to_binary(Table).
 
