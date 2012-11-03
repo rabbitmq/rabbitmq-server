@@ -173,58 +173,60 @@ encode_properties([], []) ->
 encode_properties(TypeList, ValueList) ->
     encode_properties(0, TypeList, ValueList, 0, [], []).
 
-encode_properties(_Bit, [], [], FirstShortAcc, FlagsAcc, PropsAcc) ->
-    list_to_binary([lists:reverse(FlagsAcc), <<FirstShortAcc:16>>, lists:reverse(PropsAcc)]);
-encode_properties(_Bit, [], _ValueList, _FirstShortAcc, _FlagsAcc, _PropsAcc) ->
+encode_properties(_Bit, [], [],
+                  FirstShortAcc, FlagsAcc, PropsAcc) ->
+    list_to_binary([lists:reverse(FlagsAcc),
+                    <<FirstShortAcc:16>>,
+                    lists:reverse(PropsAcc)]);
+encode_properties(_Bit, [], _ValueList,
+                  _FirstShortAcc, _FlagsAcc, _PropsAcc) ->
     exit(content_properties_values_overflow);
-encode_properties(15, TypeList, ValueList, FirstShortAcc, FlagsAcc, PropsAcc) ->
+encode_properties(15, TypeList, ValueList,
+                  FirstShortAcc, FlagsAcc, PropsAcc) ->
     NewFlagsShort = FirstShortAcc bor 1, % set the continuation low bit
-    encode_properties(0, TypeList, ValueList, 0, [<<NewFlagsShort:16>> | FlagsAcc], PropsAcc);
-encode_properties(Bit, [bit | TypeList], [Value | ValueList], FirstShortAcc, FlagsAcc, PropsAcc) ->
-    case Value of
-        true -> encode_properties(Bit + 1, TypeList, ValueList,
-                                  FirstShortAcc bor (1 bsl (15 - Bit)), FlagsAcc, PropsAcc);
-        false -> encode_properties(Bit + 1, TypeList, ValueList,
-                                   FirstShortAcc, FlagsAcc, PropsAcc);
-        Other -> exit({content_properties_illegal_bit_value, Other})
-    end;
-encode_properties(Bit, [T | TypeList], [Value | ValueList], FirstShortAcc, FlagsAcc, PropsAcc) ->
-    case Value of
-        undefined -> encode_properties(Bit + 1, TypeList, ValueList,
-                                       FirstShortAcc, FlagsAcc, PropsAcc);
-        _ -> encode_properties(Bit + 1, TypeList, ValueList,
-                               FirstShortAcc bor (1 bsl (15 - Bit)),
-                               FlagsAcc,
-                               [encode_property(T, Value) | PropsAcc])
-    end.
+    encode_properties(0, TypeList, ValueList,
+                      0, [<<NewFlagsShort:16>> | FlagsAcc], PropsAcc);
+encode_properties(Bit, [bit | TypeList], [true  | ValueList],
+                  FirstShortAcc, FlagsAcc, PropsAcc) ->
+    encode_properties(Bit + 1, TypeList, ValueList,
+                      FirstShortAcc bor (1 bsl (15 - Bit)), FlagsAcc, PropsAcc);
+encode_properties(Bit, [bit | TypeList], [false | ValueList],
+                  FirstShortAcc, FlagsAcc, PropsAcc) ->
+    encode_properties(Bit + 1, TypeList, ValueList,
+                      FirstShortAcc, FlagsAcc, PropsAcc);
+encode_properties(_Bit, [bit | _TypeList], [Other | _ValueList],
+                  _FirstShortAcc, _FlagsAcc, _PropsAcc) ->
+    exit({content_properties_illegal_bit_value, Other});
+encode_properties(Bit, [_Type | TypeList], [undefined | ValueList],
+                  FirstShortAcc, FlagsAcc, PropsAcc) ->
+    encode_properties(Bit + 1, TypeList, ValueList,
+                      FirstShortAcc, FlagsAcc, PropsAcc);
+encode_properties(Bit, [Type | TypeList], [Value | ValueList],
+                  FirstShortAcc, FlagsAcc, PropsAcc) ->
+    encode_properties(Bit + 1, TypeList, ValueList,
+                      FirstShortAcc bor (1 bsl (15 - Bit)), FlagsAcc,
+                      [encode_property(Type, Value) | PropsAcc]).
 
 encode_property(shortstr, String) ->
     Len = size(String),
     if Len < 256 -> <<Len:8, String:Len/binary>>;
        true      -> exit(content_properties_shortstr_overflow)
     end;
-encode_property(longstr, String) ->
-    Len = size(String), <<Len:32, String:Len/binary>>;
-encode_property(octet, Int) ->
-    <<Int:8/unsigned>>;
-encode_property(shortint, Int) ->
-    <<Int:16/unsigned>>;
-encode_property(longint, Int) ->
-    <<Int:32/unsigned>>;
-encode_property(longlongint, Int) ->
-    <<Int:64/unsigned>>;
-encode_property(timestamp, Int) ->
-    <<Int:64/unsigned>>;
-encode_property(table, Table) ->
-    table_to_binary(Table).
+encode_property(longstr,  String) -> Len = size(String),
+                                     <<Len:32, String:Len/binary>>;
+encode_property(octet,       Int) -> <<Int:8/unsigned>>;
+encode_property(shortint,    Int) -> <<Int:16/unsigned>>;
+encode_property(longint,     Int) -> <<Int:32/unsigned>>;
+encode_property(longlongint, Int) -> <<Int:64/unsigned>>;
+encode_property(timestamp,   Int) -> <<Int:64/unsigned>>;
+encode_property(table,     Table) -> table_to_binary(Table).
 
 check_empty_frame_size() ->
     %% Intended to ensure that EMPTY_FRAME_SIZE is defined correctly.
-    ComputedSize = iolist_size(create_frame(?FRAME_BODY, 0, <<>>)),
-    if ComputedSize == ?EMPTY_FRAME_SIZE ->
-            ok;
-       true ->
-            exit({incorrect_empty_frame_size, ComputedSize, ?EMPTY_FRAME_SIZE})
+    case iolist_size(create_frame(?FRAME_BODY, 0, <<>>)) of
+        ?EMPTY_FRAME_SIZE -> ok;
+        ComputedSize      -> exit({incorrect_empty_frame_size,
+                                   ComputedSize, ?EMPTY_FRAME_SIZE})
     end.
 
 ensure_content_encoded(Content = #content{properties_bin = PropBin,
