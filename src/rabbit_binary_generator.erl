@@ -118,51 +118,24 @@ create_frame(TypeInt, ChannelInt, Payload) ->
 %% table_field_to_binary supports the AMQP 0-8/0-9 standard types, S,
 %% I, D, T and F, as well as the QPid extensions b, d, f, l, s, t, x,
 %% and V.
+table_field_to_binary({FName, T, V}) ->
+    [short_string_to_binary(FName) | field_value_to_binary(T, V)].
 
-table_field_to_binary({FName, Type, Value}) ->
-    [short_string_to_binary(FName) | field_value_to_binary(Type, Value)].
-
-field_value_to_binary(longstr, Value) ->
-    ["S", long_string_to_binary(Value)];
-
-field_value_to_binary(signedint, Value) ->
-    ["I", <<Value:32/signed>>];
-
-field_value_to_binary(decimal, {Before, After}) ->
-    ["D", Before, <<After:32>>];
-
-field_value_to_binary(timestamp, Value) ->
-    ["T", <<Value:64>>];
-
-field_value_to_binary(table, Value) ->
-    ["F", table_to_binary(Value)];
-
-field_value_to_binary(array, Value) ->
-    ["A", array_to_binary(Value)];
-
-field_value_to_binary(byte, Value) ->
-    ["b", <<Value:8/unsigned>>];
-
-field_value_to_binary(double, Value) ->
-    ["d", <<Value:64/float>>];
-
-field_value_to_binary(float, Value) ->
-    ["f", <<Value:32/float>>];
-
-field_value_to_binary(long, Value) ->
-    ["l", <<Value:64/signed>>];
-
-field_value_to_binary(short, Value) ->
-    ["s", <<Value:16/signed>>];
-
-field_value_to_binary(bool, Value) ->
-    ["t", if Value -> 1; true -> 0 end];
-
-field_value_to_binary(binary, Value) ->
-    ["x", long_string_to_binary(Value)];
-
-field_value_to_binary(void, _Value) ->
-    ["V"].
+field_value_to_binary(longstr,   V) -> ["S", long_string_to_binary(V)];
+field_value_to_binary(signedint, V) -> ["I", <<V:32/signed>>];
+field_value_to_binary(decimal,   V) -> {Before, After} = V,
+                                       ["D", Before, <<After:32>>];
+field_value_to_binary(timestamp, V) -> ["T", <<V:64>>];
+field_value_to_binary(table,     V) -> ["F", table_to_binary(V)];
+field_value_to_binary(array,     V) -> ["A", array_to_binary(V)];
+field_value_to_binary(byte,      V) -> ["b", <<V:8/unsigned>>];
+field_value_to_binary(double,    V) -> ["d", <<V:64/float>>];
+field_value_to_binary(float,     V) -> ["f", <<V:32/float>>];
+field_value_to_binary(long,      V) -> ["l", <<V:64/signed>>];
+field_value_to_binary(short,     V) -> ["s", <<V:16/signed>>];
+field_value_to_binary(bool,      V) -> ["t", if V -> 1; true -> 0 end];
+field_value_to_binary(binary,    V) -> ["x", long_string_to_binary(V)];
+field_value_to_binary(void,     _V) -> ["V"].
 
 table_to_binary(Table) when is_list(Table) ->
     BinTable = generate_table(Table),
@@ -176,9 +149,8 @@ generate_table(Table) when is_list(Table) ->
     list_to_binary(lists:map(fun table_field_to_binary/1, Table)).
 
 generate_array(Array) when is_list(Array) ->
-    list_to_binary(lists:map(
-                     fun ({Type, Value}) -> field_value_to_binary(Type, Value) end,
-                     Array)).
+    list_to_binary(lists:map(fun ({T, V}) -> field_value_to_binary(T, V) end,
+                             Array)).
 
 short_string_to_binary(String) when is_binary(String) ->
     Len = size(String),
