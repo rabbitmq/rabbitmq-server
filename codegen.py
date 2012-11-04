@@ -233,29 +233,19 @@ def genErl(spec):
         def presentBin(fields):
             ps = ', '.join(['P' + str(f.index) + ':1' for f in fields])
             return '<<' + ps + ', _:%d, R0/binary>>' % (16 - len(fields),)
-        def mkMacroName(field):
-            return '?' + field.domain.upper() + '_PROP'
-        def writePropFieldLine(field, bin_next = None):
+        def writePropFieldLine(field):
             i = str(field.index)
-            if not bin_next:
-                bin_next = 'R' + str(field.index + 1)
-            if field.domain in ['octet', 'timestamp']:
-                print ("  {%s, %s} = %s(%s, %s, %s, %s)," %
-                       ('F' + i, bin_next, mkMacroName(field), 'P' + i,
-                        'R' + i, 'I' + i, 'X' + i))
-            else:
-                print ("  {%s, %s} = %s(%s, %s, %s, %s, %s)," %
-                       ('F' + i, bin_next, mkMacroName(field), 'P' + i,
-                        'R' + i, 'L' + i, 'S' + i, 'X' + i))
+            print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> %s_prop(R%s) end," % \
+                (i, str(field.index + 1), i, i, erlType(field.domain), i)
 
         if len(c.fields) == 0:
             print "decode_properties(%d, _) ->" % (c.index,)
         else:
             print ("decode_properties(%d, %s) ->" %
                    (c.index, presentBin(c.fields)))
-            for field in c.fields[:-1]:
+            for field in c.fields:
                 writePropFieldLine(field)
-            writePropFieldLine(c.fields[-1], "<<>>")
+            print "  <<>> = %s," % ('R' + str(len(c.fields)))
         print "  #'P_%s'{%s};" % (erlangize(c.name), fieldMapList(c.fields))
 
     def genFieldPreprocessing(packed):
@@ -429,26 +419,17 @@ shortstr_size(S) ->
         _                   -> exit(method_field_shortstr_overflow)
     end.
 
--define(SHORTSTR_PROP(P, R, L, S, X),
-        if P =:= 0 -> {undefined, R};
-           true    -> <<L:8/unsigned, S:L/binary, X/binary>> = R,
-                      {S, X}
-        end).
--define(TABLE_PROP(P, R, L, T, X),
-        if P =:= 0 -> {undefined, R};
-           true    -> <<L:32/unsigned, T:L/binary, X/binary>> = R,
-                      {rabbit_binary_parser:parse_table(T), X}
-        end).
--define(OCTET_PROP(P, R, I, X),
-        if P =:= 0 -> {undefined, R};
-           true    -> <<I:8/unsigned, X/binary>> = R,
-                      {I, X}
-        end).
--define(TIMESTAMP_PROP(P, R, I, X),
-        if P =:= 0 -> {undefined, R};
-           true    -> <<I:64/unsigned, X/binary>> = R,
-                      {I, X}
-        end).
+shortstr_prop(<<L:8/unsigned, S:L/binary, X/binary>>) ->
+    {S, X}.
+
+table_prop(<<L:32/unsigned, T:L/binary, X/binary>>) ->
+    {rabbit_binary_parser:parse_table(T), X}.
+
+octet_prop(<<I:8/unsigned, X/binary>>) ->
+    {I, X}.
+
+timestamp_prop(<<I:64/unsigned, X/binary>>) ->
+    {I, X}.
 """
     version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
     if version == '{8, 0, 0}': version = '{0, 8, 0}'
