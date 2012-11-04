@@ -24,18 +24,6 @@ from amqp_codegen import *
 import string
 import re
 
-erlangTypeMap = {
-    'octet': 'octet',
-    'shortstr': 'shortstr',
-    'longstr': 'longstr',
-    'short': 'shortint',
-    'long': 'longint',
-    'longlong': 'longlongint',
-    'bit': 'bit',
-    'table': 'table',
-    'timestamp': 'timestamp',
-}
-
 # Coming up with a proper encoding of AMQP tables in JSON is too much
 # hassle at this stage. Given that the only default value we are
 # interested in is for the empty table, we only support that.
@@ -123,7 +111,7 @@ def printFileHeader():
 
 def genErl(spec):
     def erlType(domain):
-        return erlangTypeMap[spec.resolveDomain(domain)]
+        return erlangize(spec.resolveDomain(domain))
 
     def fieldTypeList(fields):
         return '[' + ', '.join([erlType(f.domain) for f in fields]) + ']'
@@ -186,11 +174,11 @@ def genErl(spec):
             return p+'Len:32/unsigned, '+p+':'+p+'Len/binary'
         elif type == 'octet':
             return p+':8/unsigned'
-        elif type == 'shortint':
+        elif type == 'short':
             return p+':16/unsigned'
-        elif type == 'longint':
+        elif type == 'long':
             return p+':32/unsigned'
-        elif type == 'longlongint':
+        elif type == 'longlong':
             return p+':64/unsigned'
         elif type == 'timestamp':
             return p+':64/unsigned'
@@ -350,8 +338,8 @@ def genErl(spec):
       'table' | 'byte' | 'double' | 'float' | 'long' |
       'short' | 'bool' | 'binary' | 'void' | 'array').
 -type(amqp_property_type() ::
-      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
-      'longlongint' | 'timestamp' | 'bit' | 'table').
+      'shortstr' | 'longstr' | 'octet' | 'short' | 'long' |
+      'longlong' | 'timestamp' | 'bit' | 'table').
 
 -type(amqp_table() :: [{binary(), amqp_field_type(), amqp_value()}]).
 -type(amqp_array() :: [{amqp_field_type(), amqp_value()}]).
@@ -497,9 +485,6 @@ shortstr_size(S) ->
     print "amqp_exception(_Code) -> undefined."
 
 def genHrl(spec):
-    def erlType(domain):
-        return erlangTypeMap[spec.resolveDomain(domain)]
-
     def fieldNameList(fields):
         return ', '.join([erlangize(f.name) for f in fields])
 
