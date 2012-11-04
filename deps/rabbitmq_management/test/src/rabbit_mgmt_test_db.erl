@@ -262,7 +262,7 @@ find_conn_by_local_port(Port, Items) ->
     [Conn] = lists:filter(
                fun(Conn) ->
                        pget(peer_port, Conn) == Port andalso
-                           pget(peer_address, Conn) == <<"127.0.0.1">>
+                           pget(peer_host, Conn) == <<"127.0.0.1">>
                end, Items),
     Conn.
 
