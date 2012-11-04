@@ -21,7 +21,7 @@
          node_listeners/1, connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
-         close_connection/2, force_connection_event_refresh/0]).
+         close_connection/2, force_connection_event_refresh/0, tcp_host/1]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/6,
