@@ -249,7 +249,7 @@ def genErl(spec):
                         'R' + i, 'L' + i, 'S' + i, 'X' + i))
 
         if len(c.fields) == 0:
-            print "decode_properties(%d, _) ->" % (c.index,)
+            print "decode_properties(%d, <<>>) ->" % (c.index,)
         else:
             print ("decode_properties(%d, %s) ->" %
                    (c.index, presentBin(c.fields)))
