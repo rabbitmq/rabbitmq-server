@@ -223,8 +223,12 @@ def genErl(spec):
             return '<<' + ps + ', _:%d, R0/binary>>' % (16 - len(fields),)
         def writePropFieldLine(field):
             i = str(field.index)
-            print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> %s_prop(R%s) end," % \
-                (i, str(field.index + 1), i, i, erlType(field.domain), i)
+            if field.domain == 'bit':
+                print "  {F%s, R%s} = {P%s =/= 0, R%s}," % \
+                    (i, str(field.index + 1), i, i)
+            else:
+                print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> %s_prop(R%s) end," % \
+                    (i, str(field.index + 1), i, i, erlType(field.domain), i)
 
         if len(c.fields) == 0:
             print "decode_properties(%d, <<>>) ->" % (c.index,)
@@ -407,17 +411,28 @@ shortstr_size(S) ->
         _                   -> exit(method_field_shortstr_overflow)
     end.
 
-shortstr_prop(<<L:8/unsigned, S:L/binary, X/binary>>) ->
-    {S, X}.
+%% use of these functions by the codec depends on the protocol spec
+-compile({nowarn_unused_function,
+          [{shortstr_prop, 1}, {longstr_prop, 1},
+           {short_prop, 1}, {long_prop, 1}, {longlong_prop, 1},
+           {octet_prop, 1}, {table_prop, 1}, {timestamp_prop, 1}]}).
+
+shortstr_prop(<<L:8/unsigned, S:L/binary, X/binary>>) -> {S, X}.
+
+longstr_prop(<<L:32/unsigned, S:L/binary, X/binary>>) -> {S, X}.
+
+short_prop(<<I:8/unsigned, X/binary>>) -> {I, X}.
+
+long_prop(<<I:32/unsigned, X/binary>>) -> {I, X}.
+
+longlong_prop(<<I:64/unsigned, X/binary>>) -> {I, X}.
+
+octet_prop(<<I:8/unsigned, X/binary>>) -> {I, X}.
 
 table_prop(<<L:32/unsigned, T:L/binary, X/binary>>) ->
     {rabbit_binary_parser:parse_table(T), X}.
 
-octet_prop(<<I:8/unsigned, X/binary>>) ->
-    {I, X}.
-
-timestamp_prop(<<I:64/unsigned, X/binary>>) ->
-    {I, X}.
+timestamp_prop(<<I:64/unsigned, X/binary>>) -> {I, X}.
 """
     version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
     if version == '{8, 0, 0}': version = '{0, 8, 0}'
