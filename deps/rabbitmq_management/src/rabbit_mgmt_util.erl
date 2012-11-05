@@ -157,9 +157,16 @@ get_dotted_value(Key, Item) ->
 get_dotted_value0([Key], Item) ->
     %% Put "nothing" before everything else, in number terms it usually
     %% means 0.
-    pget(list_to_atom(Key), Item, 0);
+    pget_bin(list_to_binary(Key), Item, 0);
 get_dotted_value0([Key | Keys], Item) ->
-    get_dotted_value0(Keys, pget(list_to_atom(Key), Item, [])).
+    get_dotted_value0(Keys, pget_bin(list_to_binary(Key), Item, [])).
+
+pget_bin(Key, List, Default) ->
+    case lists:partition(fun ({K, _V}) -> a2b(K) =:= Key end, List) of
+        %% TODO lose that | _
+        {[{_K, V} | _], _} -> V;
+        {[],            _} -> Default
+    end.
 
 extract_columns(Items, ReqData) ->
     Cols = columns(ReqData),
