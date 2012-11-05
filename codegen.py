@@ -24,18 +24,6 @@ from amqp_codegen import *
 import string
 import re
 
-erlangTypeMap = {
-    'octet': 'octet',
-    'shortstr': 'shortstr',
-    'longstr': 'longstr',
-    'short': 'shortint',
-    'long': 'longint',
-    'longlong': 'longlongint',
-    'bit': 'bit',
-    'table': 'table',
-    'timestamp': 'timestamp',
-}
-
 # Coming up with a proper encoding of AMQP tables in JSON is too much
 # hassle at this stage. Given that the only default value we are
 # interested in is for the empty table, we only support that.
@@ -123,7 +111,7 @@ def printFileHeader():
 
 def genErl(spec):
     def erlType(domain):
-        return erlangTypeMap[spec.resolveDomain(domain)]
+        return erlangize(spec.resolveDomain(domain))
 
     def fieldTypeList(fields):
         return '[' + ', '.join([erlType(f.domain) for f in fields]) + ']'
@@ -186,11 +174,11 @@ def genErl(spec):
             return p+'Len:32/unsigned, '+p+':'+p+'Len/binary'
         elif type == 'octet':
             return p+':8/unsigned'
-        elif type == 'shortint':
+        elif type == 'short':
             return p+':16/unsigned'
-        elif type == 'longint':
+        elif type == 'long':
             return p+':32/unsigned'
-        elif type == 'longlongint':
+        elif type == 'longlong':
             return p+':64/unsigned'
         elif type == 'timestamp':
             return p+':64/unsigned'
@@ -235,11 +223,15 @@ def genErl(spec):
             return '<<' + ps + ', _:%d, R0/binary>>' % (16 - len(fields),)
         def writePropFieldLine(field):
             i = str(field.index)
-            print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> ?%s_PROP(R%s, L%s, V%s, X%s) end," % \
-                (i, str(field.index + 1), i, i, erlType(field.domain).upper(), i, i, i, i)
+            if field.domain == 'bit':
+                print "  {F%s, R%s} = {P%s =/= 0, R%s}," % \
+                    (i, str(field.index + 1), i, i)
+            else:
+                print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> ?%s_PROP(R%s, L%s, V%s, X%s) end," % \
+                    (i, str(field.index + 1), i, i, erlType(field.domain).upper(), i, i, i, i)
 
         if len(c.fields) == 0:
-            print "decode_properties(%d, _) ->" % (c.index,)
+            print "decode_properties(%d, <<>>) ->" % (c.index,)
         else:
             print ("decode_properties(%d, %s) ->" %
                    (c.index, presentBin(c.fields)))
@@ -340,8 +332,8 @@ def genErl(spec):
       'table' | 'byte' | 'double' | 'float' | 'long' |
       'short' | 'bool' | 'binary' | 'void' | 'array').
 -type(amqp_property_type() ::
-      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
-      'longlongint' | 'timestamp' | 'bit' | 'table').
+      'shortstr' | 'longstr' | 'octet' | 'short' | 'long' |
+      'longlong' | 'timestamp' | 'bit' | 'table').
 
 -type(amqp_table() :: [{binary(), amqp_field_type(), amqp_value()}]).
 -type(amqp_array() :: [{amqp_field_type(), amqp_value()}]).
@@ -425,16 +417,40 @@ shortstr_size(S) ->
             {V, X}
         end).
 
--define(TABLE_PROP(R, L, V, X),
+-define(LONGSTR_PROP(R, L, V, X),
         begin
             <<L:32/unsigned, V:L/binary, X/binary>> = R,
-            {rabbit_binary_parser:parse_table(V), X}
+            {V, X}
+        end).
+
+-define(SHORT_PROP(R, L, V, X),
+        begin
+            <<V:8/unsigned, X/binary>> = R,
+            {V, X}
+        end).
+
+-define(LONG_PROP(R, L, V, X),
+        begin
+            <<V:32/unsigned, X/binary>> = R,
+            {V, X}
+        end).
+
+-define(LONGLONG_PROP(R, L, V, X),
+        begin
+            <<V:64/unsigned, X/binary>> = R,
+            {V, X}
         end).
 
 -define(OCTET_PROP(R, L, V, X),
         begin
             <<V:8/unsigned, X/binary>> = R,
             {V, X}
+        end).
+
+-define(TABLE_PROP(R, L, V, X),
+        begin
+            <<L:32/unsigned, V:L/binary, X/binary>> = R,
+            {rabbit_binary_parser:parse_table(V), X}
         end).
 
 -define(TIMESTAMP_PROP(R, L, V, X),
@@ -490,9 +506,6 @@ shortstr_size(S) ->
     print "amqp_exception(_Code) -> undefined."
 
 def genHrl(spec):
-    def erlType(domain):
-        return erlangTypeMap[spec.resolveDomain(domain)]
-
     def fieldNameList(fields):
         return ', '.join([erlangize(f.name) for f in fields])
 
