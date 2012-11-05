@@ -1005,12 +1005,9 @@ term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
 
-check_expiry(N) when N > ?MAX_EXPIRY_TIMER ->
-    {error, {value_too_big, N}};
-check_expiry(N) when N < 0 ->
-    {error, {value_negative, N}};
-check_expiry(_N) ->
-    ok.
+check_expiry(N) when N > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, N}};
+check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
+check_expiry(_N)                           -> ok.
 
 base64url(In) ->
     lists:reverse(lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
