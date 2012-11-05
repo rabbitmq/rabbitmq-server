@@ -235,8 +235,8 @@ def genErl(spec):
             return '<<' + ps + ', _:%d, R0/binary>>' % (16 - len(fields),)
         def writePropFieldLine(field):
             i = str(field.index)
-            print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> %s_prop(R%s) end," % \
-                (i, str(field.index + 1), i, i, erlType(field.domain), i)
+            print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> ?%s_PROP(R%s, L%s, V%s, X%s) end," % \
+                (i, str(field.index + 1), i, i, erlType(field.domain).upper(), i, i, i, i)
 
         if len(c.fields) == 0:
             print "decode_properties(%d, _) ->" % (c.index,)
@@ -419,17 +419,29 @@ shortstr_size(S) ->
         _                   -> exit(method_field_shortstr_overflow)
     end.
 
-shortstr_prop(<<L:8/unsigned, S:L/binary, X/binary>>) ->
-    {S, X}.
+-define(SHORTSTR_PROP(R, L, V, X),
+        begin
+            <<L:8/unsigned, V:L/binary, X/binary>> = R,
+            {V, X}
+        end).
 
-table_prop(<<L:32/unsigned, T:L/binary, X/binary>>) ->
-    {rabbit_binary_parser:parse_table(T), X}.
+-define(TABLE_PROP(R, L, V, X),
+        begin
+            <<L:32/unsigned, V:L/binary, X/binary>> = R,
+            {rabbit_binary_parser:parse_table(V), X}
+        end).
 
-octet_prop(<<I:8/unsigned, X/binary>>) ->
-    {I, X}.
+-define(OCTET_PROP(R, L, V, X),
+        begin
+            <<V:8/unsigned, X/binary>> = R,
+            {V, X}
+        end).
 
-timestamp_prop(<<I:64/unsigned, X/binary>>) ->
-    {I, X}.
+-define(TIMESTAMP_PROP(R, L, V, X),
+        begin
+            <<V:64/unsigned, X/binary>> = R,
+            {V, X}
+        end).
 """
     version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
     if version == '{8, 0, 0}': version = '{0, 8, 0}'
