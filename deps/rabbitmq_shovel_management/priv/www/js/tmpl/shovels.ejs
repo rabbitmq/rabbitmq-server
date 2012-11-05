@@ -22,7 +22,7 @@
   <tr<%= alt_rows(i)%>>
     <td><%= fmt_string(shovel.name) %></td>
 <% if (nodes_interesting) { %>
-    <td><%= fmt_string(shovel.node) %></td>
+    <td><%= fmt_node(shovel.node) %></td>
 <% } %>
 <% if (shovel.state == 'terminated') { %>
     <td colspan="3">
