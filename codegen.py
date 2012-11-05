@@ -227,7 +227,7 @@ def genErl(spec):
                 print "  {F%s, R%s} = {P%s =/= 0, R%s}," % \
                     (i, str(field.index + 1), i, i)
             else:
-                print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> ?%s_PROP(R%s, L%s, V%s, X%s) end," % \
+                print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> ?%s_VAL(R%s, L%s, V%s, X%s) end," % \
                     (i, str(field.index + 1), i, i, erlType(field.domain).upper(), i, i, i, i)
 
         if len(c.fields) == 0:
@@ -265,9 +265,27 @@ def genErl(spec):
         print "  <<%s>>;" % (', '.join([methodFieldFragment(f) for f in packedFields]))
 
     def genEncodeProperties(c):
+        def presentBin(fields):
+            ps = ', '.join(['P' + str(f.index) + ':1' for f in fields])
+            return '<<' + ps + ', 0:%d>>' % (16 - len(fields),)
+        def writePropFieldLine(field):
+            i = str(field.index)
+            if field.domain == 'bit':
+                print "  {P%s, R%s} = {F%s =:= 1, R%s}," % \
+                    (i, str(field.index + 1), i, i)
+            else:
+                print "  {P%s, R%s} = if F%s =:= undefined -> {0, R%s}; true -> {1, [?%s_PROP(F%s) | R%s]} end," % \
+                    (i, str(field.index + 1), i, i, erlType(field.domain).upper(), i, i)
+
         print "encode_properties(#'P_%s'{%s}) ->" % (erlangize(c.name), fieldMapList(c.fields))
-        print "  rabbit_binary_generator:encode_properties(%s, %s);" % \
-              (fieldTypeList(c.fields), fieldTempList(c.fields))
+        if len(c.fields) == 0:
+            print "  <<>>;"
+        else:
+            print "  R0 = [<<>>],"
+            for field in c.fields:
+                writePropFieldLine(field)
+            print "  list_to_binary([%s | lists:reverse(R%s)]);" % \
+                (presentBin(c.fields), str(len(c.fields)))
 
     def messageConstantClass(cls):
         # We do this because 0.8 uses "soft error" and 8.1 uses "soft-error".
@@ -411,53 +429,80 @@ shortstr_size(S) ->
         _                   -> exit(method_field_shortstr_overflow)
     end.
 
--define(SHORTSTR_PROP(R, L, V, X),
+-define(SHORTSTR_VAL(R, L, V, X),
         begin
             <<L:8/unsigned, V:L/binary, X/binary>> = R,
             {V, X}
         end).
 
--define(LONGSTR_PROP(R, L, V, X),
+-define(LONGSTR_VAL(R, L, V, X),
         begin
             <<L:32/unsigned, V:L/binary, X/binary>> = R,
             {V, X}
         end).
 
--define(SHORT_PROP(R, L, V, X),
+-define(SHORT_VAL(R, L, V, X),
         begin
             <<V:8/unsigned, X/binary>> = R,
             {V, X}
         end).
 
--define(LONG_PROP(R, L, V, X),
+-define(LONG_VAL(R, L, V, X),
         begin
             <<V:32/unsigned, X/binary>> = R,
             {V, X}
         end).
 
--define(LONGLONG_PROP(R, L, V, X),
+-define(LONGLONG_VAL(R, L, V, X),
         begin
             <<V:64/unsigned, X/binary>> = R,
             {V, X}
         end).
 
--define(OCTET_PROP(R, L, V, X),
+-define(OCTET_VAL(R, L, V, X),
         begin
             <<V:8/unsigned, X/binary>> = R,
             {V, X}
         end).
 
--define(TABLE_PROP(R, L, V, X),
+-define(TABLE_VAL(R, L, V, X),
         begin
             <<L:32/unsigned, V:L/binary, X/binary>> = R,
             {rabbit_binary_parser:parse_table(V), X}
         end).
 
--define(TIMESTAMP_PROP(R, L, V, X),
+-define(TIMESTAMP_VAL(R, L, V, X),
         begin
             <<V:64/unsigned, X/binary>> = R,
             {V, X}
         end).
+
+%% use of these functions by the codec depends on the protocol spec
+-compile({nowarn_unused_function,
+         [{shortstr_prop, 1}, {longstr_prop, 1}, {table_prop, 1}]}).
+
+shortstr_prop(S) ->
+    L = size(S),
+    if L < 256 -> <<L:8, S:L/binary>>;
+       true    -> exit(content_properties_shortstr_overflow)
+    end.
+
+longstr_prop(S) ->
+    L = size(S),
+    <<L:32, S:L/binary>>.
+
+table_prop(T) ->
+    BinT = rabbit_binary_generator:generate_table(T),
+    <<(size(BinT)):32, BinT/binary>>.
+
+-define(SHORTSTR_PROP(X),  shortstr_prop(X)).
+-define(LONGSTR_PROP(X),   longstr_prop(X)).
+-define(OCTET_PROP(X),     <<X:8/unsigned>>).
+-define(SHORT_PROP(X),     <<X:16/unsigned>>).
+-define(LONG_PROP(X),      <<X:32/unsigned>>).
+-define(LONGLONG_PROP(X),  <<X:64/unsigned>>).
+-define(TIMESTAMP_PROP(X), <<X:64/unsigned>>).
+-define(TABLE_PROP(X),     table_prop(X)).
 """
     version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
     if version == '{8, 0, 0}': version = '{0, 8, 0}'

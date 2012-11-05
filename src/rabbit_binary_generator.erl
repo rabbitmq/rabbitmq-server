@@ -21,7 +21,7 @@
 -export([build_simple_method_frame/3,
          build_simple_content_frames/4,
          build_heartbeat_frame/0]).
--export([generate_table/1, encode_properties/2]).
+-export([generate_table/1]).
 -export([check_empty_frame_size/0]).
 -export([ensure_content_encoded/2, clear_encoded_content/1]).
 -export([map_exception/3]).
@@ -42,8 +42,6 @@
         -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
 -spec(generate_table/1 :: (rabbit_framing:amqp_table()) -> binary()).
--spec(encode_properties/2 ::
-        ([rabbit_framing:amqp_property_type()], [any()]) -> binary()).
 -spec(check_empty_frame_size/0 :: () -> 'ok').
 -spec(ensure_content_encoded/2 ::
         (rabbit_types:content(), rabbit_types:protocol()) ->
@@ -167,59 +165,6 @@ long_string_to_binary(String) when is_binary(String) ->
     [<<(size(String)):32>>, String];
 long_string_to_binary(String) ->
     [<<(length(String)):32>>, String].
-
-encode_properties([], []) ->
-    <<0, 0>>;
-encode_properties(TypeList, ValueList) ->
-    encode_properties(0, TypeList, ValueList, 0, [], []).
-
-encode_properties(_Bit, [], [],
-                  FirstShortAcc, FlagsAcc, PropsAcc) ->
-    list_to_binary([lists:reverse(FlagsAcc),
-                    <<FirstShortAcc:16>>,
-                    lists:reverse(PropsAcc)]);
-encode_properties(_Bit, [], _ValueList,
-                  _FirstShortAcc, _FlagsAcc, _PropsAcc) ->
-    exit(content_properties_values_overflow);
-encode_properties(15, TypeList, ValueList,
-                  FirstShortAcc, FlagsAcc, PropsAcc) ->
-    NewFlagsShort = FirstShortAcc bor 1, % set the continuation low bit
-    encode_properties(0, TypeList, ValueList,
-                      0, [<<NewFlagsShort:16>> | FlagsAcc], PropsAcc);
-encode_properties(Bit, [bit | TypeList], [true  | ValueList],
-                  FirstShortAcc, FlagsAcc, PropsAcc) ->
-    encode_properties(Bit + 1, TypeList, ValueList,
-                      FirstShortAcc bor (1 bsl (15 - Bit)), FlagsAcc, PropsAcc);
-encode_properties(Bit, [bit | TypeList], [false | ValueList],
-                  FirstShortAcc, FlagsAcc, PropsAcc) ->
-    encode_properties(Bit + 1, TypeList, ValueList,
-                      FirstShortAcc, FlagsAcc, PropsAcc);
-encode_properties(_Bit, [bit | _TypeList], [Other | _ValueList],
-                  _FirstShortAcc, _FlagsAcc, _PropsAcc) ->
-    exit({content_properties_illegal_bit_value, Other});
-encode_properties(Bit, [_Type | TypeList], [undefined | ValueList],
-                  FirstShortAcc, FlagsAcc, PropsAcc) ->
-    encode_properties(Bit + 1, TypeList, ValueList,
-                      FirstShortAcc, FlagsAcc, PropsAcc);
-encode_properties(Bit, [Type | TypeList], [Value | ValueList],
-                  FirstShortAcc, FlagsAcc, PropsAcc) ->
-    encode_properties(Bit + 1, TypeList, ValueList,
-                      FirstShortAcc bor (1 bsl (15 - Bit)), FlagsAcc,
-                      [encode_property(Type, Value) | PropsAcc]).
-
-encode_property(shortstr, String) ->
-    Len = size(String),
-    if Len < 256 -> <<Len:8, String:Len/binary>>;
-       true      -> exit(content_properties_shortstr_overflow)
-    end;
-encode_property(longstr,  String) -> Len = size(String),
-                                     <<Len:32, String:Len/binary>>;
-encode_property(octet,       Int) -> <<Int:8/unsigned>>;
-encode_property(short,       Int) -> <<Int:16/unsigned>>;
-encode_property(long,        Int) -> <<Int:32/unsigned>>;
-encode_property(longlong,    Int) -> <<Int:64/unsigned>>;
-encode_property(timestamp,   Int) -> <<Int:64/unsigned>>;
-encode_property(table,     Table) -> table_to_binary(Table).
 
 check_empty_frame_size() ->
     %% Intended to ensure that EMPTY_FRAME_SIZE is defined correctly.
