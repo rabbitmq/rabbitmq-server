@@ -61,7 +61,7 @@
 <% if (nodes_interesting) { %>
       <tr>
         <th>Node</th>
-        <td><%= fmt_string(queue.node) %></td>
+        <td><%= fmt_node(queue.node) %></td>
       </tr>
       <tr>
         <th>Mirrors</th>
@@ -70,9 +70,9 @@
              var node = queue.slave_nodes[i];
           %>
             <% if (jQuery.inArray(node, queue.synchronised_slave_nodes) == -1) { %>
-             <%= fmt_string(node) %> <b>(unsynchronised)</b>
+             <%= fmt_node(node) %> <b>(unsynchronised)</b>
             <% } else { %>
-             <%= fmt_string(node) %>
+             <%= fmt_node(node) %>
             <% } %>
             <br/>
           <% } %>

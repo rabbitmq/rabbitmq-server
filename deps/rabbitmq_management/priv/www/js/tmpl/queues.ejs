@@ -54,7 +54,7 @@
    <td><%= link_queue(queue.vhost, queue.name) %></td>
 <% if (nodes_interesting) { %>
    <td>
-     <%= fmt_string(queue.node) %>
+     <%= fmt_node(queue.node) %>
      <%= fmt_mirrors(queue) %>
    </td>
 <% } %>

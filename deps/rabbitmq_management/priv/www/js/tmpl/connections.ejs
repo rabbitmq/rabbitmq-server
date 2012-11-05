@@ -41,7 +41,7 @@
     </td>
     <td><%= fmt_client_name(connection.client_properties) %></td>
 <% if (nodes_interesting) { %>
-    <td><%= connection.node %></td>
+    <td><%= fmt_node(connection.node) %></td>
 <% } %>
     <td><%= fmt_rate_bytes(connection, 'recv_oct') %></td>
     <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>

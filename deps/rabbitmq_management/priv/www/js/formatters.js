@@ -385,11 +385,11 @@ function fmt_maybe_wrap(txt, encoding) {
     return fmt_escape_html(res);
 }
 
-function fmt_node_host(node_host) {
+function fmt_node(node_host) {
     var both = node_host.split('@');
     var node = both.slice(0, 1);
     var host = both.slice(1);
-    return host + ' <small>(' + node_host + ')</small>';
+    return '<small>' + node + '@</small>' + host;
 }
 
 function fmt_connection_state(conn) {

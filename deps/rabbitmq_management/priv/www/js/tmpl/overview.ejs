@@ -158,7 +158,7 @@
   <tr>
     <th>Protocol</th>
 <% if (nodes_interesting) { %>
-    <th>Host <small>(node)</small></th>
+    <th>Node</th>
 <% } %>
     <th>Bound to</th>
     <th>Port</th>
@@ -170,7 +170,7 @@
   <tr<%= alt_rows(i)%>>
     <td><%= listener.protocol %></td>
 <% if (nodes_interesting) { %>
-    <td><%= fmt_node_host(listener.node) %></td>
+    <td><%= fmt_node(listener.node) %></td>
 <% } %>
     <td><%= listener.ip_address %></td>
     <td><%= listener.port %></td>
@@ -182,7 +182,7 @@
   <tr>
     <th>Context</th>
 <% if (nodes_interesting) { %>
-    <th>Host <small>(node)</small></th>
+    <th>Node</th>
 <% } %>
     <th>Bound to</th>
     <th>Port</th>
@@ -196,7 +196,7 @@
     <tr<%= alt_rows(i)%>>
       <td><%= context.description %></td>
 <% if (nodes_interesting) { %>
-      <td><%= fmt_node_host(context.node) %></td>
+      <td><%= fmt_node(context.node) %></td>
 <% } %>
       <td><%= (context.ip != undefined) ? context.ip : "0.0.0.0" %></td>
       <td><%= context.port %></td>
