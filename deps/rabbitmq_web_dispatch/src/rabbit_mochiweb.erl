@@ -17,6 +17,7 @@
 -module(rabbit_mochiweb).
 
 -export([register_context_handler/5, register_static_context/6]).
+-export([register_port_redirect/4]).
 -export([unregister_context/1]).
 
 -define(APP, rabbitmq_mochiweb).
@@ -46,6 +47,24 @@ register_static_context(Name, Listener, Prefix, Module, FSPath, LinkText) ->
                      static_context_handler(Prefix, Module, FSPath),
                      {Prefix, LinkText}),
     {ok, Prefix}.
+
+%% A context which just redirects the request to a different port.
+register_port_redirect(Name, Listener, Prefix, RedirectPort) ->
+    register_context_handler(
+      Name, Listener, Prefix,
+      fun (Req) ->
+              Host = case Req:get_header_value("host") of
+                         undefined -> {ok, {IP, _Port}} = rabbit_net:sockname(
+                                                            Req:get(socket)),
+                                      rabbit_misc:ntoa(IP);
+                         Header    -> hd(string:tokens(Header, ":"))
+                     end,
+              URL = rabbit_misc:format(
+                      "~s://~s:~B~s~n",
+                      [Req:get(scheme), Host, RedirectPort, Req:get(raw_path)]),
+              Req:respond({301, [{"Location", URL}], ""})
+      end,
+      rabbit_misc:format("Redirect to port ~B", [RedirectPort])).
 
 context_selector("") ->
     fun(_Req) -> true end;
