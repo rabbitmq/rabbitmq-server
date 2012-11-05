@@ -477,9 +477,8 @@ check_user_id_header(#'P_basic'{user_id = Claimed},
 check_expiration_header(Props) ->
     case rabbit_basic:parse_expiration(Props) of
         {ok, _}    -> ok;
-        {error, E} -> rabbit_misc:protocol_error(
-                        invalid_expiration, "cannot parse expiration '~p': ~p",
-                        [Props#'P_basic'.expiration, E])
+        {error, E} -> precondition_failed("cannot parse expiration '~p': ~p",
+                                          [Props#'P_basic'.expiration, E])
     end.
 
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
