@@ -259,19 +259,18 @@ header_routes(HeadersTable) ->
                                              binary_to_list(HeaderKey), Type}})
        end || HeaderKey <- ?ROUTING_HEADERS]).
 
+parse_expiration(#'P_basic'{expiration = undefined}) ->
+    {ok, undefined};
 parse_expiration(#'P_basic'{expiration = Expiration}) ->
-    case Expiration of
-        undefined -> {ok, undefined};
-        B         -> case string:to_integer(binary_to_list(B)) of
-                         {error, no_integer} = E ->
-                             E;
-                         {N, ""} ->
-                             case rabbit_misc:check_expiry_size(N) of
-                                 ok             -> {ok, N};
-                                 E = {error, _} -> E
-                             end;
-                         {_, S} ->
-                             {error, {leftover_string, S}}
-                     end
+    case string:to_integer(binary_to_list(Expiration)) of
+        {error, no_integer} = E ->
+            E;
+        {N, ""} ->
+            case rabbit_misc:check_expiry_size(N) of
+                ok             -> {ok, N};
+                E = {error, _} -> E
+            end;
+        {_, S} ->
+            {error, {leftover_string, S}}
     end.
 
