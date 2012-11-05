@@ -266,7 +266,7 @@ parse_expiration(#'P_basic'{expiration = Expiration}) ->
         {error, no_integer} = E ->
             E;
         {N, ""} ->
-            case rabbit_misc:check_expiry_size(N) of
+            case rabbit_misc:check_expiry(N) of
                 ok             -> {ok, N};
                 E = {error, _} -> E
             end;
