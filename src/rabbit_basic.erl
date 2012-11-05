@@ -75,7 +75,7 @@
                              {rabbit_framing:amqp_property_record(), binary()}).
 -spec(parse_expiration/1 ::
         (rabbit_framing:amqp_property_record())
-        -> rabbit_types:ok_or_error2(non_neg_integer(), any())).
+        -> rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any())).
 
 -endif.
 
