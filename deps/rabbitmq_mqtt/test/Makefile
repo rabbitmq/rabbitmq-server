@@ -8,18 +8,20 @@ CHECKOUT_DIR=test_client
 PAHO_JAR_NAME=paho.jar
 PAHO_JAR=$(CHECKOUT_DIR)/org.eclipse.paho.client.mqttv3/$(PAHO_JAR_NAME)
 JUNIT_JAR=../lib/junit.jar
+JAVA_AMQP_DIR=../../rabbitmq-java-client/
+JAVA_AMQP_CLASSES=$(JAVA_AMQP_DIR)build/classes/
 
 TEST_SRCS:=$(shell find $(TEST_SRC) -name '*.java')
 ALL_CLASSES:=$(foreach f,$(shell find src -name '*.class'),'$(f)')
 TEST_CLASSES:=$(TEST_SRCS:.java=.class)
-CP:=$(PAHO_JAR):$(JUNIT_JAR):$(TEST_SRC)
+CP:=$(PAHO_JAR):$(JUNIT_JAR):$(TEST_SRC):$(JAVA_AMQP_CLASSES)
 
 define class_from_path
 $(subst .class,,$(subst src.,,$(subst /,.,$(1))))
 endef
 
 .PHONY: test
-test: $(TEST_CLASSES)
+test: $(TEST_CLASSES) build_java_amqp
 	$(foreach test,$(TEST_CLASSES),CLASSPATH=$(CP) junit -text $(call class_from_path,$(test)))
 
 clean:
@@ -39,3 +41,6 @@ $(PAHO_JAR): $(CHECKOUT_DIR)
 %.class: %.java $(PAHO_JAR) $(JUNIT_JAR)
 	$(JC) -cp $(CP) $<
 
+.PHONY: build_java_amqp
+build_java_amqp:
+	make -C $(JAVA_AMQP_DIR)

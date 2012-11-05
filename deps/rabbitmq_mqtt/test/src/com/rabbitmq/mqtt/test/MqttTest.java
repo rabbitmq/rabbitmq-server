@@ -16,6 +16,7 @@
 
 package com.rabbitmq.mqtt.test;
 
+import com.rabbitmq.client.*;
 import junit.framework.Assert;
 import junit.framework.TestCase;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
@@ -58,9 +59,13 @@ public class MqttTest extends TestCase implements MqttCallback {
 
     private final byte[] payload = "payload".getBytes();
     private final String topic = "test-topic";
-    private int testDelay = 1000;
+    private int testDelay = 2000;
     private long lastReceipt;
     private boolean expectConnectionFailure;
+
+    private ConnectionFactory connectionFactory;
+    private Connection conn;
+    private Channel ch;
 
     // override 10s limit
     private class MyConnOpts extends MqttConnectOptions {
@@ -102,6 +107,17 @@ public class MqttTest extends TestCase implements MqttCallback {
             client2.connect(conOpt);
             client2.disconnect();
         } catch (Exception _) {}
+    }
+
+    private void setUpAmqp() throws IOException {
+        connectionFactory = new ConnectionFactory();
+        connectionFactory.setHost(host);
+        conn = connectionFactory.newConnection();
+        ch = conn.createChannel();
+    }
+
+    private void tearDownAmqp() throws IOException {
+        conn.close();
     }
 
     private void setConOpts(MqttConnectOptions conOpts) {
@@ -356,6 +372,36 @@ public class MqttTest extends TestCase implements MqttCallback {
                 receivedMessages.clear();
             }
         }
+    }
+
+    public void testInteropM2A() throws MqttException, IOException, InterruptedException {
+        setUpAmqp();
+        String queue = ch.queueDeclare().getQueue();
+        ch.queueBind(queue, "amq.topic", topic);
+
+        client.connect(conOpt);
+        publish(client, topic, 1, payload);
+        client.disconnect();
+        Thread.sleep(testDelay);
+
+        GetResponse response = ch.basicGet(queue, true);
+        assertTrue(Arrays.equals(payload, response.getBody()));
+        assertNull(ch.basicGet(queue, true));
+        tearDownAmqp();
+    }
+
+    public void testInteropA2M() throws MqttException, IOException, InterruptedException {
+        client.connect(conOpt);
+        client.setCallback(this);
+        client.subscribe(topic, 1);
+
+        setUpAmqp();
+        ch.basicPublish("amq.topic", topic, MessageProperties.MINIMAL_BASIC, payload);
+        tearDownAmqp();
+        Thread.sleep(testDelay);
+
+        Assert.assertEquals(1, receivedMessages.size());
+        client.disconnect();
     }
 
     private void publish(MqttClient client, String topicName, int qos, byte[] payload) throws MqttException {

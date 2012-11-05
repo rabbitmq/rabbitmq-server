@@ -47,3 +47,8 @@ env(Key) ->
         {ok, Val} -> Val;
         undefined -> undefined
     end.
+
+table_lookup(undefined, Key) ->
+    undefined;
+table_lookup(Table, Key) ->
+    rabbit_misc:table_lookup(Table, Key).

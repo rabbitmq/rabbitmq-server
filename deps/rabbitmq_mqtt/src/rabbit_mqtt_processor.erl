@@ -267,7 +267,7 @@ amqp_callback(#'basic.ack'{ multiple = false, delivery_tag = Tag },
 
 delivery_dup({#'basic.deliver'{ redelivered = Redelivered },
               #amqp_msg{ props = #'P_basic'{ headers = Headers }}}) ->
-    case rabbit_misc:table_lookup(Headers, 'x-mqtt-dup') of
+    case rabbit_mqtt_util:table_lookup(Headers, "x-mqtt-dup") of
         undefined   -> Redelivered;
         {bool, Dup} -> Redelivered orelse Dup
     end.
@@ -278,12 +278,15 @@ next_msg_id(PState = #proc_state{ message_id = MsgId }) ->
     PState #proc_state{ message_id = MsgId + 1 }.
 
 %% decide at which qos level to deliver based on subscription
-%% and the message publish qos level
-delivery_qos(Tag, _Headers, #proc_state{ consumer_tags = {Tag, _} }) ->
+%% and the message publish qos level. non-MQTT publishes are
+%% assumed to be qos 1, regardless of delivery_mode.
+delivery_qos(Tag, _Headers,  #proc_state{ consumer_tags = {Tag, _} }) ->
     {?QOS_0, ?QOS_0};
-delivery_qos(Tag, Headers, #proc_state{ consumer_tags = {_, Tag} }) ->
-    {byte, Qos} = rabbit_misc:table_lookup(Headers, 'x-mqtt-publish-qos'),
-    {lists:min([Qos, ?QOS_1]), ?QOS_1}.
+delivery_qos(Tag, Headers,   #proc_state{ consumer_tags = {_, Tag} }) ->
+    case rabbit_mqtt_util:table_lookup(Headers, "x-mqtt-publish-qos") of
+        {byte, Qos} -> {lists:min([Qos, ?QOS_1]), ?QOS_1};
+        undefined   -> {?QOS_1, ?QOS_1}
+    end.
 
 maybe_clean_sess(false, _Conn, _ClientId) ->
     % todo: establish subscription to deliver old unacknowledged messages
@@ -431,7 +434,7 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
     Method = #'basic.publish'{ exchange    = Exchange,
                                routing_key =
                                    rabbit_mqtt_util:mqtt2amqp(Topic)},
-    Headers = [{'x-mqtt-publish-qos', byte, Qos}, {'x-mqtt-dup', bool, Dup}],
+    Headers = [{"x-mqtt-publish-qos", byte, Qos}, {"x-mqtt-dup", bool, Dup}],
     Msg = #amqp_msg{ props   = #'P_basic'{ headers = Headers },
                      payload = Payload },
     {UnackedPubs1, Ch, SeqNo1} =
