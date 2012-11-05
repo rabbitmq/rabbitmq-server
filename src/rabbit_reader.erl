@@ -39,19 +39,19 @@
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state, conserve_resources,
-             last_blocked_by, last_blocked_at}).
+             last_blocked_by, last_blocked_at, host, peer_host,
+             port, peer_port}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
                           channels]).
 
--define(CREATION_EVENT_KEYS, [pid, name, address, port, peer_address, peer_port,
-                              ssl, peer_cert_subject, peer_cert_issuer,
-                              peer_cert_validity, auth_mechanism,
-                              ssl_protocol, ssl_key_exchange,
-                              ssl_cipher, ssl_hash,
-                              protocol, user, vhost, timeout, frame_max,
-                              client_properties]).
+-define(CREATION_EVENT_KEYS,
+        [pid, name, port, peer_port, host,
+        peer_host, ssl, peer_cert_subject, peer_cert_issuer,
+        peer_cert_validity, auth_mechanism, ssl_protocol,
+        ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
+        timeout, frame_max, client_properties]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -192,17 +192,20 @@ socket_op(Sock, Fun) ->
 name(Sock) ->
     socket_op(Sock, fun (S) -> rabbit_net:connection_string(S, inbound) end).
 
+socket_ends(Sock) ->
+    socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end).
+
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
     Name = name(Sock),
     log(info, "accepting AMQP connection ~p (~s)~n", [self(), Name]),
     ClientSock = socket_op(Sock, SockTransform),
-    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
-                      handshake_timeout),
+    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(), handshake_timeout),
+    {PeerHost, PeerPort, Host, Port} = socket_ends(Sock),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
-                name                = Name,
+                name                = list_to_binary(Name),
                 connection          = #connection{
                   protocol           = none,
                   user               = none,
@@ -225,7 +228,11 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 auth_state          = none,
                 conserve_resources  = false,
                 last_blocked_by     = none,
-                last_blocked_at     = never},
+                last_blocked_at     = never,
+                host                = Host,
+                peer_host           = PeerHost,
+                port                = Port,
+                peer_port           = PeerPort},
     try
         ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
@@ -894,15 +901,11 @@ auth_phase(Response,
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
-i(name,               #v1{name = Name}) -> list_to_binary(Name);
-i(address,            S) -> socket_info(fun rabbit_net:sockname/1,
-                                        fun ({A, _}) -> A end, S);
-i(port,               S) -> socket_info(fun rabbit_net:sockname/1,
-                                        fun ({_, P}) -> P end, S);
-i(peer_address,       S) -> socket_info(fun rabbit_net:peername/1,
-                                        fun ({A, _}) -> A end, S);
-i(peer_port,          S) -> socket_info(fun rabbit_net:peername/1,
-                                        fun ({_, P}) -> P end, S);
+i(name,               #v1{name      = Name})     -> Name;
+i(host,               #v1{host      = Host})     -> Host;
+i(peer_host,          #v1{peer_host = PeerHost}) -> PeerHost;
+i(port,               #v1{port      = Port})     -> Port;
+i(peer_port,          #v1{peer_port = PeerPort}) -> PeerPort;
 i(SockStat,           S) when SockStat =:= recv_oct;
                               SockStat =:= recv_cnt;
                               SockStat =:= send_oct;
