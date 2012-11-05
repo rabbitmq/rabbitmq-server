@@ -36,7 +36,7 @@
 <% } %>
     <td><%= link_exchange(link.vhost, link.exchange) %></td>
 <% if (nodes_interesting) { %>
-    <td><%= fmt_string(link.node) %></td>
+    <td><%= fmt_node(link.node) %></td>
 <% } %>
 <% if (link.error) { %>
     <td>
