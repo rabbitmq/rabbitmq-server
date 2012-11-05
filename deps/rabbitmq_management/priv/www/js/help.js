@@ -188,6 +188,25 @@ HELP = {
 
     'memory-use' : '<p>Note that the memory details shown here are only updated on request - they could be too expensive to calculate every few seconds on a busy server.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
 
+    'policy-definitions' : '<dl>\
+<dt><code>ha-mode</code></dt>\
+  <dd>\
+    One of <code>all</code>, <code>exactly</code>\
+    or <code>nodes</code> (the latter currently not supported by\
+    web UI).\
+  </dd>\
+  <dt><code>ha-params</code></dt>\
+  <dd>\
+    Absent if <code>ha-mode</code> is <code>all</code>, a number\
+    if <code>ha-mode</code> is <code>exactly</code>, or an array\
+    of strings if <code>ha-mode</code> is <code>nodes</code>.\
+  </dd>\
+  <dt><code>federation-upstream-set</code></dt>\
+  <dd>\
+    A string; only if the federation plugin is enabled.\
+  </dd>\
+</dl>',
+
     'foo': 'foo' // No comma.
 };
 

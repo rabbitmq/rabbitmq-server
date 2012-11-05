@@ -356,7 +356,7 @@ handle_event(Event = #event{type = queue_deleted}, State) ->
 handle_event(#event{type = connection_created, props = Stats}, State) ->
     handle_created(
       connection_stats, Stats,
-      [{fun rabbit_mgmt_format:addr/1,         [address, peer_address]},
+      [{fun rabbit_mgmt_format:addr/1,         [host, peer_host]},
        {fun rabbit_mgmt_format:port/1,         [port, peer_port]},
        {fun rabbit_mgmt_format:protocol/1,     [protocol]},
        {fun rabbit_mgmt_format:amqp_table/1,   [client_properties]}], State);
@@ -628,15 +628,15 @@ augment_channel_pid(Pid, #state{tables = Tables}) ->
     [{name,            pget(name,   Ch)},
      {number,          pget(number, Ch)},
      {connection_name, pget(name,         Conn)},
-     {peer_address,    pget(peer_address, Conn)},
-     {peer_port,       pget(peer_port,    Conn)}].
+     {peer_port,       pget(peer_port,    Conn)},
+     {peer_host,       pget(peer_host,    Conn)}].
 
 augment_connection_pid(Pid, #state{tables = Tables}) ->
     Conn = lookup_element(orddict:fetch(connection_stats, Tables),
                           {Pid, create}),
     [{name,         pget(name,         Conn)},
-     {peer_address, pget(peer_address, Conn)},
-     {peer_port,    pget(peer_port,    Conn)}].
+     {peer_port,    pget(peer_port,    Conn)},
+     {peer_host,    pget(peer_host,    Conn)}].
 
 augment_queue_pid(Pid, _State) ->
     %% TODO This should be in rabbit_amqqueue?

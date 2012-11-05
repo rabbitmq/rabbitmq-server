@@ -40,7 +40,11 @@ start_other_node(Name, Port) ->
                      " OTHER_PORT=" ++ integer_to_list(Port) ++
                      " start-other-node ; echo $?"),
     LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
-    ?assertEqual("0", LastLine).
+    case LastLine of
+        "0" -> ok;
+        _   -> ?debugVal(Res),
+               ?assertEqual("0", LastLine)
+    end.
 
 cluster_other_node(Name) ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++
@@ -79,6 +83,7 @@ ha() ->
     assert_single_node(hare, pget(slave_nodes, Q2)),
     assert_single_node(hare, pget(synchronised_slave_nodes, Q2)),
     http_delete("/queues/%2f/ha-queue", ?NO_CONTENT),
+    http_delete("/policies/%2f/HA", ?NO_CONTENT),
     ok.
 
 %%----------------------------------------------------------------------------

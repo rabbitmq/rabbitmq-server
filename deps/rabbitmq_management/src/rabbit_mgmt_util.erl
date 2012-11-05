@@ -54,28 +54,27 @@ is_authorized_monitor(ReqData, Context) ->
                   fun(#user{tags = Tags}) -> is_monitor(Tags) end).
 
 is_authorized_vhost(ReqData, Context) ->
-    is_authorized(
-      ReqData, Context,
-      fun(User) ->
-              case vhost(ReqData) of
-                  not_found -> true;
-                  none      -> true;
-                  V         -> lists:member(V, list_login_vhosts(User))
-              end
-      end).
+    is_authorized(ReqData, Context,
+                  fun(User) ->
+                          case vhost(ReqData) of
+                              not_found -> true;
+                              none      -> true;
+                              V         -> lists:member(
+                                             V, list_login_vhosts(User))
+                          end
+                  end).
 
 %% Used for connections / channels. A normal user can only see / delete
 %% their own stuff. Monitors can see other users' and delete their
 %% own. Admins can do it all.
 is_authorized_user(ReqData, Context, Item) ->
-    is_authorized(
-      ReqData, Context,
-      fun(#user{username = Username, tags = Tags}) ->
-              case wrq:method(ReqData) of
-                  'DELETE' -> is_admin(Tags);
-                  _        -> is_monitor(Tags)
-              end orelse Username == pget(user, Item)
-      end).
+    is_authorized(ReqData, Context,
+                  fun(#user{username = Username, tags = Tags}) ->
+                          case wrq:method(ReqData) of
+                              'DELETE' -> is_admin(Tags);
+                              _        -> is_monitor(Tags)
+                          end orelse Username == pget(user, Item)
+                  end).
 
 is_authorized(ReqData, Context, Fun) ->
     %% Note that we've already done authentication in the Mochiweb
@@ -112,8 +111,7 @@ reply(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
     try
         {mochijson2:encode(Facts), ReqData1, Context}
-    catch
-        exit:{json_encode, E} ->
+    catch exit:{json_encode, E} ->
             Error = iolist_to_binary(
                       io_lib:format("JSON encode error: ~p", [E])),
             Reason = iolist_to_binary(
@@ -132,8 +130,7 @@ reply_list(Facts, DefaultSorts, ReqData, Context) ->
             wrq:get_qs_value("sort_reverse", ReqData)),
           ReqData, Context).
 
-sort_list(Facts, Sorts) ->
-    sort_list(Facts, Sorts, undefined, false).
+sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false).
 
 sort_list(Facts, DefaultSorts, Sort, Reverse) ->
     SortList = case Sort of
@@ -180,10 +177,10 @@ extract_column_items(L, Cols) when is_list(L) ->
 extract_column_items(O, _Cols) ->
     O.
 
-descend_columns(_K, [])                -> [];
-descend_columns(K, [[K] | _Rest])      -> all;
-descend_columns(K, [[K | K2] | Rest])  -> [K2 | descend_columns(K, Rest)];
-descend_columns(K, [[_K2 | _] | Rest]) -> descend_columns(K, Rest).
+descend_columns(_K, [])                   -> [];
+descend_columns( K, [[K]        | _Rest]) -> all;
+descend_columns( K, [[K   | K2] |  Rest]) -> [K2 | descend_columns(K, Rest)];
+descend_columns( K, [[_K2 | _ ] |  Rest]) -> descend_columns(K, Rest).
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
@@ -308,26 +305,23 @@ parse_bool(true)        -> true;
 parse_bool(false)       -> false;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
-parse_int(I) when is_integer(I) ->
-    I;
-parse_int(F) when is_number(F) ->
-    trunc(F);
-parse_int(S) ->
-    try
-        list_to_integer(binary_to_list(S))
-    catch error:badarg ->
-        throw({error, {not_integer, S}})
-    end.
+parse_int(I) when is_integer(I) -> I;
+parse_int(F) when is_number(F)  -> trunc(F);
+parse_int(S)                    -> try
+                                       list_to_integer(binary_to_list(S))
+                                   catch error:badarg ->
+                                           throw({error, {not_integer, S}})
+                                   end.
 
 amqp_request(VHost, ReqData, Context, Method) ->
     amqp_request(VHost, ReqData, Context, node(), Method).
 
 amqp_request(VHost, ReqData, Context, Node, Method) ->
     with_channel(VHost, ReqData, Context, Node,
-                      fun (Ch) ->
-                              amqp_channel:call(Ch, Method),
-                              {true, ReqData, Context}
-                      end).
+                 fun (Ch) ->
+                         amqp_channel:call(Ch, Method),
+                         {true, ReqData, Context}
+                 end).
 
 with_channel(VHost, ReqData, Context, Fun) ->
     with_channel(VHost, ReqData, Context, node(), Fun).
@@ -410,10 +404,9 @@ redirect(Location, ReqData) ->
     wrq:do_redirect(true,
                     wrq:set_resp_header("Location",
                                         binary_to_list(Location), ReqData)).
-args({struct, L}) ->
-    args(L);
-args(L) ->
-    rabbit_mgmt_format:to_amqp_table(L).
+
+args({struct, L}) -> args(L);
+args(L)           -> rabbit_mgmt_format:to_amqp_table(L).
 
 %% Make replying to a post look like anything else...
 post_respond({{halt, Code}, ReqData, Context}) ->
@@ -463,7 +456,8 @@ list_login_vhosts(User) ->
 %% Wow, base64:decode throws lots of weird errors. Catch and convert to one
 %% that will cause a bad_request.
 b64decode_or_throw(B64) ->
-    try base64:decode(B64)
+    try
+        base64:decode(B64)
     catch error:_ ->
             throw({error, {not_base64, B64}})
     end.

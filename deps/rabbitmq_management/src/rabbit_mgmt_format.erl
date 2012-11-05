@@ -75,8 +75,8 @@ ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
 ipb(unknown) -> unknown;
 ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
 
-addr(Addr) when is_list(Addr); is_atom(Addr) -> print("~s", Addr);
-addr(Addr) when is_tuple(Addr)               -> ip(Addr).
+addr(S)    when is_list(S); is_atom(S); is_binary(S) -> print("~s", S);
+addr(Addr) when is_tuple(Addr)                       -> ip(Addr).
 
 port(Port) when is_number(Port) -> Port;
 port(Port)                      -> print("~w", Port).
