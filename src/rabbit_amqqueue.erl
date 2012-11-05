@@ -401,9 +401,9 @@ check_int_arg({Type, _}, _) ->
 
 check_positive_expires({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val > 0 -> rabbit_misc:check_expiry_size(Val);
-        ok              -> {error, {value_zero_or_less, Val}};
-        Error           -> Error
+        ok when Val == 0 -> {error, {value_zero_or_less, Val}};
+        ok               -> rabbit_misc:check_expiry_size(Val);
+        Error            -> Error
     end.
 
 check_non_neg_ttl({Type, Val}, Args) ->
