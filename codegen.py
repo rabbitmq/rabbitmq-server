@@ -281,7 +281,7 @@ def genErl(spec):
         if len(c.fields) == 0:
             print "  <<>>;"
         else:
-            print "  R0 = <<>>,"
+            print "  R0 = [<<>>],"
             for field in c.fields:
                 writePropFieldLine(field)
             print "  list_to_binary([%s | lists:reverse(R%s)]);" % \
