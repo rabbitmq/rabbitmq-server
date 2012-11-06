@@ -18,7 +18,7 @@
 
 -behaviour(gen_event).
 
--export([start_link/0, start/0, stop/0, register/2, set_alarm/1, set_alarm_gc/1,
+-export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
          clear_alarm/1, get_alarms/0, on_node_up/1, on_node_down/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
@@ -38,7 +38,6 @@
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), rabbit_types:mfargs()) -> boolean()).
--spec(set_alarm_gc/1 :: (any()) -> 'ok').
 -spec(set_alarm/1 :: (any()) -> 'ok').
 -spec(clear_alarm/1 :: (any()) -> 'ok').
 -spec(on_node_up/1 :: (node()) -> 'ok').
@@ -56,8 +55,10 @@ start() ->
     ok = gen_event:add_handler(?SERVER, ?MODULE, []),
     {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
     rabbit_sup:start_restartable_child(
-      vm_memory_monitor, [MemoryWatermark, fun rabbit_alarm:set_alarm_gc/1,
-                          fun rabbit_alarm:clear_alarm/1]),
+      vm_memory_monitor, [MemoryWatermark, fun (Alarm) ->
+                                                   gc_all(),
+                                                   set_alarm(Alarm)
+                                           end, fun clear_alarm/1]),
     {ok, DiskLimit} = application:get_env(disk_free_limit),
     rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
     ok.
@@ -68,10 +69,8 @@ register(Pid, HighMemMFA) ->
     gen_event:call(?SERVER, ?MODULE, {register, Pid, HighMemMFA},
                    infinity).
 
-set_alarm_gc(Alarm) -> [erlang:garbage_collect(P) || P <- processes()],
-                       set_alarm(Alarm).
-set_alarm(Alarm)    -> gen_event:notify(?SERVER, {set_alarm,   Alarm}).
-clear_alarm(Alarm)  -> gen_event:notify(?SERVER, {clear_alarm, Alarm}).
+set_alarm(Alarm)   -> gen_event:notify(?SERVER, {set_alarm,   Alarm}).
+clear_alarm(Alarm) -> gen_event:notify(?SERVER, {clear_alarm, Alarm}).
 
 get_alarms() -> gen_event:call(?SERVER, ?MODULE, get_alarms, infinity).
 
@@ -228,3 +227,5 @@ handle_clear_alarm(file_descriptor_limit, State) ->
 handle_clear_alarm(Alarm, State) ->
     rabbit_log:warning("alarm '~p' cleared~n", [Alarm]),
     {ok, State}.
+
+gc_all() -> [erlang:garbage_collect(P) || P <- processes()].
