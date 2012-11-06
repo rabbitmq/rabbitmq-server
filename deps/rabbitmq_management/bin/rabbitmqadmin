@@ -430,16 +430,19 @@ class Management:
         return self.args[0]
 
     def invoke_help(self):
-        help_cmd = self.get_arg()
-        if help_cmd == 'subcommands':
-            usage = subcommands_usage()
-        elif help_cmd == 'config':
-            usage = config_usage()
+        if len(self.args) == 0:
+            parser.print_help()
         else:
-            assert_usage(False, """help topic must be one of:
+            help_cmd = self.get_arg()
+            if help_cmd == 'subcommands':
+                usage = subcommands_usage()
+            elif help_cmd == 'config':
+                usage = config_usage()
+            else:
+                assert_usage(False, """help topic must be one of:
   subcommands
   config""")
-        print usage
+            print usage
         exit(0)
 
     def invoke_publish(self):
