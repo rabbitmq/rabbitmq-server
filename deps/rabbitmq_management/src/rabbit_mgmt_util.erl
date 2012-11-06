@@ -163,9 +163,8 @@ get_dotted_value0([Key | Keys], Item) ->
 
 pget_bin(Key, List, Default) ->
     case lists:partition(fun ({K, _V}) -> a2b(K) =:= Key end, List) of
-        %% TODO lose that | _
-        {[{_K, V} | _], _} -> V;
-        {[],            _} -> Default
+        {[{_K, V}], _} -> V;
+        {[],        _} -> Default
     end.
 
 extract_columns(Items, ReqData) ->

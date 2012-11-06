@@ -411,7 +411,8 @@ handle_event(#event{type = queue_mirror_deaths, props = Props},
 handle_event(#event{type = node_stats, props = Stats, timestamp = Timestamp},
              State = #state{tables = Tables}) ->
     Table = orddict:fetch(node_stats, Tables),
-    ets:insert(Table, {{pget(name, Stats), stats}, Stats, Timestamp}),
+    ets:insert(Table, {{pget(name, Stats), stats},
+                       proplists:delete(name, Stats), Timestamp}),
     {ok, State};
 
 handle_event(_Event, State) ->
