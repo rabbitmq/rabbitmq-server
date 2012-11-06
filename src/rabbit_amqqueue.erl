@@ -41,8 +41,6 @@
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
 
--define(MAX_EXPIRY_TIMER, 4294967295).
-
 -define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
 -define(FAILOVER_WAIT_MILLIS, 100).
@@ -373,8 +371,8 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
       Args, RequiredArgs, QueueName, [<<"x-expires">>, <<"x-message-ttl">>]).
 
 check_declare_arguments(QueueName, Args) ->
-    Checks = [{<<"x-expires">>,                 fun check_positive_int_arg/2},
-              {<<"x-message-ttl">>,             fun check_non_neg_int_arg/2},
+    Checks = [{<<"x-expires">>,                 fun check_expires_arg/2},
+              {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
               {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
               {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}],
     [case rabbit_misc:table_lookup(Args, Key) of
@@ -401,20 +399,17 @@ check_int_arg({Type, _}, _) ->
         false -> {error, {unacceptable_type, Type}}
     end.
 
-check_positive_int_arg({Type, Val}, Args) ->
+check_expires_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, Val}};
-        ok when Val > 0                 -> ok;
-        ok                              -> {error, {value_zero_or_less, Val}};
-        Error                           -> Error
+        ok when Val == 0 -> {error, {value_zero, Val}};
+        ok               -> rabbit_misc:check_expiry(Val);
+        Error            -> Error
     end.
 
-check_non_neg_int_arg({Type, Val}, Args) ->
+check_message_ttl_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, Val}};
-        ok when Val >= 0                -> ok;
-        ok                              -> {error, {value_less_than_zero, Val}};
-        Error                           -> Error
+        ok    -> rabbit_misc:check_expiry(Val);
+        Error -> Error
     end.
 
 check_dlxrk_arg({longstr, _}, Args) ->

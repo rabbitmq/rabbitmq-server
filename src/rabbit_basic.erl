@@ -20,7 +20,8 @@
 
 -export([publish/4, publish/5, publish/1,
          message/3, message/4, properties/1, prepend_table_header/3,
-         extract_headers/1, map_headers/2, delivery/3, header_routes/1]).
+         extract_headers/1, map_headers/2, delivery/3, header_routes/1,
+         parse_expiration/1]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -72,6 +73,9 @@
                           binary() | [binary()]) -> rabbit_types:content()).
 -spec(from_content/1 :: (rabbit_types:content()) ->
                              {rabbit_framing:amqp_property_record(), binary()}).
+-spec(parse_expiration/1 ::
+        (rabbit_framing:amqp_property_record())
+        -> rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any())).
 
 -endif.
 
@@ -254,3 +258,19 @@ header_routes(HeadersTable) ->
            {Type, _Val}    -> throw({error, {unacceptable_type_in_header,
                                              binary_to_list(HeaderKey), Type}})
        end || HeaderKey <- ?ROUTING_HEADERS]).
+
+parse_expiration(#'P_basic'{expiration = undefined}) ->
+    {ok, undefined};
+parse_expiration(#'P_basic'{expiration = Expiration}) ->
+    case string:to_integer(binary_to_list(Expiration)) of
+        {error, no_integer} = E ->
+            E;
+        {N, ""} ->
+            case rabbit_misc:check_expiry(N) of
+                ok             -> {ok, N};
+                E = {error, _} -> E
+            end;
+        {_, S} ->
+            {error, {leftover_string, S}}
+    end.
+

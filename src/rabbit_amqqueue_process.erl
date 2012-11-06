@@ -553,7 +553,7 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
 deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
                    Delivered, State) ->
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
-    Props = message_properties(Confirm, Delivered, State),
+    Props = message_properties(Message, Confirm, Delivered, State),
     case attempt_delivery(Delivery, Props, State1) of
         {true, State2} ->
             State2;
@@ -680,16 +680,21 @@ subtract_acks(ChPid, AckTags, State, Fun) ->
             Fun(State)
     end.
 
-message_properties(Confirm, Delivered, #q{ttl = TTL}) ->
-    #message_properties{expiry           = calculate_msg_expiry(TTL),
+message_properties(Message, Confirm, Delivered, #q{ttl = TTL}) ->
+    #message_properties{expiry           = calculate_msg_expiry(Message, TTL),
                         needs_confirming = Confirm == eventually,
                         delivered        = Delivered}.
 
-calculate_msg_expiry(undefined) -> undefined;
-calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).
+calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
+    #content{properties = Props} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    %% We assert that the expiration must be valid - we check in the channel.
+    {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
+    case lists:min([TTL, MsgTTL]) of
+        undefined -> undefined;
+        T         -> now_micros() + T * 1000
+    end.
 
-drop_expired_messages(State = #q{ttl = undefined}) ->
-    State;
 drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue       = BQ }) ->
     Now = now_micros(),
@@ -710,8 +715,6 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
                      end, State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(undefined, State) ->
-    State;
-ensure_ttl_timer(_Expiry, State = #q{ttl = undefined}) ->
     State;
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref = undefined}) ->
     After = (case Expiry - now_micros() of
