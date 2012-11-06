@@ -157,6 +157,15 @@ tracing: False
         self.run_success(['--vhost', '/', 'declare', 'user', 'name=foo', 'password=pass', 'tags='])
         self.run_success(['delete', 'user', 'name=foo'])
 
+    def test_sort(self):
+        self.run_success(['declare', 'queue', 'name=foo'])
+        self.run_success(['declare', 'binding', 'source=amq.direct', 'destination=foo', 'destination_type=queue', 'routing_key=bbb'])
+        self.run_success(['declare', 'binding', 'source=amq.topic', 'destination=foo', 'destination_type=queue', 'routing_key=aaa'])
+        self.assert_table([['', 'foo'], ['amq.direct', 'bbb'], ['amq.topic', 'aaa']], ['--sort', 'source', 'list', 'bindings', 'source', 'routing_key'])
+        self.assert_table([['amq.topic', 'aaa'], ['amq.direct', 'bbb'], ['', 'foo']], ['--sort', 'routing_key', 'list', 'bindings', 'source', 'routing_key'])
+        self.assert_table([['amq.topic', 'aaa'], ['amq.direct', 'bbb'], ['', 'foo']], ['--sort', 'source', '--sort-reverse', 'list', 'bindings', 'source', 'routing_key'])
+        self.run_success(['delete', 'queue', 'name=foo'])
+
     # ---------------------------------------------------------------------------
 
     def run_success(self, args, **kwargs):
