@@ -19,8 +19,9 @@
 -export([parse_destination/1, parse_routing_information/1,
          parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
--export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/3,
-         headers_post_process/1, headers/3, message_properties/1, tag_to_id/1]).
+-export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/5,
+         headers_post_process/1, headers/5, message_properties/1, tag_to_id/1,
+         ack_header_name/1]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
 -export([valid_dest_prefixes/0]).
@@ -94,22 +95,30 @@ message_headers(SessionId,
                                  delivery_tag = DeliveryTag,
                                  exchange     = ExchangeBin,
                                  routing_key  = RoutingKeyBin},
-                Props = #'P_basic'{headers = Headers}) ->
+                Props = #'P_basic'{headers = Headers},
+                AckMode,
+                Version) ->
     Basic = [{?HEADER_DESTINATION,
               format_destination(binary_to_list(ExchangeBin),
                                  binary_to_list(RoutingKeyBin))},
              {?HEADER_MESSAGE_ID,
               create_message_id(ConsumerTag, SessionId, DeliveryTag)}],
-
+    MsgAck = case AckMode == client andalso Version == "1.2" of
+                 true ->
+                     [{?HEADER_ACK,
+                       create_message_id(ConsumerTag, SessionId, DeliveryTag)}];
+                 false ->
+                     []
+             end,
     Standard =
         lists:foldl(
           fun({Header, Index}, Acc) ->
                   maybe_header(Header, element(Index, Props), Acc)
           end,
           case tag_to_id(ConsumerTag) of
-              {ok, {internal, Id}} -> [{?HEADER_SUBSCRIPTION, Id} | Basic];
-              _                    -> Basic
-          end,
+              {ok, {internal, Id}} -> [{?HEADER_SUBSCRIPTION, Id}];
+              _                    -> []
+          end ++ Basic ++ MsgAck,
           [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
            {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
            {?HEADER_PERSISTENT,       #'P_basic'.delivery_mode},
@@ -134,8 +143,9 @@ headers_post_process(Headers) ->
              H
      end || H <- Headers].
 
-headers(SessionId, Delivery, Properties) ->
-    headers_post_process(message_headers(SessionId, Delivery, Properties)).
+headers(SessionId, Delivery, Properties, AckMode, Version) ->
+    headers_post_process(
+      message_headers(SessionId, Delivery, Properties, AckMode, Version)).
 
 tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
     {ok, {internal, binary_to_list(Id)}};
@@ -245,6 +255,10 @@ internal_tag(Base) ->
 
 queue_tag(Base) ->
     list_to_binary(?QUEUE_TAG_PREFIX ++ Base).
+
+ack_header_name("1.2") -> ?HEADER_ID;
+ack_header_name("1.1") -> ?HEADER_MESSAGE_ID;
+ack_header_name("1.0") -> ?HEADER_MESSAGE_ID.
 
 %%--------------------------------------------------------------------
 %% Destination Formatting

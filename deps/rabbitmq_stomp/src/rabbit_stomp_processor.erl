@@ -32,9 +32,9 @@
                 config, dest_queues, reply_queues, frame_transformer,
                 adapter_info, send_fun, ssl_login_name}).
 
--record(subscription, {dest_hdr, channel, multi_ack, description}).
+-record(subscription, {dest_hdr, channel, ack_mode, multi_ack, description}).
 
--define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
+-define(SUPPORTED_VERSIONS, ["1.0", "1.1", "1.2"]).
 -define(FLUSH_TIMEOUT, 60000).
 
 %%----------------------------------------------------------------------------
@@ -306,8 +306,10 @@ handle_frame(Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 ack_action(Command, Frame,
-           State = #state{subscriptions = Subs}, MethodFun) ->
-    case rabbit_stomp_frame:header(Frame, ?HEADER_MESSAGE_ID) of
+           State = #state{subscriptions = Subs,
+                          version       = Version}, MethodFun) ->
+    IdHeader = rabbit_stomp_util:ack_header_name(Version),
+    case rabbit_stomp_frame:header(Frame, IdHeader) of
         {ok, IdStr} ->
             case rabbit_stomp_util:parse_message_id(IdStr) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
@@ -324,15 +326,15 @@ ack_action(Command, Frame,
                             ok(State)
                     end;
                 _ ->
-                   error("Invalid message-id",
-                         "~p must include a valid 'message-id' header~n",
-                         [Command],
+                   error("Invalid ~p",
+                         "~p must include a valid '~p' header~n",
+                         [IdHeader, Command, IdHeader],
                          State)
             end;
         not_found ->
-            error("Missing message-id",
-                  "~p must include a 'message-id' header~n",
-                  [Command],
+            error("Missing ~p",
+                  "~p must include a '~p' header~n",
+                  [IdHeader, Command, IdHeader],
                   State)
     end.
 
@@ -493,7 +495,8 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                "",
                State1#state{session_id = SessionId,
                             channel    = Channel,
-                            connection = Connection});
+                            connection = Connection,
+                            version    = Version});
         {error, auth_failure} ->
             rabbit_log:warning("STOMP login failed for user ~p~n",
                                [binary_to_list(Username)]),
@@ -554,6 +557,7 @@ do_subscribe(Destination, DestHdr, Frame,
                        dict:store(ConsumerTag,
                                   #subscription{dest_hdr    = DestHdr,
                                                 channel     = Channel,
+                                                ack_mode    = AckMode,
                                                 multi_ack   = IsMulti,
                                                 description = Description},
                                   Subs),
@@ -609,12 +613,14 @@ negotiate_version(Frame) ->
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
               State = #state{session_id    = SessionId,
-                             subscriptions = Subs}) ->
+                             subscriptions = Subs,
+                             version       = Version}) ->
     case dict:find(ConsumerTag, Subs) of
-        {ok, #subscription{}} ->
+        {ok, #subscription{ack_mode = AckMode}} ->
             send_frame(
               "MESSAGE",
-              rabbit_stomp_util:headers(SessionId, Delivery, Properties),
+              rabbit_stomp_util:headers(SessionId, Delivery, Properties,
+                                        AckMode, Version),
               Body,
               State);
         error ->
