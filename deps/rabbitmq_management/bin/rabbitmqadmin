@@ -803,7 +803,7 @@ _rabbitmqadmin()
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     opts="list show declare delete close purge import export get publish help"
-    fargs="--help --host --port --vhost --username --password --format --depth"
+    fargs="--help --host --port --vhost --username --password --format --depth --sort --sort-reverse"
 
     case "${prev}" in
 	list)
