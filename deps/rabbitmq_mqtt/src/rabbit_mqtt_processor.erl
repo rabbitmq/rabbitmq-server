@@ -267,7 +267,7 @@ amqp_callback(#'basic.ack'{ multiple = false, delivery_tag = Tag },
 
 delivery_dup({#'basic.deliver'{ redelivered = Redelivered },
               #amqp_msg{ props = #'P_basic'{ headers = Headers }}}) ->
-    case rabbit_mqtt_util:table_lookup(Headers, "x-mqtt-dup") of
+    case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-dup">>) of
         undefined   -> Redelivered;
         {bool, Dup} -> Redelivered orelse Dup
     end.
@@ -283,7 +283,7 @@ next_msg_id(PState = #proc_state{ message_id = MsgId }) ->
 delivery_qos(Tag, _Headers,  #proc_state{ consumer_tags = {Tag, _} }) ->
     {?QOS_0, ?QOS_0};
 delivery_qos(Tag, Headers,   #proc_state{ consumer_tags = {_, Tag} }) ->
-    case rabbit_mqtt_util:table_lookup(Headers, "x-mqtt-publish-qos") of
+    case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
         {byte, Qos} -> {lists:min([Qos, ?QOS_1]), ?QOS_1};
         undefined   -> {?QOS_1, ?QOS_1}
     end.
@@ -368,9 +368,12 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                           consumer_tags = {TagQ0, TagQ1} = Tags} = PState) ->
     {QueueQ0, QueueQ1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
     Qos1Args = case {rabbit_mqtt_util:env(subscription_ttl), CleanSess} of
-                   {undefined, _}                  -> [];
-                   {Ms, false} when is_integer(Ms) -> [{"x-expires", long, Ms}];
-                   _                               -> []
+                   {undefined, _} ->
+                       [];
+                   {Ms, false} when is_integer(Ms) ->
+                       [{<<"x-expires">>, long, Ms}];
+                   _ ->
+                       []
                end,
     QueueSetup =
         case {TagQ0, TagQ1, Qos} of
@@ -434,7 +437,8 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
     Method = #'basic.publish'{ exchange    = Exchange,
                                routing_key =
                                    rabbit_mqtt_util:mqtt2amqp(Topic)},
-    Headers = [{"x-mqtt-publish-qos", byte, Qos}, {"x-mqtt-dup", bool, Dup}],
+    Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
+               {<<"x-mqtt-dup">>, bool, Dup}],
     Msg = #amqp_msg{ props   = #'P_basic'{ headers = Headers },
                      payload = Payload },
     {UnackedPubs1, Ch, SeqNo1} =
