@@ -477,7 +477,7 @@ check_user_id_header(#'P_basic'{user_id = Claimed},
 check_expiration_header(Props) ->
     case rabbit_basic:parse_expiration(Props) of
         {ok, _}    -> ok;
-        {error, E} -> precondition_failed("invalid expiration '~s': ~w",
+        {error, E} -> precondition_failed("invalid expiration '~s': ~p",
                                           [Props#'P_basic'.expiration, E])
     end.
 
