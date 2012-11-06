@@ -474,6 +474,13 @@ check_user_id_header(#'P_basic'{user_id = Claimed},
                    "'~s'", [Claimed, Actual])
     end.
 
+check_expiration_header(Props) ->
+    case rabbit_basic:parse_expiration(Props) of
+        {ok, _}    -> ok;
+        {error, E} -> precondition_failed("invalid expiration '~s': ~p",
+                                          [Props#'P_basic'.expiration, E])
+    end.
+
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
     rabbit_misc:protocol_error(access_refused,
                                "cannot publish to internal ~s",
@@ -614,8 +621,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_internal_exchange(Exchange),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
-    DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
-    check_user_id_header(DecodedContent#content.properties, State),
+    DecodedContent = #content {properties = Props} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    check_user_id_header(Props, State),
+    check_expiration_header(Props),
     {MsgSeqNo, State1} =
         case {TxStatus, ConfirmEnabled} of
             {none, false} -> {undefined, State};
