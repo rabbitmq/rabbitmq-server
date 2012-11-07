@@ -21,7 +21,7 @@ function start_app_login() {
         this.put('#/login', function() {
             username = this.params['username'];
             password = this.params['password'];
-            var b64 = base64.encode(username + ':' + password);
+            var b64 = b64_encode_utf8(username + ':' + password);
             document.cookie = 'auth=' + encodeURIComponent(b64);
             check_login();
         });
@@ -893,6 +893,19 @@ function xmlHttpRequest() {
         res = new ActiveXObject("Microsoft.XMLHttp");
     }
     return res;
+}
+
+// Our base64 library takes a string that is really a byte sequence,
+// and will throw if given a string with chars > 255 (and hence not
+// DTRT for chars > 127). So encode a unicode string as a UTF-8
+// sequence of "bytes".
+function b64_encode_utf8(str) {
+    return base64.encode(encode_utf8(str));
+}
+
+// encodeURIComponent handles utf-8, unescape does not. Neat!
+function encode_utf8(str) {
+  return unescape(encodeURIComponent(str));
 }
 
 (function($){
