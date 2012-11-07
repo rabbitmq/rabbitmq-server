@@ -29,8 +29,8 @@
 
 -define(TIMEOUT, 1000). % milliseconds
 
-connect()        -> connect0([]).
-connect(V)       -> connect0([{"accept-version", V}]).
+connect()  -> connect0([]).
+connect(V) -> connect0([{"accept-version", V}]).
 
 connect0(Version) ->
     {ok, Sock} = gen_tcp:connect(localhost, 61613, [{active, false}, binary]),

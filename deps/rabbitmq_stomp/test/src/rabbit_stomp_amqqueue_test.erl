@@ -20,6 +20,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp_headers.hrl").
 
@@ -27,15 +28,14 @@
 -define(DESTINATION, "/amq/queue/TestQueue").
 
 all_tests() ->
-    [
-     [ok = run_test(TestFun, Version)
+    [[ok = run_test(TestFun, Version)
       || TestFun <- [fun test_subscribe_error/3,
                      fun test_subscribe/3,
                      fun test_subscribe_ack/3,
                      fun test_send/3,
                      fun test_delete_queue_subscribe/3,
                      fun test_temp_destination_queue/3]]
-     || Version <- ["1.0", "1.1", "1.2"]],
+     || Version <- ?SUPPORTED_VERSIONS],
     ok.
 
 run_test(TestFun, Version) ->
@@ -97,9 +97,11 @@ test_subscribe_ack(Channel, Client, Version) ->
 
     {ok, _Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     false = (Version == "1.2") xor proplists:is_defined(?HEADER_ACK, Headers),
-    IdHeader = rabbit_stomp_util:msg_header_name(Version),
-    AckValue = proplists:get_value(IdHeader, Headers),
+
+    MsgHeader = rabbit_stomp_util:msg_header_name(Version),
+    AckValue  = proplists:get_value(MsgHeader, Headers),
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
+
     rabbit_stomp_client:send(Client, "ACK", [{AckHeader, AckValue}]),
     #'basic.get_empty'{} =
         amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),

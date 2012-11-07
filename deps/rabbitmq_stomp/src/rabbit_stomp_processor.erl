@@ -34,7 +34,6 @@
 
 -record(subscription, {dest_hdr, channel, ack_mode, multi_ack, description}).
 
--define(SUPPORTED_VERSIONS, ["1.0", "1.1", "1.2"]).
 -define(FLUSH_TIMEOUT, 60000).
 
 %%----------------------------------------------------------------------------
@@ -308,10 +307,10 @@ handle_frame(Command, _Frame, State) ->
 ack_action(Command, Frame,
            State = #state{subscriptions = Subs,
                           version       = Version}, MethodFun) ->
-    IdHeader = rabbit_stomp_util:ack_header_name(Version),
-    case rabbit_stomp_frame:header(Frame, IdHeader) of
-        {ok, IdStr} ->
-            case rabbit_stomp_util:parse_message_id(IdStr) of
+    AckHeader = rabbit_stomp_util:ack_header_name(Version),
+    case rabbit_stomp_frame:header(Frame, AckHeader) of
+        {ok, AckValue} ->
+            case rabbit_stomp_util:parse_message_id(AckValue) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
                     Subscription = #subscription{channel = SubChannel}
                         = dict:fetch(ConsumerTag, Subs),
@@ -326,15 +325,15 @@ ack_action(Command, Frame,
                             ok(State)
                     end;
                 _ ->
-                   error("Invalid ~p",
-                         "~p must include a valid '~p' header~n",
-                         [IdHeader, Command, IdHeader],
+                   error("Invalid header",
+                         "~p must include a valid ~p header~n",
+                         [Command, AckHeader],
                          State)
             end;
         not_found ->
-            error("Missing ~p",
-                  "~p must include a '~p' header~n",
-                  [IdHeader, Command, IdHeader],
+            error("Missing header",
+                  "~p must include the ~p header~n",
+                  [Command, AckHeader],
                   State)
     end.
 

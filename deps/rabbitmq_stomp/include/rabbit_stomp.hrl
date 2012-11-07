@@ -18,3 +18,5 @@
                               default_passcode,
                               implicit_connect,
                               ssl_cert_login}).
+
+-define(SUPPORTED_VERSIONS, ["1.0", "1.1", "1.2"]).
