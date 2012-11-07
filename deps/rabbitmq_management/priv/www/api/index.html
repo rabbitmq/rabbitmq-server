@@ -61,7 +61,7 @@
     <ul>
       <li>
         Get a list of vhosts:
-<pre>$ curl -i -u guest:guest http://localhost:55672/api/vhosts
+<pre>$ curl -i -u guest:guest http://localhost:15672/api/vhosts
 HTTP/1.1 200 OK
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Tue, 31 Aug 2010 15:46:59 GMT
@@ -73,7 +73,7 @@ Content-Length: 5
       <li>
         Get a list of channels, fast publishers first, restricting the info
         items we get back:
-<pre>$ curl -i -u guest:guest 'http://localhost:55672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate'
+<pre>$ curl -i -u guest:guest 'http://localhost:15672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate'
 HTTP/1.1 200 OK
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Tue, 12 Oct 2010 10:03:21 GMT
@@ -86,7 +86,7 @@ Cache-Control: no-cache
       <li>
         Create a new vhost:
 <pre>$ curl -i -u guest:guest -H "content-type:application/json" \
-  -XPUT http://localhost:55672/api/vhosts/foo
+  -XPUT http://localhost:15672/api/vhosts/foo
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Fri, 27 Aug 2010 16:56:00 GMT
@@ -103,7 +103,7 @@ Content-Length: 0</pre>
         Create a new exchange in the default virtual host:
 <pre>$ curl -i -u guest:guest -H "content-type:application/json" \
   -XPUT -d'{"type":"direct","durable":true}' \
-  http://localhost:55672/api/exchanges/%2f/my-new-exchange
+  http://localhost:15672/api/exchanges/%2f/my-new-exchange
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Fri, 27 Aug 2010 17:04:29 GMT
@@ -115,7 +115,7 @@ Content-Length: 0</pre>
       <li>
         And delete it again:
 <pre>$ curl -i -u guest:guest -H "content-type:application/json" \
-  -XDELETE http://localhost:55672/api/exchanges/%2f/my-new-exchange
+  -XDELETE http://localhost:15672/api/exchanges/%2f/my-new-exchange
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Fri, 27 Aug 2010 17:05:30 GMT
