@@ -94,14 +94,9 @@ message_headers(SessionId,
                 #'basic.deliver'{consumer_tag = ConsumerTag,
                                  delivery_tag = DeliveryTag,
                                  exchange     = ExchangeBin,
-                                 routing_key  = RoutingKeyBin},
+                                 routing_key  = RKeyBin},
                 Props = #'P_basic'{headers = Headers},
                 BaseHeaders) ->
-    Basic = [{?HEADER_DESTINATION,
-              format_destination(binary_to_list(ExchangeBin),
-                                 binary_to_list(RoutingKeyBin))},
-             {?HEADER_MESSAGE_ID,
-              create_message_id(ConsumerTag, SessionId, DeliveryTag)}],
     Standard =
         lists:foldl(
           fun({Header, Index}, Acc) ->
@@ -110,7 +105,9 @@ message_headers(SessionId,
           case tag_to_id(ConsumerTag) of
               {ok, {internal, Id}} -> [{?HEADER_SUBSCRIPTION, Id}];
               _                    -> []
-          end ++ Basic ++ BaseHeaders,
+          end ++ BaseHeaders ++
+          [{?HEADER_DESTINATION, format_destination(binary_to_list(ExchangeBin),
+                                                    binary_to_list(RKeyBin))}],
           [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
            {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
            {?HEADER_PERSISTENT,       #'P_basic'.delivery_mode},
@@ -138,14 +135,15 @@ headers_post_process(Headers) ->
 headers(SessionId, #'basic.deliver'{consumer_tag = ConsumerTag,
                                     delivery_tag = DeliveryTag} = Delivery,
         Properties, AckMode, Version) ->
-    MsgAck =
+    BaseHeaders =
         case AckMode == client andalso Version == "1.2" of
             true  -> [{?HEADER_ACK,
                        create_message_id(ConsumerTag, SessionId, DeliveryTag)}];
             false -> []
-        end,
+        end ++ [{?HEADER_MESSAGE_ID,
+                 create_message_id(ConsumerTag, SessionId, DeliveryTag)}],
     headers_post_process(
-      message_headers(SessionId, Delivery, Properties, MsgAck)).
+      message_headers(SessionId, Delivery, Properties, BaseHeaders)).
 
 tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
     {ok, {internal, binary_to_list(Id)}};
