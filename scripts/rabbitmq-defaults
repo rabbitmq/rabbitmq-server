@@ -18,6 +18,14 @@
 ### next line potentially updated in package install steps
 SYS_PREFIX=
 
+### next line will be updated when generating a standalone release
+ERL_DIR=
+
+### TODO fix these values
+CLEAN_BOOT_FILE="${SYS_PREFIX}/releases/${RELEASE_VERSION}/start_clean"
+SASL_BOOT_FILE="${SYS_PREFIX}/releases/${RELEASE_VERSION}/start_sasl"
+
+
 ## Set default values
 
 CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq

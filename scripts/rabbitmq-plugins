@@ -26,7 +26,7 @@
 
 ##--- End of overridden <var_name> variables
 
-exec erl \
+exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
