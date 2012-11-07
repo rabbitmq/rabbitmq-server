@@ -1,9 +1,6 @@
 $(document).ready(function() {
-    setup_global_vars();
-    setup_constant_events();
-    update_vhosts();
-    update_interval();
-    setup_extensions();
+    replace_content('outer', format('login', {}));
+    start_app_login();
 });
 
 function dispatcher_add(fun) {
@@ -19,7 +16,40 @@ function dispatcher() {
     }
 }
 
+function start_app_login() {
+    app = $.sammy(function () {
+        this.put('#/login', function() {
+            username = this.params['username'];
+            password = this.params['password'];
+            var b64 = base64.encode(username + ':' + password);
+            document.cookie = 'auth=' + encodeURIComponent(b64);
+            check_login();
+        });
+    });
+    app.run();
+    if (get_cookie('auth') != '') {
+        check_login();
+    }
+}
+
+function check_login() {
+    var user = JSON.parse(sync_get('/whoami'));
+    if (user == false) {
+        document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        replace_content('login-status', '<p>Login failed</p>');
+    }
+    else {
+        replace_content('outer', format('layout', {}));
+        setup_global_vars(user);
+        setup_constant_events();
+        update_vhosts();
+        update_interval();
+        setup_extensions();
+    }
+}
+
 function start_app() {
+    app.unload();
     app = $.sammy(dispatcher);
     app.run();
     var url = this.location.toString();
@@ -583,10 +613,15 @@ function update_status(status) {
     replace_content('status', html);
 }
 
+function auth_header() {
+    return "Basic " + decodeURIComponent(get_cookie('auth'));
+}
+
 function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
+    req.setRequestHeader('authorization', auth_header());
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             if (check_bad_response(req, true)) {
@@ -627,6 +662,7 @@ function sync_req(type, params0, path_template) {
     var req = xmlHttpRequest();
     req.open(type, 'api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
+    req.setRequestHeader('authorization', auth_header());
     try {
         if (type == 'GET')
             req.send(null);

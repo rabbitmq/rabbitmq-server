@@ -71,14 +71,14 @@ var extension_count;
 // The dispatcher needs access to the Sammy app
 var app;
 
+// Used for the new exchange form, and to display broken exchange types
 var exchange_types;
 
 // Set up the above vars
-function setup_global_vars() {
+function setup_global_vars(user) {
     var overview = JSON.parse(sync_get('/overview'));
     statistics_level = overview.statistics_level;
-    var user = JSON.parse(sync_get('/whoami'));
-    replace_content('login-version',
+    replace_content('login-details',
                     '<p>User: <b>' + user.name + '</b></p>' +
                     '<p>RabbitMQ ' + overview.rabbitmq_version +
                     ', Erlang ' + overview.erlang_version + '</p>');

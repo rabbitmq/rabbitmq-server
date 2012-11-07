@@ -170,6 +170,11 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
+    sammy.put('#/logout', function() {
+            document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            location.reload();
+        });
+
     sammy.get('#/import-succeeded', function() {
             render({}, 'import-succeeded', '#/overview');
         });
