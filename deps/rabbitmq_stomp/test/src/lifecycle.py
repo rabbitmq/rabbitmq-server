@@ -74,7 +74,7 @@ class TestLifecycle(base.BaseTest):
         self.bad_connect(stomp.Connection(user="guest",
                                           passcode="guest",
                                           version="100.1"),
-                         "Supported versions are 1.0,1.1\n")
+                         "Supported versions are 1.0,1.1,1.2\n")
 
     def test_bad_username(self):
         ''' Test bad username'''

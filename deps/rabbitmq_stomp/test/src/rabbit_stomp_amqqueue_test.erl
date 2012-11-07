@@ -16,35 +16,41 @@
 
 -module(rabbit_stomp_amqqueue_test).
 -export([all_tests/0]).
+-compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
+-include("rabbit_stomp_headers.hrl").
 
 -define(QUEUE, <<"TestQueue">>).
 -define(DESTINATION, "/amq/queue/TestQueue").
 
 all_tests() ->
-    [ok = run_test(TestFun) || TestFun <- [fun test_subscribe_error/2,
-                                           fun test_subscribe/2,
-                                           fun test_send/2,
-                                           fun test_delete_queue_subscribe/2,
-                                           fun test_temp_destination_queue/2]],
+    [
+     [ok = run_test(TestFun, Version)
+      || TestFun <- [fun test_subscribe_error/3,
+                     fun test_subscribe/3,
+                     fun test_subscribe_ack/3,
+                     fun test_send/3,
+                     fun test_delete_queue_subscribe/3,
+                     fun test_temp_destination_queue/3]]
+     || Version <- ["1.0", "1.1", "1.2"]],
     ok.
 
-run_test(TestFun) ->
+run_test(TestFun, Version) ->
     {ok, Connection} = amqp_connection:start(#amqp_params_direct{}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    {ok, Client} = rabbit_stomp_client:connect(),
+    {ok, Client} = rabbit_stomp_client:connect(Version),
 
-    Result = (catch TestFun(Channel, Client)),
+    Result = (catch TestFun(Channel, Client, Version)),
 
     rabbit_stomp_client:disconnect(Client),
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
     Result.
 
-test_subscribe_error(_Channel, Client) ->
+test_subscribe_error(_Channel, Client, _Version) ->
     %% SUBSCRIBE to missing queue
     rabbit_stomp_client:send(
       Client, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
@@ -52,7 +58,7 @@ test_subscribe_error(_Channel, Client) ->
     "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
-test_subscribe(Channel, Client) ->
+test_subscribe(Channel, Client, _Version) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -71,7 +77,35 @@ test_subscribe(Channel, Client) ->
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     ok.
 
-test_send(Channel, Client) ->
+test_subscribe_ack(Channel, Client, Version) ->
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    auto_delete = true}),
+
+    %% subscribe and wait for receipt
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE", [{"destination", ?DESTINATION},
+                            {"receipt",     "foo"},
+                            {"ack",         "client"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+
+    %% send from amqp
+    Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
+
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"hello">>}),
+
+    {ok, _Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+    false = (Version == "1.2") xor proplists:is_defined(?HEADER_ACK, Headers),
+    IdHeader = rabbit_stomp_util:msg_header_name(Version),
+    AckValue = proplists:get_value(IdHeader, Headers),
+    AckHeader = rabbit_stomp_util:ack_header_name(Version),
+    rabbit_stomp_client:send(Client, "ACK", [{AckHeader, AckValue}]),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
+    ok.
+
+test_send(Channel, Client, _Version) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -88,7 +122,7 @@ test_send(Channel, Client) ->
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     ok.
 
-test_delete_queue_subscribe(Channel, Client) ->
+test_delete_queue_subscribe(Channel, Client, _Version) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -109,7 +143,7 @@ test_delete_queue_subscribe(Channel, Client) ->
     % server closes connection
     ok.
 
-test_temp_destination_queue(Channel, Client) ->
+test_temp_destination_queue(Channel, Client, _Version) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),

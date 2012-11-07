@@ -155,7 +155,7 @@ class TestParsing(unittest.TestCase):
         resp = ('ERROR\n'
                 'message:Bad command\n'
                 'content-type:text/plain\n'
-                'version:1.0,1.1\n'
+                'version:1.0,1.1,1.2\n'
                 'content-length:43\n'
                 '\n'
                 'Could not interpret command "WRONGCOMMAND"\n'

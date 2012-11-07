@@ -90,7 +90,7 @@ message_headers_test() ->
       app_id           = <<"joe's app">>},
 
     Headers = rabbit_stomp_util:message_headers(SessionId, Delivery,
-                                                Properties),
+                                                Properties, []),
 
     Expected = [
                 {"destination", Destination},
@@ -126,7 +126,7 @@ minimal_message_headers_with_no_custom_test() ->
     Properties = #'P_basic'{},
 
     Headers = rabbit_stomp_util:message_headers(SessionId, Delivery,
-                                                Properties),
+                                                Properties, []),
     Expected = [
                 {"destination", Destination},
                 {"message-id", [<<"Q_123">>, "@@", SessionId, "@@", "123"]},

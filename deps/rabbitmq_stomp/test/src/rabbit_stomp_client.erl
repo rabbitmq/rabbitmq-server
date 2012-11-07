@@ -23,16 +23,20 @@
 
 -module(rabbit_stomp_client).
 
--export([connect/0, disconnect/1, send/2, send/3, send/4, recv/1]).
+-export([connect/0, connect/1, disconnect/1, send/2, send/3, send/4, recv/1]).
 
 -include("rabbit_stomp_frame.hrl").
 
 -define(TIMEOUT, 1000). % milliseconds
 
-connect() ->
+connect()        -> connect0([]).
+connect(V)       -> connect0([{"accept-version", V}]).
+
+connect0(Version) ->
     {ok, Sock} = gen_tcp:connect(localhost, 61613, [{active, false}, binary]),
     Client0 = recv_state(Sock),
-    send(Client0, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
+    send(Client0, "CONNECT", [{"login", "guest"},
+                              {"passcode", "guest"} | Version]),
     {#stomp_frame{command = "CONNECTED"}, Client1} = recv(Client0),
     {ok, Client1}.
 
@@ -72,6 +76,6 @@ parse(Payload, Client = {Sock, FramesRev}, FrameState, Length) ->
         {ok, Frame, Rest} ->
             parse(Rest, {Sock, [Frame | FramesRev]},
                   rabbit_stomp_frame:initial_state(), Length);
-        {more, NewState, NewLength} ->
-            recv(Client, NewState, NewLength)
+        {more, NewState} ->
+            recv(Client, NewState, 0)
     end.
