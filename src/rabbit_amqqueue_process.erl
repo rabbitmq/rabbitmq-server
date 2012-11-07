@@ -247,9 +247,9 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
               end
       end, State,
       [{<<"x-expires">>,                 fun init_expires/2},
-       {<<"x-message-ttl">>,             fun init_ttl/2},
        {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
-       {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2}]).
+       {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
+       {<<"x-message-ttl">>,             fun init_ttl/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
