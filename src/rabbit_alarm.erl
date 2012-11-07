@@ -56,7 +56,11 @@ start() ->
     {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
     rabbit_sup:start_restartable_child(
       vm_memory_monitor, [MemoryWatermark,
-                          fun (Alarm) -> R = set_alarm(Alarm), gc(), R end,
+                          fun (Alarm) ->
+                                  R = set_alarm(Alarm),
+                                  [garbage_collect(P) || P <- processes()],
+                                  R
+                          end,
                           fun clear_alarm/1]),
     {ok, DiskLimit} = application:get_env(disk_free_limit),
     rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
@@ -226,5 +230,3 @@ handle_clear_alarm(file_descriptor_limit, State) ->
 handle_clear_alarm(Alarm, State) ->
     rabbit_log:warning("alarm '~p' cleared~n", [Alarm]),
     {ok, State}.
-
-gc() -> [erlang:garbage_collect(P) || P <- processes()].
