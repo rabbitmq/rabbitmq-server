@@ -114,7 +114,7 @@ prepare_cluster_status_files() ->
                 end,
     write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
 
-write_cluster_status({All, Disc, Running}=St) ->
+write_cluster_status({All, Disc, Running}) ->
     ClusterStatusFN = cluster_status_filename(),
     Res = case rabbit_file:write_term_file(ClusterStatusFN, [{All, Disc}]) of
               ok ->
