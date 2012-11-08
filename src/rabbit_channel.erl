@@ -27,8 +27,8 @@
 -export([force_event_refresh/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
+         handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
+         prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 %% Internal
 -export([list_local/0]).
 
@@ -213,20 +213,20 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     {ok, State1, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-prioritise_call(Msg, _From, _State) ->
+prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         info           -> 9;
         {info, _Items} -> 9;
         _              -> 0
     end.
 
-prioritise_cast(Msg, _State) ->
+prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {confirm, _MsgSeqNos, _QPid} -> 5;
         _                            -> 0
     end.
 
-prioritise_info(Msg, _State) ->
+prioritise_info(Msg, _Len, _State) ->
     case Msg of
         emit_stats                   -> 7;
         _                            -> 0

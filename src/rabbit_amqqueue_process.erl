@@ -29,8 +29,8 @@
 -export([init_with_backing_queue_state/7]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
+         handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
+         prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 
 %% Queue's state
 -record(q, {q,
@@ -956,7 +956,7 @@ emit_consumer_deleted(ChPid, ConsumerTag) ->
 
 %%----------------------------------------------------------------------------
 
-prioritise_call(Msg, _From, _State) ->
+prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         info                                 -> 9;
         {info, _Items}                       -> 9;
@@ -965,7 +965,7 @@ prioritise_call(Msg, _From, _State) ->
         _                                    -> 0
     end.
 
-prioritise_cast(Msg, _State) ->
+prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
@@ -974,7 +974,7 @@ prioritise_cast(Msg, _State) ->
         _                                    -> 0
     end.
 
-prioritise_info(Msg, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
+prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
     case Msg of
         {'DOWN', _, process, DownPid, _}     -> 8;
         update_ram_duration                  -> 8;

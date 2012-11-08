@@ -1179,16 +1179,20 @@ find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
 function_exported_or_default(Mod, Fun, Arity, Default) ->
     case erlang:function_exported(Mod, Fun, Arity) of
         true -> case Arity of
-                    2 -> fun (Msg, GS2State = #gs2_state { state = State }) ->
-                                 case catch Mod:Fun(Msg, State) of
+                    2 -> fun (Msg, GS2State = #gs2_state { queue = Queue,
+                                                           state = State }) ->
+                                 Length = priority_queue:len(Queue),
+                                 case catch Mod:Fun(Msg, Length, State) of
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->
                                          handle_common_termination(Err, Msg, GS2State)
                                  end
                          end;
-                    3 -> fun (Msg, From, GS2State = #gs2_state { state = State }) ->
-                                 case catch Mod:Fun(Msg, From, State) of
+                    3 -> fun (Msg, From, GS2State = #gs2_state { queue = Queue,
+                                                                 state = State }) ->
+                                 Length = priority_queue:len(Queue),
+                                 case catch Mod:Fun(Msg, From, Length, State) of
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->

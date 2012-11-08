@@ -380,7 +380,7 @@
          confirmed_broadcast/2, info/1, forget_group/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, prioritise_info/2]).
+         code_change/3, prioritise_info/3]).
 
 -ifndef(use_specs).
 -export([behaviour_info/1]).
@@ -718,12 +718,12 @@ terminate(Reason, State = #state { module        = Module,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-prioritise_info(flush, _State) ->
+prioritise_info(flush, _Len, _State) ->
     1;
-prioritise_info({'DOWN', _MRef, process, _Pid, _Reason},
+prioritise_info({'DOWN', _MRef, process, _Pid, _Reason}, _Len,
                 #state { members_state = MS }) when MS /= undefined ->
     1;
-prioritise_info(_, _State) ->
+prioritise_info(_, _Len, _State) ->
     0.
 
 

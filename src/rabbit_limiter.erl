@@ -19,7 +19,7 @@
 -behaviour(gen_server2).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, prioritise_call/3]).
+         handle_info/2, prioritise_call/4]).
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
@@ -126,8 +126,8 @@ is_blocked(Limiter) ->
 init([]) ->
     {ok, #lim{}}.
 
-prioritise_call(get_limit, _From, _State) -> 9;
-prioritise_call(_Msg,      _From, _State) -> 0.
+prioritise_call(get_limit, _From, _Len, _State) -> 9;
+prioritise_call(_Msg,      _From, _Len, _State) -> 0.
 
 handle_call({can_send, QPid, _AckRequired}, _From,
             State = #lim{blocked = true}) ->
