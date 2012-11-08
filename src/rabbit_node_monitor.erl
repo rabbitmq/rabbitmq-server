@@ -85,10 +85,10 @@ cluster_status_filename() ->
 
 prepare_cluster_status_files() ->
     rabbit_mnesia:ensure_mnesia_dir(),
-    CorruptFiles = fun () -> throw({error, corrupt_cluster_status_files}) end,
+    Corrupt = fun(F) -> throw({error, corrupt_cluster_status_files, F}) end,
     RunningNodes1 = case try_read_file(running_nodes_filename()) of
                         {ok, [Nodes]} when is_list(Nodes) -> Nodes;
-                        {ok, _      }                     -> CorruptFiles();
+                        {ok, Other}                       -> Corrupt(Other);
                         {error, enoent}                   -> []
                     end,
     ThisNode = [node()],
@@ -102,8 +102,8 @@ prepare_cluster_status_files() ->
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
                 {legacy_cluster_nodes(AllNodes0),
                  legacy_should_be_disc_node(AllNodes0)};
-            {ok, _} ->
-                CorruptFiles();
+            {ok, Files} ->
+                Corrupt(Files);
             {error, enoent} ->
                 {legacy_cluster_nodes([]), true}
         end,
@@ -114,7 +114,7 @@ prepare_cluster_status_files() ->
                 end,
     ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
 
-write_cluster_status({All, Disc, Running}) ->
+write_cluster_status({All, Disc, Running}=St) ->
     ClusterStatusFN = cluster_status_filename(),
     Res = case rabbit_file:write_term_file(ClusterStatusFN, [{All, Disc}]) of
               ok ->
@@ -134,8 +134,8 @@ read_cluster_status() ->
           try_read_file(running_nodes_filename())} of
         {{ok, [{All, Disc}]}, {ok, [Running]}} when is_list(Running) ->
             {All, Disc, Running};
-        {_, _} ->
-            throw({error, corrupt_or_missing_cluster_files})
+        {Stat, Run} ->
+            throw({error, {corrupt_or_missing_cluster_files, Stat, Run}})
     end.
 
 update_cluster_status() ->
@@ -199,44 +199,48 @@ handle_call(_Request, _From, State) ->
 %% mnesia propagation.
 handle_cast({node_up, Node, NodeType},
             State = #state{monitors = Monitors}) ->
-    case pmon:is_monitored({rabbit, Node}, Monitors) of
+    case pmon:is_monitored({rabbit_running, Node}, Monitors) of
         true  -> {noreply, State};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-                 write_cluster_status({add_node(Node, AllNodes),
-                                       case NodeType of
-                                           disc -> add_node(Node, DiscNodes);
-                                           ram  -> DiscNodes
-                                       end,
-                                       add_node(Node, RunningNodes)}),
+                 ok = write_cluster_status({add_node(Node, AllNodes),
+                                            case NodeType of
+                                                disc -> add_node(Node, DiscNodes);
+                                                ram  -> DiscNodes
+                                            end,
+                                            add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
-                 {noreply, State#state{
-                             monitors = pmon:monitor({rabbit, Node}, Monitors)}}
+                 {noreply,
+                  State#state{
+                    monitors = pmon:monitor({rabbit_running, Node}, Monitors)}}
     end;
 handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({add_node(Node, AllNodes),
-                          case NodeType of
-                              disc -> add_node(Node, DiscNodes);
-                              ram  -> DiscNodes
-                          end,
-                          RunningNodes}),
+    ok = write_cluster_status({add_node(Node, AllNodes),
+                               case NodeType of
+                                   disc -> add_node(Node, DiscNodes);
+                                   ram  -> DiscNodes
+                               end,
+                               RunningNodes}),
     {noreply, State};
 handle_cast({left_cluster, Node}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({del_node(Node, AllNodes), del_node(Node, DiscNodes),
-                          del_node(Node, RunningNodes)}),
+    ok =  write_cluster_status({del_node(Node, AllNodes),
+                                del_node(Node, DiscNodes),
+                                del_node(Node, RunningNodes)}),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
+handle_info({'DOWN', _MRef, process, {rabbit_running, Node}, _Reason},
             State = #state{monitors = Monitors}) ->
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
+    ok = write_cluster_status({AllNodes, DiscNodes,
+                               del_node(Node, RunningNodes)}),
     ok = handle_dead_rabbit(Node),
-    {noreply, State#state{monitors = pmon:erase({rabbit, Node}, Monitors)}};
+    {noreply, State#state{monitors = pmon:erase(
+                                       {rabbit_running, Node}, Monitors)}};
 
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
