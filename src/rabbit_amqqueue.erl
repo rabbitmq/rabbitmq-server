@@ -16,7 +16,8 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
+-export([recover/0, stop/0, start/1, declare/5,
+         delete_immediately/1, delete/3, purge/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
@@ -64,8 +65,9 @@
                            {'absent', rabbit_types:amqqueue()}).
 -type(not_found_or_absent() :: 'not_found' |
                                {'absent', rabbit_types:amqqueue()}).
--spec(start/0 :: () -> [name()]).
+-spec(recover/0 :: () -> [name()]).
 -spec(stop/0 :: () -> 'ok').
+-spec(start/1 :: ([name()]) -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
@@ -179,7 +181,7 @@
 -define(CONSUMER_INFO_KEYS,
         [queue_name, channel_pid, consumer_tag, ack_required]).
 
-start() ->
+recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
     %% faster than other nodes handled DOWN messages from us.
     on_node_down(node()),
@@ -199,6 +201,14 @@ stop() ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     ok = BQ:stop().
 
+start(QNames) ->
+    %% At this point all recovered queues and their bindings are
+    %% visible to routing, so now it is safe for them to complete
+    %% their initialisation (which may involve interacting with other
+    %% queues).
+    [Pid ! {self(), go} || #amqqueue{pid = Pid} <- lookup(QNames)],
+    ok.
+
 find_durable_queues() ->
     Node = node(),
     %% TODO: use dirty ops instead
@@ -212,7 +222,7 @@ find_durable_queues() ->
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(node(), Q) || Q <- DurableQueues],
     [QName || Q = #amqqueue{name = QName, pid = Pid} <- Qs,
-              gen_server2:call(Pid, {init, true}, infinity) == {new, Q}].
+              gen_server2:call(Pid, {init, self()}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
@@ -227,7 +237,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                      gm_pids         = []}),
     {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
     Q1 = start_queue_process(Node, Q0),
-    gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity).
+    gen_server2:call(Q1#amqqueue.pid, {init, new}, infinity).
 
 internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
