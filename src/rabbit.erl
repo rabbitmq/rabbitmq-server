@@ -21,7 +21,7 @@
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/0,
-         start_fhc/0, start_app_marker/1, hibernate/0]).
+         start_fhc/0]).
 
 -export([start/2, stop/1]).
 
@@ -176,7 +176,8 @@
 
 -rabbit_boot_step({app_running,
                    [{description, "cluster membership"},
-                    {mfa,         {rabbit, start_app_marker, [boot]}},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_app_marker]}},
                     {requires,    networking}]}).
 
 -rabbit_boot_step({notify_cluster,
@@ -775,16 +776,3 @@ start_fhc() ->
     rabbit_sup:start_restartable_child(
       file_handle_cache,
       [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]).
-
-start_app_marker(boot) ->
-    supervisor:start_child(rabbit_sup,
-                           {rabbit_app, {?MODULE, start_app_marker, [spawn]},
-                            transient, ?MAX_WAIT, worker, [?MODULE]});
-start_app_marker(spawn) ->
-    Pid = spawn_link(fun() -> erlang:hibernate(?MODULE, hibernate, []) end),
-    register(rabbit_running, Pid),
-    {ok, Pid}.
-
-hibernate() ->
-    erlang:hibernate(?MODULE, hibernate, []).
-
