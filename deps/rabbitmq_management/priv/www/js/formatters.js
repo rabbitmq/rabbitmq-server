@@ -247,9 +247,9 @@ function fmt_download_filename(host) {
         (now.getMonth() + 1) + "-" + now.getDate() + ".json";
 }
 
-function fmt_fd_used(used) {
+function fmt_fd_used(used, total) {
     if (used == 'install_handle_from_sysinternals') {
-        return '<a href="http://technet.microsoft.com/en-us/sysinternals/bb896655" title="Install handle.exe from sysinternals to see used file descriptors - click for the download page.">?</a>';
+        return '<p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub>' + total + ' available</sub></p>';
     }
     else {
         return used;
@@ -455,8 +455,12 @@ function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
 }
 
 function fmt_resource_bar_count(used, total, thresholds) {
-    return fmt_resource_bar(used, total + ' available', used / total,
-                            fmt_color(used / total, thresholds));
+    if (typeof used == 'number') {
+        return fmt_resource_bar(used, total + ' available', used / total,
+                                fmt_color(used / total, thresholds));
+    } else {
+        return used;
+    }
 }
 
 function fmt_shortened_uri(uri0) {

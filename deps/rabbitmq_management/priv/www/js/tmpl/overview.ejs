@@ -93,7 +93,7 @@
      </td>
 <% } else { %>
      <td>
-<%= fmt_resource_bar_count(node.fd_used, node.fd_total, FD_THRESHOLDS) %>
+<%= fmt_resource_bar_count(fmt_fd_used(node.fd_used, node.fd_total), node.fd_total, FD_THRESHOLDS) %>
      </td>
      <td>
 <%= fmt_resource_bar_count(node.sockets_used, node.sockets_total, FD_THRESHOLDS) %>

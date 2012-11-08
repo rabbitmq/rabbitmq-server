@@ -207,6 +207,8 @@ HELP = {
   </dd>\
 </dl>',
 
+    'handle-exe' : 'In order to monitor the number of file descriptors in use on Windows, RabbitMQ needs the <a href="http://technet.microsoft.com/en-us/sysinternals/bb896655" target="_blank">handle.exe command line tool from Microsoft</a>. Download it and place it in the path (e.g. in C:\Windows).',
+
     'foo': 'foo' // No comma.
 };
 

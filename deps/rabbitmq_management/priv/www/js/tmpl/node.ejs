@@ -14,7 +14,7 @@
         File descriptors <span class="help" id="file-descriptors"></span>
       </th>
       <td>
-<%= fmt_resource_bar_count(node.fd_used, node.fd_total, FD_THRESHOLDS) %>
+<%= fmt_resource_bar_count(fmt_fd_used(node.fd_used, node.fd_total), node.fd_total, FD_THRESHOLDS) %>
       </td>
     </tr>
     <tr>
