@@ -21,7 +21,8 @@
 %% Message, From, Length and State or just Message, Length and State
 %% (where Length is the current number of messages waiting to be
 %% processed) and return a single integer representing the priority
-%% attached to the message, or 'drop' to ignore it.  Messages with
+%% attached to the message, or 'drop' to ignore it (for
+%% prioritise_cast/3 and prioritise_info/3 only).  Messages with
 %% higher priorities are processed before requests with lower
 %% priorities. The default priority is 0.
 %%
@@ -1200,8 +1201,6 @@ function_exported_or_default(Mod, Fun, Arity, Default) ->
                                                                  state = State }) ->
                                  Length = priority_queue:len(Queue),
                                  case catch Mod:Fun(Msg, From, Length, State) of
-                                     drop ->
-                                         drop;
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->
