@@ -65,9 +65,9 @@
                            {'absent', rabbit_types:amqqueue()}).
 -type(not_found_or_absent() :: 'not_found' |
                                {'absent', rabbit_types:amqqueue()}).
--spec(recover/0 :: () -> [name()]).
+-spec(recover/0 :: () -> [rabbit_types:amqqueue()]).
 -spec(stop/0 :: () -> 'ok').
--spec(start/1 :: ([name()]) -> 'ok').
+-spec(start/1 :: ([rabbit_types:amqqueue()]) -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
@@ -201,12 +201,12 @@ stop() ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     ok = BQ:stop().
 
-start(QNames) ->
+start(Qs) ->
     %% At this point all recovered queues and their bindings are
     %% visible to routing, so now it is safe for them to complete
     %% their initialisation (which may involve interacting with other
     %% queues).
-    [Pid ! {self(), go} || #amqqueue{pid = Pid} <- lookup(QNames)],
+    [Pid ! {self(), go} || #amqqueue{pid = Pid} <- Qs],
     ok.
 
 find_durable_queues() ->
@@ -221,8 +221,8 @@ find_durable_queues() ->
 
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(node(), Q) || Q <- DurableQueues],
-    [QName || Q = #amqqueue{name = QName, pid = Pid} <- Qs,
-              gen_server2:call(Pid, {init, self()}, infinity) == {new, Q}].
+    [Q || Q = #amqqueue{pid = Pid} <- Qs,
+          gen_server2:call(Pid, {init, self()}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
