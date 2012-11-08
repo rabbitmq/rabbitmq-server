@@ -25,6 +25,14 @@
 
 -include("rabbit.hrl").
 
+%%----------------------------------------------------------------------------
+
+%% We want to know when another node has *started* shutting down (to
+%% write the cluster status file). The rabbit application goes away
+%% pretty much when we have *finished* shutting down. So we have this
+%% process to monitor instead - it;s the last thing to be started so
+%% the first thing to go.
+
 start_link() ->
     gen_server:start_link({local, rabbit_running}, ?MODULE, [], []).
 
