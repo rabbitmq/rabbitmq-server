@@ -16,12 +16,14 @@
 %% The original code could reorder messages when communicating with a
 %% process on a remote node that was not currently connected.
 %%
-%% 4) The callback module can optionally implement prioritise_call/3,
-%% prioritise_cast/2 and prioritise_info/2.  These functions take
-%% Message, From and State or just Message and State and return a
-%% single integer representing the priority attached to the message.
-%% Messages with higher priorities are processed before requests with
-%% lower priorities. The default priority is 0.
+%% 4) The callback module can optionally implement prioritise_call/4,
+%% prioritise_cast/3 and prioritise_info/3.  These functions take
+%% Message, From, Length and State or just Message, Length and State
+%% (where Length is the current number of messages waiting to be
+%% processed) and return a single integer representing the priority
+%% attached to the message, or 'drop' to ignore it.  Messages with
+%% higher priorities are processed before requests with lower
+%% priorities. The default priority is 0.
 %%
 %% 5) The callback module can optionally implement
 %% handle_pre_hibernate/1 and handle_post_hibernate/1. These will be
@@ -650,6 +652,9 @@ in({system, _From, _Req} = Input, GS2State) ->
 in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
     in(Input, PI(Input, GS2State), GS2State).
 
+in(_Input, drop, GS2State) ->
+    GS2State;
+
 in(Input, Priority, GS2State = #gs2_state { queue = Queue }) ->
     GS2State # gs2_state { queue = priority_queue:in(Input, Priority, Queue) }.
 
@@ -1166,11 +1171,11 @@ whereis_name(Name) ->
 
 find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
     PrioriCall = function_exported_or_default(
-                   Mod, 'prioritise_call', 3,
+                   Mod, 'prioritise_call', 4,
                    fun (_Msg, _From, _State) -> 0 end),
-    PrioriCast = function_exported_or_default(Mod, 'prioritise_cast', 2,
+    PrioriCast = function_exported_or_default(Mod, 'prioritise_cast', 3,
                                               fun (_Msg, _State) -> 0 end),
-    PrioriInfo = function_exported_or_default(Mod, 'prioritise_info', 2,
+    PrioriInfo = function_exported_or_default(Mod, 'prioritise_info', 3,
                                               fun (_Msg, _State) -> 0 end),
     GS2State #gs2_state { prioritise_call = PrioriCall,
                           prioritise_cast = PrioriCast,
@@ -1179,20 +1184,24 @@ find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
 function_exported_or_default(Mod, Fun, Arity, Default) ->
     case erlang:function_exported(Mod, Fun, Arity) of
         true -> case Arity of
-                    2 -> fun (Msg, GS2State = #gs2_state { queue = Queue,
+                    3 -> fun (Msg, GS2State = #gs2_state { queue = Queue,
                                                            state = State }) ->
                                  Length = priority_queue:len(Queue),
                                  case catch Mod:Fun(Msg, Length, State) of
+                                     drop ->
+                                         drop;
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->
                                          handle_common_termination(Err, Msg, GS2State)
                                  end
                          end;
-                    3 -> fun (Msg, From, GS2State = #gs2_state { queue = Queue,
+                    4 -> fun (Msg, From, GS2State = #gs2_state { queue = Queue,
                                                                  state = State }) ->
                                  Length = priority_queue:len(Queue),
                                  case catch Mod:Fun(Msg, From, Length, State) of
+                                     drop ->
+                                         drop;
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->
