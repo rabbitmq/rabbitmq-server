@@ -210,9 +210,12 @@ handle_cast({node_up, Node, NodeType},
                                        end,
                                        add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
-                 {noreply,
-                  State#state{
-                    monitors = pmon:monitor({rabbit_running, Node}, Monitors)}}
+                 State1 = mon({rabbit_running, Node}, State),
+                 State2 = case pmon:is_monitored({rabbit, Node}) of
+                              true  -> State1;
+                              false -> mon({rabbit, Node}, State1)
+                          end,
+                 {noreply, State2}
     end;
 handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
@@ -231,14 +234,20 @@ handle_cast({left_cluster, Node}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _MRef, process, {rabbit_running, Node}, _Reason},
-            State = #state{monitors = Monitors}) ->
-    rabbit_log:info("rabbit on node ~p down~n", [Node]),
+handle_info({'DOWN', _MRef, process, {rabbit_running, Node}, _Reason}, State) ->
+    %% The node has started to stop, remove it from the cluster status
+    %% file. We want to do this "early" to stand a better chance of
+    %% recording anything when all the nodes are shut down
+    %% simultaneously.
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
+    {noreply, unmon({rabbit_running, Node}, State)};
+
+handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
+    %% The node has finished stopping (rabbit anyway), treat it as dead.
+    rabbit_log:info("rabbit on node ~p down~n", [Node]),
     ok = handle_dead_rabbit(Node),
-    {noreply, State#state{monitors = pmon:erase(
-                                       {rabbit_running, Node}, Monitors)}};
+    {noreply, unmon({rabbit, Node}, State)};
 
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
@@ -296,3 +305,9 @@ legacy_should_be_disc_node(DiscNodes) ->
 add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 
 del_node(Node, Nodes) -> Nodes -- [Node].
+
+mon(Item, State = #state{monitors = Monitors}) ->
+    State#state{monitors = pmon:monitor(Item, Monitors)}.
+
+unmon(Item, State = #state{monitors = Monitors}) ->
+    State#state{monitors = pmon:erase(Item, Monitors)}.
