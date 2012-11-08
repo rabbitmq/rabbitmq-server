@@ -311,17 +311,23 @@ ack_action(Command, Frame,
         {ok, IdStr} ->
             case rabbit_stomp_util:parse_message_id(IdStr) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
-                    Subscription = #subscription{channel = SubChannel}
-                        = dict:fetch(ConsumerTag, Subs),
-                    Method = MethodFun(DeliveryTag, Subscription),
-                    case transactional(Frame) of
-                        {yes, Transaction} ->
-                            extend_transaction(Transaction,
-                                               {SubChannel, Method},
-                                               State);
-                        no ->
-                            amqp_channel:call(SubChannel, Method),
-                            ok(State)
+                    case dict:find(ConsumerTag, Subs) of
+                        {ok, Subs = #subscription{channel = SubChannel}} ->
+                            Method = MethodFun(DeliveryTag, Subs),
+                            case transactional(Frame) of
+                                {yes, Transaction} ->
+                                    extend_transaction(Transaction,
+                                                       {SubChannel, Method},
+                                                       State);
+                                no ->
+                                    amqp_channel:call(SubChannel, Method),
+                                    ok(State)
+                            end;
+                        error ->
+                            error("Subscription not found",
+                                  "Message with id ~p has no subscription",
+                                  [IdStr],
+                                  State)
                     end;
                 _ ->
                    error("Invalid message-id",
