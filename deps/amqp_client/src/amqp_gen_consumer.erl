@@ -34,7 +34,7 @@
 -export([start_link/2, call_consumer/2, call_consumer/3]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, prioritise_info/2]).
+         handle_info/2, prioritise_info/3]).
 
 -record(state, {module,
                 module_state}).
@@ -193,8 +193,8 @@ init([ConsumerModule, ExtraParams]) ->
             ignore
     end.
 
-prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _State) -> 1;
-prioritise_info(_, _State)                                     -> 0.
+prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _Len, _State) -> 1;
+prioritise_info(_, _Len, _State)                                     -> 0.
 
 handle_call({consumer_call, Msg}, From,
             State = #state{module       = ConsumerModule,
