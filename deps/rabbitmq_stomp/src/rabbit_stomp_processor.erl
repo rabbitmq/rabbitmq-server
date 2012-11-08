@@ -312,8 +312,8 @@ ack_action(Command, Frame,
             case rabbit_stomp_util:parse_message_id(IdStr) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
                     case dict:find(ConsumerTag, Subs) of
-                        {ok, Subs = #subscription{channel = SubChannel}} ->
-                            Method = MethodFun(DeliveryTag, Subs),
+                        {ok, Sub = #subscription{channel = SubChannel}} ->
+                            Method = MethodFun(DeliveryTag, Sub),
                             case transactional(Frame) of
                                 {yes, Transaction} ->
                                     extend_transaction(Transaction,
