@@ -28,7 +28,8 @@
          get_overview/1, get_overview/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, handle_pre_hibernate/1]).
+         code_change/3, handle_pre_hibernate/1, prioritise_call/4,
+         prioritise_cast/3]).
 
 -import(rabbit_misc, [pget/3, pset/3]).
 
@@ -85,6 +86,19 @@
 -define(OVERVIEW_QUEUE_STATS,
         [messages, messages_ready, messages_unacknowledged, messages_details,
          messages_ready_details, messages_unacknowledged_details]).
+
+-define(DROP_LENGTH, 1000).
+
+
+%% All the calls are requests, better to respond to them than process
+%% more stats
+prioritise_call(_Msg, _From, _Len, _State) -> 9.
+
+prioritise_cast({event, #event{type = Stats}}, Len, _State)
+  when (Stats =:= connection_stats orelse
+        Stats =:= channel_stats orelse
+        Stats =:= queue_stats) andalso Len > ?DROP_LENGTH -> drop;
+prioritise_cast(_Msg, _Len, _State)                       -> 0.
 
 %%----------------------------------------------------------------------------
 
