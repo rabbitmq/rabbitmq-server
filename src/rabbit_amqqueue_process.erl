@@ -222,13 +222,13 @@ declare(Recover, From, State = #q{q                   = Q,
 
 matches(new, Q1, Q2) ->
     %% i.e. not policy
-    Q1#amqqueue.name =:= Q2#amqqueue.name andalso
-    Q1#amqqueue.durable =:= Q2#amqqueue.durable andalso
-    Q1#amqqueue.auto_delete =:= Q2#amqqueue.auto_delete andalso
+    Q1#amqqueue.name            =:= Q2#amqqueue.name            andalso
+    Q1#amqqueue.durable         =:= Q2#amqqueue.durable         andalso
+    Q1#amqqueue.auto_delete     =:= Q2#amqqueue.auto_delete     andalso
     Q1#amqqueue.exclusive_owner =:= Q2#amqqueue.exclusive_owner andalso
-    Q1#amqqueue.arguments =:= Q2#amqqueue.arguments andalso
-    Q1#amqqueue.pid =:= Q2#amqqueue.pid andalso
-    Q1#amqqueue.slave_pids =:= Q2#amqqueue.slave_pids;
+    Q1#amqqueue.arguments       =:= Q2#amqqueue.arguments       andalso
+    Q1#amqqueue.pid             =:= Q2#amqqueue.pid             andalso
+    Q1#amqqueue.slave_pids      =:= Q2#amqqueue.slave_pids;
 matches(_,  Q,   Q) -> true;
 matches(_, _Q, _Q1) -> false.
 
