@@ -112,7 +112,7 @@ prepare_cluster_status_files() ->
                     true  -> ThisNode;
                     false -> []
                 end,
-    ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
+    write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
 
 write_cluster_status({All, Disc, Running}=St) ->
     ClusterStatusFN = cluster_status_filename(),
@@ -203,12 +203,12 @@ handle_cast({node_up, Node, NodeType},
         true  -> {noreply, State};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-                 ok = write_cluster_status({add_node(Node, AllNodes),
-                                            case NodeType of
-                                                disc -> add_node(Node, DiscNodes);
-                                                ram  -> DiscNodes
-                                            end,
-                                            add_node(Node, RunningNodes)}),
+                 write_cluster_status({add_node(Node, AllNodes),
+                                       case NodeType of
+                                           disc -> add_node(Node, DiscNodes);
+                                           ram  -> DiscNodes
+                                       end,
+                                       add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
                  {noreply,
                   State#state{
@@ -216,18 +216,17 @@ handle_cast({node_up, Node, NodeType},
     end;
 handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    ok = write_cluster_status({add_node(Node, AllNodes),
-                               case NodeType of
-                                   disc -> add_node(Node, DiscNodes);
-                                   ram  -> DiscNodes
-                               end,
-                               RunningNodes}),
+    write_cluster_status({add_node(Node, AllNodes),
+                          case NodeType of
+                              disc -> add_node(Node, DiscNodes);
+                              ram  -> DiscNodes
+                          end,
+                          RunningNodes}),
     {noreply, State};
 handle_cast({left_cluster, Node}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    ok =  write_cluster_status({del_node(Node, AllNodes),
-                                del_node(Node, DiscNodes),
-                                del_node(Node, RunningNodes)}),
+    write_cluster_status({del_node(Node, AllNodes), del_node(Node, DiscNodes),
+                          del_node(Node, RunningNodes)}),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -236,8 +235,7 @@ handle_info({'DOWN', _MRef, process, {rabbit_running, Node}, _Reason},
             State = #state{monitors = Monitors}) ->
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    ok = write_cluster_status({AllNodes, DiscNodes,
-                               del_node(Node, RunningNodes)}),
+    write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
     ok = handle_dead_rabbit(Node),
     {noreply, State#state{monitors = pmon:erase(
                                        {rabbit_running, Node}, Monitors)}};
