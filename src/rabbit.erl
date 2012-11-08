@@ -570,7 +570,10 @@ boot_delegate() ->
     rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
 recover() ->
-    rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
+    Qs = rabbit_amqqueue:recover(),
+    ok = rabbit_binding:recover(rabbit_exchange:recover(),
+                                [QName || #amqqueue{name = QName} <- Qs]),
+    rabbit_amqqueue:start(Qs).
 
 maybe_insert_default_data() ->
     case rabbit_table:is_empty() of
