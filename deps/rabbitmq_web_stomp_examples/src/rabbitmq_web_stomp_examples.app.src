@@ -4,5 +4,5 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_web_stomp_examples_app, []}},
-  {env, [{listener, [{port, 55670}]}]},
+  {env, [{listener, [{port, 15670}]}]},
   {applications, [kernel, stdlib, rabbitmq_mochiweb, rabbitmq_web_stomp]}]}.
