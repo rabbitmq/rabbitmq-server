@@ -211,7 +211,7 @@ handle_cast({node_up, Node, NodeType},
                                        add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
                  State1 = mon({rabbit_running, Node}, State),
-                 State2 = case pmon:is_monitored({rabbit, Node}) of
+                 State2 = case pmon:is_monitored({rabbit, Node}, Monitors) of
                               true  -> State1;
                               false -> mon({rabbit, Node}, State1)
                           end,
