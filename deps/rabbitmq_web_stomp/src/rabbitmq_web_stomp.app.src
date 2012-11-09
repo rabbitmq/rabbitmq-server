@@ -5,6 +5,6 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_ws_app, []}},
-  {env, [{port, 55674}]},
+  {env, [{port, 15674}]},
   {applications, [kernel, stdlib, rabbit, rabbitmq_stomp, cowboy, sockjs]}
  ]}.

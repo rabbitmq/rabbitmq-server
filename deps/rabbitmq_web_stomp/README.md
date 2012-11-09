@@ -5,8 +5,8 @@ This project is a simple bridge between "RabbitMQ-stomp" plugin and
 SockJS.
 
 Once started the plugin opens a SockJS endpoint on prefix "/stomp" on
-port 55674, for example a valid SockJS endpoint url may look like:
-"http://127.0.0.1:55674/stomp".
+port 15674, for example a valid SockJS endpoint url may look like:
+"http://127.0.0.1:15674/stomp".
 
 Once the server is started you should be able to establish a SockJS
 connection to this url. You will be able to communicate using the
@@ -19,7 +19,7 @@ usual STOMP protocol over it. For example, a page using Jeff Mesnil's
     <script>
         Stomp.WebSocketClass = SockJS;
 
-        var client = Stomp.client('http://127.0.0.1:55674/stomp');
+        var client = Stomp.client('http://127.0.0.1:15674/stomp');
         var on_connect = function() {
             console.log('connected');
         };
