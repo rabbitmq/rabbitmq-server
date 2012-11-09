@@ -107,7 +107,7 @@ exec ${ERL_DIR}erl \
     -pa ${RABBITMQ_EBIN_ROOT} \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
-    -boot start_sasl \
+    -boot "${SASL_BOOT_FILE}" \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \

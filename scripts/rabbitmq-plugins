@@ -31,6 +31,7 @@ exec ${ERL_DIR}erl \
     -noinput \
     -hidden \
     -sname rabbitmq-plugins$$ \
+    -boot "${CLEAN_BOOT_FILE}" \
     -s rabbit_plugins_main \
     -enabled_plugins_file "$RABBITMQ_ENABLED_PLUGINS_FILE" \
     -plugins_dist_dir "$RABBITMQ_PLUGINS_DIR" \

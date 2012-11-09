@@ -32,6 +32,7 @@ exec ${ERL_DIR}erl \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \
     -sname rabbitmqctl$$ \
+    -boot "${CLEAN_BOOT_FILE}" \
     -s rabbit_control_main \
     -nodename $RABBITMQ_NODENAME \
     -extra "$@"
