@@ -57,9 +57,8 @@ start() ->
     rabbit_sup:start_restartable_child(
       vm_memory_monitor, [MemoryWatermark,
                           fun (Alarm) ->
-                                  R = set_alarm(Alarm),
-                                  background_gc:gc_all(),
-                                  R
+                                  background_gc:run(),
+                                  set_alarm(Alarm)
                           end,
                           fun clear_alarm/1]),
     {ok, DiskLimit} = application:get_env(disk_free_limit),
