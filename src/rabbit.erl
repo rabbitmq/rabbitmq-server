@@ -183,7 +183,7 @@
                    [{description, "background garbage collection"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [background_gc]}},
-                    {requires,    networking}]}).
+                    {enables,     networking}]}).
 
 %%---------------------------------------------------------------------------
 
