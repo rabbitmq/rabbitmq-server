@@ -179,6 +179,12 @@
                     {mfa,         {rabbit_node_monitor, notify_node_up, []}},
                     {requires,    networking}]}).
 
+-rabbit_boot_step({background_gc,
+                   [{description, "background garbage collection"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [background_gc]}},
+                    {requires,    networking}]}).
+
 %%---------------------------------------------------------------------------
 
 -include("rabbit_framing.hrl").
