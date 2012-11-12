@@ -19,7 +19,7 @@
 -export([parse_destination/1, parse_routing_information/1,
          parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
--export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/4,
+-export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/1,
          headers_post_process/1, headers/5, message_properties/1, tag_to_id/1,
          msg_header_name/1, ack_header_name/1]).
 -export([negotiate_version/2]).
@@ -90,37 +90,44 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
                 user_id          = BinH(?HEADER_USER_ID),
                 app_id           = BinH(?HEADER_APP_ID) }.
 
-message_headers(SessionId,
-                #'basic.deliver'{consumer_tag = ConsumerTag,
-                                 delivery_tag = DeliveryTag,
-                                 exchange     = ExchangeBin,
-                                 routing_key  = RKeyBin},
-                Props = #'P_basic'{headers = Headers},
-                BaseHeaders) ->
-    Standard =
-        lists:foldl(
-          fun({Header, Index}, Acc) ->
-                  maybe_header(Header, element(Index, Props), Acc)
-          end,
-          case tag_to_id(ConsumerTag) of
-              {ok, {internal, Id}} -> [{?HEADER_SUBSCRIPTION, Id}];
-              _                    -> []
-          end ++ BaseHeaders ++
-          [{?HEADER_DESTINATION, format_destination(binary_to_list(ExchangeBin),
-                                                    binary_to_list(RKeyBin))}],
-          [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
-           {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
-           {?HEADER_PERSISTENT,       #'P_basic'.delivery_mode},
-           {?HEADER_PRIORITY,         #'P_basic'.priority},
-           {?HEADER_CORRELATION_ID,   #'P_basic'.correlation_id},
-           {?HEADER_REPLY_TO,         #'P_basic'.reply_to},
-           {?HEADER_EXPIRATION,       #'P_basic'.expiration},
-           {?HEADER_AMQP_MESSAGE_ID,  #'P_basic'.message_id},
-           {?HEADER_TIMESTAMP,        #'P_basic'.timestamp},
-           {?HEADER_TYPE,             #'P_basic'.type},
-           {?HEADER_USER_ID,          #'P_basic'.user_id},
-           {?HEADER_APP_ID,           #'P_basic'.app_id}]),
-    adhoc_convert_headers(Headers, Standard).
+message_headers(Props = #'P_basic'{headers = Headers}) ->
+    adhoc_convert_headers(
+      Headers,
+      lists:foldl(fun({Header, Index}, Acc) ->
+                          maybe_header(Header, element(Index, Props), Acc)
+                  end, [],
+                  [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
+                   {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
+                   {?HEADER_PERSISTENT,       #'P_basic'.delivery_mode},
+                   {?HEADER_PRIORITY,         #'P_basic'.priority},
+                   {?HEADER_CORRELATION_ID,   #'P_basic'.correlation_id},
+                   {?HEADER_REPLY_TO,         #'P_basic'.reply_to},
+                   {?HEADER_EXPIRATION,       #'P_basic'.expiration},
+                   {?HEADER_AMQP_MESSAGE_ID,  #'P_basic'.message_id},
+                   {?HEADER_TIMESTAMP,        #'P_basic'.timestamp},
+                   {?HEADER_TYPE,             #'P_basic'.type},
+                   {?HEADER_USER_ID,          #'P_basic'.user_id},
+                   {?HEADER_APP_ID,           #'P_basic'.app_id}])).
+
+headers_extra(SessionId, AckMode, Version,
+              #'basic.deliver'{consumer_tag = ConsumerTag,
+                               delivery_tag = DeliveryTag,
+                               exchange     = ExchangeBin,
+                               routing_key  = RoutingKeyBin}) ->
+    case tag_to_id(ConsumerTag) of
+        {ok, {internal, Id}} -> [{?HEADER_SUBSCRIPTION, Id}];
+        _                    -> []
+    end ++
+    [{?HEADER_DESTINATION,
+      format_destination(binary_to_list(ExchangeBin),
+                         binary_to_list(RoutingKeyBin))},
+     {?HEADER_MESSAGE_ID,
+      create_message_id(ConsumerTag, SessionId, DeliveryTag)}] ++
+    case AckMode == client andalso Version == "1.2" of
+        true  -> [{?HEADER_ACK,
+                   create_message_id(ConsumerTag, SessionId, DeliveryTag)}];
+        false -> []
+    end.
 
 headers_post_process(Headers) ->
     [case H of
@@ -132,18 +139,9 @@ headers_post_process(Headers) ->
              H
      end || H <- Headers].
 
-headers(SessionId, #'basic.deliver'{consumer_tag = ConsumerTag,
-                                    delivery_tag = DeliveryTag} = Delivery,
-        Properties, AckMode, Version) ->
-    BaseHeaders =
-        case AckMode == client andalso Version == "1.2" of
-            true  -> [{?HEADER_ACK,
-                       create_message_id(ConsumerTag, SessionId, DeliveryTag)}];
-            false -> []
-        end ++ [{?HEADER_MESSAGE_ID,
-                 create_message_id(ConsumerTag, SessionId, DeliveryTag)}],
-    headers_post_process(
-      message_headers(SessionId, Delivery, Properties, BaseHeaders)).
+headers(SessionId, Delivery, Properties, AckMode, Version) ->
+    headers_extra(SessionId, AckMode, Version, Delivery) ++
+    headers_post_process(message_headers(Properties)).
 
 tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
     {ok, {internal, binary_to_list(Id)}};

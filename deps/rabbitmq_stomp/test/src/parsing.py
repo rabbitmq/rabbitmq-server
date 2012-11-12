@@ -82,9 +82,9 @@ class TestParsing(unittest.TestCase):
                         'destination:/exchange/amq.fanout\n\n'
                         'hello\n\x00\n')
         resp = ('MESSAGE\n'
-                'content-type:text/plain\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
@@ -137,9 +137,9 @@ class TestParsing(unittest.TestCase):
                         'content-type:text/plain\n'
                         '\nhello\n\x00\n')
         resp = ('MESSAGE\n'
-                'content-type:text/plain\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
@@ -185,10 +185,10 @@ class TestParsing(unittest.TestCase):
                         '\n\0')
 
         resp=('MESSAGE\n'
-            'content-type:text/plain\n'
             'subscription:(.*)\n'
             'destination:/topic/da9d4779\n'
             'message-id:(.*)\n'
+            'content-type:text/plain\n'
             'content-length:8\n'
             '\n'
             'message'
@@ -216,10 +216,10 @@ class TestParsing(unittest.TestCase):
                         '\0' % message)
 
         resp=('MESSAGE\n'
-            'content-type:text/plain\n'
             'subscription:(.*)\n'
             'destination:/topic/test_huge_message\n'
             'message-id:(.*)\n'
+            'content-type:text/plain\n'
             'content-length:%i\n'
             '\n'
             '%s(.*)'
@@ -265,10 +265,10 @@ class TestParsing(unittest.TestCase):
                         '\0' % (len(message), message) )
 
         headresp=('MESSAGE\n'            # 8
-            'content-type:text/plain\n'  # 24
             'subscription:(.*)\n'        # 14 + subscription
             +resp_dest+                  # 44
             'message-id:(.*)\n'          # 12 + message-id
+            'content-type:text/plain\n'  # 24
             'content-length:%i\n'        # 16 + 4==len('1024')
             '\n'                         # 1
             '(.*)$'                      # prefix of body+null (potentially)
@@ -324,10 +324,10 @@ class TestParsing(unittest.TestCase):
             part_index += packet_size
 
         headresp=('MESSAGE\n'           # 8
-            'content-type:text/plain\n' # 24
             'subscription:(.*)\n'       # 14 + subscription
             +resp_dest+                 # 44
             'message-id:(.*)\n'         # 12 + message-id
+            'content-type:text/plain\n' # 24
             'content-length:%i\n'       # 16 + 4==len('1024')
             '\n'                        # 1
             '(.*)$'                     # prefix of body+null (potentially)
