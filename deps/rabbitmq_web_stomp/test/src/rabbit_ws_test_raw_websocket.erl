@@ -19,7 +19,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 connection_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:55674/stomp/websocket", self()),
+    WS = rfc6455_client:new("ws://127.0.0.1:15674/stomp/websocket", self()),
     {ok, _} = rfc6455_client:open(WS),
     {close, _} = rfc6455_client:close(WS),
     ok.
@@ -37,7 +37,7 @@ raw_recv(WS) ->
 
 
 pubsub_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:55674/stomp/websocket", self()),
+    WS = rfc6455_client:new("ws://127.0.0.1:15674/stomp/websocket", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
@@ -59,7 +59,7 @@ pubsub_test() ->
 
 
 disconnect_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:55674/stomp/websocket", self()),
+    WS = rfc6455_client:new("ws://127.0.0.1:15674/stomp/websocket", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
