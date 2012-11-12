@@ -58,7 +58,7 @@ start() ->
       vm_memory_monitor, [MemoryWatermark,
                           fun (Alarm) ->
                                   R = set_alarm(Alarm),
-                                  [garbage_collect(P) || P <- processes()],
+                                  background_gc:gc_all(),
                                   R
                           end,
                           fun clear_alarm/1]),

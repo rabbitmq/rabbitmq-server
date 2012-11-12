@@ -18,7 +18,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0]).
+-export([start_link/0, gc_all/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -38,11 +38,18 @@ start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [],
                            [{timeout, infinity}]).
 
+gc_all() ->
+    gen_server2:call(?MODULE, gc_all, infinity).
+
 %%----------------------------------------------------------------------------
 
 init([]) ->
     {ok, run_gc(#state{last_interval = ?IDEAL_INTERVAL}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+handle_call(gc_all, _From, State) ->
+    do_gc(),
+    {reply, ok, State, hibernate};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
