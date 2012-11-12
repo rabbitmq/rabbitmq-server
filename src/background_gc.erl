@@ -28,6 +28,7 @@
 
 -define(MAX_RATIO, 0.01).
 -define(IDEAL_INTERVAL, 5000).
+-define(MIN_BYTES, 50000).
 
 -record(state, {last_interval}).
 
@@ -69,13 +70,14 @@ run_gc(State = #state{last_interval = LastInterval}) ->
     State#state{last_interval = Interval}.
 
 do_gc() ->
-    Sorted = lists:reverse(lists:sort(
-                             [{memory(Pid), Pid} || Pid <- processes()])),
-    %% TODO select probabilisticly.
-    garbage_collect(element(2, hd(Sorted))),
+    MPs = rs([{M, P} || P <- processes(),
+                        [{status, waiting}, {memory, M}] <- stats(P),
+                        M > ?MIN_BYTES]),
+    Idx = trunc(math:pow(length(MPs) + 1, random:uniform())),
+    {_, Pid} = lists:nth(Idx, MPs),
+    garbage_collect(Pid),
     ok.
 
-memory(Pid) -> case process_info(Pid, memory) of
-                   {memory, M} -> M;
-                   _           -> 0
-               end.
+rs(L) -> lists:reverse(lists:sort(L)).
+
+stats(P) -> [erlang:process_info(P, [status, memory])].
