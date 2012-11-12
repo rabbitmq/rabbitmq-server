@@ -89,16 +89,20 @@
 
 -define(DROP_LENGTH, 1000).
 
-
 %% All the calls are requests, better to respond to them than process
 %% more stats
 prioritise_call(_Msg, _From, _Len, _State) -> 9.
 
-prioritise_cast({event, #event{type = Stats}}, Len, _State)
-  when (Stats =:= connection_stats orelse
-        Stats =:= channel_stats orelse
-        Stats =:= queue_stats) andalso Len > ?DROP_LENGTH -> drop;
-prioritise_cast(_Msg, _Len, _State)                       -> 0.
+prioritise_cast({event, #event{type  = Type,
+                               props = Props}}, Len, _State)
+  when (Type =:= channel_stats orelse
+        Type =:= queue_stats) andalso Len > ?DROP_LENGTH ->
+    case pget(idle_since, Props) of
+        unknown -> drop;
+        _       -> 0
+    end;
+prioritise_cast(_Msg, _Len, _State) ->
+    0.
 
 %%----------------------------------------------------------------------------
 
