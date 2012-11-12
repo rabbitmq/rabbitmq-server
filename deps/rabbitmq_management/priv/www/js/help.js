@@ -66,10 +66,12 @@ HELP = {
       network connections.',
 
     'memory-alarm':
-      'The <a target="_blank" href="http://www.rabbitmq.com/memory.html#memsup">memory \
+      '<p>The <a target="_blank" href="http://www.rabbitmq.com/memory.html#memsup">memory \
       alarm</a> for this node has gone off. It will block \
       incoming network traffic until the memory usage drops below \
-      the watermark.',
+      the watermark.</p>\
+      <p>Note that the pale line in this case indicates the high watermark \
+      in relation to how much memory is used in total. </p>',
 
     'disk-free-alarm':
       'The <a target="_blank" href="http://www.rabbitmq.com/memory.html#diskfreesup">disk \
