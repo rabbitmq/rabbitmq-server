@@ -1031,5 +1031,6 @@ interval_operation(Fun, MaxRatio, IdealInterval, LastInterval) ->
                 Micros > 1000 * (MaxRatio * LastInterval)} of
               {true,  true}  -> round(LastInterval * 1.5);
               {true,  false} -> LastInterval;
-              {false, false} -> IdealInterval
+              {false, false} -> lists:max([IdealInterval,
+                                           round(LastInterval / 1.5)])
           end}.
