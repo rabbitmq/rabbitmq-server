@@ -28,7 +28,6 @@
 
 -define(MAX_RATIO, 0.01).
 -define(IDEAL_INTERVAL, 60000).
--define(MIN_BYTES, 50000).
 
 -record(state, {last_interval}).
 
@@ -48,7 +47,7 @@ start_link() ->
                            [{timeout, infinity}]).
 
 run() ->
-    gen_server2:cast(?MODULE, gc_all).
+    gen_server2:cast(?MODULE, run).
 
 %%----------------------------------------------------------------------------
 
@@ -57,9 +56,9 @@ init([]) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(Msg, _From, State) ->
-    {stop, {unexpected_call, Msg}, State}.
+    {stop, {unexpected_call, Msg}, {unexpected_call, Msg}, State}.
 
-handle_cast(gc_all, State) ->
+handle_cast(run, State) ->
     do_gc(),
     {noreply, State, hibernate};
 
