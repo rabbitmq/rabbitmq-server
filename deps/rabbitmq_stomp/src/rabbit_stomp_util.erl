@@ -109,6 +109,17 @@ message_headers(Props = #'P_basic'{headers = Headers}) ->
                    {?HEADER_USER_ID,          #'P_basic'.user_id},
                    {?HEADER_APP_ID,           #'P_basic'.app_id}])).
 
+adhoc_convert_headers(undefined, Existing) ->
+    Existing;
+adhoc_convert_headers(Headers, Existing) ->
+    lists:foldr(fun ({K, longstr, V}, Acc) ->
+                        [{binary_to_list(K), binary_to_list(V)} | Acc];
+                    ({K, signedint, V}, Acc) ->
+                        [{binary_to_list(K), integer_to_list(V)} | Acc];
+                    (_, Acc) ->
+                        Acc
+                end, Existing, Headers).
+
 headers_extra(SessionId, AckMode, Version,
               #'basic.deliver'{consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag,
@@ -224,17 +235,6 @@ maybe_header(Key, Value, Acc) when is_integer(Value) ->
     [{Key, integer_to_list(Value)}| Acc];
 maybe_header(_Key, _Value, Acc) ->
     Acc.
-
-adhoc_convert_headers(undefined, Existing) ->
-    Existing;
-adhoc_convert_headers(Headers, Existing) ->
-    lists:foldr(fun ({K, longstr, V}, Acc) ->
-                        [{binary_to_list(K), binary_to_list(V)} | Acc];
-                    ({K, signedint, V}, Acc) ->
-                        [{binary_to_list(K), integer_to_list(V)} | Acc];
-                    (_, Acc) ->
-                        Acc
-                end, Existing, Headers).
 
 create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
     [ConsumerTag,
