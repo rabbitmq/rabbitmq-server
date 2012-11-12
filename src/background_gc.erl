@@ -34,6 +34,15 @@
 
 %%----------------------------------------------------------------------------
 
+-ifdef(use_specs).
+
+-spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(run/0 :: () -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [],
                            [{timeout, infinity}]).
