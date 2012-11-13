@@ -174,16 +174,10 @@
                    [{mfa,         {rabbit_networking, boot, []}},
                     {requires,    log_relay}]}).
 
--rabbit_boot_step({app_running,
-                   [{description, "cluster membership"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
-                                   [rabbit_app_marker]}},
-                    {requires,    networking}]}).
-
 -rabbit_boot_step({notify_cluster,
                    [{description, "notify cluster nodes"},
                     {mfa,         {rabbit_node_monitor, notify_node_up, []}},
-                    {requires,    app_running}]}).
+                    {requires,    networking}]}).
 
 %%---------------------------------------------------------------------------
 
