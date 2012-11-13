@@ -184,6 +184,7 @@ partitions() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    process_flag(trap_exit, true),
     {ok, _} = mnesia:subscribe(system),
     {ok, #state{monitors   = pmon:new(),
                 partitions = []}}.
