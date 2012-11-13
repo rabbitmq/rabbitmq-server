@@ -85,10 +85,10 @@ cluster_status_filename() ->
 
 prepare_cluster_status_files() ->
     rabbit_mnesia:ensure_mnesia_dir(),
-    CorruptFiles = fun () -> throw({error, corrupt_cluster_status_files}) end,
+    Corrupt = fun(F) -> throw({error, corrupt_cluster_status_files, F}) end,
     RunningNodes1 = case try_read_file(running_nodes_filename()) of
                         {ok, [Nodes]} when is_list(Nodes) -> Nodes;
-                        {ok, _      }                     -> CorruptFiles();
+                        {ok, Other}                       -> Corrupt(Other);
                         {error, enoent}                   -> []
                     end,
     ThisNode = [node()],
@@ -102,8 +102,8 @@ prepare_cluster_status_files() ->
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
                 {legacy_cluster_nodes(AllNodes0),
                  legacy_should_be_disc_node(AllNodes0)};
-            {ok, _} ->
-                CorruptFiles();
+            {ok, Files} ->
+                Corrupt(Files);
             {error, enoent} ->
                 {legacy_cluster_nodes([]), true}
         end,
@@ -134,8 +134,8 @@ read_cluster_status() ->
           try_read_file(running_nodes_filename())} of
         {{ok, [{All, Disc}]}, {ok, [Running]}} when is_list(Running) ->
             {All, Disc, Running};
-        {_, _} ->
-            throw({error, corrupt_or_missing_cluster_files})
+        {Stat, Run} ->
+            throw({error, {corrupt_or_missing_cluster_files, Stat, Run}})
     end.
 
 update_cluster_status() ->
@@ -184,6 +184,11 @@ partitions() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    %% We trap exits so that the supervisor will not just kill us. We
+    %% want to be sure that we are not going to be killed while
+    %% writing out the cluster status files - bad things can then
+    %% happen.
+    process_flag(trap_exit, true),
     {ok, _} = mnesia:subscribe(system),
     {ok, #state{monitors   = pmon:new(),
                 partitions = []}}.
