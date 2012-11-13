@@ -84,8 +84,8 @@ public class MqttTest extends TestCase implements MqttCallback {
     public void setUp() throws MqttException {
         clientId = getClass().getSimpleName() + ((int) (10000*Math.random()));
         clientId2 = clientId + "-2";
-        client = new MqttClient(brokerUrl, clientId);
-        client2 = new MqttClient(brokerUrl, clientId2);
+        client = new MqttClient(brokerUrl, clientId, null);
+        client2 = new MqttClient(brokerUrl, clientId2, null);
         conOpt = new MyConnOpts();
         setConOpts(conOpt);
         receivedMessages = new ArrayList();
@@ -96,13 +96,13 @@ public class MqttTest extends TestCase implements MqttCallback {
     public  void tearDown() throws MqttException {
         // clean any sticky sessions
         setConOpts(conOpt);
-        client = new MqttClient(brokerUrl, clientId);
+        client = new MqttClient(brokerUrl, clientId, null);
         try {
             client.connect(conOpt);
             client.disconnect();
         } catch (Exception _) {}
 
-        client2 = new MqttClient(brokerUrl, clientId2);
+        client2 = new MqttClient(brokerUrl, clientId2, null);
         try {
             client2.connect(conOpt);
             client2.disconnect();
@@ -279,7 +279,7 @@ public class MqttTest extends TestCase implements MqttCallback {
 
     public void testMultipleClientIds() throws MqttException, InterruptedException {
         client.connect(conOpt);
-        client2 = new MqttClient(brokerUrl, clientId);
+        client2 = new MqttClient(brokerUrl, clientId, null);
         client2.connect(conOpt);
         Thread.sleep(testDelay);
         Assert.assertFalse(client.isConnected());
