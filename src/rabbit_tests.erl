@@ -1131,6 +1131,9 @@ test_server_status() ->
     HWM = vm_memory_monitor:get_vm_memory_high_watermark(),
     ok = control_action(set_vm_memory_high_watermark, ["1"]),
     ok = control_action(set_vm_memory_high_watermark, ["1.0"]),
+    %% this will trigger an alarm
+    ok = control_action(set_vm_memory_high_watermark, ["0.0"]),
+    %% reset
     ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
 
     %% eval
