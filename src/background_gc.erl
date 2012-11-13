@@ -39,50 +39,40 @@
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server2:start_link({local, ?MODULE}, ?MODULE, [],
-                           [{timeout, infinity}]).
+start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [],
+                                       [{timeout, infinity}]).
 
-run() ->
-    gen_server2:cast(?MODULE, run).
+run() -> gen_server2:cast(?MODULE, run).
 
 %%----------------------------------------------------------------------------
 
-init([]) ->
-    {ok, run_gc(#state{last_interval = ?IDEAL_INTERVAL})}.
+init([]) -> {ok, interval_gc(#state{last_interval = ?IDEAL_INTERVAL})}.
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, {unexpected_call, Msg}, State}.
 
-handle_cast(run, State) ->
-    do_gc(),
-    {noreply, State};
+handle_cast(run, State) -> gc(), {noreply, State};
 
-handle_cast(Msg, State) ->
-    {stop, {unexpected_cast, Msg}, State}.
+handle_cast(Msg, State) -> {stop, {unexpected_cast, Msg}, State}.
 
-handle_info(run_gc, State) ->
-    {noreply, run_gc(State)};
+handle_info(run, State) -> {noreply, interval_gc(State)};
 
-handle_info(Msg, State) ->
-    {stop, {unexpected_info, Msg}, State}.
+handle_info(Msg, State) -> {stop, {unexpected_info, Msg}, State}.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
-terminate(_Reason, State) ->
-    State.
+terminate(_Reason, State) -> State.
 
 %%----------------------------------------------------------------------------
 
-run_gc(State = #state{last_interval = LastInterval}) ->
+interval_gc(State = #state{last_interval = LastInterval}) ->
     {ok, Interval} = rabbit_misc:interval_operation(
-                       fun do_gc/0, ?MAX_RATIO, ?IDEAL_INTERVAL, LastInterval),
-    erlang:send_after(Interval, self(), run_gc),
+                       fun gc/0, ?MAX_RATIO, ?IDEAL_INTERVAL, LastInterval),
+    erlang:send_after(Interval, self(), run),
     State#state{last_interval = Interval}.
 
-do_gc() ->
+gc() ->
     [garbage_collect(P) || P <- processes(),
                            {status, waiting} == process_info(P, status)],
-    garbage_collect(self()), %% Since we will never be waiting...
+    garbage_collect(), %% since we will never be waiting...
     ok.
