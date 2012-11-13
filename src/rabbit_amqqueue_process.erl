@@ -195,10 +195,8 @@ code_change(_OldVsn, State, _Extra) ->
 declare(Recover, From, State = #q{q                   = Q,
                                   backing_queue       = BQ,
                                   backing_queue_state = undefined}) ->
-    case rabbit_amqqueue:internal_declare(Q, Recover) of
-        not_found ->
-            {stop, normal, not_found, State};
-        Q1 ->
+    case rabbit_amqqueue:internal_declare(Q, Recover =/= new) of
+        #amqqueue{} = Q1 ->
             case matches(Recover, Q, Q1) of
                 true ->
                     gen_server2:reply(From, {new, Q}),
@@ -208,6 +206,7 @@ declare(Recover, From, State = #q{q                   = Q,
                            self(), {rabbit_amqqueue,
                                     set_ram_duration_target, [self()]}),
                     BQS = bq_init(BQ, Q, Recover),
+                    recovery_barrier(Recover),
                     State1 = process_args(State#q{backing_queue_state = BQS}),
                     rabbit_event:notify(queue_created,
                                         infos(?CREATION_EVENT_KEYS, State1)),
@@ -216,27 +215,38 @@ declare(Recover, From, State = #q{q                   = Q,
                     noreply(State1);
                 false ->
                     {stop, normal, {existing, Q1}, State}
-            end
-     end.
+            end;
+        Err ->
+            {stop, normal, Err, State}
+    end.
 
-matches(true, Q, Q) -> true;
-matches(true, _Q, _Q1) -> false;
-matches(false, Q1, Q2) ->
+matches(new, Q1, Q2) ->
     %% i.e. not policy
-    Q1#amqqueue.name =:= Q2#amqqueue.name andalso
-    Q1#amqqueue.durable =:= Q2#amqqueue.durable andalso
-    Q1#amqqueue.auto_delete =:= Q2#amqqueue.auto_delete andalso
+    Q1#amqqueue.name            =:= Q2#amqqueue.name            andalso
+    Q1#amqqueue.durable         =:= Q2#amqqueue.durable         andalso
+    Q1#amqqueue.auto_delete     =:= Q2#amqqueue.auto_delete     andalso
     Q1#amqqueue.exclusive_owner =:= Q2#amqqueue.exclusive_owner andalso
-    Q1#amqqueue.arguments =:= Q2#amqqueue.arguments andalso
-    Q1#amqqueue.pid =:= Q2#amqqueue.pid andalso
-    Q1#amqqueue.slave_pids =:= Q2#amqqueue.slave_pids.
+    Q1#amqqueue.arguments       =:= Q2#amqqueue.arguments       andalso
+    Q1#amqqueue.pid             =:= Q2#amqqueue.pid             andalso
+    Q1#amqqueue.slave_pids      =:= Q2#amqqueue.slave_pids;
+matches(_,  Q,   Q) -> true;
+matches(_, _Q, _Q1) -> false.
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
-    BQ:init(Q, Recover,
+    BQ:init(Q, Recover =/= new,
             fun (Mod, Fun) ->
                     rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
+
+recovery_barrier(new) ->
+    ok;
+recovery_barrier(BarrierPid) ->
+    MRef = erlang:monitor(process, BarrierPid),
+    receive
+        {BarrierPid, go}              -> erlang:demonitor(MRef, [flush]);
+        {'DOWN', MRef, process, _, _} -> ok
+    end.
 
 process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     lists:foldl(
@@ -247,9 +257,9 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
               end
       end, State,
       [{<<"x-expires">>,                 fun init_expires/2},
-       {<<"x-message-ttl">>,             fun init_ttl/2},
        {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
-       {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2}]).
+       {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
+       {<<"x-message-ttl">>,             fun init_ttl/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
@@ -553,7 +563,7 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
 deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
                    Delivered, State) ->
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
-    Props = message_properties(Confirm, Delivered, State),
+    Props = message_properties(Message, Confirm, Delivered, State),
     case attempt_delivery(Delivery, Props, State1) of
         {true, State2} ->
             State2;
@@ -680,16 +690,21 @@ subtract_acks(ChPid, AckTags, State, Fun) ->
             Fun(State)
     end.
 
-message_properties(Confirm, Delivered, #q{ttl = TTL}) ->
-    #message_properties{expiry           = calculate_msg_expiry(TTL),
+message_properties(Message, Confirm, Delivered, #q{ttl = TTL}) ->
+    #message_properties{expiry           = calculate_msg_expiry(Message, TTL),
                         needs_confirming = Confirm == eventually,
                         delivered        = Delivered}.
 
-calculate_msg_expiry(undefined) -> undefined;
-calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).
+calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
+    #content{properties = Props} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    %% We assert that the expiration must be valid - we check in the channel.
+    {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
+    case lists:min([TTL, MsgTTL]) of
+        undefined -> undefined;
+        T         -> now_micros() + T * 1000
+    end.
 
-drop_expired_messages(State = #q{ttl = undefined}) ->
-    State;
 drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue       = BQ }) ->
     Now = now_micros(),
@@ -710,8 +725,6 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
                      end, State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(undefined, State) ->
-    State;
-ensure_ttl_timer(_Expiry, State = #q{ttl = undefined}) ->
     State;
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref = undefined}) ->
     After = (case Expiry - now_micros() of
@@ -853,8 +866,8 @@ make_dead_letter_msg(Reason,
                         {<<"time">>,         timestamp, TimeSec},
                         {<<"exchange">>,     longstr,   Exchange#resource.name},
                         {<<"routing-keys">>, array,     RKs1}],
-                HeadersFun1(rabbit_basic:append_table_header(<<"x-death">>,
-                                                             Info, Headers))
+                HeadersFun1(rabbit_basic:prepend_table_header(<<"x-death">>,
+                                                              Info, Headers))
         end,
     Content1 = rabbit_basic:map_headers(HeadersFun2, Content),
     Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
@@ -998,9 +1011,9 @@ handle_call({init, Recover}, From,
                     q = #amqqueue{name = QName} = Q} = State,
                  gen_server2:reply(From, not_found),
                  case Recover of
-                     true -> ok;
-                     _    -> rabbit_log:warning(
-                               "Queue ~p exclusive owner went away~n", [QName])
+                     new -> rabbit_log:warning(
+                              "Queue ~p exclusive owner went away~n", [QName]);
+                     _   -> ok
                  end,
                  BQS = bq_init(BQ, Q, Recover),
                  %% Rely on terminate to delete the queue.

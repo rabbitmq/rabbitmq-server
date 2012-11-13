@@ -229,7 +229,10 @@ dropwhile(Pred, AckRequired,
     {Next, Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
     Len1 = BQ:len(BQS1),
     Dropped = Len - Len1,
-    ok = gm:broadcast(GM, {drop, Len1, Dropped, AckRequired}),
+    case Dropped of
+        0 -> ok;
+        _ -> ok = gm:broadcast(GM, {drop, Len1, Dropped, AckRequired})
+    end,
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
     {Next, Msgs, State #state { backing_queue_state = BQS1,
                                 set_delivered       = SetDelivered1 } }.

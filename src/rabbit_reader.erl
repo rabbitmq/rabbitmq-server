@@ -35,23 +35,23 @@
 
 %%--------------------------------------------------------------------------
 
--record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
+-record(v1, {parent, sock, name, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state, conserve_resources,
-             last_blocked_by, last_blocked_at}).
+             last_blocked_by, last_blocked_at, host, peer_host,
+             port, peer_port}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
                           channels]).
 
--define(CREATION_EVENT_KEYS, [pid, name, address, port, peer_address, peer_port,
-                              ssl, peer_cert_subject, peer_cert_issuer,
-                              peer_cert_validity, auth_mechanism,
-                              ssl_protocol, ssl_key_exchange,
-                              ssl_cipher, ssl_hash,
-                              protocol, user, vhost, timeout, frame_max,
-                              client_properties]).
+-define(CREATION_EVENT_KEYS,
+        [pid, name, port, peer_port, host,
+        peer_host, ssl, peer_cert_subject, peer_cert_issuer,
+        peer_cert_validity, auth_mechanism, ssl_protocol,
+        ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
+        timeout, frame_max, client_properties]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -192,16 +192,20 @@ socket_op(Sock, Fun) ->
 name(Sock) ->
     socket_op(Sock, fun (S) -> rabbit_net:connection_string(S, inbound) end).
 
+socket_ends(Sock) ->
+    socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end).
+
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    ConnStr = name(Sock),
-    log(info, "accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
+    Name = name(Sock),
+    log(info, "accepting AMQP connection ~p (~s)~n", [self(), Name]),
     ClientSock = socket_op(Sock, SockTransform),
-    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
-                      handshake_timeout),
+    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(), handshake_timeout),
+    {PeerHost, PeerPort, Host, Port} = socket_ends(Sock),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
+                name                = list_to_binary(Name),
                 connection          = #connection{
                   protocol           = none,
                   user               = none,
@@ -224,19 +228,23 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 auth_state          = none,
                 conserve_resources  = false,
                 last_blocked_by     = none,
-                last_blocked_at     = never},
+                last_blocked_at     = never,
+                host                = Host,
+                peer_host           = PeerHost,
+                port                = Port,
+                peer_port           = PeerPort},
     try
         ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
                                        State, #v1.stats_timer),
                                       handshake, 8)),
-        log(info, "closing AMQP connection ~p (~s)~n", [self(), ConnStr])
+        log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
         Ex -> log(case Ex of
                       connection_closed_abruptly -> warning;
                       _                          -> error
                   end, "closing AMQP connection ~p (~s):~n~p~n",
-                  [self(), ConnStr, Ex])
+                  [self(), Name, Ex])
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
@@ -341,6 +349,8 @@ handle_other({'$gen_cast', force_event_refresh}, Deb, State)
 handle_other({'$gen_cast', force_event_refresh}, Deb, State) ->
     %% Ignore, we will emit a created event once we start running.
     mainloop(Deb, State);
+handle_other(ensure_stats, Deb, State) ->
+    mainloop(Deb, ensure_stats_timer(State));
 handle_other(emit_stats, Deb, State) ->
     mainloop(Deb, emit_stats(State));
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
@@ -491,6 +501,14 @@ handle_exception(State, Channel, Reason) ->
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
     throw({handshake_error, State#v1.connection_state, Channel, Reason}).
 
+%% we've "lost sync" with the client and hence must not accept any
+%% more input
+fatal_frame_error(Error, Type, Channel, Payload, State) ->
+    frame_error(Error, Type, Channel, Payload, State),
+    %% grace period to allow transmission of error
+    timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+    throw(fatal_frame_error).
+
 frame_error(Error, Type, Channel, Payload, State) ->
     {Str, Bin} = payload_snippet(Payload),
     handle_exception(State, Channel,
@@ -513,7 +531,7 @@ payload_snippet(<<Snippet:16/binary, _/binary>>) ->
 %%--------------------------------------------------------------------------
 
 create_channel(Channel, State) ->
-    #v1{sock = Sock, queue_collector = Collector,
+    #v1{sock = Sock, name = Name, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
         connection = #connection{protocol     = Protocol,
                                  frame_max    = FrameMax,
@@ -522,7 +540,7 @@ create_channel(Channel, State) ->
                                  capabilities = Capabilities}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), name(Sock),
+          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
                        Protocol, User, VHost, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
     put({ch_pid, ChPid}, {Channel, MRef}),
@@ -621,8 +639,9 @@ handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>,
              State = #v1{connection = #connection{frame_max = FrameMax}})
   when FrameMax /= 0 andalso
        PayloadSize > FrameMax - ?EMPTY_FRAME_SIZE + ?FRAME_SIZE_FUDGE ->
-    frame_error({frame_too_large, PayloadSize, FrameMax - ?EMPTY_FRAME_SIZE},
-                Type, Channel, <<>>, State);
+    fatal_frame_error(
+      {frame_too_large, PayloadSize, FrameMax - ?EMPTY_FRAME_SIZE},
+      Type, Channel, <<>>, State);
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
@@ -633,8 +652,8 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
     case EndMarker of
         ?FRAME_END -> State1 = handle_frame(Type, Channel, Payload, State),
                       switch_callback(State1, frame_header, 7);
-        _          -> frame_error({invalid_frame_end_marker, EndMarker},
-                                  Type, Channel, Payload, State)
+        _          -> fatal_frame_error({invalid_frame_end_marker, EndMarker},
+                                        Type, Channel, Payload, State)
     end;
 
 %% The two rules pertaining to version negotiation:
@@ -881,82 +900,66 @@ auth_phase(Response,
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(pid, #v1{}) ->
-    self();
-i(name, #v1{sock = Sock}) ->
-    list_to_binary(name(Sock));
-i(address, #v1{sock = Sock}) ->
-    socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
-i(port, #v1{sock = Sock}) ->
-    socket_info(fun rabbit_net:sockname/1, fun ({_, P}) -> P end, Sock);
-i(peer_address, #v1{sock = Sock}) ->
-    socket_info(fun rabbit_net:peername/1, fun ({A, _}) -> A end, Sock);
-i(peer_port, #v1{sock = Sock}) ->
-    socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
-i(ssl, #v1{sock = Sock}) ->
-    rabbit_net:is_ssl(Sock);
-i(ssl_protocol, #v1{sock = Sock}) ->
-    ssl_info(fun ({P, _}) -> P end, Sock);
-i(ssl_key_exchange, #v1{sock = Sock}) ->
-    ssl_info(fun ({_, {K, _, _}}) -> K end, Sock);
-i(ssl_cipher, #v1{sock = Sock}) ->
-    ssl_info(fun ({_, {_, C, _}}) -> C end, Sock);
-i(ssl_hash, #v1{sock = Sock}) ->
-    ssl_info(fun ({_, {_, _, H}}) -> H end, Sock);
-i(peer_cert_issuer, #v1{sock = Sock}) ->
-    cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
-i(peer_cert_subject, #v1{sock = Sock}) ->
-    cert_info(fun rabbit_ssl:peer_cert_subject/1, Sock);
-i(peer_cert_validity, #v1{sock = Sock}) ->
-    cert_info(fun rabbit_ssl:peer_cert_validity/1, Sock);
-i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
-                                   SockStat =:= recv_cnt;
-                                   SockStat =:= send_oct;
-                                   SockStat =:= send_cnt;
-                                   SockStat =:= send_pend ->
-    socket_info(fun (S) -> rabbit_net:getstat(S, [SockStat]) end,
-                fun ([{_, I}]) -> I end, Sock);
-i(state, #v1{connection_state = S}) ->
-    S;
-i(last_blocked_by, #v1{last_blocked_by = By}) ->
-    By;
-i(last_blocked_age, #v1{last_blocked_at = never}) ->
+i(pid,                #v1{}) -> self();
+i(name,               #v1{name      = Name})     -> Name;
+i(host,               #v1{host      = Host})     -> Host;
+i(peer_host,          #v1{peer_host = PeerHost}) -> PeerHost;
+i(port,               #v1{port      = Port})     -> Port;
+i(peer_port,          #v1{peer_port = PeerPort}) -> PeerPort;
+i(SockStat,           S) when SockStat =:= recv_oct;
+                              SockStat =:= recv_cnt;
+                              SockStat =:= send_oct;
+                              SockStat =:= send_cnt;
+                              SockStat =:= send_pend ->
+    socket_info(fun (Sock) -> rabbit_net:getstat(Sock, [SockStat]) end,
+                fun ([{_, I}]) -> I end, S);
+i(ssl,                #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
+i(ssl_protocol,       S) -> ssl_info(fun ({P,         _}) -> P end, S);
+i(ssl_key_exchange,   S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
+i(ssl_cipher,         S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
+i(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
+i(peer_cert_issuer,   S) -> cert_info(fun rabbit_ssl:peer_cert_issuer/1,   S);
+i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
+i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
+i(state,              #v1{connection_state = CS}) -> CS;
+i(last_blocked_by,    #v1{last_blocked_by = By}) -> By;
+i(last_blocked_age,   #v1{last_blocked_at = never}) ->
     infinity;
-i(last_blocked_age, #v1{last_blocked_at = T}) ->
+i(last_blocked_age,   #v1{last_blocked_at = T}) ->
     timer:now_diff(erlang:now(), T) / 1000000;
-i(channels, #v1{}) ->
-    length(all_channels());
-i(protocol, #v1{connection = #connection{protocol = none}}) ->
+i(channels,           #v1{}) -> length(all_channels());
+i(auth_mechanism,     #v1{auth_mechanism = none}) ->
     none;
-i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
-    Protocol:version();
-i(auth_mechanism, #v1{auth_mechanism = none}) ->
-    none;
-i(auth_mechanism, #v1{auth_mechanism = Mechanism}) ->
+i(auth_mechanism,     #v1{auth_mechanism = Mechanism}) ->
     proplists:get_value(name, Mechanism:description());
-i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
-    Username;
-i(user, #v1{connection = #connection{user = none}}) ->
+i(protocol,           #v1{connection = #connection{protocol = none}}) ->
+    none;
+i(protocol,           #v1{connection = #connection{protocol = Protocol}}) ->
+    Protocol:version();
+i(user,               #v1{connection = #connection{user = none}}) ->
     '';
-i(vhost, #v1{connection = #connection{vhost = VHost}}) ->
+i(user,               #v1{connection = #connection{user = #user{
+                                                     username = Username}}}) ->
+    Username;
+i(vhost,              #v1{connection = #connection{vhost = VHost}}) ->
     VHost;
-i(timeout, #v1{connection = #connection{timeout_sec = Timeout}}) ->
+i(timeout,            #v1{connection = #connection{timeout_sec = Timeout}}) ->
     Timeout;
-i(frame_max, #v1{connection = #connection{frame_max = FrameMax}}) ->
+i(frame_max,          #v1{connection = #connection{frame_max = FrameMax}}) ->
     FrameMax;
-i(client_properties, #v1{connection = #connection{
-                           client_properties = ClientProperties}}) ->
+i(client_properties,  #v1{connection = #connection{client_properties =
+                                                       ClientProperties}}) ->
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 
-socket_info(Get, Select, Sock) ->
+socket_info(Get, Select, #v1{sock = Sock}) ->
     case Get(Sock) of
         {ok,    T} -> Select(T);
         {error, _} -> ''
     end.
 
-ssl_info(F, Sock) ->
+ssl_info(F, #v1{sock = Sock}) ->
     %% The first ok form is R14
     %% The second is R13 - the extra term is exportability (by inspection,
     %% the docs are wrong)
@@ -967,7 +970,7 @@ ssl_info(F, Sock) ->
         {ok, {P, {K, C, H, _}}} -> F({P, {K, C, H}})
     end.
 
-cert_info(F, Sock) ->
+cert_info(F, #v1{sock = Sock}) ->
     case rabbit_net:peercert(Sock) of
         nossl                -> '';
         {error, no_peercert} -> '';

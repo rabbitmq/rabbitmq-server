@@ -21,7 +21,7 @@
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4, quit/1,
          protocol_error/3, protocol_error/4, protocol_error/1]).
--export([not_found/1, assert_args_equivalence/4]).
+-export([not_found/1, absent/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
 -export([table_lookup/2, set_table_value/4]).
 -export([r/3, r/2, r_arg/4, rs/1]).
@@ -63,12 +63,17 @@
 -export([version/0]).
 -export([sequence_error/1]).
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
+-export([check_expiry/1]).
 -export([base64url/1]).
+-export([interval_operation/4]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
         R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
             R =:= shutdown).
+
+%% This is dictated by `erlang:send_after' on which we depend to implement TTL.
+-define(MAX_EXPIRY_TIMER, 4294967295).
 
 %%----------------------------------------------------------------------------
 
@@ -111,6 +116,7 @@
 -spec(protocol_error/1 ::
         (rabbit_types:amqp_error()) -> channel_or_connection_exit()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> rabbit_types:channel_exit()).
+-spec(absent/1 :: (rabbit_types:amqqueue()) -> rabbit_types:channel_exit()).
 -spec(assert_args_equivalence/4 :: (rabbit_framing:amqp_table(),
                                     rabbit_framing:amqp_table(),
                                     rabbit_types:r(any()), [binary()]) ->
@@ -228,7 +234,11 @@
 -spec(json_decode/1 :: (string()) -> {'ok', any()} | 'error').
 -spec(json_to_term/1 :: (any()) -> any()).
 -spec(term_to_json/1 :: (any()) -> any()).
+-spec(check_expiry/1 :: (integer()) -> rabbit_types:ok_or_error(any())).
 -spec(base64url/1 :: (binary()) -> string()).
+-spec(interval_operation/4 ::
+        (thunk(A), float(), non_neg_integer(), non_neg_integer())
+        -> {A, non_neg_integer()}).
 
 -endif.
 
@@ -265,6 +275,15 @@ protocol_error(#amqp_error{} = Error) ->
     exit(Error).
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
+
+absent(#amqqueue{name = QueueName, pid = QPid, durable = true}) ->
+    %% The assertion of durability is mainly there because we mention
+    %% durability in the error message. That way we will hopefully
+    %% notice if at some future point our logic changes s.t. we get
+    %% here with non-durable queues.
+    protocol_error(not_found,
+                   "home node '~s' of durable ~s is down or inaccessible",
+                   [node(QPid), rs(QueueName)]).
 
 type_class(byte)      -> int;
 type_class(short)     -> int;
@@ -990,9 +1009,28 @@ term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
 
+check_expiry(N) when N > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, N}};
+check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
+check_expiry(_N)                           -> ok.
+
 base64url(In) ->
     lists:reverse(lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
                                   ($\/, Acc) -> [$\_ | Acc];
                                   ($\=, Acc) -> Acc;
                                   (Chr, Acc) -> [Chr | Acc]
                               end, [], base64:encode_to_string(In))).
+
+%% Ideally, you'd want Fun to run every IdealInterval. but you don't
+%% want it to take more than MaxRatio of IdealInterval. So if it takes
+%% more then you want to run it less often. So we time how long it
+%% takes to run, and then suggest how long you should wait before
+%% running it again. Times are in millis.
+interval_operation(Fun, MaxRatio, IdealInterval, LastInterval) ->
+    {Micros, Res} = timer:tc(Fun),
+    {Res, case {Micros > 1000 * (MaxRatio * IdealInterval),
+                Micros > 1000 * (MaxRatio * LastInterval)} of
+              {true,  true}  -> round(LastInterval * 1.5);
+              {true,  false} -> LastInterval;
+              {false, false} -> lists:max([IdealInterval,
+                                           round(LastInterval / 1.5)])
+          end}.
