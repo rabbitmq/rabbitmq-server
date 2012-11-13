@@ -184,6 +184,10 @@ partitions() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    %% We trap exits so that the supervisor will not just kill us. We
+    %% want to be sure that we are not going to be killed while
+    %% writing out the cluster status files - bad things can then
+    %% happen.
     process_flag(trap_exit, true),
     {ok, _} = mnesia:subscribe(system),
     {ok, #state{monitors   = pmon:new(),
