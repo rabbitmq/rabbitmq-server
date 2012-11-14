@@ -42,12 +42,12 @@
              last_blocked_by, last_blocked_at, host, peer_host,
              port, peer_port}).
 
--define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
+-define(STATISTICS_KEYS, [name, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
                           channels]).
 
 -define(CREATION_EVENT_KEYS,
-        [pid, name, port, peer_port, host,
+        [name, pid, port, peer_port, host,
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
         peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,

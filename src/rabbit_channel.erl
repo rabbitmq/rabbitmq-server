@@ -43,7 +43,7 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 -define(STATISTICS_KEYS,
-        [pid,
+        [name,
          transactional,
          confirm,
          consumer_count,
@@ -55,8 +55,8 @@
          client_flow_blocked]).
 
 -define(CREATION_EVENT_KEYS,
-        [pid,
-         name,
+        [name,
+         pid,
          connection,
          number,
          user,
