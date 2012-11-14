@@ -100,11 +100,11 @@ function update_vhosts() {
 
 function setup_extensions() {
     var extensions = JSON.parse(sync_get('/extensions'));
+    extension_count = extensions.length;
     for (var i in extensions) {
         var extension = extensions[i];
         dynamic_load(extension.javascript);
     }
-    extension_count = extensions.length;
 }
 
 function dynamic_load(filename) {
