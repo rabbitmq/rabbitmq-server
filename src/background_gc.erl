@@ -19,6 +19,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/0, run/0]).
+-export([gc/0]). %% For run_interval only
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -34,6 +35,7 @@
 
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(run/0 :: () -> 'ok').
+-spec(gc/0 :: () -> 'ok').
 
 -endif.
 
@@ -67,7 +69,8 @@ terminate(_Reason, State) -> State.
 
 interval_gc(State = #state{last_interval = LastInterval}) ->
     {ok, Interval} = rabbit_misc:interval_operation(
-                       fun gc/0, ?MAX_RATIO, ?IDEAL_INTERVAL, LastInterval),
+                       {?MODULE, gc, []},
+                       ?MAX_RATIO, ?IDEAL_INTERVAL, LastInterval),
     erlang:send_after(Interval, self(), run),
     State#state{last_interval = Interval}.
 

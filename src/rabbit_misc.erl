@@ -237,8 +237,8 @@
 -spec(check_expiry/1 :: (integer()) -> rabbit_types:ok_or_error(any())).
 -spec(base64url/1 :: (binary()) -> string()).
 -spec(interval_operation/4 ::
-        (thunk(A), float(), non_neg_integer(), non_neg_integer())
-        -> {A, non_neg_integer()}).
+        ({atom(), atom(), any()}, float(), non_neg_integer(), non_neg_integer())
+        -> {any(), non_neg_integer()}).
 
 -endif.
 
@@ -1025,8 +1025,8 @@ base64url(In) ->
 %% more then you want to run it less often. So we time how long it
 %% takes to run, and then suggest how long you should wait before
 %% running it again. Times are in millis.
-interval_operation(Fun, MaxRatio, IdealInterval, LastInterval) ->
-    {Micros, Res} = timer:tc(Fun),
+interval_operation({M, F, A}, MaxRatio, IdealInterval, LastInterval) ->
+    {Micros, Res} = timer:tc(M, F, A),
     {Res, case {Micros > 1000 * (MaxRatio * IdealInterval),
                 Micros > 1000 * (MaxRatio * LastInterval)} of
               {true,  true}  -> round(LastInterval * 1.5);
