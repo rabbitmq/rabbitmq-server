@@ -31,6 +31,7 @@ all_tests() ->
     [[ok = run_test(TestFun, Version)
       || TestFun <- [fun test_subscribe_error/3,
                      fun test_subscribe/3,
+                     fun test_unsubscribe_ack/3,
                      fun test_subscribe_ack/3,
                      fun test_send/3,
                      fun test_delete_queue_subscribe/3,
@@ -75,6 +76,41 @@ test_subscribe(Channel, Client, _Version) ->
                                                  payload = <<"hello">>}),
 
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+    ok.
+
+test_unsubscribe_ack(Channel, Client, Version) ->
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    auto_delete = true}),
+    %% subscribe and wait for receipt
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE", [{"destination", ?DESTINATION},
+                            {"receipt", "rcpt1"},
+                            {"ack", "client"},
+                            {"id", "subscription-id"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+
+    %% send from amqp
+    Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
+
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"hello">>}),
+
+    {ok, Client2, Hdrs1, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+
+    rabbit_stomp_client:send(
+      Client2, "UNSUBSCRIBE", [{"destination", ?DESTINATION},
+                              {"id", "subscription-id"}]),
+
+    rabbit_stomp_client:send(
+      Client2, "ACK", [{rabbit_stomp_util:ack_header_name(Version),
+                        proplists:get_value(
+                          rabbit_stomp_util:msg_header_name(Version), Hdrs1)},
+                       {"receipt", "rcpt2"}]),
+
+    {ok, Client3, Hdrs2, Body2} = stomp_receive(Client2, "ERROR"),
+    ?assertEqual("Subscription not found",
+                 proplists:get_value("message", Hdrs2)),
     ok.
 
 test_subscribe_ack(Channel, Client, Version) ->
