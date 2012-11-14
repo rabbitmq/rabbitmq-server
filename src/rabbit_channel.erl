@@ -1503,7 +1503,7 @@ emit_stats(State, Extra) ->
         fine ->
             FineStats =
                 [{channel_queue_stats,
-                  [{QPid, Stats} || {{queue_stats, QPid}, Stats} <- get()]},
+                  [{Q, Stats} || {{queue_stats, Q}, Stats} <- get()]},
                  {channel_exchange_stats,
                   [{X, Stats} || {{exchange_stats, X}, Stats} <- get()]},
                  {channel_queue_exchange_stats,

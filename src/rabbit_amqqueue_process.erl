@@ -85,7 +85,8 @@
 %%----------------------------------------------------------------------------
 
 -define(STATISTICS_KEYS,
-        [pid,
+        [name,
+         pid,
          policy,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
@@ -101,8 +102,7 @@
         ]).
 
 -define(CREATION_EVENT_KEYS,
-        [pid,
-         name,
+        [name,
          durable,
          auto_delete,
          arguments,
@@ -277,7 +277,7 @@ terminate_shutdown(Fun, State) ->
     case BQS of
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
-                     [emit_consumer_deleted(Ch, CTag)
+                     [emit_consumer_deleted(Ch, CTag, State1)
                       || {Ch, CTag, _} <- consumers(State1)],
                      State1#q{backing_queue_state = Fun(BQS)}
     end.
@@ -591,9 +591,9 @@ remove_consumer(ChPid, ConsumerTag, Queue) ->
                          (CP /= ChPid) or (CTag /= ConsumerTag)
                  end, Queue).
 
-remove_consumers(ChPid, Queue) ->
+remove_consumers(ChPid, Queue, State) ->
     queue:filter(fun ({CP, #consumer{tag = CTag}}) when CP =:= ChPid ->
-                         emit_consumer_deleted(ChPid, CTag),
+                         emit_consumer_deleted(ChPid, CTag, State),
                          false;
                      (_) ->
                          true
@@ -634,7 +634,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
         C = #cr{ch_pid            = ChPid,
                 acktags           = ChAckTags,
                 blocked_consumers = Blocked} ->
-            _ = remove_consumers(ChPid, Blocked), %% for stats emission
+            _ = remove_consumers(ChPid, Blocked, State), %% for stats emission
             ok = erase_ch_record(C),
             State1 = State#q{
                        exclusive_consumer = case Holder of
@@ -642,7 +642,8 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                                                 Other      -> Other
                                             end,
                        active_consumers = remove_consumers(
-                                            ChPid, State#q.active_consumers),
+                                            ChPid, State#q.active_consumers,
+                                            State),
                        senders          = Senders1},
             case should_auto_delete(State1) of
                 true  -> {stop, State1};
@@ -950,19 +951,19 @@ emit_stats(State) ->
 emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
-emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
+emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired, State) ->
     rabbit_event:notify(consumer_created,
                         [{consumer_tag, ConsumerTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
                          {channel,      ChPid},
-                         {queue,        self()}]).
+                         {queue,        i(name, State)}]).
 
-emit_consumer_deleted(ChPid, ConsumerTag) ->
+emit_consumer_deleted(ChPid, ConsumerTag, State) ->
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
                          {channel,      ChPid},
-                         {queue,        self()}]).
+                         {queue,        i(name, State)}]).
 
 %%----------------------------------------------------------------------------
 
@@ -1096,7 +1097,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
                              run_message_queue(State1#q{active_consumers = AC1})
                 end,
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  not NoAck),
+                                  not NoAck, State2),
             reply(ok, State2)
     end;
 
@@ -1107,7 +1108,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
         not_found ->
             reply(ok, State);
         C = #cr{blocked_consumers = Blocked} ->
-            emit_consumer_deleted(ChPid, ConsumerTag),
+            emit_consumer_deleted(ChPid, ConsumerTag, State),
             Blocked1 = remove_consumer(ChPid, ConsumerTag, Blocked),
             update_consumer_count(C#cr{blocked_consumers = Blocked1}, -1),
             State1 = State#q{
@@ -1172,10 +1173,11 @@ handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
     case Exclusive of
-        none       -> [emit_consumer_created(Ch, CTag, false, AckRequired) ||
+        none       -> [emit_consumer_created(
+                         Ch, CTag, false, AckRequired, State) ||
                           {Ch, CTag, AckRequired} <- consumers(State)];
         {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
-                      emit_consumer_created(Ch, CTag, true, AckRequired)
+                      emit_consumer_created(Ch, CTag, true, AckRequired, State)
     end,
     reply(ok, State).
 
