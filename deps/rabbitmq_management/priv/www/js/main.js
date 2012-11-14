@@ -17,7 +17,7 @@ function dispatcher() {
 }
 
 function start_app_login() {
-    app = $.sammy(function () {
+    app = new Sammy.Application(function () {
         this.put('#/login', function() {
             username = this.params['username'];
             password = this.params['password'];
@@ -50,7 +50,22 @@ function check_login() {
 
 function start_app() {
     app.unload();
-    app = $.sammy(dispatcher);
+    // Oh boy. Sammy uses various different methods to determine if
+    // the URL hash has changed. Unsurprisingly this is a native event
+    // in modern browsers, and falls back to an icky polling function
+    // in MSIE. But it looks like there's a bug. The polling function
+    // should get installed when the app is started. But it's guarded
+    // behind if (Sammy.HashLocationProxy._interval != null). And of
+    // course that's not specific to the application; it's pretty
+    // global. So we need to manually clear that in order for links to
+    // work in MSIE.
+    // Filed as https://github.com/quirkey/sammy/issues/171
+    //
+    // Note for when we upgrade: HashLocationProxy has become
+    // DefaultLocationProxy in later versions, but otherwise the issue
+    // remains.
+    Sammy.HashLocationProxy._interval = null;
+    app = new Sammy.Application(dispatcher);
     app.run();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
