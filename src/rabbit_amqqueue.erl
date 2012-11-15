@@ -284,8 +284,7 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-policy_changed(Q1, Q2) ->
-    rabbit_mirror_queue_misc:update_mirrors(Q1, Q2).
+policy_changed(Q1, Q2) -> rabbit_mirror_queue_misc:update_mirrors(Q1, Q2).
 
 start_queue_process(Node, Q) ->
     {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
@@ -398,10 +397,8 @@ check_declare_arguments(QueueName, Args) ->
      end || {Key, Fun} <- Checks],
     ok.
 
-check_string_arg({longstr, _}, _Args) ->
-    ok;
-check_string_arg({Type, _}, _) ->
-    {error, {unacceptable_type, Type}}.
+check_string_arg({longstr, _}, _Args) -> ok;
+check_string_arg({Type,    _}, _Args) -> {error, {unacceptable_type, Type}}.
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
@@ -427,11 +424,10 @@ check_dlxrk_arg({longstr, _}, Args) ->
         undefined -> {error, routing_key_but_no_dlx_defined};
         _         -> ok
     end;
-check_dlxrk_arg({Type, _}, _Args) ->
+check_dlxrk_arg({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
-list() ->
-    mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
+list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
@@ -442,8 +438,7 @@ info_keys() -> rabbit_amqqueue_process:info_keys().
 
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
-info(#amqqueue{ pid = QPid }) ->
-    delegate_call(QPid, info).
+info(#amqqueue{ pid = QPid }) -> delegate_call(QPid, info).
 
 info(#amqqueue{ pid = QPid }, Items) ->
     case delegate_call(QPid, {info, Items}) of
@@ -460,8 +455,7 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 %% the first place since a node failed). Therefore we keep poking at
 %% the list of queues until we were able to talk to a live process or
 %% the queue no longer exists.
-force_event_refresh() ->
-    force_event_refresh([Q#amqqueue.name || Q <- list()]).
+force_event_refresh() -> force_event_refresh([Q#amqqueue.name || Q <- list()]).
 
 force_event_refresh(QNames) ->
     Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
@@ -478,8 +472,7 @@ force_event_refresh(QNames) ->
 
 wake_up(#amqqueue{pid = QPid}) -> gen_server2:cast(QPid, wake_up).
 
-consumers(#amqqueue{ pid = QPid }) ->
-    delegate_call(QPid, consumers).
+consumers(#amqqueue{ pid = QPid }) -> delegate_call(QPid, consumers).
 
 consumer_info_keys() -> ?CONSUMER_INFO_KEYS.
 
@@ -493,8 +486,7 @@ consumers_all(VHostPath) ->
                          {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
           end)).
 
-stat(#amqqueue{pid = QPid}) ->
-    delegate_call(QPid, stat).
+stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat).
 
 delete_immediately(QPids) ->
     [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
@@ -509,11 +501,9 @@ deliver(Qs, Delivery) -> deliver(Qs, Delivery, noflow).
 
 deliver_flow(Qs, Delivery) -> deliver(Qs, Delivery, flow).
 
-requeue(QPid, MsgIds, ChPid) ->
-    delegate_call(QPid, {requeue, MsgIds, ChPid}).
+requeue(QPid, MsgIds, ChPid) -> delegate_call(QPid, {requeue, MsgIds, ChPid}).
 
-ack(QPid, MsgIds, ChPid) ->
-    delegate_cast(QPid, {ack, MsgIds, ChPid}).
+ack(QPid, MsgIds, ChPid) -> delegate_cast(QPid, {ack, MsgIds, ChPid}).
 
 reject(QPid, MsgIds, Requeue, ChPid) ->
     delegate_cast(QPid, {reject, MsgIds, Requeue, ChPid}).
@@ -555,8 +545,7 @@ notify_sent_queue_down(QPid) ->
     erase({consumer_credit_to, QPid}),
     ok.
 
-unblock(QPid, ChPid) ->
-    delegate_cast(QPid, {unblock, ChPid}).
+unblock(QPid, ChPid) -> delegate_cast(QPid, {unblock, ChPid}).
 
 flush_all(QPids, ChPid) ->
     delegate:invoke_no_result(
@@ -600,7 +589,7 @@ set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
 
 start_mirroring(QPid) -> ok = delegate_call(QPid, start_mirroring).
-stop_mirroring(QPid) -> ok = delegate_call(QPid, stop_mirroring).
+stop_mirroring(QPid)  -> ok = delegate_call(QPid, stop_mirroring).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
