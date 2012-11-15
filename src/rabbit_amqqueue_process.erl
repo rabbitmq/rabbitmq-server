@@ -85,7 +85,7 @@
 %%----------------------------------------------------------------------------
 
 -define(STATISTICS_KEYS,
-        [pid,
+        [name,
          policy,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
@@ -101,16 +101,14 @@
         ]).
 
 -define(CREATION_EVENT_KEYS,
-        [pid,
-         name,
+        [name,
          durable,
          auto_delete,
          arguments,
          owner_pid
         ]).
 
--define(INFO_KEYS,
-        ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS).
 
 %%----------------------------------------------------------------------------
 
@@ -183,7 +181,7 @@ terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
       fun (BQS) ->
               BQS1 = BQ:delete_and_terminate(Reason, BQS),
               %% don't care if the internal delete doesn't return 'ok'.
-              rabbit_amqqueue:internal_delete(QName, self()),
+              rabbit_amqqueue:internal_delete(QName),
               BQS1
       end, State).
 
