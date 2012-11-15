@@ -1242,7 +1242,10 @@ record_sent(ConsumerTag, AckRequired,
                                       {_   ,  true} -> deliver;
                                       {_   , false} -> deliver_no_ack
                                   end, State),
-    maybe_incr_redeliver_stats(Redelivered, QPid, State),
+    case Redelivered of
+        true  -> maybe_incr_stats([{QPid, 1}], redeliver, State);
+        false -> ok
+    end,
     rabbit_trace:tap_trace_out(Msg, TraceState),
     UAMQ1 = case AckRequired of
                 true  -> queue:in({DeliveryTag, ConsumerTag, {QPid, MsgId}},
@@ -1461,11 +1464,6 @@ i(Item, _) ->
 
 name(#ch{conn_name = ConnName, channel = Channel}) ->
     list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
-
-maybe_incr_redeliver_stats(true, QPid, State) ->
-    maybe_incr_stats([{QPid, 1}], redeliver, State);
-maybe_incr_redeliver_stats(_, _, _State) ->
-    ok.
 
 maybe_incr_stats(QXIncs, Measure, State) ->
     case rabbit_event:stats_level(State, #ch.stats_timer) of
