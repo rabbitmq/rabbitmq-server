@@ -762,8 +762,8 @@ dead_letter_publish(Msg, Reason, X, State = #q{publish_seqno = MsgSeqNo}) ->
     {Queues, Cycles} = detect_dead_letter_cycles(
                          DLMsg, rabbit_exchange:route(X, Delivery)),
     lists:foreach(fun log_cycle_once/1, Cycles),
-    QPids = rabbit_amqqueue:lookup(Queues),
-    {_, DeliveredQPids} = rabbit_amqqueue:deliver(QPids, Delivery),
+    {_, DeliveredQPids} = rabbit_amqqueue:deliver(
+                            rabbit_amqqueue:lookup(Queues), Delivery),
     DeliveredQPids.
 
 handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
