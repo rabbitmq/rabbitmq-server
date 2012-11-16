@@ -60,7 +60,7 @@ clean_partial:
 
 .PHONY : generate_release
 generate_release:
-	erlc -I $(TARGET_DIR)/include/ -o erlang -Wall -v +debug_info -Duse_specs -Duse_proper_qc -pa $(TARGET_DIR)/ebin/ src/rabbit_release.erl
+	erlc -I $(TARGET_DIR)/include/ -o src -Wall -v +debug_info -Duse_specs -Duse_proper_qc -pa $(TARGET_DIR)/ebin/ src/rabbit_release.erl
 	erl \
 	    -pa "$(RABBITMQ_EBIN_ROOT)" \
 	    -pa src \
@@ -68,3 +68,4 @@ generate_release:
 	    -hidden \
 	    -s rabbit_release \
 	    -extra "$(RABBITMQ_PLUGINS_DIR)" "$(RABBITMQ_PLUGINS_EXPAND_DIR)" "$(RABBITMQ_HOME)"
+	rm src/rabbit_release.beam
