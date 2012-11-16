@@ -178,4 +178,7 @@ dispatcher_add(function(sammy) {
     sammy.get('#/import-succeeded', function() {
             render({}, 'import-succeeded', '#/overview');
         });
+    sammy.put('#/rate-options', function() {
+            update_rate_options(this);
+        });
 });

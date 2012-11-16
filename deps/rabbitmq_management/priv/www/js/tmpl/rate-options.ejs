@@ -1,0 +1,29 @@
+<%
+   var mode = get_pref('rate-mode');
+   var size = get_pref('chart-size');
+%>
+
+<form action="#/rate-options" method="put" class="auto-submit">
+  <table class="form">
+    <tr>
+      <th><label>Display:</label></th>
+      <td>
+        <select name="mode">
+          <%= fmt_option('Charts', 'chart', mode) %>
+          <%= fmt_option('Rates (instantaneous)', 'inst', mode) %>
+          <%= fmt_option('Rates (moving average)', 'avg', mode) %>
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <th><label>Chart size:</label></th>
+      <td>
+        <select name="size">
+          <%= fmt_option('Small', 'small', size) %>
+          <%= fmt_option('Medium', 'Medium', size) %>
+          <%= fmt_option('Large', 'large', size) %>
+        </select>
+      </td>
+    </tr>
+  </table>
+</form>

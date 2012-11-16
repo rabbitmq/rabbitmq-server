@@ -3,7 +3,7 @@
 <%
      var col_redeliver = !is_col_empty(object, 'redeliver', function(o) {return o.stats;});
 %>
-<table class="list list-with-total">
+<table class="list">
   <tr>
 <% if (mode == 'queue') { %>
     <th>Channel</th>
@@ -32,11 +32,6 @@
        <td class="r"><%= fmt_rate(del.stats, 'ack') %></td>
      </tr>
 <% } %>
-  <tr class="total">
-    <th>Total:</th>
-    <td class="r"><%= fmt_deliver_rate(totals, col_redeliver, 'mini-highlight') %></td>
-    <td class="r"><%= fmt_rate(totals, 'ack', false, 'mini-highlight') %></td>
-  </tr>
 </table>
 <% } else { %>
 <p> ... no deliveries ...</p>

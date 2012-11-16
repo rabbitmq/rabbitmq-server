@@ -39,8 +39,10 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .right { float: right; }
 .clear { clear: both; }
 
-.help { color: #888; cursor: pointer; }
-.help:hover { color: #444; }
+.help, .rate-options { color: #888; cursor: pointer; }
+.help:hover, .rate-options:hover { color: #444; }
+
+.rate-options-p { padding-top: 10px; clear: both; }
 
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
@@ -55,10 +57,6 @@ table.list th a.sort { display: block; width: 100%; cursor: pointer; }
 table.list th a.sort .arrow { color: #888; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }
 table.list td p.warning { margin: 0; padding: 5px; }
-
-table.list-with-total { border-bottom: none; }
-table.list tr.total td { border: none; border-top: 1px solid #bbb; }
-table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: right; vertical-align: middle; }
 
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
@@ -122,13 +120,18 @@ p.status-error th { background: white; }
 p.warning, div.form-popup-warn { background: #ff8; border: 1px solid #bb8; }
 div.form-popup-info { background: #8f8; border: 1px solid #4b4; }
 div.form-popup-help { text-align: left !important; background: #f8f8f8; border: 1px solid #ccc; }
-div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; }
+div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; z-index: 1; }
 
 p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; font-weight: bold; }
 
 .highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
 .highlight, .micro-highlight { float: left; }
+
+.chart { margin: 20px 0; }
+.chart-small  { width: 600px; height: 200px; }
+.chart-medium { width: 800px; height: 300px; }
+.chart-large  { width: 1200px; height: 400px; }
 
 .mini-highlight { font-size: 150%; padding:10px; background-color: #ddd; color: #888; border-radius: 10px; -moz-border-radius: 10px; line-height: 300%; }
 

@@ -536,8 +536,9 @@ function _link_to(name, url) {
     return '<a href="' + url + '">' + name + '</a>';
 }
 
-function message_rates(stats) {
-    var res = "";
+function message_rates(stats, map) {
+    var res = '';
+
     if (keys(stats).length > 0) {
         var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
                      ['Deliver', 'deliver'],
@@ -548,14 +549,18 @@ function message_rates(stats) {
                      ['Return', 'return_unroutable']];
         for (var i in items) {
             var name = items[i][0];
-            var key = items[i][1] + '_details';
-            if (key in stats) {
-                res += '<div class="highlight">' + name;
-                res += '<strong>' + fmt_rate_num(stats[key].rate) + '</strong>';
-                res += 'msg/s</div>';
+            if (map != undefined && name in map) {
+                items[i][0] = map[name];
             }
         }
-
+        var res;
+        var mode = get_pref('rate-mode');
+        if (mode == 'chart') {
+            res = message_rates_chart(items, stats);
+        }
+        else {
+            res = message_rates_text(items, stats, mode);
+        }
         if (res == "") {
             res = '<p>Waiting for message rates...</p>';
         }
@@ -564,6 +569,36 @@ function message_rates(stats) {
         res = '<p>Currently idle</p>';
     }
 
+    return res + '<p class="rate-options-p"><span class="rate-options">[Options...]</span></p>';
+}
+
+function message_rates_chart(items, stats) {
+    var size = get_pref('chart-size');
+    var show = false;
+    for (var i in items) {
+        var name = items[i][0];
+        var key = items[i][1] + '_details';
+        if (key in stats) {
+            chart_data[name] = stats[key];
+            show = true;
+        }
+    }
+    return show ? '<div class="chart chart-' + size + '"></div>' : '';
+}
+
+function message_rates_text(items, stats, mode) {
+    var res = '';
+    for (var i in items) {
+        var name = items[i][0];
+        var key = items[i][1] + '_details';
+        if (key in stats) {
+            var num = mode == 'avg' ? stats[key].avg_rate : stats[key].rate;
+            res += '<div class="highlight">' + name;
+            res += '<strong>' + fmt_rate_num(num) + '</strong>';
+            res += 'msg/s';
+            res += '</div>';
+        }
+    }
     return res;
 }
 
@@ -612,6 +647,12 @@ function fmt_permissions(obj, permissions, lookup, show, warning) {
         }
     }
     return res.length == 0 ? warning : res.join(', ');
+}
+
+function fmt_option(name, value, current) {
+    return '<option value="' + value + '"' +
+        ((value == current) ? ' selected="selected"' : '') +
+        '>' + name + '</option>';
 }
 
 function properties_size(obj) {
