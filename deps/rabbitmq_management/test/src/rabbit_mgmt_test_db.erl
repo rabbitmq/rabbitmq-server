@@ -345,7 +345,7 @@ assert_equal(Item, PList1, PList2) ->
 assert_rate(Exp, Stats) ->
     Interval = pget(interval, Stats),
     Rate = pget(rate, Stats),
-    CorrectedRate = Interval / 5000000 * Rate,
+    CorrectedRate = Interval / 5000 * Rate,
     case abs(Exp - CorrectedRate) < 0.00001 of
         true -> ok;
         _    -> throw({expected, Exp, got, Rate, corrected, CorrectedRate})
