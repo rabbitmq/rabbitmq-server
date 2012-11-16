@@ -335,7 +335,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State4 = handle_delivering_queue_down(QPid, State3),
     credit_flow:peer_down(QPid),
     erase_queue_stats(QPid),
-    noreply(State3#ch{queue_monitors = pmon:erase(
+    noreply(State4#ch{queue_monitors = pmon:erase(
                                          QPid, State4#ch.queue_monitors)});
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
