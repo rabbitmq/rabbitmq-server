@@ -15,7 +15,7 @@
 %%
 -module(rabbit_release).
 
--export([start/0, stop/0, make_tar/2]).
+-export([start/0]).
 
 -include("rabbit.hrl").
 
@@ -75,10 +75,7 @@ start() ->
     systools:script2boot(RootName),
     %% Make release tarfile
     make_tar(RootName, RabbitHome),
-    terminate(0),
-    ok.
-
-stop() ->
+    rabbit_misc:quit(0),
     ok.
 
 make_tar(Release, RabbitHome) ->
@@ -160,13 +157,4 @@ prepare_dir_plugin(PluginAppDescFn) ->
 
 terminate(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
-    terminate(?ERROR_CODE).
-
-terminate(Status) ->
-    case os:type() of
-        {unix,  _} -> halt(Status);
-        {win32, _} -> init:stop(Status),
-                      receive
-                      after infinity -> ok
-                      end
-    end.
+    rabbit_misc:quit(?ERROR_CODE).
