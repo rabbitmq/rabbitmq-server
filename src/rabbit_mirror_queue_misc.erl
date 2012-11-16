@@ -315,8 +315,8 @@ update_mirrors(OldQ = #amqqueue{pid = QPid},
     case {is_mirrored(OldQ), is_mirrored(NewQ)} of
         {false, false} -> ok;
         {true,  false} -> rabbit_amqqueue:stop_mirroring(QPid);
-        {false, true}  -> rabbit_amqqueue:start_mirroring(QPid);
-        {true, true}   -> update_mirrors0(OldQ, NewQ)
+        {false,  true} -> rabbit_amqqueue:start_mirroring(QPid);
+        {true,   true} -> update_mirrors0(OldQ, NewQ)
     end.
 
 update_mirrors0(OldQ = #amqqueue{name = QName},
