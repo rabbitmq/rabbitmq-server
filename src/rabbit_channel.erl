@@ -1126,12 +1126,13 @@ consumer_monitor(ConsumerTag,
             State
     end.
 
-monitor_delivering_queue(true, _QPid, State) ->
-    State;
-monitor_delivering_queue(false, QPid, State = #ch{queue_monitors    = QMons,
+monitor_delivering_queue(NoAck, QPid, State = #ch{queue_monitors    = QMons,
                                                   delivering_queues = DQ}) ->
     State#ch{queue_monitors    = pmon:monitor(QPid, QMons),
-             delivering_queues = sets:add_element(QPid, DQ)}.
+             delivering_queues = case NoAck of
+                                     true  -> DQ;
+                                     false -> sets:add_element(QPid, DQ)
+                                 end}.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
     case rabbit_misc:is_abnormal_exit(Reason) of
