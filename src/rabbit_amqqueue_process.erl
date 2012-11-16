@@ -1043,7 +1043,8 @@ handle_call({notify_down, ChPid}, From, State) ->
     %% are no longer visible by the time we send a response to the
     %% client.  The queue is ultimately deleted in terminate/2; if we
     %% return stop with a reply, terminate/2 will be called by
-    %% gen_server2 *before* the reply is sent.
+    %% gen_server2 *before* the reply is sent. FIXME: in case of a
+    %% delayed stop the reply is sent earlier.
     case handle_ch_down(ChPid, State) of
         {ok, State1}   -> reply(ok, State1);
         {stop, State1} -> stop(From, ok, State1)
