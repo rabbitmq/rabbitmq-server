@@ -1,4 +1,18 @@
-%% based on rabbit_prelaunch.erl from rabbitmq-server source code
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%%
 -module(rabbit_release).
 
 -export([start/0, stop/0, make_tar/2]).
@@ -8,6 +22,13 @@
 -define(BaseApps, [rabbit]).
 -define(ERROR_CODE, 1).
 
+%% This module is based on rabbit_prelaunch.erl from rabbitmq-server source code
+%% We need to calculate all the ERTS apps we need to ship with a
+%% standalone rabbit. To acomplish that we need to unpack and load the plugins
+%% apps that are shiped with rabbit.
+%% Once we get that we generate an erlang release inside a tarball.
+%% Our make file will work with that release to generate our final rabbitmq
+%% package.
 start() ->
     %% Determine our various directories
     [PluginsDistDir, UnpackedPluginDir, RabbitHome] =
@@ -16,10 +37,12 @@ start() ->
 
     prepare_plugins(PluginsDistDir, UnpackedPluginDir),
 
-    PluginAppNames =  [ P#plugin.name || P <- rabbit_plugins:list(PluginsDistDir) ],
+    PluginAppNames = [P#plugin.name ||
+                         P <- rabbit_plugins:list(PluginsDistDir)],
 
-    %% we need to call find_plugins because it has the secondary effect of adding the
-    %% plugin ebin folder to the code path. We need that in order to load the plugin app
+    %% we need to call find_plugins because it has the secondary effect of
+    %% adding the plugin ebin folder to the code path.
+    %% We need that in order to load the plugin app
     RequiredApps = find_plugins(UnpackedPluginDir),
 
     %% Build the entire set of dependencies - this will load the
@@ -89,7 +112,8 @@ prepare_plugins(PluginsDistDir, DestDir) ->
         {error, E2} -> terminate("Could not create dir ~s (~p)", [DestDir, E2])
     end,
 
-    [prepare_plugin(Plugin, DestDir) || Plugin <- rabbit_plugins:list(PluginsDistDir)].
+    [prepare_plugin(Plugin, DestDir) ||
+        Plugin <- rabbit_plugins:list(PluginsDistDir)].
 
 prepare_plugin(#plugin{type = ez, location = Location}, PluginDestDir) ->
     zip:unzip(Location, [{cwd, PluginDestDir}]);
