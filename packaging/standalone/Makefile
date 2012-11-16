@@ -28,7 +28,6 @@ dist:
 
 	$(MAKE) generate_release
 
-## todo see where the .tar is being created
 	mkdir -p $(RLS_DIR)
 	tar -C $(RLS_DIR) -xzf $(RABBITMQ_HOME)/rabbit.tar.gz
 
