@@ -1360,8 +1360,10 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     {QNames1, QMons1} =
         lists:foldl(fun (#amqqueue{pid = QPid, name = QName},
                          {QNames0, QMons0}) ->
-                            {dict:store(QPid, QName, QNames0),
-                             pmon:monitor(QPid, QMons0)}
+                            {case dict:is_key(QPid, QNames0) of
+                                 true  -> QNames0;
+                                 false -> dict:store(QPid, QName, QNames0)
+                             end, pmon:monitor(QPid, QMons0)}
                     end, {QNames, pmon:monitor_all(DeliveredQPids, QMons)}, Qs),
     State1 = process_routing_result(RoutingRes, DeliveredQPids,
                                     XName, MsgSeqNo, Message,
