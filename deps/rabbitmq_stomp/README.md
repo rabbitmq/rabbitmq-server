@@ -11,4 +11,3 @@ from
 
 Full usage instructions can be found at
 <http://www.rabbitmq.com/stomp.html>.
-
