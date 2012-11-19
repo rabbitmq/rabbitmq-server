@@ -112,4 +112,3 @@ to use the adapter.
         +--  PUBLISH   <------    basic.deliver
         |
         +--> PUBACK    ------>    basic.ack
-
