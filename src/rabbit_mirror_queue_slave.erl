@@ -28,7 +28,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
 
 -export([joined/2, members_changed/3, handle_msg/3]).
 
@@ -328,6 +328,8 @@ prioritise_info(Msg, _State) ->
         sync_timeout                         -> 6;
         _                                    -> 0
     end.
+
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %% ---------------------------------------------------------------------------
 %% GM
