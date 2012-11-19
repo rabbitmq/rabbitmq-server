@@ -40,12 +40,15 @@ proc_spec(Conn) ->
     Info = Conn:info(),
     {PeerAddr, PeerPort} = proplists:get_value(peername, Info),
     {SockAddr, SockPort} = proplists:get_value(sockname, Info),
-
+    Name = rabbit_misc:format("~s:~b -> ~s:~b",
+                              [rabbit_misc:ntoa(PeerAddr), PeerPort,
+                               rabbit_misc:ntoa(SockAddr), SockPort]),
     AdapterInfo = #amqp_adapter_info{protocol        = {'Web STOMP', 0},
-                                     address         = SockAddr,
+                                     host            = SockAddr,
                                      port            = SockPort,
-                                     peer_address    = PeerAddr,
+                                     peer_host       = PeerAddr,
                                      peer_port       = PeerPort,
+                                     name            = list_to_binary(Name),
                                      additional_info = [{ssl, false}]},
 
     {rabbit_stomp_processor,
