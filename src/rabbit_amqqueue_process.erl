@@ -1135,11 +1135,11 @@ handle_call(stat, _From, State) ->
 
 handle_call({delete, IfUnused, IfEmpty}, From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
-    IsEmpty = BQ:is_empty(BQS),
+    IsEmpty  = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
-        IfEmpty and not(IsEmpty)   -> reply({error, not_empty}, State);
-        IfUnused and not(IsUnused) -> reply({error, in_use}, State);
+        IfEmpty  and not(IsEmpty)  -> reply({error, not_empty}, State);
+        IfUnused and not(IsUnused) -> reply({error,    in_use}, State);
         true                       -> stop(From, {ok, BQ:len(BQS)}, State)
     end;
 
