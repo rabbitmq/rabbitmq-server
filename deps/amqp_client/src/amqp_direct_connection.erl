@@ -37,8 +37,8 @@
 
 -define(INFO_KEYS, [type]).
 
--define(CREATION_EVENT_KEYS, [pid, protocol, address, port, name,
-                              peer_address, peer_port,
+-define(CREATION_EVENT_KEYS, [pid, protocol, host, port, name,
+                              peer_host, peer_port,
                               user, vhost, client_properties, type]).
 
 %%---------------------------------------------------------------------------
@@ -96,9 +96,9 @@ i(client_properties, #state{params = P}) ->
     P#amqp_params_direct.client_properties;
 %% Optional adapter info
 i(protocol,     #state{adapter_info = I}) -> I#amqp_adapter_info.protocol;
-i(address,      #state{adapter_info = I}) -> I#amqp_adapter_info.address;
+i(host,         #state{adapter_info = I}) -> I#amqp_adapter_info.host;
 i(port,         #state{adapter_info = I}) -> I#amqp_adapter_info.port;
-i(peer_address, #state{adapter_info = I}) -> I#amqp_adapter_info.peer_address;
+i(peer_host,    #state{adapter_info = I}) -> I#amqp_adapter_info.peer_host;
 i(peer_port,    #state{adapter_info = I}) -> I#amqp_adapter_info.peer_port;
 i(name,         #state{adapter_info = I}) -> I#amqp_adapter_info.name;
 
