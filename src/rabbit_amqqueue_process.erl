@@ -728,8 +728,10 @@ drop_expired_messages(State = #q{dlx                 = DLX,
                                      {Next, BQS2};
                         _         -> {Next, Msgs,      BQS2} =
                                          BQ:dropwhile(ExpirePred, true,  BQS),
-                                     DLXFun = dead_letter_fun(expired),
-                                     DLXFun(Msgs),
+                                     case Msgs of
+                                         [] -> ok;
+                                         _  -> (dead_letter_fun(expired))(Msgs)
+                                     end,
                                      {Next, BQS2}
                     end,
     ensure_ttl_timer(case Props of
