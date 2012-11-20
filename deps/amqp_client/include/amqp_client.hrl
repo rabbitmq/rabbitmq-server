@@ -45,9 +45,9 @@
                              adapter_info      = none,
                              client_properties = []}).
 
--record(amqp_adapter_info, {address         = unknown,
+-record(amqp_adapter_info, {host            = unknown,
                             port            = unknown,
-                            peer_address    = unknown,
+                            peer_host       = unknown,
                             peer_port       = unknown,
                             name            = unknown,
                             protocol        = unknown,
