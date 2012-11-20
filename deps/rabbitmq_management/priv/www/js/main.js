@@ -848,13 +848,13 @@ function maybe_remove_fields(params) {
 function put_parameter(sammy, mandatory_keys, num_keys, bool_keys) {
     for (var i in sammy.params) {
         if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
-        if (sammy.params[i] == '' && mandatory_keys.indexOf(i) == -1) {
+        if (sammy.params[i] == '' && jQuery.inArray(i, mandatory_keys) == -1) {
             delete sammy.params[i];
         }
-        else if (num_keys.indexOf(i) != -1) {
+        else if (jQuery.inArray(i, num_keys) != -1) {
             sammy.params[i] = parseInt(sammy.params[i]);
         }
-        else if (bool_keys.indexOf(i) != -1) {
+        else if (jQuery.inArray(i, bool_keys) != -1) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
     }
@@ -872,13 +872,13 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys) {
 function put_policy(sammy, mandatory_keys, num_keys, bool_keys) {
     for (var i in sammy.params) {
         if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
-        if (sammy.params[i] == '' && mandatory_keys.indexOf(i) == -1) {
+        if (sammy.params[i] == '' && jQuery.inArray(i, mandatory_keys) == -1) {
             delete sammy.params[i];
         }
-        else if (num_keys.indexOf(i) != -1) {
+        else if (jQuery.inArray(i, num_keys) != -1) {
             sammy.params[i] = parseInt(sammy.params[i]);
         }
-        else if (bool_keys.indexOf(i) != -1) {
+        else if (jQuery.inArray(i, bool_keys) != -1) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
     }
