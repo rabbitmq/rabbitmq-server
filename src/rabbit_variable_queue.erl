@@ -837,6 +837,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     true = Len             >= 0,
     true = PersistentCount >= 0,
     true = RamMsgCount     >= 0,
+    true = RamMsgCount     =< Len,
 
     State.
 
