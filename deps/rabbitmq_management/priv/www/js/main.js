@@ -152,7 +152,7 @@ function update_interval() {
 }
 
 function go_to(url) {
-    app.setLocation(url);
+    this.location = url;
 }
 
 function set_timer_interval(interval) {
