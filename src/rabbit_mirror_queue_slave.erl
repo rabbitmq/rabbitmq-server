@@ -727,8 +727,8 @@ process_instruction({drop, Length, Dropped, AckRequired},
              end,
     State1 = lists:foldl(
                fun (const, StateN = #state{backing_queue_state = BQSN}) ->
-                       {{#basic_message{id = MsgId}, _, AckTag, _}, BQSN1} =
-                           BQ:fetch(AckRequired, BQSN),
+                       {{MsgId, AckTag, _Remaining}, BQSN1} =
+                           BQ:drop(AckRequired, BQSN),
                        maybe_store_ack(
                          AckRequired, MsgId, AckTag,
                          StateN #state { backing_queue_state = BQSN1 })
@@ -736,21 +736,6 @@ process_instruction({drop, Length, Dropped, AckRequired},
     {ok, case AckRequired of
              true  -> State1;
              false -> update_delta(ToDrop - Dropped, State1)
-         end};
-process_instruction({fetch, AckRequired, MsgId, Remaining},
-                    State = #state { backing_queue       = BQ,
-                                     backing_queue_state = BQS }) ->
-    QLen = BQ:len(BQS),
-    {ok, case QLen - 1 of
-             Remaining ->
-                 {{#basic_message{id = MsgId}, _IsDelivered,
-                   AckTag, Remaining}, BQS1} = BQ:fetch(AckRequired, BQS),
-                 maybe_store_ack(AckRequired, MsgId, AckTag,
-                                 State #state { backing_queue_state = BQS1 });
-             _ when QLen =< Remaining andalso AckRequired ->
-                 State;
-             _ when QLen =< Remaining ->
-                 update_delta(-1, State)
          end};
 process_instruction({ack, MsgIds},
                     State = #state { backing_queue       = BQ,
