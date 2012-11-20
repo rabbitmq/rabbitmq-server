@@ -162,23 +162,20 @@ start_processor(SupPid, Configuration, Sock) ->
 
 
 adapter_info(Sock) ->
-    {Addr, Port} = case rabbit_net:sockname(Sock) of
-                       {ok, Res} -> Res;
-                       _         -> {unknown, unknown}
-                   end,
-    {PeerAddr, PeerPort} = case rabbit_net:peername(Sock) of
-                               {ok, Res2} -> Res2;
-                               _          -> {unknown, unknown}
-                           end,
+    {PeerHost, PeerPort, Host, Port} =
+        case rabbit_net:socket_ends(Sock, inbound) of
+            {ok, Res} -> Res;
+            _          -> {unknown, unknown}
+        end,
     Name = case rabbit_net:connection_string(Sock, inbound) of
                {ok, Res3} -> Res3;
                _          -> unknown
            end,
     #amqp_adapter_info{protocol        = {'STOMP', 0},
                        name            = list_to_binary(Name),
-                       address         = Addr,
+                       host            = Host,
                        port            = Port,
-                       peer_address    = PeerAddr,
+                       peer_host       = PeerHost,
                        peer_port       = PeerPort,
                        additional_info = maybe_ssl_info(Sock)}.
 
