@@ -42,3 +42,4 @@ Generic build instructions are at:
 Instructions on how to install a plugin into RabbitMQ broker:
 
   * http://www.rabbitmq.com/plugins.html#installing-plugins
+
