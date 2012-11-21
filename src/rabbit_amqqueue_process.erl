@@ -1178,7 +1178,12 @@ handle_call(force_event_refresh, _From,
         {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
                       emit_consumer_created(Ch, CTag, true, AckRequired)
     end,
-    reply(ok, State).
+    reply(ok, State);
+
+handle_call({fold, Fun, Acc}, _From, State = #q{backing_queue       = BQ,
+                                                backing_queue_state = BQS}) ->
+    {Acc1, BQS1} = BQ:fold(Fun, Acc, BQS),
+    reply(Acc1, State#q{backing_queue_state = BQS1}).
 
 handle_cast({confirm, MsgSeqNos, QPid}, State = #q{unconfirmed = UC}) ->
     {MsgSeqNoAckTags, UC1} = dtree:take(MsgSeqNos, QPid, UC),
@@ -1224,8 +1229,8 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-                      BQS1 = BQ:fold(fun(M, A) -> DLXFun([{M, A}]) end,
-                                     BQS, AckTags),
+                      BQS1 = BQ:foreach_ack(fun(M, A) -> DLXFun([{M, A}]) end,
+                                            BQS, AckTags),
                       State1#q{backing_queue_state = BQS1}
               end));
 
