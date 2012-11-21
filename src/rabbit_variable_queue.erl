@@ -255,7 +255,6 @@
           q4,
           next_seq_id,
           pending_ack,
-          pending_ack_index,
           ram_ack_index,
           index_state,
           msg_store_clients,
