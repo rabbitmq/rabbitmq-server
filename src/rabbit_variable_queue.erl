@@ -641,13 +641,12 @@ ack(AckTags, State) ->
 fold(undefined, State, _AckTags) ->
     State;
 fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
-    lists:foldl(
-      fun(SeqId, State1) ->
-              {MsgStatus, State2} =
-                  read_msg(gb_trees:get(SeqId, PA), State1),
-              MsgFun(MsgStatus#msg_status.msg, SeqId),
-              State2
-      end, State, AckTags).
+    a(lists:foldl(fun(SeqId, State1) ->
+                          {MsgStatus, State2} =
+                              read_msg(gb_trees:get(SeqId, PA), State1),
+                          MsgFun(MsgStatus#msg_status.msg, SeqId),
+                          State2
+                  end, State, AckTags)).
 
 requeue(AckTags, #vqstate { delta      = Delta,
                             q3         = Q3,
