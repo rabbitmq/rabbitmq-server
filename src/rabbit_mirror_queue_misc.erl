@@ -183,7 +183,7 @@ start_child(Name, MirrorNode, Q) ->
            fun () ->
                    rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
            end) of
-        {ok, SPid} ->
+        {ok, SPid} when is_pid(SPid)  ->
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                             [rabbit_misc:rs(Name), MirrorNode, SPid]),
             {ok, started};
