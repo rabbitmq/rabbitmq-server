@@ -1150,23 +1150,6 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
     noreply(requeue(AckTags, ChPid, State));
 
-handle_call(start_mirroring, _From, State = #q{backing_queue       = BQ,
-                                               backing_queue_state = BQS}) ->
-    %% lookup again to get policy for init_with_existing_bq
-    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
-    true = BQ =/= rabbit_mirror_queue_master, %% assertion
-    BQ1 = rabbit_mirror_queue_master,
-    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
-    reply(ok, State#q{backing_queue       = BQ1,
-                      backing_queue_state = BQS1});
-
-handle_call(stop_mirroring, _From, State = #q{backing_queue       = BQ,
-                                              backing_queue_state = BQS}) ->
-    BQ = rabbit_mirror_queue_master, %% assertion
-    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
-    reply(ok, State#q{backing_queue       = BQ1,
-                      backing_queue_state = BQS1});
-
 handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
@@ -1289,6 +1272,23 @@ handle_cast({dead_letter, Msgs, Reason}, State = #q{dlx = XName}) ->
         {error, not_found} ->
             cleanup_after_confirm([AckTag || {_, AckTag} <- Msgs], State)
     end;
+
+handle_cast(start_mirroring, State = #q{backing_queue       = BQ,
+					backing_queue_state = BQS}) ->
+    %% lookup again to get policy for init_with_existing_bq
+    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
+    true = BQ =/= rabbit_mirror_queue_master, %% assertion
+    BQ1 = rabbit_mirror_queue_master,
+    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
+    noreply(State#q{backing_queue       = BQ1,
+		    backing_queue_state = BQS1});
+
+handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
+				       backing_queue_state = BQS}) ->
+    BQ = rabbit_mirror_queue_master, %% assertion
+    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
+    noreply(State#q{backing_queue       = BQ1,
+		    backing_queue_state = BQS1});
 
 handle_cast(wake_up, State) ->
     noreply(State).
