@@ -293,8 +293,8 @@ postcondition(S, {call, ?BQMOD, drop, _Args}, Res) ->
     case Res of
         {{MsgIdFetched, AckTag, RemainingLen}, _BQ} ->
             {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
-            MsgId = {call, erlang, element,
-                     [?RECORD_INDEX(id, basic_message), Msg]},
+            MsgId = eval({call, erlang, element,
+                          [?RECORD_INDEX(id, basic_message), Msg]}),
             MsgIdFetched =:= MsgId andalso
             not proplists:is_defined(AckTag, Acks) andalso
                 not gb_sets:is_element(AckTag, Confrms) andalso
