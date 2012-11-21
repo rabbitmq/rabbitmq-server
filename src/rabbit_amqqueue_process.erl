@@ -489,7 +489,7 @@ deliver_from_queue_deliver(AckRequired, State) ->
         fetch(AckRequired, State),
     State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         drop_expired_messages(State1),
-    {{Message, IsDelivered, AckTag}, BQ:len(BQS) == 0, State2}.
+    {{Message, IsDelivered, AckTag}, BQ:is_empty(BQS), State2}.
 
 confirm_messages([], State) ->
     State;
