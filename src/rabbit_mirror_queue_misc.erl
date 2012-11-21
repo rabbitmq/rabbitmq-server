@@ -133,11 +133,11 @@ on_node_up() ->
                             end
                     end, [], rabbit_queue)
           end),
-    [{ok, _} = add_mirror(QName, node()) || QName <- QNames],
+    [add_mirror(QName, node()) || QName <- QNames],
     ok.
 
 drop_mirrors(QName, Nodes) ->
-    [{ok, _} = drop_mirror(QName, Node)  || Node <- Nodes],
+    [drop_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 drop_mirror(QName, MirrorNode) ->
@@ -159,7 +159,7 @@ drop_mirror(QName, MirrorNode) ->
       end).
 
 add_mirrors(QName, Nodes) ->
-    [{ok, _} = add_mirror(QName, Node)  || Node <- Nodes],
+    [add_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 add_mirror(QName, MirrorNode) ->
@@ -183,14 +183,6 @@ start_child(Name, MirrorNode, Q) ->
            fun () ->
                    rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
            end) of
-        {ok, undefined} ->
-            %% this means the mirror process was
-            %% already running on the given node.
-            {ok, already_mirrored};
-        {ok, down} ->
-            %% Node went down between us deciding to start a mirror
-            %% and actually starting it. Which is fine.
-            {ok, node_down};
         {ok, SPid} ->
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                             [rabbit_misc:rs(Name), MirrorNode, SPid]),
