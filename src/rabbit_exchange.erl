@@ -124,12 +124,8 @@ callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
 policy_changed(X1, X2) -> callback(X1, policy_changed, none, [X1, X2]).
 
 serialise_events(X = #exchange{type = Type}) ->
-    case [Serialise || M <- decorators(),
-                       Serialise <- [M:serialise_events(X)],
-                       Serialise == true] of
-        [] -> (type_to_module(Type)):serialise_events();
-        _  -> true
-    end.
+    lists:any(fun (M) -> M:serialise_events(X) end, decorators())
+        orelse (type_to_module(Type)):serialise_events().
 
 serial(#exchange{name = XName} = X) ->
     Serial = case serialise_events(X) of
