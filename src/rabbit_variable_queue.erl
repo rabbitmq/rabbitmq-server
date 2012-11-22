@@ -643,7 +643,7 @@ fold(undefined, State, _AckTags) ->
 fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
     a(lists:foldl(fun(SeqId, State1) ->
                           {MsgStatus, State2} =
-                              read_msg(gb_trees:get(SeqId, PA), State1),
+                              read_msg(gb_trees:get(SeqId, PA), false, State1),
                           MsgFun(MsgStatus#msg_status.msg, SeqId),
                           State2
                   end, State, AckTags)).
@@ -1062,17 +1062,19 @@ queue_out(State = #vqstate { q4 = Q4 }) ->
             {{value, MsgStatus}, State #vqstate { q4 = Q4a }}
     end.
 
+read_msg(MsgStatus, State) -> read_msg(MsgStatus, true, State).
+
 read_msg(MsgStatus = #msg_status { msg           = undefined,
                                    msg_id        = MsgId,
                                    is_persistent = IsPersistent },
-         State = #vqstate { ram_msg_count     = RamMsgCount,
-                            msg_store_clients = MSCState}) ->
+         CountDiskToRam, State = #vqstate { ram_msg_count     = RamMsgCount,
+                                            msg_store_clients = MSCState}) ->
     {{ok, Msg = #basic_message {}}, MSCState1} =
         msg_store_read(MSCState, IsPersistent, MsgId),
     {MsgStatus #msg_status { msg = Msg },
-     State #vqstate { ram_msg_count     = RamMsgCount + 1,
+     State #vqstate { ram_msg_count     = RamMsgCount + one_if(CountDiskToRam),
                       msg_store_clients = MSCState1 }};
-read_msg(MsgStatus, State) ->
+read_msg(MsgStatus, _CountDiskToRam, State) ->
     {MsgStatus, State}.
 
 internal_fetch(AckRequired, MsgStatus = #msg_status {
