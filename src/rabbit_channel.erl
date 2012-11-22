@@ -1357,6 +1357,16 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                            queue_monitors = QMons}) ->
     Qs = rabbit_amqqueue:lookup(DelQNames),
     {RoutingRes, DeliveredQPids} = rabbit_amqqueue:deliver_flow(Qs, Delivery),
+    %% The pmon:monitor_all/2 monitors all queues to which we
+    %% delivered. But we want to monitor even queues we didn't deliver
+    %% to, since we need their 'DOWN' messages to clean
+    %% queue_names. So we also need to monitor each QPid from
+    %% queues. But that only gets the masters (which is fine for
+    %% cleaning queue_names), so we need the union of both.
+    %%
+    %% ...and we need to add even non-delivered queues to queue_names
+    %% since alternative algorithms to update queue_names less
+    %% frequently would in fact be more expensive in the common case.
     {QNames1, QMons1} =
         lists:foldl(fun (#amqqueue{pid = QPid, name = QName},
                          {QNames0, QMons0}) ->
