@@ -122,11 +122,10 @@ info_keys() -> ?INFO_KEYS.
 
 init(Q) ->
     process_flag(trap_exit, true),
-
     State = #q{q                   = Q#amqqueue{pid = self()},
                exclusive_consumer  = none,
                has_had_consumers   = false,
-               backing_queue       = backing_queue_module(Q),
+               backing_queue       = undefined,
                backing_queue_state = undefined,
                active_consumers    = queue:new(),
                expires             = undefined,
@@ -193,7 +192,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 declare(Recover, From, State = #q{q                   = Q,
-                                  backing_queue       = BQ,
+                                  backing_queue       = undefined,
                                   backing_queue_state = undefined}) ->
     case rabbit_amqqueue:internal_declare(Q, Recover =/= new) of
         #amqqueue{} = Q1 ->
@@ -205,9 +204,11 @@ declare(Recover, From, State = #q{q                   = Q,
                     ok = rabbit_memory_monitor:register(
                            self(), {rabbit_amqqueue,
                                     set_ram_duration_target, [self()]}),
+                    BQ = backing_queue_module(Q1),
                     BQS = bq_init(BQ, Q, Recover),
                     recovery_barrier(Recover),
-                    State1 = process_args(State#q{backing_queue_state = BQS}),
+                    State1 = process_args(State#q{backing_queue       = BQ,
+                                                  backing_queue_state = BQS}),
                     rabbit_event:notify(queue_created,
                                         infos(?CREATION_EVENT_KEYS, State1)),
                     rabbit_event:if_enabled(State1, #q.stats_timer,
