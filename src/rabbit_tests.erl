@@ -2300,6 +2300,7 @@ test_variable_queue() ->
               fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
+              fun test_variable_queue_fold_msg_on_disk/1,
               fun test_dropwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
@@ -2514,6 +2515,12 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ7 = variable_queue_init(test_amqqueue(true), true),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
+
+test_variable_queue_fold_msg_on_disk(VQ0) ->
+    VQ1 = variable_queue_publish(true, 1, VQ0),
+    {VQ2, AckTags} = variable_queue_fetch(1, true, false, 1, VQ1),
+    VQ3 = rabbit_variable_queue:fold(fun (_M, _A) -> ok end, VQ2, AckTags),
+    VQ3.
 
 test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
