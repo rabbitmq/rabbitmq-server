@@ -39,8 +39,7 @@
 -spec(recover/0 :: () -> [name()]).
 -spec(callback/4::
         (rabbit_types:exchange(), fun_name(),
-         fun((boolean()) -> non_neg_integer()) | atom(),
-            [any()]) -> 'ok').
+         fun((boolean()) -> non_neg_integer()) | atom(), [any()]) -> 'ok').
 -spec(policy_changed/2 ::
         (rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok').
 -spec(declare/6 ::
@@ -114,26 +113,19 @@ recover() ->
     [XName || #exchange{name = XName} <- Xs].
 
 callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
-    Serial = fun (Bool) ->
-                     case Serial0 of
-                         _ when is_atom(Serial0) -> Serial0;
-                         _                       -> Serial0(Bool)
-                     end
+    Serial = if is_function(Serial0) -> Serial0;
+                is_atom(Serial0)     -> fun (_Bool) -> Serial0 end
              end,
-    [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args])
-     || M <- decorators()],
+    [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args]) ||
+        M <- decorators()],
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
 policy_changed(X1, X2) -> callback(X1, policy_changed, none, [X1, X2]).
 
 serialise_events(X = #exchange{type = Type}) ->
-    case [Serialise || M <- decorators(),
-                       Serialise <- [M:serialise_events(X)],
-                       Serialise == true] of
-        [] -> (type_to_module(Type)):serialise_events();
-        _  -> true
-    end.
+    lists:any(fun (M) -> M:serialise_events(X) end, decorators())
+        orelse (type_to_module(Type)):serialise_events().
 
 serial(#exchange{name = XName} = X) ->
     Serial = case serialise_events(X) of

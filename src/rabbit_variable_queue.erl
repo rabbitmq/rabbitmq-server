@@ -18,10 +18,10 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
          publish/4, publish_delivered/4, discard/3, drain_confirmed/1,
-         dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
+         dropwhile/3, fetch/2, drop/2, ack/2, requeue/2, len/1, is_empty/1,
          depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, multiple_routing_keys/0, fold/3]).
+         is_duplicate/2, multiple_routing_keys/0, foreach_ack/3]).
 
 -export([start/1, stop/0]).
 
@@ -255,7 +255,6 @@
           q4,
           next_seq_id,
           pending_ack,
-          pending_ack_index,
           ram_ack_index,
           index_state,
           msg_store_clients,
@@ -615,6 +614,16 @@ fetch(AckRequired, State) ->
             {Res, a(State3)}
     end.
 
+drop(AckRequired, State) ->
+    case queue_out(State) of
+        {empty, State1} ->
+            {empty, a(State1)};
+        {{value, MsgStatus}, State1} ->
+            {{_Msg, _IsDelivered, AckTag, Remaining}, State2} =
+                internal_fetch(AckRequired, MsgStatus, State1),
+            {{MsgStatus#msg_status.msg_id, AckTag, Remaining}, a(State2)}
+    end.
+
 ack([], State) ->
     {[], State};
 ack(AckTags, State) ->
@@ -638,9 +647,9 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-fold(undefined, State, _AckTags) ->
+foreach_ack(undefined, State, _AckTags) ->
     State;
-fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
+foreach_ack(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
     a(lists:foldl(fun(SeqId, State1) ->
                           {MsgStatus, State2} =
                               read_msg(gb_trees:get(SeqId, PA), false, State1),

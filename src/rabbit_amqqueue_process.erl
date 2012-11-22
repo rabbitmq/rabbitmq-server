@@ -730,8 +730,10 @@ drop_expired_messages(State = #q{dlx                 = DLX,
                                      {Next, BQS2};
                         _         -> {Next, Msgs,      BQS2} =
                                          BQ:dropwhile(ExpirePred, true,  BQS),
-                                     DLXFun = dead_letter_fun(expired),
-                                     DLXFun(Msgs),
+                                     case Msgs of
+                                         [] -> ok;
+                                         _  -> (dead_letter_fun(expired))(Msgs)
+                                     end,
                                      {Next, BQS2}
                     end,
     ensure_ttl_timer(case Props of
@@ -1135,11 +1137,11 @@ handle_call(stat, _From, State) ->
 
 handle_call({delete, IfUnused, IfEmpty}, From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
-    IsEmpty = BQ:is_empty(BQS),
+    IsEmpty  = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
-        IfEmpty and not(IsEmpty)   -> reply({error, not_empty}, State);
-        IfUnused and not(IsUnused) -> reply({error, in_use}, State);
+        IfEmpty  and not(IsEmpty)  -> reply({error, not_empty}, State);
+        IfUnused and not(IsUnused) -> reply({error,    in_use}, State);
         true                       -> stop(From, {ok, BQ:len(BQS)}, State)
     end;
 
@@ -1224,7 +1226,7 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-                      BQS1 = BQ:fold(fun(M, A) -> DLXFun([{M, A}]) end,
+                      BQS1 = BQ:foreach_ack(fun(M, A) -> DLXFun([{M, A}]) end,
                                      BQS, AckTags),
                       State1#q{backing_queue_state = BQS1}
               end));

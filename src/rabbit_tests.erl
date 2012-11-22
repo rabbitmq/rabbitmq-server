@@ -2300,6 +2300,7 @@ test_variable_queue() ->
               fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
+              fun test_drop/1,
               fun test_variable_queue_fold_msg_on_disk/1,
               fun test_dropwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
@@ -2361,6 +2362,20 @@ test_variable_queue_ack_limiting(VQ0) ->
              {ram_ack_count, 0}]),
 
     VQ6.
+
+test_drop(VQ0) ->
+    %% start by sending a messages
+    VQ1 = variable_queue_publish(false, 1, VQ0),
+    %% drop message with AckRequired = true
+    {{MsgId, AckTag, 0}, VQ2} = rabbit_variable_queue:drop(true, VQ1),
+    true = AckTag =/= undefinded,
+    %% drop again -> empty
+    {empty, VQ3} = rabbit_variable_queue:drop(false, VQ2),
+    %% requeue
+    {[MsgId], VQ4} = rabbit_variable_queue:requeue([AckTag], VQ3),
+    %% drop message with AckRequired = false
+    {{MsgId, undefined, 0}, VQ5} = rabbit_variable_queue:drop(false, VQ4),
+    VQ5.
 
 test_dropwhile(VQ0) ->
     Count = 10,
@@ -2519,7 +2534,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
 test_variable_queue_fold_msg_on_disk(VQ0) ->
     VQ1 = variable_queue_publish(true, 1, VQ0),
     {VQ2, AckTags} = variable_queue_fetch(1, true, false, 1, VQ1),
-    VQ3 = rabbit_variable_queue:fold(fun (_M, _A) -> ok end, VQ2, AckTags),
+    VQ3 = rabbit_variable_queue:foreach_ack(fun (_M, _A) -> ok end,
+                                            VQ2, AckTags),
     VQ3.
 
 test_queue_recover() ->
