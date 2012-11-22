@@ -485,11 +485,10 @@ deliver_msg_to_consumer(DeliverFun,
     {Stop, State1}.
 
 deliver_from_queue_deliver(AckRequired, State) ->
-    {{Message, IsDelivered, AckTag, _Remaining}, State1} =
-        fetch(AckRequired, State),
+    {Result, State1} = fetch(AckRequired, State),
     State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         drop_expired_messages(State1),
-    {{Message, IsDelivered, AckTag}, BQ:is_empty(BQS), State2}.
+    {Result, BQ:is_empty(BQS), State2}.
 
 confirm_messages([], State) ->
     State;
@@ -1061,8 +1060,8 @@ handle_call({basic_get, ChPid, NoAck}, _From,
     case fetch(AckRequired, drop_expired_messages(State1)) of
         {empty, State2} ->
             reply(empty, State2);
-        {{Message, IsDelivered, AckTag, Remaining}, State2} ->
-            State3 =
+        {{Message, IsDelivered, AckTag}, State2} ->
+            State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
                 case AckRequired of
                     true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
                              ChAckTags1 = sets:add_element(AckTag, ChAckTags),
@@ -1071,7 +1070,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                     false -> State2
                 end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
-            reply({ok, Remaining, Msg}, State3)
+            reply({ok, BQ:len(BQS), Msg}, State3)
     end;
 
 handle_call({basic_consume, NoAck, ChPid, Limiter,

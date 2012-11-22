@@ -591,8 +591,8 @@ dropwhile(Pred, AckRequired, State, Msgs) ->
             case {Pred(MsgProps), AckRequired} of
                 {true, true} ->
                     {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-                    {{Msg, _, AckTag, _}, State3} =
-                         internal_fetch(true, MsgStatus1, State2),
+                    {{Msg, _IsDelivered, AckTag}, State3} =
+                        internal_fetch(true, MsgStatus1, State2),
                     dropwhile(Pred, AckRequired, State3, [{Msg, AckTag} | Msgs]);
                 {true, false} ->
                     {_, State2} = internal_fetch(false, MsgStatus, State1),
@@ -619,9 +619,9 @@ drop(AckRequired, State) ->
         {empty, State1} ->
             {empty, a(State1)};
         {{value, MsgStatus}, State1} ->
-            {{_Msg, _IsDelivered, AckTag, Remaining}, State2} =
+            {{_Msg, _IsDelivered, AckTag}, State2} =
                 internal_fetch(AckRequired, MsgStatus, State1),
-            {{MsgStatus#msg_status.msg_id, AckTag, Remaining}, a(State2)}
+            {{MsgStatus#msg_status.msg_id, AckTag}, a(State2)}
     end.
 
 ack([], State) ->
@@ -1125,14 +1125,13 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                        end,
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
-    Len1 = Len - 1,
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
-    {{Msg, IsDelivered, AckTag, Len1},
+    {{Msg, IsDelivered, AckTag},
      State1 #vqstate { ram_msg_count    = RamMsgCount1,
                        out_counter      = OutCount + 1,
                        index_state      = IndexState2,
-                       len              = Len1,
+                       len              = Len - 1,
                        persistent_count = PCount1 }}.
 
 purge_betas_and_deltas(LensByStore,

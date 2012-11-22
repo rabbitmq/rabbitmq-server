@@ -727,8 +727,7 @@ process_instruction({drop, Length, Dropped, AckRequired},
              end,
     State1 = lists:foldl(
                fun (const, StateN = #state{backing_queue_state = BQSN}) ->
-                       {{MsgId, AckTag, _Remaining}, BQSN1} =
-                           BQ:drop(AckRequired, BQSN),
+                       {{MsgId, AckTag}, BQSN1} = BQ:drop(AckRequired, BQSN),
                        maybe_store_ack(
                          AckRequired, MsgId, AckTag,
                          StateN #state { backing_queue_state = BQSN1 })

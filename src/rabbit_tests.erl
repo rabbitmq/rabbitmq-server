@@ -2233,8 +2233,9 @@ variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
                         Rem = Len - N,
                         {{#basic_message { is_persistent = IsPersistent },
-                          IsDelivered, AckTagN, Rem}, VQM} =
+                          IsDelivered, AckTagN}, VQM} =
                             rabbit_variable_queue:fetch(true, VQN),
+                        Rem = rabbit_variable_queue:len(VQM),
                         {VQM, [AckTagN | AckTagsAcc]}
                 end, {VQ, []}, lists:seq(1, Count)).
 
@@ -2326,7 +2327,7 @@ test_variable_queue_requeue(VQ0) ->
                               VQM
                       end, VQ4, Subset),
     VQ6 = lists:foldl(fun (AckTag, VQa) ->
-                              {{#basic_message{}, true, AckTag, _}, VQb} =
+                              {{#basic_message{}, true, AckTag}, VQb} =
                                   rabbit_variable_queue:fetch(true, VQa),
                               VQb
                       end, VQ5, lists:reverse(Acks)),
@@ -2366,14 +2367,16 @@ test_drop(VQ0) ->
     %% start by sending a messages
     VQ1 = variable_queue_publish(false, 1, VQ0),
     %% drop message with AckRequired = true
-    {{MsgId, AckTag, 0}, VQ2} = rabbit_variable_queue:drop(true, VQ1),
+    {{MsgId, AckTag}, VQ2} = rabbit_variable_queue:drop(true, VQ1),
+    true = rabbit_variable_queue:is_empty(VQ2),
     true = AckTag =/= undefinded,
     %% drop again -> empty
     {empty, VQ3} = rabbit_variable_queue:drop(false, VQ2),
     %% requeue
     {[MsgId], VQ4} = rabbit_variable_queue:requeue([AckTag], VQ3),
     %% drop message with AckRequired = false
-    {{MsgId, undefined, 0}, VQ5} = rabbit_variable_queue:drop(false, VQ4),
+    {{MsgId, undefined}, VQ5} = rabbit_variable_queue:drop(false, VQ4),
+    true = rabbit_variable_queue:is_empty(VQ5),
     VQ5.
 
 test_dropwhile(VQ0) ->
@@ -2392,7 +2395,7 @@ test_dropwhile(VQ0) ->
 
     %% fetch five now
     VQ3 = lists:foldl(fun (_N, VQN) ->
-                              {{#basic_message{}, _, _, _}, VQM} =
+                              {{#basic_message{}, _, _}, VQM} =
                                   rabbit_variable_queue:fetch(false, VQN),
                               VQM
                       end, VQ2, lists:seq(6, Count)),
@@ -2445,7 +2448,8 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
     VQ0;
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
-    {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    {{_Msg, false, AckTag}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    Len = rabbit_variable_queue:len(VQ2),
     {_Guids, VQ3} = rabbit_variable_queue:ack([AckTag], VQ2),
     publish_fetch_and_ack(N-1, Len, VQ3).
 
@@ -2510,8 +2514,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
     VQ7 = variable_queue_init(test_amqqueue(true), true),
-    {{_Msg1, true, _AckTag1, Count1}, VQ8} =
-        rabbit_variable_queue:fetch(true, VQ7),
+    {{_Msg1, true, _AckTag1}, VQ8} = rabbit_variable_queue:fetch(true, VQ7),
+    Count1 = rabbit_variable_queue:len(VQ8),
     VQ9 = variable_queue_publish(false, 1, VQ8),
     VQ10 = rabbit_variable_queue:set_ram_duration_target(0, VQ9),
     {VQ11, _AckTags2} = variable_queue_fetch(Count1, true, true, Count, VQ10),
@@ -2551,8 +2555,9 @@ test_queue_recover() ->
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
               VQ1 = variable_queue_init(Q, true),
-              {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
+              {{_Msg1, true, _AckTag1}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
+              CountMinusOne = rabbit_variable_queue:len(VQ2),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
               rabbit_amqqueue:internal_delete(QName, QPid1)
       end),

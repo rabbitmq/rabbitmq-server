@@ -26,13 +26,9 @@
 
 -type(msg_ids() :: [rabbit_types:msg_id()]).
 -type(fetch_result(Ack) ::
-        ('empty' |
-         %% Message,                  IsDelivered, AckTag, Remaining_Len
-         {rabbit_types:basic_message(), boolean(), Ack, non_neg_integer()})).
+        ('empty' | {rabbit_types:basic_message(), boolean(), Ack})).
 -type(drop_result(Ack) ::
-        ('empty' |
-         %% MessageId,        AckTag, Remaining_Len
-         {rabbit_types:msg_id(), Ack, non_neg_integer()})).
+        ('empty' | {rabbit_types:msg_id(), Ack})).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
 -type(async_callback() ::
