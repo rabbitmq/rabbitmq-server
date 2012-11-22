@@ -278,12 +278,12 @@ next_state(S, Res, {call, ?BQMOD, purge, _Args}) ->
 postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
     #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
     case Res of
-        {{MsgFetched, _IsDelivered, AckTag, RemainingLen}, _BQ} ->
+        {{MsgFetched, _IsDelivered, AckTag}, _BQ} ->
             {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
             MsgFetched =:= Msg andalso
             not proplists:is_defined(AckTag, Acks) andalso
                 not gb_sets:is_element(AckTag, Confrms) andalso
-                RemainingLen =:= Len - 1;
+                Len =/= 0;
         {empty, _BQ} ->
             Len =:= 0
     end;
@@ -291,14 +291,14 @@ postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
 postcondition(S, {call, ?BQMOD, drop, _Args}, Res) ->
     #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
     case Res of
-        {{MsgIdFetched, AckTag, RemainingLen}, _BQ} ->
+        {{MsgIdFetched, AckTag}, _BQ} ->
             {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
             MsgId = eval({call, erlang, element,
                           [?RECORD_INDEX(id, basic_message), Msg]}),
             MsgIdFetched =:= MsgId andalso
             not proplists:is_defined(AckTag, Acks) andalso
                 not gb_sets:is_element(AckTag, Confrms) andalso
-                RemainingLen =:= Len - 1;
+                Len =/= 0;
         {empty, _BQ} ->
             Len =:= 0
     end;
