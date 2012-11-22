@@ -21,7 +21,7 @@
          dropwhile/3, fetch/2, drop/2, ack/2, requeue/2, len/1, is_empty/1,
          depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, multiple_routing_keys/0, fold/3]).
+         is_duplicate/2, multiple_routing_keys/0, foreach_ack/3]).
 
 -export([start/1, stop/0]).
 
@@ -647,9 +647,9 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-fold(undefined, State, _AckTags) ->
+foreach_ack(undefined, State, _AckTags) ->
     State;
-fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
+foreach_ack(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
     a(lists:foldl(fun(SeqId, State1) ->
                           {MsgStatus, State2} =
                               read_msg(gb_trees:get(SeqId, PA), false, State1),
