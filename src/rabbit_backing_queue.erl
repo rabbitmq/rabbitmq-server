@@ -29,6 +29,10 @@
         ('empty' |
          %% Message,                  IsDelivered, AckTag, Remaining_Len
          {rabbit_types:basic_message(), boolean(), Ack, non_neg_integer()})).
+-type(drop_result(Ack) ::
+        ('empty' |
+         %% MessageId,        AckTag, Remaining_Len
+         {rabbit_types:msg_id(), Ack, non_neg_integer()})).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
 -type(async_callback() ::
@@ -138,6 +142,10 @@
 %% Produce the next message.
 -callback fetch(true,  state()) -> {fetch_result(ack()), state()};
                (false, state()) -> {fetch_result(undefined), state()}.
+
+%% Remove the next message.
+-callback drop(true,  state()) -> {drop_result(ack()), state()};
+              (false, state()) -> {drop_result(undefined), state()}.
 
 %% Acktags supplied are for messages which can now be forgotten
 %% about. Must return 1 msg_id per Ack, in the same order as Acks.

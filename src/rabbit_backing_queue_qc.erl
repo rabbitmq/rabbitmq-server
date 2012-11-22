@@ -85,17 +85,19 @@ backing_queue_test(Cmds) ->
 
 %% Commands
 
-%% Command frequencies are tuned so that queues are normally reasonably
-%% short, but they may sometimes exceed ?QUEUE_MAXLEN. Publish-multiple
-%% and purging cause extreme queue lengths, so these have lower probabilities.
-%% Fetches are sufficiently frequent so that commands that need acktags
-%% get decent coverage.
+%% Command frequencies are tuned so that queues are normally
+%% reasonably short, but they may sometimes exceed
+%% ?QUEUE_MAXLEN. Publish-multiple and purging cause extreme queue
+%% lengths, so these have lower probabilities.  Fetches/drops are
+%% sufficiently frequent so that commands that need acktags get decent
+%% coverage.
 
 command(S) ->
     frequency([{10, qc_publish(S)},
                {1,  qc_publish_delivered(S)},
                {1,  qc_publish_multiple(S)},  %% very slow
-               {15, qc_fetch(S)},             %% needed for ack and requeue
+               {9,  qc_fetch(S)},             %% needed for ack and requeue
+               {6,  qc_drop(S)},              %%
                {15, qc_ack(S)},
                {15, qc_requeue(S)},
                {3,  qc_set_ram_duration_target(S)},
@@ -123,6 +125,9 @@ qc_publish_delivered(#state{bqstate = BQ}) ->
 
 qc_fetch(#state{bqstate = BQ}) ->
     {call, ?BQMOD, fetch, [boolean(), BQ]}.
+
+qc_drop(#state{bqstate = BQ}) ->
+    {call, ?BQMOD, drop, [boolean(), BQ]}.
 
 qc_ack(#state{bqstate = BQ, acks = Acks}) ->
     {call, ?BQMOD, ack, [rand_choice(proplists:get_keys(Acks)), BQ]}.
@@ -217,22 +222,10 @@ next_state(S, Res,
            };
 
 next_state(S, Res, {call, ?BQMOD, fetch, [AckReq, _BQ]}) ->
-    #state{len = Len, messages = Messages, acks = Acks} = S,
-    ResultInfo = {call, erlang, element, [1, Res]},
-    BQ1        = {call, erlang, element, [2, Res]},
-    AckTag     = {call, erlang, element, [3, ResultInfo]},
-    S1         = S#state{bqstate = BQ1},
-    case gb_trees:is_empty(Messages) of
-        true  -> S1;
-        false -> {SeqId, MsgProp_Msg, M2} = gb_trees:take_smallest(Messages),
-                 S2 = S1#state{len = Len - 1, messages = M2},
-                 case AckReq of
-                     true  ->
-                         S2#state{acks = [{AckTag, {SeqId, MsgProp_Msg}}|Acks]};
-                     false ->
-                         S2
-                 end
-    end;
+    next_state_fetch_and_drop(S, Res, AckReq, 3);
+
+next_state(S, Res, {call, ?BQMOD, drop, [AckReq, _BQ]}) ->
+    next_state_fetch_and_drop(S, Res, AckReq, 2);
 
 next_state(S, Res, {call, ?BQMOD, ack, [AcksArg, _BQ]}) ->
     #state{acks = AcksState} = S,
@@ -288,6 +281,21 @@ postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
         {{MsgFetched, _IsDelivered, AckTag, RemainingLen}, _BQ} ->
             {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
             MsgFetched =:= Msg andalso
+            not proplists:is_defined(AckTag, Acks) andalso
+                not gb_sets:is_element(AckTag, Confrms) andalso
+                RemainingLen =:= Len - 1;
+        {empty, _BQ} ->
+            Len =:= 0
+    end;
+
+postcondition(S, {call, ?BQMOD, drop, _Args}, Res) ->
+    #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
+    case Res of
+        {{MsgIdFetched, AckTag, RemainingLen}, _BQ} ->
+            {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
+            MsgId = eval({call, erlang, element,
+                          [?RECORD_INDEX(id, basic_message), Msg]}),
+            MsgIdFetched =:= MsgId andalso
             not proplists:is_defined(AckTag, Acks) andalso
                 not gb_sets:is_element(AckTag, Confrms) andalso
                 RemainingLen =:= Len - 1;
@@ -386,6 +394,24 @@ drop_messages(Messages) ->
                 true  -> drop_messages(M2);
                 false -> Messages
             end
+    end.
+
+next_state_fetch_and_drop(S, Res, AckReq, AckTagIdx) ->
+    #state{len = Len, messages = Messages, acks = Acks} = S,
+    ResultInfo = {call, erlang, element, [1, Res]},
+    BQ1        = {call, erlang, element, [2, Res]},
+    AckTag     = {call, erlang, element, [AckTagIdx, ResultInfo]},
+    S1         = S#state{bqstate = BQ1},
+    case gb_trees:is_empty(Messages) of
+        true  -> S1;
+        false -> {SeqId, MsgProp_Msg, M2} = gb_trees:take_smallest(Messages),
+                 S2 = S1#state{len = Len - 1, messages = M2},
+                 case AckReq of
+                     true  ->
+                         S2#state{acks = [{AckTag, {SeqId, MsgProp_Msg}}|Acks]};
+                     false ->
+                         S2
+                 end
     end.
 
 -else.

@@ -18,7 +18,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
          publish/4, publish_delivered/4, discard/3, drain_confirmed/1,
-         dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
+         dropwhile/3, fetch/2, drop/2, ack/2, requeue/2, len/1, is_empty/1,
          depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
          is_duplicate/2, multiple_routing_keys/0, fold/3]).
@@ -255,7 +255,6 @@
           q4,
           next_seq_id,
           pending_ack,
-          pending_ack_index,
           ram_ack_index,
           index_state,
           msg_store_clients,
@@ -613,6 +612,16 @@ fetch(AckRequired, State) ->
             {MsgStatus1, State2} = read_msg(MsgStatus, State1),
             {Res, State3} = internal_fetch(AckRequired, MsgStatus1, State2),
             {Res, a(State3)}
+    end.
+
+drop(AckRequired, State) ->
+    case queue_out(State) of
+        {empty, State1} ->
+            {empty, a(State1)};
+        {{value, MsgStatus}, State1} ->
+            {{_Msg, _IsDelivered, AckTag, Remaining}, State2} =
+                internal_fetch(AckRequired, MsgStatus, State1),
+            {{MsgStatus#msg_status.msg_id, AckTag, Remaining}, a(State2)}
     end.
 
 ack([], State) ->
