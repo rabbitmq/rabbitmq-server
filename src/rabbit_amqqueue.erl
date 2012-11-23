@@ -31,7 +31,7 @@
 -export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
--export([start_mirroring/1, stop_mirroring/1]).
+-export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -590,6 +590,12 @@ set_maximum_since_use(QPid, Age) ->
 
 start_mirroring(QPid) -> ok = delegate_call(QPid, start_mirroring).
 stop_mirroring(QPid)  -> ok = delegate_call(QPid, stop_mirroring).
+
+sync_mirrors(Name) ->
+    case lookup(Name) of
+        {ok, #amqqueue{pid = QPid}} -> delegate_cast(QPid, sync_mirrors);
+        _                           -> ok
+    end.
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
