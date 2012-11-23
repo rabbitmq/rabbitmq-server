@@ -1300,6 +1300,20 @@ handle_cast({dead_letter, Msgs, Reason}, State = #q{dlx = XName}) ->
             cleanup_after_confirm([AckTag || {_, AckTag} <- Msgs], State)
     end;
 
+handle_cast(sync_mirrors,
+            State = #q{q                   = #amqqueue{name = Name},
+                       backing_queue       = BQ,
+                       backing_queue_state = BQS}) ->
+    case BQ of
+        rabbit_mirror_queue_master ->
+            {ok, #amqqueue{slave_pids = SPids, sync_slave_pids = SSPids}} =
+                rabbit_amqqueue:lookup(Name),
+            rabbit_mirror_queue_master:sync_mirrors(SPids -- SSPids, BQS);
+        _ ->
+            ok
+    end,
+    noreply(State);
+
 handle_cast(wake_up, State) ->
     noreply(State).
 

@@ -28,7 +28,7 @@
 
 -export([promote_backing_queue_state/7, sender_death_fun/0, depth_fun/0]).
 
--export([init_with_existing_bq/3, stop_mirroring/1]).
+-export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/2]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -126,6 +126,33 @@ stop_mirroring(State = #state { coordinator         = CPid,
     unlink(CPid),
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
+
+sync_mirrors(SPids, #state { backing_queue       = BQ,
+                             backing_queue_state = BQS }) ->
+    Ref = make_ref(),
+    SPidsMRefs = [begin
+                      SPid ! {sync_start, Ref, self()},
+                      MRef = erlang:monitor(process, SPid),
+                      {SPid, MRef}
+                  end || SPid <- SPids],
+    %% We wait for a reply from the slaves so that we know they are in
+    %% a receive block and will thus receive messages we send to them
+    %% *without* those messages ending up in their gen_server2 pqueue.
+    SPids1 = [SPid1 || {SPid, MRef} <- SPidsMRefs,
+                       SPid1 <- [receive
+                                     {'DOWN', MRef, process, SPid, _Reason} ->
+                                         dead;
+                                     {sync_ready, Ref, SPid} ->
+                                         SPid
+                                 end],
+                       SPid1 =/= dead],
+    [erlang:demonitor(MRef) || {_, MRef} <- SPidsMRefs],
+    BQ:fold(fun (M = #basic_message{}, none) ->
+                    [SPid ! {sync_message, Ref, M} || SPid <- SPids1],
+                    none
+            end, none, BQS),
+    [SPid ! {sync_complete, Ref} || SPid <- SPids1],
+    ok.
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue       = BQ,
