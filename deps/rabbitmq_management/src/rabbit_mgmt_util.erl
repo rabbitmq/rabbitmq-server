@@ -19,7 +19,7 @@
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
--export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3,
+-export([is_authorized_vhost/2, is_authorized_user/3,
          is_authorized_monitor/2]).
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
          parse_int/1]).
@@ -43,18 +43,21 @@
 %%--------------------------------------------------------------------
 
 is_authorized(ReqData, Context) ->
-    is_authorized(ReqData, Context, fun(_) -> true end).
+    is_authorized(ReqData, Context, '', fun(_) -> true end).
 
 is_authorized_admin(ReqData, Context) ->
     is_authorized(ReqData, Context,
+                  <<"Not administrator user">>,
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
 is_authorized_monitor(ReqData, Context) ->
     is_authorized(ReqData, Context,
+                  <<"Not monitor user">>,
                   fun(#user{tags = Tags}) -> is_monitor(Tags) end).
 
 is_authorized_vhost(ReqData, Context) ->
     is_authorized(ReqData, Context,
+                  <<"User not authorised to access virtual host">>,
                   fun(User) ->
                           case vhost(ReqData) of
                               not_found -> true;
@@ -69,6 +72,7 @@ is_authorized_vhost(ReqData, Context) ->
 %% own. Admins can do it all.
 is_authorized_user(ReqData, Context, Item) ->
     is_authorized(ReqData, Context,
+                  <<"User not authorised to access object">>,
                   fun(#user{username = Username, tags = Tags}) ->
                           case wrq:method(ReqData) of
                               'DELETE' -> is_admin(Tags);
@@ -76,20 +80,28 @@ is_authorized_user(ReqData, Context, Item) ->
                           end orelse Username == pget(user, Item)
                   end).
 
-is_authorized(ReqData, Context, Fun) ->
+is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     case rabbit_mochiweb_util:parse_auth_header(
            wrq:get_req_header("authorization", ReqData)) of
         [Username, Password] ->
             case rabbit_access_control:check_user_pass_login(
                    Username, Password) of
                 {ok, User = #user{tags = Tags}} ->
-                    case is_mgmt_user(Tags) andalso Fun(User) of
-                        true  -> {true, ReqData,
-                                  Context#context{user     = User,
-                                                  password = Password}};
-                        false -> not_authorised(not_mgmt_user, ReqData, Context)
+                    case is_mgmt_user(Tags) of
+                        true ->
+                            case Fun(User) of
+                                true -> {true, ReqData,
+                                         Context#context{user     = User,
+                                                         password = Password}};
+                                false ->
+                                    not_authorised(ErrorMsg, ReqData, Context)
+                            end;
+                        false ->
+                            not_authorised(<<"Not management user">>,
+                                           ReqData, Context)
                     end;
-                _       -> not_authorised(login_failed, ReqData, Context)
+                _ ->
+                    not_authorised(<<"Login failed">>, ReqData, Context)
 
             end;
         _ ->
