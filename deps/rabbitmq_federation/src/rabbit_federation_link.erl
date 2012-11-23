@@ -85,7 +85,7 @@ init(Args = {Upstream, XName}) ->
 	    gen_server2:cast(self(), maybe_go),
 	    {ok, {not_started, Args}};
 	{error, not_found} ->
-	    ignore
+	    {stop, gone}
     end.
 
 handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
