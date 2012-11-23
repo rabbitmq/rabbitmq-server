@@ -1,9 +1,9 @@
 <h3><%= label %></h3>
-<%
-     var col_return_unroutable = !is_stat_empty(totals, 'return_unroutable');
-%>
 <% if (object && object.length > 0) { %>
-<table class="list list-with-total">
+<%
+     var col_return_unroutable = !is_col_empty(object, 'return_unroutable', function(o) {return o.stats;});
+%>
+<table class="list">
   <tr>
 <% if (mode == 'channel') { %>
     <th>Exchange</th>
@@ -42,14 +42,6 @@
 <% } %>
     </tr>
 <% } %>
-  <tr class="total">
-    <th>Total:</th>
-    <td class="r"><%= fmt_rate(totals, 'publish', false, 'mini-highlight') %></td>
-    <td class="r"><%= fmt_rate(totals, 'confirm', false, 'mini-highlight') %></td>
-<% if (col_return_unroutable) { %>
-    <td class="r"><%= fmt_rate(totals, 'return_unroutable', false, 'mini-highlight') %></td>
-<% } %>
-  </tr>
 </table>
 <% } else { %>
 <p> ... no publishes ...</p>

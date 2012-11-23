@@ -153,27 +153,52 @@ lookup_element(Table, Key, Pos) ->
 result_or_error([]) -> error;
 result_or_error(S)  -> S.
 
-rates(Stats, Timestamp, OldStats, OldTimestamp, Keys) ->
+append_samples(Stats, Timestamp, Id, Table, Keys) ->
+    OldStats = lookup_element(Table, Id),
+    OldTimestamp = lookup_element(Table, Id, 3),
     Stats ++ [R || Key <- Keys,
-                   R   <- [rate(Stats, Timestamp, OldStats, OldTimestamp, Key)],
+                   R   <- [append_sample(Stats, Timestamp,
+                                         OldStats, OldTimestamp, Key)],
                    R =/= unknown].
 
-rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
-    case OldTimestamp == [] orelse not proplists:is_defined(Key, OldStats) of
-        true  -> unknown;
-        false -> Diff = pget(Key, Stats) - pget(Key, OldStats),
-                 Name = details_key(Key),
-                 Interval = timer:now_diff(Timestamp, OldTimestamp),
-                 Rate = Diff / (Interval / 1000000),
-                 {Name, [{rate, Rate},
-                         {interval, Interval},
-                         {last_event,
-                          rabbit_mgmt_format:timestamp_ms(Timestamp)}]}
+append_sample(Stats, TS, OldStats, OldTS, Key) ->
+    KeyDetails = details_key(Key),
+    case {pget(Key, Stats), pget(Key, OldStats), pget(KeyDetails, OldStats)} of
+        {unknown, _, _}     -> unknown;
+        {_, unknown, _}     -> unknown;
+        {New, Old, unknown} -> OldMS = rabbit_mgmt_format:timestamp_ms(OldTS),
+                               MS = rabbit_mgmt_format:timestamp_ms(TS),
+                               {KeyDetails,
+                                [[{sample, New}, {timestamp, MS}],
+                                 [{sample, Old}, {timestamp, OldMS}]]};
+        {New, _, Samples}   -> MS = rabbit_mgmt_format:timestamp_ms(TS),
+                               {KeyDetails,
+                                [[{sample, New}, {timestamp, MS}] |
+                                 remove_old_samples(MS, Samples)]}
     end.
 
-sum(List, Keys) ->
-    lists:foldl(fun (I0, I1) -> gs_update(I0, I1, Keys) end,
-                gs_update([], [], Keys), List).
+%% TODO be less crude
+-define(MAX_SAMPLE_AGE, 60000).
+remove_old_samples(Now, Samples) ->
+    Cutoff = Now - ?MAX_SAMPLE_AGE,
+    [Sample || Sample <- Samples,
+               pget(timestamp, Sample) > Cutoff].
+
+sum(Keys, List) ->
+    [{Key, sum2(Key, List)} || Key <- Keys].
+
+sum2(Key, List) ->
+    case is_details(Key) of
+        true ->
+            %% TODO this is a bit crude
+            [{rate, lists:foldl(fun (Stats, T) ->
+                                        T + pget(rate, pget(Key, Stats, []), 0)
+                                end, 0, List)}];
+        false ->
+            lists:foldl(fun (Stats, T) ->
+                                T + pget(Key, Stats, 0)
+                        end, 0, List)
+    end.
 
 %% List = [{ [{channel, Pid}, ...], [{deliver, 123}, ...] } ...]
 group_sum([], List) ->
@@ -199,24 +224,35 @@ gs_update(Item0, Item1, Keys) ->
     [{Key, gs_update_add(Key, pget(Key, Item0), pget(Key, Item1))} ||
         Key <- Keys].
 
+-define(SAMPLE_COMBINE_WINDOW, 5000).
+
 gs_update_add(Key, Item0, Item1) ->
     case is_details(Key) of
         true  ->
             I0 = if_unknown(Item0, []),
             I1 = if_unknown(Item1, []),
-            %% TODO if I0 and I1 are from different channels then should we not
-            %% just throw away interval / last_event?
-            [{rate,       pget(rate, I0, 0) + pget(rate, I1, 0)},
-             {interval,   gs_max(interval, I0, I1)},
-             {last_event, gs_max(last_event, I0, I1)}];
+            %% TODO this could *ahem* probably be more efficient
+            %% TODO apportion across samples
+            %% TODO if I0 and I1 are from different channels then
+            %% should we do this at all?
+            Tree = lists:foldl(
+                     fun ([{sample,    S},
+                           {timestamp, T}], D) ->
+                             K = (T div ?SAMPLE_COMBINE_WINDOW) *
+                                 ?SAMPLE_COMBINE_WINDOW,
+                             case gb_trees:lookup(K, D) of
+                                 {value, S1} -> gb_trees:update(K, S + S1, D);
+                                 none        -> gb_trees:insert(K, S, D)
+                             end
+                     end, gb_trees:empty(), I0 ++ I1),
+            [[{sample,    S},
+              {timestamp, T}] || {T, S} <- lists:reverse(
+                                             gb_trees:to_list(Tree))];
         false ->
             I0 = if_unknown(Item0, 0),
             I1 = if_unknown(Item1, 0),
             I0 + I1
     end.
-
-gs_max(Key, I0, I1) ->
-    erlang:max(pget(Key, I0, 0), pget(Key, I1, 0)).
 
 if_unknown(unknown, Def) -> Def;
 if_unknown(Val,    _Def) -> Val.
@@ -286,7 +322,7 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
                                           Q <- rabbit_amqqueue:list(V)],
     Qs1 = basic_queue_stats(Qs0, State),
-    QueueTotals = sum(Qs1, ?OVERVIEW_QUEUE_STATS),
+    QueueTotals = sum(?OVERVIEW_QUEUE_STATS, Qs1),
 
     Filter = fun(Id, Name) ->
                      lists:member(pget(vhost, pget(Name, Id)), VHosts)
@@ -295,7 +331,7 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
                 get_fine_stats_from_list(
                   [], [R || R = {Id, _, _}
                                 <- ets:tab2list(orddict:fetch(Type, Tables)),
-                            Filter(format_id(Id), Name)], State)
+                            Filter(format_id(Id), Name)])
         end,
     Publish = F(channel_exchange_stats, exchange),
     Consume = F(channel_queue_stats, queue),
@@ -317,7 +353,7 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
                                     X <- rabbit_exchange:list(V)])},
          {connections, F2(created_events(connection_stats, Tables))},
          {channels,    F2(created_events(channel_stats, Tables))}],
-    reply([{message_stats, Publish ++ Consume},
+    reply([{message_stats, calculate_rates(Publish ++ Consume, State)},
            {queue_totals,  QueueTotals},
            {object_totals, ObjectTotals}], State);
 
@@ -448,9 +484,7 @@ handle_stats(TName, Stats0, Timestamp, Funs, RatesKeys,
               Stats0, ?FINE_STATS_TYPES),
     Table = orddict:fetch(TName, Tables),
     Id = {id(TName, Stats), stats},
-    OldStats = lookup_element(Table, Id),
-    OldTimestamp = lookup_element(Table, Id, 3),
-    Stats1 = rates(Stats, Timestamp, OldStats, OldTimestamp, RatesKeys),
+    Stats1 = append_samples(Stats, Timestamp, Id, Table, RatesKeys),
     Stats2 = proplists:delete(
                id_name(TName), rabbit_mgmt_format:format(Stats1, Funs)),
     ets:insert(Table, {Id, Stats2, Timestamp}),
@@ -469,36 +503,26 @@ handle_consumer(Fun, Props,
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
     {ok, State}.
 
-handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
+handle_fine_stats(Type, Props, Timestamp, #state{tables = Tables}) ->
     case pget(Type, Props) of
         unknown ->
             ok;
         AllFineStats ->
             ChPid = id(channel_stats, Props),
             Table = orddict:fetch(Type, Tables),
-            IdsStatsTS =
-                [{Ids,
-                  Stats,
-                  lookup_element(Table, fine_stats_key(ChPid, Ids)),
-                  lookup_element(Table, fine_stats_key(ChPid, Ids), 3)} ||
-                    {Ids, Stats} <- AllFineStats],
-            delete_fine_stats(Type, ChPid, State),
-            [handle_fine_stat(ChPid, Ids, Stats, Timestamp,
-                              OldStats, OldTimestamp, Table) ||
-                {Ids, Stats, OldStats, OldTimestamp} <- IdsStatsTS]
+            [handle_fine_stat(
+               fine_stats_id(ChPid, Ids), Stats, Timestamp, Table) ||
+                {Ids, Stats} <- AllFineStats]
     end.
 
 
-handle_fine_stat(ChPid, Ids, Stats, Timestamp,
-                 OldStats, OldTimestamp,
-                 Table) ->
-    Id = fine_stats_key(ChPid, Ids),
+handle_fine_stat(Id, Stats, Timestamp, Table) ->
     Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
     Stats1 = case Total of
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    Res = rates(Stats1, Timestamp, OldStats, OldTimestamp, ?FINE_STATS),
+    Res = append_samples(Stats1, Timestamp, Id, Table, ?FINE_STATS),
     ets:insert(Table, {Id, Res, Timestamp}).
 
 delete_fine_stats(Type, ChPid, #state{tables = Tables}) ->
@@ -506,8 +530,8 @@ delete_fine_stats(Type, ChPid, #state{tables = Tables}) ->
     ets:match_delete(Table, {{ChPid, '_'}, '_', '_'}),
     ets:match_delete(Table, {{ChPid, '_', '_'}, '_', '_'}).
 
-fine_stats_key(ChPid, {Q, X}) -> {ChPid, Q, X};
-fine_stats_key(ChPid, QorX)   -> {ChPid, QorX}.
+fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
+fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
 created_event(Names, Type, Tables) ->
     Table = orddict:fetch(Type, Tables),
@@ -521,12 +545,12 @@ created_events(Type, Tables) ->
     [Facts || {{_, create}, Facts, _Name}
                   <- ets:tab2list(orddict:fetch(Type, Tables))].
 
-get_fine_stats(Type, GroupBy, State = #state{tables = Tables}) ->
+get_fine_stats(Type, GroupBy, #state{tables = Tables}) ->
     get_fine_stats_from_list(
-      GroupBy, ets:tab2list(orddict:fetch(Type, Tables)), State).
+      GroupBy, ets:tab2list(orddict:fetch(Type, Tables))).
 
-get_fine_stats_from_list(GroupBy, List, State) ->
-    All = [{format_id(Id), zero_old_rates(Stats, State)} ||
+get_fine_stats_from_list(GroupBy, List) ->
+    All = [{format_id(Id), Stats} ||
               {Id, Stats, _Timestamp} <- List],
     group_sum(GroupBy, All).
 
@@ -549,7 +573,7 @@ basic_stats_fun(Type, State = #state{tables = Tables}) ->
     Table = orddict:fetch(Type, Tables),
     fun (Props) ->
             Id = id_lookup(Type, Props),
-            zero_old_rates(lookup_element(Table, {Id, stats}), State)
+            calculate_rates(lookup_element(Table, {Id, stats}), State)
     end.
 
 fine_stats_fun(FineSpecs, State) ->
@@ -581,8 +605,8 @@ augment_fine_stats(Dict, State) when element(1, Dict) == dict ->
     [[{stats, augment_fine_stats(Stats, State)} |
       augment_msg_stats([IdTuple], State)]
      || {IdTuple, Stats} <- dict:to_list(Dict)];
-augment_fine_stats(Stats, _State) ->
-    Stats.
+augment_fine_stats(Stats, State) ->
+    calculate_rates(Stats, State).
 
 consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
     Table = orddict:fetch(consumers, Tables),
@@ -598,16 +622,32 @@ augment_consumer(Obj) ->
     [{queue, rabbit_mgmt_format:resource(pget(queue, Obj))} |
      proplists:delete(queue, Obj)].
 
-zero_old_rates(Stats, State) -> [maybe_zero_rate(S, State) || S <- Stats].
+calculate_rates(Stats, State) -> [calculate_rate(S, State) || S <- Stats].
 
-maybe_zero_rate({Key, Val}, #state{interval = Interval}) ->
+calculate_rate({Key, Val}, #state{interval = Interval}) ->
     case is_details(Key) of
-        true  -> Age = rabbit_misc:now_ms() - pget(last_event, Val),
-                 {Key, case Age > Interval * 1.5 of
-                           true  -> pset(rate, 0, Val);
-                           false -> Val
-                       end};
-        false -> {Key, Val}
+        true  ->
+            case length(Val) > 1 of
+                true ->
+                    [[{sample, S3}, {timestamp, T3}],
+                     [{sample, S2}, {timestamp, T2}] | _] = Val,
+                    {Inst, Avg} =
+                        case rabbit_misc:now_ms() - T3 > Interval * 1.5 of
+                            true  -> {0, 0};
+                            false -> [{sample,    S1},
+                                      {timestamp, T1}] = lists:last(Val),
+                                     {(S3 - S2) * 1000 / (T3 - T2),
+                                      (S3 - S1) * 1000 / (T3 - T1)}
+                        end,
+                    {Key, [{rate,     Inst},
+                           {interval, T3 - T2},
+                           {avg_rate, Avg},
+                           {samples,  Val}]};
+                false ->
+                    {Key, [{samples, Val}]}
+            end;
+        false ->
+            {Key, Val}
     end.
 
 is_details(Key) -> lists:suffix("_details", atom_to_list(Key)).

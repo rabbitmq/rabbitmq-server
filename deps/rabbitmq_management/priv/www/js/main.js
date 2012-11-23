@@ -194,6 +194,7 @@ function update() {
             replace_content('main', html);
             postprocess();
             postprocess_partial();
+            render_charts();
             maybe_scroll();
             reset_timer();
         });
@@ -219,6 +220,7 @@ function partial_update() {
             }
             replace_content('scratch', '');
             postprocess_partial();
+            render_charts();
         });
     }
 }
@@ -432,8 +434,14 @@ function postprocess() {
     $('.help').die().live('click', function() {
         help($(this).attr('id'))
     });
+    $('.rate-options').die().live('click', function() {
+        show_popup('help', format('rate-options', {}));
+    });
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.
+    });
+    $('form.auto-submit select, form.auto-submit input').live('click', function(){
+        $(this).parents('form').submit();
     });
     if (! user_administrator) {
         $('.administrator-only').remove();
