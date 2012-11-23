@@ -850,7 +850,8 @@ sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
             %% sync with a newly promoted master, or even just receive
             %% messages from it, we have a hole in the middle. So the
             %% only thing to do here is purge.)
-            State#state{backing_queue_state = BQ:purge(BQS)};
+            {_MsgCount, BQS1} = BQ:purge(BQS),
+            State#state{backing_queue_state = BQS1};
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
             sync_loop(Ref, MRef, MPid, State);
