@@ -127,6 +127,11 @@ safe_call(Term, Item) ->
 %%----------------------------------------------------------------------------
 pget(Key, List) -> pget(Key, List, unknown).
 
+%% id_name() and id() are for use when handling events, id_lookup()
+%% for when augmenting. The difference is that when handling events a
+%% queue name will be a resource, but when augmenting we will be
+%% passed a queue proplist that will already have been formatted -
+%% i.e. it will have name and vhost keys.
 id_name(node_stats)       -> name;
 id_name(queue_stats)      -> name;
 id_name(channel_stats)    -> pid;
