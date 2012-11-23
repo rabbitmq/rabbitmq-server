@@ -60,7 +60,7 @@ register_port_redirect(Name, Listener, Prefix, RedirectPort) ->
                          Header    -> hd(string:tokens(Header, ":"))
                      end,
               URL = rabbit_misc:format(
-                      "~s://~s:~B~s~n",
+                      "~s://~s:~B~s",
                       [Req:get(scheme), Host, RedirectPort, Req:get(raw_path)]),
               Req:respond({301, [{"Location", URL}], ""})
       end,
