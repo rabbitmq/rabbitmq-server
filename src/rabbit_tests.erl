@@ -2217,6 +2217,10 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
 
 variable_queue_publish(IsPersistent, Count, PropFun, VQ) ->
+    variable_queue_publish(IsPersistent, Count, PropFun,
+                           fun (_N) -> <<>> end, VQ).
+
+variable_queue_publish(IsPersistent, Count, PropFun, PayloadFun, VQ) ->
     lists:foldl(
       fun (N, VQN) ->
               rabbit_variable_queue:publish(
@@ -2225,7 +2229,8 @@ variable_queue_publish(IsPersistent, Count, PropFun, VQ) ->
                   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
                                                        true  -> 2;
                                                        false -> 1
-                                                   end}, <<>>),
+                                                   end},
+                                   PayloadFun(N)),
                 PropFun(N, #message_properties{}), self(), VQN)
       end, VQ, lists:seq(1, Count)).
 
@@ -2305,8 +2310,21 @@ test_variable_queue() ->
               fun test_dropwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
-              fun test_variable_queue_requeue/1]],
+              fun test_variable_queue_requeue/1,
+              fun test_variable_queue_fold/1]],
     passed.
+
+test_variable_queue_fold(VQ0) ->
+    Count = rabbit_queue_index:next_segment_boundary(0) * 2 + 1,
+    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
+    VQ2 = variable_queue_publish(
+            true, Count, fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
+    {Acc, VQ3} = rabbit_variable_queue:fold(fun (M, A) -> [M | A] end, [], VQ2),
+    true = [term_to_binary(N) || N <- lists:seq(Count, 1, -1)] ==
+           [list_to_binary(lists:reverse(P)) ||
+             #basic_message{ content = #content{ payload_fragments_rev = P}} <-
+             Acc],
+    VQ3.
 
 test_variable_queue_requeue(VQ0) ->
     Interval = 50,
