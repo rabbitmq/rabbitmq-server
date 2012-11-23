@@ -840,7 +840,7 @@ record_synchronised(#amqqueue { name = QName }) ->
       end).
 
 sync_loop(Ref, MRef, State = #state{backing_queue       = BQ,
-                                          backing_queue_state = BQS}) ->
+                                    backing_queue_state = BQS}) ->
     receive
         {'DOWN', MRef, process, _MPid, _Reason} ->
             %% If the master dies half way we are not in the usual
@@ -854,11 +854,10 @@ sync_loop(Ref, MRef, State = #state{backing_queue       = BQ,
             erlang:demonitor(MRef),
             set_delta(0, State);
         {sync_message, Ref, M} ->
-            %% TODO expiry / delivered need fixing
+            %% TODO expiry needs fixing
             Props = #message_properties{expiry           = undefined,
                                         needs_confirming = false,
-                                        delivered        = false},
+                                        delivered        = true},
             BQS1 = BQ:publish(M, Props, none, BQS),
             sync_loop(Ref, MRef, State#state{backing_queue_state = BQS1})
     end.
-
