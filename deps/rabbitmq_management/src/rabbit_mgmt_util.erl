@@ -81,6 +81,7 @@ is_authorized_user(ReqData, Context, Item) ->
                   end).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
+    ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
     case rabbit_mochiweb_util:parse_auth_header(
            wrq:get_req_header("authorization", ReqData)) of
         [Username, Password] ->
@@ -88,20 +89,17 @@ is_authorized(ReqData, Context, ErrorMsg, Fun) ->
                    Username, Password) of
                 {ok, User = #user{tags = Tags}} ->
                     case is_mgmt_user(Tags) of
-                        true ->
-                            case Fun(User) of
-                                true -> {true, ReqData,
-                                         Context#context{user     = User,
-                                                         password = Password}};
-                                false ->
-                                    not_authorised(ErrorMsg, ReqData, Context)
+                        true -> case Fun(User) of
+                                    true -> {true, ReqData,
+                                             Context#context{
+                                               user     = User,
+                                               password = Password}};
+                                    false -> ErrFun(ErrorMsg)
                             end;
-                        false ->
-                            not_authorised(<<"Not management user">>,
-                                           ReqData, Context)
+                        false -> ErrFun(<<"Not management user">>)
                     end;
                 _ ->
-                    not_authorised(<<"Login failed">>, ReqData, Context)
+                    ErrFun(<<"Login failed">>)
 
             end;
         _ ->
