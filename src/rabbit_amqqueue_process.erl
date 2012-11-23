@@ -85,7 +85,7 @@
 %%----------------------------------------------------------------------------
 
 -define(STATISTICS_KEYS,
-        [pid,
+        [name,
          policy,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
@@ -101,16 +101,14 @@
         ]).
 
 -define(CREATION_EVENT_KEYS,
-        [pid,
-         name,
+        [name,
          durable,
          auto_delete,
          arguments,
          owner_pid
         ]).
 
--define(INFO_KEYS,
-        ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name]).
 
 %%----------------------------------------------------------------------------
 
@@ -183,7 +181,7 @@ terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
       fun (BQS) ->
               BQS1 = BQ:delete_and_terminate(Reason, BQS),
               %% don't care if the internal delete doesn't return 'ok'.
-              rabbit_amqqueue:internal_delete(QName, self()),
+              rabbit_amqqueue:internal_delete(QName),
               BQS1
       end, State).
 
@@ -277,7 +275,8 @@ terminate_shutdown(Fun, State) ->
     case BQS of
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
-                     [emit_consumer_deleted(Ch, CTag)
+                     QName = qname(State),
+                     [emit_consumer_deleted(Ch, CTag, QName)
                       || {Ch, CTag, _} <- consumers(State1)],
                      State1#q{backing_queue_state = Fun(BQS)}
     end.
@@ -604,9 +603,9 @@ remove_consumer(ChPid, ConsumerTag, Queue) ->
                          (CP /= ChPid) or (CTag /= ConsumerTag)
                  end, Queue).
 
-remove_consumers(ChPid, Queue) ->
+remove_consumers(ChPid, Queue, QName) ->
     queue:filter(fun ({CP, #consumer{tag = CTag}}) when CP =:= ChPid ->
-                         emit_consumer_deleted(ChPid, CTag),
+                         emit_consumer_deleted(ChPid, CTag, QName),
                          false;
                      (_) ->
                          true
@@ -647,7 +646,8 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
         C = #cr{ch_pid            = ChPid,
                 acktags           = ChAckTags,
                 blocked_consumers = Blocked} ->
-            _ = remove_consumers(ChPid, Blocked), %% for stats emission
+            QName = qname(State),
+            _ = remove_consumers(ChPid, Blocked, QName), %% for stats emission
             ok = erase_ch_record(C),
             State1 = State#q{
                        exclusive_consumer = case Holder of
@@ -655,7 +655,8 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                                                 Other      -> Other
                                             end,
                        active_consumers = remove_consumers(
-                                            ChPid, State#q.active_consumers),
+                                            ChPid, State#q.active_consumers,
+                                            QName),
                        senders          = Senders1},
             case should_auto_delete(State1) of
                 true  -> {stop, State1};
@@ -954,19 +955,19 @@ emit_stats(State) ->
 emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
-emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
+emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired, QName) ->
     rabbit_event:notify(consumer_created,
                         [{consumer_tag, ConsumerTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
                          {channel,      ChPid},
-                         {queue,        self()}]).
+                         {queue,        QName}]).
 
-emit_consumer_deleted(ChPid, ConsumerTag) ->
+emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
                          {channel,      ChPid},
-                         {queue,        self()}]).
+                         {queue,        QName}]).
 
 %%----------------------------------------------------------------------------
 
@@ -1075,9 +1076,8 @@ handle_call({basic_get, ChPid, NoAck}, _From,
 
 handle_call({basic_consume, NoAck, ChPid, Limiter,
              ConsumerTag, ExclusiveConsume, OkMsg},
-            _From, State = #q{exclusive_consumer = ExistingHolder}) ->
-    case check_exclusive_access(ExistingHolder, ExclusiveConsume,
-                                State) of
+            _From, State = #q{exclusive_consumer = Holder}) ->
+    case check_exclusive_access(Holder, ExclusiveConsume, State) of
         in_use ->
             reply({error, exclusive_consume_unavailable}, State);
         ok ->
@@ -1086,7 +1086,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
-                                   true             -> ExistingHolder
+                                   true             -> Holder
                                 end,
             State1 = State#q{has_had_consumers = true,
                              exclusive_consumer = ExclusiveConsumer},
@@ -1101,7 +1101,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
                              run_message_queue(State1#q{active_consumers = AC1})
                 end,
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  not NoAck),
+                                  not NoAck, qname(State2)),
             reply(ok, State2)
     end;
 
@@ -1112,7 +1112,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
         not_found ->
             reply(ok, State);
         C = #cr{blocked_consumers = Blocked} ->
-            emit_consumer_deleted(ChPid, ConsumerTag),
+            emit_consumer_deleted(ChPid, ConsumerTag, qname(State)),
             Blocked1 = remove_consumer(ChPid, ConsumerTag, Blocked),
             update_consumer_count(C#cr{blocked_consumers = Blocked1}, -1),
             State1 = State#q{
@@ -1122,7 +1122,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
                                             end,
                        active_consumers   = remove_consumer(
                                               ChPid, ConsumerTag,
-                                             State#q.active_consumers)},
+                                              State#q.active_consumers)},
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
                 true  -> stop(From, ok, State1)
@@ -1173,11 +1173,13 @@ handle_call(stop_mirroring, _From, State = #q{backing_queue       = BQ,
 handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
+    QName = qname(State),
     case Exclusive of
-        none       -> [emit_consumer_created(Ch, CTag, false, AckRequired) ||
+        none       -> [emit_consumer_created(
+                         Ch, CTag, false, AckRequired, QName) ||
                           {Ch, CTag, AckRequired} <- consumers(State)];
         {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
-                      emit_consumer_created(Ch, CTag, true, AckRequired)
+                      emit_consumer_created(Ch, CTag, true, AckRequired, QName)
     end,
     reply(ok, State).
 
@@ -1225,7 +1227,7 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-                      BQS1 = BQ:fold(fun(M, A) -> DLXFun([{M, A}]) end,
+                      BQS1 = BQ:foreach_ack(fun(M, A) -> DLXFun([{M, A}]) end,
                                      BQS, AckTags),
                       State1#q{backing_queue_state = BQS1}
               end));
@@ -1277,18 +1279,24 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 handle_cast({dead_letter, Msgs, Reason}, State = #q{dlx = XName}) ->
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
-            noreply(lists:foldl(
-                      fun({Msg, AckTag}, State1 = #q{publish_seqno  = SeqNo,
-                                                     unconfirmed    = UC,
-                                                     queue_monitors = QMon}) ->
-                              QPids = dead_letter_publish(Msg, Reason, X,
-                                                          State1),
-                              UC1   = dtree:insert(SeqNo, QPids, AckTag, UC),
-                              QMons = pmon:monitor_all(QPids, QMon),
-                              State1#q{queue_monitors = QMons,
-                                       publish_seqno  = SeqNo + 1,
-                                       unconfirmed    = UC1}
-                      end, State, Msgs));
+            {AckImmediately, State2} =
+                lists:foldl(
+                  fun({Msg, AckTag},
+                      {Acks, State1 = #q{publish_seqno  = SeqNo,
+                                         unconfirmed    = UC,
+                                         queue_monitors = QMons}}) ->
+                          case dead_letter_publish(Msg, Reason, X, State1) of
+                              []    -> {[AckTag | Acks], State1};
+                              QPids -> UC1 = dtree:insert(
+                                               SeqNo, QPids, AckTag, UC),
+                                       QMons1 = pmon:monitor_all(QPids, QMons),
+                                       {Acks,
+                                        State1#q{publish_seqno  = SeqNo + 1,
+                                                 unconfirmed    = UC1,
+                                                 queue_monitors = QMons1}}
+                          end
+                  end, {[], State}, Msgs),
+            cleanup_after_confirm(AckImmediately, State2);
         {error, not_found} ->
             cleanup_after_confirm([AckTag || {_, AckTag} <- Msgs], State)
     end;

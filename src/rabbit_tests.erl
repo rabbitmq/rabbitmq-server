@@ -1286,8 +1286,7 @@ test_statistics() ->
     QName = receive #'queue.declare_ok'{queue = Q0} -> Q0
             after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
             end,
-    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
-    QPid = Q#amqqueue.pid,
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
     X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
     rabbit_tests_event_receiver:start(self(), [node()], [channel_stats]),
@@ -1311,9 +1310,9 @@ test_statistics() ->
                        length(proplists:get_value(
                                 channel_queue_exchange_stats, E)) > 0
                end),
-    [{QPid,[{get,1}]}] = proplists:get_value(channel_queue_stats, Event2),
+    [{QRes, [{get,1}]}] = proplists:get_value(channel_queue_stats,    Event2),
     [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event2),
-    [{{QPid,X},[{publish,1}]}] =
+    [{{QRes,X},[{publish,1}]}] =
         proplists:get_value(channel_queue_exchange_stats, Event2),
 
     %% Check the stats remove stuff on queue deletion
@@ -1338,31 +1337,31 @@ test_refresh_events(SecondaryNode) ->
                                       [channel_created, queue_created]),
 
     {_Writer, Ch} = test_spawn(),
-    expect_events(Ch, channel_created),
+    expect_events(pid, Ch, channel_created),
     rabbit_channel:shutdown(Ch),
 
     {_Writer2, Ch2} = test_spawn(SecondaryNode),
-    expect_events(Ch2, channel_created),
+    expect_events(pid, Ch2, channel_created),
     rabbit_channel:shutdown(Ch2),
 
-    {new, #amqqueue { pid = QPid } = Q} =
+    {new, #amqqueue{name = QName} = Q} =
         rabbit_amqqueue:declare(test_queue(), false, false, [], none),
-    expect_events(QPid, queue_created),
+    expect_events(name, QName, queue_created),
     rabbit_amqqueue:delete(Q, false, false),
 
     rabbit_tests_event_receiver:stop(),
     passed.
 
-expect_events(Pid, Type) ->
-    expect_event(Pid, Type),
+expect_events(Tag, Key, Type) ->
+    expect_event(Tag, Key, Type),
     rabbit:force_event_refresh(),
-    expect_event(Pid, Type).
+    expect_event(Tag, Key, Type).
 
-expect_event(Pid, Type) ->
+expect_event(Tag, Key, Type) ->
     receive #event{type = Type, props = Props} ->
-            case pget(pid, Props) of
-                Pid -> ok;
-                _   -> expect_event(Pid, Type)
+            case pget(Tag, Props) of
+                Key -> ok;
+                _   -> expect_event(Tag, Key, Type)
             end
     after ?TIMEOUT -> throw({failed_to_receive_event, Type})
     end.
@@ -2302,6 +2301,7 @@ test_variable_queue() ->
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_drop/1,
+              fun test_variable_queue_fold_msg_on_disk/1,
               fun test_dropwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
@@ -2534,6 +2534,13 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
 
+test_variable_queue_fold_msg_on_disk(VQ0) ->
+    VQ1 = variable_queue_publish(true, 1, VQ0),
+    {VQ2, AckTags} = variable_queue_fetch(1, true, false, 1, VQ1),
+    VQ3 = rabbit_variable_queue:foreach_ack(fun (_M, _A) -> ok end,
+                                            VQ2, AckTags),
+    VQ3.
+
 test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
@@ -2559,7 +2566,7 @@ test_queue_recover() ->
                   rabbit_variable_queue:fetch(true, VQ1),
               CountMinusOne = rabbit_variable_queue:len(VQ2),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
-              rabbit_amqqueue:internal_delete(QName, QPid1)
+              rabbit_amqqueue:internal_delete(QName)
       end),
     passed.
 

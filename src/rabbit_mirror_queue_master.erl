@@ -22,7 +22,7 @@
          requeue/2, len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/3, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, fold/3]).
+         status/1, invoke/3, is_duplicate/2, foreach_ack/3]).
 
 -export([start/1, stop/0]).
 
@@ -303,9 +303,9 @@ ack(AckTags, State = #state { gm                  = GM,
     {MsgIds, State #state { backing_queue_state = BQS1,
                             ack_msg_id          = AM1 }}.
 
-fold(MsgFun, State = #state { backing_queue       = BQ,
-                              backing_queue_state = BQS }, AckTags) ->
-    State #state { backing_queue_state = BQ:fold(MsgFun, BQS, AckTags) }.
+foreach_ack(MsgFun, State = #state { backing_queue       = BQ,
+                                     backing_queue_state = BQS }, AckTags) ->
+    State #state { backing_queue_state = BQ:foreach_ack(MsgFun, BQS, AckTags) }.
 
 requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,

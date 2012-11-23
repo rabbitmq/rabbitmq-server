@@ -21,7 +21,7 @@
          dropwhile/3, fetch/2, drop/2, ack/2, requeue/2, len/1, is_empty/1,
          depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, multiple_routing_keys/0, fold/3]).
+         is_duplicate/2, multiple_routing_keys/0, foreach_ack/3]).
 
 -export([start/1, stop/0]).
 
@@ -348,7 +348,7 @@
              q4                    :: ?QUEUE:?QUEUE(),
              next_seq_id           :: seq_id(),
              pending_ack           :: gb_tree(),
-             ram_ack_index         :: gb_tree(),
+             ram_ack_index         :: gb_set(),
              index_state           :: any(),
              msg_store_clients     :: 'undefined' | {{any(), binary()},
                                                     {any(), binary()}},
@@ -647,16 +647,15 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-fold(undefined, State, _AckTags) ->
+foreach_ack(undefined, State, _AckTags) ->
     State;
-fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
-    lists:foldl(
-      fun(SeqId, State1) ->
-              {MsgStatus, State2} =
-                  read_msg(gb_trees:get(SeqId, PA), State1),
-              MsgFun(MsgStatus#msg_status.msg, SeqId),
-              State2
-      end, State, AckTags).
+foreach_ack(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
+    a(lists:foldl(fun(SeqId, State1) ->
+                          {MsgStatus, State2} =
+                              read_msg(gb_trees:get(SeqId, PA), false, State1),
+                          MsgFun(MsgStatus#msg_status.msg, SeqId),
+                          State2
+                  end, State, AckTags)).
 
 requeue(AckTags, #vqstate { delta      = Delta,
                             q3         = Q3,
@@ -732,7 +731,7 @@ ram_duration(State = #vqstate {
     {AvgAckIngressRate, AckIngress1} =
         update_rate(Now, AckTimestamp, AckInCount, AckIngress),
 
-    RamAckCount = gb_trees:size(RamAckIndex),
+    RamAckCount = gb_sets:size(RamAckIndex),
 
     Duration = %% msgs+acks / (msgs+acks/sec) == sec
         case (AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
@@ -811,7 +810,7 @@ status(#vqstate {
       {pending_acks        , gb_trees:size(PA)},
       {target_ram_count    , TargetRamCount},
       {ram_msg_count       , RamMsgCount},
-      {ram_ack_count       , gb_trees:size(RAI)},
+      {ram_ack_count       , gb_sets:size(RAI)},
       {next_seq_id         , NextSeqId},
       {persistent_count    , PersistentCount},
       {avg_ingress_rate    , AvgIngressRate},
@@ -846,6 +845,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     true = Len             >= 0,
     true = PersistentCount >= 0,
     true = RamMsgCount     >= 0,
+    true = RamMsgCount     =< Len,
 
     State.
 
@@ -1015,7 +1015,7 @@ init(IsDurable, IndexState, DeltaCount, Terms, AsyncCallback,
       q4                  = ?QUEUE:new(),
       next_seq_id         = NextSeqId,
       pending_ack         = gb_trees:empty(),
-      ram_ack_index       = gb_trees:empty(),
+      ram_ack_index       = gb_sets:empty(),
       index_state         = IndexState1,
       msg_store_clients   = {PersistentClient, TransientClient},
       durable             = IsDurable,
@@ -1071,17 +1071,19 @@ queue_out(State = #vqstate { q4 = Q4 }) ->
             {{value, MsgStatus}, State #vqstate { q4 = Q4a }}
     end.
 
+read_msg(MsgStatus, State) -> read_msg(MsgStatus, true, State).
+
 read_msg(MsgStatus = #msg_status { msg           = undefined,
                                    msg_id        = MsgId,
                                    is_persistent = IsPersistent },
-         State = #vqstate { ram_msg_count     = RamMsgCount,
-                            msg_store_clients = MSCState}) ->
+         CountDiskToRam, State = #vqstate { ram_msg_count     = RamMsgCount,
+                                            msg_store_clients = MSCState}) ->
     {{ok, Msg = #basic_message {}}, MSCState1} =
         msg_store_read(MSCState, IsPersistent, MsgId),
     {MsgStatus #msg_status { msg = Msg },
-     State #vqstate { ram_msg_count     = RamMsgCount + 1,
+     State #vqstate { ram_msg_count     = RamMsgCount + one_if(CountDiskToRam),
                       msg_store_clients = MSCState1 }};
-read_msg(MsgStatus, State) ->
+read_msg(MsgStatus, _CountDiskToRam, State) ->
     {MsgStatus, State}.
 
 internal_fetch(AckRequired, MsgStatus = #msg_status {
@@ -1230,7 +1232,6 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 %%----------------------------------------------------------------------------
 
 record_pending_ack(#msg_status { seq_id        = SeqId,
-                                 msg_id        = MsgId,
                                  msg_on_disk   = MsgOnDisk } = MsgStatus,
                    State = #vqstate { pending_ack     = PA,
                                       ram_ack_index   = RAI,
@@ -1238,7 +1239,7 @@ record_pending_ack(#msg_status { seq_id        = SeqId,
     {AckEntry, RAI1} =
         case MsgOnDisk of
             true  -> {m(trim_msg_status(MsgStatus)), RAI};
-            false -> {MsgStatus, gb_trees:insert(SeqId, MsgId, RAI)}
+            false -> {MsgStatus, gb_sets:insert(SeqId, RAI)}
         end,
     State #vqstate { pending_ack    = gb_trees:insert(SeqId, AckEntry, PA),
                      ram_ack_index  = RAI1,
@@ -1248,7 +1249,7 @@ remove_pending_ack(SeqId, State = #vqstate { pending_ack   = PA,
                                              ram_ack_index = RAI }) ->
     {gb_trees:get(SeqId, PA),
      State #vqstate { pending_ack   = gb_trees:delete(SeqId, PA),
-                      ram_ack_index = gb_trees:delete_any(SeqId, RAI) }}.
+                      ram_ack_index = gb_sets:delete_any(SeqId, RAI) }}.
 
 purge_pending_ack(KeepPersistent,
                   State = #vqstate { pending_ack       = PA,
@@ -1259,7 +1260,7 @@ purge_pending_ack(KeepPersistent,
                                           accumulate_ack(MsgStatus, Acc)
                                   end, accumulate_ack_init(), PA),
     State1 = State #vqstate { pending_ack   = gb_trees:empty(),
-                              ram_ack_index = gb_trees:empty() },
+                              ram_ack_index = gb_sets:empty() },
     case KeepPersistent of
         true  -> case orddict:find(false, MsgIdsByStore) of
                      error        -> State1;
@@ -1459,7 +1460,7 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
                    }) ->
 
     {Reduce, State1 = #vqstate { q2 = Q2, q3 = Q3 }} =
-        case chunk_size(RamMsgCount + gb_trees:size(RamAckIndex),
+        case chunk_size(RamMsgCount + gb_sets:size(RamAckIndex),
                         TargetRamCount) of
             0  -> {false, State};
             %% Reduce memory of pending acks and alphas. The order is
@@ -1487,12 +1488,12 @@ limit_ram_acks(0, State) ->
     {0, State};
 limit_ram_acks(Quota, State = #vqstate { pending_ack   = PA,
                                          ram_ack_index = RAI }) ->
-    case gb_trees:is_empty(RAI) of
+    case gb_sets:is_empty(RAI) of
         true ->
             {Quota, State};
         false ->
-            {SeqId, MsgId, RAI1} = gb_trees:take_largest(RAI),
-            MsgStatus = #msg_status { msg_id = MsgId, is_persistent = false} =
+            {SeqId, RAI1} = gb_sets:take_largest(RAI),
+            MsgStatus = #msg_status { is_persistent = false} =
                 gb_trees:get(SeqId, PA),
             {MsgStatus1, State1} =
                 maybe_write_to_disk(true, false, MsgStatus, State),
