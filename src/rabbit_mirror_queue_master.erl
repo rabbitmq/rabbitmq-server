@@ -28,7 +28,7 @@
 
 -export([promote_backing_queue_state/7, sender_death_fun/0, depth_fun/0]).
 
--export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/2]).
+-export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/3]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -127,8 +127,14 @@ stop_mirroring(State = #state { coordinator         = CPid,
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
-sync_mirrors(SPids, #state { backing_queue       = BQ,
-                             backing_queue_state = BQS }) ->
+sync_mirrors([], Name, _State) ->
+    rabbit_log:info("Synchronising ~s: nothing to do~n",
+                    [rabbit_misc:rs(Name)]),
+    ok;
+sync_mirrors(SPids, Name, #state { backing_queue       = BQ,
+                                   backing_queue_state = BQS }) ->
+    rabbit_log:info("Synchronising ~s with slaves ~p~n",
+                    [rabbit_misc:rs(Name), SPids]),
     Ref = make_ref(),
     SPidsMRefs = [begin
                       SPid ! {sync_start, Ref, self()},
@@ -147,11 +153,20 @@ sync_mirrors(SPids, #state { backing_queue       = BQ,
                                  end],
                        SPid1 =/= dead],
     [erlang:demonitor(MRef) || {_, MRef} <- SPidsMRefs],
-    BQ:fold(fun (M = #basic_message{}, none) ->
-                    [SPid ! {sync_message, Ref, M} || SPid <- SPids1],
-                    none
-            end, none, BQS),
+    {Total, _BQS} =
+        BQ:fold(fun (M = #basic_message{}, I) ->
+                        [SPid ! {sync_message, Ref, M} || SPid <- SPids1],
+                        case I rem 1000 of
+                            0 -> rabbit_log:info(
+                                   "Synchronising ~s: ~p messages~n",
+                                   [rabbit_misc:rs(Name), I]);
+                            _ -> ok
+                        end,
+                        I + 1
+                end, 0, BQS),
     [SPid ! {sync_complete, Ref} || SPid <- SPids1],
+    rabbit_log:info("Synchronising ~s: ~p messages; complete~n",
+                    [rabbit_misc:rs(Name), Total]),
     ok.
 
 terminate({shutdown, dropped} = Reason,

@@ -1308,7 +1308,7 @@ handle_cast(sync_mirrors,
         rabbit_mirror_queue_master ->
             {ok, #amqqueue{slave_pids = SPids, sync_slave_pids = SSPids}} =
                 rabbit_amqqueue:lookup(Name),
-            rabbit_mirror_queue_master:sync_mirrors(SPids -- SSPids, BQS);
+            rabbit_mirror_queue_master:sync_mirrors(SPids -- SSPids, Name, BQS);
         _ ->
             ok
     end,
