@@ -95,7 +95,7 @@ is_authorized(ReqData, Context, ErrorMsg, Fun) ->
                                                 user     = User,
                                                 password = Password}};
                                     false -> ErrFun(ErrorMsg)
-                            end;
+                                end;
                         false -> ErrFun(<<"Not management user">>)
                     end;
                 _ ->
