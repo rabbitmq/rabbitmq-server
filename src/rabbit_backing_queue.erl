@@ -159,6 +159,11 @@
 %% and were pending acknowledgement.
 -callback requeue([ack()], state()) -> {msg_ids(), state()}.
 
+%% Fold over all the messages in a queue and return the accumulated
+%% results, leaving the queue undisturbed.
+-callback fold(fun((rabbit_types:basic_message(), any()) -> any()),
+               any(), state()) -> {any(), state()}.
+
 %% How long is my queue?
 -callback len(state()) -> non_neg_integer().
 
@@ -220,7 +225,7 @@ behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
      {delete_and_terminate, 2}, {purge, 1}, {publish, 4},
      {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1}, {dropwhile, 3},
-     {fetch, 2}, {ack, 2}, {foreach_ack, 3}, {requeue, 2}, {len, 1},
+     {fetch, 2}, {ack, 2}, {foreach_ack, 3}, {requeue, 2}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
      {handle_pre_hibernate, 1}, {status, 1}, {invoke, 3}, {is_duplicate, 2}] ;

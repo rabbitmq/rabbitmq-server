@@ -1154,6 +1154,11 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
     noreply(requeue(AckTags, ChPid, State));
 
+handle_call({fold, Fun, Acc}, _From, State = #q{backing_queue       = BQ,
+                                                backing_queue_state = BQS}) ->
+    {Reply, BQS1} = BQ:fold(Fun, Acc, BQS),
+    reply(Reply, State #q{backing_queue_state = BQS1});
+
 handle_call(start_mirroring, _From, State = #q{backing_queue       = BQ,
                                                backing_queue_state = BQS}) ->
     %% lookup again to get policy for init_with_existing_bq
