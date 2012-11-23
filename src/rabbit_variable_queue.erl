@@ -1232,17 +1232,15 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 %% Internal gubbins for acks
 %%----------------------------------------------------------------------------
 
-record_pending_ack(#msg_status { seq_id        = SeqId,
-                                 msg_on_disk   = MsgOnDisk } = MsgStatus,
+record_pending_ack(#msg_status { seq_id = SeqId, msg = Msg } = MsgStatus,
                    State = #vqstate { pending_ack     = PA,
                                       ram_ack_index   = RAI,
                                       ack_in_counter  = AckInCount}) ->
-    {AckEntry, RAI1} =
-        case MsgOnDisk of
-            true  -> {m(trim_msg_status(MsgStatus)), RAI};
-            false -> {MsgStatus, gb_sets:insert(SeqId, RAI)}
-        end,
-    State #vqstate { pending_ack    = gb_trees:insert(SeqId, AckEntry, PA),
+    RAI1 = case Msg of
+               undefined -> RAI;
+               _         -> gb_sets:insert(SeqId, RAI)
+           end,
+    State #vqstate { pending_ack    = gb_trees:insert(SeqId, MsgStatus, PA),
                      ram_ack_index  = RAI1,
                      ack_in_counter = AckInCount + 1}.
 
@@ -1494,8 +1492,7 @@ limit_ram_acks(Quota, State = #vqstate { pending_ack   = PA,
             {Quota, State};
         false ->
             {SeqId, RAI1} = gb_sets:take_largest(RAI),
-            MsgStatus = #msg_status { is_persistent = false} =
-                gb_trees:get(SeqId, PA),
+            MsgStatus = gb_trees:get(SeqId, PA),
             {MsgStatus1, State1} =
                 maybe_write_to_disk(true, false, MsgStatus, State),
             PA1 = gb_trees:update(SeqId, m(trim_msg_status(MsgStatus1)), PA),
