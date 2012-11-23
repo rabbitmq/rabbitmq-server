@@ -687,14 +687,14 @@ fold(Fun, Acc, #vqstate { q1    = Q1,
     QFun = fun(MsgStatus, {Acc0, State0}) ->
                    {#msg_status { msg = Msg }, State1 } =
                        read_msg(MsgStatus, false, State0),
-                   Acc1 = Fun(Msg, Acc0),
-                   {Acc1, State1}
+                   {Fun(Msg, Acc0), State1}
            end,
     {Acc1, State1} = ?QUEUE:foldl(QFun, {Acc,  State},  Q4),
     {Acc2, State2} = ?QUEUE:foldl(QFun, {Acc1, State1}, Q3),
-    {Acc3, State3} =  delta_fold (Fun, Acc2, DeltaSeqId, DeltaSeqIdEnd, State2),
+    {Acc3, State3} = delta_fold(Fun, Acc2, DeltaSeqId, DeltaSeqIdEnd, State2),
     {Acc4, State4} = ?QUEUE:foldl(QFun, {Acc3, State3}, Q2),
-                     ?QUEUE:foldl(QFun, {Acc4, State4}, Q1).
+    {Acc5, State5} = ?QUEUE:foldl(QFun, {Acc4, State4}, Q1),
+    {Acc5, State5}.
 
 len(#vqstate { len = Len }) -> Len.
 
@@ -1442,8 +1442,7 @@ beta_limit(Q) ->
 delta_limit(?BLANK_DELTA_PATTERN(_X))             -> undefined;
 delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
 
-delta_fold(_Fun, Acc, DeltaSeqId, DeltaSeqIdEnd, State)
-  when DeltaSeqId == DeltaSeqIdEnd ->
+delta_fold(_Fun, Acc, DeltaSeqIdEnd, DeltaSeqIdEnd, State) ->
     {Acc, State};
 delta_fold(Fun, Acc, DeltaSeqId, DeltaSeqIdEnd,
            #vqstate { index_state       = IndexState,
