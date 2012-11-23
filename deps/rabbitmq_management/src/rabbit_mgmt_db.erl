@@ -28,7 +28,7 @@
          get_overview/1, get_overview/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, handle_pre_hibernate/1]).
+         code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
 
 -import(rabbit_misc, [pget/3, pset/3]).
 
@@ -352,6 +352,8 @@ handle_pre_hibernate(State) ->
     rpc:multicall(
       rabbit_mnesia:cluster_nodes(running), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
+
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%----------------------------------------------------------------------------
 
