@@ -26,7 +26,15 @@
 -export([start_link/1, adjust/3]).
 -export([init/1]).
 
-start_link(X) -> supervisor2:start_link(?MODULE, X).
+start_link(X) ->
+    case supervisor2:start_link(?MODULE, X) of
+        {ok, Sup} ->
+            [ok = supervisor2:delete_child(Sup, Id) ||
+                {Id, undefined, _, _} <- supervisor2:which_children(Sup)],
+            {ok, Sup};
+        Else ->
+            Else
+    end.
 
 adjust(Sup, X, everything) ->
     [stop(Sup, Upstream) ||
@@ -68,8 +76,11 @@ adjust(Sup, X, {clear_upstream_set, _}) ->
     adjust(Sup, X, everything).
 
 start(Sup, Upstream, X) ->
-    {ok, _Pid} = supervisor2:start_child(Sup, spec(Upstream, X)),
-    ok.
+    Spec = spec(Upstream, X),
+    case supervisor2:start_child(Sup, Spec) of
+        {ok, undefined} -> supervisor2:delete_child(Sup, Spec);
+        {ok, _Pid}      -> ok
+    end.
 
 stop(Sup, Upstream) ->
     ok = supervisor2:terminate_child(Sup, Upstream),
