@@ -155,7 +155,11 @@ sync_mirrors(SPids, Name, #state { backing_queue       = BQ,
     [erlang:demonitor(MRef) || {_, MRef} <- SPidsMRefs],
     {Total, _BQS} =
         BQ:fold(fun (M = #basic_message{}, I) ->
-                        [SPid ! {sync_message, Ref, M} || SPid <- SPids1],
+                        wait_for_credit(),
+                        [begin
+                             credit_flow:send(SPid, ?CREDIT_DISC_BOUND),
+                             SPid ! {sync_message, Ref, M}
+                         end || SPid <- SPids1],
                         case I rem 1000 of
                             0 -> rabbit_log:info(
                                    "Synchronising ~s: ~p messages~n",
@@ -168,6 +172,15 @@ sync_mirrors(SPids, Name, #state { backing_queue       = BQ,
     rabbit_log:info("Synchronising ~s: ~p messages; complete~n",
                     [rabbit_misc:rs(Name), Total]),
     ok.
+
+wait_for_credit() ->
+    case credit_flow:blocked() of
+        true  -> receive
+                     {bump_credit, Msg} -> credit_flow:handle_bump_msg(Msg),
+                                           wait_for_credit()
+                 end;
+        false -> ok
+    end.
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue       = BQ,

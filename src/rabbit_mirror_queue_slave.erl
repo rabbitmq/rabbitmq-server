@@ -270,7 +270,8 @@ handle_info({sync_start, Ref, MPid},
     MRef = erlang:monitor(process, MPid),
     MPid ! {sync_ready, Ref, self()},
     {_MsgCount, BQS1} = BQ:purge(BQS),
-    noreply(sync_loop(Ref, MRef, State#state{backing_queue_state = BQS1}));
+    noreply(
+      sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1}));
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -839,10 +840,10 @@ record_synchronised(#amqqueue { name = QName }) ->
               end
       end).
 
-sync_loop(Ref, MRef, State = #state{backing_queue       = BQ,
+sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
                                     backing_queue_state = BQS}) ->
     receive
-        {'DOWN', MRef, process, _MPid, _Reason} ->
+        {'DOWN', MRef, process, MPid, _Reason} ->
             %% If the master dies half way we are not in the usual
             %% half-synced state (with messages nearer the tail of the
             %% queue; instead we have ones nearer the head. If we then
@@ -850,14 +851,18 @@ sync_loop(Ref, MRef, State = #state{backing_queue       = BQ,
             %% messages from it, we have a hole in the middle. So the
             %% only thing to do here is purge.)
             State#state{backing_queue_state = BQ:purge(BQS)};
+        {bump_credit, Msg} ->
+            credit_flow:handle_bump_msg(Msg),
+            sync_loop(Ref, MRef, MPid, State);
         {sync_complete, Ref} ->
             erlang:demonitor(MRef),
             set_delta(0, State);
         {sync_message, Ref, M} ->
+            credit_flow:ack(MPid, ?CREDIT_DISC_BOUND),
             %% TODO expiry needs fixing
             Props = #message_properties{expiry           = undefined,
                                         needs_confirming = false,
                                         delivered        = true},
             BQS1 = BQ:publish(M, Props, none, BQS),
-            sync_loop(Ref, MRef, State#state{backing_queue_state = BQS1})
+            sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1})
     end.
