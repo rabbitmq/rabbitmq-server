@@ -858,12 +858,10 @@ sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
         {sync_complete, Ref} ->
             erlang:demonitor(MRef),
             set_delta(0, State);
-        {sync_message, Ref, M} ->
+        {sync_message, Ref, Msg, Props0} ->
             credit_flow:ack(MPid, ?CREDIT_DISC_BOUND),
-            %% TODO expiry needs fixing
-            Props = #message_properties{expiry           = undefined,
-                                        needs_confirming = false,
-                                        delivered        = true},
-            BQS1 = BQ:publish(M, Props, none, BQS),
+            Props = Props0#message_properties{needs_confirming = false,
+                                              delivered        = true},
+            BQS1 = BQ:publish(Msg, Props, none, BQS),
             sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1})
     end.

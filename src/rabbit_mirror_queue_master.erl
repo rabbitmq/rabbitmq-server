@@ -154,11 +154,11 @@ sync_mirrors(SPids, Name, #state { backing_queue       = BQ,
                        SPid1 =/= dead],
     [erlang:demonitor(MRef) || {_, MRef} <- SPidsMRefs],
     {Total, _BQS} =
-        BQ:fold(fun (M = #basic_message{}, I) ->
+        BQ:fold(fun ({Msg, MsgProps}, I) ->
                         wait_for_credit(),
                         [begin
                              credit_flow:send(SPid, ?CREDIT_DISC_BOUND),
-                             SPid ! {sync_message, Ref, M}
+                             SPid ! {sync_message, Ref, Msg, MsgProps}
                          end || SPid <- SPids1],
                         case I rem 1000 of
                             0 -> rabbit_log:info(
