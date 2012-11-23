@@ -23,6 +23,7 @@
 %% We can't specify a per-queue ack/state with callback signatures
 -type(ack()   :: any()).
 -type(state() :: any()).
+-type(acc()   :: any()).
 
 -type(msg_ids() :: [rabbit_types:msg_id()]).
 -type(fetch_result(Ack) ::
@@ -161,8 +162,8 @@
 
 %% Fold over all the messages in a queue and return the accumulated
 %% results, leaving the queue undisturbed.
--callback fold(fun((rabbit_types:basic_message(), any()) -> any()),
-               any(), state()) -> {any(), state()}.
+-callback fold(fun((rabbit_types:basic_message(), acc()) -> acc()),
+               acc(), state()) -> {acc(), state()}.
 
 %% How long is my queue?
 -callback len(state()) -> non_neg_integer().
