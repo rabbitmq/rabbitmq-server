@@ -30,7 +30,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--define(PIDS_TO_STRIP, [connection, owner_pid, queue, channel,
+-define(PIDS_TO_STRIP, [connection, owner_pid, channel,
                         exclusive_consumer_pid]).
 
 %%--------------------------------------------------------------------

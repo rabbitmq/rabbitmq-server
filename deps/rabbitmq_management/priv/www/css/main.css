@@ -133,6 +133,7 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 .mini-highlight { font-size: 150%; padding:10px; background-color: #ddd; color: #888; border-radius: 10px; -moz-border-radius: 10px; line-height: 300%; }
 
 .micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
+.micro-highlight a { font-weight: normal !important; color: #888 !important; }
 .micro-highlight strong { font-size: 120%; color: #444; font-weight: normal; }
 
 div.section, div.section-hidden { margin: 0 0 1em 0; }
