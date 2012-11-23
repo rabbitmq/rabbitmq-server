@@ -90,10 +90,10 @@ is_authorized(ReqData, Context, ErrorMsg, Fun) ->
                 {ok, User = #user{tags = Tags}} ->
                     case is_mgmt_user(Tags) of
                         true -> case Fun(User) of
-                                    true -> {true, ReqData,
-                                             Context#context{
-                                               user     = User,
-                                               password = Password}};
+                                    true  -> {true, ReqData,
+                                              Context#context{
+                                                user     = User,
+                                                password = Password}};
                                     false -> ErrFun(ErrorMsg)
                             end;
                         false -> ErrFun(<<"Not management user">>)
