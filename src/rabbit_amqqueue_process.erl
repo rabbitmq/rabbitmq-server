@@ -108,7 +108,7 @@
          owner_pid
         ]).
 
--define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name]).
+-define(INFO_KEYS, [pid | ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name]]).
 
 %%----------------------------------------------------------------------------
 
