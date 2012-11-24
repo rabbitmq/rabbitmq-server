@@ -262,12 +262,10 @@ basic_properties(Props = #'P_basic'{}) ->
 
 record(Record, Fields) ->
     {Res, _Ix} = lists:foldl(fun (K, {L, Ix}) ->
-                                     V = element(Ix, Record),
-                                     NewL = case V of
-                                                undefined -> L;
-                                                _         -> [{K, V}|L]
-                                            end,
-                                     {NewL, Ix + 1}
+                                     {case element(Ix, Record) of
+                                          undefined -> L;
+                                          V         -> [{K, V}|L]
+                                      end, Ix + 1}
                              end, {[], 2}, Fields),
     Res.
 
@@ -280,11 +278,10 @@ to_basic_properties(Props) ->
           end,
     {Res, _Ix} = lists:foldl(
                    fun (K, {P, Ix}) ->
-                           NewP = case proplists:get_value(a2b(K), Props) of
-                                      undefined -> P;
-                                      V         -> setelement(Ix, P, Fmt(K, V))
-                                  end,
-                           {NewP, Ix + 1}
+                           {case proplists:get_value(a2b(K), Props) of
+                                undefined -> P;
+                                V         -> setelement(Ix, P, Fmt(K, V))
+                            end, Ix + 1}
                    end, {#'P_basic'{}, 2},
                    record_info(fields, 'P_basic')),
     Res.
