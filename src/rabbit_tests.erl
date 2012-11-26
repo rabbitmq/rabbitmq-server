@@ -2319,7 +2319,8 @@ test_variable_queue_fold(VQ0) ->
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(
             true, Count, fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
-    {Acc, VQ3} = rabbit_variable_queue:fold(fun (M, A) -> [M | A] end, [], VQ2),
+    {Acc, VQ3} = rabbit_variable_queue:fold(
+                   fun (M, _, A) -> [M | A] end, [], VQ2),
     true = [term_to_binary(N) || N <- lists:seq(Count, 1, -1)] ==
            [list_to_binary(lists:reverse(P)) ||
              #basic_message{ content = #content{ payload_fragments_rev = P}} <-
