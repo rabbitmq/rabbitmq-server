@@ -851,12 +851,15 @@ sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
             %% messages from it, we have a hole in the middle. So the
             %% only thing to do here is purge.)
             {_MsgCount, BQS1} = BQ:purge(BQS),
+            credit_flow:peer_down(MPid),
             State#state{backing_queue_state = BQS1};
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
             sync_loop(Ref, MRef, MPid, State);
         {sync_complete, Ref} ->
+            MPid ! {sync_complete_ok, Ref, self()},
             erlang:demonitor(MRef),
+            credit_flow:peer_down(MPid),
             %% We can only sync when there are no pending acks
             set_delta(0, State);
         {sync_message, Ref, Msg, Props0} ->

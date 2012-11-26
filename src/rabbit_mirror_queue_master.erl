@@ -144,43 +144,64 @@ sync_mirrors(SPids, Name, State = #state { backing_queue       = BQ,
     %% We wait for a reply from the slaves so that we know they are in
     %% a receive block and will thus receive messages we send to them
     %% *without* those messages ending up in their gen_server2 pqueue.
-    SPids1 = [SPid1 || {SPid, MRef} <- SPidsMRefs,
-                       SPid1 <- [receive
-                                     {'DOWN', MRef, process, SPid, _Reason} ->
-                                         dead;
-                                     {sync_ready, Ref, SPid} ->
-                                         SPid
-                                 end],
-                       SPid1 =/= dead],
-    [erlang:demonitor(MRef) || {_, MRef} <- SPidsMRefs],
-    {Total, BQS1} =
-        BQ:fold(fun ({Msg, MsgProps}, I) ->
-                        wait_for_credit(),
+    SPidsMRefs1 = sync_foreach(SPidsMRefs, Ref, fun sync_receive_ready/3),
+    {{Total, SPidsMRefs2}, BQS1} =
+        BQ:fold(fun ({Msg, MsgProps}, {I, SPMR}) ->
+                        SPMR1 = wait_for_credit(SPMR, Ref),
                         [begin
                              credit_flow:send(SPid, ?CREDIT_DISC_BOUND),
                              SPid ! {sync_message, Ref, Msg, MsgProps}
-                         end || SPid <- SPids1],
+                         end || {SPid, _} <- SPMR1],
                         case I rem 1000 of
                             0 -> rabbit_log:info(
                                    "Synchronising ~s: ~p messages~n",
                                    [rabbit_misc:rs(Name), I]);
                             _ -> ok
                         end,
-                        I + 1
-                end, 0, BQS),
-    [SPid ! {sync_complete, Ref} || SPid <- SPids1],
+                        {I + 1, SPMR1}
+                end, {0, SPidsMRefs1}, BQS),
+    sync_foreach(SPidsMRefs2, Ref, fun sync_receive_complete/3),
     rabbit_log:info("Synchronising ~s: ~p messages; complete~n",
                     [rabbit_misc:rs(Name), Total]),
     State#state{backing_queue_state = BQS1}.
 
-wait_for_credit() ->
+wait_for_credit(SPidsMRefs, Ref) ->
     case credit_flow:blocked() of
-        true  -> receive
-                     {bump_credit, Msg} -> credit_flow:handle_bump_msg(Msg),
-                                           wait_for_credit()
-                 end;
-        false -> ok
+        true  -> wait_for_credit(sync_foreach(SPidsMRefs, Ref,
+                                              fun sync_receive_credit/3), Ref);
+        false -> SPidsMRefs
     end.
+
+sync_foreach(SPidsMRefs, Ref, Fun) ->
+    [{SPid, MRef} || {SPid, MRef} <- SPidsMRefs,
+                     SPid1 <- [Fun(SPid, MRef, Ref)],
+                     SPid1 =/= dead].
+
+sync_receive_ready(SPid, MRef, Ref) ->
+    receive
+        {sync_ready, Ref, SPid}    -> SPid;
+        {'DOWN', MRef, _, SPid, _} -> dead
+    end.
+
+sync_receive_credit(SPid, MRef, Ref) ->
+    receive
+        {bump_credit, {SPid, _} = Msg} -> credit_flow:handle_bump_msg(Msg),
+                                          sync_receive_credit(SPid, MRef, Ref);
+        {'DOWN', MRef, _, SPid, _}     -> credit_flow:peer_down(SPid),
+                                          dead
+    after 0 ->
+            SPid
+    end.
+
+sync_receive_complete(SPid, MRef, Ref) ->
+    SPid ! {sync_complete, Ref},
+    receive
+        {sync_complete_ok, Ref, SPid} -> ok;
+        {'DOWN', MRef, _, SPid, _}    -> ok
+    end,
+    erlang:demonitor(MRef, [flush]),
+    credit_flow:peer_down(SPid).
+
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue       = BQ,

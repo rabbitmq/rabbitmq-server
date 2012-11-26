@@ -174,7 +174,8 @@
 -spec(start_mirroring/1 :: (pid()) -> 'ok').
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
 -spec(sync_mirrors/1 :: (rabbit_types:amqqueue()) ->
-    'ok' | error('queue_has_pending_acks') | error('queue_not_mirrored')).
+    'ok' | rabbit_types:error('queue_has_pending_acks')
+         | rabbit_types:error('queue_not_mirrored')).
 
 -endif.
 
