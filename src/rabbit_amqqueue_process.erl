@@ -486,9 +486,11 @@ deliver_msg_to_consumer(DeliverFun,
     {Stop, State1}.
 
 deliver_from_queue_deliver(AckRequired, State) ->
-    {{Message, IsDelivered, AckTag, Remaining}, State1} =
+    {{Message, IsDelivered, AckTag, _Remaining}, State1} =
         fetch(AckRequired, State),
-    {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
+    State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+        drop_expired_messages(State1),
+    {{Message, IsDelivered, AckTag}, BQ:is_empty(BQS), State2}.
 
 confirm_messages([], State) ->
     State;
@@ -1258,18 +1260,24 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 handle_cast({dead_letter, Msgs, Reason}, State = #q{dlx = XName}) ->
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
-            noreply(lists:foldl(
-                      fun({Msg, AckTag}, State1 = #q{publish_seqno  = SeqNo,
-                                                     unconfirmed    = UC,
-                                                     queue_monitors = QMon}) ->
-                              QPids = dead_letter_publish(Msg, Reason, X,
-                                                          State1),
-                              UC1   = dtree:insert(SeqNo, QPids, AckTag, UC),
-                              QMons = pmon:monitor_all(QPids, QMon),
-                              State1#q{queue_monitors = QMons,
-                                       publish_seqno  = SeqNo + 1,
-                                       unconfirmed    = UC1}
-                      end, State, Msgs));
+            {AckImmediately, State2} =
+                lists:foldl(
+                  fun({Msg, AckTag},
+                      {Acks, State1 = #q{publish_seqno  = SeqNo,
+                                         unconfirmed    = UC,
+                                         queue_monitors = QMons}}) ->
+                          case dead_letter_publish(Msg, Reason, X, State1) of
+                              []    -> {[AckTag | Acks], State1};
+                              QPids -> UC1 = dtree:insert(
+                                               SeqNo, QPids, AckTag, UC),
+                                       QMons1 = pmon:monitor_all(QPids, QMons),
+                                       {Acks,
+                                        State1#q{publish_seqno  = SeqNo + 1,
+                                                 unconfirmed    = UC1,
+                                                 queue_monitors = QMons1}}
+                          end
+                  end, {[], State}, Msgs),
+            cleanup_after_confirm(AckImmediately, State2);
         {error, not_found} ->
             cleanup_after_confirm([AckTag || {_, AckTag} <- Msgs], State)
     end;
