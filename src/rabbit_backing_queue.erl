@@ -26,9 +26,9 @@
 
 -type(msg_ids() :: [rabbit_types:msg_id()]).
 -type(fetch_result(Ack) ::
-        ('empty' |
-         %% Message,                  IsDelivered, AckTag, Remaining_Len
-         {rabbit_types:basic_message(), boolean(), Ack, non_neg_integer()})).
+        ('empty' | {rabbit_types:basic_message(), boolean(), Ack})).
+-type(drop_result(Ack) ::
+        ('empty' | {rabbit_types:msg_id(), Ack})).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
 -type(async_callback() ::
@@ -139,17 +139,26 @@
 -callback fetch(true,  state()) -> {fetch_result(ack()), state()};
                (false, state()) -> {fetch_result(undefined), state()}.
 
+%% Remove the next message.
+-callback drop(true,  state()) -> {drop_result(ack()), state()};
+              (false, state()) -> {drop_result(undefined), state()}.
+
 %% Acktags supplied are for messages which can now be forgotten
 %% about. Must return 1 msg_id per Ack, in the same order as Acks.
 -callback ack([ack()], state()) -> {msg_ids(), state()}.
 
 %% Acktags supplied are for messages which should be processed. The
 %% provided callback function is called with each message.
--callback fold(msg_fun(), state(), [ack()]) -> state().
+-callback foreach_ack(msg_fun(), state(), [ack()]) -> state().
 
 %% Reinsert messages into the queue which have already been delivered
 %% and were pending acknowledgement.
 -callback requeue([ack()], state()) -> {msg_ids(), state()}.
+
+%% Fold over all the messages in a queue and return the accumulated
+%% results, leaving the queue undisturbed.
+-callback fold(fun((rabbit_types:basic_message(), A) -> A), A, state())
+              -> {A, state()}.
 
 %% How long is my queue?
 -callback len(state()) -> non_neg_integer().
@@ -212,7 +221,7 @@ behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
      {delete_and_terminate, 2}, {purge, 1}, {publish, 4},
      {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1}, {dropwhile, 3},
-     {fetch, 2}, {ack, 2}, {fold, 3}, {requeue, 2}, {len, 1},
+     {fetch, 2}, {ack, 2}, {foreach_ack, 3}, {requeue, 2}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
      {handle_pre_hibernate, 1}, {status, 1}, {invoke, 3}, {is_duplicate, 2}] ;
