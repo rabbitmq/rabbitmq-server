@@ -45,6 +45,8 @@
                  known_senders
                }).
 
+-define(SYNC_PROGRESS_INTERVAL, 1000000).
+
 -ifdef(use_specs).
 
 -export_type([death_fun/0, depth_fun/0]).
@@ -134,8 +136,8 @@ sync_mirrors([], Name, State) ->
 sync_mirrors(SPids, Name, State = #state { gm                  = GM,
                                            backing_queue       = BQ,
                                            backing_queue_state = BQS }) ->
-    rabbit_log:info("Synchronising ~s with slaves ~p~n",
-                    [rabbit_misc:rs(Name), SPids]),
+    rabbit_log:info("Synchronising ~s with slaves ~p: ~p messages to do~n",
+                    [rabbit_misc:rs(Name), SPids, BQ:len(BQS)]),
     Ref = make_ref(),
     %% We send the start over GM to flush out any other messages that
     %% we might have sent that way already.
@@ -148,24 +150,26 @@ sync_mirrors(SPids, Name, State = #state { gm                  = GM,
     %% a receive block and will thus receive messages we send to them
     %% *without* those messages ending up in their gen_server2 pqueue.
     SPidsMRefs1 = sync_foreach(SPidsMRefs, Ref, fun sync_receive_ready/3),
-    {{Total, SPidsMRefs2}, BQS1} =
-        BQ:fold(fun ({Msg, MsgProps}, {I, SPMR}) ->
+    {{_, SPidsMRefs2, _}, BQS1} =
+        BQ:fold(fun ({Msg, MsgProps}, {I, SPMR, Last}) ->
                         SPMR1 = wait_for_credit(SPMR, Ref),
                         [begin
                              credit_flow:send(SPid, ?CREDIT_DISC_BOUND),
                              SPid ! {sync_message, Ref, Msg, MsgProps}
                          end || {SPid, _} <- SPMR1],
-                        case I rem 1000 of
-                            0 -> rabbit_log:info(
-                                   "Synchronising ~s: ~p messages~n",
-                                   [rabbit_misc:rs(Name), I]);
-                            _ -> ok
-                        end,
-                        {I + 1, SPMR1}
-                end, {0, SPidsMRefs1}, BQS),
+                        {I + 1, SPMR1,
+                         case timer:now_diff(erlang:now(), Last) >
+                             ?SYNC_PROGRESS_INTERVAL of
+                             true  -> rabbit_log:info(
+                                        "Synchronising ~s: ~p messages~n",
+                                        [rabbit_misc:rs(Name), I]),
+                                      erlang:now();
+                             false -> Last
+                         end}
+                end, {0, SPidsMRefs1, erlang:now()}, BQS),
     sync_foreach(SPidsMRefs2, Ref, fun sync_receive_complete/3),
-    rabbit_log:info("Synchronising ~s: ~p messages; complete~n",
-                    [rabbit_misc:rs(Name), Total]),
+    rabbit_log:info("Synchronising ~s: complete~n",
+                    [rabbit_misc:rs(Name)]),
     State#state{backing_queue_state = BQS1}.
 
 wait_for_credit(SPidsMRefs, Ref) ->
