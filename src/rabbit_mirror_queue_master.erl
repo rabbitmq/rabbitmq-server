@@ -131,13 +131,16 @@ sync_mirrors([], Name, State) ->
     rabbit_log:info("Synchronising ~s: nothing to do~n",
                     [rabbit_misc:rs(Name)]),
     State;
-sync_mirrors(SPids, Name, State = #state { backing_queue       = BQ,
+sync_mirrors(SPids, Name, State = #state { gm                  = GM,
+                                           backing_queue       = BQ,
                                            backing_queue_state = BQS }) ->
     rabbit_log:info("Synchronising ~s with slaves ~p~n",
                     [rabbit_misc:rs(Name), SPids]),
     Ref = make_ref(),
+    %% We send the start over GM to flush out any other messages that
+    %% we might have sent that way already.
+    gm:broadcast(GM, {sync_start, Ref, self(), SPids}),
     SPidsMRefs = [begin
-                      SPid ! {sync_start, Ref, self()},
                       MRef = erlang:monitor(process, SPid),
                       {SPid, MRef}
                   end || SPid <- SPids],

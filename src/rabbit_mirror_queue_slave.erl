@@ -222,6 +222,15 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, true, Flow},
     end,
     noreply(maybe_enqueue_message(Delivery, State));
 
+handle_cast({sync_start, Ref, MPid},
+            State = #state { backing_queue       = BQ,
+                             backing_queue_state = BQS }) ->
+    MRef = erlang:monitor(process, MPid),
+    MPid ! {sync_ready, Ref, self()},
+    {_MsgCount, BQS1} = BQ:purge(BQS),
+    noreply(
+      sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1}));
+
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
@@ -263,15 +272,6 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     noreply(State);
-
-handle_info({sync_start, Ref, MPid},
-            State = #state { backing_queue       = BQ,
-                             backing_queue_state = BQS }) ->
-    MRef = erlang:monitor(process, MPid),
-    MPid ! {sync_ready, Ref, self()},
-    {_MsgCount, BQS1} = BQ:purge(BQS),
-    noreply(
-      sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1}));
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -367,6 +367,11 @@ handle_msg([_SPid], _From, process_death) ->
 handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, {gm, Msg}),
     {stop, {shutdown, ring_shutdown}};
+handle_msg([SPid], _From, {sync_start, Ref, MPid, SPids}) ->
+    case lists:member(SPid, SPids) of
+        true  -> ok = gen_server2:cast(SPid, {sync_start, Ref, MPid});
+        false -> ok
+    end;
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
