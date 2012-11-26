@@ -225,10 +225,16 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, true, Flow},
 handle_cast({sync_start, Ref, MPid},
             State = #state { backing_queue       = BQ,
                              backing_queue_state = BQS }) ->
-    MRef = erlang:monitor(process, MPid),
-    MPid ! {sync_ready, Ref, self()},
-    {_MsgCount, BQS1} = BQ:purge(BQS),
-    sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1});
+    S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
+    %% [0] We can only sync when there are no pending acks
+    %% [1] The master died so we do not need to set_delta even though
+    %%     we purged since we will get a depth instruction soon.
+    case rabbit_mirror_queue_sync:slave(Ref, MPid, BQ, BQS,
+                                        fun update_ram_duration/2) of
+        {ok, BQS1}      -> noreply(set_delta(0, S(BQS1))); %% [0]
+        {failed, BQS1}  -> noreply(S(BQS1));               %% [1]
+        {stop, R, BQS1} -> {stop, R, S(BQS1)}
+    end;
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -824,12 +830,14 @@ update_delta( DeltaChange, State = #state { depth_delta = Delta     }) ->
 
 update_ram_duration(State = #state { backing_queue = BQ,
                                      backing_queue_state = BQS }) ->
+    State#state{rate_timer_ref      = just_measured,
+                backing_queue_state = update_ram_duration(BQ, BQS)}.
+
+update_ram_duration(BQ, BQS) ->
     {RamDuration, BQS1} = BQ:ram_duration(BQS),
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
-    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    State #state { rate_timer_ref      = just_measured,
-                   backing_queue_state = BQS2 }.
+    BQ:set_ram_duration_target(DesiredDuration, BQS1).
 
 record_synchronised(#amqqueue { name = QName }) ->
     Self = self(),
@@ -844,44 +852,3 @@ record_synchronised(#amqqueue { name = QName }) ->
                       ok
               end
       end).
-
-sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
-                                          backing_queue_state = BQS}) ->
-    receive
-        {'DOWN', MRef, process, MPid, _Reason} ->
-            %% If the master dies half way we are not in the usual
-            %% half-synced state (with messages nearer the tail of the
-            %% queue; instead we have ones nearer the head. If we then
-            %% sync with a newly promoted master, or even just receive
-            %% messages from it, we have a hole in the middle. So the
-            %% only thing to do here is purge.)
-            {_MsgCount, BQS1} = BQ:purge(BQS),
-            credit_flow:peer_down(MPid),
-            noreply(State#state{backing_queue_state = BQS1});
-        {bump_credit, Msg} ->
-            credit_flow:handle_bump_msg(Msg),
-            sync_loop(Ref, MRef, MPid, State);
-        {sync_complete, Ref} ->
-            MPid ! {sync_complete_ok, Ref, self()},
-            erlang:demonitor(MRef),
-            credit_flow:peer_down(MPid),
-            %% We can only sync when there are no pending acks
-            noreply(set_delta(0, State));
-        {'$gen_cast', {set_maximum_since_use, Age}} ->
-            ok = file_handle_cache:set_maximum_since_use(Age),
-            sync_loop(Ref, MRef, MPid, State);
-        {'$gen_cast', {set_ram_duration_target, Duration}} ->
-            BQS1 = BQ:set_ram_duration_target(Duration, BQS),
-            sync_loop(Ref, MRef, MPid,
-                      State#state{backing_queue_state = BQS1});
-        update_ram_duration ->
-            sync_loop(Ref, MRef, MPid, update_ram_duration(State));
-        {sync_message, Ref, Msg, Props0} ->
-            credit_flow:ack(MPid, ?CREDIT_DISC_BOUND),
-            Props = Props0#message_properties{needs_confirming = false,
-                                              delivered        = true},
-            BQS1 = BQ:publish(Msg, Props, none, BQS),
-            sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1});
-        {'EXIT', _Pid, Reason} ->
-            {stop, Reason, State}
-    end.
