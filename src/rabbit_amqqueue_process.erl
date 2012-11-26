@@ -1176,14 +1176,12 @@ handle_call(sync_mirrors, From,
                        backing_queue       = rabbit_mirror_queue_master = BQ,
                        backing_queue_state = BQS}) ->
     case BQ:depth(BQS) - BQ:len(BQS) of
-        0 ->
-            {ok, #amqqueue{slave_pids = SPids, sync_slave_pids = SSPids}} =
-                rabbit_amqqueue:lookup(Name),
-            gen_server2:reply(From, ok),
-            noreply(rabbit_mirror_queue_master:sync_mirrors(
-                      SPids -- SSPids, Name, BQS));
-        _ ->
-            reply({error, queue_has_pending_acks}, State)
+        0 -> {ok, #amqqueue{slave_pids = SPids, sync_slave_pids = SSPids}} =
+                 rabbit_amqqueue:lookup(Name),
+             gen_server2:reply(From, ok),
+             noreply(rabbit_mirror_queue_master:sync_mirrors(
+                       SPids -- SSPids, Name, BQS));
+        _ -> reply({error, queue_has_pending_acks}, State)
     end;
 
 handle_call(sync_mirrors, _From, State) ->
