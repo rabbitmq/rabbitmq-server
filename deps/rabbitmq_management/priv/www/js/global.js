@@ -14,9 +14,9 @@ function map(list) {
 }
 
 // Which queries need to have the current vhost appended (if there is one)?
-var VHOST_QUERIES = [new RegExp('/queues'),
-                     new RegExp('/exchanges'),
-                     new RegExp('/parameters/[^/]*')];
+var VHOST_QUERIES = [new RegExp('^/queues$'),
+                     new RegExp('^/exchanges$'),
+                     new RegExp('^/parameters/[^/]*$')];
 
 // Which queries need to have the current sort appended (if there is one)?
 var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
