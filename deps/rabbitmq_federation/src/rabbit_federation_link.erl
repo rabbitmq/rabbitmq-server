@@ -73,11 +73,20 @@ start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 init(Args = {Upstream, XName}) ->
-    rabbit_federation_status:report(Upstream, XName, starting),
-    join(rabbit_federation_exchanges),
-    join({rabbit_federation_exchange, XName}),
-    gen_server2:cast(self(), maybe_go),
-    {ok, {not_started, Args}}.
+    %% If we are starting up due to a policy change then it's possible
+    %% for the exchange to have been deleted before we got here, in which
+    %% case it's possible that delete callback would also have been called
+    %% before we got here. So check if we still exist.
+    case rabbit_exchange:lookup(XName) of
+	{ok, _} ->
+	    rabbit_federation_status:report(Upstream, XName, starting),
+	    join(rabbit_federation_exchanges),
+	    join({rabbit_federation_exchange, XName}),
+	    gen_server2:cast(self(), maybe_go),
+	    {ok, {not_started, Args}};
+	{error, not_found} ->
+	    {stop, gone}
+    end.
 
 handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
     {reply, lists:sort([K || {K, _} <- dict:fetch_keys(Bindings)]), State};

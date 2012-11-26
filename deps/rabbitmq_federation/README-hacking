@@ -142,4 +142,3 @@ exchange? What about if its type changes?) This would only be an issue
 if exchanges churn rapidly; however we could get into a state where
 Mnesia sees CDCD but we see CDDC and leave a process running when we
 shouldn't.
-
