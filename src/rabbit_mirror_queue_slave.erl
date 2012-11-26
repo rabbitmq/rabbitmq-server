@@ -222,6 +222,15 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, true, Flow},
     end,
     noreply(maybe_enqueue_message(Delivery, State));
 
+handle_cast({sync_start, Ref, MPid},
+            State = #state { backing_queue       = BQ,
+                             backing_queue_state = BQS }) ->
+    MRef = erlang:monitor(process, MPid),
+    MPid ! {sync_ready, Ref, self()},
+    {_MsgCount, BQS1} = BQ:purge(BQS),
+    noreply(
+      sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1}));
+
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
@@ -358,6 +367,11 @@ handle_msg([_SPid], _From, process_death) ->
 handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, {gm, Msg}),
     {stop, {shutdown, ring_shutdown}};
+handle_msg([SPid], _From, {sync_start, Ref, MPid, SPids}) ->
+    case lists:member(SPid, SPids) of
+        true  -> ok = gen_server2:cast(SPid, {sync_start, Ref, MPid});
+        false -> ok
+    end;
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
@@ -829,3 +843,33 @@ record_synchronised(#amqqueue { name = QName }) ->
                       ok
               end
       end).
+
+sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
+                                    backing_queue_state = BQS}) ->
+    receive
+        {'DOWN', MRef, process, MPid, _Reason} ->
+            %% If the master dies half way we are not in the usual
+            %% half-synced state (with messages nearer the tail of the
+            %% queue; instead we have ones nearer the head. If we then
+            %% sync with a newly promoted master, or even just receive
+            %% messages from it, we have a hole in the middle. So the
+            %% only thing to do here is purge.)
+            {_MsgCount, BQS1} = BQ:purge(BQS),
+            credit_flow:peer_down(MPid),
+            State#state{backing_queue_state = BQS1};
+        {bump_credit, Msg} ->
+            credit_flow:handle_bump_msg(Msg),
+            sync_loop(Ref, MRef, MPid, State);
+        {sync_complete, Ref} ->
+            MPid ! {sync_complete_ok, Ref, self()},
+            erlang:demonitor(MRef),
+            credit_flow:peer_down(MPid),
+            %% We can only sync when there are no pending acks
+            set_delta(0, State);
+        {sync_message, Ref, Msg, Props0} ->
+            credit_flow:ack(MPid, ?CREDIT_DISC_BOUND),
+            Props = Props0#message_properties{needs_confirming = false,
+                                              delivered        = true},
+            BQS1 = BQ:publish(Msg, Props, none, BQS),
+            sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1})
+    end.
