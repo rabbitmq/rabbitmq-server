@@ -18,8 +18,8 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
          publish/4, publish_delivered/4, discard/3, drain_confirmed/1,
-         dropwhile/3, fetch/2, drop/2, ack/2, requeue/2, len/1, is_empty/1,
-         depth/1, set_ram_duration_target/2, ram_duration/1,
+         dropwhile/3, fetch/2, drop/2, ack/2, requeue/2, fold/3, len/1,
+         is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
          is_duplicate/2, multiple_routing_keys/0, foreach_ack/3]).
 
@@ -591,8 +591,8 @@ dropwhile(Pred, AckRequired, State, Msgs) ->
             case {Pred(MsgProps), AckRequired} of
                 {true, true} ->
                     {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-                    {{Msg, _, AckTag, _}, State3} =
-                         internal_fetch(true, MsgStatus1, State2),
+                    {{Msg, _IsDelivered, AckTag}, State3} =
+                        internal_fetch(true, MsgStatus1, State2),
                     dropwhile(Pred, AckRequired, State3, [{Msg, AckTag} | Msgs]);
                 {true, false} ->
                     {_, State2} = internal_fetch(false, MsgStatus, State1),
@@ -619,9 +619,9 @@ drop(AckRequired, State) ->
         {empty, State1} ->
             {empty, a(State1)};
         {{value, MsgStatus}, State1} ->
-            {{_Msg, _IsDelivered, AckTag, Remaining}, State2} =
+            {{_Msg, _IsDelivered, AckTag}, State2} =
                 internal_fetch(AckRequired, MsgStatus, State1),
-            {{MsgStatus#msg_status.msg_id, AckTag, Remaining}, a(State2)}
+            {{MsgStatus#msg_status.msg_id, AckTag}, a(State2)}
     end.
 
 ack([], State) ->
@@ -677,6 +677,24 @@ requeue(AckTags, #vqstate { delta      = Delta,
                                     q4         = Q4a,
                                     in_counter = InCounter + MsgCount,
                                     len        = Len + MsgCount }))}.
+
+fold(Fun, Acc, #vqstate { q1    = Q1,
+                          q2    = Q2,
+                          delta = #delta { start_seq_id = DeltaSeqId,
+                                           end_seq_id   = DeltaSeqIdEnd },
+                          q3    = Q3,
+                          q4    = Q4 } = State) ->
+    QFun = fun(MsgStatus, {Acc0, State0}) ->
+                   {#msg_status { msg = Msg }, State1 } =
+                       read_msg(MsgStatus, false, State0),
+                   {Fun(Msg, Acc0), State1}
+           end,
+    {Acc1, State1} = ?QUEUE:foldl(QFun, {Acc,  State},  Q4),
+    {Acc2, State2} = ?QUEUE:foldl(QFun, {Acc1, State1}, Q3),
+    {Acc3, State3} = delta_fold(Fun, Acc2, DeltaSeqId, DeltaSeqIdEnd, State2),
+    {Acc4, State4} = ?QUEUE:foldl(QFun, {Acc3, State3}, Q2),
+    {Acc5, State5} = ?QUEUE:foldl(QFun, {Acc4, State4}, Q1),
+    {Acc5, State5}.
 
 len(#vqstate { len = Len }) -> Len.
 
@@ -1127,14 +1145,13 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                        end,
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
-    Len1 = Len - 1,
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
-    {{Msg, IsDelivered, AckTag, Len1},
+    {{Msg, IsDelivered, AckTag},
      State1 #vqstate { ram_msg_count    = RamMsgCount1,
                        out_counter      = OutCount + 1,
                        index_state      = IndexState2,
-                       len              = Len1,
+                       len              = Len - 1,
                        persistent_count = PCount1 }}.
 
 purge_betas_and_deltas(LensByStore,
@@ -1352,7 +1369,7 @@ msg_indices_written_to_disk(Callback, MsgIdSet) ->
              end).
 
 %%----------------------------------------------------------------------------
-%% Internal plumbing for requeue
+%% Internal plumbing for requeue and fold
 %%----------------------------------------------------------------------------
 
 publish_alpha(#msg_status { msg = undefined } = MsgStatus, State) ->
@@ -1420,6 +1437,27 @@ beta_limit(Q) ->
 
 delta_limit(?BLANK_DELTA_PATTERN(_X))             -> undefined;
 delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
+
+delta_fold(_Fun, Acc, DeltaSeqIdEnd, DeltaSeqIdEnd, State) ->
+    {Acc, State};
+delta_fold(Fun, Acc, DeltaSeqId, DeltaSeqIdEnd,
+           #vqstate { index_state       = IndexState,
+                      msg_store_clients = MSCState } = State) ->
+    DeltaSeqId1 = lists:min(
+                    [rabbit_queue_index:next_segment_boundary(DeltaSeqId),
+                     DeltaSeqIdEnd]),
+    {List, IndexState1} = rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1,
+                                                  IndexState),
+    {Acc1, MSCState1} =
+        lists:foldl(fun ({MsgId, _SeqId, _MsgProps, IsPersistent,
+                          _IsDelivered}, {Acc0, MSCState0}) ->
+                            {{ok, Msg = #basic_message {}}, MSCState1} =
+                              msg_store_read(MSCState0, IsPersistent, MsgId),
+                            {Fun(Msg, Acc0), MSCState1}
+                    end, {Acc, MSCState}, List),
+    delta_fold(Fun, Acc1, DeltaSeqId1, DeltaSeqIdEnd,
+               State #vqstate { index_state       = IndexState1,
+                                msg_store_clients = MSCState1 }).
 
 %%----------------------------------------------------------------------------
 %% Phase changes

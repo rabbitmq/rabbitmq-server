@@ -19,7 +19,7 @@
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/4,
          discard/3, fetch/2, drop/2, ack/2,
-         requeue/2, len/1, is_empty/1, depth/1, drain_confirmed/1,
+         requeue/2, fold/3, len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/3, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, foreach_ack/3]).
@@ -268,8 +268,7 @@ drain_confirmed(State = #state { backing_queue       = BQ,
                                           seen_status         = SS1,
                                           confirmed           = [] }}.
 
-fetch(AckRequired, State = #state { gm                  = GM,
-                                    backing_queue       = BQ,
+fetch(AckRequired, State = #state { backing_queue       = BQ,
                                     backing_queue_state = BQS,
                                     set_delivered       = SetDelivered }) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
@@ -277,25 +276,19 @@ fetch(AckRequired, State = #state { gm                  = GM,
     case Result of
         empty ->
             {Result, State1};
-        {Message, IsDelivered, AckTag, Remaining} ->
-            ok = gm:broadcast(GM, {drop, Remaining, 1, AckRequired}),
-            IsDelivered1 = IsDelivered orelse SetDelivered > 0,
-            {{Message, IsDelivered1, AckTag, Remaining},
+        {Message, IsDelivered, AckTag} ->
+            {{Message, IsDelivered orelse SetDelivered > 0, AckTag},
              drop(Message#basic_message.id, AckTag, State1)}
     end.
 
-drop(AckRequired, State = #state { gm                  = GM,
-                                   backing_queue       = BQ,
+drop(AckRequired, State = #state { backing_queue       = BQ,
                                    backing_queue_state = BQS }) ->
     {Result, BQS1} = BQ:drop(AckRequired, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
-    case Result of
-        empty ->
-            {Result, State1};
-        {MsgId, AckTag, Remaining} ->
-            ok = gm:broadcast(GM, {drop, Remaining, 1, AckRequired}),
-            {Result, drop(MsgId, AckTag, State1)}
-    end.
+    {Result, case Result of
+                 empty           -> State1;
+                 {MsgId, AckTag} -> drop(MsgId, AckTag, State1)
+             end}.
 
 ack(AckTags, State = #state { gm                  = GM,
                               backing_queue       = BQ,
@@ -320,6 +313,11 @@ requeue(AckTags, State = #state { gm                  = GM,
     {MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
     ok = gm:broadcast(GM, {requeue, MsgIds}),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
+
+fold(Fun, Acc, State = #state { backing_queue = BQ,
+                                backing_queue_state = BQS }) ->
+    {Result, BQS1} = BQ:fold(Fun, Acc, BQS),
+    {Result, State #state { backing_queue_state = BQS1 }}.
 
 len(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:len(BQS).
@@ -453,8 +451,12 @@ depth_fun() ->
 %% Helpers
 %% ---------------------------------------------------------------------------
 
-drop(MsgId, AckTag, State = #state { set_delivered = SetDelivered,
-                                     ack_msg_id    = AM }) ->
+drop(MsgId, AckTag, State = #state { set_delivered       = SetDelivered,
+                                     ack_msg_id          = AM,
+                                     gm                  = GM,
+                                     backing_queue       = BQ,
+                                     backing_queue_state = BQS }) ->
+    ok = gm:broadcast(GM, {drop, BQ:len(BQS), 1, AckTag =/= undefined}),
     State #state { set_delivered = lists:max([0, SetDelivered - 1]),
                    ack_msg_id    = maybe_store_acktag(AckTag, MsgId, AM) }.
 

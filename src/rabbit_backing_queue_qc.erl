@@ -106,7 +106,8 @@ command(S) ->
                {1,  qc_dropwhile(S)},
                {1,  qc_is_empty(S)},
                {1,  qc_timeout(S)},
-               {1,  qc_purge(S)}]).
+               {1,  qc_purge(S)},
+               {1,  qc_fold(S)}]).
 
 qc_publish(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish,
@@ -156,6 +157,9 @@ qc_timeout(#state{bqstate = BQ}) ->
 
 qc_purge(#state{bqstate = BQ}) ->
     {call, ?BQMOD, purge, [BQ]}.
+
+qc_fold(#state{bqstate = BQ}) ->
+    {call, ?BQMOD, fold, [fun foldfun/2, foldacc(), BQ]}.
 
 %% Preconditions
 
@@ -271,19 +275,23 @@ next_state(S, BQ, {call, ?MODULE, timeout, _Args}) ->
 
 next_state(S, Res, {call, ?BQMOD, purge, _Args}) ->
     BQ1 = {call, erlang, element, [2, Res]},
-    S#state{bqstate = BQ1, len = 0, messages = gb_trees:empty()}.
+    S#state{bqstate = BQ1, len = 0, messages = gb_trees:empty()};
+
+next_state(S, Res, {call, ?BQMOD, fold, _Args}) ->
+    BQ1 = {call, erlang, element, [2, Res]},
+    S#state{bqstate = BQ1}.
 
 %% Postconditions
 
 postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
     #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
     case Res of
-        {{MsgFetched, _IsDelivered, AckTag, RemainingLen}, _BQ} ->
+        {{MsgFetched, _IsDelivered, AckTag}, _BQ} ->
             {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
             MsgFetched =:= Msg andalso
             not proplists:is_defined(AckTag, Acks) andalso
                 not gb_sets:is_element(AckTag, Confrms) andalso
-                RemainingLen =:= Len - 1;
+                Len =/= 0;
         {empty, _BQ} ->
             Len =:= 0
     end;
@@ -291,14 +299,14 @@ postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
 postcondition(S, {call, ?BQMOD, drop, _Args}, Res) ->
     #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
     case Res of
-        {{MsgIdFetched, AckTag, RemainingLen}, _BQ} ->
+        {{MsgIdFetched, AckTag}, _BQ} ->
             {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
             MsgId = eval({call, erlang, element,
                           [?RECORD_INDEX(id, basic_message), Msg]}),
             MsgIdFetched =:= MsgId andalso
             not proplists:is_defined(AckTag, Acks) andalso
                 not gb_sets:is_element(AckTag, Confrms) andalso
-                RemainingLen =:= Len - 1;
+                Len =/= 0;
         {empty, _BQ} ->
             Len =:= 0
     end;
@@ -320,6 +328,12 @@ postcondition(S, {call, ?BQMOD, drain_confirmed, _Args}, Res) ->
     {ReportedConfirmed, _BQ} = Res,
     lists:all(fun (M) -> gb_sets:is_element(M, Confirms) end,
               ReportedConfirmed);
+
+postcondition(S, {call, ?BQMOD, fold, _Args}, {Res, _BQ}) ->
+    #state{messages = Messages} = S,
+    lists:foldl(fun ({_SeqId, {_MsgProps, Msg}}, Acc) ->
+                        foldfun(Msg, Acc)
+                end, foldacc(), gb_trees:to_list(Messages)) =:= Res;
 
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
     ?BQMOD:len(BQ) =:= Len.
@@ -378,6 +392,9 @@ rand_choice(List, Selection, N)  ->
     Picked = lists:nth(random:uniform(length(List)), List),
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
+
+foldfun(Msg, Acc) -> [Msg | Acc].
+foldacc() -> [].
 
 dropfun(Props) ->
     Expiry = eval({call, erlang, element,
