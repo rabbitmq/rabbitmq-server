@@ -32,11 +32,15 @@ start_link() ->
                                    ?SUPERVISOR, ?MODULE, []).
 
 start_child(X) ->
-    {ok, _Pid} = mirrored_supervisor:start_child(
-                   ?SUPERVISOR,
-                   {id(X), {rabbit_federation_link_sup, start_link, [X]},
-                    transient, ?MAX_WAIT, supervisor,
-                    [rabbit_federation_link_sup]}).
+    case mirrored_supervisor:start_child(
+           ?SUPERVISOR,
+           {id(X), {rabbit_federation_link_sup, start_link, [X]},
+            transient, ?MAX_WAIT, supervisor,
+            [rabbit_federation_link_sup]}) of
+        {ok, _Pid}             -> ok;
+        %% A link returned {stop, gone}, the link_sup shut down, that's OK.
+        {error, {shutdown, _}} -> ok
+    end.
 
 adjust(Reason) ->
     [rabbit_federation_link_sup:adjust(Pid, Id, Reason) ||
