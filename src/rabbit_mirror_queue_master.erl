@@ -127,12 +127,12 @@ stop_mirroring(State = #state { coordinator         = CPid,
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
-sync_mirrors([], Name, _State) ->
+sync_mirrors([], Name, State) ->
     rabbit_log:info("Synchronising ~s: nothing to do~n",
                     [rabbit_misc:rs(Name)]),
-    ok;
-sync_mirrors(SPids, Name, #state { backing_queue       = BQ,
-                                   backing_queue_state = BQS }) ->
+    State;
+sync_mirrors(SPids, Name, State = #state { backing_queue       = BQ,
+                                           backing_queue_state = BQS }) ->
     rabbit_log:info("Synchronising ~s with slaves ~p~n",
                     [rabbit_misc:rs(Name), SPids]),
     Ref = make_ref(),
@@ -153,7 +153,7 @@ sync_mirrors(SPids, Name, #state { backing_queue       = BQ,
                                  end],
                        SPid1 =/= dead],
     [erlang:demonitor(MRef) || {_, MRef} <- SPidsMRefs],
-    {Total, _BQS} =
+    {Total, BQS1} =
         BQ:fold(fun ({Msg, MsgProps}, I) ->
                         wait_for_credit(),
                         [begin
@@ -171,7 +171,7 @@ sync_mirrors(SPids, Name, #state { backing_queue       = BQ,
     [SPid ! {sync_complete, Ref} || SPid <- SPids1],
     rabbit_log:info("Synchronising ~s: ~p messages; complete~n",
                     [rabbit_misc:rs(Name), Total]),
-    ok.
+    State#state{backing_queue_state = BQS1}.
 
 wait_for_credit() ->
     case credit_flow:blocked() of

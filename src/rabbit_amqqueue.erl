@@ -173,6 +173,8 @@
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 -spec(start_mirroring/1 :: (pid()) -> 'ok').
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
+-spec(sync_mirrors/1 :: (rabbit_types:amqqueue()) ->
+    'ok' | error('queue_has_pending_acks') | error('queue_not_mirrored')).
 
 -endif.
 
@@ -591,11 +593,7 @@ set_maximum_since_use(QPid, Age) ->
 start_mirroring(QPid) -> ok = delegate_call(QPid, start_mirroring).
 stop_mirroring(QPid)  -> ok = delegate_call(QPid, stop_mirroring).
 
-sync_mirrors(Name) ->
-    case lookup(Name) of
-        {ok, #amqqueue{pid = QPid}} -> delegate_cast(QPid, sync_mirrors);
-        _                           -> ok
-    end.
+sync_mirrors(#amqqueue{pid = QPid}) -> delegate_call(QPid, sync_mirrors).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(

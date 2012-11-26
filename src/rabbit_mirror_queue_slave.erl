@@ -857,6 +857,7 @@ sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
             sync_loop(Ref, MRef, MPid, State);
         {sync_complete, Ref} ->
             erlang:demonitor(MRef),
+            %% We can only sync when there are no pending acks
             set_delta(0, State);
         {sync_message, Ref, Msg, Props0} ->
             credit_flow:ack(MPid, ?CREDIT_DISC_BOUND),
