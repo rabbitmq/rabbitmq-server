@@ -318,7 +318,6 @@ prioritise_cast(Msg, _State) ->
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         {gm, _Msg}                           -> 5;
-        {post_commit, _Txn, _AckTags}        -> 4;
         _                                    -> 0
     end.
 
