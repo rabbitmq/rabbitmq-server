@@ -26,7 +26,8 @@
 -export([start_link/1, adjust/3]).
 -export([init/1]).
 
-start_link(X) -> supervisor2:start_link(?MODULE, X).
+start_link(X) ->
+    supervisor2:start_link(?MODULE, X).
 
 adjust(Sup, X, everything) ->
     [stop(Sup, Upstream) ||
