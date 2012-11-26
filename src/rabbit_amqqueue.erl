@@ -587,8 +587,8 @@ set_ram_duration_target(QPid, Duration) ->
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
 
-start_mirroring(QPid) -> ok = delegate_call(QPid, start_mirroring).
-stop_mirroring(QPid)  -> ok = delegate_call(QPid, stop_mirroring).
+start_mirroring(QPid) -> ok = delegate_cast(QPid, start_mirroring).
+stop_mirroring(QPid)  -> ok = delegate_cast(QPid, stop_mirroring).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
