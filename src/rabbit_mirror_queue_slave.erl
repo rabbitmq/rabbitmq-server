@@ -703,7 +703,7 @@ process_instruction({publish, ChPid, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(published, ChPid, MsgId, State),
-    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
+    BQS1 = BQ:publish(Msg, MsgProps, true, ChPid, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
 process_instruction({publish_delivered, ChPid, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->

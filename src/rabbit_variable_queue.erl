@@ -17,7 +17,7 @@
 -module(rabbit_variable_queue).
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
-         publish/4, publish_delivered/4, discard/3, drain_confirmed/1,
+         publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/3, fetch/2, drop/2, ack/2, requeue/2, fold/3, len/1,
          is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
@@ -520,16 +520,16 @@ purge(State = #vqstate { q4                = Q4,
 
 publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-        _ChPid, State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
-                                   next_seq_id      = SeqId,
-                                   len              = Len,
-                                   in_counter       = InCount,
-                                   persistent_count = PCount,
-                                   durable          = IsDurable,
-                                   ram_msg_count    = RamMsgCount,
-                                   unconfirmed      = UC }) ->
+        IsDelivered, _ChPid, State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
+                                                next_seq_id      = SeqId,
+                                                len              = Len,
+                                                in_counter       = InCount,
+                                                persistent_count = PCount,
+                                                durable          = IsDurable,
+                                                ram_msg_count    = RamMsgCount,
+                                                unconfirmed      = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, SeqId, Msg, MsgProps),
+    MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps),
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = case ?QUEUE:is_empty(Q3) of
                  false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
@@ -556,8 +556,7 @@ publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
                                              durable          = IsDurable,
                                              unconfirmed      = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
-        #msg_status { is_delivered = true },
+    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps),
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
@@ -891,11 +890,10 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 %% when requeueing, we re-add a msg_id to the unconfirmed set
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
-msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
-           MsgProps = #message_properties { delivered = Delivered }) ->
-    %% TODO would it make sense to remove #msg_status.is_delivered?
+msg_status(IsPersistent, IsDelivered, SeqId,
+           Msg = #basic_message { id = MsgId }, MsgProps) ->
     #msg_status { seq_id = SeqId, msg_id = MsgId, msg = Msg,
-                  is_persistent = IsPersistent, is_delivered = Delivered,
+                  is_persistent = IsPersistent, is_delivered = IsDelivered,
                   msg_on_disk = false, index_on_disk = false,
                   msg_props = MsgProps }.
 
