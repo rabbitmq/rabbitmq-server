@@ -228,8 +228,7 @@ handle_cast({sync_start, Ref, MPid},
     MRef = erlang:monitor(process, MPid),
     MPid ! {sync_ready, Ref, self()},
     {_MsgCount, BQS1} = BQ:purge(BQS),
-    noreply(
-      sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1}));
+    sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1});
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -858,7 +857,7 @@ sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
             %% only thing to do here is purge.)
             {_MsgCount, BQS1} = BQ:purge(BQS),
             credit_flow:peer_down(MPid),
-            State#state{backing_queue_state = BQS1};
+            noreply(State#state{backing_queue_state = BQS1});
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
             sync_loop(Ref, MRef, MPid, State);
@@ -867,7 +866,7 @@ sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
             erlang:demonitor(MRef),
             credit_flow:peer_down(MPid),
             %% We can only sync when there are no pending acks
-            set_delta(0, State);
+            noreply(set_delta(0, State));
         {'$gen_cast', {set_maximum_since_use, Age}} ->
             ok = file_handle_cache:set_maximum_since_use(Age),
             sync_loop(Ref, MRef, MPid, State);
@@ -882,5 +881,7 @@ sync_loop(Ref, MRef, MPid, State = #state{backing_queue       = BQ,
             Props = Props0#message_properties{needs_confirming = false,
                                               delivered        = true},
             BQS1 = BQ:publish(Msg, Props, none, BQS),
-            sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1})
+            sync_loop(Ref, MRef, MPid, State#state{backing_queue_state = BQS1});
+        {'EXIT', _Pid, Reason} ->
+            {stop, Reason, State}
     end.

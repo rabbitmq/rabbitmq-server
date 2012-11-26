@@ -152,6 +152,12 @@ sync_mirrors(SPids, Name, State = #state { gm                  = GM,
     SPidsMRefs1 = sync_foreach(SPidsMRefs, Ref, fun sync_receive_ready/3),
     {{_, SPidsMRefs2, _}, BQS1} =
         BQ:fold(fun (Msg, MsgProps, {I, SPMR, Last}) ->
+                        receive
+                            {'EXIT', _Pid, Reason} ->
+                                throw({time_to_shutdown, Reason})
+                        after 0 ->
+                                ok
+                        end,
                         SPMR1 = wait_for_credit(SPMR, Ref),
                         [begin
                              credit_flow:send(SPid, ?CREDIT_DISC_BOUND),

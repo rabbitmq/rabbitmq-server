@@ -1162,9 +1162,14 @@ handle_call(sync_mirrors, From,
         0 -> {ok, #amqqueue{slave_pids = SPids, sync_slave_pids = SSPids}} =
                  rabbit_amqqueue:lookup(Name),
              gen_server2:reply(From, ok),
-             noreply(State#q{backing_queue_state =
-                                 rabbit_mirror_queue_master:sync_mirrors(
-                                   SPids -- SSPids, Name, BQS)});
+             try
+                 noreply(State#q{backing_queue_state =
+                                     rabbit_mirror_queue_master:sync_mirrors(
+                                       SPids -- SSPids, Name, BQS)})
+             catch
+                 {time_to_shutdown, Reason} ->
+                     {stop, Reason, State}
+             end;
         _ -> reply({error, queue_has_pending_acks}, State)
     end;
 
