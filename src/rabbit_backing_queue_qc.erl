@@ -332,7 +332,7 @@ postcondition(S, {call, ?BQMOD, drain_confirmed, _Args}, Res) ->
 postcondition(S, {call, ?BQMOD, fold, _Args}, {Res, _BQ}) ->
     #state{messages = Messages} = S,
     lists:foldl(fun ({_SeqId, {MsgProps, Msg}}, Acc) ->
-                        foldfun({Msg, MsgProps}, Acc)
+                        foldfun(Msg, MsgProps, Acc)
                 end, foldacc(), gb_trees:to_list(Messages)) =:= Res;
 
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->

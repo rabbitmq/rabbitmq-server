@@ -687,7 +687,7 @@ fold(Fun, Acc, #vqstate { q1    = Q1,
     QFun = fun(MsgStatus, {Acc0, State0}) ->
                    {#msg_status { msg = Msg, msg_props = MsgProps }, State1 } =
                        read_msg(MsgStatus, false, State0),
-                   {Fun({Msg, MsgProps}, Acc0), State1}
+                   {Fun(Msg, MsgProps, Acc0), State1}
            end,
     {Acc1, State1} = ?QUEUE:foldl(QFun, {Acc,  State},  Q4),
     {Acc2, State2} = ?QUEUE:foldl(QFun, {Acc1, State1}, Q3),
@@ -1457,7 +1457,7 @@ delta_fold(Fun, Acc, DeltaSeqId, DeltaSeqIdEnd,
                           _IsDelivered}, {Acc0, MSCState0}) ->
                             {{ok, Msg = #basic_message {}}, MSCState1} =
                               msg_store_read(MSCState0, IsPersistent, MsgId),
-                            {Fun({Msg, MsgProps}, Acc0), MSCState1}
+                            {Fun(Msg, MsgProps, Acc0), MSCState1}
                     end, {Acc, MSCState}, List),
     delta_fold(Fun, Acc1, DeltaSeqId1, DeltaSeqIdEnd,
                State #vqstate { index_state       = IndexState1,

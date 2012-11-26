@@ -161,8 +161,8 @@
 
 %% Fold over all the messages in a queue and return the accumulated
 %% results, leaving the queue undisturbed.
--callback fold(fun(({rabbit_types:basic_message(),
-                     rabbit_types:message_properties()}, A) -> A),
+-callback fold(fun((rabbit_types:basic_message(),
+                    rabbit_types:message_properties(), A) -> A),
                A, state()) -> {A, state()}.
 
 %% How long is my queue?
