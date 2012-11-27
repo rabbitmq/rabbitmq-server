@@ -17,7 +17,7 @@
 -module(rabbit_variable_queue).
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
-         publish/4, publish_delivered/4, discard/3, drain_confirmed/1,
+         publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/3, fetch/2, drop/2, ack/2, requeue/2, fold/3, len/1,
          is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
@@ -520,16 +520,16 @@ purge(State = #vqstate { q4                = Q4,
 
 publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-        _ChPid, State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
-                                   next_seq_id      = SeqId,
-                                   len              = Len,
-                                   in_counter       = InCount,
-                                   persistent_count = PCount,
-                                   durable          = IsDurable,
-                                   ram_msg_count    = RamMsgCount,
-                                   unconfirmed      = UC }) ->
+        IsDelivered, _ChPid, State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
+                                                next_seq_id      = SeqId,
+                                                len              = Len,
+                                                in_counter       = InCount,
+                                                persistent_count = PCount,
+                                                durable          = IsDurable,
+                                                ram_msg_count    = RamMsgCount,
+                                                unconfirmed      = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, SeqId, Msg, MsgProps),
+    MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps),
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = case ?QUEUE:is_empty(Q3) of
                  false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
@@ -556,8 +556,7 @@ publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
                                              durable          = IsDurable,
                                              unconfirmed      = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
-        #msg_status { is_delivered = true },
+    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps),
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
@@ -685,9 +684,9 @@ fold(Fun, Acc, #vqstate { q1    = Q1,
                           q3    = Q3,
                           q4    = Q4 } = State) ->
     QFun = fun(MsgStatus, {Acc0, State0}) ->
-                   {#msg_status { msg = Msg }, State1 } =
+                   {#msg_status { msg = Msg, msg_props = MsgProps }, State1 } =
                        read_msg(MsgStatus, false, State0),
-                   {Fun(Msg, Acc0), State1}
+                   {Fun(Msg, MsgProps, Acc0), State1}
            end,
     {Acc1, State1} = ?QUEUE:foldl(QFun, {Acc,  State},  Q4),
     {Acc2, State2} = ?QUEUE:foldl(QFun, {Acc1, State1}, Q3),
@@ -891,11 +890,10 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 %% when requeueing, we re-add a msg_id to the unconfirmed set
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
-msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
-           MsgProps = #message_properties { delivered = Delivered }) ->
-    %% TODO would it make sense to remove #msg_status.is_delivered?
+msg_status(IsPersistent, IsDelivered, SeqId,
+           Msg = #basic_message { id = MsgId }, MsgProps) ->
     #msg_status { seq_id = SeqId, msg_id = MsgId, msg = Msg,
-                  is_persistent = IsPersistent, is_delivered = Delivered,
+                  is_persistent = IsPersistent, is_delivered = IsDelivered,
                   msg_on_disk = false, index_on_disk = false,
                   msg_props = MsgProps }.
 
@@ -1249,17 +1247,15 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 %% Internal gubbins for acks
 %%----------------------------------------------------------------------------
 
-record_pending_ack(#msg_status { seq_id        = SeqId,
-                                 msg_on_disk   = MsgOnDisk } = MsgStatus,
+record_pending_ack(#msg_status { seq_id = SeqId, msg = Msg } = MsgStatus,
                    State = #vqstate { pending_ack     = PA,
                                       ram_ack_index   = RAI,
                                       ack_in_counter  = AckInCount}) ->
-    {AckEntry, RAI1} =
-        case MsgOnDisk of
-            true  -> {m(trim_msg_status(MsgStatus)), RAI};
-            false -> {MsgStatus, gb_sets:insert(SeqId, RAI)}
-        end,
-    State #vqstate { pending_ack    = gb_trees:insert(SeqId, AckEntry, PA),
+    RAI1 = case Msg of
+               undefined -> RAI;
+               _         -> gb_sets:insert(SeqId, RAI)
+           end,
+    State #vqstate { pending_ack    = gb_trees:insert(SeqId, MsgStatus, PA),
                      ram_ack_index  = RAI1,
                      ack_in_counter = AckInCount + 1}.
 
@@ -1451,11 +1447,11 @@ delta_fold(Fun, Acc, DeltaSeqId, DeltaSeqIdEnd,
     {List, IndexState1} = rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1,
                                                   IndexState),
     {Acc1, MSCState1} =
-        lists:foldl(fun ({MsgId, _SeqId, _MsgProps, IsPersistent,
+        lists:foldl(fun ({MsgId, _SeqId, MsgProps, IsPersistent,
                           _IsDelivered}, {Acc0, MSCState0}) ->
                             {{ok, Msg = #basic_message {}}, MSCState1} =
                               msg_store_read(MSCState0, IsPersistent, MsgId),
-                            {Fun(Msg, Acc0), MSCState1}
+                            {Fun(Msg, MsgProps, Acc0), MSCState1}
                     end, {Acc, MSCState}, List),
     delta_fold(Fun, Acc1, DeltaSeqId1, DeltaSeqIdEnd,
                State #vqstate { index_state       = IndexState1,
@@ -1532,8 +1528,7 @@ limit_ram_acks(Quota, State = #vqstate { pending_ack   = PA,
             {Quota, State};
         false ->
             {SeqId, RAI1} = gb_sets:take_largest(RAI),
-            MsgStatus = #msg_status { is_persistent = false} =
-                gb_trees:get(SeqId, PA),
+            MsgStatus = gb_trees:get(SeqId, PA),
             {MsgStatus1, State1} =
                 maybe_write_to_disk(true, false, MsgStatus, State),
             PA1 = gb_trees:update(SeqId, m(trim_msg_status(MsgStatus1)), PA),
