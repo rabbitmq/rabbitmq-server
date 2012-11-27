@@ -19,8 +19,8 @@
 -include("rabbit.hrl").
 
 -export([start_link/0]).
--export([init_stats_timer/2, ensure_stats_timer/3, stop_stats_timer/2]).
--export([reset_stats_timer/2]).
+-export([init_stats_timer/2, init_disabled_stats_timer/2,
+         ensure_stats_timer/3, stop_stats_timer/2, reset_stats_timer/2]).
 -export([stats_level/2, if_enabled/3]).
 -export([notify/2, notify_if/3]).
 
@@ -51,6 +51,7 @@
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(init_stats_timer/2 :: (container(), pos()) -> container()).
+-spec(init_disabled_stats_timer/2 :: (container(), pos()) -> container()).
 -spec(ensure_stats_timer/3 :: (container(), pos(), term()) -> container()).
 -spec(stop_stats_timer/2 :: (container(), pos()) -> container()).
 -spec(reset_stats_timer/2 :: (container(), pos()) -> container()).
@@ -90,9 +91,12 @@ start_link() ->
 
 init_stats_timer(C, P) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    {ok, Interval}   = application:get_env(rabbit, collect_statistics_interval),
     setelement(P, C, #state{level = StatsLevel, interval = Interval,
                             timer = undefined}).
+
+init_disabled_stats_timer(C, P) ->
+    setelement(P, C, #state{level = none, interval = 0, timer = undefined}).
 
 ensure_stats_timer(C, P, Msg) ->
     case element(P, C) of

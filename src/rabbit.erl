@@ -36,7 +36,7 @@
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
-                                   check_empty_content_body_frame_size,
+                                   check_empty_frame_size,
                                    []}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
@@ -178,6 +178,12 @@
                    [{description, "notify cluster nodes"},
                     {mfa,         {rabbit_node_monitor, notify_node_up, []}},
                     {requires,    networking}]}).
+
+-rabbit_boot_step({background_gc,
+                   [{description, "background garbage collection"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [background_gc]}},
+                    {enables,     networking}]}).
 
 %%---------------------------------------------------------------------------
 
@@ -570,7 +576,10 @@ boot_delegate() ->
     rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
 recover() ->
-    rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
+    Qs = rabbit_amqqueue:recover(),
+    ok = rabbit_binding:recover(rabbit_exchange:recover(),
+                                [QName || #amqqueue{name = QName} <- Qs]),
+    rabbit_amqqueue:start(Qs).
 
 maybe_insert_default_data() ->
     case rabbit_table:is_empty() of

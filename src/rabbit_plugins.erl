@@ -19,18 +19,6 @@
 
 -export([setup/0, active/0, read_enabled/1, list/1, dependencies/3]).
 
--define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
--define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
--define(ENABLED_DEF, {?ENABLED_OPT, flag}).
--define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
-
--define(GLOBAL_DEFS, []).
-
--define(COMMANDS,
-        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
-         enable,
-         disable]).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -100,8 +88,13 @@ dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
-                [{Name, Deps}
-                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins]),
+                lists:ukeysort(
+                  1, [{Name, Deps} ||
+                         #plugin{name         = Name,
+                                 dependencies = Deps} <- AllPlugins] ++
+                      [{Dep,   []} ||
+                          #plugin{dependencies = Deps} <- AllPlugins,
+                          Dep                          <- Deps])),
     Dests = case Reverse of
                 false -> digraph_utils:reachable(Sources, G);
                 true  -> digraph_utils:reaching(Sources, G)

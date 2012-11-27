@@ -386,7 +386,7 @@ action(list_bindings, Node, Args, Opts, Inform) ->
 
 action(list_connections, Node, Args, _Opts, Inform) ->
     Inform("Listing connections", []),
-    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port, state]),
+    ArgAtoms = default_if_empty(Args, [user, peer_host, peer_port, state]),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
@@ -611,7 +611,7 @@ display_info_list(Results, InfoItemKeys) when is_list(Results) ->
       fun (Result) -> display_row(
                         [format_info_item(proplists:get_value(X, Result)) ||
                             X <- InfoItemKeys])
-      end, Results),
+      end, lists:sort(Results)),
     ok;
 display_info_list(Other, _) ->
     Other.

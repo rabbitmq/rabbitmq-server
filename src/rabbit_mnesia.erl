@@ -833,7 +833,7 @@ error_description(cannot_connect_to_cluster) ->
         "'update_cluster_nodes' command to point to the new cluster nodes.";
 error_description(no_online_cluster_nodes) ->
     "Could not find any online cluster nodes. If the cluster has changed, "
-        "you can use the 'recluster' command.";
+        "you can use the 'update_cluster_nodes' command.";
 error_description(cannot_connect_to_node) ->
     "Could not connect to the cluster node provided.";
 error_description(inconsistent_cluster) ->

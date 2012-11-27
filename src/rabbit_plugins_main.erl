@@ -108,16 +108,19 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
                                                     Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     Missing = ToEnable -- plugin_names(AllPlugins),
-    case Missing of
-        [] -> ok;
-        _  -> throw({error_string,
-                     fmt_list("The following plugins could not be found:",
-                              Missing)})
-    end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
-    write_enabled_plugins(PluginsFile, NewEnabled),
     NewImplicitlyEnabled = rabbit_plugins:dependencies(false,
                                                        NewEnabled, AllPlugins),
+    MissingDeps = (NewImplicitlyEnabled -- plugin_names(AllPlugins)) -- Missing,
+    case {Missing, MissingDeps} of
+        {[],   []} -> ok;
+        {Miss, []} -> throw({error_string, fmt_missing("plugins",      Miss)});
+        {[], Miss} -> throw({error_string, fmt_missing("dependencies", Miss)});
+        {_,     _} -> throw({error_string,
+                             fmt_missing("plugins", Missing) ++
+                                 fmt_missing("dependencies", MissingDeps)})
+    end,
+    write_enabled_plugins(PluginsFile, NewEnabled),
     maybe_warn_mochiweb(NewImplicitlyEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
@@ -183,9 +186,12 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     EnabledImplicitly =
         rabbit_plugins:dependencies(false, EnabledExplicitly,
                                     AvailablePlugins) -- EnabledExplicitly,
+    Missing = [#plugin{name = Name, dependencies = []} ||
+                  Name <- ((EnabledExplicitly ++ EnabledImplicitly) --
+                               plugin_names(AvailablePlugins))],
     {ok, RE} = re:compile(Pattern),
     Plugins = [ Plugin ||
-                  Plugin = #plugin{name = Name} <- AvailablePlugins,
+                  Plugin = #plugin{name = Name} <- AvailablePlugins ++ Missing,
                   re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match,
                   if OnlyEnabled    ->  lists:member(Name, EnabledExplicitly);
                      OnlyEnabledAll -> (lists:member(Name,
@@ -196,30 +202,35 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     Plugins1 = usort_plugins(Plugins),
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
                              #plugin{name = Name} <- Plugins1] ++ [0]),
-    [format_plugin(P, EnabledExplicitly, EnabledImplicitly, Format,
-                   MaxWidth) || P <- Plugins1],
+    [format_plugin(P, EnabledExplicitly, EnabledImplicitly,
+                   plugin_names(Missing), Format, MaxWidth) || P <- Plugins1],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version,
                       description = Description, dependencies = Deps},
-              EnabledExplicitly, EnabledImplicitly, Format, MaxWidth) ->
+              EnabledExplicitly, EnabledImplicitly, Missing,
+              Format, MaxWidth) ->
     Glyph = case {lists:member(Name, EnabledExplicitly),
-                  lists:member(Name, EnabledImplicitly)} of
-                {true, false} -> "[E]";
-                {false, true} -> "[e]";
-                _             -> "[ ]"
+                  lists:member(Name, EnabledImplicitly),
+                  lists:member(Name, Missing)} of
+                {true, false, false} -> "[E]";
+                {false, true, false} -> "[e]";
+                {_,        _,  true} -> "[!]";
+                _                    -> "[ ]"
             end,
+    Opt = fun (_F, A, A) -> ok;
+              ( F, A, _) -> io:format(F, [A])
+          end,
     case Format of
         minimal -> io:format("~s~n", [Name]);
-        normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++
-                                 "w ~s~n", [Glyph, Name, Version]);
+        normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++ "w ",
+                             [Glyph, Name]),
+                   Opt("~s", Version, undefined),
+                   io:format("~n");
         verbose -> io:format("~s ~w~n", [Glyph, Name]),
-                   io:format("    Version:    \t~s~n", [Version]),
-                   case Deps of
-                       [] -> ok;
-                       _  -> io:format("    Dependencies:\t~p~n", [Deps])
-                   end,
-                   io:format("    Description:\t~s~n", [Description]),
+                   Opt("    Version:     \t~s~n", Version,     undefined),
+                   Opt("    Dependencies:\t~p~n", Deps,        []),
+                   Opt("    Description: \t~s~n", Description, undefined),
                    io:format("~n")
     end.
 
@@ -229,6 +240,9 @@ print_list(Header, Plugins) ->
 fmt_list(Header, Plugins) ->
     lists:flatten(
       [Header, $\n, [io_lib:format("  ~s~n", [P]) || P <- Plugins]]).
+
+fmt_missing(Desc, Missing) ->
+    fmt_list("The following " ++ Desc ++ " could not be found:", Missing).
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
