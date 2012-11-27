@@ -39,6 +39,6 @@ start_connection_sup(AmqpParams) ->
 %%---------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{connection_sup, {amqp_connection_sup, start_link, []},
            temporary, infinity, supervisor, [amqp_connection_sup]}]}}.
