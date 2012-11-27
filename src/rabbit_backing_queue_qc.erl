@@ -159,7 +159,7 @@ qc_purge(#state{bqstate = BQ}) ->
     {call, ?BQMOD, purge, [BQ]}.
 
 qc_fold(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, fold, [fun foldfun/2, foldacc(), BQ]}.
+    {call, ?BQMOD, fold, [fun foldfun/3, foldacc(), BQ]}.
 
 %% Preconditions
 
@@ -393,7 +393,7 @@ rand_choice(List, Selection, N)  ->
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
 
-foldfun(Msg, Acc) -> [Msg | Acc].
+foldfun(Msg, _MsgProps, Acc) -> [Msg | Acc].
 foldacc() -> [].
 
 dropfun(Props) ->
