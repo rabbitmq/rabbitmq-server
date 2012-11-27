@@ -222,6 +222,22 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, true, Flow},
     end,
     noreply(maybe_enqueue_message(Delivery, State));
 
+handle_cast({sync_start, Ref, MPid},
+            State = #state { backing_queue       = BQ,
+                             backing_queue_state = BQS }) ->
+    State1 = #state{rate_timer_ref = TRef} = ensure_rate_timer(State),
+    S = fun({TRefN, BQSN}) -> State1#state{rate_timer_ref      = TRefN,
+                                           backing_queue_state = BQSN} end,
+    %% [0] We can only sync when there are no pending acks
+    %% [1] The master died so we do not need to set_delta even though
+    %%     we purged since we will get a depth instruction soon.
+    case rabbit_mirror_queue_sync:slave(Ref, TRef, MPid, BQ, BQS,
+                                        fun update_ram_duration_sync/2) of
+        {ok,           Res} -> noreply(set_delta(0, S(Res))); %% [0]
+        {failed,       Res} -> noreply(S(Res));               %% [1]
+        {stop, Reason, Res} -> {stop, Reason, S(Res)}
+    end;
+
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
@@ -232,15 +248,8 @@ handle_cast({set_ram_duration_target, Duration},
     BQS1 = BQ:set_ram_duration_target(Duration, BQS),
     noreply(State #state { backing_queue_state = BQS1 }).
 
-handle_info(update_ram_duration,
-            State = #state { backing_queue = BQ,
-                             backing_queue_state = BQS }) ->
-    {RamDuration, BQS1} = BQ:ram_duration(BQS),
-    DesiredDuration =
-        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
-    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    noreply(State #state { rate_timer_ref = just_measured,
-                           backing_queue_state = BQS2 });
+handle_info(update_ram_duration, State) ->
+    noreply(update_ram_duration(State));
 
 handle_info(sync_timeout, State) ->
     noreply(backing_queue_timeout(
@@ -357,6 +366,11 @@ handle_msg([_SPid], _From, process_death) ->
 handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, {gm, Msg}),
     {stop, {shutdown, ring_shutdown}};
+handle_msg([SPid], _From, {sync_start, Ref, MPid, SPids}) ->
+    case lists:member(SPid, SPids) of
+        true  -> ok = gen_server2:cast(SPid, {sync_start, Ref, MPid});
+        false -> ok
+    end;
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
@@ -814,6 +828,23 @@ update_delta( DeltaChange, State = #state { depth_delta = 0         }) ->
 update_delta( DeltaChange, State = #state { depth_delta = Delta     }) ->
     true = DeltaChange =< 0, %% assertion: we cannot become 'less' sync'ed
     set_delta(Delta + DeltaChange, State #state { depth_delta = undefined }).
+
+update_ram_duration(State = #state { backing_queue = BQ,
+                                     backing_queue_state = BQS }) ->
+    State#state{rate_timer_ref      = just_measured,
+                backing_queue_state = update_ram_duration(BQ, BQS)}.
+
+update_ram_duration_sync(BQ, BQS) ->
+    BQS1 = update_ram_duration(BQ, BQS),
+    TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
+                             self(), update_ram_duration),
+    {TRef, BQS1}.
+
+update_ram_duration(BQ, BQS) ->
+    {RamDuration, BQS1} = BQ:ram_duration(BQS),
+    DesiredDuration =
+        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
+    BQ:set_ram_duration_target(DesiredDuration, BQS1).
 
 record_synchronised(#amqqueue { name = QName }) ->
     Self = self(),

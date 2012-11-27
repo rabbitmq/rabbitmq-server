@@ -28,7 +28,7 @@
 
 -export([promote_backing_queue_state/7, sender_death_fun/0, depth_fun/0]).
 
--export([init_with_existing_bq/3, stop_mirroring/1]).
+-export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/3]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -123,6 +123,24 @@ stop_mirroring(State = #state { coordinator         = CPid,
     unlink(CPid),
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
+
+sync_mirrors([], Name, State) ->
+    rabbit_log:info("Synchronising ~s: nothing to do~n",
+                    [rabbit_misc:rs(Name)]),
+    State;
+sync_mirrors(SPids, Name, State = #state { gm                  = GM,
+                                           backing_queue       = BQ,
+                                           backing_queue_state = BQS }) ->
+    rabbit_log:info("Synchronising ~s with slaves ~p: ~p messages to do~n",
+                    [rabbit_misc:rs(Name), SPids, BQ:len(BQS)]),
+    Ref = make_ref(),
+    %% We send the start over GM to flush out any other messages that
+    %% we might have sent that way already.
+    gm:broadcast(GM, {sync_start, Ref, self(), SPids}),
+    BQS1 = rabbit_mirror_queue_sync:master(Name, Ref, SPids, BQ, BQS),
+    rabbit_log:info("Synchronising ~s: complete~n",
+                    [rabbit_misc:rs(Name)]),
+    State#state{backing_queue_state = BQS1}.
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue       = BQ,
