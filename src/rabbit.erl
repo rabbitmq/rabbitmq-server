@@ -400,13 +400,11 @@ status() ->
 
 is_running() -> is_running(node()).
 
-is_running(Node) ->
-    rabbit_nodes:is_running(Node, rabbit).
+is_running(Node) -> rabbit_nodes:is_running(Node, rabbit).
 
 environment() ->
-    lists:keysort(
-      1, [P || P = {K, _} <- application:get_all_env(rabbit),
-               K =/= default_pass]).
+    lists:keysort(1, [P || P = {K, _} <- application:get_all_env(rabbit),
+                           K =/= default_pass]).
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
