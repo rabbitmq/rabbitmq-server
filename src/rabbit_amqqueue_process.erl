@@ -1170,11 +1170,11 @@ handle_call(sync_mirrors, From,
                  {time_to_shutdown, Reason} ->
                      {stop, Reason, State}
              end;
-        _ -> reply({error, queue_has_pending_acks}, State)
+        _ -> reply({error, pending_acks}, State)
     end;
 
 handle_call(sync_mirrors, _From, State) ->
-    reply({error, queue_not_mirrored}, State);
+    reply({error, not_mirrored}, State);
 
 handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
