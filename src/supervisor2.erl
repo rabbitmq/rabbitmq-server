@@ -338,8 +338,12 @@ init_dynamic(_State, StartSpec) ->
 start_children(Children, SupName) -> start_children(Children, [], SupName).
 
 start_children([Child|Chs], NChildren, SupName) ->
+    Restart = case Child#child.restart_type of
+                  A      when is_atom(A) -> A;
+                  {N, _} when is_atom(N) -> N
+              end,
     case do_start_child(SupName, Child) of
-	{ok, undefined} when Child#child.restart_type =:= temporary ->
+	{ok, undefined} when Restart =:= temporary ->
 	    start_children(Chs, NChildren, SupName);
 	{ok, Pid} ->
 	    start_children(Chs, [Child#child{pid = Pid}|NChildren], SupName);
@@ -394,9 +398,13 @@ do_start_child_i(M, F, A) ->
 handle_call({start_child, EArgs}, _From, State) when ?is_simple(State) ->
     Child = hd(State#state.children),
     #child{mfargs = {M, F, A}} = Child,
+    Restart = case Child#child.restart_type of
+                  Name      when is_atom(Name) -> Name;
+                  {Type, _} when is_atom(Type) -> Type
+              end,
     Args = A ++ EArgs,
     case do_start_child_i(M, F, Args) of
-	{ok, undefined} when Child#child.restart_type =:= temporary ->
+	{ok, undefined} when Restart =:= temporary ->
 	    {reply, {ok, undefined}, State};
 	{ok, Pid} ->
 	    NState = save_dynamic_child(Child#child.restart_type, Pid, Args, State),
@@ -630,7 +638,7 @@ handle_info({delayed_restart, {RestartType, Reason, Child}}, State) ->
         {value, Child1} ->
             {ok, NState} = do_restart(RestartType, Reason, Child1, State),
             {noreply, NState};
-        _ ->
+        What ->
             {noreply, State}
     end;
 
@@ -806,7 +814,7 @@ do_restart(temporary, Reason, Child, State) ->
     {ok, NState}.
 
 do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
-    case restart(Child, State) of
+    case restart1(Child, State) of
         {ok, NState} ->
             {ok, NState};
         {terminate, NState} ->
@@ -814,6 +822,19 @@ do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
                                       {delayed_restart,
                                        {{RestartType, Delay}, Reason, Child}}),
             {ok, state_del_child(Child, NState)}
+    end.
+
+restart1(Child, State) ->
+    case add_restart(State) of
+	{ok, NState} ->
+	    restart(NState#state.strategy, Child, NState);
+	{terminate, _NState} ->
+            %% we've reached the max restart intensity, but the
+            %% add_restart will have added to the restarts
+            %% field. Given we don't want to die here, we need to go
+            %% back to the old restarts field otherwise we'll never
+            %% attempt to restart later.
+            {terminate, State}
     end.
 
 del_child_and_maybe_shutdown(intrinsic, Child, State) ->
