@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([master/5, slave/5]).
+-export([master/5, slave/6]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
@@ -98,47 +98,47 @@ sync_receive_complete(SPid, MRef, Ref) ->
 
 %% ---------------------------------------------------------------------------
 
-slave(Ref, MPid, BQ, BQS, UpdateRamDuration) ->
+slave(Ref, TRef, MPid, BQ, BQS, UpdateRamDuration) ->
     MRef = erlang:monitor(process, MPid),
     MPid ! {sync_ready, Ref, self()},
     {_MsgCount, BQS1} = BQ:purge(BQS),
-    slave_sync_loop(Ref, MRef, MPid, BQ, BQS1, UpdateRamDuration).
+    slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS1, UpdateRamDuration).
 
-slave_sync_loop(Ref, MRef, MPid, BQ, BQS, UpdateRamDuration) ->
+slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS, UpdateRamDur) ->
     receive
         {'DOWN', MRef, process, MPid, _Reason} ->
             %% If the master dies half way we are not in the usual
             %% half-synced state (with messages nearer the tail of the
-            %% queue; instead we have ones nearer the head. If we then
+            %% queue); instead we have ones nearer the head. If we then
             %% sync with a newly promoted master, or even just receive
             %% messages from it, we have a hole in the middle. So the
-            %% only thing to do here is purge.)
+            %% only thing to do here is purge.
             {_MsgCount, BQS1} = BQ:purge(BQS),
             credit_flow:peer_down(MPid),
-            {failed, BQS1};
+            {failed, {TRef, BQS1}};
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
-            slave_sync_loop(Ref, MRef, MPid, BQ, BQS, UpdateRamDuration);
+            slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS, UpdateRamDur);
         {sync_complete, Ref} ->
             MPid ! {sync_complete_ok, Ref, self()},
             erlang:demonitor(MRef),
             credit_flow:peer_down(MPid),
-            {ok, BQS};
+            {ok, {TRef, BQS}};
         {'$gen_cast', {set_maximum_since_use, Age}} ->
             ok = file_handle_cache:set_maximum_since_use(Age),
-            slave_sync_loop(Ref, MRef, MPid, BQ, BQS, UpdateRamDuration);
+            slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS, UpdateRamDur);
         {'$gen_cast', {set_ram_duration_target, Duration}} ->
             BQS1 = BQ:set_ram_duration_target(Duration, BQS),
-            slave_sync_loop(Ref, MRef, MPid, BQ, BQS1, UpdateRamDuration);
+            slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS1, UpdateRamDur);
         update_ram_duration ->
-            BQS1 = UpdateRamDuration(BQ, BQS),
-            slave_sync_loop(Ref, MRef, MPid, BQ, BQS1, UpdateRamDuration);
+            {TRef2, BQS1} = UpdateRamDur(BQ, BQS),
+            slave_sync_loop(Ref, TRef2, MRef, MPid, BQ, BQS1, UpdateRamDur);
         {sync_message, Ref, Msg, Props0} ->
             credit_flow:ack(MPid, ?CREDIT_DISC_BOUND),
             Props = Props0#message_properties{needs_confirming = false,
                                               delivered        = true},
             BQS1 = BQ:publish(Msg, Props, none, BQS),
-            slave_sync_loop(Ref, MRef, MPid, BQ, BQS1, UpdateRamDuration);
+            slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS1, UpdateRamDur);
         {'EXIT', _Pid, Reason} ->
-            {stop, Reason, BQS}
+            {stop, Reason, {TRef, BQS}}
     end.

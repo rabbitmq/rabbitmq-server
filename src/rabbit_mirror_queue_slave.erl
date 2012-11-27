@@ -225,15 +225,17 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, true, Flow},
 handle_cast({sync_start, Ref, MPid},
             State = #state { backing_queue       = BQ,
                              backing_queue_state = BQS }) ->
-    S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
+    State1 = #state{rate_timer_ref = TRef} = ensure_rate_timer(State),
+    S = fun({TRefN, BQSN}) -> State1#state{rate_timer_ref      = TRefN,
+                                           backing_queue_state = BQSN} end,
     %% [0] We can only sync when there are no pending acks
     %% [1] The master died so we do not need to set_delta even though
     %%     we purged since we will get a depth instruction soon.
-    case rabbit_mirror_queue_sync:slave(Ref, MPid, BQ, BQS,
-                                        fun update_ram_duration/2) of
-        {ok, BQS1}      -> noreply(set_delta(0, S(BQS1))); %% [0]
-        {failed, BQS1}  -> noreply(S(BQS1));               %% [1]
-        {stop, R, BQS1} -> {stop, R, S(BQS1)}
+    case rabbit_mirror_queue_sync:slave(Ref, TRef, MPid, BQ, BQS,
+                                        fun update_ram_duration_sync/2) of
+        {ok,           Res} -> noreply(set_delta(0, S(Res))); %% [0]
+        {failed,       Res} -> noreply(S(Res));               %% [1]
+        {stop, Reason, Res} -> {stop, Reason, S(Res)}
     end;
 
 handle_cast({set_maximum_since_use, Age}, State) ->
@@ -832,6 +834,12 @@ update_ram_duration(State = #state { backing_queue = BQ,
                                      backing_queue_state = BQS }) ->
     State#state{rate_timer_ref      = just_measured,
                 backing_queue_state = update_ram_duration(BQ, BQS)}.
+
+update_ram_duration_sync(BQ, BQS) ->
+    BQS1 = update_ram_duration(BQ, BQS),
+    TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
+                             self(), update_ram_duration),
+    {TRef, BQS1}.
 
 update_ram_duration(BQ, BQS) ->
     {RamDuration, BQS1} = BQ:ram_duration(BQS),
