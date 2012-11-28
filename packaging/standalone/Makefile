@@ -1,7 +1,7 @@
 VERSION=0.0.0
 SOURCE_DIR=rabbitmq-server-$(VERSION)
 TARGET_DIR=rabbitmq_server-$(VERSION)
-TARGET_TARBALL=rabbitmq-server-standalone-$(VERSION)
+TARGET_TARBALL=rabbitmq-server-mac-standalone-$(VERSION)
 RLS_DIR=$(TARGET_DIR)/release/$(TARGET_DIR)
 
 ERTS_VSN=$(shell erl -noshell -eval 'io:format("~s", [erlang:system_info(version)]), halt().')
@@ -45,7 +45,7 @@ dist:
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
 clean: clean_partial
-	rm -f rabbitmq-server-standalone-*.tar.gz
+	rm -f rabbitmq-server-mac-standalone-*.tar.gz
 
 clean_partial:
 	rm -rf $(SOURCE_DIR)
