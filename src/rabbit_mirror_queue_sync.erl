@@ -147,7 +147,7 @@ slave(Ref, TRef, Syncer, BQ, BQS, UpdateRamDuration) ->
     {_MsgCount, BQS1} = BQ:purge(BQS),
     slave_sync_loop({Ref, MRef, Syncer, BQ, UpdateRamDuration}, TRef, BQS1).
 
-slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDur}, TRef, BQS) ->
+slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration}, TRef, BQS) ->
     receive
         {'DOWN', MRef, process, Syncer, _Reason} ->
             %% If the master dies half way we are not in the usual
@@ -173,7 +173,7 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDur}, TRef, BQS) ->
             BQS1 = BQ:set_ram_duration_target(Duration, BQS),
             slave_sync_loop(Args, TRef, BQS1);
         update_ram_duration ->
-            {TRef2, BQS1} = UpdateRamDur(BQ, BQS),
+            {TRef2, BQS1} = UpdateRamDuration(BQ, BQS),
             slave_sync_loop(Args, TRef2, BQS1);
         {sync_msg, Ref, Msg, Props} ->
             credit_flow:ack(Syncer, ?CREDIT_DISC_BOUND),
