@@ -1697,6 +1697,7 @@ test_backing_queue() ->
             passed = test_queue_index(),
             passed = test_queue_index_props(),
             passed = test_variable_queue(),
+            passed = test_variable_queue_fold(),
             passed = test_variable_queue_delete_msg_store_files_callback(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
@@ -2299,6 +2300,32 @@ wait_for_confirms(Unconfirmed) ->
                  end
     end.
 
+test_variable_queue_fold() ->
+    Count = rabbit_queue_index:next_segment_boundary(0),
+    [passed = with_fresh_variable_queue(
+               fun (VQ) -> test_variable_queue_fold_shortcut(VQ, Cut) end) ||
+        Cut <- [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]],
+    passed.
+
+test_variable_queue_fold_shortcut(VQ0, Cut) ->
+    Count = rabbit_queue_index:next_segment_boundary(0),
+    Msg2Int = fun (#basic_message{
+                     content = #content{ payload_fragments_rev = P}}) ->
+                     binary_to_term(list_to_binary(lists:reverse(P)))
+              end,
+    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
+    VQ2 = variable_queue_publish(
+            true, Count, fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
+    {Acc, VQ3} = rabbit_variable_queue:fold(fun (M, _, A) ->
+                                                    case Msg2Int(M) =< Cut of
+                                                       true  -> {cont, [M | A]};
+                                                       false -> {stop, A}
+                                                    end
+                                            end, [], VQ2),
+    true = [N || N <- lists:seq(lists:min([Cut, Count]), 1, -1)] ==
+           [Msg2Int(M) || M <- Acc],
+    VQ3.
+
 test_variable_queue() ->
     [passed = with_fresh_variable_queue(F) ||
         F <- [fun test_variable_queue_dynamic_duration_change/1,
@@ -2310,22 +2337,8 @@ test_variable_queue() ->
               fun test_dropwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
-              fun test_variable_queue_requeue/1,
-              fun test_variable_queue_fold/1]],
+              fun test_variable_queue_requeue/1]],
     passed.
-
-test_variable_queue_fold(VQ0) ->
-    Count = rabbit_queue_index:next_segment_boundary(0) * 2 + 1,
-    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
-    VQ2 = variable_queue_publish(
-            true, Count, fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
-    {Acc, VQ3} = rabbit_variable_queue:fold(
-                   fun (M, _, A) -> [M | A] end, [], VQ2),
-    true = [term_to_binary(N) || N <- lists:seq(Count, 1, -1)] ==
-           [list_to_binary(lists:reverse(P)) ||
-             #basic_message{ content = #content{ payload_fragments_rev = P}} <-
-             Acc],
-    VQ3.
 
 test_variable_queue_requeue(VQ0) ->
     Interval = 50,

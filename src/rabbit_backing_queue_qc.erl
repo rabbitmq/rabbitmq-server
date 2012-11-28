@@ -332,7 +332,8 @@ postcondition(S, {call, ?BQMOD, drain_confirmed, _Args}, Res) ->
 postcondition(S, {call, ?BQMOD, fold, _Args}, {Res, _BQ}) ->
     #state{messages = Messages} = S,
     lists:foldl(fun ({_SeqId, {MsgProps, Msg}}, Acc) ->
-                        foldfun(Msg, MsgProps, Acc)
+                        {cont, Acc1} = foldfun(Msg, MsgProps, Acc),
+                        Acc1
                 end, foldacc(), gb_trees:to_list(Messages)) =:= Res;
 
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
@@ -393,7 +394,7 @@ rand_choice(List, Selection, N)  ->
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
 
-foldfun(Msg, _MsgProps, Acc) -> [Msg | Acc].
+foldfun(Msg, _MsgProps, Acc) -> {cont, [Msg | Acc]}.
 foldacc() -> [].
 
 dropfun(Props) ->
