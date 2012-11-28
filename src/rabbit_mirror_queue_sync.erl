@@ -35,7 +35,7 @@
 %% messages that we might have sent that way already. (credit) is the
 %% usual credit_flow bump message every so often.
 %%
-%%               Master             Syncer           Slave(s)
+%%               Master             Syncer                 Slave(s)
 %% sync_mirrors -> ||                                         ||
 %% (from channel)  || -- (spawns) --> ||                      ||
 %%                 || --------- sync_start (over GM) -------> ||
