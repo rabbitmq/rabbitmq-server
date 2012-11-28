@@ -173,8 +173,8 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration}, TRef, BQS) ->
             BQS1 = BQ:set_ram_duration_target(Duration, BQS),
             slave_sync_loop(Args, TRef, BQS1);
         update_ram_duration ->
-            {TRef2, BQS1} = UpdateRamDuration(BQ, BQS),
-            slave_sync_loop(Args, TRef2, BQS1);
+            {TRef1, BQS1} = UpdateRamDuration(BQ, BQS),
+            slave_sync_loop(Args, TRef1, BQS1);
         {sync_msg, Ref, Msg, Props} ->
             credit_flow:ack(Syncer, ?CREDIT_DISC_BOUND),
             Props1 = Props#message_properties{needs_confirming = false},
