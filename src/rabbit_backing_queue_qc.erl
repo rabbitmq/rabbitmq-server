@@ -159,7 +159,7 @@ qc_purge(#state{bqstate = BQ}) ->
     {call, ?BQMOD, purge, [BQ]}.
 
 qc_fold(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, fold, [fun foldfun/3, foldacc(), BQ]}.
+    {call, ?BQMOD, fold, [makefoldfun(pos_integer()), foldacc(), BQ]}.
 
 %% Preconditions
 
@@ -329,12 +329,14 @@ postcondition(S, {call, ?BQMOD, drain_confirmed, _Args}, Res) ->
     lists:all(fun (M) -> gb_sets:is_element(M, Confirms) end,
               ReportedConfirmed);
 
-postcondition(S, {call, ?BQMOD, fold, _Args}, {Res, _BQ}) ->
+postcondition(S, {call, ?BQMOD, fold, [FoldFun, Acc0, _BQ0]}, {Res, _BQ1}) ->
     #state{messages = Messages} = S,
-    lists:foldl(fun ({_SeqId, {MsgProps, Msg}}, Acc) ->
-                        {cont, Acc1} = foldfun(Msg, MsgProps, Acc),
-                        Acc1
-                end, foldacc(), gb_trees:to_list(Messages)) =:= Res;
+    {_, Model} = lists:foldl(fun ({_SeqId, {_MsgProps, _Msg}}, {stop, Acc}) ->
+                                     {stop, Acc};
+                                 ({_SeqId, {MsgProps, Msg}}, {cont, Acc}) ->
+                                     FoldFun(Msg, MsgProps, Acc)
+                             end, {cont, Acc0}, gb_trees:to_list(Messages)),
+    true = Model =:= Res;
 
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
     ?BQMOD:len(BQ) =:= Len.
@@ -394,7 +396,13 @@ rand_choice(List, Selection, N)  ->
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
 
-foldfun(Msg, _MsgProps, Acc) -> {cont, [Msg | Acc]}.
+makefoldfun(Size) ->
+    fun (Msg, _MsgProps, Acc) ->
+            case length(Acc) > Size of
+                false -> {cont, [Msg | Acc]};
+                true  -> {stop, Acc}
+            end
+    end.
 foldacc() -> [].
 
 dropfun(Props) ->
