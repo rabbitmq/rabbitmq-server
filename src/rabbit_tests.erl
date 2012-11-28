@@ -1697,7 +1697,6 @@ test_backing_queue() ->
             passed = test_queue_index(),
             passed = test_queue_index_props(),
             passed = test_variable_queue(),
-            passed = test_variable_queue_fold(),
             passed = test_variable_queue_delete_msg_store_files_callback(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
@@ -2300,15 +2299,25 @@ wait_for_confirms(Unconfirmed) ->
                  end
     end.
 
-test_variable_queue_fold() ->
+test_variable_queue() ->
+    [passed = with_fresh_variable_queue(F) ||
+        F <- [fun test_variable_queue_dynamic_duration_change/1,
+              fun test_variable_queue_partial_segments_delta_thing/1,
+              fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
+              fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
+              fun test_drop/1,
+              fun test_variable_queue_fold_msg_on_disk/1,
+              fun test_dropwhile/1,
+              fun test_dropwhile_varying_ram_duration/1,
+              fun test_variable_queue_ack_limiting/1,
+              fun test_variable_queue_requeue/1]],
     Count = rabbit_queue_index:next_segment_boundary(0),
     [passed = with_fresh_variable_queue(
-               fun (VQ) -> test_variable_queue_fold_shortcut(VQ, Cut) end) ||
+                fun (VQ) -> test_variable_queue_fold(Cut, Count, VQ) end) ||
         Cut <- [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]],
     passed.
 
-test_variable_queue_fold_shortcut(VQ0, Cut) ->
-    Count = rabbit_queue_index:next_segment_boundary(0),
+test_variable_queue_fold(Cut, Count, VQ0) ->
     Msg2Int = fun (#basic_message{
                      content = #content{ payload_fragments_rev = P}}) ->
                      binary_to_term(list_to_binary(lists:reverse(P)))
@@ -2325,20 +2334,6 @@ test_variable_queue_fold_shortcut(VQ0, Cut) ->
     true = [N || N <- lists:seq(lists:min([Cut, Count]), 1, -1)] ==
            [Msg2Int(M) || M <- Acc],
     VQ3.
-
-test_variable_queue() ->
-    [passed = with_fresh_variable_queue(F) ||
-        F <- [fun test_variable_queue_dynamic_duration_change/1,
-              fun test_variable_queue_partial_segments_delta_thing/1,
-              fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
-              fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
-              fun test_drop/1,
-              fun test_variable_queue_fold_msg_on_disk/1,
-              fun test_dropwhile/1,
-              fun test_dropwhile_varying_ram_duration/1,
-              fun test_variable_queue_ack_limiting/1,
-              fun test_variable_queue_requeue/1]],
-    passed.
 
 test_variable_queue_requeue(VQ0) ->
     Interval = 50,
