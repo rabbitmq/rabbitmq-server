@@ -235,9 +235,9 @@ handle_cast({sync_start, Ref, MPid},
            Ref, TRef, MPid, BQ, BQS,
            fun (BQN, BQSN) ->
                    BQSN1 = update_ram_duration(BQN, BQSN),
-                   TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
-                                            self(), update_ram_duration),
-                   {TRef, BQSN1}
+                   TRefN = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
+                                             self(), update_ram_duration),
+                   {TRefN, BQSN1}
            end) of
         {ok,           Res} -> noreply(set_delta(0, S(Res))); %% [0]
         {failed,       Res} -> noreply(S(Res));               %% [1]
