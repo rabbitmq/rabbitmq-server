@@ -22,7 +22,6 @@
 -define(BaseApps, [rabbit]).
 -define(ERROR_CODE, 1).
 
-%% This module is based on rabbit_prelaunch.erl from rabbitmq-server source code
 %% We need to calculate all the ERTS apps we need to ship with a
 %% standalone rabbit. To acomplish that we need to unpack and load the plugins
 %% apps that are shiped with rabbit.
