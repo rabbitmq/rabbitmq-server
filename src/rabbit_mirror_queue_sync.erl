@@ -22,6 +22,32 @@
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
+%% There are three processes around, the master, the syncer and the
+%% slave(s). The syncer is an intermediary, linked to the master in
+%% order to make sure we do not mess with the master's credit flow or
+%% set of monitors.
+%%
+%% Interactions
+%% ------------
+%%
+%% '*' indicates repeating messages. All are standard Erlang messages
+%% except sync_start which is sent over GM to flush out any other
+%% messages that we might have sent that way already. (credit) is the
+%% usual credit_flow bump message every so often.
+%%
+%%               Master             Syncer           Slave(s)
+%% sync_mirrors -> ||                                         ||
+%% (from channel)  || -- (spawns) --> ||                      ||
+%%                 || --------- sync_start (over GM) -------> ||
+%%                 ||                 || <--- sync_ready ---- ||
+%%                 || ----- msg* ---> ||                      ||  }
+%%                 || <-- msg_ok* --- ||                      ||  } loop
+%%                 ||                 || ----- sync_msg* ---> ||  }
+%%                 ||                 || <---- (credit)* ---- ||  }
+%%                 || ---- done ----> ||                      ||
+%%                 ||                 || -- sync_complete --> ||
+%%                 ||               (Dies)                    ||
+
 %% ---------------------------------------------------------------------------
 %% Master
 

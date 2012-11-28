@@ -143,8 +143,6 @@ sync_mirrors(SPids, State = #state { name                = Name,
     rabbit_log:info("Synchronising ~s with slaves ~p: ~p messages to do~n",
                     [rabbit_misc:rs(Name), SPids, BQ:len(BQS)]),
     Ref = make_ref(),
-    %% We send the start over GM to flush out any other messages that
-    %% we might have sent that way already.
     Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     BQS1 = rabbit_mirror_queue_sync:master_go(Syncer, Ref, Name, BQ, BQS),
