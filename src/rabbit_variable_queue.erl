@@ -690,12 +690,12 @@ fold(Fun, Acc, #vqstate { q1    = Q1,
                    {StopGo, AccNext} = Fun(Msg, MsgProps, Acc0),
                    {StopGo, {AccNext, State1}}
            end,
-    {Cont1, {Acc1, State1}} = shortcut_qfold(QFun, {cont, {Acc,  State}},  Q4),
-    {Cont2, {Acc2, State2}} = shortcut_qfold(QFun, {Cont1, {Acc1, State1}}, Q3),
+    {Cont1, {Acc1, State1}} = qfoldl(QFun, {cont,  {Acc,  State }}, Q4),
+    {Cont2, {Acc2, State2}} = qfoldl(QFun, {Cont1, {Acc1, State1}}, Q3),
     {Cont3, {Acc3, State3}} = delta_fold(Fun, {Cont2, Acc2},
                                          DeltaSeqId, DeltaSeqIdEnd, State2),
-    {Cont4, {Acc4, State4}} = shortcut_qfold(QFun, {Cont3, {Acc3, State3}}, Q2),
-    {_,     {Acc5, State5}} = shortcut_qfold(QFun, {Cont4, {Acc4, State4}}, Q1),
+    {Cont4, {Acc4, State4}} = qfoldl(QFun, {Cont3, {Acc3, State3}}, Q2),
+    {_,     {Acc5, State5}} = qfoldl(QFun, {Cont4, {Acc4, State4}}, Q1),
     {Acc5, State5}.
 
 len(#vqstate { len = Len }) -> Len.
@@ -1444,26 +1444,22 @@ beta_limit(Q) ->
 delta_limit(?BLANK_DELTA_PATTERN(_X))             -> undefined;
 delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
 
-shortcut_qfold(_Fun, {stop, _Acc} = A, _Q) ->
-    A;
-shortcut_qfold(Fun, {cont, Acc} = A, Q) ->
+qfoldl(_Fun, {stop, _Acc} = A, _Q) -> A;
+qfoldl( Fun, {cont,  Acc} = A,  Q) ->
     case ?QUEUE:out(Q) of
         {empty, _Q}      -> A;
-        {{value, V}, Q1} -> shortcut_qfold(Fun, Fun(V, Acc), Q1)
+        {{value, V}, Q1} -> qfoldl(Fun, Fun(V, Acc), Q1)
     end.
 
-shortcut_lfold(_Fun, {stop, _Acc} = A, _List) ->
-    A;
-shortcut_lfold(_Fun, {cont, _Acc} = A, []) ->
-    A;
-shortcut_lfold(Fun, {cont, Acc}, [H | Rest]) ->
-    shortcut_lfold(Fun, Fun(H, Acc), Rest).
+lfoldl(_Fun, {stop, _Acc} = A,      _L) -> A;
+lfoldl(_Fun, {cont, _Acc} = A,      []) -> A;
+lfoldl( Fun, {cont,  Acc},     [H | T]) -> lfoldl(Fun, Fun(H, Acc), T).
 
-delta_fold(_Fun, {stop, Acc}, _DeltaSeqId, _DeltaSeqIdEnd, State) ->
+delta_fold(_Fun, {stop, Acc},   _DeltaSeqId, _DeltaSeqIdEnd, State) ->
     {stop, {Acc, State}};
-delta_fold(_Fun, {cont, Acc}, DeltaSeqIdEnd, DeltaSeqIdEnd, State) ->
+delta_fold(_Fun, {cont, Acc}, DeltaSeqIdEnd,  DeltaSeqIdEnd, State) ->
     {cont, {Acc, State}};
-delta_fold(Fun, {cont, Acc}, DeltaSeqId, DeltaSeqIdEnd,
+delta_fold( Fun, {cont, Acc},    DeltaSeqId,  DeltaSeqIdEnd,
            #vqstate { index_state       = IndexState,
                       msg_store_clients = MSCState } = State) ->
     DeltaSeqId1 = lists:min(
@@ -1472,13 +1468,13 @@ delta_fold(Fun, {cont, Acc}, DeltaSeqId, DeltaSeqIdEnd,
     {List, IndexState1} = rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1,
                                                   IndexState),
     {StopCont, {Acc1, MSCState1}} =
-      shortcut_lfold(fun ({MsgId, _SeqId, MsgProps, IsPersistent,
-                           _IsDelivered}, {Acc0, MSCState0}) ->
-                             {{ok, Msg = #basic_message {}}, MSCState1} =
-                               msg_store_read(MSCState0, IsPersistent, MsgId),
-                             {StopCont, AccNext} = Fun(Msg, MsgProps, Acc0),
-                             {StopCont, {AccNext, MSCState1}}
-                     end, {cont, {Acc, MSCState}}, List),
+        lfoldl(fun ({MsgId, _SeqId, MsgProps, IsPersistent, _IsDelivered},
+                    {Acc0, MSCState0}) ->
+                       {{ok, Msg = #basic_message {}}, MSCState1} =
+                           msg_store_read(MSCState0, IsPersistent, MsgId),
+                       {StopCont, AccNext} = Fun(Msg, MsgProps, Acc0),
+                       {StopCont, {AccNext, MSCState1}}
+               end, {cont, {Acc, MSCState}}, List),
     delta_fold(Fun, {StopCont, Acc1}, DeltaSeqId1, DeltaSeqIdEnd,
                State #vqstate { index_state       = IndexState1,
                                 msg_store_clients = MSCState1 }).
