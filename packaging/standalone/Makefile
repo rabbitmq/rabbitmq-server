@@ -22,7 +22,7 @@ dist:
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
 			install
 
-	$(MAKE) fix_rabbitmq_defaults
+	./fix-rabbitmq-defaults.sh $(TARGET_DIR) $(ERTS_VSN) $(VERSION)
 
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
 
@@ -62,19 +62,3 @@ generate_release:
 	    -s rabbit_release \
 	    -extra "$(RABBITMQ_PLUGINS_DIR)" "$(RABBITMQ_PLUGINS_EXPAND_DIR)" "$(RABBITMQ_HOME)"
 	rm src/rabbit_release.beam
-
-## Here we set the RABBITMQ_HOME variable,
-## then we make ERL_DIR point to our released erl
-## and we add the paths to our released start_clean and start_sasl boot scripts
-.PHONY : fix_rabbitmq_defaults
-fix_rabbitmq_defaults:
-	sed -e 's:^SYS_PREFIX=$$:SYS_PREFIX=\$${RABBITMQ_HOME}:' \
-        $(TARGET_DIR)/sbin/rabbitmq-defaults >$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp \
-	&& sed -e 's:^ERL_DIR=$$:ERL_DIR=\$${RABBITMQ_HOME}/erts-$(ERTS_VSN)/bin/:' \
-	$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp >$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp1 \
-	&& sed -e 's:start_clean$$:"\$${SYS_PREFIX}/releases/$(VERSION)/start_clean":' \
-	$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp1 >$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp \
-	&& sed -e 's:start_sasl:"\$${SYS_PREFIX}/releases/$(VERSION)/start_sasl":' \
-	$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp >$(TARGET_DIR)/sbin/rabbitmq-defaults
-
-	chmod 0755 $(TARGET_DIR)/sbin/rabbitmq-defaults
