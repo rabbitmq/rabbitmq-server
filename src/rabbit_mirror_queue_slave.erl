@@ -231,8 +231,14 @@ handle_cast({sync_start, Ref, MPid},
     %% [0] We can only sync when there are no pending acks
     %% [1] The master died so we do not need to set_delta even though
     %%     we purged since we will get a depth instruction soon.
-    case rabbit_mirror_queue_sync:slave(Ref, TRef, MPid, BQ, BQS,
-                                        fun update_ram_duration_sync/2) of
+    case rabbit_mirror_queue_sync:slave(
+           Ref, TRef, MPid, BQ, BQS,
+           fun (BQN, BQSN) ->
+                   BQSN1 = update_ram_duration(BQN, BQSN),
+                   TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
+                                            self(), update_ram_duration),
+                   {TRef, BQSN1}
+           end) of
         {ok,           Res} -> noreply(set_delta(0, S(Res))); %% [0]
         {failed,       Res} -> noreply(S(Res));               %% [1]
         {stop, Reason, Res} -> {stop, Reason, S(Res)}
@@ -248,8 +254,10 @@ handle_cast({set_ram_duration_target, Duration},
     BQS1 = BQ:set_ram_duration_target(Duration, BQS),
     noreply(State #state { backing_queue_state = BQS1 }).
 
-handle_info(update_ram_duration, State) ->
-    noreply(update_ram_duration(State));
+handle_info(update_ram_duration, State = #state{backing_queue       = BQ,
+                                                backing_queue_state = BQS}) ->
+    noreply(State#state{rate_timer_ref      = just_measured,
+                        backing_queue_state = update_ram_duration(BQ, BQS)});
 
 handle_info(sync_timeout, State) ->
     noreply(backing_queue_timeout(
@@ -542,7 +550,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     AckTags = [AckTag || {_MsgId, AckTag} <- dict:to_list(MA)],
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, AckTags, SS, MPids),
+                    QName, CPid, BQ, BQS, GM, AckTags, SS, MPids),
 
     MTC = dict:fold(fun (MsgId, {published, ChPid, MsgSeqNo}, MTC0) ->
                             gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
@@ -828,17 +836,6 @@ update_delta( DeltaChange, State = #state { depth_delta = 0         }) ->
 update_delta( DeltaChange, State = #state { depth_delta = Delta     }) ->
     true = DeltaChange =< 0, %% assertion: we cannot become 'less' sync'ed
     set_delta(Delta + DeltaChange, State #state { depth_delta = undefined }).
-
-update_ram_duration(State = #state { backing_queue = BQ,
-                                     backing_queue_state = BQS }) ->
-    State#state{rate_timer_ref      = just_measured,
-                backing_queue_state = update_ram_duration(BQ, BQS)}.
-
-update_ram_duration_sync(BQ, BQS) ->
-    BQS1 = update_ram_duration(BQ, BQS),
-    TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
-                             self(), update_ram_duration),
-    {TRef, BQS1}.
 
 update_ram_duration(BQ, BQS) ->
     {RamDuration, BQS1} = BQ:ram_duration(BQS),

@@ -32,7 +32,7 @@ master(Name, Ref, SPids, BQ, BQS) ->
     %% We wait for a reply from the slaves so that we know they are in
     %% a receive block and will thus receive messages we send to them
     %% *without* those messages ending up in their gen_server2 pqueue.
-    SPidsMRefs1 = sync_foreach(SPidsMRefs, Ref, fun sync_receive_ready/3),
+    SPidsMRefs1 = foreach_slave(SPidsMRefs, Ref, fun sync_receive_ready/3),
     {{_, SPidsMRefs2, _}, BQS1} =
         BQ:fold(fun (Msg, MsgProps, {I, SPMR, Last}) ->
                         receive
@@ -56,20 +56,19 @@ master(Name, Ref, SPids, BQ, BQS) ->
                              false -> Last
                          end}
                 end, {0, SPidsMRefs1, erlang:now()}, BQS),
-    sync_foreach(SPidsMRefs2, Ref, fun sync_receive_complete/3),
+    foreach_slave(SPidsMRefs2, Ref, fun sync_receive_complete/3),
     BQS1.
 
 wait_for_credit(SPidsMRefs, Ref) ->
     case credit_flow:blocked() of
-        true  -> wait_for_credit(sync_foreach(SPidsMRefs, Ref,
-                                              fun sync_receive_credit/3), Ref);
+        true  -> wait_for_credit(foreach_slave(SPidsMRefs, Ref,
+                                               fun sync_receive_credit/3), Ref);
         false -> SPidsMRefs
     end.
 
-sync_foreach(SPidsMRefs, Ref, Fun) ->
+foreach_slave(SPidsMRefs, Ref, Fun) ->
     [{SPid, MRef} || {SPid, MRef} <- SPidsMRefs,
-                     SPid1 <- [Fun(SPid, MRef, Ref)],
-                     SPid1 =/= dead].
+                     Fun(SPid, MRef, Ref) =/= dead].
 
 sync_receive_ready(SPid, MRef, Ref) ->
     receive
@@ -102,9 +101,9 @@ slave(Ref, TRef, MPid, BQ, BQS, UpdateRamDuration) ->
     MRef = erlang:monitor(process, MPid),
     MPid ! {sync_ready, Ref, self()},
     {_MsgCount, BQS1} = BQ:purge(BQS),
-    slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS1, UpdateRamDuration).
+    slave_sync_loop({Ref, MRef, MPid, BQ, UpdateRamDuration}, TRef, BQS1).
 
-slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS, UpdateRamDur) ->
+slave_sync_loop(Args = {Ref, MRef, MPid, BQ, UpdateRamDur}, TRef, BQS) ->
     receive
         {'DOWN', MRef, process, MPid, _Reason} ->
             %% If the master dies half way we are not in the usual
@@ -118,7 +117,7 @@ slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS, UpdateRamDur) ->
             {failed, {TRef, BQS1}};
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
-            slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS, UpdateRamDur);
+            slave_sync_loop(Args, TRef, BQS);
         {sync_complete, Ref} ->
             MPid ! {sync_complete_ok, Ref, self()},
             erlang:demonitor(MRef),
@@ -126,18 +125,18 @@ slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS, UpdateRamDur) ->
             {ok, {TRef, BQS}};
         {'$gen_cast', {set_maximum_since_use, Age}} ->
             ok = file_handle_cache:set_maximum_since_use(Age),
-            slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS, UpdateRamDur);
+            slave_sync_loop(Args, TRef, BQS);
         {'$gen_cast', {set_ram_duration_target, Duration}} ->
             BQS1 = BQ:set_ram_duration_target(Duration, BQS),
-            slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS1, UpdateRamDur);
+            slave_sync_loop(Args, TRef, BQS1);
         update_ram_duration ->
             {TRef2, BQS1} = UpdateRamDur(BQ, BQS),
-            slave_sync_loop(Ref, TRef2, MRef, MPid, BQ, BQS1, UpdateRamDur);
+            slave_sync_loop(Args, TRef2, BQS1);
         {sync_message, Ref, Msg, Props} ->
             credit_flow:ack(MPid, ?CREDIT_DISC_BOUND),
             Props1 = Props#message_properties{needs_confirming = false},
-            BQS1 = BQ:publish(Msg, Props1, none, BQS),
-            slave_sync_loop(Ref, TRef, MRef, MPid, BQ, BQS1, UpdateRamDur);
+            BQS1 = BQ:publish(Msg, Props1, true, none, BQS),
+            slave_sync_loop(Args, TRef, BQS1);
         {'EXIT', _Pid, Reason} ->
             {stop, Reason, {TRef, BQS}}
     end.

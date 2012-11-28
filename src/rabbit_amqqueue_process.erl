@@ -1154,17 +1154,13 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     noreply(requeue(AckTags, ChPid, State));
 
 handle_call(sync_mirrors, From,
-            State = #q{q                   = #amqqueue{name = Name},
-                       backing_queue       = rabbit_mirror_queue_master = BQ,
+            State = #q{backing_queue       = rabbit_mirror_queue_master = BQ,
                        backing_queue_state = BQS}) ->
     case BQ:depth(BQS) - BQ:len(BQS) of
-        0 -> {ok, #amqqueue{slave_pids = SPids, sync_slave_pids = SSPids}} =
-                 rabbit_amqqueue:lookup(Name),
-             gen_server2:reply(From, ok),
+        0 -> gen_server2:reply(From, ok),
              try
-                 noreply(State#q{backing_queue_state =
-                                     rabbit_mirror_queue_master:sync_mirrors(
-                                       SPids -- SSPids, Name, BQS)})
+                 BQS1 = rabbit_mirror_queue_master:sync_mirrors(BQS),
+                 noreply(State#q{backing_queue_state = BQS1})
              catch
                  {time_to_shutdown, Reason} ->
                      {stop, Reason, State}
