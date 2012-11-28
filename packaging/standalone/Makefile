@@ -38,6 +38,9 @@ dist:
 # move rabbitmq files to top level folder
 	mv $(RLS_DIR)/lib/rabbit-$(VERSION)/* $(RLS_DIR)
 
+# remove empty lib/rabbit-$(VERSION) folder
+	rm -rf $(RLS_DIR)/lib/rabbit-$(VERSION)
+
 	tar -zcf $(TARGET_TARBALL).tar.gz -C $(TARGET_DIR)/release $(TARGET_DIR)
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
