@@ -83,10 +83,7 @@ master_send({Syncer, Ref, Name}, I, Last, Msg, MsgProps) ->
 %% Syncer
 
 syncer(Ref, MPid, SPids) ->
-    SPidsMRefs = [begin
-                      MRef = erlang:monitor(process, SPid),
-                      {SPid, MRef}
-                  end || SPid <- SPids],
+    SPidsMRefs = [{SPid, erlang:monitor(process, SPid)} || SPid <- SPids],
     %% We wait for a reply from the slaves so that we know they are in
     %% a receive block and will thus receive messages we send to them
     %% *without* those messages ending up in their gen_server2 pqueue.

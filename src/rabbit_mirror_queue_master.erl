@@ -127,27 +127,27 @@ stop_mirroring(State = #state { coordinator         = CPid,
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
-sync_mirrors(State = #state{name = Name}) ->
+sync_mirrors(State = #state{name = QName}) ->
     {ok, #amqqueue{slave_pids = SPids, sync_slave_pids = SSPids}} =
-        rabbit_amqqueue:lookup(Name),
+        rabbit_amqqueue:lookup(QName),
     sync_mirrors(SPids -- SSPids, State).
 
-sync_mirrors([], State = #state{name = Name}) ->
+sync_mirrors([], State = #state{name = QName}) ->
     rabbit_log:info("Synchronising ~s: nothing to do~n",
-                    [rabbit_misc:rs(Name)]),
+                    [rabbit_misc:rs(QName)]),
     State;
-sync_mirrors(SPids, State = #state { name                = Name,
+sync_mirrors(SPids, State = #state { name                = QName,
                                      gm                  = GM,
                                      backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     rabbit_log:info("Synchronising ~s with slaves ~p: ~p messages to do~n",
-                    [rabbit_misc:rs(Name), SPids, BQ:len(BQS)]),
+                    [rabbit_misc:rs(QName), SPids, BQ:len(BQS)]),
     Ref = make_ref(),
     Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
-    BQS1 = rabbit_mirror_queue_sync:master_go(Syncer, Ref, Name, BQ, BQS),
+    BQS1 = rabbit_mirror_queue_sync:master_go(Syncer, Ref, QName, BQ, BQS),
     rabbit_log:info("Synchronising ~s: complete~n",
-                    [rabbit_misc:rs(Name)]),
+                    [rabbit_misc:rs(QName)]),
     State#state{backing_queue_state = BQS1}.
 
 terminate({shutdown, dropped} = Reason,
@@ -173,11 +173,9 @@ delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
     stop_all_slaves(Reason, State),
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
-stop_all_slaves(Reason, #state{name = Name,
-                               gm   = GM}) ->
-    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
-    Slaves = [Pid || Pid <- SPids],
-    MRefs = [erlang:monitor(process, S) || S <- Slaves],
+stop_all_slaves(Reason, #state{name = QName, gm   = GM}) ->
+    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
+    MRefs = [erlang:monitor(process, SPid) || SPid <- SPids],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
     [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
     %% Normally when we remove a slave another slave or master will
@@ -185,11 +183,11 @@ stop_all_slaves(Reason, #state{name = Name,
     %% have stopped listening ourselves. So manually clean up.
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              [Q] = mnesia:read({rabbit_queue, Name}),
+              [Q] = mnesia:read({rabbit_queue, QName}),
               rabbit_mirror_queue_misc:store_updated_slaves(
                 Q #amqqueue { gm_pids = [], slave_pids = [] })
       end),
-    ok = gm:forget_group(Name).
+    ok = gm:forget_group(QName).
 
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
