@@ -34,19 +34,18 @@ start() ->
         init:get_plain_arguments(),
     RootName = UnpackedPluginDir ++ "/rabbit",
 
+    %% extract the plugins so we can load their apps later
     prepare_plugins(PluginsDistDir, UnpackedPluginDir),
 
     PluginAppNames = [P#plugin.name ||
                          P <- rabbit_plugins:list(PluginsDistDir)],
 
-    %% we need to call find_plugins because it has the secondary effect of
-    %% adding the plugin ebin folder to the code path.
-    %% We need that in order to load the plugin app
-    RequiredApps = find_plugins(UnpackedPluginDir),
+    %% add the plugin ebin folder to the code path.
+    add_plugins_to_path(UnpackedPluginDir),
 
     %% Build the entire set of dependencies - this will load the
     %% applications along the way
-    AllApps = case catch sets:to_list(expand_dependencies(RequiredApps)) of
+    AllApps = case catch sets:to_list(expand_dependencies(PluginAppNames)) of
                   {failed_to_load_app, App, Err} ->
                       terminate("failed to load application ~s:~n~p",
                                 [App, Err]);
@@ -139,19 +138,14 @@ expand_dependencies(Current, [Next|Rest]) ->
             expand_dependencies(sets:add_element(Next, Current), Rest ++ Unique)
     end.
 
-find_plugins(PluginDir) ->
-    [prepare_dir_plugin(PluginName) ||
+add_plugins_to_path(PluginDir) ->
+    [add_plugin_to_path(PluginName) ||
         PluginName <- filelib:wildcard(PluginDir ++ "/*/ebin/*.app")].
 
-prepare_dir_plugin(PluginAppDescFn) ->
+add_plugin_to_path(PluginAppDescFn) ->
     %% Add the plugin ebin directory to the load path
     PluginEBinDirN = filename:dirname(PluginAppDescFn),
-    code:add_path(PluginEBinDirN),
-
-    %% We want the second-last token
-    NameTokens = string:tokens(PluginAppDescFn,"/."),
-    PluginNameString = lists:nth(length(NameTokens) - 1, NameTokens),
-    list_to_atom(PluginNameString).
+    code:add_path(PluginEBinDirN).
 
 terminate(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
