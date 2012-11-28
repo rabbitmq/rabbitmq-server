@@ -2310,30 +2310,33 @@ test_variable_queue() ->
               fun test_dropwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
-              fun test_variable_queue_requeue/1]],
-    Count = rabbit_queue_index:next_segment_boundary(0),
-    [passed = with_fresh_variable_queue(
-                fun (VQ) -> test_variable_queue_fold(Cut, Count, VQ) end) ||
-        Cut <- [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]],
+              fun test_variable_queue_requeue/1,
+              fun test_variable_queue_fold/1]],
     passed.
 
-test_variable_queue_fold(Cut, Count, VQ0) ->
-    Msg2Int = fun (#basic_message{
-                     content = #content{ payload_fragments_rev = P}}) ->
-                     binary_to_term(list_to_binary(lists:reverse(P)))
-              end,
+test_variable_queue_fold(VQ0) ->
+    Count = rabbit_queue_index:next_segment_boundary(0) * 2 + 64,
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(
             true, Count, fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
-    {Acc, VQ3} = rabbit_variable_queue:fold(fun (M, _, A) ->
-                                                    case Msg2Int(M) =< Cut of
-                                                       true  -> {cont, [M | A]};
-                                                       false -> {stop, A}
-                                                    end
-                                            end, [], VQ2),
+    lists:foldl(
+      fun (Cut, VQ3) -> test_variable_queue_fold(Cut, Count, VQ3) end,
+      VQ2, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
+
+test_variable_queue_fold(Cut, Count, VQ0) ->
+    {Acc, VQ1} = rabbit_variable_queue:fold(
+                   fun (M, _, A) ->
+                           case msg2int(M) =< Cut of
+                               true  -> {cont, [M | A]};
+                               false -> {stop, A}
+                           end
+                   end, [], VQ0),
     true = [N || N <- lists:seq(lists:min([Cut, Count]), 1, -1)] ==
-           [Msg2Int(M) || M <- Acc],
-    VQ3.
+        [msg2int(M) || M <- Acc],
+    VQ1.
+
+msg2int(#basic_message{content = #content{ payload_fragments_rev = P}}) ->
+    binary_to_term(list_to_binary(lists:reverse(P))).
 
 test_variable_queue_requeue(VQ0) ->
     Interval = 50,
