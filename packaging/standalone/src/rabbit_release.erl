@@ -75,8 +75,7 @@ start() ->
     systools:script2boot(RootName),
     %% Make release tarfile
     make_tar(RootName, RabbitHome),
-    rabbit_misc:quit(0),
-    ok.
+    rabbit_misc:quit(0).
 
 make_tar(Release, RabbitHome) ->
     systools:make_tar(Release,
