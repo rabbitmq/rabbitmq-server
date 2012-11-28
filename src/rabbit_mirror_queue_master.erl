@@ -145,8 +145,9 @@ sync_mirrors(SPids, State = #state { name                = Name,
     Ref = make_ref(),
     %% We send the start over GM to flush out any other messages that
     %% we might have sent that way already.
-    gm:broadcast(GM, {sync_start, Ref, self(), SPids}),
-    BQS1 = rabbit_mirror_queue_sync:master(Name, Ref, SPids, BQ, BQS),
+    Syncer = rabbit_mirror_queue_sync:master_prepare(Name, Ref, SPids, BQ, BQS),
+    gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
+    BQS1 = rabbit_mirror_queue_sync:master_go(Syncer, Ref),
     rabbit_log:info("Synchronising ~s: complete~n",
                     [rabbit_misc:rs(Name)]),
     State#state{backing_queue_state = BQS1}.
