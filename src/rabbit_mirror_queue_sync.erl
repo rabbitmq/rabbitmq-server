@@ -163,8 +163,7 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDur}, TRef, BQS) ->
             credit_flow:handle_bump_msg(Msg),
             slave_sync_loop(Args, TRef, BQS);
         {sync_complete, Ref} ->
-            Syncer ! {sync_complete_ok, Ref, self()},
-            erlang:demonitor(MRef),
+            erlang:demonitor(MRef, [flush]),
             credit_flow:peer_down(Syncer),
             {ok, {TRef, BQS}};
         {'$gen_cast', {set_maximum_since_use, Age}} ->
