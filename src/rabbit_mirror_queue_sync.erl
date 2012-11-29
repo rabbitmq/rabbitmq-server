@@ -166,7 +166,7 @@ sync_send_complete(SPid, _MRef, Ref) ->
 
 slave(0, Ref, TRef, Syncer, _BQ, BQS, _UpdateRamDuration) ->
     Syncer ! {sync_deny, Ref, self()},
-    {ok, {TRef, BQS}};
+    denied;
 
 slave(_DD, Ref, TRef, Syncer, BQ, BQS, UpdateRamDuration) ->
     MRef = erlang:monitor(process, Syncer),

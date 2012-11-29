@@ -239,6 +239,7 @@ handle_cast({sync_start, Ref, Syncer},
                                              self(), update_ram_duration),
                    {TRefN, BQSN1}
            end) of
+        denied              -> noreply(State1);
         {ok,           Res} -> noreply(set_delta(0, S(Res))); %% [0]
         {failed,       Res} -> noreply(S(Res));
         {stop, Reason, Res} -> {stop, Reason, S(Res)}
