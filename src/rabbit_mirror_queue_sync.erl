@@ -81,6 +81,12 @@ master_send({Syncer, Ref, QName}, I, Last, Msg, MsgProps) ->
            end},
     Parent = rabbit_misc:get_parent(),
     receive
+        {'$gen_cast', {set_maximum_since_use, Age}} ->
+            ok = file_handle_cache:set_maximum_since_use(Age)
+    after 0 ->
+            ok
+    end,
+    receive
         {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps},
                                     {cont, Acc};
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}};
@@ -101,7 +107,7 @@ syncer(Ref, QName, MPid, SPids) ->
             rabbit_log:info("Synchronising ~s: all slaves already synced~n",
                             [rabbit_misc:rs(QName)]);
         SPidsMRefs1 ->
-            rabbit_log:info("Synchronising ~s: ~p require sync~n",
+            rabbit_log:info("Synchronising ~s: ~p to sync~n",
                             [rabbit_misc:rs(QName),
                              [rabbit_misc:pid_to_string(S) ||
                                  {S, _} <- SPidsMRefs1]]),
