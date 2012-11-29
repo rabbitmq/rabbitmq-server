@@ -63,10 +63,10 @@ master_go(Syncer, Ref, Log, BQ, BQS) ->
         BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
                         master_send(SendArgs, I, Last, Msg, MsgProps)
                 end, {0, erlang:now()}, BQS),
-    Syncer ! {done, Ref},
     receive
         {next, Ref} -> ok
     end,
+    Syncer ! {done, Ref},
     case Acc of
         {shutdown,  Reason} -> {shutdown,  Reason, BQS1};
         {sync_died, Reason} -> {sync_died, Reason, BQS1};
@@ -89,8 +89,8 @@ master_send({Syncer, Ref, Log, Parent}, I, Last, Msg, MsgProps) ->
     receive
         {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps},
                                     {cont, Acc};
-        {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}};
-        {'EXIT', Parent, Reason} -> {stop, {shutdown, Reason}}
+        {'EXIT', Parent, Reason} -> {stop, {shutdown,  Reason}};
+        {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
     end.
 
 %% Master
@@ -139,7 +139,7 @@ foreach_slave(SPidsMRefs, Ref, Fun) ->
 sync_receive_ready(SPid, MRef, Ref) ->
     receive
         {sync_ready, Ref, SPid}    -> SPid;
-        {sync_deny, Ref, SPid}     -> ignore;
+        {sync_deny,  Ref, SPid}    -> ignore;
         {'DOWN', MRef, _, SPid, _} -> ignore
     end.
 
