@@ -57,25 +57,28 @@ master_prepare(Ref, SPids) ->
 
 master_go(Syncer, Ref, Name, BQ, BQS) ->
     SendArgs = {Syncer, Ref, Name},
-    {_, BQS1} =
+    {Acc, BQS1} =
         BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
-                        {I + 1, master_send(SendArgs, I, Last, Msg, MsgProps)}
+                        master_send(SendArgs, I, Last, Msg, MsgProps)
                 end, {0, erlang:now()}, BQS),
     Syncer ! {done, Ref},
-    BQS1.
+    case Acc of
+        {shutdown, Reason} -> {shutdown, Reason, BQS1};
+        _                  -> {ok, BQS1}
+    end.
 
 master_send({Syncer, Ref, Name}, I, Last, Msg, MsgProps) ->
     Syncer ! {msg, Ref, Msg, MsgProps},
+    Acc = {I + 1,
+           case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
+               true  -> rabbit_log:info("Synchronising ~s: ~p messages~n",
+                                        [rabbit_misc:rs(Name), I]),
+                        erlang:now();
+               false -> Last
+           end},
     receive
-        {msg_ok, Ref}          -> ok;
-        {'EXIT', _Pid, Reason} -> throw({time_to_shutdown, Reason})
-    end,
-    case timer:now_diff(erlang:now(), Last) >
-        ?SYNC_PROGRESS_INTERVAL of
-        true  -> rabbit_log:info("Synchronising ~s: ~p messages~n",
-                                 [rabbit_misc:rs(Name), I]),
-                 erlang:now();
-        false -> Last
+        {msg_ok, Ref}          -> {cont, Acc};
+        {'EXIT', _Pid, Reason} -> {stop, {shutdown, Reason}}
     end.
 
 %% Master

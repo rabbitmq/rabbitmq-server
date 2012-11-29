@@ -2315,17 +2315,28 @@ test_variable_queue() ->
     passed.
 
 test_variable_queue_fold(VQ0) ->
-    Count = rabbit_queue_index:next_segment_boundary(0) * 2 + 1,
+    Count = rabbit_queue_index:next_segment_boundary(0) * 2 + 64,
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(
             true, Count, fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
-    {Acc, VQ3} = rabbit_variable_queue:fold(
-                   fun (M, _, A) -> [M | A] end, [], VQ2),
-    true = [term_to_binary(N) || N <- lists:seq(Count, 1, -1)] ==
-           [list_to_binary(lists:reverse(P)) ||
-             #basic_message{ content = #content{ payload_fragments_rev = P}} <-
-             Acc],
-    VQ3.
+    lists:foldl(
+      fun (Cut, VQ3) -> test_variable_queue_fold(Cut, Count, VQ3) end,
+      VQ2, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
+
+test_variable_queue_fold(Cut, Count, VQ0) ->
+    {Acc, VQ1} = rabbit_variable_queue:fold(
+                   fun (M, _, A) ->
+                           case msg2int(M) =< Cut of
+                               true  -> {cont, [M | A]};
+                               false -> {stop, A}
+                           end
+                   end, [], VQ0),
+    true = [N || N <- lists:seq(lists:min([Cut, Count]), 1, -1)] ==
+        [msg2int(M) || M <- Acc],
+    VQ1.
+
+msg2int(#basic_message{content = #content{ payload_fragments_rev = P}}) ->
+    binary_to_term(list_to_binary(lists:reverse(P))).
 
 test_variable_queue_requeue(VQ0) ->
     Interval = 50,
