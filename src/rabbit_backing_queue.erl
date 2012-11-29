@@ -78,8 +78,8 @@
 
 %% Publish a message.
 -callback publish(rabbit_types:basic_message(),
-                  rabbit_types:message_properties(), pid(), state()) ->
-    state().
+                  rabbit_types:message_properties(), boolean(), pid(),
+                  state()) -> state().
 
 %% Called for messages which have already been passed straight
 %% out to a client. The queue will be empty for these calls
@@ -157,8 +157,9 @@
 
 %% Fold over all the messages in a queue and return the accumulated
 %% results, leaving the queue undisturbed.
--callback fold(fun((rabbit_types:basic_message(), A) -> A), A, state())
-              -> {A, state()}.
+-callback fold(fun((rabbit_types:basic_message(),
+                    rabbit_types:message_properties(), A) -> A),
+               A, state()) -> {A, state()}.
 
 %% How long is my queue?
 -callback len(state()) -> non_neg_integer().
@@ -219,7 +220,7 @@
 
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
-     {delete_and_terminate, 2}, {purge, 1}, {publish, 4},
+     {delete_and_terminate, 2}, {purge, 1}, {publish, 5},
      {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1}, {dropwhile, 3},
      {fetch, 2}, {ack, 2}, {foreach_ack, 3}, {requeue, 2}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},

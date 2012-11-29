@@ -318,7 +318,6 @@ prioritise_cast(Msg, _State) ->
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         {gm, _Msg}                           -> 5;
-        {post_commit, _Txn, _AckTags}        -> 4;
         _                                    -> 0
     end.
 
@@ -703,7 +702,7 @@ process_instruction({publish, ChPid, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(published, ChPid, MsgId, State),
-    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
+    BQS1 = BQ:publish(Msg, MsgProps, true, ChPid, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
 process_instruction({publish_delivered, ChPid, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
