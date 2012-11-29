@@ -56,7 +56,7 @@ master_prepare(Ref, QName, SPids) ->
     spawn_link(fun () -> syncer(Ref, QName, MPid, SPids) end).
 
 master_go(Syncer, Ref, QName, BQ, BQS) ->
-    SendArgs = {Syncer, Ref, QName},
+    SendArgs = {Syncer, Ref, QName, rabbit_misc:get_parent()},
     {Acc, BQS1} =
         BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
                         master_send(SendArgs, I, Last, Msg, MsgProps)
@@ -71,7 +71,7 @@ master_go(Syncer, Ref, QName, BQ, BQS) ->
         _                   -> {ok, BQS1}
     end.
 
-master_send({Syncer, Ref, QName}, I, Last, Msg, MsgProps) ->
+master_send({Syncer, Ref, QName, Parent}, I, Last, Msg, MsgProps) ->
     Acc = {I + 1,
            case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
                true  -> rabbit_log:info("Synchronising ~s: ~p messages~n",
@@ -79,7 +79,6 @@ master_send({Syncer, Ref, QName}, I, Last, Msg, MsgProps) ->
                         erlang:now();
                false -> Last
            end},
-    Parent = rabbit_misc:get_parent(),
     receive
         {'$gen_cast', {set_maximum_since_use, Age}} ->
             ok = file_handle_cache:set_maximum_since_use(Age)
@@ -171,10 +170,11 @@ slave(_DD, Ref, TRef, Syncer, BQ, BQS, UpdateRamDuration) ->
     MRef = erlang:monitor(process, Syncer),
     Syncer ! {sync_ready, Ref, self()},
     {_MsgCount, BQS1} = BQ:purge(BQS),
-    slave_sync_loop({Ref, MRef, Syncer, BQ, UpdateRamDuration}, TRef, BQS1).
+    slave_sync_loop({Ref, MRef, Syncer, BQ, UpdateRamDuration,
+                     rabbit_misc:get_parent()}, TRef, BQS1).
 
-slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration}, TRef, BQS) ->
-    Parent = rabbit_misc:get_parent(),
+slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
+                TRef, BQS) ->
     receive
         {'DOWN', MRef, process, Syncer, _Reason} ->
             %% If the master dies half way we are not in the usual
