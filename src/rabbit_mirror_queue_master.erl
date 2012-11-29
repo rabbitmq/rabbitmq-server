@@ -135,7 +135,7 @@ sync_mirrors(State = #state{name = QName}) ->
 sync_mirrors([], State = #state{name = QName}) ->
     rabbit_log:info("Synchronising ~s: nothing to do~n",
                     [rabbit_misc:rs(QName)]),
-    State;
+    {ok, State};
 sync_mirrors(SPids, State = #state { name                = QName,
                                      gm                  = GM,
                                      backing_queue       = BQ,
@@ -145,10 +145,13 @@ sync_mirrors(SPids, State = #state { name                = QName,
     Ref = make_ref(),
     Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
-    BQS1 = rabbit_mirror_queue_sync:master_go(Syncer, Ref, QName, BQ, BQS),
-    rabbit_log:info("Synchronising ~s: complete~n",
-                    [rabbit_misc:rs(QName)]),
-    State#state{backing_queue_state = BQS1}.
+    S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
+    case rabbit_mirror_queue_sync:master_go(Syncer, Ref, QName, BQ, BQS) of
+        {shutdown, R, BQS1} -> {stop, R, S(BQS1)};
+        {ok, BQS1}          -> rabbit_log:info("Synchronising ~s: complete~n",
+                                               [rabbit_misc:rs(QName)]),
+                               {ok, S(BQS1)}
+    end.
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue       = BQ,
