@@ -74,7 +74,7 @@
 	 start_child/2, restart_child/2,
 	 delete_child/2, terminate_child/2,
 	 which_children/1, count_children/1,
-     find_child/2, check_childspecs/1]).
+         find_child/2, check_childspecs/1]).
 
 %% Internal exports
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -437,7 +437,7 @@ handle_call({terminate_child, Name}, _From, State) ->
 %%% The requests delete_child and restart_child are invalid for
 %%% simple_one_for_one supervisors.
 handle_call({_Req, _Data}, _From, State) when ?is_simple(State) ->
-    {reply, {error, State#state.strategy}, State};
+    {reply, {error, simple_one_for_one}, State};
 
 handle_call({start_child, ChildSpec}, _From, State) ->
     case check_childspec(ChildSpec) of
@@ -777,6 +777,7 @@ restart_child(Pid, Reason, #state{children = [Child]} = State) when ?is_simple(S
 	error ->
             {ok, State}
     end;
+
 restart_child(Pid, Reason, State) ->
     Children = State#state.children,
     case lists:keysearch(Pid, #child.pid, Children) of
