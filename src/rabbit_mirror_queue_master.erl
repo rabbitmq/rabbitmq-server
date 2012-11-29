@@ -127,24 +127,16 @@ stop_mirroring(State = #state { coordinator         = CPid,
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
-sync_mirrors(State = #state{name = QName}) ->
-    {ok, #amqqueue{slave_pids = SPids, sync_slave_pids = SSPids}} =
-        rabbit_amqqueue:lookup(QName),
-    sync_mirrors(SPids -- SSPids, State).
-
-sync_mirrors([], State = #state{name = QName}) ->
-    rabbit_log:info("Synchronising ~s: nothing to do~n",
-                    [rabbit_misc:rs(QName)]),
-    {ok, State};
-sync_mirrors(SPids, State = #state { name                = QName,
-                                     gm                  = GM,
-                                     backing_queue       = BQ,
-                                     backing_queue_state = BQS }) ->
-    rabbit_log:info("Synchronising ~s with slaves ~p: ~p messages to do~n",
-                    [rabbit_misc:rs(QName), SPids, BQ:len(BQS)]),
+sync_mirrors(State = #state { name                = QName,
+                              gm                  = GM,
+                              backing_queue       = BQ,
+                              backing_queue_state = BQS }) ->
+    rabbit_log:info("Synchronising ~s: ~p messages to synchronise~n",
+                    [rabbit_misc:rs(QName), BQ:len(BQS)]),
+    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
     Ref = make_ref(),
-    Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, SPids),
-    gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
+    Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, QName, SPids),
+    gm:broadcast(GM, {sync_start, Ref, Syncer}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
     case rabbit_mirror_queue_sync:master_go(Syncer, Ref, QName, BQ, BQS) of
         {shutdown, R, BQS1} -> {stop, R, S(BQS1)};

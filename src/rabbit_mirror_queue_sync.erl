@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([master_prepare/2, master_go/5, slave/6]).
+-export([master_prepare/3, master_go/5, slave/7]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
@@ -51,12 +51,12 @@
 %% ---------------------------------------------------------------------------
 %% Master
 
-master_prepare(Ref, SPids) ->
+master_prepare(Ref, QName, SPids) ->
     MPid = self(),
-    spawn_link(fun () -> syncer(Ref, MPid, SPids) end).
+    spawn_link(fun () -> syncer(Ref, QName, MPid, SPids) end).
 
-master_go(Syncer, Ref, Name, BQ, BQS) ->
-    SendArgs = {Syncer, Ref, Name},
+master_go(Syncer, Ref, QName, BQ, BQS) ->
+    SendArgs = {Syncer, Ref, QName},
     {Acc, BQS1} =
         BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
                         master_send(SendArgs, I, Last, Msg, MsgProps)
@@ -70,11 +70,11 @@ master_go(Syncer, Ref, Name, BQ, BQS) ->
         _                  -> {ok, BQS1}
     end.
 
-master_send({Syncer, Ref, Name}, I, Last, Msg, MsgProps) ->
+master_send({Syncer, Ref, QName}, I, Last, Msg, MsgProps) ->
     Acc = {I + 1,
            case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
                true  -> rabbit_log:info("Synchronising ~s: ~p messages~n",
-                                        [rabbit_misc:rs(Name), I]),
+                                        [rabbit_misc:rs(QName), I]),
                         erlang:now();
                false -> Last
            end},
@@ -88,14 +88,23 @@ master_send({Syncer, Ref, Name}, I, Last, Msg, MsgProps) ->
 %% ---------------------------------------------------------------------------
 %% Syncer
 
-syncer(Ref, MPid, SPids) ->
+syncer(Ref, QName, MPid, SPids) ->
     SPidsMRefs = [{SPid, erlang:monitor(process, SPid)} || SPid <- SPids],
     %% We wait for a reply from the slaves so that we know they are in
     %% a receive block and will thus receive messages we send to them
     %% *without* those messages ending up in their gen_server2 pqueue.
-    SPidsMRefs1 = foreach_slave(SPidsMRefs, Ref, fun sync_receive_ready/3),
-    SPidsMRefs2 = syncer_loop({Ref, MPid}, SPidsMRefs1),
-    foreach_slave(SPidsMRefs2, Ref, fun sync_send_complete/3),
+    case foreach_slave(SPidsMRefs, Ref, fun sync_receive_ready/3) of
+        [] ->
+            rabbit_log:info("Synchronising ~s: all slaves already synced~n",
+                            [rabbit_misc:rs(QName)]);
+        SPidsMRefs1 ->
+            rabbit_log:info("Synchronising ~s: ~p require sync~n",
+                            [rabbit_misc:rs(QName),
+                             [rabbit_misc:pid_to_string(S) ||
+                                 {S, _} <- SPidsMRefs1]]),
+            SPidsMRefs2 = syncer_loop({Ref, MPid}, SPidsMRefs1),
+            foreach_slave(SPidsMRefs2, Ref, fun sync_send_complete/3)
+    end,
     unlink(MPid).
 
 syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
@@ -121,12 +130,13 @@ wait_for_credit(SPidsMRefs, Ref) ->
 
 foreach_slave(SPidsMRefs, Ref, Fun) ->
     [{SPid, MRef} || {SPid, MRef} <- SPidsMRefs,
-                     Fun(SPid, MRef, Ref) =/= dead].
+                     Fun(SPid, MRef, Ref) =/= ignore].
 
 sync_receive_ready(SPid, MRef, Ref) ->
     receive
         {sync_ready, Ref, SPid}    -> SPid;
-        {'DOWN', MRef, _, SPid, _} -> dead
+        {sync_deny, Ref, SPid}     -> ignore;
+        {'DOWN', MRef, _, SPid, _} -> ignore
     end.
 
 sync_receive_credit(SPid, MRef, _Ref) ->
@@ -134,7 +144,7 @@ sync_receive_credit(SPid, MRef, _Ref) ->
         {bump_credit, {SPid, _} = Msg} -> credit_flow:handle_bump_msg(Msg),
                                           SPid;
         {'DOWN', MRef, _, SPid, _}     -> credit_flow:peer_down(SPid),
-                                          dead
+                                          ignore
     end.
 
 sync_send_complete(SPid, _MRef, Ref) ->
@@ -144,7 +154,11 @@ sync_send_complete(SPid, _MRef, Ref) ->
 %% ---------------------------------------------------------------------------
 %% Slave
 
-slave(Ref, TRef, Syncer, BQ, BQS, UpdateRamDuration) ->
+slave(0, Ref, TRef, Syncer, _BQ, BQS, _UpdateRamDuration) ->
+    Syncer ! {sync_deny, Ref, self()},
+    {ok, {TRef, BQS}};
+
+slave(_DD, Ref, TRef, Syncer, BQ, BQS, UpdateRamDuration) ->
     MRef = erlang:monitor(process, Syncer),
     Syncer ! {sync_ready, Ref, self()},
     {_MsgCount, BQS1} = BQ:purge(BQS),

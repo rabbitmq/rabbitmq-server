@@ -222,8 +222,9 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, true, Flow},
     end,
     noreply(maybe_enqueue_message(Delivery, State));
 
-handle_cast({sync_start, Ref, MPid},
-            State = #state { backing_queue       = BQ,
+handle_cast({sync_start, Ref, Syncer},
+            State = #state { depth_delta         = DD,
+                             backing_queue       = BQ,
                              backing_queue_state = BQS }) ->
     State1 = #state{rate_timer_ref = TRef} = ensure_rate_timer(State),
     S = fun({TRefN, BQSN}) -> State1#state{rate_timer_ref      = TRefN,
@@ -232,7 +233,7 @@ handle_cast({sync_start, Ref, MPid},
     %% [1] The master died so we do not need to set_delta even though
     %%     we purged since we will get a depth instruction soon.
     case rabbit_mirror_queue_sync:slave(
-           Ref, TRef, MPid, BQ, BQS,
+           DD, Ref, TRef, Syncer, BQ, BQS,
            fun (BQN, BQSN) ->
                    BQSN1 = update_ram_duration(BQN, BQSN),
                    TRefN = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
@@ -374,11 +375,8 @@ handle_msg([_SPid], _From, process_death) ->
 handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, {gm, Msg}),
     {stop, {shutdown, ring_shutdown}};
-handle_msg([SPid], _From, {sync_start, Ref, MPid, SPids}) ->
-    case lists:member(SPid, SPids) of
-        true  -> ok = gen_server2:cast(SPid, {sync_start, Ref, MPid});
-        false -> ok
-    end;
+handle_msg([SPid], _From, {sync_start, Ref, Syncer}) ->
+    gen_server2:cast(SPid, {sync_start, Ref, Syncer});
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
