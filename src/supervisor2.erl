@@ -780,6 +780,7 @@ restart_child(Pid, Reason, #state{children = [Child]} = State) when ?is_simple(S
 
 restart_child(Pid, Reason, State) ->
     Children = State#state.children,
+    %% we still support >= R12-B3 in which lists:keyfind/3 doesn't exist
     case lists:keysearch(Pid, #child.pid, Children) of
 	{value, Child} ->
 	    RestartType = Child#child.restart_type,
