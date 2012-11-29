@@ -66,8 +66,9 @@ master_go(Syncer, Ref, QName, BQ, BQS) ->
         {next, Ref} -> ok
     end,
     case Acc of
-        {shutdown, Reason} -> {shutdown, Reason, BQS1};
-        _                  -> {ok, BQS1}
+        {shutdown,  Reason} -> {shutdown,  Reason, BQS1};
+        {sync_died, Reason} -> {sync_died, Reason, BQS1};
+        _                   -> {ok, BQS1}
     end.
 
 master_send({Syncer, Ref, QName}, I, Last, Msg, MsgProps) ->
@@ -78,10 +79,12 @@ master_send({Syncer, Ref, QName}, I, Last, Msg, MsgProps) ->
                         erlang:now();
                false -> Last
            end},
+    Parent = rabbit_misc:get_parent(),
     receive
-        {next, Ref}            -> Syncer ! {msg, Ref, Msg, MsgProps},
-                                  {cont, Acc};
-        {'EXIT', _Pid, Reason} -> {stop, {shutdown, Reason}}
+        {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps},
+                                    {cont, Acc};
+        {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}};
+        {'EXIT', Parent, Reason} -> {stop, {shutdown, Reason}}
     end.
 
 %% Master
@@ -165,6 +168,7 @@ slave(_DD, Ref, TRef, Syncer, BQ, BQS, UpdateRamDuration) ->
     slave_sync_loop({Ref, MRef, Syncer, BQ, UpdateRamDuration}, TRef, BQS1).
 
 slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration}, TRef, BQS) ->
+    Parent = rabbit_misc:get_parent(),
     receive
         {'DOWN', MRef, process, Syncer, _Reason} ->
             %% If the master dies half way we are not in the usual
@@ -197,6 +201,6 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration}, TRef, BQS) ->
             Props1 = Props#message_properties{needs_confirming = false},
             BQS1 = BQ:publish(Msg, Props1, true, none, BQS),
             slave_sync_loop(Args, TRef, BQS1);
-        {'EXIT', _Pid, Reason} ->
+        {'EXIT', Parent, Reason} ->
             {stop, Reason, {TRef, BQS}}
     end.
