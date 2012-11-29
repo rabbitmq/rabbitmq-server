@@ -1037,44 +1037,35 @@ interval_operation({M, F, A}, MaxRatio, IdealInterval, LastInterval) ->
           end}.
 
 %% -------------------------------------------------------------------------
-%% Begin copypasta from gen_server.erl
+%% Begin copypasta from gen_server2.erl
 
 get_parent() ->
     case get('$ancestors') of
-        [Parent | _] when is_pid(Parent)->
-            Parent;
-        [Parent | _] when is_atom(Parent)->
-            name_to_pid(Parent);
-        _ ->
-            exit(process_was_not_started_by_proc_lib)
+        [Parent | _] when is_pid (Parent) -> Parent;
+        [Parent | _] when is_atom(Parent) -> name_to_pid(Parent);
+        _ -> exit(process_was_not_started_by_proc_lib)
     end.
 
 name_to_pid(Name) ->
     case whereis(Name) of
-        undefined ->
-            case whereis_name(Name) of
-                undefined ->
-                    exit(could_not_find_registerd_name);
-                Pid ->
-                    Pid
-            end;
-        Pid ->
-            Pid
+        undefined -> case whereis_name(Name) of
+                         undefined -> exit(could_not_find_registerd_name);
+                         Pid       -> Pid
+                     end;
+        Pid       -> Pid
     end.
 
 whereis_name(Name) ->
     case ets:lookup(global_names, Name) of
-    [{_Name, Pid, _Method, _RPid, _Ref}] ->
-        if node(Pid) == node() ->
-            case erlang:is_process_alive(Pid) of
-            true  -> Pid;
-            false -> undefined
+        [{_Name, Pid, _Method, _RPid, _Ref}] ->
+            if node(Pid) == node() -> case erlang:is_process_alive(Pid) of
+                                          true  -> Pid;
+                                          false -> undefined
+                                      end;
+               true                -> Pid
             end;
-           true ->
-            Pid
-        end;
-    [] -> undefined
+        [] -> undefined
     end.
 
-%% End copypasta from gen_server.erl
+%% End copypasta from gen_server2.erl
 %% -------------------------------------------------------------------------
