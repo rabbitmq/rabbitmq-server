@@ -164,7 +164,7 @@ sync_send_complete(SPid, _MRef, Ref) ->
 %% ---------------------------------------------------------------------------
 %% Slave
 
-slave(0, Ref, TRef, Syncer, _BQ, BQS, _UpdateRamDuration) ->
+slave(0, Ref, _TRef, Syncer, _BQ, _BQS, _UpdateRamDuration) ->
     Syncer ! {sync_deny, Ref, self()},
     denied;
 
