@@ -53,12 +53,12 @@
 %% ---------------------------------------------------------------------------
 %% Master
 
-master_prepare(Ref, QName, SPids) ->
+master_prepare(Ref, Log, SPids) ->
     MPid = self(),
-    spawn_link(fun () -> syncer(Ref, QName, MPid, SPids) end).
+    spawn_link(fun () -> syncer(Ref, Log, MPid, SPids) end).
 
-master_go(Syncer, Ref, QName, BQ, BQS) ->
-    SendArgs = {Syncer, Ref, QName, rabbit_misc:get_parent()},
+master_go(Syncer, Ref, Log, BQ, BQS) ->
+    SendArgs = {Syncer, Ref, Log, rabbit_misc:get_parent()},
     {Acc, BQS1} =
         BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
                         master_send(SendArgs, I, Last, Msg, MsgProps)
@@ -73,11 +73,10 @@ master_go(Syncer, Ref, QName, BQ, BQS) ->
         _                   -> {ok, BQS1}
     end.
 
-master_send({Syncer, Ref, QName, Parent}, I, Last, Msg, MsgProps) ->
+master_send({Syncer, Ref, Log, Parent}, I, Last, Msg, MsgProps) ->
     Acc = {I + 1,
            case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
-               true  -> rabbit_log:info("Synchronising ~s: ~p messages~n",
-                                        [rabbit_misc:rs(QName), I]),
+               true  -> Log("~p messages", [I]),
                         erlang:now();
                false -> Last
            end},
@@ -98,22 +97,17 @@ master_send({Syncer, Ref, QName, Parent}, I, Last, Msg, MsgProps) ->
 %% ---------------------------------------------------------------------------
 %% Syncer
 
-syncer(Ref, QName, MPid, SPids) ->
+syncer(Ref, Log, MPid, SPids) ->
     SPidsMRefs = [{SPid, erlang:monitor(process, SPid)} || SPid <- SPids],
     %% We wait for a reply from the slaves so that we know they are in
     %% a receive block and will thus receive messages we send to them
     %% *without* those messages ending up in their gen_server2 pqueue.
     case foreach_slave(SPidsMRefs, Ref, fun sync_receive_ready/3) of
-        [] ->
-            rabbit_log:info("Synchronising ~s: all slaves already synced~n",
-                            [rabbit_misc:rs(QName)]);
-        SPidsMRefs1 ->
-            rabbit_log:info("Synchronising ~s: ~p to sync~n",
-                            [rabbit_misc:rs(QName),
-                             [rabbit_misc:pid_to_string(S) ||
-                                 {S, _} <- SPidsMRefs1]]),
-            SPidsMRefs2 = syncer_loop({Ref, MPid}, SPidsMRefs1),
-            foreach_slave(SPidsMRefs2, Ref, fun sync_send_complete/3)
+        []          -> Log("all slaves already synced", []);
+        SPidsMRefs1 -> Log("~p to sync", [[rabbit_misc:pid_to_string(S) ||
+                                              {S, _} <- SPidsMRefs1]]),
+                       SPidsMRefs2 = syncer_loop({Ref, MPid}, SPidsMRefs1),
+                       foreach_slave(SPidsMRefs2, Ref, fun sync_send_complete/3)
     end,
     unlink(MPid).
 

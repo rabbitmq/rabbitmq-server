@@ -131,20 +131,21 @@ sync_mirrors(State = #state { name                = QName,
                               gm                  = GM,
                               backing_queue       = BQ,
                               backing_queue_state = BQS }) ->
-    rabbit_log:info("Synchronising ~s: ~p messages to synchronise~n",
-                    [rabbit_misc:rs(QName), BQ:len(BQS)]),
+    Log = fun (Fmt, Params) ->
+                  rabbit_log:info("Synchronising ~s: " ++ Fmt ++ "~n",
+                                  [rabbit_misc:rs(QName) | Params])
+          end,
+    Log("~p messages to synchronise", [BQ:len(BQS)]),
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
     Ref = make_ref(),
-    Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, QName, SPids),
+    Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, Log, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
-    case rabbit_mirror_queue_sync:master_go(Syncer, Ref, QName, BQ, BQS) of
+    case rabbit_mirror_queue_sync:master_go(Syncer, Ref, Log, BQ, BQS) of
         {shutdown,  R, BQS1} -> {stop, R, S(BQS1)};
-        {sync_died, R, BQS1} -> rabbit_log:info("Synchronising ~s: ~p~n",
-                                                [rabbit_misc:rs(QName), R]),
+        {sync_died, R, BQS1} -> Log("~p", [R]),
                                 {ok, S(BQS1)};
-        {ok, BQS1}           -> rabbit_log:info("Synchronising ~s: complete~n",
-                                                [rabbit_misc:rs(QName)]),
+        {ok, BQS1}           -> Log("complete", []),
                                 {ok, S(BQS1)}
     end.
 
