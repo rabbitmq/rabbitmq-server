@@ -375,8 +375,11 @@ handle_msg([_SPid], _From, process_death) ->
 handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, {gm, Msg}),
     {stop, {shutdown, ring_shutdown}};
-handle_msg([SPid], _From, {sync_start, Ref, Syncer}) ->
-    gen_server2:cast(SPid, {sync_start, Ref, Syncer});
+handle_msg([SPid], _From, {sync_start, Ref, Syncer, SPids}) ->
+    case lists:member(SPid, SPids) of
+        true  -> gen_server2:cast(SPid, {sync_start, Ref, Syncer});
+        false -> ok
+    end;
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
