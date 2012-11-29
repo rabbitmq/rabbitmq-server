@@ -163,6 +163,10 @@
 -endif.
 
 -define(is_simple(State), State#state.strategy =:= simple_one_for_one).
+-define(is_permanent(R), ((R =:= permanent) orelse
+                          (is_tuple(R) andalso
+                           tuple_size(R) == 2 andalso
+                           element(1, R) =:= permanent))).
 
 -ifdef(use_specs).
 -callback init(Args :: term()) ->
@@ -1007,15 +1011,8 @@ do_terminate(Child, SupName) when is_pid(Child#child.pid) ->
     case shutdown(Child#child.pid, Child#child.shutdown) of
         ok ->
             ok;
-        {error, normal} ->
-            case Child#child.restart_type of
-                permanent ->
-                    report_error(shutdown_error, normal, Child, SupName);
-                {permanent, _Delay} ->
-                    report_error(shutdown_error, normal, Child, SupName);
-                _ ->
-                    ok
-            end;
+        {error, normal} when not ?is_permanent(Child#child.restart_type) ->
+            ok;
         {error, OtherReason} ->
             report_error(shutdown_error, OtherReason, Child, SupName)
     end,
@@ -1145,7 +1142,7 @@ monitor_dynamic_children(#child{restart_type=RType}, Dynamics) ->
                        case monitor_child(P) of
                            ok ->
                                {?SETS:add_element(P, Pids), EStack};
-                           {error, normal} when RType =/= permanent ->
+                           {error, normal} when ?is_permanent(RType) ->
                                {Pids, EStack};
                            {error, Reason} ->
                                {Pids, ?DICT:append(Reason, P, EStack)}
@@ -1153,7 +1150,6 @@ monitor_dynamic_children(#child{restart_type=RType}, Dynamics) ->
 		  (?restarting(_), _, {Pids, EStack}) ->
 		       {Pids, EStack}
                end, {?SETS:new(), ?DICT:new()}, Dynamics).
-
 
 wait_dynamic_children(_Child, _Pids, 0, undefined, EStack) ->
     EStack;
@@ -1185,7 +1181,7 @@ wait_dynamic_children(#child{restart_type=RType} = Child, Pids, Sz,
             wait_dynamic_children(Child, ?SETS:del_element(Pid, Pids), Sz-1,
                                   TRef, EStack);
 
-        {'DOWN', _MRef, process, Pid, normal} when RType =/= permanent ->
+        {'DOWN', _MRef, process, Pid, normal} when ?is_permanent(RType) ->
             wait_dynamic_children(Child, ?SETS:del_element(Pid, Pids), Sz-1,
                                   TRef, EStack);
 
