@@ -536,23 +536,19 @@ function _link_to(name, url) {
     return '<a href="' + url + '">' + name + '</a>';
 }
 
-function message_rates(stats, map) {
+function message_rates(stats) {
     var res = '';
 
     if (keys(stats).length > 0) {
         var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
+                     ['Publish (In)', 'publish_in'],
+                     ['Publish (Out)', 'publish_out'],
                      ['Deliver', 'deliver'],
                      ['Redelivered', 'redeliver'],
                      ['Acknowledge', 'ack'],
                      ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                      ['Get (noack)', 'get_no_ack'],
                      ['Return', 'return_unroutable']];
-        for (var i in items) {
-            var name = items[i][0];
-            if (map != undefined && name in map) {
-                items[i][0] = map[name];
-            }
-        }
         var res;
         var mode = get_pref('rate-mode');
         if (mode == 'chart') {
