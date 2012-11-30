@@ -536,29 +536,40 @@ function _link_to(name, url) {
     return '<a href="' + url + '">' + name + '</a>';
 }
 
-function message_rates(stats) {
+function message_rates(id, stats) {
+    var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
+                 ['Publish (In)', 'publish_in'],
+                 ['Publish (Out)', 'publish_out'],
+                 ['Deliver', 'deliver'],
+                 ['Redelivered', 'redeliver'],
+                 ['Acknowledge', 'ack'],
+                 ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
+                 ['Get (noack)', 'get_no_ack'],
+                 ['Return', 'return_unroutable']];
+    return rates_chart_or_text(id, stats, items, 'rates');
+}
+
+function queue_lengths(id, stats) {
+    var items = [['Ready', 'messages_ready'],
+                 ['Unacknowledged', 'messages_unacknowledged'],
+                 ['Total', 'messages']];
+    return rates_chart_or_text(id, stats, items, 'counts');
+}
+
+function rates_chart_or_text(id, stats, items, rates_counts) {
     var res = '';
 
     if (keys(stats).length > 0) {
-        var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
-                     ['Publish (In)', 'publish_in'],
-                     ['Publish (Out)', 'publish_out'],
-                     ['Deliver', 'deliver'],
-                     ['Redelivered', 'redeliver'],
-                     ['Acknowledge', 'ack'],
-                     ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
-                     ['Get (noack)', 'get_no_ack'],
-                     ['Return', 'return_unroutable']];
         var res;
         var mode = get_pref('rate-mode');
         if (mode == 'chart') {
-            res = message_rates_chart(items, stats);
+            res = rates_chart(id, items, stats, rates_counts);
         }
         else {
-            res = message_rates_text(items, stats, mode);
+            res = rates_text(items, stats, mode);
         }
         if (res == "") {
-            res = '<p>Waiting for message rates...</p>';
+            res = '<p>Waiting for data...</p>';
         }
     }
     else {
@@ -568,21 +579,23 @@ function message_rates(stats) {
     return res + '<p class="rate-options-p"><span class="rate-options">[Options...]</span></p>';
 }
 
-function message_rates_chart(items, stats) {
+function rates_chart(id, items, stats, rates_counts) {
     var size = get_pref('chart-size');
     var show = false;
+    chart_data[id] = {};
     for (var i in items) {
         var name = items[i][0];
         var key = items[i][1] + '_details';
         if (key in stats) {
-            chart_data[name] = stats[key];
+            chart_data[id][name] = stats[key];
             show = true;
         }
     }
-    return show ? '<div class="chart chart-' + size + '"></div>' : '';
+    return show ? '<div id="chart-' + id + '" class="chart chart-' + size +
+        ' chart-' + rates_counts + '"></div>' : '';
 }
 
-function message_rates_text(items, stats, mode) {
+function rates_text(items, stats, mode) {
     var res = '';
     for (var i in items) {
         var name = items[i][0];
@@ -596,19 +609,6 @@ function message_rates_text(items, stats, mode) {
         }
     }
     return res;
-}
-
-function queue_length(stats, name, key) {
-    var rateMsg = '&nbsp;';
-    var detail = stats[key + '_details']
-    if (detail != undefined) {
-        var rate = detail.rate;
-        if (rate > 0)      rateMsg = '+' + fmt_rate_num(rate)  + ' msg/s';
-        else if (rate < 0) rateMsg = '-' + fmt_rate_num(-rate) + ' msg/s';
-    }
-
-    return '<div class="highlight">' + name +
-        '<strong>' + stats[key] + '</strong>' + rateMsg + '</div>';
 }
 
 function maybe_truncate(items) {
