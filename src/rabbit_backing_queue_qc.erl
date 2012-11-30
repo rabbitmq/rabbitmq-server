@@ -147,7 +147,7 @@ qc_drain_confirmed(#state{bqstate = BQ}) ->
     {call, ?BQMOD, drain_confirmed, [BQ]}.
 
 qc_dropwhile(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, dropwhile, [fun dropfun/1, false, BQ]}.
+    {call, ?BQMOD, dropwhile, [fun dropfun/1, BQ]}.
 
 qc_is_empty(#state{bqstate = BQ}) ->
     {call, ?BQMOD, is_empty, [BQ]}.
@@ -262,7 +262,7 @@ next_state(S, Res, {call, ?BQMOD, drain_confirmed, _Args}) ->
     S#state{bqstate = BQ1};
 
 next_state(S, Res, {call, ?BQMOD, dropwhile, _Args}) ->
-    BQ = {call, erlang, element, [3, Res]},
+    BQ = {call, erlang, element, [2, Res]},
     #state{messages = Messages} = S,
     Msgs1 = drop_messages(Messages),
     S#state{bqstate = BQ, len = gb_trees:size(Msgs1), messages = Msgs1};
