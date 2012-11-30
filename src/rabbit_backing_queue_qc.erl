@@ -115,7 +115,7 @@ qc_publish(#state{bqstate = BQ}) ->
       #message_properties{needs_confirming = frequency([{1,  true},
                                                         {20, false}]),
                           expiry = oneof([undefined | lists:seq(1, 10)])},
-      self(), BQ]}.
+      false, self(), BQ]}.
 
 qc_publish_multiple(#state{}) ->
     {call, ?MODULE, publish_multiple, [resize(?QUEUE_MAXLEN, pos_integer())]}.
@@ -182,7 +182,7 @@ precondition(#state{len = Len}, {call, ?MODULE, publish_multiple, _Arg}) ->
 
 %% Model updates
 
-next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Pid, _BQ]}) ->
+next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Del, _Pid, _BQ]}) ->
     #state{len         = Len,
            messages    = Messages,
            confirms    = Confirms,
