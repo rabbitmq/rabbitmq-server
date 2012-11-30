@@ -147,11 +147,7 @@
 %% the default ports will be selected depending on whether this is a
 %% normal or an SSL connection.
 start(AmqpParams) ->
-    case amqp_client:start() of
-        ok                                      -> ok;
-        {error, {already_started, amqp_client}} -> ok;
-        {error, _} = E                          -> throw(E)
-    end,
+    ensure_started(),
     AmqpParams1 =
         case AmqpParams of
             #amqp_params_network{port = undefined, ssl_options = none} ->
@@ -163,6 +159,18 @@ start(AmqpParams) ->
         end,
     {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams1),
     amqp_gen_connection:connect(Connection).
+
+ensure_started() ->
+    case application_controller:get_master(amqp_client) of
+        undefined ->
+            case amqp_client:start() of
+                ok                                      -> ok;
+                {error, {already_started, amqp_client}} -> ok;
+                {error, _} = E                          -> throw(E)
+            end;
+        _ ->
+            ok
+    end.
 
 %%---------------------------------------------------------------------------
 %% Commands
