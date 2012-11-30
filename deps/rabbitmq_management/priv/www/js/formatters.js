@@ -566,7 +566,7 @@ function rates_chart_or_text(id, stats, items, rates_counts) {
             res = rates_chart(id, items, stats, rates_counts);
         }
         else {
-            res = rates_text(items, stats, mode);
+            res = rates_text(items, stats, mode, rates_counts);
         }
         if (res == "") {
             res = '<p>Waiting for data...</p>';
@@ -595,16 +595,26 @@ function rates_chart(id, items, stats, rates_counts) {
         ' chart-' + rates_counts + '"></div>' : '';
 }
 
-function rates_text(items, stats, mode) {
+function rates_text(items, stats, mode, rates_counts) {
     var res = '';
     for (var i in items) {
         var name = items[i][0];
-        var key = items[i][1] + '_details';
-        if (key in stats) {
-            var num = mode == 'avg' ? stats[key].avg_rate : stats[key].rate;
+        var key = items[i][1];
+        var key_details = key + '_details';
+        if (key_details in stats) {
+            var details = stats[key_details];
+            var rate = mode == 'avg' ? details.avg_rate : details.rate;
             res += '<div class="highlight">' + name;
-            res += '<strong>' + fmt_rate_num(num) + '</strong>';
-            res += 'msg/s';
+            if (rates_counts == 'rates') {
+                res += '<strong>' + fmt_rate_num(rate) + '</strong>';
+                res += 'msg/s';
+            }
+            else {
+                res += '<strong>' + stats[key] + '</strong>';
+                if (rate > 0)      res += '+' + fmt_rate_num(rate)  + ' msg/s';
+                else if (rate < 0) res += '-' + fmt_rate_num(-rate) + ' msg/s';
+                else               res += '&nbsp;';
+            }
             res += '</div>';
         }
     }
