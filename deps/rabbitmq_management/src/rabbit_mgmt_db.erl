@@ -158,7 +158,7 @@ apportion_sample(New, NewTS, Old, OldTS, Id, Key, State) ->
         end,
     case (NewMSCeil - OldMSCeil) / ?SAMPLE_COMBINE_WINDOW of
         0.0 ->
-            R(Diff, NewMSCeil, Id, Key);
+            R(Diff, NewMSCeil);
         _ ->
             %% We need a fractional apportionment for the window
             %% before OldMSCeil, then apportionments for all the
@@ -247,12 +247,16 @@ remove_old_samples(Ceil, Samples) ->
     remove_old_samples0(Cutoff, Samples).
 
 remove_old_samples0(Cutoff, Stats = #stats{diffs = Diffs, base = Base}) ->
-    {Small, Val} = gb_trees:smallest(Diffs),
-    case Small < Cutoff of
-        true  -> remove_old_samples0(
-                   Cutoff, Stats#stats{diffs = gb_trees:delete(Small, Diffs),
-                                       base  = Base + Val});
-        false -> Stats
+    case gb_trees:is_empty(Diffs) of
+        true  -> Stats;
+        false -> {Small, Val} = gb_trees:smallest(Diffs),
+                 case Small < Cutoff of
+                     true  -> Diffs1 = gb_trees:delete(Small, Diffs),
+                              remove_old_samples0(
+                                Cutoff, Stats#stats{diffs = Diffs1,
+                                                    base  = Base + Val});
+                     false -> Stats
+                 end
     end.
 
 overview_sum(Type, Aggregated) ->
