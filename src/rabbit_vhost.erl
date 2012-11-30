@@ -70,6 +70,7 @@ add(VHostPath) ->
                            {<<"amq.rabbitmq.trace">>, topic}]],
                   ok
           end),
+    rabbit_event:notify(vhost_created, info(VHostPath)),
     R.
 
 delete(VHostPath) ->
@@ -87,6 +88,7 @@ delete(VHostPath) ->
           with(VHostPath, fun () ->
                                   ok = internal_delete(VHostPath)
                           end)),
+    ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
     R.
 
 internal_delete(VHostPath) ->
