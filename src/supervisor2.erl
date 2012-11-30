@@ -1142,7 +1142,7 @@ monitor_dynamic_children(#child{restart_type=RType}, Dynamics) ->
                        case monitor_child(P) of
                            ok ->
                                {?SETS:add_element(P, Pids), EStack};
-                           {error, normal} when ?is_permanent(RType) ->
+                           {error, normal} when not ?is_permanent(RType) ->
                                {Pids, EStack};
                            {error, Reason} ->
                                {Pids, ?DICT:append(Reason, P, EStack)}
@@ -1181,7 +1181,7 @@ wait_dynamic_children(#child{restart_type=RType} = Child, Pids, Sz,
             wait_dynamic_children(Child, ?SETS:del_element(Pid, Pids), Sz-1,
                                   TRef, EStack);
 
-        {'DOWN', _MRef, process, Pid, normal} when ?is_permanent(RType) ->
+        {'DOWN', _MRef, process, Pid, normal} when not ?is_permanent(RType) ->
             wait_dynamic_children(Child, ?SETS:del_element(Pid, Pids), Sz-1,
                                   TRef, EStack);
 
