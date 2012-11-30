@@ -160,6 +160,12 @@ start(AmqpParams) ->
     {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams1),
     amqp_gen_connection:connect(Connection).
 
+%% Usually the amqp_client application will already be running. We
+%% check whether that is the case by invoking an undocumented function
+%% which does not require a synchronous call to the application
+%% controller. That way we don't risk a dead-lock if, say, the
+%% application controller is in the process of shutting down the very
+%% application which is making this call.
 ensure_started() ->
     case application_controller:get_master(amqp_client) of
         undefined ->
