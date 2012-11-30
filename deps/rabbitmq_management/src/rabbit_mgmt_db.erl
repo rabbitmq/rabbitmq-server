@@ -154,6 +154,9 @@ apportion_sample(New, NewTS, Old, OldTS, Id, Key, State) ->
     NewMSCeil = apportion_ceiling(NewMS),
     Diff = New - Old,
     R = fun(Num, Ceil) ->
+                %% TODO round() is not good enough - can lead to off
+                %% by one errors. We need to make sure we don't lose
+                %% any message counts here.
                 record_sample(Id, {Key, round(Num), Ceil, State}, State)
         end,
     case (NewMSCeil - OldMSCeil) / ?SAMPLE_COMBINE_WINDOW of
