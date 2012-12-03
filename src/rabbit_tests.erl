@@ -2309,6 +2309,7 @@ test_variable_queue() ->
               fun test_variable_queue_fold_msg_on_disk/1,
               fun test_dropfetchwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
+              fun test_fetchwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
               fun test_variable_queue_requeue/1,
               fun test_variable_queue_fold/1]],
@@ -2449,12 +2450,30 @@ test_dropfetchwhile(VQ0) ->
     VQ5.
 
 test_dropwhile_varying_ram_duration(VQ0) ->
+    test_dropfetchwhile_varying_ram_duration(
+      fun (VQ1) ->
+              {_, VQ2} = rabbit_variable_queue:dropwhile(
+                           fun (_) -> false end, VQ1),
+              VQ2
+      end, VQ0).
+
+test_fetchwhile_varying_ram_duration(VQ0) ->
+    test_dropfetchwhile_varying_ram_duration(
+      fun (VQ1) ->
+              {_, ok, VQ2} = rabbit_variable_queue:fetchwhile(
+                               fun (_) -> false end,
+                               fun (_, _, _, A) -> A end,
+                               ok, VQ1),
+              VQ2
+      end, VQ0).
+
+test_dropfetchwhile_varying_ram_duration(Fun, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
-    {_, VQ3} = rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ2),
+    VQ3 = Fun(VQ2),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_publish(false, 1, VQ4),
-    {_, VQ6} = rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ5),
+    VQ6 = Fun(VQ5),
     VQ6.
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
