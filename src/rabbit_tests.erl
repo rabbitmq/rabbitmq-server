@@ -2307,7 +2307,7 @@ test_variable_queue() ->
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_drop/1,
               fun test_variable_queue_fold_msg_on_disk/1,
-              fun test_dropwhile/1,
+              fun test_dropfetchwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
               fun test_variable_queue_requeue/1,
@@ -2409,7 +2409,7 @@ test_drop(VQ0) ->
     true = rabbit_variable_queue:is_empty(VQ5),
     VQ5.
 
-test_dropwhile(VQ0) ->
+test_dropfetchwhile(VQ0) ->
     Count = 10,
 
     %% add messages with sequential expiry
@@ -2417,23 +2417,32 @@ test_dropwhile(VQ0) ->
             false, Count,
             fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
 
-    %% drop the first 5 messages
-    {_, VQ2} = rabbit_variable_queue:dropwhile(
-                 fun(#message_properties { expiry = Expiry }) ->
-                         Expiry =< 5
-                 end, VQ1),
+    %% fetch the first 5 messages
+    {#message_properties{expiry = 6}, AckTags, VQ2} =
+        rabbit_variable_queue:fetchwhile(
+          fun (#message_properties{expiry = Expiry}) -> Expiry =< 5 end,
+          fun (_Msg, _Delivered, AckTag, Acc) -> [AckTag | Acc] end, [], VQ1),
+    5 = length(AckTags),
 
-    %% fetch five now
-    VQ3 = lists:foldl(fun (_N, VQN) ->
+    %% requeue them
+    {_MsgIds, VQ3} = rabbit_variable_queue:requeue(AckTags, VQ2),
+
+    %% drop the first 5 messages
+    {#message_properties{expiry = 6}, VQ4} =
+        rabbit_variable_queue:dropwhile(
+          fun (#message_properties {expiry = Expiry}) -> Expiry =< 5 end, VQ3),
+
+    %% fetch 5 now
+    VQ5 = lists:foldl(fun (_N, VQN) ->
                               {{#basic_message{}, _, _}, VQM} =
                                   rabbit_variable_queue:fetch(false, VQN),
                               VQM
-                      end, VQ2, lists:seq(6, Count)),
+                      end, VQ4, lists:seq(6, Count)),
 
     %% should be empty now
-    {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
+    {empty, VQ6} = rabbit_variable_queue:fetch(false, VQ5),
 
-    VQ4.
+    VQ6.
 
 test_dropwhile_varying_ram_duration(VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
