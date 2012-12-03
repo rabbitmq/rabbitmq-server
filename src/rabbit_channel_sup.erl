@@ -83,7 +83,7 @@ init(Type) ->
 
 child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol}) ->
     [{writer, {rabbit_writer, start_link,
-               [Sock, Channel, FrameMax, Protocol, ReaderPid]},
+               [Sock, Channel, FrameMax, Protocol, ReaderPid, true]},
       intrinsic, ?MAX_WAIT, worker, [rabbit_writer]} | child_specs(direct)];
 child_specs(direct) ->
     [{limiter, {rabbit_limiter, start_link, []},

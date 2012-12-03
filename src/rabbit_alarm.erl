@@ -55,8 +55,12 @@ start() ->
     ok = gen_event:add_handler(?SERVER, ?MODULE, []),
     {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
     rabbit_sup:start_restartable_child(
-      vm_memory_monitor, [MemoryWatermark, fun rabbit_alarm:set_alarm/1,
-                          fun rabbit_alarm:clear_alarm/1]),
+      vm_memory_monitor, [MemoryWatermark,
+                          fun (Alarm) ->
+                                  background_gc:run(),
+                                  set_alarm(Alarm)
+                          end,
+                          fun clear_alarm/1]),
     {ok, DiskLimit} = application:get_env(disk_free_limit),
     rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
     ok.

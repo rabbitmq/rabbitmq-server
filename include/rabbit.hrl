@@ -78,8 +78,7 @@
 
 -record(event, {type, props, timestamp}).
 
--record(message_properties, {expiry, needs_confirming = false,
-                             delivered = false}).
+-record(message_properties, {expiry, needs_confirming = false}).
 
 -record(plugin, {name,          %% atom()
                  version,       %% string()
@@ -95,11 +94,21 @@
 -define(PROTOCOL_VERSION, "AMQP 0-9-1 / 0-9 / 0-8").
 -define(ERTS_MINIMUM, "5.6.3").
 
+%% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
+%%  - 1 byte of frame type
+%%  - 2 bytes of channel number
+%%  - 4 bytes of frame payload length
+%%  - 1 byte of payload trailer FRAME_END byte
+%% See rabbit_binary_generator:check_empty_frame_size/0, an assertion
+%% called at startup.
+-define(EMPTY_FRAME_SIZE, 8).
+
 -define(MAX_WAIT, 16#ffffffff).
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
 -define(CREDIT_DISC_BOUND,   {2000, 500}).
 
+-define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
 -define(DELETED_HEADER, <<"BCC">>).

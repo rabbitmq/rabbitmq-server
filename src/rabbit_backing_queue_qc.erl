@@ -85,17 +85,19 @@ backing_queue_test(Cmds) ->
 
 %% Commands
 
-%% Command frequencies are tuned so that queues are normally reasonably
-%% short, but they may sometimes exceed ?QUEUE_MAXLEN. Publish-multiple
-%% and purging cause extreme queue lengths, so these have lower probabilities.
-%% Fetches are sufficiently frequent so that commands that need acktags
-%% get decent coverage.
+%% Command frequencies are tuned so that queues are normally
+%% reasonably short, but they may sometimes exceed
+%% ?QUEUE_MAXLEN. Publish-multiple and purging cause extreme queue
+%% lengths, so these have lower probabilities.  Fetches/drops are
+%% sufficiently frequent so that commands that need acktags get decent
+%% coverage.
 
 command(S) ->
     frequency([{10, qc_publish(S)},
                {1,  qc_publish_delivered(S)},
                {1,  qc_publish_multiple(S)},  %% very slow
-               {15, qc_fetch(S)},             %% needed for ack and requeue
+               {9,  qc_fetch(S)},             %% needed for ack and requeue
+               {6,  qc_drop(S)},              %%
                {15, qc_ack(S)},
                {15, qc_requeue(S)},
                {3,  qc_set_ram_duration_target(S)},
@@ -104,7 +106,8 @@ command(S) ->
                {1,  qc_dropwhile(S)},
                {1,  qc_is_empty(S)},
                {1,  qc_timeout(S)},
-               {1,  qc_purge(S)}]).
+               {1,  qc_purge(S)},
+               {1,  qc_fold(S)}]).
 
 qc_publish(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish,
@@ -112,7 +115,7 @@ qc_publish(#state{bqstate = BQ}) ->
       #message_properties{needs_confirming = frequency([{1,  true},
                                                         {20, false}]),
                           expiry = oneof([undefined | lists:seq(1, 10)])},
-      self(), BQ]}.
+      false, self(), BQ]}.
 
 qc_publish_multiple(#state{}) ->
     {call, ?MODULE, publish_multiple, [resize(?QUEUE_MAXLEN, pos_integer())]}.
@@ -123,6 +126,9 @@ qc_publish_delivered(#state{bqstate = BQ}) ->
 
 qc_fetch(#state{bqstate = BQ}) ->
     {call, ?BQMOD, fetch, [boolean(), BQ]}.
+
+qc_drop(#state{bqstate = BQ}) ->
+    {call, ?BQMOD, drop, [boolean(), BQ]}.
 
 qc_ack(#state{bqstate = BQ, acks = Acks}) ->
     {call, ?BQMOD, ack, [rand_choice(proplists:get_keys(Acks)), BQ]}.
@@ -152,6 +158,9 @@ qc_timeout(#state{bqstate = BQ}) ->
 qc_purge(#state{bqstate = BQ}) ->
     {call, ?BQMOD, purge, [BQ]}.
 
+qc_fold(#state{bqstate = BQ}) ->
+    {call, ?BQMOD, fold, [makefoldfun(pos_integer()), foldacc(), BQ]}.
+
 %% Preconditions
 
 %% Create long queues by only allowing publishing
@@ -173,7 +182,7 @@ precondition(#state{len = Len}, {call, ?MODULE, publish_multiple, _Arg}) ->
 
 %% Model updates
 
-next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Pid, _BQ]}) ->
+next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Del, _Pid, _BQ]}) ->
     #state{len         = Len,
            messages    = Messages,
            confirms    = Confirms,
@@ -217,22 +226,10 @@ next_state(S, Res,
            };
 
 next_state(S, Res, {call, ?BQMOD, fetch, [AckReq, _BQ]}) ->
-    #state{len = Len, messages = Messages, acks = Acks} = S,
-    ResultInfo = {call, erlang, element, [1, Res]},
-    BQ1        = {call, erlang, element, [2, Res]},
-    AckTag     = {call, erlang, element, [3, ResultInfo]},
-    S1         = S#state{bqstate = BQ1},
-    case gb_trees:is_empty(Messages) of
-        true  -> S1;
-        false -> {SeqId, MsgProp_Msg, M2} = gb_trees:take_smallest(Messages),
-                 S2 = S1#state{len = Len - 1, messages = M2},
-                 case AckReq of
-                     true  ->
-                         S2#state{acks = [{AckTag, {SeqId, MsgProp_Msg}}|Acks]};
-                     false ->
-                         S2
-                 end
-    end;
+    next_state_fetch_and_drop(S, Res, AckReq, 3);
+
+next_state(S, Res, {call, ?BQMOD, drop, [AckReq, _BQ]}) ->
+    next_state_fetch_and_drop(S, Res, AckReq, 2);
 
 next_state(S, Res, {call, ?BQMOD, ack, [AcksArg, _BQ]}) ->
     #state{acks = AcksState} = S,
@@ -278,19 +275,38 @@ next_state(S, BQ, {call, ?MODULE, timeout, _Args}) ->
 
 next_state(S, Res, {call, ?BQMOD, purge, _Args}) ->
     BQ1 = {call, erlang, element, [2, Res]},
-    S#state{bqstate = BQ1, len = 0, messages = gb_trees:empty()}.
+    S#state{bqstate = BQ1, len = 0, messages = gb_trees:empty()};
+
+next_state(S, Res, {call, ?BQMOD, fold, _Args}) ->
+    BQ1 = {call, erlang, element, [2, Res]},
+    S#state{bqstate = BQ1}.
 
 %% Postconditions
 
 postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
     #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
     case Res of
-        {{MsgFetched, _IsDelivered, AckTag, RemainingLen}, _BQ} ->
+        {{MsgFetched, _IsDelivered, AckTag}, _BQ} ->
             {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
             MsgFetched =:= Msg andalso
             not proplists:is_defined(AckTag, Acks) andalso
                 not gb_sets:is_element(AckTag, Confrms) andalso
-                RemainingLen =:= Len - 1;
+                Len =/= 0;
+        {empty, _BQ} ->
+            Len =:= 0
+    end;
+
+postcondition(S, {call, ?BQMOD, drop, _Args}, Res) ->
+    #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
+    case Res of
+        {{MsgIdFetched, AckTag}, _BQ} ->
+            {_SeqId, {_MsgProps, Msg}} = gb_trees:smallest(Messages),
+            MsgId = eval({call, erlang, element,
+                          [?RECORD_INDEX(id, basic_message), Msg]}),
+            MsgIdFetched =:= MsgId andalso
+            not proplists:is_defined(AckTag, Acks) andalso
+                not gb_sets:is_element(AckTag, Confrms) andalso
+                Len =/= 0;
         {empty, _BQ} ->
             Len =:= 0
     end;
@@ -312,6 +328,15 @@ postcondition(S, {call, ?BQMOD, drain_confirmed, _Args}, Res) ->
     {ReportedConfirmed, _BQ} = Res,
     lists:all(fun (M) -> gb_sets:is_element(M, Confirms) end,
               ReportedConfirmed);
+
+postcondition(S, {call, ?BQMOD, fold, [FoldFun, Acc0, _BQ0]}, {Res, _BQ1}) ->
+    #state{messages = Messages} = S,
+    {_, Model} = lists:foldl(fun ({_SeqId, {_MsgProps, _Msg}}, {stop, Acc}) ->
+                                     {stop, Acc};
+                                 ({_SeqId, {MsgProps, Msg}}, {cont, Acc}) ->
+                                     FoldFun(Msg, MsgProps, Acc)
+                             end, {cont, Acc0}, gb_trees:to_list(Messages)),
+    true = Model =:= Res;
 
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
     ?BQMOD:len(BQ) =:= Len.
@@ -371,6 +396,15 @@ rand_choice(List, Selection, N)  ->
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
 
+makefoldfun(Size) ->
+    fun (Msg, _MsgProps, Acc) ->
+            case length(Acc) > Size of
+                false -> {cont, [Msg | Acc]};
+                true  -> {stop, Acc}
+            end
+    end.
+foldacc() -> [].
+
 dropfun(Props) ->
     Expiry = eval({call, erlang, element,
                    [?RECORD_INDEX(expiry, message_properties), Props]}),
@@ -386,6 +420,24 @@ drop_messages(Messages) ->
                 true  -> drop_messages(M2);
                 false -> Messages
             end
+    end.
+
+next_state_fetch_and_drop(S, Res, AckReq, AckTagIdx) ->
+    #state{len = Len, messages = Messages, acks = Acks} = S,
+    ResultInfo = {call, erlang, element, [1, Res]},
+    BQ1        = {call, erlang, element, [2, Res]},
+    AckTag     = {call, erlang, element, [AckTagIdx, ResultInfo]},
+    S1         = S#state{bqstate = BQ1},
+    case gb_trees:is_empty(Messages) of
+        true  -> S1;
+        false -> {SeqId, MsgProp_Msg, M2} = gb_trees:take_smallest(Messages),
+                 S2 = S1#state{len = Len - 1, messages = M2},
+                 case AckReq of
+                     true  ->
+                         S2#state{acks = [{AckTag, {SeqId, MsgProp_Msg}}|Acks]};
+                     false ->
+                         S2
+                 end
     end.
 
 -else.

@@ -35,8 +35,9 @@
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
              conn_name, limiter, tx_status, next_tag, unacked_message_q,
              uncommitted_message_q, uncommitted_acks, uncommitted_nacks, user,
-             virtual_host, most_recently_declared_queue, queue_monitors,
-             consumer_mapping, blocking, queue_consumers, delivering_queues,
+             virtual_host, most_recently_declared_queue,
+             queue_names, queue_monitors, consumer_mapping,
+             blocking, queue_consumers, delivering_queues,
              queue_collector_pid, stats_timer, confirm_enabled, publish_seqno,
              unconfirmed, confirmed, capabilities, trace_state}).
 
@@ -194,6 +195,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 user                    = User,
                 virtual_host            = VHost,
                 most_recently_declared_queue = <<>>,
+                queue_names             = dict:new(),
                 queue_monitors          = pmon:new(),
                 consumer_mapping        = dict:new(),
                 blocking                = sets:new(),
@@ -334,9 +336,13 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State3 = handle_consuming_queue_down(QPid, State2),
     State4 = handle_delivering_queue_down(QPid, State3),
     credit_flow:peer_down(QPid),
-    erase_queue_stats(QPid),
-    noreply(State3#ch{queue_monitors = pmon:erase(
-                                         QPid, State4#ch.queue_monitors)});
+    #ch{queue_names = QNames, queue_monitors = QMons} = State4,
+    case dict:find(QPid, QNames) of
+        {ok, QName} -> erase_queue_stats(QName);
+        error       -> ok
+    end,
+    noreply(State4#ch{queue_names    = dict:erase(QPid, QNames),
+                      queue_monitors = pmon:erase(QPid, QMons)});
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
@@ -472,6 +478,13 @@ check_user_id_header(#'P_basic'{user_id = Claimed},
         false -> precondition_failed(
                    "user_id property set to '~s' but authenticated user was "
                    "'~s'", [Claimed, Actual])
+    end.
+
+check_expiration_header(Props) ->
+    case rabbit_basic:parse_expiration(Props) of
+        {ok, _}    -> ok;
+        {error, E} -> precondition_failed("invalid expiration '~s': ~p",
+                                          [Props#'P_basic'.expiration, E])
     end.
 
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
@@ -614,8 +627,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_internal_exchange(Exchange),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
-    DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
-    check_user_id_header(DecodedContent#content.properties, State),
+    DecodedContent = #content {properties = Props} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    check_user_id_header(Props, State),
+    check_expiration_header(Props),
     {MsgSeqNo, State1} =
         case {TxStatus, ConfirmEnabled} of
             {none, false} -> {undefined, State};
@@ -668,7 +683,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
            QueueName, ConnPid,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
         {ok, MessageCount,
-         Msg = {_QName, QPid, _MsgId, Redelivered,
+         Msg = {QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
                                routing_keys  = [RoutingKey | _CcRoutes],
                                content       = Content}}} ->
@@ -680,7 +695,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                    routing_key   = RoutingKey,
                                    message_count = MessageCount},
                    Content),
-            State1 = monitor_delivering_queue(NoAck, QPid, State),
+            State1 = monitor_delivering_queue(NoAck, QPid, QName, State),
             {noreply, record_sent(none, not(NoAck), Msg, State1)};
         empty ->
             {reply, #'basic.get_empty'{}, State}
@@ -719,10 +734,11 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                        consumer_tag = ActualConsumerTag})),
                             Q}
                    end) of
-                {ok, Q = #amqqueue{pid = QPid}} ->
+                {ok, Q = #amqqueue{pid = QPid, name = QName}} ->
                     CM1 = dict:store(ActualConsumerTag, Q, ConsumerMapping),
                     State1 = monitor_delivering_queue(
-                               NoAck, QPid, State#ch{consumer_mapping = CM1}),
+                               NoAck, QPid, QName,
+                               State#ch{consumer_mapping = CM1}),
                     {noreply,
                      case NoWait of
                          true  -> consumer_monitor(ActualConsumerTag, State1);
@@ -960,8 +976,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 {existing, _Q} ->
                     %% must have been created between the stat and the
                     %% declare. Loop around again.
-                    handle_method(Declare, none, State)
-            end
+                    handle_method(Declare, none, State);
+                {absent, Q} ->
+                    rabbit_misc:absent(Q)
+            end;
+        {error, {absent, Q}} ->
+            rabbit_misc:absent(Q)
     end;
 
 handle_method(#'queue.declare'{queue   = QueueNameBin,
@@ -1113,12 +1133,16 @@ consumer_monitor(ConsumerTag,
             State
     end.
 
-monitor_delivering_queue(true, _QPid, State) ->
-    State;
-monitor_delivering_queue(false, QPid, State = #ch{queue_monitors    = QMons,
-                                                  delivering_queues = DQ}) ->
-    State#ch{queue_monitors    = pmon:monitor(QPid, QMons),
-             delivering_queues = sets:add_element(QPid, DQ)}.
+monitor_delivering_queue(NoAck, QPid, QName,
+                         State = #ch{queue_names       = QNames,
+                                     queue_monitors    = QMons,
+                                     delivering_queues = DQ}) ->
+    State#ch{queue_names       = dict:store(QPid, QName, QNames),
+             queue_monitors    = pmon:monitor(QPid, QMons),
+             delivering_queues = case NoAck of
+                                     true  -> DQ;
+                                     false -> sets:add_element(QPid, DQ)
+                                 end}.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
     case rabbit_misc:is_abnormal_exit(Reason) of
@@ -1153,10 +1177,6 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host = VHostPath,
                            conn_pid     = ConnPid }) ->
-    %% FIXME: connection exception (!) on failure??
-    %% (see rule named "failure" in spec-XML)
-    %% FIXME: don't allow binding to internal exchanges -
-    %% including the one named "" !
     {DestinationName, ActualRoutingKey} =
         expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
     check_write_permitted(DestinationName, State),
@@ -1174,14 +1194,10 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                  (_X, #exchange{}) ->
                      ok
              end) of
-        {error, source_not_found} ->
-            rabbit_misc:not_found(ExchangeName);
-        {error, destination_not_found} ->
-            rabbit_misc:not_found(DestinationName);
-        {error, source_and_destination_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no ~s and no ~s", [rabbit_misc:rs(ExchangeName),
-                                             rabbit_misc:rs(DestinationName)]);
+        {error, {resources_missing, [{not_found, Name} | _]}} ->
+            rabbit_misc:not_found(Name);
+        {error, {resources_missing, [{absent, Q} | _]}} ->
+            rabbit_misc:absent(Q);
         {error, binding_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no binding ~s between ~s and ~s",
@@ -1227,17 +1243,20 @@ reject(Requeue, Acked, Limiter) ->
     ok = notify_limiter(Limiter, Acked).
 
 record_sent(ConsumerTag, AckRequired,
-            Msg = {_QName, QPid, MsgId, Redelivered, _Message},
+            Msg = {QName, QPid, MsgId, Redelivered, _Message},
             State = #ch{unacked_message_q = UAMQ,
                         next_tag          = DeliveryTag,
                         trace_state       = TraceState}) ->
-    maybe_incr_stats([{QPid, 1}], case {ConsumerTag, AckRequired} of
-                                      {none,  true} -> get;
-                                      {none, false} -> get_no_ack;
-                                      {_   ,  true} -> deliver;
-                                      {_   , false} -> deliver_no_ack
-                                  end, State),
-    maybe_incr_redeliver_stats(Redelivered, QPid, State),
+    incr_stats([{queue_stats, QName, 1}], case {ConsumerTag, AckRequired} of
+                                              {none,  true} -> get;
+                                              {none, false} -> get_no_ack;
+                                              {_   ,  true} -> deliver;
+                                              {_   , false} -> deliver_no_ack
+                                          end, State),
+    case Redelivered of
+        true  -> incr_stats([{queue_stats, QName, 1}], redeliver, State);
+        false -> ok
+    end,
     rabbit_trace:tap_trace_out(Msg, TraceState),
     UAMQ1 = case AckRequired of
                 true  -> queue:in({DeliveryTag, ConsumerTag, {QPid, MsgId}},
@@ -1268,14 +1287,18 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
             precondition_failed("unknown delivery tag ~w", [DeliveryTag])
     end.
 
-ack(Acked, State) ->
-    QIncs = fold_per_queue(
-              fun (QPid, MsgIds, L) ->
-                      ok = rabbit_amqqueue:ack(QPid, MsgIds, self()),
-                      [{QPid, length(MsgIds)} | L]
-              end, [], Acked),
+ack(Acked, State = #ch{queue_names = QNames}) ->
+    Incs = fold_per_queue(
+             fun (QPid, MsgIds, L) ->
+                     ok = rabbit_amqqueue:ack(QPid, MsgIds, self()),
+                     case dict:find(QPid, QNames) of
+                         {ok, QName} -> Count = length(MsgIds),
+                                        [{queue_stats, QName, Count} | L];
+                         error       -> L
+                     end
+             end, [], Acked),
     ok = notify_limiter(State#ch.limiter, Acked),
-    maybe_incr_stats(QIncs, ack, State).
+    incr_stats(Incs, ack, State).
 
 new_tx(State) -> State#ch{uncommitted_message_q = queue:new(),
                           uncommitted_acks      = [],
@@ -1330,23 +1353,42 @@ notify_limiter(Limiter, Acked) ->
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
                                         msg_seq_no = MsgSeqNo},
-                   QNames}, State) ->
-    {RoutingRes, DeliveredQPids} =
-        rabbit_amqqueue:deliver_flow(rabbit_amqqueue:lookup(QNames), Delivery),
-    State1 = State#ch{queue_monitors =
-                          pmon:monitor_all(DeliveredQPids,
-                                           State#ch.queue_monitors)},
-    State2 = process_routing_result(RoutingRes, DeliveredQPids,
-                                    XName, MsgSeqNo, Message, State1),
-    maybe_incr_stats([{XName, 1} |
-                      [{{QPid, XName}, 1} ||
-                          QPid <- DeliveredQPids]], publish, State2),
-    State2.
+                   DelQNames}, State = #ch{queue_names    = QNames,
+                                           queue_monitors = QMons}) ->
+    Qs = rabbit_amqqueue:lookup(DelQNames),
+    {RoutingRes, DeliveredQPids} = rabbit_amqqueue:deliver_flow(Qs, Delivery),
+    %% The pmon:monitor_all/2 monitors all queues to which we
+    %% delivered. But we want to monitor even queues we didn't deliver
+    %% to, since we need their 'DOWN' messages to clean
+    %% queue_names. So we also need to monitor each QPid from
+    %% queues. But that only gets the masters (which is fine for
+    %% cleaning queue_names), so we need the union of both.
+    %%
+    %% ...and we need to add even non-delivered queues to queue_names
+    %% since alternative algorithms to update queue_names less
+    %% frequently would in fact be more expensive in the common case.
+    {QNames1, QMons1} =
+        lists:foldl(fun (#amqqueue{pid = QPid, name = QName},
+                         {QNames0, QMons0}) ->
+                            {case dict:is_key(QPid, QNames0) of
+                                 true  -> QNames0;
+                                 false -> dict:store(QPid, QName, QNames0)
+                             end, pmon:monitor(QPid, QMons0)}
+                    end, {QNames, pmon:monitor_all(DeliveredQPids, QMons)}, Qs),
+    State1 = process_routing_result(RoutingRes, DeliveredQPids,
+                                    XName, MsgSeqNo, Message,
+                                    State#ch{queue_names    = QNames1,
+                                             queue_monitors = QMons1}),
+    incr_stats([{exchange_stats, XName, 1} |
+                [{queue_exchange_stats, {QName, XName}, 1} ||
+                    QPid        <- DeliveredQPids,
+                    {ok, QName} <- [dict:find(QPid, QNames1)]]],
+               publish, State1),
+    State1.
 
 process_routing_result(unroutable, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_route),
-    maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
-                     return_unroutable, State),
+    incr_stats([{exchange_stats, XName, 1}], return_unroutable, State),
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,    [], XName,  MsgSeqNo,   _, State) ->
     record_confirm(MsgSeqNo, XName, State);
@@ -1371,10 +1413,11 @@ send_confirms(State = #ch{tx_status = none, confirmed = []}) ->
     State;
 send_confirms(State = #ch{tx_status = none, confirmed = C}) ->
     MsgSeqNos =
-        lists:foldl(fun ({MsgSeqNo, XName}, MSNs) ->
-                            maybe_incr_stats([{XName, 1}], confirm, State),
-                            [MsgSeqNo | MSNs]
-                    end, [], lists:append(C)),
+        lists:foldl(
+          fun ({MsgSeqNo, XName}, MSNs) ->
+                  incr_stats([{exchange_stats, XName, 1}], confirm, State),
+                  [MsgSeqNo | MSNs]
+          end, [], lists:append(C)),
     send_confirms(MsgSeqNos, State#ch{confirmed = []});
 send_confirms(State) ->
     maybe_complete_tx(State).
@@ -1457,26 +1500,15 @@ i(Item, _) ->
 name(#ch{conn_name = ConnName, channel = Channel}) ->
     list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
 
-maybe_incr_redeliver_stats(true, QPid, State) ->
-    maybe_incr_stats([{QPid, 1}], redeliver, State);
-maybe_incr_redeliver_stats(_, _, _State) ->
-    ok.
-
-maybe_incr_stats(QXIncs, Measure, State) ->
+incr_stats(Incs, Measure, State) ->
     case rabbit_event:stats_level(State, #ch.stats_timer) of
-        fine -> [incr_stats(QX, Inc, Measure) || {QX, Inc} <- QXIncs];
+        fine -> [update_measures(Type, Key, Inc, Measure) ||
+                    {Type, Key, Inc} <- Incs];
         _    -> ok
     end.
 
-incr_stats({_, _} = QX, Inc, Measure) ->
-    update_measures(queue_exchange_stats, QX, Inc, Measure);
-incr_stats(QPid, Inc, Measure) when is_pid(QPid) ->
-    update_measures(queue_stats, QPid, Inc, Measure);
-incr_stats(X, Inc, Measure) ->
-    update_measures(exchange_stats, X, Inc, Measure).
-
-update_measures(Type, QX, Inc, Measure) ->
-    Measures = case get({Type, QX}) of
+update_measures(Type, Key, Inc, Measure) ->
+    Measures = case get({Type, Key}) of
                    undefined -> [];
                    D         -> D
                end,
@@ -1484,31 +1516,29 @@ update_measures(Type, QX, Inc, Measure) ->
               error   -> 0;
               {ok, C} -> C
           end,
-    put({Type, QX},
-        orddict:store(Measure, Cur + Inc, Measures)).
+    put({Type, Key}, orddict:store(Measure, Cur + Inc, Measures)).
 
 emit_stats(State) ->
     emit_stats(State, []).
 
 emit_stats(State, Extra) ->
-    CoarseStats = infos(?STATISTICS_KEYS, State),
+    Coarse = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(State, #ch.stats_timer) of
-        coarse ->
-            rabbit_event:notify(channel_stats, Extra ++ CoarseStats);
-        fine ->
-            FineStats =
-                [{channel_queue_stats,
-                  [{QPid, Stats} || {{queue_stats, QPid}, Stats} <- get()]},
-                 {channel_exchange_stats,
-                  [{X, Stats} || {{exchange_stats, X}, Stats} <- get()]},
-                 {channel_queue_exchange_stats,
-                  [{QX, Stats} ||
-                      {{queue_exchange_stats, QX}, Stats} <- get()]}],
-            rabbit_event:notify(channel_stats,
-                                Extra ++ CoarseStats ++ FineStats)
+        coarse -> rabbit_event:notify(channel_stats, Extra ++ Coarse);
+        fine   -> Fine = [{channel_queue_stats,
+                           [{QName, Stats} ||
+                               {{queue_stats,       QName}, Stats} <- get()]},
+                          {channel_exchange_stats,
+                           [{XName, Stats} ||
+                               {{exchange_stats,    XName}, Stats} <- get()]},
+                          {channel_queue_exchange_stats,
+                           [{QX, Stats} ||
+                               {{queue_exchange_stats, QX}, Stats} <- get()]}],
+                  rabbit_event:notify(channel_stats, Extra ++ Coarse ++ Fine)
     end.
 
-erase_queue_stats(QPid) ->
-    erase({queue_stats, QPid}),
+erase_queue_stats(QName) ->
+    erase({queue_stats, QName}),
     [erase({queue_exchange_stats, QX}) ||
-        {{queue_exchange_stats, QX = {QPid0, _}}, _} <- get(), QPid =:= QPid0].
+        {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
+        QName0 =:= QName].

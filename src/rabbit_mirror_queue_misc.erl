@@ -133,15 +133,15 @@ on_node_up() ->
                             end
                     end, [], rabbit_queue)
           end),
-    [{ok, _} = add_mirror(QName, node()) || QName <- QNames],
+    [add_mirror(QName, node()) || QName <- QNames],
     ok.
 
 drop_mirrors(QName, Nodes) ->
-    [ok = drop_mirror(QName, Node)  || Node <- Nodes],
+    [drop_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 drop_mirror(QName, MirrorNode) ->
-    if_mirrored_queue(
+    rabbit_amqqueue:with(
       QName,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids }) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
@@ -154,16 +154,16 @@ drop_mirror(QName, MirrorNode) ->
                         "Dropping queue mirror on node ~p for ~s~n",
                         [MirrorNode, rabbit_misc:rs(Name)]),
                       exit(Pid, {shutdown, dropped}),
-                      ok
+                      {ok, dropped}
               end
       end).
 
 add_mirrors(QName, Nodes) ->
-    [{ok, _} = add_mirror(QName, Node)  || Node <- Nodes],
+    [add_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 add_mirror(QName, MirrorNode) ->
-    if_mirrored_queue(
+    rabbit_amqqueue:with(
       QName,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
@@ -183,15 +183,7 @@ start_child(Name, MirrorNode, Q) ->
            fun () ->
                    rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
            end) of
-        {ok, undefined} ->
-            %% this means the mirror process was
-            %% already running on the given node.
-            {ok, already_mirrored};
-        {ok, down} ->
-            %% Node went down between us deciding to start a mirror
-            %% and actually starting it. Which is fine.
-            {ok, node_down};
-        {ok, SPid} ->
+        {ok, SPid} when is_pid(SPid)  ->
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                             [rabbit_misc:rs(Name), MirrorNode, SPid]),
             {ok, started};
@@ -205,14 +197,6 @@ start_child(Name, MirrorNode, Q) ->
         Other ->
             Other
     end.
-
-if_mirrored_queue(QName, Fun) ->
-    rabbit_amqqueue:with(QName, fun (Q) ->
-                                        case is_mirrored(Q) of
-                                            false -> ok;
-                                            true  -> Fun(Q)
-                                        end
-                                end).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
@@ -268,7 +252,11 @@ policy(Policy, Q) ->
 suggested_queue_nodes(<<"all">>, _Params, {MNode, _SNodes}, Possible) ->
     {MNode, Possible -- [MNode]};
 suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, Possible) ->
-    Nodes = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
+    Nodes1 = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
+    %% If the current master is currently not in the nodes specified,
+    %% act like it is for the purposes below - otherwise we will not
+    %% return it in the results...
+    Nodes = lists:usort([MNode | Nodes1]),
     Unavailable = Nodes -- Possible,
     Available = Nodes -- Unavailable,
     case Available of
@@ -314,20 +302,13 @@ is_mirrored(Q) ->
         _             -> false
     end.
 
-
-%% [1] - rabbit_amqqueue:start_mirroring/1 will turn unmirrored to
-%% master and start any needed slaves. However, if node(QPid) is not
-%% in the nodes for the policy, it won't switch it. So this is for the
-%% case where we kill the existing queue and restart elsewhere. TODO:
-%% is this TRTTD? All alternatives seem ugly.
 update_mirrors(OldQ = #amqqueue{pid = QPid},
                NewQ = #amqqueue{pid = QPid}) ->
     case {is_mirrored(OldQ), is_mirrored(NewQ)} of
         {false, false} -> ok;
         {true,  false} -> rabbit_amqqueue:stop_mirroring(QPid);
-        {false, true}  -> rabbit_amqqueue:start_mirroring(QPid),
-                          update_mirrors0(OldQ, NewQ); %% [1]
-        {true, true}   -> update_mirrors0(OldQ, NewQ)
+        {false,  true} -> rabbit_amqqueue:start_mirroring(QPid);
+        {true,   true} -> update_mirrors0(OldQ, NewQ)
     end.
 
 update_mirrors0(OldQ = #amqqueue{name = QName},
