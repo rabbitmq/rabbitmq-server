@@ -757,18 +757,34 @@ check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
                                         [node(), Node, Node])}}
     end.
 
-check_version_consistency(This, Remote, _) when This =:= Remote ->
-    ok;
 check_version_consistency(This, Remote, Name) ->
-    {error, {inconsistent_cluster,
-             rabbit_misc:format("~s version mismatch: local node is ~s, "
-                                "remote node ~s", [Name, This, Remote])}}.
+    check_version_consistency(This, Remote, Name, fun (A, B) -> A =:= B end).
+
+check_version_consistency(This, Remote, Name, Comp) ->
+    case Comp(This, Remote) of
+        true  -> ok;
+        false -> {error, {inconsistent_cluster,
+                          rabbit_misc:format(
+                            "~s version mismatch: local node is ~s, "
+                            "remote node ~s", [Name, This, Remote])}}
+    end.
 
 check_otp_consistency(Remote) ->
     check_version_consistency(erlang:system_info(otp_release), Remote, "OTP").
 
 check_rabbit_consistency(Remote) ->
-    check_version_consistency(rabbit_misc:version(), Remote, "Rabbit").
+    check_version_consistency(
+      rabbit_misc:version(), Remote, "Rabbit",
+      fun(A, B) ->
+              %% a.b.c and a.b.d match, but a.b.c and a.d.e don't. If
+              %% versions do not match that pattern, just compare them.
+              {ok, RE} = re:compile("(\\d+\\.\\d+)(\\.\\d+)*"),
+              Opts = [{capture, all_but_first, list}],
+              case {re:run(A, RE, Opts), re:run(B, RE, Opts)} of
+                  {{match, [A1|_]}, {match, [B1|_]}} -> A1 =:= B1;
+                  _                                  -> A =:= B
+              end
+      end).
 
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
