@@ -509,9 +509,14 @@ reject(QPid, MsgIds, Requeue, ChPid) ->
     delegate:cast(QPid, {reject, MsgIds, Requeue, ChPid}).
 
 notify_down_all(QPids, ChPid) ->
-    safe_delegate_call_ok(
-      fun (QPid) -> gen_server2:call(QPid, {notify_down, ChPid}, infinity) end,
-      QPids).
+    {_, Bads} = delegate:call(QPids, {notify_down, ChPid}),
+    case lists:filter(
+           fun ({_Pid, {exit, {R, _}, _}}) -> rabbit_misc:is_abnormal_exit(R);
+               ({_Pid, _})                 -> false
+           end, Bads) of
+        []    -> ok;
+        Bads1 -> {error, Bads1}
+    end.
 
 limit_all(QPids, ChPid, Limiter) ->
     delegate:cast(QPids, {limit, ChPid, Limiter}).
@@ -671,17 +676,3 @@ qpids(Qs) ->
                                          {[QPid | MPidAcc], [SPids | SPidAcc]}
                                  end, {[], []}, Qs),
     {MPids, lists:append(SPids)}.
-
-safe_delegate_call_ok(F, Pids) ->
-    {_, Bads} = delegate:invoke(Pids, fun (Pid) ->
-                                              rabbit_misc:with_exit_handler(
-                                                fun () -> ok end,
-                                                fun () -> F(Pid) end)
-                                      end),
-    case lists:filter(
-           fun ({_Pid, {exit, {R, _}, _}}) -> rabbit_misc:is_abnormal_exit(R);
-               ({_Pid, _})                 -> false
-           end, Bads) of
-        []    -> ok;
-        Bads1 -> {error, Bads1}
-    end.
