@@ -77,6 +77,9 @@
    <tr<%= alt_rows(i)%>>
      <td>
        <%= link_node(node.name) %>
+       <% if (rabbit_versions_interesting) { %>
+         <sub>RabbitMQ <%= fmt_rabbit_version(node.applications) %></sub>
+       <% } %>
      </td>
 <% if (!node.running) { %>
      <td colspan="6">
