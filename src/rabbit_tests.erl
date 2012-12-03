@@ -2415,14 +2415,17 @@ test_dropfetchwhile(VQ0) ->
     %% add messages with sequential expiry
     VQ1 = variable_queue_publish(
             false, Count,
-            fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
+            fun (N, Props) -> Props#message_properties{expiry = N} end,
+            fun erlang:term_to_binary/1, VQ0),
 
     %% fetch the first 5 messages
-    {#message_properties{expiry = 6}, AckTags, VQ2} =
+    {#message_properties{expiry = 6}, {Msgs, AckTags}, VQ2} =
         rabbit_variable_queue:fetchwhile(
           fun (#message_properties{expiry = Expiry}) -> Expiry =< 5 end,
-          fun (_Msg, _Delivered, AckTag, Acc) -> [AckTag | Acc] end, [], VQ1),
-    5 = length(AckTags),
+          fun (Msg, _Delivered, AckTag, {MsgAcc, AckAcc}) ->
+                  {[Msg | MsgAcc], [AckTag | AckAcc]}
+          end, {[], []}, VQ1),
+    true = lists:seq(1, 5) == [msg2int(M) || M <- lists:reverse(Msgs)],
 
     %% requeue them
     {_MsgIds, VQ3} = rabbit_variable_queue:requeue(AckTags, VQ2),
@@ -2432,17 +2435,18 @@ test_dropfetchwhile(VQ0) ->
         rabbit_variable_queue:dropwhile(
           fun (#message_properties {expiry = Expiry}) -> Expiry =< 5 end, VQ3),
 
-    %% fetch 5 now
-    VQ5 = lists:foldl(fun (_N, VQN) ->
-                              {{#basic_message{}, _, _}, VQM} =
+    %% fetch 5
+    VQ5 = lists:foldl(fun (N, VQN) ->
+                              {{Msg, _, _}, VQM} =
                                   rabbit_variable_queue:fetch(false, VQN),
+                              true = msg2int(Msg) == N,
                               VQM
                       end, VQ4, lists:seq(6, Count)),
 
     %% should be empty now
-    {empty, VQ6} = rabbit_variable_queue:fetch(false, VQ5),
+    true = rabbit_variable_queue:is_empty(VQ5),
 
-    VQ6.
+    VQ5.
 
 test_dropwhile_varying_ram_duration(VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
