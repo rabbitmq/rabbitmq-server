@@ -743,7 +743,7 @@ drop_expired_messages(State = #q{dlx                 = DLX,
                      end, State#q{backing_queue_state = BQS1}).
 
 accumulate_msgs(Msg, _IsDelivered, AckTag, Acc) -> [{Msg, AckTag} | Acc].
-    
+
 ensure_ttl_timer(undefined, State) ->
     State;
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref = undefined}) ->
