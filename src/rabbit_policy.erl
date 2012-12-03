@@ -166,8 +166,8 @@ update_policies(VHost) ->
                           [update_queue(Q, Policies) ||
                               Q <- rabbit_amqqueue:list(VHost)]}
                  end),
-    [notify(X) || X <- Xs],
-    [notify(Q) || Q <- Qs],
+    [catch notify(X) || X <- Xs],
+    [catch notify(Q) || Q <- Qs],
     ok.
 
 update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
