@@ -668,8 +668,7 @@ handle_info(flush, State) ->
       flush_broadcast_buffer(State #state { broadcast_timer = undefined }));
 
 handle_info(timeout, State) ->
-    noreply(
-      flush_broadcast_buffer(State #state { broadcast_timer = undefined }));
+    noreply(flush_broadcast_buffer(State));
 
 handle_info({'DOWN', MRef, process, _Pid, Reason},
             State = #state { self          = Self,
