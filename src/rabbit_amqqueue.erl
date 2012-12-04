@@ -34,7 +34,7 @@
 -export([start_mirroring/1, stop_mirroring/1]).
 
 %% internal
--export([internal_declare/2, internal_delete/2, run_backing_queue/3,
+-export([internal_declare/2, internal_delete/1, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
@@ -156,11 +156,11 @@
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: (qpids(), pid()) -> 'ok').
--spec(internal_delete/2 ::
-        (name(), pid()) -> rabbit_types:ok_or_error('not_found') |
-                           rabbit_types:connection_exit() |
-                           fun (() -> rabbit_types:ok_or_error('not_found') |
-                                      rabbit_types:connection_exit())).
+-spec(internal_delete/1 ::
+        (name()) -> rabbit_types:ok_or_error('not_found') |
+                    rabbit_types:connection_exit() |
+                    fun (() -> rabbit_types:ok_or_error('not_found') |
+                               rabbit_types:connection_exit())).
 -spec(run_backing_queue/3 ::
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
@@ -257,7 +257,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
                           true  -> rabbit_misc:const(ExistingQ);
-                          false -> TailFun = internal_delete(QueueName, QPid),
+                          false -> TailFun = internal_delete(QueueName),
                                    fun () -> TailFun(), ExistingQ end
                       end
               end
@@ -569,7 +569,7 @@ internal_delete1(QueueName) ->
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName).
 
-internal_delete(QueueName, QPid) ->
+internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
@@ -579,8 +579,7 @@ internal_delete(QueueName, QPid) ->
                          fun() ->
                                  ok = T(),
                                  ok = rabbit_event:notify(queue_deleted,
-                                                          [{pid,  QPid},
-                                                           {name, QueueName}])
+                                                          [{name, QueueName}])
                          end
               end
       end).
@@ -600,7 +599,7 @@ stop_mirroring(QPid)  -> ok = delegate:cast(QPid, stop_mirroring).
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> QsDels =
-                    qlc:e(qlc:q([{{QName, Pid}, delete_queue(QName)} ||
+                    qlc:e(qlc:q([{QName, delete_queue(QName)} ||
                                     #amqqueue{name = QName, pid = Pid,
                                               slave_pids = []}
                                         <- mnesia:table(rabbit_queue),
@@ -613,10 +612,9 @@ on_node_down(Node) ->
                 fun () ->
                         T(),
                         lists:foreach(
-                          fun({QName, QPid}) ->
+                          fun(QName) ->
                                   ok = rabbit_event:notify(queue_deleted,
-                                                           [{pid,  QPid},
-                                                            {name, QName}])
+                                                           [{name, QName}])
                           end, Qs)
                 end
       end).
