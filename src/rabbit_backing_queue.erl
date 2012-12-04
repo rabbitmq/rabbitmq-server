@@ -124,16 +124,25 @@
 %% be ignored.
 -callback drain_confirmed(state()) -> {msg_ids(), state()}.
 
-%% Drop messages from the head of the queue while the supplied predicate returns
-%% true. Also accepts a boolean parameter that determines whether the messages
-%% necessitate an ack or not. If they do, the function returns a list of
-%% messages with the respective acktags.
--callback dropwhile(msg_pred(), true, state())
-                   -> {rabbit_types:message_properties() | undefined,
-                       [{rabbit_types:basic_message(), ack()}], state()};
-                   (msg_pred(), false, state())
-                   -> {rabbit_types:message_properties() | undefined,
-                       undefined, state()}.
+%% Drop messages from the head of the queue while the supplied
+%% predicate on message properties returns true. Returns the first
+%% message properties for which the predictate returned false, or
+%% 'undefined' if the whole backing queue was traversed w/o the
+%% predicate ever returning false.
+-callback dropwhile(msg_pred(), state())
+                   -> {rabbit_types:message_properties() | undefined, state()}.
+
+%% Like dropwhile, except messages are fetched in "require
+%% acknowledgement" mode and are passed, together with their Delivered
+%% flag and ack tag, to the supplied function. The function is also
+%% fed an accumulator. The result of fetchwhile is as for dropwhile
+%% plus the accumulator.
+-callback fetchwhile(msg_pred(),
+                     fun ((rabbit_types:basic_message(), boolean(), ack(), A)
+                          -> A),
+                     A, state())
+                     -> {rabbit_types:message_properties() | undefined,
+                         A, state()}.
 
 %% Produce the next message.
 -callback fetch(true,  state()) -> {fetch_result(ack()), state()};
@@ -222,7 +231,8 @@
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
      {delete_and_terminate, 2}, {purge, 1}, {publish, 5},
-     {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1}, {dropwhile, 3},
+     {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1},
+     {dropwhile, 2}, {fetchwhile, 4},
      {fetch, 2}, {ack, 2}, {foreach_ack, 3}, {requeue, 2}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
