@@ -104,6 +104,7 @@ command(S) ->
                {1,  qc_ram_duration(S)},
                {1,  qc_drain_confirmed(S)},
                {1,  qc_dropwhile(S)},
+               {1,  qc_fetchwhile(S)},
                {1,  qc_is_empty(S)},
                {1,  qc_timeout(S)},
                {1,  qc_purge(S)},
@@ -147,7 +148,10 @@ qc_drain_confirmed(#state{bqstate = BQ}) ->
     {call, ?BQMOD, drain_confirmed, [BQ]}.
 
 qc_dropwhile(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, dropwhile, [fun dropfun/1, BQ]}.
+    {call, ?BQMOD, dropwhile, [fun drop_fetch_pred/1, BQ]}.
+
+qc_fetchwhile(#state{bqstate = BQ}) ->
+    {call, ?BQMOD, fetchwhile, [fun drop_fetch_pred/1, fun fetchfun/4, foldacc(), BQ]}.
 
 qc_is_empty(#state{bqstate = BQ}) ->
     {call, ?BQMOD, is_empty, [BQ]}.
@@ -192,16 +196,15 @@ next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Del, _Pid, _BQ]}) ->
     NeedsConfirm =
         {call, erlang, element,
          [?RECORD_INDEX(needs_confirming, message_properties), MsgProps]},
-    S#state{bqstate  = BQ,
-            len      = Len + 1,
+    S#state{bqstate     = BQ,
+            len         = Len + 1,
             next_seq_id = NextSeq + 1,
-            messages = gb_trees:insert(NextSeq, {MsgProps, Msg}, Messages),
-            publishing = {call, erlang, max, [0, {call, erlang, '-',
-                                                  [PublishCount, 1]}]},
-            confirms = case eval(NeedsConfirm) of
-                           true -> gb_sets:add(MsgId, Confirms);
-                           _    -> Confirms
-                       end};
+            messages    = gb_trees:insert(NextSeq, {MsgProps, Msg}, Messages),
+            publishing  = max(0, PublishCount - 1),
+            confirms    = case eval(NeedsConfirm) of
+                              true -> gb_sets:add(MsgId, Confirms);
+                              _    -> Confirms
+                          end};
 
 next_state(S, _BQ, {call, ?MODULE, publish_multiple, [PublishCount]}) ->
     S#state{publishing = PublishCount};
@@ -267,6 +270,12 @@ next_state(S, Res, {call, ?BQMOD, dropwhile, _Args}) ->
     Msgs1 = drop_messages(Messages),
     S#state{bqstate = BQ, len = gb_trees:size(Msgs1), messages = Msgs1};
 
+next_state(S, Res, {call, ?BQMOD, fetchwhile, _Args}) ->
+    BQ = {call, erlang, element, [3, Res]},
+    #state{messages = Messages} = S,
+    Msgs1 = drop_messages(Messages),
+    S#state{bqstate = BQ, len = gb_trees:size(Msgs1), messages = Msgs1};
+
 next_state(S, _Res, {call, ?BQMOD, is_empty, _Args}) ->
     S;
 
@@ -295,6 +304,21 @@ postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
         {empty, _BQ} ->
             Len =:= 0
     end;
+
+postcondition(S, {call, ?BQMOD, fetchwhile, _Args}, {Unfetched, Acc, _BQ0}) ->
+    #state{messages = Messages, len = Len} = S,
+    MsgList = gb_trees:to_list(Messages),
+    ExpectedMsgs = [M || {_SeqId, {_MsgPRop, M}} <-
+                           lists:takewhile(fun ({_SeqId, {MsgPop, _Msg}}) ->
+                                                   drop_fetch_pred(MsgPop)
+                                           end, MsgList)],
+    case Unfetched of
+        undefined   -> true = length(ExpectedMsgs) =:= Len;
+        ResultProps -> {_SeqId, {ExpectedMsgProp, _Msg}} =
+                         lists:nth(length(ExpectedMsgs) + 1, MsgList),
+                       true = ResultProps =:= ExpectedMsgProp
+    end,
+    true = ExpectedMsgs == lists:reverse(Acc);
 
 postcondition(S, {call, ?BQMOD, drop, _Args}, Res) ->
     #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
@@ -396,6 +420,9 @@ rand_choice(List, Selection, N)  ->
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
 
+fetchfun(Msg, _IsDelivered, _AckTag, Acc) ->
+    [Msg | Acc].
+
 makefoldfun(Size) ->
     fun (Msg, _MsgProps, Acc) ->
             case length(Acc) > Size of
@@ -405,7 +432,7 @@ makefoldfun(Size) ->
     end.
 foldacc() -> [].
 
-dropfun(Props) ->
+drop_fetch_pred(Props) ->
     Expiry = eval({call, erlang, element,
                    [?RECORD_INDEX(expiry, message_properties), Props]}),
     Expiry =/= 1.
@@ -416,7 +443,7 @@ drop_messages(Messages) ->
             Messages;
         false -> {_Seq, MsgProps_Msg, M2} = gb_trees:take_smallest(Messages),
             MsgProps = {call, erlang, element, [1, MsgProps_Msg]},
-            case dropfun(MsgProps) of
+            case drop_fetch_pred(MsgProps) of
                 true  -> drop_messages(M2);
                 false -> Messages
             end
