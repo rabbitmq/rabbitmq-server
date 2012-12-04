@@ -284,7 +284,11 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-policy_changed(Q1, Q2) -> rabbit_mirror_queue_misc:update_mirrors(Q1, Q2).
+policy_changed(Q1, Q2) ->
+    rabbit_mirror_queue_misc:update_mirrors(Q1, Q2),
+    %% Make sure we emit a stats event even if nothing
+    %% mirroring-related has changed - the policy may have changed anyway.
+    wake_up(Q1).
 
 start_queue_process(Node, Q) ->
     {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
