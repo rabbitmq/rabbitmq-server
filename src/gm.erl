@@ -667,6 +667,10 @@ handle_info(flush, State) ->
     noreply(
       flush_broadcast_buffer(State #state { broadcast_timer = undefined }));
 
+handle_info(timeout, State) ->
+    noreply(
+      flush_broadcast_buffer(State #state { broadcast_timer = undefined }));
+
 handle_info({'DOWN', MRef, process, _Pid, Reason},
             State = #state { self          = Self,
                              left          = Left,
@@ -834,10 +838,13 @@ handle_msg({activity, _NotLeft, _Activity}, State) ->
 
 
 noreply(State) ->
-    {noreply, ensure_broadcast_timer(State), hibernate}.
+    {noreply, ensure_broadcast_timer(State), flush_timeout(State)}.
 
 reply(Reply, State) ->
-    {reply, Reply, ensure_broadcast_timer(State), hibernate}.
+    {reply, Reply, ensure_broadcast_timer(State), flush_timeout(State)}.
+
+flush_timeout(#state{broadcast_buffer = []}) -> hibernate;
+flush_timeout(_)                             -> 0.
 
 ensure_broadcast_timer(State = #state { broadcast_buffer = [],
                                         broadcast_timer  = undefined }) ->
