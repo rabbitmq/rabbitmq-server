@@ -74,6 +74,12 @@
       <th>Uptime</th>
       <td><%= fmt_uptime(node.uptime) %></td>
     </tr>
+<% if (rabbit_versions_interesting) { %>
+    <tr>
+      <th>RabbitMQ Version</th>
+      <td><%= fmt_rabbit_version(node.applications) %></td>
+    </tr>
+<% } %>
     <tr>
       <th>Type</th>
       <td>

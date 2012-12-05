@@ -56,11 +56,12 @@ var NAVIGATION = {'Overview':    ['#/',                            false],
 ///////////////////////////////////////////////////////////////////////////
 
 // All these are to do with hiding UI elements if
-var statistics_level;   // ...there are no fine stats
-var user_administrator; // ...user is not an admin
-var user_monitor;       // ...user cannot monitor
-var nodes_interesting;  // ...we are not in a cluster
-var vhosts_interesting; // ...there is only one vhost
+var statistics_level;            // ...there are no fine stats
+var user_administrator;          // ...user is not an admin
+var user_monitor;                // ...user cannot monitor
+var nodes_interesting;           // ...we are not in a cluster
+var vhosts_interesting;          // ...there is only one vhost
+var rabbit_versions_interesting; // ...all cluster nodes run the same version
 
 // Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
@@ -86,8 +87,22 @@ function setup_global_vars(user) {
     user_administrator = jQuery.inArray("administrator", tags) != -1;
     user_monitor = user_administrator ||
         jQuery.inArray("monitoring", tags) != -1;
-    nodes_interesting = user_monitor &&
-        JSON.parse(sync_get('/nodes')).length > 1;
+    nodes_interesting = false;
+    rabbit_versions_interesting = false;
+    if (user_monitor) {
+        var nodes = JSON.parse(sync_get('/nodes'));
+        if (nodes.length > 1) {
+            nodes_interesting = true;
+            var v = '';
+            for (var i = 0; i < nodes.length; i++) {
+                var v1 = fmt_rabbit_version(nodes[i].applications);
+                if (v1 != 'unknown') {
+                    if (v != '' && v != v1) rabbit_versions_interesting = true;
+                    v = v1;
+                }
+            }
+        }
+    }
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     current_vhost = get_pref('vhost');
     exchange_types = overview.exchange_types;

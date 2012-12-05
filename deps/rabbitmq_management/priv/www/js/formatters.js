@@ -333,6 +333,15 @@ function fmt_uptime(u) {
         return min + 'm ' + sec + 's';
 }
 
+function fmt_rabbit_version(applications) {
+    for (var i in applications) {
+        if (applications[i].name == 'rabbit') {
+            return applications[i].version;
+        }
+    }
+    return 'unknown';
+}
+
 function fmt_idle(obj) {
     if (obj.idle_since == undefined) {
         return 'Active';
