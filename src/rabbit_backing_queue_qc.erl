@@ -318,7 +318,8 @@ postcondition(S, {call, ?BQMOD, fetchwhile, _Args}, {Unfetched, Acc, _BQ0}) ->
                          lists:nth(length(ExpectedMsgs) + 1, MsgList),
                        true = ResultProps =:= ExpectedMsgProp
     end,
-    true = ExpectedMsgs == lists:reverse(Acc);
+    {ExpectedMsgs, _} = lists:unzip(lists:reverse(Acc)),
+    true;
 
 postcondition(S, {call, ?BQMOD, drop, _Args}, Res) ->
     #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
@@ -360,7 +361,7 @@ postcondition(S, {call, ?BQMOD, fold, [FoldFun, Acc0, _BQ0]}, {Res, _BQ1}) ->
                                  ({_SeqId, {MsgProps, Msg}}, {cont, Acc}) ->
                                      FoldFun(Msg, MsgProps, Acc)
                              end, {cont, Acc0}, gb_trees:to_list(Messages)),
-    true = Model =:= Res;
+    Model =:= Res;
 
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
     ?BQMOD:len(BQ) =:= Len.
@@ -420,8 +421,8 @@ rand_choice(List, Selection, N)  ->
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
 
-fetchfun(Msg, _IsDelivered, _AckTag, Acc) ->
-    [Msg | Acc].
+fetchfun(Msg, _IsDelivered, AckTag, Acc) ->
+    [{Msg, AckTag} | Acc].
 
 makefoldfun(Size) ->
     fun (Msg, _MsgProps, Acc) ->
