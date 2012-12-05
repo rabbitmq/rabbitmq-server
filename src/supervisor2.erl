@@ -834,10 +834,9 @@ restart_child(Pid, Reason, State) ->
     Children = State#state.children,
     %% we still support >= R12-B3 in which lists:keyfind/3 doesn't exist
     case lists:keysearch(Pid, #child.pid, Children) of
-	{value, Child} ->
-	    RestartType = Child#child.restart_type,
+	{value, #child{restart_type = RestartType} = Child} ->
 	    do_restart(RestartType, Reason, Child, State);
-	_ ->
+	false ->
 	    {ok, State}
     end.
 
