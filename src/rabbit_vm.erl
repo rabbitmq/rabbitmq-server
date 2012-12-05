@@ -84,7 +84,15 @@ sup_memory(Sup) ->
 
 sup_children(Sup) ->
     rabbit_misc:with_exit_handler(
-      rabbit_misc:const([]), fun () -> supervisor:which_children(Sup) end).
+      rabbit_misc:const([]),
+      fun () ->
+              %% Just in case we end up talking to something that is
+              %% not a supervisor by mistake.
+              case supervisor:which_children(Sup) of
+                  L when is_list(L) -> L;
+                  _                 -> []
+              end
+      end).
 
 pid_memory(Pid)  when is_pid(Pid)   -> case process_info(Pid, memory) of
                                            {memory, M} -> M;
