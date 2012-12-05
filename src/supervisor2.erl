@@ -92,12 +92,12 @@
 -ifdef(use_specs).
 -type child()    :: 'undefined' | pid().
 -type child_id() :: term().
--type mfargs() :: {M :: module(), F :: atom(), A :: [term()] | undefined}.
--type modules() :: [module()] | 'dynamic'.
--type delay() :: non_neg_integer().
--type restart() :: 'permanent' | 'transient' | 'temporary' | 'intrinsic' | {'permanent', delay()} | {'transient', delay()} | {'intrinsic', delay()}.
+-type mfargs()   :: {M :: module(), F :: atom(), A :: [term()] | undefined}.
+-type modules()  :: [module()] | 'dynamic'.
+-type delay()    :: non_neg_integer().
+-type restart()  :: 'permanent' | 'transient' | 'temporary' | 'intrinsic' | {'permanent', delay()} | {'transient', delay()} | {'intrinsic', delay()}.
 -type shutdown() :: 'brutal_kill' | timeout().
--type worker() :: 'worker' | 'supervisor'.
+-type worker()   :: 'worker' | 'supervisor'.
 -type sup_name() :: {'local', Name :: atom()} | {'global', Name :: atom()}.
 -type sup_ref()  :: (Name :: atom())
                   | {Name :: atom(), Node :: node()}
