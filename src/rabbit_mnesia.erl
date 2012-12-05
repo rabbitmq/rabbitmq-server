@@ -763,14 +763,21 @@ check_version_consistency(This, Remote, Name) ->
 check_version_consistency(This, Remote, Name, Comp) ->
     case Comp(This, Remote) of
         true  -> ok;
-        false -> {error, {inconsistent_cluster,
-                          rabbit_misc:format(
-                            "~s version mismatch: local node is ~s, "
-                            "remote node ~s", [Name, This, Remote])}}
+        false -> version_error(Name, This, Remote)
     end.
+
+version_error(Name, This, Remote) ->
+    {error, {inconsistent_cluster,
+             rabbit_misc:format("~s version mismatch: local node is ~s, "
+                                "remote node ~s", [Name, This, Remote])}}.
 
 check_otp_consistency(Remote) ->
     check_version_consistency(erlang:system_info(otp_release), Remote, "OTP").
+
+%% Unlike the rest of 3.0.x, 3.0.0 is not compatible. This can be
+%% removed after 3.1.0 is released.
+check_rabbit_consistency("3.0.0") ->
+    version_error("Rabbit", rabbit_misc:version(), "3.0.0");
 
 check_rabbit_consistency(Remote) ->
     check_version_consistency(
