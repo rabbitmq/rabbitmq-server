@@ -152,29 +152,31 @@ apportion_sample(New, NewTS, Old, OldTS, Id, Key, State) ->
     NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
     OldMSCeil = apportion_ceiling(OldMS),
     NewMSCeil = apportion_ceiling(NewMS),
-    Diff = New - Old,
-    R = fun(Num, Ceil) ->
-                %% TODO round() is not good enough - can lead to off
-                %% by one errors. We need to make sure we don't lose
-                %% any message counts here.
-                record_sample(Id, {Key, round(Num), Ceil, State}, State)
+    Count = New - Old,
+    R = fun(Total, ThisFloat, Ceil) ->
+                This = round(ThisFloat),
+                record_sample(Id, {Key, This, Ceil, State}, State),
+                Total - This
         end,
     case (NewMSCeil - OldMSCeil) / ?SAMPLE_COMBINE_WINDOW of
         0.0 ->
-            R(Diff, NewMSCeil);
+            record_sample(Id, {Key, Count, NewMSCeil, State}, State);
         _ ->
             %% We need a fractional apportionment for the window
             %% before OldMSCeil, then apportionments for all the
             %% full windows in the middle (of which there may be 0),
             %% then a fractional apportionment for the window
             %% before NewMSCeil.
-            Rate = Diff / (NewMS - OldMS),
-            R(Rate * (OldMSCeil - OldMS), OldMSCeil),
-            [R(Rate * ?SAMPLE_COMBINE_WINDOW, I)
-             || I <- lists:seq(OldMSCeil + ?SAMPLE_COMBINE_WINDOW,
+            Rate = Count / (NewMS - OldMS),
+            Count1 = R(Count, Rate * (OldMSCeil - OldMS), OldMSCeil),
+            Middle = lists:seq(OldMSCeil + ?SAMPLE_COMBINE_WINDOW,
                                NewMSCeil - ?SAMPLE_COMBINE_WINDOW,
-                               ?SAMPLE_COMBINE_WINDOW)],
-            R(Rate * (NewMS + ?SAMPLE_COMBINE_WINDOW - NewMSCeil), NewMSCeil)
+                               ?SAMPLE_COMBINE_WINDOW),
+            CountFinal =
+                lists:foldl(fun(I, CountN) ->
+                                    R(CountN, Rate * ?SAMPLE_COMBINE_WINDOW, I)
+                            end, Count1, Middle),
+            R(CountFinal, CountFinal, NewMSCeil)
     end.
 
 apportion_ceiling(TS) ->
