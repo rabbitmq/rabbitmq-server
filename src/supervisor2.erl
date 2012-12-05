@@ -443,9 +443,10 @@ do_start_child_i(M, F, A) ->
 %%% Callback functions.
 %%% 
 %%% ---------------------------------------------------
+-ifdef(use_specs).
 -type call() :: 'which_children' | 'count_children' | {_, _}.	% XXX: refine
 -spec handle_call(call(), term(), state()) -> {'reply', term(), state()}.
-
+-endif.
 handle_call({start_child, EArgs}, _From, State) when ?is_simple(State) ->
     Child = hd(State#state.children),
     #child{mfargs = {M, F, A}} = Child,
