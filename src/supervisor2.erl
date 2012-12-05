@@ -195,7 +195,7 @@
 
 -endif.
 start_link(Mod, Args) ->
-    gen_server:start_link(supervisor2, {self, Mod, Args}, []).
+    gen_server:start_link(?MODULE, {self, Mod, Args}, []).
  
 -ifdef(use_specs).
 -spec start_link(SupName, Module, Args) -> startlink_ret() when
