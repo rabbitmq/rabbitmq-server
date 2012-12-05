@@ -38,6 +38,7 @@ all_tests() ->
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
+    passed = test_version_equivalance(),
     passed = test_multi_call(),
     passed = test_file_handle_cache(),
     passed = test_backing_queue(),
@@ -139,6 +140,16 @@ run_cluster_dependent_tests(SecondaryNode) ->
             throw(timeout)
     end,
 
+    passed.
+
+test_version_equivalance() ->
+    true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0"),
+    true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.1"),
+    true = rabbit_misc:version_minor_equivalent("%%VSN%%", "%%VSN%%"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.1.0"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
     passed.
 
 test_multi_call() ->

@@ -757,9 +757,16 @@ check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
                                         [node(), Node, Node])}}
     end.
 
-check_version_consistency(This, Remote, _) when This =:= Remote ->
-    ok;
 check_version_consistency(This, Remote, Name) ->
+    check_version_consistency(This, Remote, Name, fun (A, B) -> A =:= B end).
+
+check_version_consistency(This, Remote, Name, Comp) ->
+    case Comp(This, Remote) of
+        true  -> ok;
+        false -> version_error(Name, This, Remote)
+    end.
+
+version_error(Name, This, Remote) ->
     {error, {inconsistent_cluster,
              rabbit_misc:format("~s version mismatch: local node is ~s, "
                                 "remote node ~s", [Name, This, Remote])}}.
@@ -767,8 +774,15 @@ check_version_consistency(This, Remote, Name) ->
 check_otp_consistency(Remote) ->
     check_version_consistency(erlang:system_info(otp_release), Remote, "OTP").
 
+%% Unlike the rest of 3.0.x, 3.0.0 is not compatible. This can be
+%% removed after 3.1.0 is released.
+check_rabbit_consistency("3.0.0") ->
+    version_error("Rabbit", rabbit_misc:version(), "3.0.0");
+
 check_rabbit_consistency(Remote) ->
-    check_version_consistency(rabbit_misc:version(), Remote, "Rabbit").
+    check_version_consistency(
+      rabbit_misc:version(), Remote, "Rabbit",
+      fun rabbit_misc:version_minor_equivalent/2).
 
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
