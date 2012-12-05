@@ -264,9 +264,9 @@ remove_old_samples0(Cutoff, Stats = #stats{diffs = Diffs, base = Base}) ->
                  end
     end.
 
-overview_sum(Type, Aggregated) ->
-    Trees = ets:match(Aggregated, {{{vhost_stats, '_'}, Type}, '$1'}),
-    {Type, sum_trees([Tree || [Tree] <- Trees])}.
+overview_sum(Type, VHostStats) ->
+    Stats = [pget(Type, VHost, blank_stats()) || VHost <- VHostStats],
+    {Type, sum_trees(Stats)}.
 
 blank_stats() -> #stats{diffs = gb_trees:empty(), base = 0}.
 is_blank_stats(S) -> S =:= blank_stats().
@@ -349,17 +349,17 @@ handle_call(get_all_connections, _From, State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
     reply(connection_stats(Conns, State), State);
 
-handle_call({get_overview, User}, _From,
-            State = #state{aggregated_stats = ETS,
-                           tables           = Tables}) ->
+handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     VHosts = case User of
                  all -> rabbit_vhost:list();
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
              end,
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
-    MessageStats = [overview_sum(Type, ETS) || Type <- ?FINE_STATS],
-    QueueStats = [overview_sum(Type, ETS) || Type <- ?OVERVIEW_QUEUE_STATS],
+    VStats = [read_simple_stats(vhost_stats, VHost, State) ||
+                 VHost <- rabbit_vhost:list()],
+    MessageStats = [overview_sum(Type, VStats) || Type <- ?FINE_STATS],
+    QueueStats = [overview_sum(Type, VStats) || Type <- ?OVERVIEW_QUEUE_STATS],
     F = case User of
             all -> fun (L) -> length(L) end;
             _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
@@ -619,23 +619,35 @@ detail_stats_fun({IdType, FineSpecs}, State) ->
              || {Name, AggregatedStatsType, IdFun} <- FineSpecs]
     end.
 
-read_simple_stats(Type, Id, #state{aggregated_stats = ETS}) ->
+read_simple_stats(Type, Id, State = #state{aggregated_stats = ETS}) ->
     FromETS = ets:match(ETS, {{{Type, Id}, '$1'}, '$2'}),
-    [{K, V} || [K, V] <- FromETS].
+    [{K, remove_old_samples_during_read(Type, Id, K, V, State)}
+     || [K, V] <- FromETS].
 
-read_detail_stats(Type, Id, #state{aggregated_stats = ETS}) ->
+read_detail_stats(Type, Id, State = #state{aggregated_stats = ETS}) ->
     %% Id must contain '$1'
     FromETS = ets:match(ETS, {{{Type, Id}, '$2'}, '$3'}),
     %% [[G, K, V]] -> [{G, [{K, V}]}] where G is Q/X/Ch, K is from
     %% ?FINE_STATS and V is a stats tree
     %% TODO does this need to be optimised?
     lists:foldl(
-      fun ([G, K, V], L) ->
+      fun ([G, K, V0], L) ->
+              V = remove_old_samples_during_read(
+                    Type, insert_id(Id, G), K, V0, State),
               case lists:keyfind(G, 1, L) of
                   false    -> [{G, [{K, V}]} | L];
                   {G, KVs} -> lists:keyreplace(G, 1, L, {G, [{K, V} | KVs]})
               end
       end, [], FromETS).
+
+remove_old_samples_during_read(Type, Id, Key, Stats,
+                               #state{aggregated_stats = ETS}) ->
+    TS = rabbit_mgmt_format:timestamp_ms(erlang:now()),
+    case remove_old_samples(apportion_ceiling(TS), Stats) of
+        Stats -> Stats;
+        S     -> ets:insert(ETS, {{{Type, Id}, Key}, S}),
+                 S
+    end.
 
 extract_msg_stats(Stats) ->
     FineStats = lists:append([[K, details_key(K)] || K <- ?FINE_STATS]),
@@ -758,6 +770,9 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 
 first(Id)  -> {Id, '$1'}.
 second(Id) -> {'$1', Id}.
+
+insert_id({A, '$1'}, B) -> {A, B};
+insert_id({'$1', B}, A) -> {A, B}.
 
 -define(QUEUE_DETAILS,
         {queue_stats, [{incoming,   queue_exchange_stats, fun first/1},
