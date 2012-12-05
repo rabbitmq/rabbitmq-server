@@ -123,7 +123,7 @@ syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
         {msg, Ref, Msg, MsgProps} ->
             SPidsMRefs1 = wait_for_credit(SPidsMRefs, Ref),
             [begin
-                 credit_flow:send(SPid, ?CREDIT_DISC_BOUND),
+                 credit_flow:send(SPid),
                  SPid ! {sync_msg, Ref, Msg, MsgProps}
              end || {SPid, _} <- SPidsMRefs1],
             syncer_loop(Args, SPidsMRefs1);
@@ -205,7 +205,7 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
             {TRef1, BQS1} = UpdateRamDuration(BQ, BQS),
             slave_sync_loop(Args, TRef1, BQS1);
         {sync_msg, Ref, Msg, Props} ->
-            credit_flow:ack(Syncer, ?CREDIT_DISC_BOUND),
+            credit_flow:ack(Syncer),
             Props1 = Props#message_properties{needs_confirming = false},
             BQS1 = BQ:publish(Msg, Props1, true, none, BQS),
             slave_sync_loop(Args, TRef, BQS1);
