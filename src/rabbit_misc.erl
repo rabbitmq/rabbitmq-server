@@ -739,10 +739,10 @@ version_compare(A,  B) ->
 %% a.b.c and a.b.d match, but a.b.c and a.d.e don't. If
 %% versions do not match that pattern, just compare them.
 version_minor_equivalent(A, B) ->
-    {ok, RE} = re:compile("^(\\d+\\.\\d+)(\\.\\d+)*\$"),
+    {ok, RE} = re:compile("^(\\d+\\.\\d+)(\\.\\d+)\$"),
     Opts = [{capture, all_but_first, list}],
     case {re:run(A, RE, Opts), re:run(B, RE, Opts)} of
-                  {{match, [A1|_]}, {match, [B1|_]}} -> A1 =:= B1;
+        {{match, [A1|_]}, {match, [B1|_]}} -> A1 =:= B1;
         _                                  -> A =:= B
     end.
 
