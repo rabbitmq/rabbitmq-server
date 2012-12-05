@@ -775,16 +775,7 @@ check_otp_consistency(Remote) ->
 check_rabbit_consistency(Remote) ->
     check_version_consistency(
       rabbit_misc:version(), Remote, "Rabbit",
-      fun(A, B) ->
-              %% a.b.c and a.b.d match, but a.b.c and a.d.e don't. If
-              %% versions do not match that pattern, just compare them.
-              {ok, RE} = re:compile("(\\d+\\.\\d+)(\\.\\d+)*"),
-              Opts = [{capture, all_but_first, list}],
-              case {re:run(A, RE, Opts), re:run(B, RE, Opts)} of
-                  {{match, [A1|_]}, {match, [B1|_]}} -> A1 =:= B1;
-                  _                                  -> A =:= B
-              end
-      end).
+      fun rabbit_misc:version_minor_equivalent/2).
 
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
