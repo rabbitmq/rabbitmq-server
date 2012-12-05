@@ -1428,7 +1428,7 @@ validDelay(What)                  -> throw({invalid_delay, What}).
 
 validShutdown(Shutdown, _) 
   when is_integer(Shutdown), Shutdown > 0 -> true;
-validShutdown(infinity, supervisor)    -> true;
+validShutdown(infinity, _)             -> true;
 validShutdown(brutal_kill, _)          -> true;
 validShutdown(Shutdown, _)             -> throw({invalid_shutdown, Shutdown}).
 
