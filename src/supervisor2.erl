@@ -393,12 +393,8 @@ init_dynamic(_State, StartSpec) ->
 start_children(Children, SupName) -> start_children(Children, [], SupName).
 
 start_children([Child|Chs], NChildren, SupName) ->
-    Restart = case Child#child.restart_type of
-                  A      when is_atom(A) -> A;
-                  {N, _} when is_atom(N) -> N
-              end,
     case do_start_child(SupName, Child) of
-	{ok, undefined} when Restart =:= temporary ->
+	{ok, undefined} when Child#child.restart_type =:= temporary ->
 	    start_children(Chs, NChildren, SupName);
 	{ok, Pid} ->
 	    start_children(Chs, [Child#child{pid = Pid}|NChildren], SupName);
@@ -453,13 +449,9 @@ do_start_child_i(M, F, A) ->
 handle_call({start_child, EArgs}, _From, State) when ?is_simple(State) ->
     Child = hd(State#state.children),
     #child{mfargs = {M, F, A}} = Child,
-    Restart = case Child#child.restart_type of
-                  Name      when is_atom(Name) -> Name;
-                  {Type, _} when is_atom(Type) -> Type
-              end,
     Args = A ++ EArgs,
     case do_start_child_i(M, F, Args) of
-	{ok, undefined} when Restart =:= temporary ->
+	{ok, undefined} when Child#child.restart_type =:= temporary ->
 	    {reply, {ok, undefined}, State};
 	{ok, Pid} ->
 	    NState = save_dynamic_child(Child#child.restart_type, Pid, Args, State),
