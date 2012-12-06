@@ -142,3 +142,6 @@ var last_successful_connect;
 // TODO: maybe we don't need this any more?
 var update_counter = 0;
 
+// Used to hold chart data in between writing the div in an ejs and
+// rendering the chart.
+var chart_data = {};

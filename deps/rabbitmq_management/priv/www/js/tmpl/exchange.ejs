@@ -2,6 +2,14 @@
 
 <div class="section">
   <h2>Overview</h2>
+<% if (statistics_level == 'fine') { %>
+    <h3>Message rates</h3>
+    <div class="box">
+      <%= message_rates('xr', exchange.message_stats) %>
+    </div>
+<% } %>
+
+<h3>Details</h3>
   <div class="hider updatable">
     <table class="facts">
       <tr>
@@ -28,7 +36,7 @@
 
 <% if (statistics_level == 'fine') { %>
 <div class="section-hidden">
-<h2>Message rates</h2>
+<h2>Message rates breakdown</h2>
 <div class="hider updatable">
 <table class="two-col-layout">
   <tr>
@@ -36,15 +44,13 @@
       <%= format('msg-detail-publishes',
                  {'mode':   'exchange-incoming',
                   'object': exchange.incoming,
-                  'label':  'Incoming <span class="help" id="exchange-rates-incoming"></span>',
-                  'totals': exchange.message_stats_in}) %>
+                  'label':  'Incoming <span class="help" id="exchange-rates-incoming"></span>'}) %>
     </td>
     <td>
       <%= format('msg-detail-publishes',
                  {'mode':   'exchange-outgoing',
                   'object': exchange.outgoing,
-                  'label':  'Outgoing <span class="help" id="exchange-rates-outgoing"></span>',
-                  'totals': exchange.message_stats_out}) %>
+                  'label':  'Outgoing <span class="help" id="exchange-rates-outgoing"></span>'}) %>
     </td>
   </tr>
 </table>
