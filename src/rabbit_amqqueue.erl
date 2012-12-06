@@ -174,8 +174,7 @@
 -spec(start_mirroring/1 :: (pid()) -> 'ok').
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
 -spec(sync/2 :: (binary(), rabbit_types:vhost()) ->
-    'ok' | rabbit_types:error('pending_acks' | 'not_mirrored' |
-                              'already_synced')).
+    'ok' | rabbit_types:error('pending_acks' | 'not_mirrored')).
 
 -endif.
 
