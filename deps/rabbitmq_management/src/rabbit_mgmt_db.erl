@@ -141,25 +141,24 @@ append_sample(Stats, TS, OldStats, OldTS, Id, Key, State) ->
         {New, Old}     -> apportion_sample(New, TS, Old, OldTS, Id, Key, State)
     end.
 
--define(SAMPLE_COMBINE_WINDOW, 5000).
-
 apportion_first_sample(New, NewTS, Id, Key, State) ->
     NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
-    NewMSCeil = apportion_ceiling(NewMS),
+    NewMSCeil = ceil(NewMS, State),
     record_sample(Id, {Key, New, NewMSCeil, State}, State).
 
-apportion_sample(New, NewTS, Old, OldTS, Id, Key, State) ->
+apportion_sample(New, NewTS, Old, OldTS, Id, Key,
+                 State = #state{interval = Interval}) ->
     OldMS = rabbit_mgmt_format:timestamp_ms(OldTS),
     NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
-    OldMSCeil = apportion_ceiling(OldMS),
-    NewMSCeil = apportion_ceiling(NewMS),
+    OldMSCeil = ceil(OldMS, State),
+    NewMSCeil = ceil(NewMS, State),
     Count = New - Old,
     R = fun(Total, ThisFloat, Ceil) ->
                 This = round(ThisFloat),
                 record_sample(Id, {Key, This, Ceil, State}, State),
                 Total - This
         end,
-    case (NewMSCeil - OldMSCeil) / ?SAMPLE_COMBINE_WINDOW of
+    case (NewMSCeil - OldMSCeil) / Interval of
         0.0 ->
             record_sample(Id, {Key, Count, NewMSCeil, State}, State);
         _ ->
@@ -170,20 +169,18 @@ apportion_sample(New, NewTS, Old, OldTS, Id, Key, State) ->
             %% before NewMSCeil.
             Rate = Count / (NewMS - OldMS),
             Count1 = R(Count, Rate * (OldMSCeil - OldMS), OldMSCeil),
-            Middle = lists:seq(OldMSCeil + ?SAMPLE_COMBINE_WINDOW,
-                               NewMSCeil - ?SAMPLE_COMBINE_WINDOW,
-                               ?SAMPLE_COMBINE_WINDOW),
-            CountFinal =
-                lists:foldl(fun(I, CountN) ->
-                                    R(CountN, Rate * ?SAMPLE_COMBINE_WINDOW, I)
-                            end, Count1, Middle),
+            Middle = lists:seq(
+                       OldMSCeil + Interval, NewMSCeil - Interval, Interval),
+            CountFinal = lists:foldl(fun(I, CountN) ->
+                                             R(CountN, Rate * Interval, I)
+                                     end, Count1, Middle),
             R(CountFinal, CountFinal, NewMSCeil)
     end.
 
-apportion_ceiling(TS) ->
-    Round = (TS div ?SAMPLE_COMBINE_WINDOW) * ?SAMPLE_COMBINE_WINDOW,
+ceil(TS, #state{interval = Interval}) ->
+    Round = (TS div Interval) * Interval,
     case TS - Round > 0 of
-        true  -> Round + ?SAMPLE_COMBINE_WINDOW;
+        true  -> Round + Interval;
         false -> Round
     end.
 
@@ -249,8 +246,8 @@ add(Ceil, Diff, Stats = #stats{diffs = Diffs}) ->
 %% TODO be less crude
 -define(MAX_SAMPLE_AGE, 60000).
 
-remove_old_samples(#state{aggregated_stats = ETS}) ->
-    TS = apportion_ceiling(rabbit_mgmt_format:timestamp_ms(erlang:now())),
+remove_old_samples(State = #state{aggregated_stats = ETS}) ->
+    TS = ceil(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
     remove_old_samples_it(ets:match(ETS, '$1', 1), TS, ETS). %% TODO incr
 
 remove_old_samples_it('$end_of_table', _, _) ->
