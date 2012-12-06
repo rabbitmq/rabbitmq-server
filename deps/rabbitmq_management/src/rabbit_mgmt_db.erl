@@ -40,6 +40,7 @@
           %% What the previous info item was for any given
           %% {queue/channel/connection}
           old_stats,
+          remove_old_samples_timer,
           interval}).
 -record(stats, {diffs, base}).
 
@@ -234,7 +235,7 @@ record_sample0(Id0, {Key, Diff, Ceil, #state{aggregated_stats = ETS}}) ->
     Id = {Id0, Key},
     Old = case lookup_element(ETS, Id) of
               [] -> blank_stats();
-              E  -> remove_old_samples(Ceil, E)
+              E  -> E
           end,
     ets:insert(ETS, {Id, add(Ceil, Diff, Old)}).
 
@@ -247,9 +248,23 @@ add(Ceil, Diff, Stats = #stats{diffs = Diffs}) ->
 
 %% TODO be less crude
 -define(MAX_SAMPLE_AGE, 60000).
-remove_old_samples(Ceil, Samples) ->
-    Cutoff = Ceil - ?MAX_SAMPLE_AGE,
-    remove_old_samples0(Cutoff, Samples).
+
+remove_old_samples(#state{aggregated_stats = ETS}) ->
+    TS = apportion_ceiling(rabbit_mgmt_format:timestamp_ms(erlang:now())),
+    remove_old_samples_it(ets:match(ETS, '$1', 1), TS, ETS). %% TODO incr
+
+remove_old_samples_it('$end_of_table', _, _) ->
+    ok;
+remove_old_samples_it({Matches, Continuation}, TS, ETS) ->
+    [remove_old_samples(Key, Stats, TS, ETS) || [{Key, Stats}] <- Matches],
+    remove_old_samples_it(ets:match(Continuation), TS, ETS).
+
+remove_old_samples(Key, Stats, TS, ETS) ->
+    Cutoff = TS - ?MAX_SAMPLE_AGE,
+    case remove_old_samples0(Cutoff, Stats) of
+        Stats  -> ok;
+        Stats2 -> ets:insert(ETS, {Key, Stats2})
+    end.
 
 remove_old_samples0(Cutoff, Stats = #stats{diffs = Diffs, base = Base}) ->
     case gb_trees:is_empty(Diffs) of
@@ -301,10 +316,10 @@ init([]) ->
     rabbit_log:info("Statistics database started.~n"),
     Table = fun () -> ets:new(rabbit_mgmt_db, [ordered_set]) end,
     Tables = orddict:from_list([{Key, Table()} || Key <- ?TABLES]),
-    {ok, #state{interval         = Interval,
-                tables           = Tables,
-                old_stats        = Table(),
-                aggregated_stats = Table()}, hibernate,
+    {ok, set_remove_timer(#state{interval         = Interval,
+                                 tables           = Tables,
+                                 old_stats        = Table(),
+                                 aggregated_stats = Table()}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({augment_exchanges, Xs, basic}, _From, State) ->
@@ -392,6 +407,10 @@ handle_cast({event, Event}, State) ->
 handle_cast(_Request, State) ->
     noreply(State).
 
+handle_info(remove_old_samples, State) ->
+    remove_old_samples(State),
+    noreply(set_remove_timer(State));
+
 handle_info(_Info, State) ->
     noreply(State).
 
@@ -403,6 +422,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 noreply(NewState) -> {noreply, NewState, hibernate}.
+
+set_remove_timer(State = #state{interval = Interval}) ->
+    TRef = erlang:send_after(Interval, self(), remove_old_samples),
+    State#state{remove_old_samples_timer = TRef}.
 
 handle_pre_hibernate(State) ->
     %% rabbit_event can end up holding on to some memory after a busy
@@ -619,35 +642,23 @@ detail_stats_fun({IdType, FineSpecs}, State) ->
              || {Name, AggregatedStatsType, IdFun} <- FineSpecs]
     end.
 
-read_simple_stats(Type, Id, State = #state{aggregated_stats = ETS}) ->
+read_simple_stats(Type, Id, #state{aggregated_stats = ETS}) ->
     FromETS = ets:match(ETS, {{{Type, Id}, '$1'}, '$2'}),
-    [{K, remove_old_samples_during_read(Type, Id, K, V, State)}
-     || [K, V] <- FromETS].
+    [{K, V} || [K, V] <- FromETS].
 
-read_detail_stats(Type, Id, State = #state{aggregated_stats = ETS}) ->
+read_detail_stats(Type, Id, #state{aggregated_stats = ETS}) ->
     %% Id must contain '$1'
     FromETS = ets:match(ETS, {{{Type, Id}, '$2'}, '$3'}),
     %% [[G, K, V]] -> [{G, [{K, V}]}] where G is Q/X/Ch, K is from
     %% ?FINE_STATS and V is a stats tree
     %% TODO does this need to be optimised?
     lists:foldl(
-      fun ([G, K, V0], L) ->
-              V = remove_old_samples_during_read(
-                    Type, insert_id(Id, G), K, V0, State),
+      fun ([G, K, V], L) ->
               case lists:keyfind(G, 1, L) of
                   false    -> [{G, [{K, V}]} | L];
                   {G, KVs} -> lists:keyreplace(G, 1, L, {G, [{K, V} | KVs]})
               end
       end, [], FromETS).
-
-remove_old_samples_during_read(Type, Id, Key, Stats,
-                               #state{aggregated_stats = ETS}) ->
-    TS = rabbit_mgmt_format:timestamp_ms(erlang:now()),
-    case remove_old_samples(apportion_ceiling(TS), Stats) of
-        Stats -> Stats;
-        S     -> ets:insert(ETS, {{{Type, Id}, Key}, S}),
-                 S
-    end.
 
 extract_msg_stats(Stats) ->
     FineStats = lists:append([[K, details_key(K)] || K <- ?FINE_STATS]),
@@ -770,9 +781,6 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 
 first(Id)  -> {Id, '$1'}.
 second(Id) -> {'$1', Id}.
-
-insert_id({A, '$1'}, B) -> {A, B};
-insert_id({'$1', B}, A) -> {A, B}.
 
 -define(QUEUE_DETAILS,
         {queue_stats, [{incoming,   queue_exchange_stats, fun first/1},
