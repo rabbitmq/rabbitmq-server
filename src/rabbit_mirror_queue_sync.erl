@@ -42,6 +42,7 @@
 %%                 ||                 || <--- sync_ready ---- ||
 %%                 ||                 ||         (or)         ||
 %%                 ||                 || <--- sync_deny ----- ||
+%%                 || <--- ready ---- ||                      ||
 %%                 || <--- next* ---- ||                      ||  }
 %%                 || ---- msg* ----> ||                      ||  } loop
 %%                 ||                 || ---- sync_msg* ----> ||  }
@@ -60,6 +61,13 @@ master_prepare(Ref, Log, SPids) ->
 
 master_go(Syncer, Ref, Log, BQ, BQS) ->
     Args = {Syncer, Ref, Log, rabbit_misc:get_parent()},
+    receive
+        {'EXIT', Syncer, normal} -> {already_synced, BQS};
+        {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS};
+        {ready, Syncer}          -> master_go0(Args, BQ, BQS)
+    end.
+
+master_go0(Args, BQ, BQS) ->
     case BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
                          master_send(Args, I, Last, Msg, MsgProps)
                  end, {0, erlang:now()}, BQS) of
@@ -111,7 +119,8 @@ syncer(Ref, Log, MPid, SPids) ->
     %% *without* those messages ending up in their gen_server2 pqueue.
     case foreach_slave(SPidsMRefs, Ref, fun sync_receive_ready/3) of
         []          -> Log("all slaves already synced", []);
-        SPidsMRefs1 -> Log("~p to sync", [[rabbit_misc:pid_to_string(S) ||
+        SPidsMRefs1 -> MPid ! {ready, self()},
+                       Log("~p to sync", [[rabbit_misc:pid_to_string(S) ||
                                               {S, _} <- SPidsMRefs1]]),
                        SPidsMRefs2 = syncer_loop({Ref, MPid}, SPidsMRefs1),
                        foreach_slave(SPidsMRefs2, Ref, fun sync_send_complete/3)

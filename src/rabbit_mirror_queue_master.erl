@@ -142,11 +142,12 @@ sync_mirrors(State = #state { name                = QName,
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
     case rabbit_mirror_queue_sync:master_go(Syncer, Ref, Log, BQ, BQS) of
-        {shutdown,  R, BQS1} -> {stop, R, S(BQS1)};
-        {sync_died, R, BQS1} -> Log("~p", [R]),
-                                {ok, S(BQS1)};
-        {ok, BQS1}           -> Log("complete", []),
-                                {ok, S(BQS1)}
+        {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
+        {sync_died, R, BQS1}   -> Log("~p", [R]),
+                                  {ok, S(BQS1)};
+        {already_synced, BQS1} -> {{error, already_synced}, S(BQS1)};
+        {ok, BQS1}             -> Log("complete", []),
+                                  {ok, S(BQS1)}
     end.
 
 terminate({shutdown, dropped} = Reason,

@@ -50,6 +50,7 @@
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
          cluster_status,
+         {sync_queue, [?VHOST_DEF]},
 
          add_user,
          delete_user,
@@ -279,6 +280,12 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     Inform("Removing node ~p from cluster", [ClusterNode]),
     rpc_call(Node, rabbit_mnesia, forget_cluster_node,
              [ClusterNode, RemoveWhenOffline]);
+
+action(sync_queue, Node, [Queue], Opts, Inform) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    Inform("Synchronising queue ~s in ~s", [Queue, VHost]),
+    rpc_call(Node, rabbit_amqqueue, sync,
+             [list_to_binary(Queue), list_to_binary(VHost)]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),

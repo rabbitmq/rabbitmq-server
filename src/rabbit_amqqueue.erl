@@ -31,7 +31,7 @@
 -export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
--export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1]).
+-export([start_mirroring/1, stop_mirroring/1, sync/2]).
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
@@ -173,8 +173,9 @@
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 -spec(start_mirroring/1 :: (pid()) -> 'ok').
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
--spec(sync_mirrors/1 :: (rabbit_types:amqqueue()) ->
-    'ok' | rabbit_types:error('pending_acks' | 'not_mirrored')).
+-spec(sync/2 :: (binary(), rabbit_types:vhost()) ->
+    'ok' | rabbit_types:error('pending_acks' | 'not_mirrored' |
+                              'already_synced')).
 
 -endif.
 
@@ -592,7 +593,12 @@ set_maximum_since_use(QPid, Age) ->
 start_mirroring(QPid) -> ok = delegate_cast(QPid, start_mirroring).
 stop_mirroring(QPid)  -> ok = delegate_cast(QPid, stop_mirroring).
 
-sync_mirrors(#amqqueue{pid = QPid}) -> delegate_call(QPid, sync_mirrors).
+sync(QNameBin, VHostBin) ->
+    QName = rabbit_misc:r(VHostBin, queue, QNameBin),
+    case lookup(QName) of
+        {ok, #amqqueue{pid = QPid}} -> delegate_call(QPid, sync_mirrors);
+        E                           -> E
+    end.
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
