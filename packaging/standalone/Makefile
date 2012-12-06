@@ -13,6 +13,10 @@ RABBITMQ_EBIN_ROOT=$(RABBITMQ_HOME)/ebin
 RABBITMQ_PLUGINS_DIR=$(RABBITMQ_HOME)/plugins
 RABBITMQ_PLUGINS_EXPAND_DIR=$(RABBITMQ_PLUGINS_DIR)/expand
 
+RABBITMQ_DEFAULTS=$(TARGET_DIR)/sbin/rabbitmq-defaults
+fix_defaults = sed -e $(1) $(RABBITMQ_DEFAULTS) > $(RABBITMQ_DEFAULTS).tmp \
+	       && mv $(RABBITMQ_DEFAULTS).tmp $(RABBITMQ_DEFAULTS)
+
 dist:
 	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
 
@@ -22,7 +26,15 @@ dist:
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
 			install
 
-	./fix-rabbitmq-defaults.sh $(TARGET_DIR) $(ERTS_VSN) $(VERSION)
+## Here we set the RABBITMQ_HOME variable,
+## then we make ERL_DIR point to our released erl
+## and we add the paths to our released start_clean and start_sasl boot scripts
+	$(call fix_defaults,'s:^SYS_PREFIX=$$:SYS_PREFIX=\$${RABBITMQ_HOME}:')
+	$(call fix_defaults,'s:^ERL_DIR=$$:ERL_DIR=\$${RABBITMQ_HOME}/erts-$(ERTS_VSN)/bin/:')
+	$(call fix_defaults,'s:start_clean$$:"\$${SYS_PREFIX}/releases/$(VERSION)/start_clean":')
+	$(call fix_defaults,'s:start_sasl:"\$${SYS_PREFIX}/releases/$(VERSION)/start_sasl":')
+
+	chmod 0755 $(RABBITMQ_DEFAULTS)
 
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
 
