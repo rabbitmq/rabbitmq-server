@@ -72,8 +72,8 @@ mainloop(State0 = #reader_state{socket = Sock}) ->
     State = run_socket(State0),
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
-            process_received_bytes(
-              Data, State#reader_state{recv_outstanding = false});
+            mainloop(process_received_bytes(
+                       Data, State#reader_state{recv_outstanding = false}));
         {inet_async, _Sock, _Ref, {error, closed}} ->
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
@@ -87,7 +87,7 @@ mainloop(State0 = #reader_state{socket = Sock}) ->
     end.
 
 process_received_bytes([], State) ->
-    mainloop(State);
+    State;
 process_received_bytes(Bytes,
                        State = #reader_state{
                          processor   = Processor,
@@ -95,7 +95,7 @@ process_received_bytes(Bytes,
                          state       = S}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
-            mainloop(State#reader_state{parse_state = ParseState1});
+            State#reader_state{parse_state = ParseState1};
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
