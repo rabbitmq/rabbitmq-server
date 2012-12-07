@@ -188,6 +188,7 @@ function render(reqs, template, highlight) {
 }
 
 function update() {
+    replace_content('debug', '');
     clearInterval(timer);
     with_update(function(html) {
             update_navigation();
