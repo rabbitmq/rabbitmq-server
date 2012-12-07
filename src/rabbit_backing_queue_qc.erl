@@ -163,7 +163,7 @@ qc_purge(#state{bqstate = BQ}) ->
     {call, ?BQMOD, purge, [BQ]}.
 
 qc_fold(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, fold, [makefoldfun(pos_integer()), foldacc(), BQ]}.
+    {call, ?BQMOD, fold, [makefoldfun(eval(pos_integer())), foldacc(), BQ]}.
 
 %% Preconditions
 
@@ -241,12 +241,14 @@ next_state(S, Res, {call, ?BQMOD, ack, [AcksArg, _BQ]}) ->
             acks    = lists:foldl(fun proplists:delete/2, AcksState, AcksArg)};
 
 next_state(S, Res, {call, ?BQMOD, requeue, [AcksArg, _V]}) ->
-    #state{messages = Messages, acks = AcksState} = S,
+    #state{messages = Messages, acks = AcksState, confirms = Confrms} = S,
     BQ1 = {call, erlang, element, [2, Res]},
     Messages1 = lists:foldl(fun (AckTag, Msgs) ->
                                 {SeqId, MsgPropsMsg} =
                                    proplists:get_value(AckTag, AcksState),
-                                gb_trees:insert(SeqId, MsgPropsMsg, Msgs)
+                                gb_trees:insert(SeqId,
+                                                strip_confirm(MsgPropsMsg),
+                                                Msgs)
                             end, Messages, AcksArg),
     S#state{bqstate  = BQ1,
             len      = gb_trees:size(Messages1),
@@ -271,10 +273,13 @@ next_state(S, Res, {call, ?BQMOD, dropwhile, _Args}) ->
     S#state{bqstate = BQ, len = gb_trees:size(Msgs1), messages = Msgs1};
 
 next_state(S, Res, {call, ?BQMOD, fetchwhile, _Args}) ->
+    #state{messages = Messages, acks = AcksState} = S,
     BQ = {call, erlang, element, [3, Res]},
-    #state{messages = Messages} = S,
-    Msgs1 = drop_messages(Messages),
-    S#state{bqstate = BQ, len = gb_trees:size(Msgs1), messages = Msgs1};
+    {Msgs1, Acks} = fetch_messages(Messages, foldacc()),
+    S#state{bqstate  = BQ,
+            len      = gb_trees:size(Msgs1),
+            messages = Msgs1,
+            acks     = AcksState ++ Acks};
 
 next_state(S, _Res, {call, ?BQMOD, is_empty, _Args}) ->
     S;
@@ -306,7 +311,7 @@ postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
     end;
 
 postcondition(S, {call, ?BQMOD, fetchwhile, _Args}, {Unfetched, Acc, _BQ0}) ->
-    #state{messages = Messages, len = Len} = S,
+    #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
     MsgList = gb_trees:to_list(Messages),
     ExpectedMsgs = [M || {_SeqId, {_MsgPRop, M}} <-
                            lists:takewhile(fun ({_SeqId, {MsgPop, _Msg}}) ->
@@ -318,7 +323,11 @@ postcondition(S, {call, ?BQMOD, fetchwhile, _Args}, {Unfetched, Acc, _BQ0}) ->
                          lists:nth(length(ExpectedMsgs) + 1, MsgList),
                        true = ResultProps =:= ExpectedMsgProp
     end,
-    {ExpectedMsgs, _} = lists:unzip(lists:reverse(Acc)),
+    {ExpectedMsgs, AcksAcc} = lists:unzip(lists:reverse(Acc)),
+    [begin
+         false = proplists:is_defined(AckTag, Acks),
+         false = gb_sets:is_element(AckTag, Confrms)
+     end || AckTag <- AcksAcc],
     true;
 
 postcondition(S, {call, ?BQMOD, drop, _Args}, Res) ->
@@ -439,14 +448,24 @@ drop_fetch_pred(Props) ->
     Expiry =/= 1.
 
 drop_messages(Messages) ->
+    {Messages1, ok} = fold_takewhile(fun (_, _, _) -> ok end, ok, Messages),
+    Messages1.
+
+fetch_messages(Messages, Acc) ->
+    fold_takewhile(fun (Seq, MsgProps_Msg, A) ->
+                           [{Seq, {Seq, MsgProps_Msg}} | A]
+                   end, Acc, Messages).
+
+fold_takewhile(Fun, Acc, Messages) ->
     case gb_trees:is_empty(Messages) of
         true ->
-            Messages;
-        false -> {_Seq, MsgProps_Msg, M2} = gb_trees:take_smallest(Messages),
+            {Messages, Acc};
+        false ->
+            {Seq, MsgProps_Msg, M2} = gb_trees:take_smallest(Messages),
             MsgProps = {call, erlang, element, [1, MsgProps_Msg]},
             case drop_fetch_pred(MsgProps) of
-                true  -> drop_messages(M2);
-                false -> Messages
+                true  -> fold_takewhile(Fun, Fun(Seq, MsgProps_Msg, Acc), M2);
+                false -> {Messages, Acc}
             end
     end.
 
@@ -467,6 +486,9 @@ next_state_fetch_and_drop(S, Res, AckReq, AckTagIdx) ->
                          S2
                  end
     end.
+
+strip_confirm({MsgProps, Msg}) ->
+    {MsgProps #message_properties{needs_confirming = false}, Msg}.
 
 -else.
 
