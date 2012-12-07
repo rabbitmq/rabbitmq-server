@@ -688,7 +688,7 @@ handle_info({delayed_restart, {RestartType, Reason, Child}}, State) ->
         {value, Child1} ->
             {ok, NState} = do_restart(RestartType, Reason, Child1, State),
             {noreply, NState};
-        What ->
+        _What ->
             {noreply, State}
     end;
 
