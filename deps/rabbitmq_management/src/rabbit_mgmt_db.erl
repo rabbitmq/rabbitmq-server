@@ -33,6 +33,80 @@
 
 -import(rabbit_misc, [pget/3, pset/3]).
 
+%% The management database listens to events broadcast via the
+%% rabbit_event mechanism, and responds to queries from the various
+%% rabbit_mgmt_wm_* modules. It handles several kinds of events, and
+%% slices and dices them in various ways.
+%%
+%% There are three types of events coming in: created (when an object
+%% is created, containing immutable facts about it), stats (emitted on
+%% a timer, with mutable facts about the object), and deleted (just
+%% containing the object's ID). In this context "objects" means
+%% connections, channels, exchanges, queues, consumers, vhosts and
+%% nodes. Note that we do not care about users, permissions, bindings,
+%% parameters or policies.
+%%
+%% Connections and channels are identified by pids. Queues and
+%% exchanges are identified by names (which are #resource{}s). VHosts
+%% and nodes are identified by names which are binaries. And consumers
+%% are identified by {ChPid, QName}.
+%%
+%% The management database records the "created" events for
+%% connections, channels and consumers, and can thus be authoritative
+%% about those objects. For queues, exchanges and nodes we go to
+%% Mnesia to find out the immutable details of the objects.
+%%
+%% For everything other than consumers, the database can then augment
+%% these immutable details with stats, as the object changes. (We
+%% never emit anything very interesting about consumers).
+%%
+%% Stats on the inbound side are refered to as coarse- and
+%% fine-grained. Fine grained statistics are the message rates
+%% maintained by channels and associated with tuples: {publishing
+%% channel, exchange}, {publishing channel, exchange, queue} and
+%% {queue, consuming channel}. Coarse grained stats are everything
+%% else and are associated with only one object, not a tuple.
+%%
+%% Within the management database though we rearrange things a bit: we
+%% refer to basic stats, simple stats and detail stats.
+%%
+%% Basic stats are those coarse grained stats for which we do not
+%% retain a history and do not perform any calculations -
+%% e.g. connection.state or channel.prefetch_count.
+%%
+%% Simple stats are those for which we do history / calculations which
+%% are associated with one object *after aggregation* - so these might
+%% originate with coarse grained stats - e.g. connection.send_oct or
+%% queue.messages_ready. But they might also originate from fine
+%% grained stats which have been aggregated - e.g. the message rates
+%% for a vhost or queue.
+%%
+%% Finally, detailed stats are those for which we do history /
+%% calculations which are associated with more than one object. These
+%% have to have originated as fine grained stats, but can still have
+%% been aggregated.
+%%
+%% Created events and basic stats are stored in ETS tables by object,
+%% looked up in an orddict in #state.tables. Simple and detailed stats
+%% (which only differ depending on how they're keyed) are stored in
+%% #state.aggregated_stats.
+%%
+%% For each key for simple and detailed stats we maintain a #stats{}
+%% record, essentially a base counter for everything that happened
+%% before the samples we have kept, and a gb_tree of {timestamp,
+%% sample} values.
+%%
+%% We also have #state.old_stats to let us calculate instantaneous
+%% rates, in order to apportion simple / detailed stats into time
+%% slices as they come in. These instantaneous rates are not recorded,
+%% the rates shown in the API are calculated at query time.
+%%
+%% Overall the object is to do all the aggregation when events come
+%% in, and make queries be simple lookups as much as possible. One
+%% area where this does not happen is the global overview - which is
+%% aggregated from vhost stats at query time since we do not want to
+%% reveal anything about other vhosts to unprivileged users.
+
 -record(state, {
           %% "stats" for which no calculations are required
           tables,
