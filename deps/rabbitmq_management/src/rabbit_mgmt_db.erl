@@ -841,9 +841,7 @@ detail_channel_stats(Objs, State) ->
                        augment_msg_stats_fun(State)]).
 
 vhost_stats(Objs, State) ->
-    merge_stats(Objs, [simple_stats_fun(vhost_stats, State)
-                       %% augment_msg_stats_fun(State) %% ??
-                      ]).
+    merge_stats(Objs, [simple_stats_fun(vhost_stats, State)]).
 
 node_stats(Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(node_stats, State)]).
