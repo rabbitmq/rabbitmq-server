@@ -553,46 +553,73 @@ unicode_test() ->
     http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
     ok.
 
-definitions_test() ->
-    rabbit_runtime_parameters_test:register_policy_validator(),
-    XArgs = [{type, <<"direct">>}],
-    QArgs = [],
-    BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
-    http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
-    http_put("/exchanges/%2f/my-exchange", XArgs, ?NO_CONTENT),
-    http_post("/bindings/%2f/e/my-exchange/q/my-queue", BArgs, ?CREATED),
-    http_post("/bindings/%2f/e/amq.direct/q/my-queue", BArgs, ?CREATED),
-    http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", BArgs, ?CREATED),
+defs(Key, URI, CreateMethod, Args) ->
+    %% Create the item
+    URI2 = case CreateMethod of
+               put   -> http_put(URI, Args, ?NO_CONTENT),
+                        URI;
+               post  -> Headers = http_post(URI, Args, ?CREATED),
+                        "../../../.." ++ Loc = pget("location", Headers),
+                        "/" ++ atom_to_list(Key) ++ Loc
+           end,
+    %% Make sure it ends up in definitions
     Definitions = http_get("/definitions", ?OK),
-    http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
-    http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
-    http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
+    true = lists:any(fun(I) -> test_item(Args, I) end, pget(Key, Definitions)),
+
+    %% Delete it
+    http_delete(URI2, ?NO_CONTENT),
+
+    %% Post the definitions back, it should get recreated in correct form
     http_post("/definitions", Definitions, ?CREATED),
-    http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
-    http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
-    http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
-    ExtraConfig =
-        [{users,       []},
-         {vhosts,      []},
-         {permissions, []},
-         {policies,    [[{vhost,      <<"/">>},
-                         {key,        <<"test">>},
-                         {pattern,    <<".*">>},
-                         {definition, [{testpos, [1, 2, 3]}]},
-                         {priority,   1}
-                        ]]},
-         {queues,      [[{name,        <<"another-queue">>},
-                         {vhost,       <<"/">>},
-                         {durable,     true},
-                         {auto_delete, false},
-                         {arguments,   []}
-                        ]]},
-         {exchanges,   []},
-         {bindings,    []}],
+    assert_item(Args, http_get(URI2, ?OK)),
+
+    %% And delete it again
+    http_delete(URI2, ?NO_CONTENT),
+
+    ok.
+
+definitions_test() ->
+    rabbit_runtime_parameters_test:register(),
+    rabbit_runtime_parameters_test:register_policy_validator(),
+
+    defs(queues, "/queues/%2f/my-queue", put,
+         [{name,    <<"my-queue">>},
+          {durable, true}]),
+    defs(exchanges, "/exchanges/%2f/my-exchange", put,
+         [{name, <<"my-exchange">>},
+          {type, <<"direct">>}]),
+    defs(bindings, "/bindings/%2f/e/amq.direct/e/amq.fanout", post,
+         [{routing_key, <<"routing">>}, {arguments, []}]),
+    defs(policies, "/policies/%2f/my-policy", put,
+         [{vhost,      <<"/">>},
+          {name,       <<"my-policy">>},
+          {pattern,    <<".*">>},
+          {definition, [{testpos, [1, 2, 3]}]},
+          {priority,   1}]),
+    defs(parameters, "/parameters/test/%2f/good", put,
+         [{vhost,     <<"/">>},
+          {component, <<"test">>},
+          {name,      <<"good">>},
+          {value,     <<"ignore">>}]),
+    defs(users, "/users/myuser", put,
+         [{name,          <<"myuser">>},
+          {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+          {tags,          <<"management">>}]),
+    defs(vhosts, "/vhosts/myvhost", put,
+         [{name, <<"myvhost">>}]),
+    defs(permissions, "/permissions/%2f/guest", put,
+         [{user,      <<"guest">>},
+          {vhost,     <<"/">>},
+          {configure, <<"c">>},
+          {write,     <<"w">>},
+          {read,      <<"r">>}]),
+
+    %% We just messed with guest's permissions
+    http_put("/permissions/%2f/guest",
+             [{configure, <<".*">>},
+              {write,     <<".*">>},
+              {read,      <<".*">>}], ?NO_CONTENT),
+
     BrokenConfig =
         [{users,       []},
          {vhosts,      []},
@@ -606,11 +633,10 @@ definitions_test() ->
                          {arguments,   []}
                         ]]},
          {bindings,    []}],
-    http_post("/definitions", ExtraConfig, ?CREATED),
     http_post("/definitions", BrokenConfig, ?BAD_REQUEST),
-    http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
-    http_delete("/policies/%2f/test", ?NO_CONTENT),
+
     rabbit_runtime_parameters_test:unregister_policy_validator(),
+    rabbit_runtime_parameters_test:unregister(),
     ok.
 
 definitions_remove_things_test() ->

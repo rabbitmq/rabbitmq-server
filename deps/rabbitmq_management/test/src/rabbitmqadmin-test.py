@@ -26,8 +26,13 @@ class TestRabbitMQAdmin(unittest.TestCase):
         self.run_fail(['--host', 'some-host-that-does-not-exist', 'show', 'overview'])
 
     def test_port(self):
+        # Test port selection
+        self.run_success(['--port', '15672', 'show', 'overview'])
+        # Test redirect
         self.run_success(['--port', '55672', 'show', 'overview'])
-        self.run_fail(['--port', '55673', 'show', 'overview'])
+        # Test port not open
+        self.run_fail(['--port', '15673', 'show', 'overview'])
+        # Test port open but not talking HTTP
         self.run_fail(['--port', '5672', 'show', 'overview'])
 
     def test_user(self):
