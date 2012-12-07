@@ -22,7 +22,8 @@
 
 -export([start_link/0]).
 
--export([augment_exchanges/2, augment_queues/2, augment_nodes/1,
+-export([augment_exchanges/2, augment_queues/2,
+         augment_nodes/1, augment_vhosts/1,
          get_channels/2, get_connections/1,
          get_all_channels/1, get_all_connections/0,
          get_overview/1, get_overview/0]).
@@ -76,6 +77,7 @@ start_link() ->
 
 augment_exchanges(Xs, Mode) -> safe_call({augment_exchanges, Xs, Mode}, Xs).
 augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
+augment_vhosts(VHosts)      -> safe_call({augment_vhosts, VHosts}, VHosts).
 augment_nodes(Nodes)        -> safe_call({augment_nodes, Nodes}, Nodes).
 
 get_channels(Cs, Mode)      -> safe_call({get_channels, Cs, Mode}, Cs).
@@ -104,6 +106,7 @@ pget(Key, List) -> pget(Key, List, unknown).
 %% passed a queue proplist that will already have been formatted -
 %% i.e. it will have name and vhost keys.
 id_name(node_stats)       -> name;
+id_name(vhost_stats)      -> name;
 id_name(queue_stats)      -> name;
 id_name(exchange_stats)   -> name;
 id_name(channel_stats)    -> pid;
@@ -330,6 +333,9 @@ handle_call({augment_queues, Qs, basic}, _From, State) ->
 
 handle_call({augment_queues, Qs, full}, _From, State) ->
     reply(detail_queue_stats(Qs, State), State);
+
+handle_call({augment_vhosts, VHosts}, _From, State) ->
+    reply(vhost_stats(VHosts, State), State);
 
 handle_call({augment_nodes, Nodes}, _From, State) ->
     {reply, node_stats(Nodes, State), State};
@@ -833,6 +839,11 @@ detail_channel_stats(Objs, State) ->
                          fun (Props) -> {'_', pget(pid, Props)} end, State),
                        detail_stats_fun(?CHANNEL_DETAILS, State),
                        augment_msg_stats_fun(State)]).
+
+vhost_stats(Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(vhost_stats, State)
+                       %% augment_msg_stats_fun(State) %% ??
+                      ]).
 
 node_stats(Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(node_stats, State)]).
