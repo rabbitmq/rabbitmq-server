@@ -241,7 +241,7 @@ next_state(S, Res, {call, ?BQMOD, ack, [AcksArg, _BQ]}) ->
             acks    = lists:foldl(fun proplists:delete/2, AcksState, AcksArg)};
 
 next_state(S, Res, {call, ?BQMOD, requeue, [AcksArg, _V]}) ->
-    #state{messages = Messages, acks = AcksState, confirms = Confrms} = S,
+    #state{messages = Messages, acks = AcksState} = S,
     BQ1 = {call, erlang, element, [2, Res]},
     Messages1 = lists:foldl(fun (AckTag, Msgs) ->
                                 {SeqId, MsgPropsMsg} =
