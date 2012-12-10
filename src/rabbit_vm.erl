@@ -127,9 +127,9 @@ plugin_memory() ->
                   is_plugin(atom_to_list(App))]).
 
 plugin_memory(App) ->
-    case catch application_controller:get_master(App) of
+    case application_controller:get_master(App) of
         undefined -> 0;
-        Master    -> case catch application_master:get_child(Master) of
+        Master    -> case application_master:get_child(Master) of
                          {Pid, _} when is_pid(Pid) -> sup_memory(Pid);
                          Pid      when is_pid(Pid) -> sup_memory(Pid);
                          _                         -> 0
