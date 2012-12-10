@@ -130,8 +130,9 @@ plugin_memory(App) ->
     case catch application_controller:get_master(App) of
         undefined -> 0;
         Master    -> case catch application_master:get_child(Master) of
-                         {Pid, _} -> sup_memory(Pid);
-                         _        -> 0
+                         {Pid, _} when is_pid(Pid) -> sup_memory(Pid);
+                         Pid      when is_pid(Pid) -> sup_memory(Pid);
+                         _                         -> 0
                      end
     end.
 
