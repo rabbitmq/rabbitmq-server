@@ -19,18 +19,20 @@
 -behaviour(application).
 -export([start/2,stop/1]).
 
+%% Dummy supervisor - see Ulf Wiger's comment at
+%% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
+-behaviour(supervisor).
+-export([init/1]).
+
 start(_Type, _StartArgs) ->
     {ok, Listener} = application:get_env(rabbitmq_web_stomp_examples, listener),
     {ok, _} = rabbit_mochiweb:register_static_context(
                 web_stomp_examples, Listener, "web-stomp-examples", ?MODULE,
                 "priv", "WEB-STOMP: examples"),
-    {ok, spawn(fun loop/0)}.
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
     rabbit_mochiweb:unregister_context(web_stomp_examples),
     ok.
 
-loop() ->
-    receive
-        _ -> loop()
-    end.
+init([]) -> {ok, {{one_for_one, 3, 10}, []}}.
