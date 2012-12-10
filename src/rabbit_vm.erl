@@ -127,10 +127,12 @@ plugin_memory() ->
                   is_plugin(atom_to_list(App))]).
 
 plugin_memory(App) ->
-    case catch application_master:get_child(
-                 application_controller:get_master(App)) of
-        {Pid, _} -> sup_memory(Pid);
-        _        -> 0
+    case catch application_controller:get_master(App) of
+        undefined -> 0;
+        Master    -> case catch application_master:get_child(Master) of
+                         {Pid, _} -> sup_memory(Pid);
+                         _        -> 0
+                     end
     end.
 
 is_plugin("rabbitmq_" ++ _) -> true;
