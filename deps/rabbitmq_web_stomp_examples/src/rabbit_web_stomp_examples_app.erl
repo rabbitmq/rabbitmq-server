@@ -17,9 +17,11 @@
 -module(rabbit_web_stomp_examples_app).
 
 -behaviour(application).
--behaviour(supervisor).
-
 -export([start/2,stop/1]).
+
+%% Dummy supervisor - see Ulf Wiger's comment at
+%% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
+-behaviour(supervisor).
 -export([init/1]).
 
 start(_Type, _StartArgs) ->
@@ -27,11 +29,10 @@ start(_Type, _StartArgs) ->
     {ok, _} = rabbit_mochiweb:register_static_context(
                 web_stomp_examples, Listener, "web-stomp-examples", ?MODULE,
                 "priv", "WEB-STOMP: examples"),
-    supervisor:start_link({local,?MODULE},?MODULE,[]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
     rabbit_mochiweb:unregister_context(web_stomp_examples),
     ok.
 
-init([]) ->
-    {ok, {{one_for_one,3,10},[]}}.
+init([]) -> {ok, {{one_for_one, 3, 10}, []}}.
