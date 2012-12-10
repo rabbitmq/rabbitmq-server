@@ -131,6 +131,14 @@ handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
     {noreply, State#state{unacked = remove_delivery_tags(Seq, Multiple,
                                                          Unacked)}};
 
+handle_info(#'basic.nack'{delivery_tag = Seq,
+                          multiple = Multiple,
+                          requeue=ReQueue},
+            State = #state{unacked = Unacked}) ->
+    nack(gb_trees:get(Seq, Unacked), Multiple, ReQueue, State),
+    {noreply, State#state{unacked = remove_delivery_tags(Seq, Multiple,
+                                                         Unacked)}};
+
 handle_info({#'basic.deliver'{routing_key  = Key,
                               delivery_tag = DTag,
                               redelivered  = Redelivered}, Msg},
@@ -658,6 +666,11 @@ ensure_connection_closed(Conn) ->
 ack(Tag, Multiple, #state{channel = Ch}) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
                                        multiple     = Multiple}).
+
+nack(Tag, Multiple, ReQueue, #state{channel = Ch}) ->
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = Tag,
+                                        multiple     = Multiple,
+                                        requeue      = ReQueue}).
 
 remove_delivery_tags(Seq, false, Unacked) ->
     gb_trees:delete(Seq, Unacked);
