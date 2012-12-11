@@ -435,6 +435,9 @@ function postprocess() {
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.
     });
+    $('.tag-link').click(function() {
+        $('#tags').val($(this).attr('tag'));
+    });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
