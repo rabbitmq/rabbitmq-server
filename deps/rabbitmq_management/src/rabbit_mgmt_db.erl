@@ -928,7 +928,7 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 
 remove_old_samples(State = #state{aggregated_stats = ETS}) ->
     TS = ceil(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
-    remove_old_samples_it(ets:match(ETS, '$1', 1), TS, ETS). %% TODO incr
+    remove_old_samples_it(ets:match(ETS, '$1', 1000), TS, ETS).
 
 remove_old_samples_it('$end_of_table', _, _) ->
     ok;
