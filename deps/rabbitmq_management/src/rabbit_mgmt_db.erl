@@ -133,6 +133,8 @@
         [messages, messages_ready, messages_unacknowledged]).
 
 %%----------------------------------------------------------------------------
+%% API
+%%----------------------------------------------------------------------------
 
 start_link() ->
     %% When failing over it is possible that the mirrored_supervisor
@@ -172,214 +174,7 @@ safe_call(Term, Item) ->
     end.
 
 %%----------------------------------------------------------------------------
-pget(Key, List) -> pget(Key, List, unknown).
-
-%% id_name() and id() are for use when handling events, id_lookup()
-%% for when augmenting. The difference is that when handling events a
-%% queue name will be a resource, but when augmenting we will be
-%% passed a queue proplist that will already have been formatted -
-%% i.e. it will have name and vhost keys.
-id_name(node_stats)       -> name;
-id_name(vhost_stats)      -> name;
-id_name(queue_stats)      -> name;
-id_name(exchange_stats)   -> name;
-id_name(channel_stats)    -> pid;
-id_name(connection_stats) -> pid.
-
-id(Type, List) -> pget(id_name(Type), List).
-
-id_lookup(queue_stats, List) ->
-    rabbit_misc:r(pget(vhost, List), queue, pget(name, List));
-id_lookup(exchange_stats, List) ->
-    rabbit_misc:r(pget(vhost, List), exchange, pget(name, List));
-id_lookup(Type, List) ->
-    id(Type, List).
-
-lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
-
-lookup_element(Table, Key, Pos) ->
-    try ets:lookup_element(Table, Key, Pos)
-    catch error:badarg -> []
-    end.
-
-result_or_error([]) -> error;
-result_or_error(S)  -> S.
-
-append_samples(Stats, TS, Id, Keys, State = #state{old_stats = Table}) ->
-    OldStats = lookup_element(Table, Id),
-    OldTS = lookup_element(Table, Id, 3),
-    [append_sample(Stats, TS, OldStats, OldTS, Id, Key, State) || Key <- Keys],
-    ets:insert(Table, {Id, Stats, TS}).
-
-append_sample(Stats, TS, OldStats, OldTS, Id, Key, State) ->
-    case {pget(Key, Stats), pget(Key, OldStats)} of
-        {unknown, _}   -> unknown;
-        {New, unknown} -> apportion_first_sample(New, TS, Id, Key, State);
-        {New, Old}     -> apportion_sample(New, TS, Old, OldTS, Id, Key, State)
-    end.
-
-apportion_first_sample(New, NewTS, Id, Key, State) ->
-    NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
-    NewMSCeil = ceil(NewMS, State),
-    record_sample(Id, {Key, New, NewMSCeil, State}, State).
-
-apportion_sample(New, NewTS, Old, OldTS, Id, Key,
-                 State = #state{interval = Interval}) ->
-    OldMS = rabbit_mgmt_format:timestamp_ms(OldTS),
-    NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
-    OldMSCeil = ceil(OldMS, State),
-    NewMSCeil = ceil(NewMS, State),
-    Count = New - Old,
-    R = fun(Total, ThisFloat, Ceil) ->
-                This = round(ThisFloat),
-                record_sample(Id, {Key, This, Ceil, State}, State),
-                Total - This
-        end,
-    case (NewMSCeil - OldMSCeil) / Interval of
-        0.0 ->
-            record_sample(Id, {Key, Count, NewMSCeil, State}, State);
-        _ ->
-            %% We need a fractional apportionment for the window
-            %% before OldMSCeil, then apportionments for all the
-            %% full windows in the middle (of which there may be 0),
-            %% then a fractional apportionment for the window
-            %% before NewMSCeil.
-            Rate = Count / (NewMS - OldMS),
-            Count1 = R(Count, Rate * (OldMSCeil - OldMS), OldMSCeil),
-            Middle = lists:seq(
-                       OldMSCeil + Interval, NewMSCeil - Interval, Interval),
-            CountFinal = lists:foldl(fun(I, CountN) ->
-                                             R(CountN, Rate * Interval, I)
-                                     end, Count1, Middle),
-            R(CountFinal, CountFinal, NewMSCeil)
-    end.
-
-ceil(TS, #state{interval = Interval}) ->
-    Round = (TS div Interval) * Interval,
-    case TS - Round > 0 of
-        true  -> Round + Interval;
-        false -> Round
-    end.
-
-record_sample({coarse, Id}, Args, State) ->
-    record_sample0(Id, Args),
-    record_sample0({vhost_stats, vhost(Id, State)}, Args);
-
-%% Deliveries / acks (Q -> Ch)
-record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, _State) ->
-    record_sample0({channel_queue_stats, {Ch, Q}},  Args),
-    record_sample0({channel_stats,       Ch},       Args),
-    record_sample0({queue_stats,         Q},        Args),
-    record_sample0({vhost_stats,         vhost(Q)}, Args);
-
-%% Publishes / confirms (Ch -> X)
-record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, _State) ->
-    record_sample0({channel_exchange_stats, {Ch, X}},  Args),
-    record_sample0({channel_stats,          Ch},       Args),
-    record_sampleX(publish_in,              X,         Args),
-    record_sample0({vhost_stats,            vhost(X)}, Args);
-
-%% Publishes / confirms (Ch -> X -> Q)
-record_sample({fine, {_Ch,
-                      Q = #resource{kind = queue},
-                      X = #resource{kind = exchange}}}, Args, _State) ->
-    %% TODO This one logically feels like it should be here. It would
-    %% correspond to "publishing channel message rates to queue" -
-    %% which would be nice to handle - except we don't. And just
-    %% uncommenting this means it gets merged in with "consuming
-    %% channel delivery from queue" - which is not very helpful.
-    %% record_sample0({channel_queue_stats, {Ch, Q}}, Args),
-    record_sample0({queue_exchange_stats,   {Q,  X}},  Args),
-    record_sample0({queue_stats,            Q},        Args),
-    record_sampleX(publish_out,             X,         Args).
-
-vhost(#resource{virtual_host = VHost}) -> VHost.
-
-vhost({queue_stats, #resource{virtual_host = VHost}}, _State) ->
-    VHost;
-vhost({TName, Pid}, #state{tables = Tables}) ->
-    Table = orddict:fetch(TName, Tables),
-    pget(vhost, lookup_element(Table, {Pid, create})).
-
-%% exchanges have two sets of "publish" stats, so rearrange things a touch
-record_sampleX(RenamePublishTo, X, {publish, Diff, Ceil, State}) ->
-    record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, Ceil, State}).
-
-record_sample0(Id0, {Key, Diff, Ceil, #state{aggregated_stats = ETS}}) ->
-    Id = {Id0, Key},
-    Old = case lookup_element(ETS, Id) of
-              [] -> blank_stats();
-              E  -> E
-          end,
-    ets:insert(ETS, {Id, add(Ceil, Diff, Old)}).
-
-add(Ceil, Diff, Stats = #stats{diffs = Diffs}) ->
-    Diffs2 = case gb_trees:lookup(Ceil, Diffs) of
-                 {value, Total} -> gb_trees:update(Ceil, Diff + Total, Diffs);
-                 none           -> gb_trees:insert(Ceil, Diff, Diffs)
-             end,
-    Stats#stats{diffs = Diffs2}.
-
-%% TODO be less crude
--define(MAX_SAMPLE_AGE, 60000).
-
-remove_old_samples(State = #state{aggregated_stats = ETS}) ->
-    TS = ceil(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
-    remove_old_samples_it(ets:match(ETS, '$1', 1), TS, ETS). %% TODO incr
-
-remove_old_samples_it('$end_of_table', _, _) ->
-    ok;
-remove_old_samples_it({Matches, Continuation}, TS, ETS) ->
-    [remove_old_samples(Key, Stats, TS, ETS) || [{Key, Stats}] <- Matches],
-    remove_old_samples_it(ets:match(Continuation), TS, ETS).
-
-remove_old_samples(Key, Stats, TS, ETS) ->
-    Cutoff = TS - ?MAX_SAMPLE_AGE,
-    case remove_old_samples0(Cutoff, Stats) of
-        Stats  -> ok;
-        Stats2 -> ets:insert(ETS, {Key, Stats2})
-    end.
-
-remove_old_samples0(Cutoff, Stats = #stats{diffs = Diffs, base = Base}) ->
-    case gb_trees:is_empty(Diffs) of
-        true  -> Stats;
-        false -> {Small, Val} = gb_trees:smallest(Diffs),
-                 case Small < Cutoff of
-                     true  -> Diffs1 = gb_trees:delete(Small, Diffs),
-                              remove_old_samples0(
-                                Cutoff, Stats#stats{diffs = Diffs1,
-                                                    base  = Base + Val});
-                     false -> Stats
-                 end
-    end.
-
-overview_sum(Type, VHostStats) ->
-    Stats = [pget(Type, VHost, blank_stats()) || VHost <- VHostStats],
-    {Type, sum_trees(Stats)}.
-
-blank_stats() -> #stats{diffs = gb_trees:empty(), base = 0}.
-is_blank_stats(S) -> S =:= blank_stats().
-
-sum_trees([]) -> blank_stats();
-
-sum_trees([Stats | StatsN]) ->
-    lists:foldl(
-      fun (#stats{diffs = D1, base = B1}, #stats{diffs = D2, base = B2}) ->
-              #stats{diffs = add_trees(D1, gb_trees:iterator(D2)),
-                     base  = B1 + B2}
-      end,
-      Stats, StatsN).
-
-add_trees(Tree, It) ->
-    case gb_trees:next(It) of
-        none        -> Tree;
-        {K, V, It2} -> add_trees(
-                         case gb_trees:lookup(K, Tree) of
-                             {value, V2} -> gb_trees:update(K, V + V2, Tree);
-                             none        -> gb_trees:insert(K, V, Tree)
-                         end, It2)
-    end.
-
+%% Internal, gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
 init([]) ->
@@ -517,6 +312,60 @@ handle_pre_hibernate(State) ->
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%----------------------------------------------------------------------------
+%% Internal, utilities
+%%----------------------------------------------------------------------------
+
+pget(Key, List) -> pget(Key, List, unknown).
+
+%% id_name() and id() are for use when handling events, id_lookup()
+%% for when augmenting. The difference is that when handling events a
+%% queue name will be a resource, but when augmenting we will be
+%% passed a queue proplist that will already have been formatted -
+%% i.e. it will have name and vhost keys.
+id_name(node_stats)       -> name;
+id_name(vhost_stats)      -> name;
+id_name(queue_stats)      -> name;
+id_name(exchange_stats)   -> name;
+id_name(channel_stats)    -> pid;
+id_name(connection_stats) -> pid.
+
+id(Type, List) -> pget(id_name(Type), List).
+
+id_lookup(queue_stats, List) ->
+    rabbit_misc:r(pget(vhost, List), queue, pget(name, List));
+id_lookup(exchange_stats, List) ->
+    rabbit_misc:r(pget(vhost, List), exchange, pget(name, List));
+id_lookup(Type, List) ->
+    id(Type, List).
+
+lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
+
+lookup_element(Table, Key, Pos) ->
+    try ets:lookup_element(Table, Key, Pos)
+    catch error:badarg -> []
+    end.
+
+result_or_error([]) -> error;
+result_or_error(S)  -> S.
+
+fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
+fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
+
+ceil(TS, #state{interval = Interval}) ->
+    Round = (TS div Interval) * Interval,
+    case TS - Round > 0 of
+        true  -> Round + Interval;
+        false -> Round
+    end.
+
+blank_stats() -> #stats{diffs = gb_trees:empty(), base = 0}.
+is_blank_stats(S) -> S =:= blank_stats().
+
+details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
+
+%%----------------------------------------------------------------------------
+%% Internal, event-receiving side
+%%----------------------------------------------------------------------------
 
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
@@ -611,8 +460,6 @@ handle_event(#event{type = node_stats, props = Stats, timestamp = Timestamp},
 handle_event(_Event, State) ->
     {ok, State}.
 
-%%----------------------------------------------------------------------------
-
 handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
     Formatted = rabbit_mgmt_format:format(Stats, Funs),
     ets:insert(orddict:fetch(TName, Tables), {{id(TName, Stats), create},
@@ -673,22 +520,181 @@ handle_fine_stat(Id, Stats, Timestamp, State) ->
 delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
     ets:match_delete(ETS, {{{Type, Id}, '_'}, '_'}).
 
-fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
-fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
+append_samples(Stats, TS, Id, Keys, State = #state{old_stats = Table}) ->
+    OldStats = lookup_element(Table, Id),
+    OldTS = lookup_element(Table, Id, 3),
+    [append_sample(Stats, TS, OldStats, OldTS, Id, Key, State) || Key <- Keys],
+    ets:insert(Table, {Id, Stats, TS}).
 
-created_event(Names, Type, Tables) ->
-    Table = orddict:fetch(Type, Tables),
-    [lookup_element(
-       Table, {case ets:match(Table, {{'$1', create}, '_', Name}) of
-                   []    -> none;
-                   [[I]] -> I
-               end, create}) || Name <- Names].
+append_sample(Stats, TS, OldStats, OldTS, Id, Key, State) ->
+    case {pget(Key, Stats), pget(Key, OldStats)} of
+        {unknown, _}   -> unknown;
+        {New, unknown} -> apportion_first_sample(New, TS, Id, Key, State);
+        {New, Old}     -> apportion_sample(New, TS, Old, OldTS, Id, Key, State)
+    end.
 
-created_events(Type, Tables) ->
-    [Facts || {{_, create}, Facts, _Name}
-                  <- ets:tab2list(orddict:fetch(Type, Tables))].
+apportion_first_sample(New, NewTS, Id, Key, State) ->
+    NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
+    NewMSCeil = ceil(NewMS, State),
+    record_sample(Id, {Key, New, NewMSCeil, State}, State).
+
+apportion_sample(New, NewTS, Old, OldTS, Id, Key,
+                 State = #state{interval = Interval}) ->
+    OldMS = rabbit_mgmt_format:timestamp_ms(OldTS),
+    NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
+    OldMSCeil = ceil(OldMS, State),
+    NewMSCeil = ceil(NewMS, State),
+    Count = New - Old,
+    R = fun(Total, ThisFloat, Ceil) ->
+                This = round(ThisFloat),
+                record_sample(Id, {Key, This, Ceil, State}, State),
+                Total - This
+        end,
+    case (NewMSCeil - OldMSCeil) / Interval of
+        0.0 ->
+            record_sample(Id, {Key, Count, NewMSCeil, State}, State);
+        _ ->
+            %% We need a fractional apportionment for the window
+            %% before OldMSCeil, then apportionments for all the
+            %% full windows in the middle (of which there may be 0),
+            %% then a fractional apportionment for the window
+            %% before NewMSCeil.
+            Rate = Count / (NewMS - OldMS),
+            Count1 = R(Count, Rate * (OldMSCeil - OldMS), OldMSCeil),
+            Middle = lists:seq(
+                       OldMSCeil + Interval, NewMSCeil - Interval, Interval),
+            CountFinal = lists:foldl(fun(I, CountN) ->
+                                             R(CountN, Rate * Interval, I)
+                                     end, Count1, Middle),
+            R(CountFinal, CountFinal, NewMSCeil)
+    end.
+
+record_sample({coarse, Id}, Args, State) ->
+    record_sample0(Id, Args),
+    record_sample0({vhost_stats, vhost(Id, State)}, Args);
+
+%% Deliveries / acks (Q -> Ch)
+record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, _State) ->
+    record_sample0({channel_queue_stats, {Ch, Q}},  Args),
+    record_sample0({channel_stats,       Ch},       Args),
+    record_sample0({queue_stats,         Q},        Args),
+    record_sample0({vhost_stats,         vhost(Q)}, Args);
+
+%% Publishes / confirms (Ch -> X)
+record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, _State) ->
+    record_sample0({channel_exchange_stats, {Ch, X}},  Args),
+    record_sample0({channel_stats,          Ch},       Args),
+    record_sampleX(publish_in,              X,         Args),
+    record_sample0({vhost_stats,            vhost(X)}, Args);
+
+%% Publishes / confirms (Ch -> X -> Q)
+record_sample({fine, {_Ch,
+                      Q = #resource{kind = queue},
+                      X = #resource{kind = exchange}}}, Args, _State) ->
+    %% TODO This one logically feels like it should be here. It would
+    %% correspond to "publishing channel message rates to queue" -
+    %% which would be nice to handle - except we don't. And just
+    %% uncommenting this means it gets merged in with "consuming
+    %% channel delivery from queue" - which is not very helpful.
+    %% record_sample0({channel_queue_stats, {Ch, Q}}, Args),
+    record_sample0({queue_exchange_stats,   {Q,  X}},  Args),
+    record_sample0({queue_stats,            Q},        Args),
+    record_sampleX(publish_out,             X,         Args).
+
+vhost(#resource{virtual_host = VHost}) -> VHost.
+
+vhost({queue_stats, #resource{virtual_host = VHost}}, _State) ->
+    VHost;
+vhost({TName, Pid}, #state{tables = Tables}) ->
+    Table = orddict:fetch(TName, Tables),
+    pget(vhost, lookup_element(Table, {Pid, create})).
+
+%% exchanges have two sets of "publish" stats, so rearrange things a touch
+record_sampleX(RenamePublishTo, X, {publish, Diff, Ceil, State}) ->
+    record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, Ceil, State}).
+
+record_sample0(Id0, {Key, Diff, Ceil, #state{aggregated_stats = ETS}}) ->
+    Id = {Id0, Key},
+    Old = case lookup_element(ETS, Id) of
+              [] -> blank_stats();
+              E  -> E
+          end,
+    ets:insert(ETS, {Id, add(Ceil, Diff, Old)}).
+
+add(Ceil, Diff, Stats = #stats{diffs = Diffs}) ->
+    Diffs2 = case gb_trees:lookup(Ceil, Diffs) of
+                 {value, Total} -> gb_trees:update(Ceil, Diff + Total, Diffs);
+                 none           -> gb_trees:insert(Ceil, Diff, Diffs)
+             end,
+    Stats#stats{diffs = Diffs2}.
 
 %%----------------------------------------------------------------------------
+%% Internal, querying side
+%%----------------------------------------------------------------------------
+
+-define(QUEUE_DETAILS,
+        {queue_stats, [{incoming,   queue_exchange_stats, fun first/1},
+                       {deliveries, channel_queue_stats,  fun second/1}]}).
+
+-define(EXCHANGE_DETAILS,
+        {exchange_stats, [{incoming, channel_exchange_stats, fun second/1},
+                          {outgoing, queue_exchange_stats,   fun second/1}]}).
+
+-define(CHANNEL_DETAILS,
+        {channel_stats, [{publishes,  channel_exchange_stats, fun first/1},
+                         {deliveries, channel_queue_stats,    fun first/1}]}).
+
+first(Id)  -> {Id, '$1'}.
+second(Id) -> {'$1', Id}.
+
+list_queue_stats(Objs, State) ->
+    adjust_hibernated_memory_use(
+      merge_stats(Objs, queue_funs(State))).
+
+detail_queue_stats(Objs, State) ->
+    adjust_hibernated_memory_use(
+      merge_stats(Objs, [consumer_details_fun(
+                           fun (Props) ->
+                                   {id_lookup(queue_stats, Props), '_'}
+                           end, State), detail_stats_fun(?QUEUE_DETAILS, State)
+                         | queue_funs(State)])).
+
+queue_funs(State) ->
+    [basic_stats_fun(queue_stats, State), simple_stats_fun(queue_stats, State),
+     augment_msg_stats_fun(State)].
+
+list_exchange_stats(Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(exchange_stats, State),
+                       augment_msg_stats_fun(State)]).
+
+detail_exchange_stats(Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(exchange_stats, State),
+                       detail_stats_fun(?EXCHANGE_DETAILS, State),
+                       augment_msg_stats_fun(State)]).
+
+connection_stats(Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(connection_stats, State),
+                       simple_stats_fun(connection_stats, State),
+                       augment_msg_stats_fun(State)]).
+
+list_channel_stats(Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
+                       simple_stats_fun(channel_stats, State),
+                       augment_msg_stats_fun(State)]).
+
+detail_channel_stats(Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
+                       simple_stats_fun(channel_stats, State),
+                       consumer_details_fun(
+                         fun (Props) -> {'_', pget(pid, Props)} end, State),
+                       detail_stats_fun(?CHANNEL_DETAILS, State),
+                       augment_msg_stats_fun(State)]).
+
+vhost_stats(Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(vhost_stats, State)]).
+
+node_stats(Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(node_stats, State)]).
 
 merge_stats(Objs, Funs) ->
     [lists:foldl(fun (Fun, Props) -> Fun(Props) ++ Props end, Obj, Funs)
@@ -753,20 +759,6 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
                  _State) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}].
 
-consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(consumers, Tables),
-    fun ([])    -> [];
-        (Props) -> Pattern = PatternFun(Props),
-                   [{consumer_details,
-                     [augment_msg_stats(augment_consumer(Obj), State)
-                      || Obj <- lists:append(
-                                  ets:match(Table, {Pattern, '$1'}))]}]
-    end.
-
-augment_consumer(Obj) ->
-    [{queue, rabbit_mgmt_format:resource(pget(queue, Obj))} |
-     proplists:delete(queue, Obj)].
-
 calculate_rates(ManyStats, State) ->
     lists:append(
       [case is_blank_stats(Stats) of
@@ -810,8 +802,77 @@ calculate_details(#stats{diffs = Diffs, base = Base},
             {[{samples, Samples}], Counter}
     end.
 
-details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
+%% We do this when retrieving the queue record rather than when
+%% storing it since the memory use will drop *after* we find out about
+%% hibernation, so to do it when we receive a queue stats event would
+%% be fiddly and racy. This should be quite cheap though.
+adjust_hibernated_memory_use(Qs) ->
+    Pids = [pget(pid, Q) ||
+               Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
+    {Mem, _BadNodes} = delegate:invoke(
+                         Pids, fun (Pid) -> process_info(Pid, memory) end),
+    MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
+    [case dict:find(pget(pid, Q), MemDict) of
+         error        -> Q;
+         {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
+     end || Q <- Qs].
 
+created_event(Names, Type, Tables) ->
+    Table = orddict:fetch(Type, Tables),
+    [lookup_element(
+       Table, {case ets:match(Table, {{'$1', create}, '_', Name}) of
+                   []    -> none;
+                   [[I]] -> I
+               end, create}) || Name <- Names].
+
+created_events(Type, Tables) ->
+    [Facts || {{_, create}, Facts, _Name}
+                  <- ets:tab2list(orddict:fetch(Type, Tables))].
+
+consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(consumers, Tables),
+    fun ([])    -> [];
+        (Props) -> Pattern = PatternFun(Props),
+                   [{consumer_details,
+                     [augment_msg_stats(augment_consumer(Obj), State)
+                      || Obj <- lists:append(
+                                  ets:match(Table, {Pattern, '$1'}))]}]
+    end.
+
+augment_consumer(Obj) ->
+    [{queue, rabbit_mgmt_format:resource(pget(queue, Obj))} |
+     proplists:delete(queue, Obj)].
+
+%%----------------------------------------------------------------------------
+%% Internal, query-time summing for overview
+%%----------------------------------------------------------------------------
+
+overview_sum(Type, VHostStats) ->
+    Stats = [pget(Type, VHost, blank_stats()) || VHost <- VHostStats],
+    {Type, sum_trees(Stats)}.
+
+sum_trees([]) -> blank_stats();
+
+sum_trees([Stats | StatsN]) ->
+    lists:foldl(
+      fun (#stats{diffs = D1, base = B1}, #stats{diffs = D2, base = B2}) ->
+              #stats{diffs = add_trees(D1, gb_trees:iterator(D2)),
+                     base  = B1 + B2}
+      end,
+      Stats, StatsN).
+
+add_trees(Tree, It) ->
+    case gb_trees:next(It) of
+        none        -> Tree;
+        {K, V, It2} -> add_trees(
+                         case gb_trees:lookup(K, Tree) of
+                             {value, V2} -> gb_trees:update(K, V + V2, Tree);
+                             none        -> gb_trees:insert(K, V, Tree)
+                         end, It2)
+    end.
+
+%%----------------------------------------------------------------------------
+%% Internal, query-time augmentation
 %%----------------------------------------------------------------------------
 
 augment_msg_stats(Props, State) ->
@@ -855,84 +916,39 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
      {peer_host,    pget(peer_host,    Conn)}].
 
 %%----------------------------------------------------------------------------
-
-first(Id)  -> {Id, '$1'}.
-second(Id) -> {'$1', Id}.
-
--define(QUEUE_DETAILS,
-        {queue_stats, [{incoming,   queue_exchange_stats, fun first/1},
-                       {deliveries, channel_queue_stats,  fun second/1}]}).
-
--define(EXCHANGE_DETAILS,
-        {exchange_stats, [{incoming, channel_exchange_stats, fun second/1},
-                          {outgoing, queue_exchange_stats,   fun second/1}]}).
-
--define(CHANNEL_DETAILS,
-        {channel_stats, [{publishes,  channel_exchange_stats, fun first/1},
-                         {deliveries, channel_queue_stats,    fun first/1}]}).
-
-list_queue_stats(Objs, State) ->
-    adjust_hibernated_memory_use(
-      merge_stats(Objs, queue_funs(State))).
-
-detail_queue_stats(Objs, State) ->
-    adjust_hibernated_memory_use(
-      merge_stats(Objs, [consumer_details_fun(
-                           fun (Props) ->
-                                   {id_lookup(queue_stats, Props), '_'}
-                           end, State), detail_stats_fun(?QUEUE_DETAILS, State)
-                         | queue_funs(State)])).
-
-queue_funs(State) ->
-    [basic_stats_fun(queue_stats, State), simple_stats_fun(queue_stats, State),
-     augment_msg_stats_fun(State)].
-
-list_exchange_stats(Objs, State) ->
-    merge_stats(Objs, [simple_stats_fun(exchange_stats, State),
-                       augment_msg_stats_fun(State)]).
-
-detail_exchange_stats(Objs, State) ->
-    merge_stats(Objs, [simple_stats_fun(exchange_stats, State),
-                       detail_stats_fun(?EXCHANGE_DETAILS, State),
-                       augment_msg_stats_fun(State)]).
-
-connection_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(connection_stats, State),
-                       simple_stats_fun(connection_stats, State),
-                       augment_msg_stats_fun(State)]).
-
-list_channel_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
-                       simple_stats_fun(channel_stats, State),
-                       augment_msg_stats_fun(State)]).
-
-detail_channel_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
-                       simple_stats_fun(channel_stats, State),
-                       consumer_details_fun(
-                         fun (Props) -> {'_', pget(pid, Props)} end, State),
-                       detail_stats_fun(?CHANNEL_DETAILS, State),
-                       augment_msg_stats_fun(State)]).
-
-vhost_stats(Objs, State) ->
-    merge_stats(Objs, [simple_stats_fun(vhost_stats, State)]).
-
-node_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(node_stats, State)]).
-
+%% Internal, event-GCing
 %%----------------------------------------------------------------------------
 
-%% We do this when retrieving the queue record rather than when
-%% storing it since the memory use will drop *after* we find out about
-%% hibernation, so to do it when we receive a queue stats event would
-%% be fiddly and racy. This should be quite cheap though.
-adjust_hibernated_memory_use(Qs) ->
-    Pids = [pget(pid, Q) ||
-               Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
-    {Mem, _BadNodes} = delegate:invoke(
-                         Pids, fun (Pid) -> process_info(Pid, memory) end),
-    MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
-    [case dict:find(pget(pid, Q), MemDict) of
-         error        -> Q;
-         {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
-     end || Q <- Qs].
+%% TODO be less crude
+-define(MAX_SAMPLE_AGE, 60000).
+
+remove_old_samples(State = #state{aggregated_stats = ETS}) ->
+    TS = ceil(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
+    remove_old_samples_it(ets:match(ETS, '$1', 1), TS, ETS). %% TODO incr
+
+remove_old_samples_it('$end_of_table', _, _) ->
+    ok;
+remove_old_samples_it({Matches, Continuation}, TS, ETS) ->
+    [remove_old_samples(Key, Stats, TS, ETS) || [{Key, Stats}] <- Matches],
+    remove_old_samples_it(ets:match(Continuation), TS, ETS).
+
+remove_old_samples(Key, Stats, TS, ETS) ->
+    Cutoff = TS - ?MAX_SAMPLE_AGE,
+    case remove_old_samples0(Cutoff, Stats) of
+        Stats  -> ok;
+        Stats2 -> ets:insert(ETS, {Key, Stats2})
+    end.
+
+remove_old_samples0(Cutoff, Stats = #stats{diffs = Diffs, base = Base}) ->
+    case gb_trees:is_empty(Diffs) of
+        true  -> Stats;
+        false -> {Small, Val} = gb_trees:smallest(Diffs),
+                 case Small < Cutoff of
+                     true  -> Diffs1 = gb_trees:delete(Small, Diffs),
+                              remove_old_samples0(
+                                Cutoff, Stats#stats{diffs = Diffs1,
+                                                    base  = Base + Val});
+                     false -> Stats
+                 end
+    end.
+
