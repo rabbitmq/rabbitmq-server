@@ -269,8 +269,8 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
                                     X <- rabbit_exchange:list(V)])},
          {connections, F(created_events(connection_stats, Tables))},
          {channels,    F(created_events(channel_stats, Tables))}],
-    reply([{message_stats, calculate_rates(MessageStats, State)},
-           {queue_totals,  calculate_rates(QueueStats, State)},
+    reply([{message_stats, format_samples(MessageStats, State)},
+           {queue_totals,  format_samples(QueueStats, State)},
            {object_totals, ObjectTotals}], State);
 
 handle_call(_Request, _From, State) ->
@@ -717,7 +717,7 @@ simple_stats_fun(Type, State) ->
     fun (Props) ->
             Id = id_lookup(Type, Props),
             extract_msg_stats(
-              calculate_rates(
+              format_samples(
                 read_simple_stats(Type, Id, State), State))
     end.
 
@@ -754,7 +754,7 @@ extract_msg_stats(Stats) ->
     [{message_stats, MsgStats} | Other].
 
 detail_stats(Name, AggregatedStatsType, Id, State) ->
-    {Name, [[{stats, calculate_rates(KVs, State)} | format_detail_id(G, State)]
+    {Name, [[{stats, format_samples(KVs, State)} | format_detail_id(G, State)]
             || {G, KVs} <- read_detail_stats(AggregatedStatsType, Id, State)]}.
 
 format_detail_id(ChPid, State) when is_pid(ChPid) ->
@@ -763,17 +763,17 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
                  _State) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}].
 
-calculate_rates(ManyStats, State) ->
+format_samples(ManyStats, State) ->
     lists:append(
       [case is_blank_stats(Stats) of
            true  -> [];
-           false -> {Details, Counter} = calculate_details(Stats, State),
+           false -> {Details, Counter} = format_sample_details(Stats, State),
                     [{K,              Counter},
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
 
-calculate_details(#stats{diffs = Diffs, base = Base},
-                  #state{interval = Interval}) ->
+format_sample_details(#stats{diffs = Diffs, base = Base},
+                      #state{interval = Interval}) ->
     {Samples0, Counter} =
         lists:foldl(fun({T, S}, {Samples, CountN}) ->
                             S2 = S + CountN,
