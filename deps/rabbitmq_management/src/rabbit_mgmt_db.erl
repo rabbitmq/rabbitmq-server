@@ -551,35 +551,35 @@ apportion_first_sample(New, NewTS, Id, Key, State) ->
     NewMSCeil = ceil(NewMS, State),
     record_sample(Id, {Key, New, NewMSCeil, State}, State).
 
-apportion_sample(New, NewTS, Old, OldTS, Id, Key,
-                 State = #state{interval = Interval}) ->
+apportion_sample(New, NewTS, Old, OldTS, Id, Key, State) ->
     OldMS = rabbit_mgmt_format:timestamp_ms(OldTS),
     NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
     OldMSCeil = ceil(OldMS, State),
     NewMSCeil = ceil(NewMS, State),
     Count = New - Old,
-    R = fun(Total, ThisFloat, Ceil) ->
-                This = round(ThisFloat),
-                record_sample(Id, {Key, This, Ceil, State}, State),
-                Total - This
-        end,
-    case (NewMSCeil - OldMSCeil) / Interval of
-        0.0 ->
-            record_sample(Id, {Key, Count, NewMSCeil, State}, State);
-        _ ->
-            %% We need a fractional apportionment for the window
-            %% before OldMSCeil, then apportionments for all the
-            %% full windows in the middle (of which there may be 0),
-            %% then a fractional apportionment for the window
-            %% before NewMSCeil.
-            Rate = Count / (NewMS - OldMS),
-            Count1 = R(Count, Rate * (OldMSCeil - OldMS), OldMSCeil),
-            Middle = lists:seq(
-                       OldMSCeil + Interval, NewMSCeil - Interval, Interval),
-            CountFinal = lists:foldl(fun(I, CountN) ->
-                                             R(CountN, Rate * Interval, I)
-                                     end, Count1, Middle),
-            R(CountFinal, CountFinal, NewMSCeil)
+    case NewMSCeil - OldMSCeil of
+        0 -> record_sample(Id, {Key, Count, NewMSCeil, State}, State);
+        _ -> apportion_sample0(OldMSCeil, NewMSCeil, Id, Key, Count, State)
+    end.
+
+apportion_sample0(Old, New, Id, Key, Count,
+                  State = #state{interval = Interval}) ->
+    %% We don't want fractional apportionments (since otherwise the
+    %% latest timeslice is always non-full, which gives all sorts of
+    %% weird effects). So we apportion in full timeslices from Old +
+    %% Interval to New.
+    Old1 = Old + Interval,
+    New1 = New - Interval,
+    case New - Old1 of
+        0 -> record_sample(Id, {Key, Count, New, State}, State);
+        _ -> Rate = Count / (New - Old1),
+             Rem = lists:foldl(
+                     fun(I, CountN) ->
+                             This = round(Rate * Interval),
+                             record_sample(Id, {Key, This, I, State}, State),
+                             CountN - This
+                     end, 0, lists:seq(Old1, New1, Interval)),
+             record_sample(Id, {Key, Rem, New, State}, State)
     end.
 
 record_sample({coarse, Id}, Args, State) ->
@@ -799,13 +799,6 @@ format_sample_details({First, Last, Incr},
                             S = Diff + BaseN,
                             {[[{sample, S}, {timestamp, T}] | Samples], S}
                     end, {[], Base}, lists:seq(First, Last, Incr)),
-    %% The last sample will be dubious since the events for its
-    %% timeslice won't necessarily have finished arriving. Don't return it.
-    %% TODO reinstate?
-    %% Samples = case Samples0 of
-    %%               []     -> [];
-    %%               [_S|Ss] -> Ss
-    %%           end,
     case length(Samples) > 1 of
         true ->
             [[{sample, S3}, {timestamp, T3}],
