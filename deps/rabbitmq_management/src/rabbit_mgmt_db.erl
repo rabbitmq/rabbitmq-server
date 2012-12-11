@@ -98,8 +98,12 @@
 %%
 %% We also have #state.old_stats to let us calculate instantaneous
 %% rates, in order to apportion simple / detailed stats into time
-%% slices as they come in. These instantaneous rates are not recorded,
-%% the rates shown in the API are calculated at query time.
+%% slices as they come in. These instantaneous rates are not returned
+%% in response to any query, the rates shown in the API are calculated
+%% at query time.
+%%
+%% We also keep a timer going, in order to prune old samples from
+%% #state.aggregated_stats.
 %%
 %% Overall the object is to do all the aggregation when events come
 %% in, and make queries be simple lookups as much as possible. One
