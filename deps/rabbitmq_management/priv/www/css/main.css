@@ -42,6 +42,9 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .help { color: #888; cursor: pointer; }
 .help:hover { color: #444; }
 
+.tag-link { color: #444; cursor: pointer; }
+.tag-link:hover { color: #888; }
+
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
 table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; }
