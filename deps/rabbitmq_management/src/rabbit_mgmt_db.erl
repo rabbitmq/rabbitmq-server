@@ -133,7 +133,7 @@
                      ack, deliver_get, confirm, return_unroutable, redeliver] ++
             ?DELIVER_GET).
 
--define(OVERVIEW_QUEUE_STATS,
+-define(COARSE_QUEUE_STATS,
         [messages, messages_ready, messages_unacknowledged]).
 
 %%----------------------------------------------------------------------------
@@ -182,7 +182,7 @@ safe_call(Term, Item) ->
 
 %% TODO this should become part of the API
 range(State = #state{interval = Interval}) ->
-    End = floor(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
+    End = floor(erlang:now(), State),
     Start = End - ?MAX_SAMPLE_AGE,
     {Start, End, Interval}.
 
@@ -259,7 +259,7 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     VStats = [read_simple_stats(vhost_stats, VHost, State) ||
                  VHost <- rabbit_vhost:list()],
     MessageStats = [overview_sum(Type, VStats) || Type <- ?FINE_STATS],
-    QueueStats = [overview_sum(Type, VStats) || Type <- ?OVERVIEW_QUEUE_STATS],
+    QueueStats = [overview_sum(Type, VStats) || Type <- ?COARSE_QUEUE_STATS],
     F = case User of
             all -> fun (L) -> length(L) end;
             _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
@@ -364,7 +364,8 @@ result_or_error(S)  -> S.
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
-floor(TS, #state{interval = Interval}) -> (TS div Interval) * Interval.
+floor(TS, #state{interval = Interval}) ->
+    (rabbit_mgmt_format:timestamp_ms(TS) div Interval) * Interval.
 
 blank_stats() -> #stats{diffs = gb_trees:empty(), base = 0}.
 is_blank_stats(S) -> S =:= blank_stats().
@@ -383,7 +384,19 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
                  [messages, messages_ready, messages_unacknowledged], State);
 
 handle_event(Event = #event{type = queue_deleted,
-                            props = [{name, Name}]}, State) ->
+                            props = [{name, Name}],
+                            timestamp = Timestamp},
+             State = #state{old_stats = OldTable}) ->
+    %% This is fiddly. Unlike for connections and channels, we need to
+    %% decrease any amalgamated coarse stats for [messages,
+    %% messages_ready, messages_unacknowledged] for this queue - since
+    %% the queue's deletion means we have really got rid of messages!
+    Id = {coarse, {queue_stats, Name}},
+    TS = floor(Timestamp, State),
+    OldStats = lookup_element(OldTable, Id),
+    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
+     || Key <- ?COARSE_QUEUE_STATS],
+
     delete_samples(channel_queue_stats,  {'_', Name}, State),
     delete_samples(queue_exchange_stats, {Name, '_'}, State),
     delete_samples(queue_stats,          Name,        State),
@@ -534,7 +547,7 @@ append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
     ets:insert(OldTable, {Id, Stats}).
 
 append_sample(Stats, NewTS, OldStats, Id, Key, State) ->
-    NewMS = floor(rabbit_mgmt_format:timestamp_ms(NewTS), State),
+    NewMS = floor(NewTS, State),
     case pget(Key, Stats) of
         unknown -> ok;
         New     -> Args = {Key, New - pget(Key, OldStats, 0), NewMS, State},
@@ -896,7 +909,7 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 %%----------------------------------------------------------------------------
 
 remove_old_samples(State = #state{aggregated_stats = ETS}) ->
-    TS = floor(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
+    TS = floor(erlang:now(), State),
     remove_old_samples_it(ets:match(ETS, '$1', 1000), TS, ETS).
 
 remove_old_samples_it('$end_of_table', _, _) ->
