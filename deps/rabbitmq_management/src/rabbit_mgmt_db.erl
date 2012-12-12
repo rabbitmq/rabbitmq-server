@@ -182,7 +182,7 @@ safe_call(Term, Item) ->
 
 %% TODO this should become part of the API
 range(State = #state{interval = Interval}) ->
-    End = ceil(rabbit_mgmt_format:timestamp_ms(erlang:now()), State) - Interval,
+    End = floor(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
     Start = End - ?MAX_SAMPLE_AGE,
     {Start, End, Interval}.
 
@@ -364,12 +364,7 @@ result_or_error(S)  -> S.
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
-ceil(TS, #state{interval = Interval}) ->
-    Round = (TS div Interval) * Interval,
-    case TS - Round > 0 of
-        true  -> Round + Interval;
-        false -> Round
-    end.
+floor(TS, #state{interval = Interval}) -> (TS div Interval) * Interval.
 
 blank_stats() -> #stats{diffs = gb_trees:empty(), base = 0}.
 is_blank_stats(S) -> S =:= blank_stats().
@@ -539,10 +534,10 @@ append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
     ets:insert(OldTable, {Id, Stats}).
 
 append_sample(Stats, NewTS, OldStats, Id, Key, State) ->
-    NewMSCeil = ceil(rabbit_mgmt_format:timestamp_ms(NewTS), State),
+    NewMS = floor(rabbit_mgmt_format:timestamp_ms(NewTS), State),
     case pget(Key, Stats) of
         unknown -> ok;
-        New     -> Args = {Key, New - pget(Key, OldStats, 0), NewMSCeil, State},
+        New     -> Args = {Key, New - pget(Key, OldStats, 0), NewMS, State},
                    record_sample(Id, Args, State)
     end.
 
@@ -587,21 +582,21 @@ vhost({TName, Pid}, #state{tables = Tables}) ->
     pget(vhost, lookup_element(Table, {Pid, create})).
 
 %% exchanges have two sets of "publish" stats, so rearrange things a touch
-record_sampleX(RenamePublishTo, X, {publish, Diff, Ceil, State}) ->
-    record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, Ceil, State}).
+record_sampleX(RenamePublishTo, X, {publish, Diff, TS, State}) ->
+    record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, TS, State}).
 
-record_sample0(Id0, {Key, Diff, Ceil, #state{aggregated_stats = ETS}}) ->
+record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats = ETS}}) ->
     Id = {Id0, Key},
     Old = case lookup_element(ETS, Id) of
               [] -> blank_stats();
               E  -> E
           end,
-    ets:insert(ETS, {Id, add(Ceil, Diff, Old)}).
+    ets:insert(ETS, {Id, add(TS, Diff, Old)}).
 
-add(Ceil, Diff, Stats = #stats{diffs = Diffs}) ->
-    Diffs2 = case gb_trees:lookup(Ceil, Diffs) of
-                 {value, Total} -> gb_trees:update(Ceil, Diff + Total, Diffs);
-                 none           -> gb_trees:insert(Ceil, Diff, Diffs)
+add(TS, Diff, Stats = #stats{diffs = Diffs}) ->
+    Diffs2 = case gb_trees:lookup(TS, Diffs) of
+                 {value, Total} -> gb_trees:update(TS, Diff + Total, Diffs);
+                 none           -> gb_trees:insert(TS, Diff, Diffs)
              end,
     Stats#stats{diffs = Diffs2}.
 
@@ -901,7 +896,7 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 %%----------------------------------------------------------------------------
 
 remove_old_samples(State = #state{aggregated_stats = ETS}) ->
-    TS = ceil(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
+    TS = floor(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
     remove_old_samples_it(ets:match(ETS, '$1', 1000), TS, ETS).
 
 remove_old_samples_it('$end_of_table', _, _) ->
