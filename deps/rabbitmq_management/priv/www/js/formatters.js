@@ -570,7 +570,7 @@ function rates_chart_or_text(id, stats, items, rates_counts) {
 
     if (keys(stats).length > 0) {
         var res;
-        var mode = get_pref('rate-mode');
+        var mode = get_pref('rate-mode-' + id);
         if (mode == 'chart') {
             res = rates_chart(id, items, stats, rates_counts);
         }
@@ -585,11 +585,12 @@ function rates_chart_or_text(id, stats, items, rates_counts) {
         res = '<p>Currently idle</p>';
     }
 
-    return res + '<p class="rate-options-p"><span class="rate-options">(...)</span></p>';
+    return res + '<p class="rate-options-p"><span class="rate-options" for="' +
+        id + '">(...)</span></p>';
 }
 
 function rates_chart(id, items, stats, rates_counts) {
-    var size = get_pref('chart-size');
+    var size = get_pref('chart-size-' + id);
     var show = false;
     chart_data[id] = {};
     for (var i in items) {

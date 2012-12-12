@@ -1,9 +1,11 @@
 <%
-   var mode = get_pref('rate-mode');
-   var size = get_pref('chart-size');
+   var id = span.attr('for');
+   var mode = get_pref('rate-mode-' + id);
+   var size = get_pref('chart-size-' + id);
 %>
 
 <form action="#/rate-options" method="put" class="auto-submit">
+  <input type="hidden" name="id" value="<%= id %>"/>
   <table class="form">
     <tr>
       <th><label>Display:</label></th>

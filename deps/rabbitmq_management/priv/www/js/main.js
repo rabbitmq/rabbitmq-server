@@ -435,7 +435,7 @@ function postprocess() {
         help($(this).attr('id'))
     });
     $('.rate-options').die().live('click', function() {
-        show_popup('help', format('rate-options', {}));
+        show_popup('help', format('rate-options', {span: $(this)}));
     });
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.

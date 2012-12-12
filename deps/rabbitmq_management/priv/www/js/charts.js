@@ -48,7 +48,8 @@ function render_chart(div) {
 }
 
 function update_rate_options(sammy) {
-    store_pref('rate-mode', sammy.params['mode']);
-    store_pref('chart-size', sammy.params['size']);
+    var id = sammy.params['id'];
+    store_pref('rate-mode-' + id, sammy.params['mode']);
+    store_pref('chart-size-' + id, sammy.params['size']);
     partial_update();
 }
