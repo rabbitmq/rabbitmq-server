@@ -54,7 +54,8 @@
             delayed_stop,
             queue_monitors,
             dlx,
-            dlx_routing_key
+            dlx_routing_key,
+            max_depth
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -134,6 +135,7 @@ init(Q) ->
                senders             = pmon:new(),
                dlx                 = undefined,
                dlx_routing_key     = undefined,
+               max_depth           = undefined,
                publish_seqno       = 1,
                unconfirmed         = dtree:empty(),
                delayed_stop        = undefined,
@@ -159,6 +161,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                rate_timer_ref      = RateTRef,
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
+               max_depth           = undefined,
                senders             = Senders,
                publish_seqno       = 1,
                unconfirmed         = dtree:empty(),
@@ -258,7 +261,8 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
       [{<<"x-expires">>,                 fun init_expires/2},
        {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
        {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
-       {<<"x-message-ttl">>,             fun init_ttl/2}]).
+       {<<"x-message-ttl">>,             fun init_ttl/2},
+       {<<"x-maxdepth">>,                fun init_maxdepth/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
@@ -269,6 +273,9 @@ init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
 
 init_dlx_routing_key(RoutingKey, State) ->
     State#q{dlx_routing_key = RoutingKey}.
+
+init_maxdepth(MaxDepth, State) ->
+    State#q{max_depth = MaxDepth}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue_state = BQS} =
@@ -571,10 +578,34 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
         %% The next one is an optimisation
         {false, State2 = #q{ttl = 0, dlx = undefined}} ->
             discard(Delivery, State2);
-        {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
-            BQS1 = BQ:publish(Message, Props, Delivered, SenderPid, BQS),
+        {false, State2} ->
+            BQS1 = publish_max(Message, Props, Delivered, SenderPid, State2),
             ensure_ttl_timer(Props#message_properties.expiry,
                              State2#q{backing_queue_state = BQS1})
+    end.
+
+publish_max(Message, Props, Delivered, SenderPid,
+               State = #q{backing_queue = BQ,
+                          backing_queue_state = BQS,
+                          max_depth = undefined }) ->
+    BQ:publish(Message, Props, Delivered, SenderPid, BQS);
+publish_max(Message, Props, Delivered, SenderPid,
+               State = #q{backing_queue = BQ,
+                          backing_queue_state = BQS,
+                          max_depth = MaxDepth }) ->
+    Depth = BQ:depth(BQS),
+    case Depth >= MaxDepth of
+        true ->
+            Length = BQ:len(BQS),
+            case Length >= MaxDepth of
+                false ->
+                    BQS;
+                true ->
+                    {M, BQS1} = BQ:fetch(false, BQS),
+                    BQ:publish(Message, Props, Delivered, SenderPid, BQS1)
+            end;
+        false->
+            BQ:publish(Message, Props, Delivered, SenderPid, BQS)
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
