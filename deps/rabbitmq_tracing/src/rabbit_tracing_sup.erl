@@ -46,5 +46,5 @@ stop_child(Id) ->
 
 init([]) -> {ok, {{one_for_one, 3, 10},
                   [{traces, {rabbit_tracing_traces, start_link, []},
-                    transient, ?MAX_WAIT, supervisor,
+                    transient, ?MAX_WAIT, worker,
                     [rabbit_tracing_traces]}]}}.
