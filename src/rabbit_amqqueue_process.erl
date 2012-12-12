@@ -1314,6 +1314,7 @@ handle_info(drop_expired, State) ->
 
 handle_info(emit_stats, State) ->
     emit_stats(State),
+    %% Don't call noreply/1, we don't want to set timers
     {State1, Timeout} = next_state(rabbit_event:reset_stats_timer(
                                      State, #q.stats_timer)),
     {noreply, State1, Timeout};
@@ -1340,6 +1341,7 @@ handle_info(update_ram_duration, State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
+    %% Don't call noreply/1, we don't want to set timers
     {State1, Timeout} = next_state(State#q{rate_timer_ref      = undefined,
                                            backing_queue_state = BQS2}),
     {noreply, State1, Timeout};
