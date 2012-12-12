@@ -42,7 +42,7 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .help, .rate-options { color: #888; cursor: pointer; }
 .help:hover, .rate-options:hover { color: #444; }
 
-.rate-options-p { padding-top: 10px; clear: both; }
+.rate-options-p { float: left; margin-top: 0; }
 
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
@@ -128,10 +128,10 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
 .highlight, .micro-highlight { float: left; }
 
-.chart { margin: 20px 0; }
-.chart-small  { width: 600px; height: 200px; }
-.chart-medium { width: 800px; height: 300px; }
-.chart-large  { width: 1200px; height: 400px; }
+.chart { margin: 0 0 20px 0; float: left; }
+.chart-small  { width: 400px; height: 100px; }
+.chart-medium { width: 600px; height: 200px; }
+.chart-large  { width: 800px; height: 300px; }
 
 .mini-highlight { font-size: 150%; padding:10px; background-color: #ddd; color: #888; border-radius: 10px; -moz-border-radius: 10px; line-height: 300%; }
 

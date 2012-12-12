@@ -585,7 +585,7 @@ function rates_chart_or_text(id, stats, items, rates_counts) {
         res = '<p>Currently idle</p>';
     }
 
-    return res + '<p class="rate-options-p"><span class="rate-options">[Options...]</span></p>';
+    return res + '<p class="rate-options-p"><span class="rate-options">(...)</span></p>';
 }
 
 function rates_chart(id, items, stats, rates_counts) {
