@@ -500,8 +500,8 @@ handle_deleted(TName, #event{props = Props}, State = #state{tables    = Tables,
         error       -> ok
     end,
     ets:delete(Old, {coarse, {TName, Id}}),
-    ets:match_delete(Old, {{fine, {Id, '_'}},      '_', '_'}),
-    ets:match_delete(Old, {{fine, {Id, '_', '_'}}, '_', '_'}),
+    ets:match_delete(Old, {{fine, {Id, '_'}},      '_'}),
+    ets:match_delete(Old, {{fine, {Id, '_', '_'}}, '_'}),
     {ok, State}.
 
 handle_consumer(Fun, Props,
@@ -533,53 +533,17 @@ handle_fine_stat(Id, Stats, Timestamp, State) ->
 delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
     ets:match_delete(ETS, {{{Type, Id}, '_'}, '_'}).
 
-append_samples(Stats, TS, Id, Keys, State = #state{old_stats = Table}) ->
-    OldStats = lookup_element(Table, Id),
-    OldTS = lookup_element(Table, Id, 3),
-    [append_sample(Stats, TS, OldStats, OldTS, Id, Key, State) || Key <- Keys],
-    ets:insert(Table, {Id, Stats, TS}).
+append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
+    OldStats = lookup_element(OldTable, Id),
+    [append_sample(Stats, TS, OldStats, Id, Key, State) || Key <- Keys],
+    ets:insert(OldTable, {Id, Stats}).
 
-append_sample(Stats, TS, OldStats, OldTS, Id, Key, State) ->
-    case {pget(Key, Stats), pget(Key, OldStats)} of
-        {unknown, _}   -> unknown;
-        {New, unknown} -> apportion_first_sample(New, TS, Id, Key, State);
-        {New, Old}     -> apportion_sample(New, TS, Old, OldTS, Id, Key, State)
-    end.
-
-apportion_first_sample(New, NewTS, Id, Key, State) ->
-    NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
-    NewMSCeil = ceil(NewMS, State),
-    record_sample(Id, {Key, New, NewMSCeil, State}, State).
-
-apportion_sample(New, NewTS, Old, OldTS, Id, Key, State) ->
-    OldMS = rabbit_mgmt_format:timestamp_ms(OldTS),
-    NewMS = rabbit_mgmt_format:timestamp_ms(NewTS),
-    OldMSCeil = ceil(OldMS, State),
-    NewMSCeil = ceil(NewMS, State),
-    Count = New - Old,
-    case NewMSCeil - OldMSCeil of
-        0 -> record_sample(Id, {Key, Count, NewMSCeil, State}, State);
-        _ -> apportion_sample0(OldMSCeil, NewMSCeil, Id, Key, Count, State)
-    end.
-
-apportion_sample0(Old, New, Id, Key, Count,
-                  State = #state{interval = Interval}) ->
-    %% We don't want fractional apportionments (since otherwise the
-    %% latest timeslice is always non-full, which gives all sorts of
-    %% weird effects). So we apportion in full timeslices from Old +
-    %% Interval to New.
-    Old1 = Old + Interval,
-    New1 = New - Interval,
-    case New - Old1 of
-        0 -> record_sample(Id, {Key, Count, New, State}, State);
-        _ -> Rate = Count / (New - Old1),
-             Incr = round(Rate * Interval),
-             Rem = lists:foldl(
-                     fun(I, CountN) ->
-                             record_sample(Id, {Key, Incr, I, State}, State),
-                             CountN - Incr
-                     end, Count, lists:seq(Old1, New1, Interval)),
-             record_sample(Id, {Key, Rem, New, State}, State)
+append_sample(Stats, NewTS, OldStats, Id, Key, State) ->
+    NewMSCeil = ceil(rabbit_mgmt_format:timestamp_ms(NewTS), State),
+    case pget(Key, Stats) of
+        unknown -> ok;
+        New     -> Args = {Key, New - pget(Key, OldStats, 0), NewMSCeil, State},
+                   record_sample(Id, Args, State)
     end.
 
 record_sample({coarse, Id}, Args, State) ->
