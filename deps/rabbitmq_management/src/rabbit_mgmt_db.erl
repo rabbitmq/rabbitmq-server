@@ -182,7 +182,7 @@ safe_call(Term, Item) ->
 
 %% TODO this should become part of the API
 range(State = #state{interval = Interval}) ->
-    End = ceil(rabbit_mgmt_format:timestamp_ms(erlang:now()), State),
+    End = ceil(rabbit_mgmt_format:timestamp_ms(erlang:now()), State) - Interval,
     Start = End - ?MAX_SAMPLE_AGE,
     {Start, End, Interval}.
 
