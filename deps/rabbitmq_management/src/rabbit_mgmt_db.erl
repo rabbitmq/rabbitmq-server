@@ -573,12 +573,12 @@ apportion_sample0(Old, New, Id, Key, Count,
     case New - Old1 of
         0 -> record_sample(Id, {Key, Count, New, State}, State);
         _ -> Rate = Count / (New - Old1),
+             Incr = round(Rate * Interval),
              Rem = lists:foldl(
                      fun(I, CountN) ->
-                             This = round(Rate * Interval),
-                             record_sample(Id, {Key, This, I, State}, State),
-                             CountN - This
-                     end, 0, lists:seq(Old1, New1, Interval)),
+                             record_sample(Id, {Key, Incr, I, State}, State),
+                             CountN - Incr
+                     end, Count, lists:seq(Old1, New1, Interval)),
              record_sample(Id, {Key, Rem, New, State}, State)
     end.
 
