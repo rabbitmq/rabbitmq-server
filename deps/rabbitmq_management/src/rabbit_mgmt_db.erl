@@ -173,6 +173,9 @@ safe_call(Term, Item) ->
 
 %% TODO this should become part of the API
 range(State = #state{interval = Interval}) ->
+    %% Take floor on queries so we make sure we only return samples
+    %% for which we've finished receiving events. Fixes the "drop at
+    %% the end" problem.
     End = floor(erlang:now(), State),
     Start = End - (?MAX_SAMPLE_AGE div 2), %% Fake, so we test pulling out of the range
     {Start, End, Interval}.
@@ -354,8 +357,14 @@ result_or_error(S)  -> S.
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
-floor(TS, #state{interval = Interval}) ->
-    (rabbit_mgmt_format:timestamp_ms(TS) div Interval) * Interval.
+floor(TS, State) -> floor0(rabbit_mgmt_format:timestamp_ms(TS), State).
+ceil (TS, State) -> ceil0 (rabbit_mgmt_format:timestamp_ms(TS), State).
+
+floor0(MS, #state{interval = Interval})        -> (MS div Interval) * Interval.
+ceil0(MS, State = #state{interval = Interval}) -> case floor0(MS, State) of
+                                                      MS    -> MS;
+                                                      Floor -> Floor + Interval
+                                                  end.
 
 blank_stats() -> #stats{vals = gb_trees:empty(), base = 0}.
 is_blank_stats(S) -> S =:= blank_stats().
@@ -381,7 +390,7 @@ handle_event(Event = #event{type = queue_deleted,
     %% decrease any amalgamated coarse stats for [messages,
     %% messages_ready, messages_unacknowledged] for this queue - since
     %% the queue's deletion means we have really got rid of messages!
-    TS = floor(Timestamp, State),
+    TS = ceil(Timestamp, State),
     [begin
          #stats{vals = Vals,
                 base = Base} = lookup_element(ETS, {{queue_stats, Name}, Key}),
@@ -539,7 +548,7 @@ append_samples(Stats, TS, Id, Keys, State) ->
     [append_sample(Stats, TS, Id, Key, State) || Key <- Keys].
 
 append_sample(Stats, NewTS, Id, Key, State) ->
-    NewMS = floor(NewTS, State),
+    NewMS = ceil(NewTS, State),
     case pget(Key, Stats) of
         unknown -> ok;
         New     -> Args = {Key, {abs, New}, NewMS, State},
