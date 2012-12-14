@@ -584,28 +584,23 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
                              State2#q{backing_queue_state = BQS1})
     end.
 
-publish_max(Message, Props, Delivered, SenderPid,
-               State = #q{backing_queue = BQ,
-                          backing_queue_state = BQS,
-                          max_depth = undefined }) ->
+publish_max(Message, Props, Delivered, SenderPid, #q{backing_queue = BQ,
+                                                     backing_queue_state = BQS,
+                                                     max_depth = undefined }) ->
     BQ:publish(Message, Props, Delivered, SenderPid, BQS);
-publish_max(Message, Props, Delivered, SenderPid,
-               State = #q{backing_queue = BQ,
-                          backing_queue_state = BQS,
-                          max_depth = MaxDepth }) ->
-    Depth = BQ:depth(BQS),
-    case Depth >= MaxDepth of
-        true ->
-            Length = BQ:len(BQS),
-            case Length >= MaxDepth of
-                false ->
-                    BQS;
-                true ->
-                    {M, BQS1} = BQ:fetch(false, BQS),
-                    BQ:publish(Message, Props, Delivered, SenderPid, BQS1)
-            end;
-        false->
-            BQ:publish(Message, Props, Delivered, SenderPid, BQS)
+publish_max(Message, Props, Delivered, SenderPid, #q{backing_queue = BQ,
+                                                     backing_queue_state = BQS,
+                                                     dlx = XName,
+                                                     max_depth = MaxDepth }) ->
+    {Depth, Len} = {BQ:depth(BQS), BQ:len(BQS)},
+    case {Depth >= MaxDepth, Len =:= 0} of
+        {false, _} ->
+            BQ:publish(Message, Props, Delivered, SenderPid, BQS);
+        {true, true} ->
+            BQS;
+        {true, false} ->
+            {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(false, BQS),
+            BQ:publish(Message, Props, Delivered, SenderPid, BQS1)
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
