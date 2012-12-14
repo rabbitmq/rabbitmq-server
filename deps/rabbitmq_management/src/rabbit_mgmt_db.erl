@@ -96,6 +96,12 @@
 %% before the samples we have kept, and a gb_tree of {timestamp,
 %% sample} values.
 %%
+%% We also have #state.old_stats to let us calculate instantaneous
+%% rates, in order to apportion simple / detailed stats into time
+%% slices as they come in. These instantaneous rates are not returned
+%% in response to any query, the rates shown in the API are calculated
+%% at query time.
+%%
 %% We also keep a timer going, in order to prune old samples from
 %% #state.aggregated_stats.
 %%
@@ -110,9 +116,12 @@
           tables,
           %% database of aggregated samples
           aggregated_stats,
+          %% What the previous info item was for any given
+          %% {queue/channel/connection}
+          old_stats,
           remove_old_samples_timer,
           interval}).
--record(stats, {vals, base}).
+-record(stats, {diffs, base}).
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
@@ -177,7 +186,7 @@ range(State = #state{interval = Interval}) ->
     %% for which we've finished receiving events. Fixes the "drop at
     %% the end" problem.
     End = floor(erlang:now(), State),
-    Start = End - (?MAX_SAMPLE_AGE div 2), %% Fake, so we test pulling out of the range
+    Start = End - ?MAX_SAMPLE_AGE,
     {Start, End, Interval}.
 
 %%----------------------------------------------------------------------------
@@ -194,6 +203,7 @@ init([]) ->
     Tables = orddict:from_list([{Key, Table()} || Key <- ?TABLES]),
     {ok, set_remove_timer(#state{interval         = Interval,
                                  tables           = Tables,
+                                 old_stats        = Table(),
                                  aggregated_stats = Table()}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -366,7 +376,7 @@ ceil0(MS, State = #state{interval = Interval}) -> case floor0(MS, State) of
                                                       Floor -> Floor + Interval
                                                   end.
 
-blank_stats() -> #stats{vals = gb_trees:empty(), base = 0}.
+blank_stats() -> #stats{diffs = gb_trees:empty(), base = 0}.
 is_blank_stats(S) -> S =:= blank_stats().
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
@@ -385,25 +395,16 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
 handle_event(Event = #event{type = queue_deleted,
                             props = [{name, Name}],
                             timestamp = Timestamp},
-             State = #state{aggregated_stats = ETS}) ->
+             State = #state{old_stats = OldTable}) ->
     %% This is fiddly. Unlike for connections and channels, we need to
     %% decrease any amalgamated coarse stats for [messages,
     %% messages_ready, messages_unacknowledged] for this queue - since
     %% the queue's deletion means we have really got rid of messages!
-    TS = ceil(Timestamp, State),
-    [begin
-         #stats{vals = Vals,
-                base = Base} = lookup_element(ETS, {{queue_stats, Name}, Key}),
-         Val = case gb_trees:is_empty(Vals) of
-                   true  -> Base;
-                   false -> {_TS, V} = gb_trees:largest(Vals),
-                            V
-               end,
-         record_sample0({vhost_stats, vhost(Name)},
-                        {Key, {rel, -Val}, TS, State})
-     end
+    Id = {coarse, {queue_stats, Name}},
+    TS = floor(Timestamp, State),
+    OldStats = lookup_element(OldTable, Id),
+    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
      || Key <- ?COARSE_QUEUE_STATS],
-
     delete_samples(channel_queue_stats,  {'_', Name}, State),
     delete_samples(queue_exchange_stats, {Name, '_'}, State),
     delete_samples(queue_stats,          Name,        State),
@@ -506,13 +507,17 @@ handle_stats(TName, Stats, Timestamp, Funs, RatesKeys,
     ets:insert(orddict:fetch(TName, Tables), {{Id, stats}, Stats2, Timestamp}),
     {ok, State}.
 
-handle_deleted(TName, #event{props = Props}, State = #state{tables = Tables}) ->
+handle_deleted(TName, #event{props = Props}, State = #state{tables    = Tables,
+                                                            old_stats = Old}) ->
     Id = id(TName, Props),
     case orddict:find(TName, Tables) of
         {ok, Table} -> ets:delete(Table, {Id, create}),
                        ets:delete(Table, {Id, stats});
         error       -> ok
     end,
+    ets:delete(Old, {coarse, {TName, Id}}),
+    ets:match_delete(Old, {{fine, {Id, '_'}},      '_'}),
+    ets:match_delete(Old, {{fine, {Id, '_', '_'}}, '_'}),
     {ok, State}.
 
 handle_consumer(Fun, Props,
@@ -544,14 +549,16 @@ handle_fine_stat(Id, Stats, Timestamp, State) ->
 delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
     ets:match_delete(ETS, {{{Type, Id}, '_'}, '_'}).
 
-append_samples(Stats, TS, Id, Keys, State) ->
-    [append_sample(Stats, TS, Id, Key, State) || Key <- Keys].
+append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
+    OldStats = lookup_element(OldTable, Id),
+    [append_sample(Stats, TS, OldStats, Id, Key, State) || Key <- Keys],
+    ets:insert(OldTable, {Id, Stats}).
 
-append_sample(Stats, NewTS, Id, Key, State) ->
+append_sample(Stats, NewTS, OldStats, Id, Key, State) ->
     NewMS = ceil(NewTS, State),
     case pget(Key, Stats) of
         unknown -> ok;
-        New     -> Args = {Key, {abs, New}, NewMS, State},
+        New     -> Args = {Key, New - pget(Key, OldStats, 0), NewMS, State},
                    record_sample(Id, Args, State)
     end.
 
@@ -596,34 +603,23 @@ vhost({TName, Pid}, #state{tables = Tables}) ->
     pget(vhost, lookup_element(Table, {Pid, create})).
 
 %% exchanges have two sets of "publish" stats, so rearrange things a touch
-record_sampleX(RenamePublishTo, X, {publish, Upd, TS, State}) ->
-    record_sample0({exchange_stats, X}, {RenamePublishTo, Upd, TS, State}).
+record_sampleX(RenamePublishTo, X, {publish, Diff, TS, State}) ->
+    record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, TS, State}).
 
-record_sample0(Id0, {Key, Upd, TS, #state{aggregated_stats = ETS}}) ->
+record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats = ETS}}) ->
     Id = {Id0, Key},
     Old = case lookup_element(ETS, Id) of
               [] -> blank_stats();
               E  -> E
           end,
-    ets:insert(ETS, {Id, update_sample(Upd, TS, Old)}).
+    ets:insert(ETS, {Id, add(TS, Diff, Old)}).
 
-update_sample(Update, TS, Stats = #stats{vals = Vals}) ->
-    Vals2 =
-        case {gb_trees:lookup(TS, Vals), Update} of
-            {{value, _},   {abs, Abs}} -> gb_trees:update(TS, Abs, Vals);
-            {{value, Cur}, {rel, Rel}} -> gb_trees:update(TS, Cur + Rel, Vals);
-            {none,         {abs, Abs}} -> gb_trees:insert(TS, Abs, Vals);
-            {none,         {rel, Rel}} -> insert_for_rel_update(Rel, TS, Stats)
-        end,
-    Stats#stats{vals = Vals2}.
-
-insert_for_rel_update(Rel, TS, #stats{vals = Vals, base = Base}) ->
-    case gb_trees:is_empty(Vals) of
-        true  -> gb_trees:insert(TS, Base + Rel, Vals);
-        false -> {LTS, LVal} = gb_trees:largest(Vals),
-                 true = TS > LTS, %% ASSERT
-                 gb_trees:insert(TS, LVal + Rel, Vals)
-    end.
+add(TS, Diff, Stats = #stats{diffs = Diffs}) ->
+    Diffs2 = case gb_trees:lookup(TS, Diffs) of
+                 {value, Total} -> gb_trees:update(TS, Diff + Total, Diffs);
+                 none           -> gb_trees:insert(TS, Diff, Diffs)
+             end,
+    Stats#stats{diffs = Diffs2}.
 
 %%----------------------------------------------------------------------------
 %% Internal, querying side
@@ -770,16 +766,17 @@ format_samples(Range, ManyStats, State) ->
        end || {K, Stats} <- ManyStats]).
 
 format_sample_details({First, Last, Incr},
-                      #stats{vals = Vals, base = Base},
+                      #stats{diffs = Diffs, base = Base},
                       #state{interval = Interval}) ->
     %% In the future when we have rarer samples further in the past,
     %% this will be heavily dependent on First / Incr being an integer
     {Samples, Counter} =
         lists:foldl(fun(T, {Samples, BaseN}) ->
-                            S = case gb_trees:lookup(T, Vals) of
-                                    none       -> BaseN;
-                                    {value, V} -> V
-                                end,
+                            Diff = case gb_trees:lookup(T, Diffs) of
+                                       none       -> 0;
+                                       {value, D} -> D
+                                   end,
+                            S = Diff + BaseN,
                             {[[{sample, S}, {timestamp, T}] | Samples], S}
                     end, {[], Base}, lists:seq(First, Last, Incr)),
     case length(Samples) > 1 of
@@ -855,8 +852,8 @@ sum_trees([]) -> blank_stats();
 
 sum_trees([Stats | StatsN]) ->
     lists:foldl(
-      fun (#stats{vals = V1, base = B1}, #stats{vals = V2, base = B2}) ->
-              #stats{vals = add_trees(V1, gb_trees:iterator(V2)),
+      fun (#stats{diffs = D1, base = B1}, #stats{diffs = D2, base = B2}) ->
+              #stats{diffs = add_trees(D1, gb_trees:iterator(D2)),
                      base  = B1 + B2}
       end,
       Stats, StatsN).
@@ -936,15 +933,16 @@ remove_old_samples(Key, Stats, TS, ETS) ->
         Stats2 -> ets:insert(ETS, {Key, Stats2})
     end.
 
-remove_old_samples0(Cutoff, Stats = #stats{vals = Vals}) ->
-    case gb_trees:is_empty(Vals) of
+remove_old_samples0(Cutoff, Stats = #stats{diffs = Diffs, base = Base}) ->
+    case gb_trees:is_empty(Diffs) of
         true  -> Stats;
-        false -> {Small, Val} = gb_trees:smallest(Vals),
+        false -> {Small, Val} = gb_trees:smallest(Diffs),
                  case Small < Cutoff of
-                     true  -> Vals1 = gb_trees:delete(Small, Vals),
+                     true  -> Diffs1 = gb_trees:delete(Small, Diffs),
                               remove_old_samples0(
-                                Cutoff, Stats#stats{vals = Vals1,
-                                                    base = Val});
+                                Cutoff, Stats#stats{diffs = Diffs1,
+                                                    base  = Base + Val});
                      false -> Stats
                  end
     end.
+
