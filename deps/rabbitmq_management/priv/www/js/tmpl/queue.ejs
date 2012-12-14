@@ -76,6 +76,9 @@
             <% } %>
             <br/>
           <% } %>
+          <% if (queue.status == 'syncing') { %>
+          <p><b>Syncing: <%= Math.round(100 * queue.sync_messages / queue.messages) %>%</b></p>
+          <% } %>
         </td>
       </tr>
 <% } %>

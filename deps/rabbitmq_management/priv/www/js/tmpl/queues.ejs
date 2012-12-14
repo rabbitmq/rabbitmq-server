@@ -56,6 +56,9 @@
    <td>
      <%= fmt_node(queue.node) %>
      <%= fmt_mirrors(queue) %>
+     <% if (queue.status == 'syncing') { %>
+     <p><b>Syncing: <%= Math.round(100 * queue.sync_messages / queue.messages) %>%</b></p>
+     <% } %>
    </td>
 <% } %>
    <td class="c">
