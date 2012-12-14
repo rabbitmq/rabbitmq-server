@@ -568,9 +568,7 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
             {false, State#q{backing_queue_state = BQS1}}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message    = Message,
-                                        msg_seq_no = MsgSeqNo,
-                                        sender     = SenderPid},
+deliver_or_enqueue(Delivery = #delivery{message = Message},
                    Delivered, State) ->
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
     Props = message_properties(Message, Confirm, State),
@@ -606,18 +604,13 @@ publish_max(#delivery{message    = Message,
         {false, _} ->
             BQ:publish(Message, Props, Delivered, SenderPid, BQS);
         {true, true} ->
-            case XName of
-                undefined ->
-                    ok;
-                _ ->
-                    case rabbit_exchange:lookup(XName) of
-                        {ok, X} -> dead_letter_publish(Message, maxdepth, X, State);
-                        {error, not_found} -> ok
-                    end
+            case rabbit_exchange:lookup(XName) of
+                {ok, X}    -> dead_letter_publish(Message, maxdepth, X, State);
+                {error, _} -> ok
             end,
             case Confirm of
-                true -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]);
-                _    -> ok
+                true  -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]);
+                false -> ok
             end,
             BQS;
         {true, false} ->
