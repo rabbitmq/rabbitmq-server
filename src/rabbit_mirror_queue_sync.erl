@@ -151,7 +151,7 @@ syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
             SPidsMRefs1 = wait_for_credit(SPidsMRefs, Ref),
             [begin
                  credit_flow:send(SPid),
-                 SPid ! Msg
+                 SPid ! {sync_msg, Ref, Msg, MsgProps}
              end || {SPid, _} <- SPidsMRefs1],
             syncer_loop(Args, SPidsMRefs1);
         {cancel, Ref} ->
