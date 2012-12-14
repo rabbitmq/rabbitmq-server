@@ -219,5 +219,8 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
             BQS1 = BQ:publish(Msg, Props1, true, none, BQS),
             slave_sync_loop(Args, TRef, BQS1);
         {'EXIT', Parent, Reason} ->
-            {stop, Reason, {TRef, BQS}}
+            {stop, Reason, {TRef, BQS}};
+        {'$gen_cast', {gm, {delete_and_terminate, Reason}}} ->
+            BQS1 = BQ:delete_and_terminate(Reason, BQS),
+            {stop, Reason, {TRef, BQS1}}
     end.
