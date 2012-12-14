@@ -69,7 +69,7 @@ master_go(Syncer, Ref, Log, InfoPull, InfoPush, BQ, BQS) ->
 
 master_go0(InfoPull, Args, BQ, BQS) ->
     case BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
-                         InfoPull({synchronising, I}),
+                         InfoPull({syncing, I}),
                          master_send(Args, I, Last, Msg, MsgProps)
                  end, {0, erlang:now()}, BQS) of
         {{shutdown,  Reason}, BQS1} -> {shutdown,  Reason, BQS1};
@@ -80,7 +80,7 @@ master_go0(InfoPull, Args, BQ, BQS) ->
 master_send({Syncer, Ref, Log, InfoPush, Parent}, I, Last, Msg, MsgProps) ->
     Acc = {I + 1,
            case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
-               true  -> InfoPush({synchronising, I}),
+               true  -> InfoPush({syncing, I}),
                         Log("~p messages", [I]),
                         erlang:now();
                false -> Last
