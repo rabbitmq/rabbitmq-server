@@ -477,6 +477,26 @@
             </para>
           </listitem>
         </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>cancel_sync_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>queue</term>
+                <listitem>
+                  <para>
+                    The name of the queue to cancel synchronisation for.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instructs a synchronising mirrored queue to stop
+              synchronising itself.
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 

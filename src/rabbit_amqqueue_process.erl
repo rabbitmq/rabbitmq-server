@@ -1188,6 +1188,10 @@ handle_call(sync_mirrors, _From,
 handle_call(sync_mirrors, _From, State) ->
     reply({error, not_mirrored}, State);
 
+%% By definition if we get this message here we do not have to do anything.
+handle_call(cancel_sync_mirrors, _From, State) ->
+    reply({error, not_syncing}, State);
+
 handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),

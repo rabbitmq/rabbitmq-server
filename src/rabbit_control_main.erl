@@ -51,6 +51,7 @@
          {forget_cluster_node, [?OFFLINE_DEF]},
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
+         {cancel_sync_queue, [?VHOST_DEF]},
 
          add_user,
          delete_user,
@@ -285,6 +286,12 @@ action(sync_queue, Node, [Queue], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Synchronising queue ~s in ~s", [Queue, VHost]),
     rpc_call(Node, rabbit_amqqueue, sync,
+             [list_to_binary(Queue), list_to_binary(VHost)]);
+
+action(cancel_sync_queue, Node, [Queue], Opts, Inform) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    Inform("Stopping synchronising queue ~s in ~s", [Queue, VHost]),
+    rpc_call(Node, rabbit_amqqueue, cancel_sync,
              [list_to_binary(Queue), list_to_binary(VHost)]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->

@@ -92,6 +92,14 @@ master_send({Syncer, Ref, Log, InfoPush, Parent}, I, Last, Msg, MsgProps) ->
             ok
     end,
     receive
+        {'$gen_call', From,
+         cancel_sync_mirrors}    -> unlink(Syncer),
+                                    Syncer ! {cancel, Ref},
+                                    receive {'EXIT', Syncer, _} -> ok
+                                    after 0 -> ok
+                                    end,
+                                    gen_server2:reply(From, ok),
+                                    {stop, cancelled};
         {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps},
                                     {cont, Acc};
         {'EXIT', Parent, Reason} -> {stop, {shutdown,  Reason}};
@@ -124,8 +132,16 @@ syncer(Ref, Log, MPid, SPids) ->
         SPidsMRefs1 -> MPid ! {ready, self()},
                        Log("~p to sync", [[rabbit_misc:pid_to_string(S) ||
                                               {S, _} <- SPidsMRefs1]]),
-                       SPidsMRefs2 = syncer_loop({Ref, MPid}, SPidsMRefs1),
-                       foreach_slave(SPidsMRefs2, Ref, fun sync_send_complete/3)
+                       case syncer_loop({Ref, MPid}, SPidsMRefs1) of
+                           {done, SPidsMRefs2} ->
+                               foreach_slave(SPidsMRefs2, Ref,
+                                             fun sync_send_complete/3);
+                           cancelled ->
+                               %% We don't tell the slaves we will die
+                               %% - so when we do they interpret that
+                               %% as a failure, which is what we want.
+                               ok
+                       end
     end.
 
 syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
@@ -135,11 +151,13 @@ syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
             SPidsMRefs1 = wait_for_credit(SPidsMRefs, Ref),
             [begin
                  credit_flow:send(SPid),
-                 SPid ! {sync_msg, Ref, Msg, MsgProps}
+                 SPid ! Msg
              end || {SPid, _} <- SPidsMRefs1],
             syncer_loop(Args, SPidsMRefs1);
+        {cancel, Ref} ->
+            cancelled;
         {done, Ref} ->
-            SPidsMRefs
+            {done, SPidsMRefs}
     end.
 
 wait_for_credit(SPidsMRefs, Ref) ->
