@@ -568,7 +568,9 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
             {false, State#q{backing_queue_state = BQS1}}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
+deliver_or_enqueue(Delivery = #delivery{message    = Message,
+                                        msg_seq_no = MsgSeqNo,
+                                        sender     = SenderPid},
                    Delivered, State) ->
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
     Props = message_properties(Message, Confirm, State),
@@ -579,27 +581,48 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
         {false, State2 = #q{ttl = 0, dlx = undefined}} ->
             discard(Delivery, State2);
         {false, State2} ->
-            BQS1 = publish_max(Message, Props, Delivered, SenderPid, State2),
+            BQS1 = publish_max(Delivery, Props, Delivered, State2),
             ensure_ttl_timer(Props#message_properties.expiry,
                              State2#q{backing_queue_state = BQS1})
     end.
 
-publish_max(Message, Props, Delivered, SenderPid, #q{backing_queue = BQ,
-                                                     backing_queue_state = BQS,
-                                                     max_depth = undefined }) ->
+publish_max(#delivery{message    = Message,
+                      sender     = SenderPid},
+            Props, Delivered, State = #q{backing_queue       = BQ,
+                                         backing_queue_state = BQS,
+                                         max_depth           = undefined}) ->
     BQ:publish(Message, Props, Delivered, SenderPid, BQS);
-publish_max(Message, Props, Delivered, SenderPid, #q{backing_queue = BQ,
-                                                     backing_queue_state = BQS,
-                                                     dlx = XName,
-                                                     max_depth = MaxDepth }) ->
+publish_max(#delivery{message    = Message,
+                      msg_seq_no = MsgSeqNo,
+                      sender     = SenderPid},
+            Props = #message_properties{needs_confirming = Confirm},
+            Delivered,
+            State = #q{backing_queue       = BQ,
+                       backing_queue_state = BQS,
+                       dlx                 = XName,
+                       max_depth           = MaxDepth }) ->
     {Depth, Len} = {BQ:depth(BQS), BQ:len(BQS)},
     case {Depth >= MaxDepth, Len =:= 0} of
         {false, _} ->
             BQ:publish(Message, Props, Delivered, SenderPid, BQS);
         {true, true} ->
+            case XName of
+                undefined ->
+                    ok;
+                _ ->
+                    case rabbit_exchange:lookup(XName) of
+                        {ok, X} -> dead_letter_publish(Message, maxdepth, X, State);
+                        {error, not_found} -> ok
+                    end
+            end,
+            case Confirm of
+                true -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]);
+                _    -> ok
+            end,
             BQS;
         {true, false} ->
-            {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(false, BQS),
+            {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(true, BQS),
+            (dead_letter_fun(maxdepth))([{Msg, AckTag}]),
             BQ:publish(Message, Props, Delivered, SenderPid, BQS1)
     end.
 
