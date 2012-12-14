@@ -66,10 +66,15 @@
       <tr>
         <th>Mirrors</th>
         <td>
-          <% for (var i in queue.slave_nodes) {
-             var node = queue.slave_nodes[i];
+          <%
+             var was_unsynced_node = false;
+             for (var i in queue.slave_nodes) {
+               var node = queue.slave_nodes[i];
           %>
-            <% if (jQuery.inArray(node, queue.synchronised_slave_nodes) == -1) { %>
+            <%
+               if (jQuery.inArray(node, queue.synchronised_slave_nodes) == -1) {
+                 was_unsynced_node = true;
+            %>
              <%= fmt_node(node) %> <b>(unsynchronised)</b>
             <% } else { %>
              <%= fmt_node(node) %>
@@ -78,6 +83,19 @@
           <% } %>
           <% if (queue.status == 'syncing') { %>
           <p><b>Syncing: <%= Math.round(100 * queue.sync_messages / queue.messages) %>%</b></p>
+          <form action="#/queues/actions" method="post">
+            <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+            <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+            <input type="hidden" name="action" value="cancel_sync"/>
+            <input type="submit" value="Cancel" id="action-button" />
+          </form>
+          <% } else if (was_unsynced_node) { %>
+          <form action="#/queues/actions" method="post">
+            <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+            <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+            <input type="hidden" name="action" value="sync"/>
+            <input type="submit" value="Synchronise" id="action-button" />
+          </form>
           <% } %>
         </td>
       </tr>
