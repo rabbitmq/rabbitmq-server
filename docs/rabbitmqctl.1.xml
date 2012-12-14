@@ -1140,6 +1140,12 @@
                 i.e. those which could take over from the master without
                 message loss.</para></listitem>
               </varlistentry>
+              <varlistentry>
+                <term>status</term>
+                <listitem><para>The status of the queue. Normally
+                'running', but may be different if the queue is
+                synchronising.</para></listitem>
+              </varlistentry>
             </variablelist>
             <para>
               If no <command>queueinfoitem</command>s are specified then queue name and depth are

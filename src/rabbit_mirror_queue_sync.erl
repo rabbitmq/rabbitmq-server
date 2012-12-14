@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([master_prepare/3, master_go/5, slave/7]).
+-export([master_prepare/3, master_go/7, slave/7]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
@@ -59,16 +59,17 @@ master_prepare(Ref, Log, SPids) ->
     MPid = self(),
     spawn_link(fun () -> syncer(Ref, Log, MPid, SPids) end).
 
-master_go(Syncer, Ref, Log, BQ, BQS) ->
-    Args = {Syncer, Ref, Log, rabbit_misc:get_parent()},
+master_go(Syncer, Ref, Log, InfoPull, InfoPush, BQ, BQS) ->
+    Args = {Syncer, Ref, Log, InfoPush, rabbit_misc:get_parent()},
     receive
         {'EXIT', Syncer, normal} -> {already_synced, BQS};
         {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS};
-        {ready, Syncer}          -> master_go0(Args, BQ, BQS)
+        {ready, Syncer}          -> master_go0(InfoPull, Args, BQ, BQS)
     end.
 
-master_go0(Args, BQ, BQS) ->
+master_go0(InfoPull, Args, BQ, BQS) ->
     case BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
+                         InfoPull({synchronising, I}),
                          master_send(Args, I, Last, Msg, MsgProps)
                  end, {0, erlang:now()}, BQS) of
         {{shutdown,  Reason}, BQS1} -> {shutdown,  Reason, BQS1};
@@ -76,10 +77,11 @@ master_go0(Args, BQ, BQS) ->
         {_,                   BQS1} -> master_done(Args, BQS1)
     end.
 
-master_send({Syncer, Ref, Log, Parent}, I, Last, Msg, MsgProps) ->
+master_send({Syncer, Ref, Log, InfoPush, Parent}, I, Last, Msg, MsgProps) ->
     Acc = {I + 1,
            case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
-               true  -> Log("~p messages", [I]),
+               true  -> InfoPush({synchronising, I}),
+                        Log("~p messages", [I]),
                         erlang:now();
                false -> Last
            end},
@@ -96,7 +98,7 @@ master_send({Syncer, Ref, Log, Parent}, I, Last, Msg, MsgProps) ->
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
     end.
 
-master_done({Syncer, Ref, _Log, Parent}, BQS) ->
+master_done({Syncer, Ref, _Log, _InfoPush, Parent}, BQS) ->
     receive
         {next, Ref}              -> unlink(Syncer),
                                     Syncer ! {done, Ref},

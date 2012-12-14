@@ -28,7 +28,7 @@
 
 -export([promote_backing_queue_state/8, sender_death_fun/0, depth_fun/0]).
 
--export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/1]).
+-export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/3]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -127,7 +127,8 @@ stop_mirroring(State = #state { coordinator         = CPid,
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
-sync_mirrors(State = #state { name                = QName,
+sync_mirrors(InfoPull, InfoPush,
+             State = #state { name                = QName,
                               gm                  = GM,
                               backing_queue       = BQ,
                               backing_queue_state = BQS }) ->
@@ -141,7 +142,8 @@ sync_mirrors(State = #state { name                = QName,
     Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, Log, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
-    case rabbit_mirror_queue_sync:master_go(Syncer, Ref, Log, BQ, BQS) of
+    case rabbit_mirror_queue_sync:master_go(
+           Syncer, Ref, Log, InfoPull, InfoPush, BQ, BQS) of
         {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
         {sync_died, R, BQS1}   -> Log("~p", [R]),
                                   {ok, S(BQS1)};
