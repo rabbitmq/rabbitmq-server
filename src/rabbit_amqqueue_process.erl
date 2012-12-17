@@ -588,8 +588,8 @@ deliver_or_enqueue(Delivery = #delivery{message = Message},
             end
     end.
 
-publish_max(#delivery{message    = Message,
-                      sender     = SenderPid},
+publish_max(#delivery{message = Message,
+                      sender  = SenderPid},
             Props, Delivered, State = #q{backing_queue       = BQ,
                                          backing_queue_state = BQS,
                                          max_depth           = undefined}) ->
@@ -602,7 +602,7 @@ publish_max(#delivery{message    = Message,
             State = #q{backing_queue       = BQ,
                        backing_queue_state = BQS,
                        dlx                 = XName,
-                       max_depth           = MaxDepth }) ->
+                       max_depth           = MaxDepth}) ->
     {Depth, Len} = {BQ:depth(BQS), BQ:len(BQS)},
     case {Depth >= MaxDepth, Len =:= 0} of
         {false, _} ->
