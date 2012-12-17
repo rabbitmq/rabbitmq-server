@@ -590,19 +590,18 @@ deliver_or_enqueue(Delivery = #delivery{message = Message},
 
 publish_max(#delivery{message = Message,
                       sender  = SenderPid},
-            Props, Delivered, State = #q{backing_queue       = BQ,
-                                         backing_queue_state = BQS,
-                                         max_depth           = undefined}) ->
+            Props, Delivered, #q{backing_queue       = BQ,
+                                 backing_queue_state = BQS,
+                                 max_depth           = undefined}) ->
     BQ:publish(Message, Props, Delivered, SenderPid, BQS);
 publish_max(#delivery{message    = Message,
                       msg_seq_no = MsgSeqNo,
                       sender     = SenderPid},
             Props = #message_properties{needs_confirming = Confirm},
             Delivered,
-            State = #q{backing_queue       = BQ,
-                       backing_queue_state = BQS,
-                       dlx                 = XName,
-                       max_depth           = MaxDepth}) ->
+            #q{backing_queue       = BQ,
+               backing_queue_state = BQS,
+               max_depth           = MaxDepth}) ->
     {Depth, Len} = {BQ:depth(BQS), BQ:len(BQS)},
     case {Depth >= MaxDepth, Len =:= 0} of
         {false, _} ->
