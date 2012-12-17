@@ -579,9 +579,13 @@ deliver_or_enqueue(Delivery = #delivery{message = Message},
         {false, State2 = #q{ttl = 0, dlx = undefined}} ->
             discard(Delivery, State2);
         {false, State2} ->
-            BQS1 = publish_max(Delivery, Props, Delivered, State2),
-            ensure_ttl_timer(Props#message_properties.expiry,
-                             State2#q{backing_queue_state = BQS1})
+            case publish_max(Delivery, Props, Delivered, State2) of
+                nopub ->
+                    State2;
+                BQS1 ->
+                    ensure_ttl_timer(Props#message_properties.expiry,
+                                     State2#q{backing_queue_state = BQS1})
+            end
     end.
 
 publish_max(#delivery{message    = Message,
@@ -612,7 +616,7 @@ publish_max(#delivery{message    = Message,
                 true  -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]);
                 false -> ok
             end,
-            BQS;
+            nopub;
         {true, false} ->
             {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(true, BQS),
             (dead_letter_fun(maxdepth))([{Msg, AckTag}]),
