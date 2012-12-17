@@ -608,10 +608,7 @@ publish_max(#delivery{message    = Message,
         {false, _} ->
             BQ:publish(Message, Props, Delivered, SenderPid, BQS);
         {true, true} ->
-            case rabbit_exchange:lookup(XName) of
-                {ok, X}    -> dead_letter_publish(Message, maxdepth, X, State);
-                {error, _} -> ok
-            end,
+            (dead_letter_fun(maxdepth))([{Message, undefined}]),
             case Confirm of
                 true  -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]);
                 false -> ok
@@ -857,7 +854,7 @@ cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
                                           unconfirmed         = UC,
                                           backing_queue       = BQ,
                                           backing_queue_state = BQS}) ->
-    {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+    {_Guids, BQS1} = BQ:ack([Ack || Ack <- AckTags, Ack /= undefined], BQS),
     State1 = State#q{backing_queue_state = BQS1},
     case dtree:is_empty(UC) andalso DS =/= undefined of
         true  -> case DS of
