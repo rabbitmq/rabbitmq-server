@@ -122,6 +122,7 @@
           remove_old_samples_timer,
           interval}).
 -record(stats, {diffs, base}).
+-record(range, {first, last, incr}).
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
@@ -185,9 +186,9 @@ range(State = #state{interval = Interval}) ->
     %% Take floor on queries so we make sure we only return samples
     %% for which we've finished receiving events. Fixes the "drop at
     %% the end" problem.
-    End = floor(erlang:now(), State),
-    Start = End - ?MAX_SAMPLE_AGE,
-    {Start, End, Interval}.
+    Last = floor(erlang:now(), State),
+    First = Last - ?MAX_SAMPLE_AGE,
+    #range{first = First, last = Last, incr = Interval}.
 
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks
@@ -765,20 +766,11 @@ format_samples(Range, ManyStats, State) ->
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
 
-format_sample_details({First, Last, Incr},
+format_sample_details(Range,
                       #stats{diffs = Diffs, base = Base},
                       #state{interval = Interval}) ->
-    %% In the future when we have rarer samples further in the past,
-    %% this will be heavily dependent on First / Incr being an integer
-    {Samples, Counter} =
-        lists:foldl(fun(T, {Samples, BaseN}) ->
-                            Diff = case gb_trees:lookup(T, Diffs) of
-                                       none       -> 0;
-                                       {value, D} -> D
-                                   end,
-                            S = Diff + BaseN,
-                            {[[{sample, S}, {timestamp, T}] | Samples], S}
-                    end, {[], Base}, lists:seq(First, Last, Incr)),
+    {Samples, Count} = extract_samples(
+                         Range, Base, gb_trees:iterator(Diffs), []),
     case length(Samples) > 1 of
         true ->
             [[{sample, S3}, {timestamp, T3}],
@@ -794,10 +786,44 @@ format_sample_details({First, Last, Incr},
             {[{rate,     Inst},
               {interval, T3 - T2},
               {avg_rate, Avg},
-              {samples,  Samples}], Counter};
+              {samples,  Samples}], Count};
         false ->
-            {[{samples, Samples}], Counter}
+            {[{samples, Samples}], Count}
     end.
+
+%% What we want to do here is: given the #range{}, provide a set of
+%% samples such that we definitely provide a set of samples which
+%% covers the exact range requested, despite the fact that we might
+%% not have it. We need to spin up over the entire range of the
+%% samples we *do* have since they are diff-based (and we convert to
+%% absolute values here).
+extract_samples(Range = #range{first = Next}, Base, It, Samples) ->
+    case gb_trees:next(It) of
+        {TS, S, It2} -> extract_samples1(Range, Base, TS,   S, It2, Samples);
+        none         -> extract_samples1(Range, Base, Next, 0, It,  Samples)
+    end.
+
+extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
+                 Base, TS, S, It, Samples) ->
+    if
+        %% We've gone over the range. Terminate.
+        Next > Last ->
+            {Samples, Base};
+        %% We've hit bang on a sample. Record it and move to the next.
+        Next =:= TS ->
+            extract_samples(Range#range{first = Next + Incr}, Base + S, It,
+                            append(Base + S, Next, Samples));
+        %% We haven't yet hit the beginning of our range.
+        Next > TS ->
+            extract_samples(Range, Base + S, It, Samples);
+        %% We have a valid sample, but we haven't used it up
+        %% yet. Append it and loop around.
+        Next < TS ->
+            extract_samples1(Range#range{first = Next + Incr}, Base, TS, S, It,
+                             append(Base, Next, Samples))
+    end.
+
+append(S, TS, Samples) -> [[{sample, S}, {timestamp, TS}] | Samples].
 
 %% We do this when retrieving the queue record rather than when
 %% storing it since the memory use will drop *after* we find out about
