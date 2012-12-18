@@ -28,7 +28,9 @@
 start_client({Conn}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, Processor} = supervisor2:start_child(SupPid, proc_spec(Conn)),
-    supervisor2:start_child(SupPid, client_spec(Processor, Conn)).
+    {ok, Client} = supervisor2:start_child(
+                     SupPid, client_spec(Processor, Conn)),
+    {ok, SupPid, Client}.
 
 proc_spec(Conn) ->
     StompConfig = #stomp_configuration{implicit_connect = false},

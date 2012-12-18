@@ -54,7 +54,7 @@ logger(_Service, Req, _Type) ->
 %% --------------------------------------------------------------------------
 
 service_stomp(Conn, init, _State) ->
-    {ok, Pid} = rabbit_ws_sup:start_client({Conn}),
+    {ok, _Sup, Pid} = rabbit_ws_sup:start_client({Conn}),
     {ok, Pid};
 
 service_stomp(_Conn, {recv, Data}, Pid) ->
