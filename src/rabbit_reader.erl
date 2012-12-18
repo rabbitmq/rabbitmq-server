@@ -280,11 +280,13 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
         {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
                                                   buf_len = BufLen + size(Data),
                                                   pending_recv = false});
-        closed          -> case State#v1.connection_state of
+        closed          -> maybe_emit_stats(State),
+                           case State#v1.connection_state of
                                closed -> State;
                                _      -> throw(connection_closed_abruptly)
                            end;
-        {error, Reason} -> throw({inet_error, Reason});
+        {error, Reason} -> maybe_emit_stats(State),
+                           throw({inet_error, Reason});
         {other, Other}  -> handle_other(Other, Deb, State)
     end.
 
@@ -305,9 +307,11 @@ handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
     %% ordinary error case. However, since this termination is
     %% initiated by our parent it is probably more important to exit
     %% quickly.
+    maybe_emit_stats(State),
     exit(Reason);
 handle_other({channel_exit, _Channel, E = {writer, send_failed, _Error}},
-             _Deb, _State) ->
+             _Deb, State) ->
+    maybe_emit_stats(State),
     throw(E);
 handle_other({channel_exit, Channel, Reason}, Deb, State) ->
     mainloop(Deb, handle_exception(State, Channel, Reason));
@@ -324,7 +328,8 @@ handle_other(handshake_timeout, _Deb, State) ->
     throw({handshake_timeout, State#v1.callback});
 handle_other(heartbeat_timeout, Deb, State = #v1{connection_state = closed}) ->
     mainloop(Deb, State);
-handle_other(heartbeat_timeout, _Deb, #v1{connection_state = S}) ->
+handle_other(heartbeat_timeout, _Deb, State = #v1{connection_state = S}) ->
+    maybe_emit_stats(State),
     throw({heartbeat_timeout, S});
 handle_other({'$gen_call', From, {shutdown, Explanation}}, Deb, State) ->
     {ForceTermination, NewState} = terminate(Explanation, State),
@@ -358,8 +363,9 @@ handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
 handle_other({bump_credit, Msg}, Deb, State) ->
     credit_flow:handle_bump_msg(Msg),
     recvloop(Deb, control_throttle(State));
-handle_other(Other, _Deb, _State) ->
+handle_other(Other, _Deb, State) ->
     %% internal error -> something worth dying for
+    maybe_emit_stats(State),
     exit({unexpected_message, Other}).
 
 switch_callback(State, Callback, Length) ->
@@ -805,8 +811,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     rabbit_event:notify(connection_created,
                         [{type, network} |
                          infos(?CREATION_EVENT_KEYS, State1)]),
-    rabbit_event:if_enabled(State1, #v1.stats_timer,
-                            fun() -> emit_stats(State1) end),
+    maybe_emit_stats(State1),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
@@ -976,6 +981,10 @@ cert_info(F, #v1{sock = Sock}) ->
         {error, no_peercert} -> '';
         {ok, Cert}           -> list_to_binary(F(Cert))
     end.
+
+maybe_emit_stats(State) ->
+    rabbit_event:if_enabled(State, #v1.stats_timer,
+                            fun() -> emit_stats(State) end).
 
 emit_stats(State) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),

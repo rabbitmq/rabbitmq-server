@@ -180,6 +180,8 @@ terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
       fun (BQS) ->
               BQS1 = BQ:delete_and_terminate(Reason, BQS),
               %% don't care if the internal delete doesn't return 'ok'.
+              rabbit_event:if_enabled(State, #q.stats_timer,
+                                      fun() -> emit_stats(State) end),
               rabbit_amqqueue:internal_delete(QName),
               BQS1
       end, State).

@@ -363,6 +363,8 @@ terminate(Reason, State) ->
         _                 -> ok
     end,
     pg_local:leave(rabbit_channels, self()),
+    rabbit_event:if_enabled(State, #ch.stats_timer,
+                            fun() -> emit_stats(State) end),
     rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 code_change(_OldVsn, State, _Extra) ->
