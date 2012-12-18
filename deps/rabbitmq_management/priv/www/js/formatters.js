@@ -162,14 +162,8 @@ function fmt_color(r, thresholds) {
     return 'green';
 }
 
-function fmt_rate(obj, name, show_total, cssClass) {
-    var res = fmt_rate0(obj, name, fmt_rate_num, show_total);
-    if (cssClass == undefined || res == '') {
-        return res;
-    }
-    else {
-        return '<span class="' + cssClass + '">' + res + '</span>';
-    }
+function fmt_rate(obj, name, mode) {
+    return fmt_rate0(obj, name, mode, fmt_rate_num, false);
 }
 
 function fmt_rate_num(num) {
@@ -179,15 +173,21 @@ function fmt_rate_num(num) {
     else                  return num.toFixed(0);
 }
 
-function fmt_rate_bytes(obj, name) {
-    return fmt_rate0(obj, name, fmt_bytes, true);
+function fmt_rate_bytes(obj, name, mode) {
+    return fmt_rate0(obj, name, mode, fmt_bytes, true);
 }
 
-function fmt_rate0(obj, name, fmt, show_total) {
+function fmt_rate_msgs(obj, name, mode) {
+    return fmt_rate0(obj, name, mode,
+                     function (n) { return fmt_rate_num(n) + ' msg'; }, false);
+}
+
+function fmt_rate0(obj, name, mode, fmt, show_total) {
     if (obj == undefined || obj[name] == undefined) return '';
     var res = '';
     if (obj[name + '_details'] != undefined) {
-        res = fmt(obj[name + '_details'].rate) + '/s';
+        var details = obj[name + '_details'];
+        res = fmt(mode == 'avg' ? details.avg_rate : details.rate) + '/s';
     }
     if (show_total) {
         res += '<sub>(' + fmt(obj[name]) + ' total)</sub>';
@@ -195,8 +195,8 @@ function fmt_rate0(obj, name, fmt, show_total) {
     return res;
 }
 
-function fmt_deliver_rate(obj, show_redeliver, cssClass) {
-    var res = fmt_rate(obj, 'deliver_get', false, cssClass);
+function fmt_deliver_rate(obj, show_redeliver) {
+    var res = fmt_rate(obj, 'deliver_get');
     if (show_redeliver) {
         res += '<sub>' + fmt_rate(obj, 'redeliver') + '</sub>';
     }
@@ -555,27 +555,32 @@ function message_rates(id, stats) {
                  ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                  ['Get (noack)', 'get_no_ack'],
                  ['Return', 'return_unroutable']];
-    return rates_chart_or_text(id, stats, items, 'rates');
+    return rates_chart_or_text(id, stats, items, fmt_rate_msgs);
 }
 
 function queue_lengths(id, stats) {
     var items = [['Ready', 'messages_ready'],
                  ['Unacknowledged', 'messages_unacknowledged'],
                  ['Total', 'messages']];
-    return rates_chart_or_text(id, stats, items, 'counts');
+    return rates_chart_or_text(id, stats, items, null);
 }
 
-function rates_chart_or_text(id, stats, items, rates_counts) {
+function data_rates(id, stats) {
+    var items = [['From client', 'recv_oct'], ['To client', 'send_oct']];
+    return rates_chart_or_text(id, stats, items, fmt_rate_bytes);
+}
+
+function rates_chart_or_text(id, stats, items, rate_fmt) {
     var res = '';
 
     if (keys(stats).length > 0) {
         var res;
         var mode = get_pref('rate-mode-' + id);
         if (mode == 'chart') {
-            res = rates_chart(id, items, stats, rates_counts);
+            res = rates_chart(id, items, stats, rate_fmt);
         }
         else {
-            res = rates_text(items, stats, mode, rates_counts);
+            res = rates_text(items, stats, mode, rate_fmt);
         }
         if (res == "") {
             res = '<p>Waiting for data...</p>';
@@ -589,25 +594,27 @@ function rates_chart_or_text(id, stats, items, rates_counts) {
         id + '">(...)</span></p>';
 }
 
-function rates_chart(id, items, stats, rates_counts) {
+function rates_chart(id, items, stats, rate_fmt) {
     var size = get_pref('chart-size-' + id);
     var show = [];
     chart_data[id] = {};
     for (var i in items) {
         var name = items[i][0];
-        var key = items[i][1] + '_details';
-        if (key in stats) {
-            chart_data[id][name] = stats[key];
-            if (rates_counts == 'rates') {
-                show.push([name, stats[key].rate + " msg/s"]);
+        var key = items[i][1];
+        var key_details = key + '_details';
+        if (key_details in stats) {
+            chart_data[id][name] = stats[key_details];
+            if (rate_fmt) {
+                show.push([name, rate_fmt(stats, key)]);
             }
             else {
-                show.push([name, stats[key].samples[0].sample + " msg"]);
+                show.push([name,
+                           stats[key_details].samples[0].sample + " msg"]);
             }
         }
     }
     var html = '<div id="chart-' + id + '" class="chart chart-' + size +
-        ' chart-' + rates_counts + '"></div>';
+        (rate_fmt ? ' chart-rates' : '') + '"></div>';
     html += '<table class="facts">';
     for (var i = 0; i < show.length; i++) {
         html += '<tr><th>' + show[i][0] + '</th><td>';
@@ -618,7 +625,7 @@ function rates_chart(id, items, stats, rates_counts) {
     return show.length > 0 ? html : '';
 }
 
-function rates_text(items, stats, mode, rates_counts) {
+function rates_text(items, stats, mode, rate_fmt) {
     var res = '';
     for (var i in items) {
         var name = items[i][0];
@@ -626,17 +633,16 @@ function rates_text(items, stats, mode, rates_counts) {
         var key_details = key + '_details';
         if (key_details in stats) {
             var details = stats[key_details];
-            var rate = mode == 'avg' ? details.avg_rate : details.rate;
-            res += '<div class="highlight">' + name;
-            if (rates_counts == 'rates') {
-                res += '<strong>' + fmt_rate_num(rate) + '</strong>';
-                res += 'msg/s';
+            res += '<div class="highlight"><sub>' + name + '</sub>';
+            if (rate_fmt) {
+                res += rate_fmt(stats, key, mode);
             }
             else {
-                res += '<strong>' + stats[key] + '</strong>';
+                res += stats[key] + '<sub>';
                 if (rate > 0)      res += '+' + fmt_rate_num(rate)  + ' msg/s';
                 else if (rate < 0) res += '-' + fmt_rate_num(-rate) + ' msg/s';
                 else               res += '&nbsp;';
+                res += '</sub>';
             }
             res += '</div>';
         }

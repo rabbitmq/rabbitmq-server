@@ -42,7 +42,7 @@
          <td class="r"><%= fmt_rate_bytes(vhost, 'recv_oct') %></td>
          <td class="r"><%= fmt_rate_bytes(vhost, 'send_oct') %></td>
 <% if (statistics_level == 'fine') { %>
-         <td class="r"><%= fmt_rate(vhost.message_stats, 'publish', false) %></td>
+         <td class="r"><%= fmt_rate(vhost.message_stats, 'publish') %></td>
          <td class="r"><%= fmt_deliver_rate(vhost.message_stats, false) %></td>
 <% } %>
        </tr>
