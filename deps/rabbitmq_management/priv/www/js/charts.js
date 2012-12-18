@@ -4,6 +4,8 @@ function render_charts() {
     });
 }
 
+var chart_colors = ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed'];
+
 function render_chart(div) {
     var id = div.attr('id').substring('chart-'.length);
     var rate_mode = div.hasClass('chart-rates');
@@ -13,23 +15,24 @@ function render_chart(div) {
         grid:   { borderWidth: 2, borderColor: "#aaa" },
         xaxis:  { tickColor: "#fff", mode: "time" },
         yaxis:  { tickColor: "#eee", min: 0 },
-        legend: { position: 'se', backgroundOpacity: 0.5 }
+        legend: { show: false }
     };
 
     var out_data = [];
+    var i = 0;
     for (var name in chart_data[id]) {
         var data = chart_data[id][name];
         var samples = data.samples;
         var d = [];
-        for (var i = 1; i < samples.length; i++) {
-            var x = samples[i].timestamp;
+        for (var j = 1; j < samples.length; j++) {
+            var x = samples[j].timestamp;
             var y;
             if (rate_mode) {
-                y = (samples[i - 1].sample - samples[i].sample) * 1000 /
-                    (samples[i - 1].timestamp - samples[i].timestamp);
+                y = (samples[j - 1].sample - samples[j].sample) * 1000 /
+                    (samples[j - 1].timestamp - samples[j].timestamp);
             }
             else {
-                y = samples[i].sample;
+                y = samples[j].sample;
             }
             d.push([x, y]);
         }
@@ -40,7 +43,8 @@ function render_chart(div) {
         else {
             suffix = " (" + samples[0].sample + " msg)";
         }
-        out_data.push({label: name + suffix, data: d});
+        out_data.push({data: d, color: chart_colors[i]});
+        i++;
     }
     chart_data[id] = {};
 

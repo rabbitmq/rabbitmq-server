@@ -591,18 +591,31 @@ function rates_chart_or_text(id, stats, items, rates_counts) {
 
 function rates_chart(id, items, stats, rates_counts) {
     var size = get_pref('chart-size-' + id);
-    var show = false;
+    var show = [];
     chart_data[id] = {};
     for (var i in items) {
         var name = items[i][0];
         var key = items[i][1] + '_details';
         if (key in stats) {
             chart_data[id][name] = stats[key];
-            show = true;
+            if (rates_counts == 'rates') {
+                show.push([name, stats[key].rate + " msg/s"]);
+            }
+            else {
+                show.push([name, stats[key].samples[0].sample + " msg"]);
+            }
         }
     }
-    return show ? '<div id="chart-' + id + '" class="chart chart-' + size +
-        ' chart-' + rates_counts + '"></div>' : '';
+    var html = '<div id="chart-' + id + '" class="chart chart-' + size +
+        ' chart-' + rates_counts + '"></div>';
+    html += '<table class="facts">';
+    for (var i = 0; i < show.length; i++) {
+        html += '<tr><th>' + show[i][0] + '</th><td>';
+        html += '<div class="memory-key" style="background: ' + chart_colors[i];
+        html += ';"></div>' + show[i][1] + '</td></tr>'
+    }
+    html += '</table>';
+    return show.length > 0 ? html : '';
 }
 
 function rates_text(items, stats, mode, rates_counts) {
