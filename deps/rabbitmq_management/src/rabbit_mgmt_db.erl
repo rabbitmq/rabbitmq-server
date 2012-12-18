@@ -772,23 +772,17 @@ format_sample_details(Range,
     {Samples, Count} = extract_samples(
                          Range, Base, gb_trees:iterator(Diffs), []),
     case length(Samples) > 1 of
-        true ->
-            [[{sample, S3}, {timestamp, T3}],
-             [{sample, S2}, {timestamp, T2}] | _] = Samples,
-            {Inst, Avg} =
-                case rabbit_misc:now_ms() - T3 > Interval * 1.5 of
-                    true  -> {0, 0};
-                    false -> [{sample,    S1},
-                              {timestamp, T1}] = lists:last(Samples),
-                             {(S3 - S2) * 1000 / (T3 - T2),
-                              (S3 - S1) * 1000 / (T3 - T1)}
-                end,
-            {[{rate,     Inst},
-              {interval, T3 - T2},
-              {avg_rate, Avg},
-              {samples,  Samples}], Count};
-        false ->
-            {[{samples, Samples}], Count}
+        true  -> [[{sample, S3}, {timestamp, T3}],
+                  [{sample, S2}, {timestamp, T2}] | _] = Samples,
+                 [{sample,    S1},
+                  {timestamp, T1}] = lists:last(Samples),
+                 Inst = (S3 - S2) * 1000 / (T3 - T2),
+                 Avg = (S3 - S1) * 1000 / (T3 - T1),
+                 {[{rate,     Inst},
+                   {interval, T3 - T2},
+                   {avg_rate, Avg},
+                   {samples,  Samples}], Count};
+        false -> {[{samples, Samples}], Count}
     end.
 
 %% What we want to do here is: given the #range{}, provide a set of
