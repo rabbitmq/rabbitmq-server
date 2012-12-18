@@ -28,7 +28,7 @@ function fmt_bytes(bytes) {
 }
 
 function fmt_memory(memory, key) {
-    return '<div class="memory-key memory_' + key + '"></div>' +
+    return '<div class="colour-key memory_' + key + '"></div>' +
         fmt_bytes(memory[key]);
 }
 
@@ -611,7 +611,7 @@ function rates_chart(id, items, stats, rates_counts) {
     html += '<table class="facts">';
     for (var i = 0; i < show.length; i++) {
         html += '<tr><th>' + show[i][0] + '</th><td>';
-        html += '<div class="memory-key" style="background: ' + chart_colors[i];
+        html += '<div class="colour-key" style="background: ' + chart_colors[i];
         html += ';"></div>' + show[i][1] + '</td></tr>'
     }
     html += '</table>';

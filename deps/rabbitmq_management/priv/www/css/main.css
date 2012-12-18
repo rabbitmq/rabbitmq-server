@@ -65,7 +65,7 @@ div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
 div.memory-bar { margin: 10px 0 5px 0; border-radius: 5px; border: 1px solid #ddd; float: left; }
 div.memory-section { float: left; height: 30px; }
-div.memory-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
+div.colour-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 div.memory-info { float: left; padding: 10px 10px 0 0; }
 button.memory-button { margin-top: 10px; }
 
