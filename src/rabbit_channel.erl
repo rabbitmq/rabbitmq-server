@@ -224,8 +224,9 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        {confirm, _MsgSeqNos, _QPid} -> 5;
-        _                            -> 0
+        {confirm,     _MsgSeqNos, _QPid} -> 5;
+        {confirm_all, _MsgSeqNo,  _QPid} -> 5;
+        _                                -> 0
     end.
 
 prioritise_info(Msg, _State) ->
@@ -316,6 +317,9 @@ handle_cast(force_event_refresh, State) ->
     noreply(State);
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
+    noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end);
+handle_cast({confirm_all, MsgSeqNo, _From}, State) ->
+    State1 = #ch{confirmed = C} = confirm_all(MsgSeqNo, State),
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
 
 handle_info({bump_credit, Msg}, State) ->
@@ -569,6 +573,10 @@ confirm([], _QPid, State) ->
     State;
 confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
     {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
+    record_confirms(MXs, State#ch{unconfirmed = UC1}).
+
+confirm_all(MsgSeqNo, State = #ch{unconfirmed = UC}) ->
+    {MXs, UC1} = dtree:take_prim(MsgSeqNo, UC),
     record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->

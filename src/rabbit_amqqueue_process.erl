@@ -580,11 +580,9 @@ deliver_or_enqueue(Delivery = #delivery{message = Message},
             discard(Delivery, State2);
         {false, State2} ->
             case publish_max(Delivery, Props, Delivered, State2) of
-                nopub ->
-                    State2;
-                BQS1 ->
-                    ensure_ttl_timer(Props#message_properties.expiry,
-                                     State2#q{backing_queue_state = BQS1})
+                nopub -> State2;
+                BQS1  -> ensure_ttl_timer(Props#message_properties.expiry,
+                                          State2#q{backing_queue_state = BQS1})
             end
     end.
 
@@ -597,21 +595,16 @@ publish_max(#delivery{message = Message,
 publish_max(#delivery{message    = Message,
                       msg_seq_no = MsgSeqNo,
                       sender     = SenderPid},
-            Props = #message_properties{needs_confirming = Confirm},
-            Delivered,
-            #q{backing_queue       = BQ,
-               backing_queue_state = BQS,
-               max_depth           = MaxDepth}) ->
+            Props, Delivered, #q{backing_queue       = BQ,
+                                 backing_queue_state = BQS,
+                                 max_depth           = MaxDepth}) ->
     {Depth, Len} = {BQ:depth(BQS), BQ:len(BQS)},
     case {Depth >= MaxDepth, Len =:= 0} of
         {false, _} ->
             BQ:publish(Message, Props, Delivered, SenderPid, BQS);
         {true, true} ->
             (dead_letter_fun(maxdepth))([{Message, undefined}]),
-            case Confirm of
-                true  -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]);
-                false -> ok
-            end,
+            rabbit_misc:confirm_all(SenderPid, MsgSeqNo),
             nopub;
         {true, false} ->
             {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(true, BQS),
