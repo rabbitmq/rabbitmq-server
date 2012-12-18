@@ -413,8 +413,9 @@ check_int_arg({Type, _}, _) ->
 
 check_maxdepth_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val =< 0 -> {error, {value_non_positive, Val}};
-        X                -> X
+        ok when Val > 0 -> ok;
+        ok              -> {error, {value_not_positive, Val}};
+        Error           -> Error
     end.
 
 check_expires_arg({Type, Val}, Args) ->
