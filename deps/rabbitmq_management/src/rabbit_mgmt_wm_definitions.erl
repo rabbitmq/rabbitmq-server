@@ -157,8 +157,8 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{parameters,  [vhost, component, key, value]},
-     {policies,    [vhost, key, pattern, definition, priority]},
+    [{parameters,  [vhost, component, name, value]},
+     {policies,    [vhost, name, pattern, definition, priority]},
      {users,       [name, password_hash, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
@@ -196,7 +196,7 @@ atomise_name(N) ->
 add_parameter(Param) ->
     VHost = pget(vhost, Param),
     Comp = pget(component, Param),
-    Key = pget(key, Param),
+    Key = pget(name, Param),
     case rabbit_runtime_parameters:set(
            VHost, Comp, Key, rabbit_misc:json_to_term(pget(value, Param))) of
         ok                -> ok;
@@ -207,7 +207,7 @@ add_parameter(Param) ->
 
 add_policy(Param) ->
     VHost = pget(vhost, Param),
-    Key = pget(key, Param),
+    Key = pget(name, Param),
     case rabbit_policy:set(
            VHost, Key, pget(pattern, Param),
            rabbit_misc:json_to_term(pget(definition, Param)),

@@ -188,6 +188,7 @@ function render(reqs, template, highlight) {
 }
 
 function update() {
+    replace_content('debug', '');
     clearInterval(timer);
     with_update(function(html) {
             update_navigation();
@@ -439,6 +440,9 @@ function postprocess() {
     });
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.
+    });
+    $('.tag-link').click(function() {
+        $('#tags').val($(this).attr('tag'));
     });
     $('form.auto-submit select, form.auto-submit input').live('click', function(){
         $(this).parents('form').submit();
