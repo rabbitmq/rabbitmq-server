@@ -24,7 +24,7 @@
 
 -export([augment_exchanges/2, augment_queues/2,
          augment_nodes/1, augment_vhosts/1,
-         get_channels/2, get_connections/1,
+         get_channel/2, get_connection/1,
          get_all_channels/1, get_all_connections/0,
          get_overview/1, get_overview/0]).
 
@@ -161,8 +161,8 @@ augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
 augment_vhosts(VHosts)      -> safe_call({augment_vhosts, VHosts}, VHosts).
 augment_nodes(Nodes)        -> safe_call({augment_nodes, Nodes}, Nodes).
 
-get_channels(Cs, Mode)      -> safe_call({get_channels, Cs, Mode}, Cs).
-get_connections(Cs)         -> safe_call({get_connections, Cs}, Cs).
+get_channel(Name, Mode)     -> safe_call({get_channel, Name, Mode}, not_found).
+get_connection(Name)        -> safe_call({get_connection, Name}, not_found).
 
 get_all_channels(Mode)      -> safe_call({get_all_channels, Mode}).
 get_all_connections()       -> safe_call(get_all_connections).
@@ -226,20 +226,24 @@ handle_call({augment_vhosts, VHosts}, _From, State) ->
 handle_call({augment_nodes, Nodes}, _From, State) ->
     {reply, node_stats(Nodes, State), State};
 
-handle_call({get_channels, Names, Mode}, _From,
+handle_call({get_channel, Name, Mode}, _From,
             State = #state{tables = Tables}) ->
-    Chans = created_event(Names, channel_stats, Tables),
-    Result = case Mode of
-                 basic -> list_channel_stats(range(State), Chans, State);
-                 full  -> detail_channel_stats(range(State), Chans, State)
-             end,
-    reply(lists:map(fun result_or_error/1, Result), State);
+    case created_event(Name, channel_stats, Tables) of
+        not_found -> reply(not_found, State);
+        Chan      -> [Result] = case Mode of
+                                    basic -> list_channel_stats(range(State), [Chan], State);
+                                    full  -> detail_channel_stats(range(State), [Chan], State)
+                                end,
+                     reply(Result, State)
+    end;
 
-handle_call({get_connections, Names}, _From,
+handle_call({get_connection, Name}, _From,
             State = #state{tables = Tables}) ->
-    Conns = created_event(Names, connection_stats, Tables),
-    Result = connection_stats(range(State), Conns, State),
-    reply(lists:map(fun result_or_error/1, Result), State);
+    case created_event(Name, connection_stats, Tables) of
+        not_found -> reply(not_found, State);
+        Conn      -> [Result] = connection_stats(range(State), [Conn], State),
+                     reply(Result, State)
+    end;
 
 handle_call({get_all_channels, Mode}, _From, State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
@@ -361,9 +365,6 @@ lookup_element(Table, Key, Pos) ->
     try ets:lookup_element(Table, Key, Pos)
     catch error:badarg -> []
     end.
-
-result_or_error([]) -> error;
-result_or_error(S)  -> S.
 
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
@@ -834,13 +835,12 @@ adjust_hibernated_memory_use(Qs) ->
          {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
      end || Q <- Qs].
 
-created_event(Names, Type, Tables) ->
+created_event(Name, Type, Tables) ->
     Table = orddict:fetch(Type, Tables),
-    [lookup_element(
-       Table, {case ets:match(Table, {{'$1', create}, '_', Name}) of
-                   []    -> none;
-                   [[I]] -> I
-               end, create}) || Name <- Names].
+    case ets:match(Table, {{'$1', create}, '_', Name}) of
+        []     -> not_found;
+        [[Id]] -> lookup_element(Table, {Id, create})
+    end.
 
 created_events(Type, Tables) ->
     [Facts || {{_, create}, Facts, _Name}
