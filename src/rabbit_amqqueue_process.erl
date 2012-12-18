@@ -598,8 +598,7 @@ publish_max(#delivery{message    = Message,
             Props, Delivered, #q{backing_queue       = BQ,
                                  backing_queue_state = BQS,
                                  max_depth           = MaxDepth}) ->
-    {Depth, Len} = {BQ:depth(BQS), BQ:len(BQS)},
-    case {Depth >= MaxDepth, Len =:= 0} of
+    case {BQ:depth(BQS) >= MaxDepth, BQ:len(BQS) =:= 0} of
         {false, _} ->
             BQ:publish(Message, Props, Delivered, SenderPid, BQS);
         {true, true} ->
