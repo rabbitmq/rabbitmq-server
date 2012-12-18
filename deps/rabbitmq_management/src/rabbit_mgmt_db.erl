@@ -286,8 +286,8 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
                                     X <- rabbit_exchange:list(V)])},
          {connections, F(created_events(connection_stats, Tables))},
          {channels,    F(created_events(channel_stats, Tables))}],
-    reply([{message_stats, format_samples(range(State), MessageStats, State)},
-           {queue_totals,  format_samples(range(State), QueueStats, State)},
+    reply([{message_stats, format_samples(range(State), MessageStats)},
+           {queue_totals,  format_samples(range(State), QueueStats)},
            {object_totals, ObjectTotals}], State);
 
 handle_call(_Request, _From, State) ->
@@ -710,8 +710,7 @@ simple_stats_fun(Range, Type, State) ->
     fun (Props) ->
             Id = id_lookup(Type, Props),
             extract_msg_stats(
-              format_samples(
-                Range, read_simple_stats(Type, Id, State), State))
+              format_samples(Range, read_simple_stats(Type, Id, State)))
     end.
 
 %% i.e. fine stats that are broken out per sub-thing
@@ -748,7 +747,7 @@ extract_msg_stats(Stats) ->
 
 detail_stats(Range, Name, AggregatedStatsType, Id, State) ->
     {Name,
-     [[{stats, format_samples(Range, KVs, State)} | format_detail_id(G, State)]
+     [[{stats, format_samples(Range, KVs)} | format_detail_id(G, State)]
       || {G, KVs} <- read_detail_stats(AggregatedStatsType, Id, State)]}.
 
 format_detail_id(ChPid, State) when is_pid(ChPid) ->
@@ -757,19 +756,16 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
                  _State) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}].
 
-format_samples(Range, ManyStats, State) ->
+format_samples(Range, ManyStats) ->
     lists:append(
       [case is_blank_stats(Stats) of
            true  -> [];
-           false -> {Details, Counter} =
-                        format_sample_details(Range, Stats, State),
+           false -> {Details, Counter} = format_sample_details(Range, Stats),
                     [{K,              Counter},
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
 
-format_sample_details(Range,
-                      #stats{diffs = Diffs, base = Base},
-                      #state{interval = Interval}) ->
+format_sample_details(Range, #stats{diffs = Diffs, base = Base}) ->
     {Samples, Count} = extract_samples(
                          Range, Base, gb_trees:iterator(Diffs), []),
     case length(Samples) > 1 of
