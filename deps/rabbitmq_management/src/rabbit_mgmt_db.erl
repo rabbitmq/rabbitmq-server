@@ -178,16 +178,13 @@ safe_call(Term, Item) ->
     catch exit:{noproc, _} -> Item
     end.
 
-%% TODO be less crude
--define(MAX_SAMPLE_AGE, 60000).
-
 %% TODO this should become part of the API
 range(State = #state{interval = Interval}) ->
     %% Take floor on queries so we make sure we only return samples
     %% for which we've finished receiving events. Fixes the "drop at
     %% the end" problem.
     Last = floor(erlang:now(), State),
-    First = Last - ?MAX_SAMPLE_AGE,
+    First = Last - 60000,
     #range{first = First, last = Last, incr = Interval}.
 
 %%----------------------------------------------------------------------------
@@ -301,7 +298,7 @@ handle_cast(_Request, State) ->
     noreply(State).
 
 handle_info(remove_old_samples, State) ->
-    remove_old_samples(State),
+    remove_old_samples_all(State),
     noreply(set_remove_timer(State));
 
 handle_info(_Info, State) ->
@@ -932,33 +929,52 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 %% Internal, event-GCing
 %%----------------------------------------------------------------------------
 
-remove_old_samples(State = #state{aggregated_stats = ETS}) ->
-    TS = floor(erlang:now(), State),
-    remove_old_samples_it(ets:match(ETS, '$1', 1000), TS, ETS).
+remove_old_samples_all(State = #state{aggregated_stats = ETS}) ->
+    {ok, Policies} = application:get_env(
+                       rabbitmq_management, sample_retention_policies),
+    Now = floor(erlang:now(), State),
+    remove_old_samples_it(ets:match(ETS, '$1', 1000), Policies, Now, ETS).
 
-remove_old_samples_it('$end_of_table', _, _) ->
+remove_old_samples_it('$end_of_table', _, _, _) ->
     ok;
-remove_old_samples_it({Matches, Continuation}, TS, ETS) ->
-    [remove_old_samples(Key, Stats, TS, ETS) || [{Key, Stats}] <- Matches],
-    remove_old_samples_it(ets:match(Continuation), TS, ETS).
+remove_old_samples_it({Matches, Continuation}, Policies, Now, ETS) ->
+    [remove_old_samples(Key, Stats, Policies, Now, ETS)
+     || [{Key, Stats}] <- Matches],
+    remove_old_samples_it(ets:match(Continuation), Policies, Now, ETS).
 
-remove_old_samples(Key, Stats, TS, ETS) ->
-    Cutoff = TS - ?MAX_SAMPLE_AGE,
-    case remove_old_samples0(Cutoff, Stats) of
-        Stats  -> ok;
-        Stats2 -> ets:insert(ETS, {Key, Stats2})
+remove_old_samples({{Type, Id}, Key}, Stats = #stats{diffs = Diffs,
+                                                     base  = Base},
+                   Policies, Now, ETS) ->
+    Policy = pget(retention_policy(Type), Policies),
+    List = gb_trees:to_list(Diffs),
+    Stats2 = remove_old_samples1({Policy, Now}, List, [], Base),
+    case Stats2 of
+        Stats -> ok;
+        _     -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
     end.
 
-remove_old_samples0(Cutoff, Stats = #stats{diffs = Diffs, base = Base}) ->
-    case gb_trees:is_empty(Diffs) of
-        true  -> Stats;
-        false -> {Small, Val} = gb_trees:smallest(Diffs),
-                 case Small < Cutoff of
-                     true  -> Diffs1 = gb_trees:delete(Small, Diffs),
-                              remove_old_samples0(
-                                Cutoff, Stats#stats{diffs = Diffs1,
-                                                    base  = Base + Val});
-                     false -> Stats
-                 end
+%% Go through the list, amalgamating all too-old samples with the next
+%% oldest keepable one. And if there is none such, move it to the base.
+remove_old_samples1(_Cutoff, [], Keep, Base) ->
+    #stats{diffs = gb_trees:from_orddict(lists:reverse(Keep)), base = Base};
+remove_old_samples1(Cutoff, [H = {TS, S} | T], Keep, Base) ->
+    case {keep(Cutoff, TS), Keep} of
+        {true,  _}  -> remove_old_samples1(Cutoff, T, [H | Keep], Base);
+        {false, []} -> remove_old_samples1(Cutoff, T, [], Base + S);
+        {false, _}  -> [{KTS, KS} | KT] = Keep,
+                       remove_old_samples1(Cutoff, T, [{KTS, KS+S} | KT], Base)
     end.
 
+keep({Policy, Now}, TS) ->
+    lists:any(fun ({AgeSec, DivisorSec}) ->
+                      TS rem (DivisorSec * 1000) =:= 0
+                          andalso (Now - TS) < (AgeSec * 1000)
+              end, Policy).
+
+retention_policy(vhost_stats)            -> global;
+retention_policy(queue_stats)            -> basic;
+retention_policy(exchange_stats)         -> basic;
+retention_policy(connection_stats)       -> basic;
+retention_policy(channel_stats)          -> basic;
+retention_policy(queue_exchange_stats)   -> detailed;
+retention_policy(channel_exchange_stats) -> detailed.
