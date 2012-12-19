@@ -572,7 +572,6 @@ function data_rates(id, stats) {
 
 function rates_chart_or_text(id, stats, items, rate_fmt) {
     var res = '';
-
     if (keys(stats).length > 0) {
         var res;
         var mode = get_pref('rate-mode-' + id);
@@ -638,6 +637,7 @@ function rates_text(items, stats, mode, rate_fmt) {
                 res += rate_fmt(stats, key, mode);
             }
             else {
+                var rate = details.rate;
                 res += stats[key] + '<sub>';
                 if (rate > 0)      res += '+' + fmt_rate_num(rate)  + ' msg/s';
                 else if (rate < 0) res += '-' + fmt_rate_num(-rate) + ' msg/s';
