@@ -127,8 +127,8 @@ div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; pa
 
 p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; font-weight: bold; }
 
-.highlight { min-width: 120px; font-size: 200%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #444; border-radius: 10px; -moz-border-radius: 10px; }
-.highlight sub { font-size: 65%; display: block; color: #888; font-weight: normal; }
+.highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
+.highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
 .highlight, .micro-highlight { float: left; }
 
 .chart { margin: 0 0 20px 0; float: left; }

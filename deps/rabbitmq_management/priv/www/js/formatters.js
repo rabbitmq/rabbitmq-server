@@ -162,10 +162,6 @@ function fmt_color(r, thresholds) {
     return 'green';
 }
 
-function fmt_rate(obj, name, mode) {
-    return fmt_rate0(obj, name, mode, fmt_rate_num, false);
-}
-
 function fmt_rate_num(num) {
     if (num == undefined) return UNKNOWN_REPR;
     else if (num < 1)     return num.toFixed(2);
@@ -173,26 +169,30 @@ function fmt_rate_num(num) {
     else                  return num.toFixed(0);
 }
 
+function fmt_rate(obj, name, mode) {
+    return fmt_rate0(obj, name, mode, fmt_rate_num) + '/s';
+}
+
 function fmt_rate_bytes(obj, name, mode) {
-    return fmt_rate0(obj, name, mode, fmt_bytes, true);
+    return fmt_rate0(obj, name, mode, fmt_bytes) + '/s' +
+        '<sub>(' + fmt_bytes(obj[name]) + ' total)</sub>';
 }
 
-function fmt_rate_msgs(obj, name, mode) {
-    return fmt_rate0(obj, name, mode,
-                     function (n) { return fmt_rate_num(n) + ' msg'; }, false);
+function fmt_rate_large(obj, name, mode) {
+    return '<strong>' + fmt_rate0(obj, name, mode, fmt_rate_num) +
+        '</strong>msg/s';
 }
 
-function fmt_rate0(obj, name, mode, fmt, show_total) {
-    if (obj == undefined || obj[name] == undefined) return '';
-    var res = '';
-    if (obj[name + '_details'] != undefined) {
-        var details = obj[name + '_details'];
-        res = fmt(mode == 'avg' ? details.avg_rate : details.rate) + '/s';
-    }
-    if (show_total) {
-        res += '<sub>(' + fmt(obj[name]) + ' total)</sub>';
-    }
-    return res;
+function fmt_rate_bytes_large(obj, name, mode) {
+    return '<strong>' + fmt_rate0(obj, name, mode, fmt_bytes) + '/s</strong>' +
+        '(' + fmt_bytes(obj[name]) + ' total)';
+}
+
+function fmt_rate0(obj, name, mode, fmt) {
+    if (obj == undefined || obj[name] == undefined ||
+        obj[name + '_details'] == undefined) return '';
+    var details = obj[name + '_details'];
+    return fmt(mode == 'avg' ? details.avg_rate : details.rate);
 }
 
 function fmt_deliver_rate(obj, show_redeliver) {
@@ -555,7 +555,7 @@ function message_rates(id, stats) {
                  ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                  ['Get (noack)', 'get_no_ack'],
                  ['Return', 'return_unroutable']];
-    return rates_chart_or_text(id, stats, items, fmt_rate_msgs);
+    return rates_chart_or_text(id, stats, items, fmt_rate_large);
 }
 
 function queue_lengths(id, stats) {
@@ -567,7 +567,7 @@ function queue_lengths(id, stats) {
 
 function data_rates(id, stats) {
     var items = [['From client', 'recv_oct'], ['To client', 'send_oct']];
-    return rates_chart_or_text(id, stats, items, fmt_rate_bytes);
+    return rates_chart_or_text(id, stats, items, fmt_rate_bytes_large);
 }
 
 function rates_chart_or_text(id, stats, items, rate_fmt) {
@@ -632,17 +632,16 @@ function rates_text(items, stats, mode, rate_fmt) {
         var key_details = key + '_details';
         if (key_details in stats) {
             var details = stats[key_details];
-            res += '<div class="highlight"><sub>' + name + '</sub>';
+            res += '<div class="highlight">' + name;
             if (rate_fmt) {
                 res += rate_fmt(stats, key, mode);
             }
             else {
                 var rate = details.rate;
-                res += stats[key] + '<sub>';
+                res += '<strong>' + stats[key] + '</strong>';
                 if (rate > 0)      res += '+' + fmt_rate_num(rate)  + ' msg/s';
                 else if (rate < 0) res += '-' + fmt_rate_num(-rate) + ' msg/s';
                 else               res += '&nbsp;';
-                res += '</sub>';
             }
             res += '</div>';
         }
