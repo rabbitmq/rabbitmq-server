@@ -2,11 +2,17 @@
    var id = span.attr('for');
    var mode = get_pref('rate-mode-' + id);
    var size = get_pref('chart-size-' + id);
+   var range = get_pref('chart-range');
 %>
 
 <form action="#/rate-options" method="put" class="auto-submit">
   <input type="hidden" name="id" value="<%= id %>"/>
-  <table class="form">
+  <table class="form" width="100%">
+    <tr>
+      <td colspan="2">
+        <h3>This chart</h3>
+      </td>
+    </tr>
     <tr>
       <th><label>Display:</label></th>
       <td>
@@ -24,6 +30,21 @@
           <%= fmt_option('Small', 'small', size) %>
           <%= fmt_option('Medium', 'Medium', size) %>
           <%= fmt_option('Large', 'large', size) %>
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <td colspan="2">
+        <h3>All charts</h3>
+      </td>
+    </tr>
+    <tr>
+      <th><label>Chart range:</label></th>
+      <td>
+        <select name="range">
+          <%= fmt_option('Last minute', '60|5', range) %>
+          <%= fmt_option('Last hour', '3600|60', range) %>
+          <%= fmt_option('Last day', '86400|1200', range) %>
         </select>
       </td>
     </tr>

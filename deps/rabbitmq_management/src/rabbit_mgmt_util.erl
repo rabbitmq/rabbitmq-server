@@ -31,7 +31,7 @@
 -export([with_decode/5, decode/1, decode/2, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, is_monitor/1]).
--export([list_visible_vhosts/1, b64decode_or_throw/1]).
+-export([list_visible_vhosts/1, b64decode_or_throw/1, range/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -483,4 +483,19 @@ b64decode_or_throw(B64) ->
         base64:decode(B64)
     catch error:_ ->
             throw({error, {not_base64, B64}})
+    end.
+
+range(ReqData) ->
+    Age = int(wrq:get_qs_value("sample_age", ReqData), 5) * 1000,
+    Incr = int(wrq:get_qs_value("sample_incr", ReqData), 5) * 1000,
+    %% Take floor on queries so we make sure we only return samples
+    %% for which we've finished receiving events. Fixes the "drop at
+    %% the end" problem.
+    Last = (rabbit_mgmt_format:timestamp_ms(erlang:now()) div Incr) * Incr,
+    #range{first = Last - Age, last = Last, incr = Incr}.
+
+int(Str, Default) ->
+    case catch list_to_integer(Str) of
+        {'EXIT', _} -> Default;
+        Integer     -> Integer
     end.

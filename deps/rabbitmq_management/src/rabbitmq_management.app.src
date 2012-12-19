@@ -11,7 +11,7 @@
          {sample_retention_policies,
           %% List of {MaxAgeSecs, IfTimestampDivisibleBySecs}
           [{global,   [{60, 5}, {3600, 60}, {86400, 1200}]},
-           {basic,    [{60, 5}, {1800, 120}]},
+           {basic,    [{60, 5}, {3600, 60}]},
            {detailed, [{10, 5}]}]}
         ]},
   {applications, [kernel, stdlib, rabbit, xmerl, rabbitmq_mochiweb, amqp_client,

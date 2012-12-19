@@ -22,6 +22,10 @@ var VHOST_QUERIES = [new RegExp('^/queues$'),
 var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
                          '/queues', '/exchanges']);
 
+// Which queries need to have the current range appended?
+var RANGE_QUERIES  = map(['/overview', '/connections', '/channels', '/vhosts',
+                          '/queues', '/exchanges']);
+
 // Extension arguments that we know about and present specially in the UI.
 var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'},
                   'x-message-ttl':             {'short': 'TTL', 'type': 'int'},
@@ -129,6 +133,10 @@ var current_vhost = '';
 // What is our current sort order
 var current_sort;
 var current_sort_reverse = false;
+
+// What is our current range
+var current_range_age = 3600;
+var current_range_incr = 60;
 
 // The timer object for auto-updates, and how often it goes off
 var timer;

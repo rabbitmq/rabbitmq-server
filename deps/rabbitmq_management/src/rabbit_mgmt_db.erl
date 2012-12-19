@@ -16,6 +16,7 @@
 
 -module(rabbit_mgmt_db).
 
+-include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(gen_server2).
@@ -26,7 +27,7 @@
          augment_nodes/1, augment_vhosts/1,
          get_channel/2, get_connection/1,
          get_all_channels/1, get_all_connections/0,
-         get_overview/1, get_overview/0]).
+         get_overview/2, get_overview/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
@@ -122,7 +123,6 @@
           remove_old_samples_timer,
           interval}).
 -record(stats, {diffs, base}).
--record(range, {first, last, incr}).
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
@@ -167,8 +167,8 @@ get_connection(Name)        -> safe_call({get_connection, Name}, not_found).
 get_all_channels(Mode)      -> safe_call({get_all_channels, Mode}).
 get_all_connections()       -> safe_call(get_all_connections).
 
-get_overview(User)          -> safe_call({get_overview, User}).
-get_overview()              -> safe_call({get_overview, all}).
+get_overview(User, Range)   -> safe_call({get_overview, User, Range}).
+get_overview(Range)         -> safe_call({get_overview, all, Range}).
 
 safe_call(Term) -> safe_call(Term, []).
 
@@ -254,7 +254,8 @@ handle_call(get_all_connections, _From, State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
     reply(connection_stats(range(State), Conns, State), State);
 
-handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
+handle_call({get_overview, User, Range}, _From,
+            State = #state{tables = Tables}) ->
     VHosts = case User of
                  all -> rabbit_vhost:list();
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
@@ -283,8 +284,8 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
                                     X <- rabbit_exchange:list(V)])},
          {connections, F(created_events(connection_stats, Tables))},
          {channels,    F(created_events(channel_stats, Tables))}],
-    reply([{message_stats, format_samples(range(State), MessageStats)},
-           {queue_totals,  format_samples(range(State), QueueStats)},
+    reply([{message_stats, format_samples(Range, MessageStats)},
+           {queue_totals,  format_samples(Range, QueueStats)},
            {object_totals, ObjectTotals}], State);
 
 handle_call(_Request, _From, State) ->
@@ -953,6 +954,11 @@ remove_old_samples({{Type, Id}, Key}, Stats = #stats{diffs = Diffs,
         _     -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
     end.
 
+
+%% TODO: if not matching the oldest divisor in the policy has made us
+%% drop a sample we should synthesise a new older matching sample if
+%% one does not exist rather than move to the base.
+
 %% Go through the list, amalgamating all too-old samples with the next
 %% oldest keepable one. And if there is none such, move it to the base.
 remove_old_samples1(_Cutoff, [], Keep, Base) ->
@@ -977,4 +983,5 @@ retention_policy(exchange_stats)         -> basic;
 retention_policy(connection_stats)       -> basic;
 retention_policy(channel_stats)          -> basic;
 retention_policy(queue_exchange_stats)   -> detailed;
-retention_policy(channel_exchange_stats) -> detailed.
+retention_policy(channel_exchange_stats) -> detailed;
+retention_policy(channel_queue_stats)    -> detailed.

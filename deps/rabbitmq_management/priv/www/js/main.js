@@ -356,11 +356,17 @@ function apply_state(reqs) {
             req2 = req;
         }
 
-        var qs = '';
+        var qs = [];
         if (req in SORT_QUERIES && current_sort != null) {
-            qs = '?sort=' + current_sort +
-                '&sort_reverse=' + current_sort_reverse;
+            qs.push('sort=' + current_sort);
+            qs.push('sort_reverse=' + current_sort_reverse);
         }
+        if (req in RANGE_QUERIES) {
+            qs.push('sample_age=' + current_range_age);
+            qs.push('sample_incr=' + current_range_incr);
+        }
+        qs = qs.join('&');
+        if (qs != '') qs = '?' + qs;
 
         reqs2[k] = req2 + qs;
     }
