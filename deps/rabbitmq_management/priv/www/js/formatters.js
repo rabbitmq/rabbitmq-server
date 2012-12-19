@@ -555,31 +555,31 @@ function message_rates(id, stats) {
                  ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                  ['Get (noack)', 'get_no_ack'],
                  ['Return', 'return_unroutable']];
-    return rates_chart_or_text(id, stats, items, fmt_rate_large);
+    return rates_chart_or_text(id, stats, items, fmt_rate, fmt_rate_large);
 }
 
 function queue_lengths(id, stats) {
     var items = [['Ready', 'messages_ready'],
                  ['Unacknowledged', 'messages_unacknowledged'],
                  ['Total', 'messages']];
-    return rates_chart_or_text(id, stats, items, null);
+    return rates_chart_or_text(id, stats, items, null, null);
 }
 
 function data_rates(id, stats) {
     var items = [['From client', 'recv_oct'], ['To client', 'send_oct']];
-    return rates_chart_or_text(id, stats, items, fmt_rate_bytes_large);
+    return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_large);
 }
 
-function rates_chart_or_text(id, stats, items, rate_fmt) {
+function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt) {
     var res = '';
     if (keys(stats).length > 0) {
         var res;
         var mode = get_pref('rate-mode-' + id);
         if (mode == 'chart') {
-            res = rates_chart(id, items, stats, rate_fmt);
+            res = rates_chart(id, items, stats, chart_fmt);
         }
         else {
-            res = rates_text(items, stats, mode, rate_fmt);
+            res = rates_text(items, stats, mode, text_fmt);
         }
         if (res == "") {
             res = '<p>Waiting for data...</p>';
