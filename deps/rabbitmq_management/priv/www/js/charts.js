@@ -36,13 +36,6 @@ function render_chart(div) {
             }
             d.push([x, y]);
         }
-        var suffix;
-        if (rate_mode) {
-            suffix = " (" + data.rate + " msg/s)";
-        }
-        else {
-            suffix = " (" + samples[0].sample + " msg)";
-        }
         out_data.push({data: d, color: chart_colors[i]});
         i++;
     }
