@@ -61,7 +61,7 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
                       rabbit_limiter:make_token(LimiterPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
-    {ok, SupPid, {ChannelPid, AState}};
+    {ok, SupPid, {ChannelPid, AState, WriterPid}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
             User, VHost, Capabilities, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, direct),

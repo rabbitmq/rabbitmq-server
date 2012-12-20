@@ -419,6 +419,8 @@ handle_dependent_exit(ChPid, Reason, State) ->
     case {channel_cleanup(ChPid), termination_kind(Reason)} of
         {undefined, uncontrolled} ->
             exit({abnormal_dependent_exit, ChPid, Reason});
+        {writer, _Controlled} ->
+            maybe_close(control_throttle(State));
         {_Channel, controlled} ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
@@ -466,7 +468,7 @@ wait_for_channel_termination(N, TimerRef) ->
 maybe_close(State = #v1{connection_state = closing,
                         connection = #connection{protocol = Protocol},
                         sock = Sock}) ->
-    case all_channels() of
+    case all_channels() ++ all_channel_writers() of
         [] ->
             NewState = close_connection(State),
             ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
@@ -538,26 +540,33 @@ create_channel(Channel, State) ->
                                  user         = User,
                                  vhost        = VHost,
                                  capabilities = Capabilities}} = State,
-    {ok, _ChSupPid, {ChPid, AState}} =
+    {ok, _ChSupPid, {ChPid, AState, WriterPid}} =
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
                        Protocol, User, VHost, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
+    WMRef = erlang:monitor(process, WriterPid),
     put({ch_pid, ChPid}, {Channel, MRef}),
+    put({wr_pid, WriterPid}, WMRef),
     put({channel, Channel}, {ChPid, AState}),
     {ChPid, AState}.
 
-channel_cleanup(ChPid) ->
-    case get({ch_pid, ChPid}) of
-        undefined       -> undefined;
-        {Channel, MRef} -> credit_flow:peer_down(ChPid),
+channel_cleanup(Pid) ->
+    case get({ch_pid, Pid}) of
+        undefined       -> case get({wr_pid, Pid}) of
+                               undefined -> undefined;
+                               _MRef     -> erase({wr_pid, Pid}),
+                                            writer
+                           end;
+        {Channel, MRef} -> credit_flow:peer_down(Pid),
                            erase({channel, Channel}),
-                           erase({ch_pid, ChPid}),
+                           erase({ch_pid, Pid}),
                            erlang:demonitor(MRef, [flush]),
                            Channel
     end.
 
 all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
+all_channel_writers() -> [WrPid || {{wr_pid, WrPid}, _} <- get()].
 
 %%--------------------------------------------------------------------------
 
