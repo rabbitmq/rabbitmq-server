@@ -98,7 +98,8 @@
                 start_writer_fun,
                 unconfirmed_set    = gb_sets:new(),
                 waiting_set        = gb_trees:empty(),
-                only_acks_received = true
+                only_acks_received = true,
+                confirms_selected  = false
                }).
 
 %%---------------------------------------------------------------------------
@@ -214,7 +215,7 @@ next_publish_seqno(Channel) ->
 %%      Channel = pid()
 %% @doc Wait until all messages published since the last call have
 %% been either ack'd or nack'd by the broker.  Note, when called on a
-%% non-Confirm channel, waitForConfirms returns true immediately.
+%% non-Confirm channel, waitForConfirms returns an error.
 wait_for_confirms(Channel) ->
     wait_for_confirms(Channel, infinity).
 
@@ -225,7 +226,7 @@ wait_for_confirms(Channel) ->
 %% @doc Wait until all messages published since the last call have
 %% been either ack'd or nack'd by the broker or the timeout expires.
 %% Note, when called on a non-Confirm channel, waitForConfirms returns
-%% true immediately.
+%% an error.
 wait_for_confirms(Channel, Timeout) ->
     gen_server:call(Channel, {wait_for_confirms, Timeout}, infinity).
 
@@ -520,7 +521,8 @@ handle_method_to_server(Method, AmqpMsg, From, Sender, Flow,
         {ok, _, ok} ->
             State1 = case {Method, State#state.next_pub_seqno} of
                          {#'confirm.select'{}, _} ->
-                             State#state{next_pub_seqno = 1};
+                             State#state{next_pub_seqno    = 1,
+                                         confirms_selected = true};
                          {#'basic.publish'{}, 0} ->
                              State;
                          {#'basic.publish'{}, SeqNo} ->
@@ -884,6 +886,9 @@ notify_confirm_waiters(State = #state{waiting_set        = WSet,
     State#state{waiting_set        = gb_trees:empty(),
                 only_acks_received = true}.
 
+handle_wait_for_confirms(_From, _Timeout,
+                         State = #state{confirms_selected = false}) ->
+    handle_shutdown({invalid_state, "wait requires confirms selected"}, State);
 handle_wait_for_confirms(From, Timeout,
                          State = #state{unconfirmed_set = USet,
                                         waiting_set     = WSet}) ->
