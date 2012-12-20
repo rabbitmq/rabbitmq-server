@@ -98,8 +98,7 @@
                 start_writer_fun,
                 unconfirmed_set    = gb_sets:new(),
                 waiting_set        = gb_trees:empty(),
-                only_acks_received = true,
-                confirms_selected  = false
+                only_acks_received = true
                }).
 
 %%---------------------------------------------------------------------------
@@ -521,8 +520,7 @@ handle_method_to_server(Method, AmqpMsg, From, Sender, Flow,
         {ok, _, ok} ->
             State1 = case {Method, State#state.next_pub_seqno} of
                          {#'confirm.select'{}, _} ->
-                             State#state{next_pub_seqno    = 1,
-                                         confirms_selected = true};
+                             State#state{next_pub_seqno = 1};
                          {#'basic.publish'{}, 0} ->
                              State;
                          {#'basic.publish'{}, SeqNo} ->
@@ -887,7 +885,7 @@ notify_confirm_waiters(State = #state{waiting_set        = WSet,
                 only_acks_received = true}.
 
 handle_wait_for_confirms(_From, _Timeout,
-                         State = #state{confirms_selected = false}) ->
+                         State = #state{next_pub_seqno = 0}) ->
     handle_shutdown({invalid_state, "wait requires confirms selected"}, State);
 handle_wait_for_confirms(From, Timeout,
                          State = #state{unconfirmed_set = USet,
