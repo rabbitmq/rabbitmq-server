@@ -32,6 +32,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
 
+%% For testing
+-export([remove_old_samples/2, format_sample_details/2]).
+
 -import(rabbit_misc, [pget/3, pset/3]).
 
 %% The management database listens to events broadcast via the
@@ -122,7 +125,6 @@
           old_stats,
           remove_old_samples_timer,
           interval}).
--record(stats, {diffs, base}).
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
@@ -939,36 +941,38 @@ remove_old_samples_all(State = #state{aggregated_stats = ETS}) ->
 remove_old_samples_it('$end_of_table', _, _, _) ->
     ok;
 remove_old_samples_it({Matches, Continuation}, Policies, Now, ETS) ->
-    [remove_old_samples(Key, Stats, Policies, Now, ETS)
+    [remove_old_samples_single(Key, Stats, Policies, Now, ETS)
      || [{Key, Stats}] <- Matches],
     remove_old_samples_it(ets:match(Continuation), Policies, Now, ETS).
 
-remove_old_samples({{Type, Id}, Key}, Stats = #stats{diffs = Diffs,
-                                                     base  = Base},
-                   Policies, Now, ETS) ->
+remove_old_samples_single({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
     Policy = pget(retention_policy(Type), Policies),
-    List = gb_trees:to_list(Diffs),
-    Stats2 = remove_old_samples1({Policy, Now}, List, [], Base),
+    Stats2 = remove_old_samples({Policy, Now}, Stats),
     case Stats2 of
         Stats -> ok;
         _     -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
     end.
+
+remove_old_samples(Cutoff, #stats{diffs = Diffs,
+                                  base  = Base}) ->
+    List = gb_trees:to_list(Diffs),
+    remove_old_samples(Cutoff, List, [], Base).
 
 %% Go through the list, amalgamating all too-old samples with the next
 %% oldest keepable one [0]. If the sample is too old, but would not be
 %% too old if moved to a rounder timestamp which does not exist then
 %% invent one and move it there [1]. But if it's just outright too
 %% old, move it to the base [2].
-remove_old_samples1(_Cutoff, [], Keep, Base) ->
+remove_old_samples(_Cutoff, [], Keep, Base) ->
     #stats{diffs = gb_trees:from_orddict(lists:reverse(Keep)), base = Base};
-remove_old_samples1(Cutoff, [H = {TS, S} | T], Keep, Base) ->
+remove_old_samples(Cutoff, [H = {TS, S} | T], Keep, Base) ->
     case {keep(Cutoff, TS), Keep} of
-        {keep,       _} -> remove_old_samples1(Cutoff, T, [H | Keep], Base);
-        {drop,       _} -> remove_old_samples1(Cutoff, T, [], Base + S); %% [2]
-        {{move, D}, []} -> remove_old_samples1(
+        {keep,       _} -> remove_old_samples(Cutoff, T, [H | Keep], Base);
+        {drop,       _} -> remove_old_samples(Cutoff, T, [], Base + S); %% [2]
+        {{move, D}, []} -> remove_old_samples(
                              Cutoff, T, [{TS - D, S}], Base); %% [1]
         {{move, _},  _} -> [{KTS, KS} | KT] = Keep,
-                           remove_old_samples1(
+                           remove_old_samples(
                              Cutoff, T, [{KTS, KS + S} | KT], Base) %% [0]
     end.
 
@@ -976,7 +980,7 @@ keep({Policy, Now}, TS) ->
     lists:foldl(fun ({AgeSec, DivisorSec}, Action) ->
                         prefer_action(
                           Action,
-                          case (Now - TS) < (AgeSec * 1000) of
+                          case (Now - TS) =< (AgeSec * 1000) of
                               true  -> case TS rem (DivisorSec * 1000) of
                                            0   -> keep;
                                            Rem -> {move, Rem}
