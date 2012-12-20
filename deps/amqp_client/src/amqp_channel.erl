@@ -884,8 +884,7 @@ notify_confirm_waiters(State = #state{waiting_set        = WSet,
     State#state{waiting_set        = gb_trees:empty(),
                 only_acks_received = true}.
 
-handle_wait_for_confirms(_From, _Timeout,
-                         State = #state{next_pub_seqno = 0}) ->
+handle_wait_for_confirms(_From, _Timeout, State = #state{next_pub_seqno = 0}) ->
     handle_shutdown({invalid_state, "wait requires confirms selected"}, State);
 handle_wait_for_confirms(From, Timeout,
                          State = #state{unconfirmed_set = USet,
