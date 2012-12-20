@@ -954,28 +954,43 @@ remove_old_samples({{Type, Id}, Key}, Stats = #stats{diffs = Diffs,
         _     -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
     end.
 
-
-%% TODO: if not matching the oldest divisor in the policy has made us
-%% drop a sample we should synthesise a new older matching sample if
-%% one does not exist rather than move to the base.
-
 %% Go through the list, amalgamating all too-old samples with the next
-%% oldest keepable one. And if there is none such, move it to the base.
+%% oldest keepable one [0]. If the sample is too old, but would not be
+%% too old if moved to a rounder timestamp which does not exist then
+%% invent one and move it there [1]. But if it's just outright too
+%% old, move it to the base [2].
 remove_old_samples1(_Cutoff, [], Keep, Base) ->
     #stats{diffs = gb_trees:from_orddict(lists:reverse(Keep)), base = Base};
 remove_old_samples1(Cutoff, [H = {TS, S} | T], Keep, Base) ->
     case {keep(Cutoff, TS), Keep} of
-        {true,  _}  -> remove_old_samples1(Cutoff, T, [H | Keep], Base);
-        {false, []} -> remove_old_samples1(Cutoff, T, [], Base + S);
-        {false, _}  -> [{KTS, KS} | KT] = Keep,
-                       remove_old_samples1(Cutoff, T, [{KTS, KS+S} | KT], Base)
+        {keep,       _} -> remove_old_samples1(Cutoff, T, [H | Keep], Base);
+        {drop,       _} -> remove_old_samples1(Cutoff, T, [], Base + S); %% [2]
+        {{move, D}, []} -> remove_old_samples1(
+                             Cutoff, T, [{TS - D, S}], Base); %% [1]
+        {{move, _},  _} -> [{KTS, KS} | KT] = Keep,
+                           remove_old_samples1(
+                             Cutoff, T, [{KTS, KS + S} | KT], Base) %% [0]
     end.
 
 keep({Policy, Now}, TS) ->
-    lists:any(fun ({AgeSec, DivisorSec}) ->
-                      TS rem (DivisorSec * 1000) =:= 0
-                          andalso (Now - TS) < (AgeSec * 1000)
-              end, Policy).
+    lists:foldl(fun ({AgeSec, DivisorSec}, Action) ->
+                        prefer_action(
+                          Action,
+                          case (Now - TS) < (AgeSec * 1000) of
+                              true  -> case TS rem (DivisorSec * 1000) of
+                                           0   -> keep;
+                                           Rem -> {move, Rem}
+                                       end;
+                              false -> drop
+                          end)
+                end, drop, Policy).
+
+prefer_action(keep,      _)         -> keep;
+prefer_action(_,         keep)      -> keep;
+prefer_action({move, A}, {move, B}) -> {move, lists:min([A, B])};
+prefer_action({move, A}, drop)      -> {move, A};
+prefer_action(drop,      {move, A}) -> {move, A};
+prefer_action(drop,      drop)      -> drop.
 
 retention_policy(vhost_stats)            -> global;
 retention_policy(queue_stats)            -> basic;
