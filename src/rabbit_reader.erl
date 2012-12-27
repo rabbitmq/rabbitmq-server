@@ -622,8 +622,7 @@ post_process_frame({method, MethodName, _}, _ChPid,
                    State = #v1{connection = #connection{
                                  protocol = Protocol}}) ->
     case Protocol:method_has_content(MethodName) of
-        true  -> erlang:bump_reductions(2000),
-                 maybe_block(control_throttle(State));
+        true  -> maybe_block(control_throttle(State));
         false -> control_throttle(State)
     end;
 post_process_frame(_Frame, _ChPid, State) ->
