@@ -617,13 +617,10 @@ process_frame(Frame, Channel, State) ->
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     channel_cleanup(ChPid),
     State;
-post_process_frame({method, MethodName, _}, _ChPid,
-                   State = #v1{connection = #connection{
-                                 protocol = Protocol}}) ->
-    case Protocol:method_has_content(MethodName) of
-        true  -> maybe_block(State);
-        false -> State
-    end;
+post_process_frame({content_header, _, _, _, _}, _ChPid, State) ->
+    maybe_block(State);
+post_process_frame({content_body, _}, _ChPid, State) ->
+    maybe_block(State);
 post_process_frame(_Frame, _ChPid, State) ->
     State.
 
