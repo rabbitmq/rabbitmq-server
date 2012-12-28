@@ -302,6 +302,8 @@ add_default_binding(#amqqueue{name = QueueName}) ->
                                 key         = RoutingKey,
                                 args        = []}).
 
+lookup([])     -> [];                             %% optimisation
+lookup([Name]) -> ets:lookup(rabbit_queue, Name); %% optimisation
 lookup(Names) when is_list(Names) ->
     %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
     %% expensive for reasons explained in rabbit_misc:dirty_read/1.
