@@ -555,11 +555,6 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                  State#ch{blocking = Blocking1}
     end.
 
-record_confirm(undefined, _, State) ->
-    State;
-record_confirm(MsgSeqNo, XName, State) ->
-    record_confirms([{MsgSeqNo, XName}], State).
-
 record_confirms([], State) ->
     State;
 record_confirms(MXs, State = #ch{confirmed = C}) ->
@@ -1382,17 +1377,20 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                publish, State1),
     State1.
 
+process_routing_result(routed,     _,     _, undefined,   _, State) ->
+    State;
+process_routing_result(routed,    [], XName,  MsgSeqNo,   _, State) ->
+    record_confirms([{MsgSeqNo, XName}], State);
+process_routing_result(routed, QPids, XName,  MsgSeqNo,   _, State) ->
+    State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
+                                        State#ch.unconfirmed)};
 process_routing_result(unroutable, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_route),
     incr_stats([{exchange_stats, XName, 1}], return_unroutable, State),
-    record_confirm(MsgSeqNo, XName, State);
-process_routing_result(routed,    [], XName,  MsgSeqNo,   _, State) ->
-    record_confirm(MsgSeqNo, XName, State);
-process_routing_result(routed,     _,     _, undefined,   _, State) ->
-    State;
-process_routing_result(routed, QPids, XName,  MsgSeqNo,   _, State) ->
-    State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
-                                        State#ch.unconfirmed)}.
+    case MsgSeqNo of
+        undefined -> State;
+        _         -> record_confirms([{MsgSeqNo, XName}], State)
+    end.
 
 send_nacks([], State) ->
     State;
