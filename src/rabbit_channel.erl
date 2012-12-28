@@ -314,9 +314,12 @@ handle_cast({deliver, ConsumerTag, AckRequired,
 handle_cast(force_event_refresh, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     noreply(State);
+
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
-    noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
+    Timeout = case C of [] -> hibernate; _ -> 0 end,
+    %% NB: don't call noreply/1 since we don't want to send confirms.
+    {noreply, ensure_stats_timer(State1), Timeout}.
 
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
@@ -327,8 +330,10 @@ handle_info(timeout, State) ->
 
 handle_info(emit_stats, State) ->
     emit_stats(State),
-    noreply([ensure_stats_timer],
-            rabbit_event:reset_stats_timer(State, #ch.stats_timer));
+    State1 = rabbit_event:reset_stats_timer(State, #ch.stats_timer),
+    %% NB: don't call noreply/1 since we don't want to kick off the
+    %% stats timer.
+    {noreply, send_confirms(State1), hibernate};
 
 handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
@@ -372,30 +377,11 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) -> reply(Reply, [], NewState).
+reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
 
-reply(Reply, Mask, NewState) -> reply(Reply, Mask, NewState, hibernate).
+noreply(NewState) -> {noreply, next_state(NewState), hibernate}.
 
-reply(Reply, Mask, NewState, Timeout) ->
-    {reply, Reply, next_state(Mask, NewState), Timeout}.
-
-noreply(NewState) -> noreply([], NewState).
-
-noreply(Mask, NewState) -> noreply(Mask, NewState, hibernate).
-
-noreply(Mask, NewState, Timeout) ->
-    {noreply, next_state(Mask, NewState), Timeout}.
-
--define(MASKED_CALL(Fun, Mask, State),
-        case lists:member(Fun, Mask) of
-            true  -> State;
-            false -> Fun(State)
-        end).
-
-next_state(Mask, State) ->
-    State1 = ?MASKED_CALL(ensure_stats_timer, Mask, State),
-    State2 = ?MASKED_CALL(send_confirms,      Mask, State1),
-    State2.
+next_state(State) -> ensure_stats_timer(send_confirms(State)).
 
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #ch.stats_timer, emit_stats).
