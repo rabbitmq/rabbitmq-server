@@ -54,13 +54,15 @@ enabled(VHost) ->
     {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
     lists:member(VHost, VHosts).
 
+tap_in(_Msg, none) -> ok;
 tap_in(Msg = #basic_message{exchange_name = #resource{name = XName}}, TraceX) ->
-    maybe_trace(TraceX, Msg, <<"publish">>, XName, []).
+    trace(TraceX, Msg, <<"publish">>, XName, []).
 
+tap_out(_Msg, none) -> ok;
 tap_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg}, TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-    maybe_trace(TraceX, Msg, <<"deliver">>, QName,
-                [{<<"redelivered">>, signedint, RedeliveredNum}]).
+    trace(TraceX, Msg, <<"deliver">>, QName,
+          [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 %%----------------------------------------------------------------------------
 
@@ -81,14 +83,11 @@ update_config(Fun) ->
 
 %%----------------------------------------------------------------------------
 
-maybe_trace(none, _Msg, _RKPrefix, _RKSuffix, _Extra) ->
+trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
+      _RKPrefix, _RKSuffix, _Extra) ->
     ok;
-maybe_trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
-            _RKPrefix, _RKSuffix, _Extra) ->
-    ok;
-maybe_trace(X, Msg = #basic_message{content = #content{
-                                      payload_fragments_rev = PFR}},
-            RKPrefix, RKSuffix, Extra) ->
+trace(X, Msg = #basic_message{content = #content{payload_fragments_rev = PFR}},
+      RKPrefix, RKSuffix, Extra) ->
     {ok, _, _} = rabbit_basic:publish(
                    X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
                    #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
