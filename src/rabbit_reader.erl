@@ -35,12 +35,15 @@
 
 %%--------------------------------------------------------------------------
 
--record(v1, {parent, sock, name, connection, callback, recv_len, pending_recv,
+-record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state, conserve_resources,
-             last_blocked_by, last_blocked_at, host, peer_host,
-             port, peer_port}).
+             last_blocked_by, last_blocked_at}).
+
+-record(connection, {name, host, peer_host, port, peer_port,
+                     protocol, user, timeout_sec, frame_max, vhost,
+                     client_properties, capabilities}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
@@ -205,8 +208,12 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     {PeerHost, PeerPort, Host, Port} = socket_ends(Sock),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
-                name                = list_to_binary(Name),
                 connection          = #connection{
+                  name               = list_to_binary(Name),
+                  host               = Host,
+                  peer_host          = PeerHost,
+                  port               = Port,
+                  peer_port          = PeerPort,
                   protocol           = none,
                   user               = none,
                   timeout_sec        = ?HANDSHAKE_TIMEOUT,
@@ -228,11 +235,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 auth_state          = none,
                 conserve_resources  = false,
                 last_blocked_by     = none,
-                last_blocked_at     = never,
-                host                = Host,
-                peer_host           = PeerHost,
-                port                = Port,
-                peer_port           = PeerPort},
+                last_blocked_at     = never},
     try
         ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
@@ -531,9 +534,10 @@ payload_snippet(<<Snippet:16/binary, _/binary>>) ->
 %%--------------------------------------------------------------------------
 
 create_channel(Channel, State) ->
-    #v1{sock = Sock, name = Name, queue_collector = Collector,
+    #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
-        connection = #connection{protocol     = Protocol,
+        connection = #connection{name         = Name,
+                                 protocol     = Protocol,
                                  frame_max    = FrameMax,
                                  user         = User,
                                  vhost        = VHost,
@@ -901,11 +905,6 @@ auth_phase(Response,
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
-i(name,               #v1{name      = Name})     -> Name;
-i(host,               #v1{host      = Host})     -> Host;
-i(peer_host,          #v1{peer_host = PeerHost}) -> PeerHost;
-i(port,               #v1{port      = Port})     -> Port;
-i(peer_port,          #v1{peer_port = PeerPort}) -> PeerPort;
 i(SockStat,           S) when SockStat =:= recv_oct;
                               SockStat =:= recv_cnt;
                               SockStat =:= send_oct;
@@ -932,26 +931,22 @@ i(auth_mechanism,     #v1{auth_mechanism = none}) ->
     none;
 i(auth_mechanism,     #v1{auth_mechanism = Mechanism}) ->
     proplists:get_value(name, Mechanism:description());
-i(protocol,           #v1{connection = #connection{protocol = none}}) ->
-    none;
-i(protocol,           #v1{connection = #connection{protocol = Protocol}}) ->
-    Protocol:version();
-i(user,               #v1{connection = #connection{user = none}}) ->
-    '';
-i(user,               #v1{connection = #connection{user = #user{
-                                                     username = Username}}}) ->
-    Username;
-i(vhost,              #v1{connection = #connection{vhost = VHost}}) ->
-    VHost;
-i(timeout,            #v1{connection = #connection{timeout_sec = Timeout}}) ->
-    Timeout;
-i(frame_max,          #v1{connection = #connection{frame_max = FrameMax}}) ->
-    FrameMax;
-i(client_properties,  #v1{connection = #connection{client_properties =
-                                                       ClientProperties}}) ->
-    ClientProperties;
-i(Item, #v1{}) ->
-    throw({bad_argument, Item}).
+i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
+
+ic(name,              #connection{name        = Name})     -> Name;
+ic(host,              #connection{host        = Host})     -> Host;
+ic(peer_host,         #connection{peer_host   = PeerHost}) -> PeerHost;
+ic(port,              #connection{port        = Port})     -> Port;
+ic(peer_port,         #connection{peer_port   = PeerPort}) -> PeerPort;
+ic(protocol,          #connection{protocol    = none})     -> none;
+ic(protocol,          #connection{protocol    = P})        -> P:version();
+ic(user,              #connection{user        = none})     -> '';
+ic(user,              #connection{user        = U})        -> U#user.username;
+ic(vhost,             #connection{vhost       = VHost})    -> VHost;
+ic(timeout,           #connection{timeout_sec = Timeout})  -> Timeout;
+ic(frame_max,         #connection{frame_max   = FrameMax}) -> FrameMax;
+ic(client_properties, #connection{client_properties = CP}) -> CP;
+ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
     case Get(Sock) of
