@@ -38,12 +38,12 @@
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
-             auth_mechanism, auth_state, conserve_resources,
-             last_blocked_by, last_blocked_at}).
+             conserve_resources, last_blocked_by, last_blocked_at}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
                      protocol, user, timeout_sec, frame_max, vhost,
-                     client_properties, capabilities}).
+                     client_properties, capabilities,
+                     auth_mechanism, auth_state}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
@@ -220,7 +220,9 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                   frame_max          = ?FRAME_MIN_SIZE,
                   vhost              = none,
                   client_properties  = none,
-                  capabilities       = []},
+                  capabilities       = [],
+                  auth_mechanism     = none,
+                  auth_state         = none},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
                 pending_recv        = false,
@@ -231,8 +233,6 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 start_heartbeat_fun = StartHeartbeatFun,
                 buf                 = [],
                 buf_len             = 0,
-                auth_mechanism      = none,
-                auth_state          = none,
                 conserve_resources  = false,
                 last_blocked_by     = none,
                 last_blocked_at     = never},
@@ -750,13 +750,13 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
             {table, Capabilities1} -> Capabilities1;
             _                      -> []
         end,
-    State = State0#v1{auth_mechanism   = AuthMechanism,
-                      auth_state       = AuthMechanism:init(Sock),
-                      connection_state = securing,
+    State = State0#v1{connection_state = securing,
                       connection       =
                           Connection#connection{
                             client_properties = ClientProperties,
-                            capabilities      = Capabilities}},
+                            capabilities      = Capabilities,
+                            auth_mechanism    = AuthMechanism,
+                            auth_state        = AuthMechanism:init(Sock)}},
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -874,10 +874,10 @@ auth_mechanisms_binary(Sock) ->
       string:join([atom_to_list(A) || A <- auth_mechanisms(Sock)], " ")).
 
 auth_phase(Response,
-           State = #v1{auth_mechanism = AuthMechanism,
-                       auth_state = AuthState,
-                       connection = Connection =
-                           #connection{protocol = Protocol},
+           State = #v1{connection = Connection =
+                           #connection{protocol       = Protocol,
+                                       auth_mechanism = AuthMechanism,
+                                       auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Msg, Args} ->
@@ -890,14 +890,16 @@ auth_phase(Response,
         {challenge, Challenge, AuthState1} ->
             Secure = #'connection.secure'{challenge = Challenge},
             ok = send_on_channel0(Sock, Secure, Protocol),
-            State#v1{auth_state = AuthState1};
+            State#v1{connection = Connection#connection{
+                                    auth_state = AuthState1}};
         {ok, User} ->
             Tune = #'connection.tune'{channel_max = 0,
                                       frame_max = server_frame_max(),
                                       heartbeat = server_heartbeat()},
             ok = send_on_channel0(Sock, Tune, Protocol),
             State#v1{connection_state = tuning,
-                     connection = Connection#connection{user = User}}
+                     connection = Connection#connection{user       = User,
+                                                        auth_state = none}}
     end.
 
 %%--------------------------------------------------------------------------
@@ -927,10 +929,6 @@ i(last_blocked_age,   #v1{last_blocked_at = never}) ->
 i(last_blocked_age,   #v1{last_blocked_at = T}) ->
     timer:now_diff(erlang:now(), T) / 1000000;
 i(channels,           #v1{}) -> length(all_channels());
-i(auth_mechanism,     #v1{auth_mechanism = none}) ->
-    none;
-i(auth_mechanism,     #v1{auth_mechanism = Mechanism}) ->
-    proplists:get_value(name, Mechanism:description());
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
 ic(name,              #connection{name        = Name})     -> Name;
@@ -946,6 +944,10 @@ ic(vhost,             #connection{vhost       = VHost})    -> VHost;
 ic(timeout,           #connection{timeout_sec = Timeout})  -> Timeout;
 ic(frame_max,         #connection{frame_max   = FrameMax}) -> FrameMax;
 ic(client_properties, #connection{client_properties = CP}) -> CP;
+ic(auth_mechanism,    #connection{auth_mechanism = none}) ->
+    none;
+ic(auth_mechanism,    #connection{auth_mechanism = Mechanism}) ->
+    proplists:get_value(name, Mechanism:description());
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
