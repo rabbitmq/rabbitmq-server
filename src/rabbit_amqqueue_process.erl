@@ -791,12 +791,9 @@ stop(State) -> stop(undefined, noreply, State).
 
 stop(From, Reply, State = #q{unconfirmed = UC}) ->
     case {dtree:is_empty(UC), Reply} of
-        {true, noreply} ->
-            {stop, normal, State};
-        {true, _} ->
-            {stop, normal, Reply, State};
-        {false, _} ->
-            noreply(State#q{delayed_stop = {From, Reply}})
+        {true, noreply} -> {stop, normal, State};
+        {true,       _} -> {stop, normal, Reply, State};
+        {false,      _} -> noreply(State#q{delayed_stop = {From, Reply}})
     end.
 
 cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
