@@ -65,6 +65,12 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
+-define(INCR_STATS(Incs, Measure, State),
+        case rabbit_event:stats_level(State, #ch.stats_timer) of
+            fine -> incr_stats(Incs, Measure);
+            _    -> ok
+        end).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -1238,14 +1244,14 @@ record_sent(ConsumerTag, AckRequired,
             State = #ch{unacked_message_q = UAMQ,
                         next_tag          = DeliveryTag,
                         trace_state       = TraceState}) ->
-    incr_stats([{queue_stats, QName, 1}], case {ConsumerTag, AckRequired} of
-                                              {none,  true} -> get;
-                                              {none, false} -> get_no_ack;
-                                              {_   ,  true} -> deliver;
-                                              {_   , false} -> deliver_no_ack
-                                          end, State),
+    ?INCR_STATS([{queue_stats, QName, 1}], case {ConsumerTag, AckRequired} of
+                                               {none,  true} -> get;
+                                               {none, false} -> get_no_ack;
+                                               {_   ,  true} -> deliver;
+                                               {_   , false} -> deliver_no_ack
+                                           end, State),
     case Redelivered of
-        true  -> incr_stats([{queue_stats, QName, 1}], redeliver, State);
+        true  -> ?INCR_STATS([{queue_stats, QName, 1}], redeliver, State);
         false -> ok
     end,
     rabbit_trace:tap_out(Msg, TraceState),
@@ -1289,7 +1295,7 @@ ack(Acked, State = #ch{queue_names = QNames}) ->
                      end
              end, [], Acked),
     ok = notify_limiter(State#ch.limiter, Acked),
-    incr_stats(Incs, ack, State).
+    ?INCR_STATS(Incs, ack, State).
 
 new_tx(State) -> State#ch{uncommitted_message_q = queue:new(),
                           uncommitted_acks      = [],
@@ -1370,11 +1376,11 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                     XName, MsgSeqNo, Message,
                                     State#ch{queue_names    = QNames1,
                                              queue_monitors = QMons1}),
-    incr_stats([{exchange_stats, XName, 1} |
-                [{queue_exchange_stats, {QName, XName}, 1} ||
-                    QPid        <- DeliveredQPids,
-                    {ok, QName} <- [dict:find(QPid, QNames1)]]],
-               publish, State1),
+    ?INCR_STATS([{exchange_stats, XName, 1} |
+                 [{queue_exchange_stats, {QName, XName}, 1} ||
+                     QPid        <- DeliveredQPids,
+                     {ok, QName} <- [dict:find(QPid, QNames1)]]],
+                publish, State1),
     State1.
 
 process_routing_result(routed,     _,     _, undefined,   _, State) ->
@@ -1386,7 +1392,7 @@ process_routing_result(routed, QPids, XName,  MsgSeqNo,   _, State) ->
                                         State#ch.unconfirmed)};
 process_routing_result(unroutable, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_route),
-    incr_stats([{exchange_stats, XName, 1}], return_unroutable, State),
+    ?INCR_STATS([{exchange_stats, XName, 1}], return_unroutable, State),
     case MsgSeqNo of
         undefined -> State;
         _         -> record_confirms([{MsgSeqNo, XName}], State)
@@ -1409,7 +1415,7 @@ send_confirms(State = #ch{tx_status = none, confirmed = C}) ->
     MsgSeqNos =
         lists:foldl(
           fun ({MsgSeqNo, XName}, MSNs) ->
-                  incr_stats([{exchange_stats, XName, 1}], confirm, State),
+                  ?INCR_STATS([{exchange_stats, XName, 1}], confirm, State),
                   [MsgSeqNo | MSNs]
           end, [], lists:append(C)),
     send_confirms(MsgSeqNos, State#ch{confirmed = []});
@@ -1494,12 +1500,8 @@ i(Item, _) ->
 name(#ch{conn_name = ConnName, channel = Channel}) ->
     list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
 
-incr_stats(Incs, Measure, State) ->
-    case rabbit_event:stats_level(State, #ch.stats_timer) of
-        fine -> [update_measures(Type, Key, Inc, Measure) ||
-                    {Type, Key, Inc} <- Incs];
-        _    -> ok
-    end.
+incr_stats(Incs, Measure) ->
+    [update_measures(Type, Key, Inc, Measure) || {Type, Key, Inc} <- Incs].
 
 update_measures(Type, Key, Inc, Measure) ->
     Measures = case get({Type, Key}) of
