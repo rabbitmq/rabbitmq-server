@@ -465,9 +465,8 @@
               synchronise itself. The queue will block while
               synchronisation takes place (all publishers to and
               consumers from the queue will block). The queue must be
-              mirrored, must have unsynchronised slaves, and must not
-              have any pending unacknowledged messages for this
-              command to succeed.
+              mirrored, and must not have any pending unacknowledged
+              messages for this command to succeed.
             </para>
             <para>
               Note that unsynchronised queues from which messages are
