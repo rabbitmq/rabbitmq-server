@@ -283,7 +283,7 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
 
 action(sync_queue, Node, [Queue], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Synchronising queue ~s in ~s", [Queue, VHost]),
+    Inform("Synchronising queue \"~s\" in vhost \"~s\"", [Queue, VHost]),
     rpc_call(Node, rabbit_amqqueue, sync,
              [list_to_binary(Queue), list_to_binary(VHost)]);
 
