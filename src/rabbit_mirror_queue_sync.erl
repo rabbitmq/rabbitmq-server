@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([master_prepare/3, master_go/5, slave/7]).
+-export([master_prepare/3, master_go/7, slave/7]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
@@ -59,12 +59,13 @@ master_prepare(Ref, Log, SPids) ->
     MPid = self(),
     spawn_link(fun () -> syncer(Ref, Log, MPid, SPids) end).
 
-master_go(Syncer, Ref, Log, BQ, BQS) ->
-    Args = {Syncer, Ref, Log, rabbit_misc:get_parent()},
+master_go(Syncer, Ref, Log, InfoPull, InfoPush, BQ, BQS) ->
+    Args = {Syncer, Ref, Log, InfoPull, InfoPush, rabbit_misc:get_parent()},
     receive
         {'EXIT', Syncer, normal} -> {already_synced, BQS};
         {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS};
-        {ready, Syncer}          -> master_go0(Args, BQ, BQS)
+        {ready, Syncer}          -> InfoPush({syncing, 0}),
+                                    master_go0(Args, BQ, BQS)
     end.
 
 master_go0(Args, BQ, BQS) ->
@@ -76,12 +77,15 @@ master_go0(Args, BQ, BQS) ->
         {_,                   BQS1} -> master_done(Args, BQS1)
     end.
 
-master_send(Msg, MsgProps, {Syncer, Ref, Log, Parent}, {I, Last}) ->
+master_send(Msg, MsgProps, {Syncer, Ref, Log, InfoPull, InfoPush, Parent},
+            {I, Last}) ->
     T = case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
-            true  -> Log("~p messages", [I]),
+            true  -> InfoPush({syncing, I}),
+                     Log("~p messages", [I]),
                      erlang:now();
             false -> Last
         end,
+    InfoPull({syncing, I}),
     receive
         {'$gen_cast', {set_maximum_since_use, Age}} ->
             ok = file_handle_cache:set_maximum_since_use(Age)
@@ -89,6 +93,14 @@ master_send(Msg, MsgProps, {Syncer, Ref, Log, Parent}, {I, Last}) ->
             ok
     end,
     receive
+        {'$gen_call', From,
+         cancel_sync_mirrors}    -> unlink(Syncer),
+                                    Syncer ! {cancel, Ref},
+                                    receive {'EXIT', Syncer, _} -> ok
+                                    after 0 -> ok
+                                    end,
+                                    gen_server2:reply(From, ok),
+                                    {stop, cancelled};
         {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps},
                                     {cont, {I + 1, T}};
         {'EXIT', Parent, Reason} -> {stop, {shutdown,  Reason}};
@@ -121,8 +133,16 @@ syncer(Ref, Log, MPid, SPids) ->
         SPidsMRefs1 -> MPid ! {ready, self()},
                        Log("~p to sync", [[rabbit_misc:pid_to_string(S) ||
                                               {S, _} <- SPidsMRefs1]]),
-                       SPidsMRefs2 = syncer_loop({Ref, MPid}, SPidsMRefs1),
-                       foreach_slave(SPidsMRefs2, Ref, fun sync_send_complete/3)
+                       case syncer_loop({Ref, MPid}, SPidsMRefs1) of
+                           {done, SPidsMRefs2} ->
+                               foreach_slave(SPidsMRefs2, Ref,
+                                             fun sync_send_complete/3);
+                           cancelled ->
+                               %% We don't tell the slaves we will die
+                               %% - so when we do they interpret that
+                               %% as a failure, which is what we want.
+                               ok
+                       end
     end.
 
 syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
@@ -135,8 +155,10 @@ syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
                  SPid ! {sync_msg, Ref, Msg, MsgProps}
              end || {SPid, _} <- SPidsMRefs1],
             syncer_loop(Args, SPidsMRefs1);
+        {cancel, Ref} ->
+            cancelled;
         {done, Ref} ->
-            SPidsMRefs
+            {done, SPidsMRefs}
     end.
 
 wait_for_credit(SPidsMRefs, Ref) ->

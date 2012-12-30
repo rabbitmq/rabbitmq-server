@@ -31,7 +31,7 @@
 -export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
--export([start_mirroring/1, stop_mirroring/1, sync/2]).
+-export([start_mirroring/1, stop_mirroring/1, sync/2, cancel_sync/2]).
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
@@ -175,6 +175,8 @@
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
 -spec(sync/2 :: (binary(), rabbit_types:vhost()) ->
     'ok' | rabbit_types:error('pending_acks' | 'not_mirrored')).
+-spec(cancel_sync/2 :: (binary(), rabbit_types:vhost()) ->
+    'ok' | rabbit_types:error('not_mirrored')).
 
 -endif.
 
@@ -596,6 +598,13 @@ sync(QNameBin, VHostBin) ->
     QName = rabbit_misc:r(VHostBin, queue, QNameBin),
     case lookup(QName) of
         {ok, #amqqueue{pid = QPid}} -> delegate_call(QPid, sync_mirrors);
+        E                           -> E
+    end.
+
+cancel_sync(QNameBin, VHostBin) ->
+    QName = rabbit_misc:r(VHostBin, queue, QNameBin),
+    case lookup(QName) of
+        {ok, #amqqueue{pid = QPid}} -> delegate_call(QPid, cancel_sync_mirrors);
         E                           -> E
     end.
 

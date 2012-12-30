@@ -476,6 +476,26 @@
             </para>
           </listitem>
         </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>cancel_sync_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>queue</term>
+                <listitem>
+                  <para>
+                    The name of the queue to cancel synchronisation for.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instructs a synchronising mirrored queue to stop
+              synchronising itself.
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 
@@ -1138,6 +1158,12 @@
                 the current slaves which are synchronised with the master -
                 i.e. those which could take over from the master without
                 message loss.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>status</term>
+                <listitem><para>The status of the queue. Normally
+                'running', but may be different if the queue is
+                synchronising.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
