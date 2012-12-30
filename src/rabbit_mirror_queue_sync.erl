@@ -68,21 +68,20 @@ master_go(Syncer, Ref, Log, BQ, BQS) ->
     end.
 
 master_go0(Args, BQ, BQS) ->
-    case BQ:fold(fun (Msg, MsgProps, {I, Last}) ->
-                         master_send(Args, I, Last, Msg, MsgProps)
+    case BQ:fold(fun (Msg, MsgProps, Acc) ->
+                         master_send(Msg, MsgProps, Args, Acc)
                  end, {0, erlang:now()}, BQS) of
         {{shutdown,  Reason}, BQS1} -> {shutdown,  Reason, BQS1};
         {{sync_died, Reason}, BQS1} -> {sync_died, Reason, BQS1};
         {_,                   BQS1} -> master_done(Args, BQS1)
     end.
 
-master_send({Syncer, Ref, Log, Parent}, I, Last, Msg, MsgProps) ->
-    Acc = {I + 1,
-           case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
-               true  -> Log("~p messages", [I]),
-                        erlang:now();
-               false -> Last
-           end},
+master_send(Msg, MsgProps, {Syncer, Ref, Log, Parent}, {I, Last}) ->
+    T = case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
+            true  -> Log("~p messages", [I]),
+                     erlang:now();
+            false -> Last
+        end,
     receive
         {'$gen_cast', {set_maximum_since_use, Age}} ->
             ok = file_handle_cache:set_maximum_since_use(Age)
@@ -91,7 +90,7 @@ master_send({Syncer, Ref, Log, Parent}, I, Last, Msg, MsgProps) ->
     end,
     receive
         {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps},
-                                    {cont, Acc};
+                                    {cont, {I + 1, T}};
         {'EXIT', Parent, Reason} -> {stop, {shutdown,  Reason}};
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
     end.
