@@ -94,11 +94,7 @@ master_send(Msg, MsgProps, {Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
     end,
     receive
         {'$gen_call', From,
-         cancel_sync_mirrors}    -> unlink(Syncer),
-                                    Syncer ! {cancel, Ref},
-                                    receive {'EXIT', Syncer, _} -> ok
-                                    after 0 -> ok
-                                    end,
+         cancel_sync_mirrors}    -> stop_syncer(Syncer, {cancel, Ref}),
                                     gen_server2:reply(From, ok),
                                     {stop, cancelled};
         {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps},
@@ -109,14 +105,17 @@ master_send(Msg, MsgProps, {Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
 
 master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
     receive
-        {next, Ref}              -> unlink(Syncer),
-                                    Syncer ! {done, Ref},
-                                    receive {'EXIT', Syncer, _} -> ok
-                                    after 0 -> ok
-                                    end,
+        {next, Ref}              -> stop_syncer(Syncer, {done, Ref}),
                                     {ok, BQS};
         {'EXIT', Parent, Reason} -> {shutdown,  Reason, BQS};
         {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS}
+    end.
+
+stop_syncer(Syncer, Msg) ->
+    unlink(Syncer),
+    Syncer ! Msg,
+    receive {'EXIT', Syncer, _} -> ok
+    after 0 -> ok
     end.
 
 %% Master
