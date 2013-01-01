@@ -758,8 +758,8 @@ dead_letter_fun(Reason) ->
             gen_server2:cast(self(), {dead_letter, Msg, AckTag, Reason})
     end.
 
-dead_letter_publish(Msg, Reason, X, State = #q{publish_seqno = MsgSeqNo}) ->
-    DLMsg = make_dead_letter_msg(Reason, Msg, State),
+dead_letter_publish(Msg, Reason, X, RK, MsgSeqNo, QName) ->
+    DLMsg = make_dead_letter_msg(Msg, Reason, X#exchange.name, RK, QName),
     Delivery = rabbit_basic:delivery(false, DLMsg, MsgSeqNo),
     {Queues, Cycles} = detect_dead_letter_cycles(
                          DLMsg, rabbit_exchange:route(X, Delivery)),
@@ -838,19 +838,16 @@ detect_dead_letter_cycles(#basic_message{content = Content}, Queues) ->
             end
     end.
 
-make_dead_letter_msg(Reason,
-                     Msg = #basic_message{content       = Content,
+make_dead_letter_msg(Msg = #basic_message{content       = Content,
                                           exchange_name = Exchange,
                                           routing_keys  = RoutingKeys},
-                     State = #q{dlx = DLX, dlx_routing_key = DlxRoutingKey}) ->
+                     Reason, DLX, RK, #resource{name = QName}) ->
     {DeathRoutingKeys, HeadersFun1} =
-        case DlxRoutingKey of
+        case RK of
             undefined -> {RoutingKeys, fun (H) -> H end};
-            _         -> {[DlxRoutingKey],
-                          fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
+            _         -> {[RK], fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
-    #resource{name = QName} = qname(State),
     TimeSec = rabbit_misc:now_ms() div 1000,
     HeadersFun2 =
         fun (Headers) ->
@@ -1251,13 +1248,14 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     noreply(State);
 
 handle_cast({dead_letter, Msg, AckTag, Reason},
-            State = #q{dlx            = XName,
-                       publish_seqno  = SeqNo,
-                       unconfirmed    = UC,
-                       queue_monitors = QMons}) ->
+            State = #q{dlx             = XName,
+                       dlx_routing_key = RK,
+                       publish_seqno   = SeqNo,
+                       unconfirmed     = UC,
+                       queue_monitors  = QMons}) ->
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
-            case dead_letter_publish(Msg, Reason, X, State) of
+            case dead_letter_publish(Msg, Reason, X, RK, SeqNo, qname(State)) of
                 []    -> cleanup_after_confirm([AckTag], State);
                 QPids -> UC1 = dtree:insert(SeqNo, QPids, AckTag, UC),
                          QMons1 = pmon:monitor_all(QPids, QMons),
