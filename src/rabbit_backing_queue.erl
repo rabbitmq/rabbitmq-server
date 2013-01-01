@@ -35,8 +35,7 @@
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(duration() :: ('undefined' | 'infinity' | number())).
 
--type(msg_fun(A) :: fun ((rabbit_types:basic_message(), boolean(), ack(), A)
-                         -> A)).
+-type(msg_fun(A) :: fun ((rabbit_types:basic_message(), ack(), A) -> A)).
 -type(msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean())).
 
 %% Called on startup with a list of durable queue names. The queues
@@ -133,10 +132,10 @@
                    -> {rabbit_types:message_properties() | undefined, state()}.
 
 %% Like dropwhile, except messages are fetched in "require
-%% acknowledgement" mode and are passed, together with their Delivered
-%% flag and ack tag, to the supplied function. The function is also
-%% fed an accumulator. The result of fetchwhile is as for dropwhile
-%% plus the accumulator.
+%% acknowledgement" mode and are passed, together with their ack tag,
+%% to the supplied function. The function is also fed an
+%% accumulator. The result of fetchwhile is as for dropwhile plus the
+%% accumulator.
 -callback fetchwhile(msg_pred(), msg_fun(A), A, state())
                      -> {rabbit_types:message_properties() | undefined,
                          A, state()}.
@@ -158,8 +157,7 @@
 -callback requeue([ack()], state()) -> {msg_ids(), state()}.
 
 %% Fold over messages by ack tag. The supplied function is called with
-%% each message, its IsDelivered flag, its ack tag, and an
-%% accumulator.
+%% each message, its ack tag, and an accumulator.
 -callback ackfold(msg_fun(A), A, state(), [ack()]) -> {A, state()}.
 
 %% Fold over all the messages in a queue and return the accumulated

@@ -597,10 +597,9 @@ fetchwhile(Pred, Fun, Acc, State) ->
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case Pred(MsgProps) of
                 true  -> {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-                         {{Msg, IsDelivered, AckTag}, State3} =
+                         {{Msg, _IsDelivered, AckTag}, State3} =
                              internal_fetch(true, MsgStatus1, State2),
-                         Acc1 = Fun(Msg, IsDelivered, AckTag, Acc),
-                         fetchwhile(Pred, Fun, Acc1, State3);
+                         fetchwhile(Pred, Fun, Fun(Msg, AckTag, Acc), State3);
                 false -> {MsgProps, Acc, a(in_r(MsgStatus, State1))}
             end
     end.
@@ -675,9 +674,9 @@ ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
         lists:foldl(
           fun(SeqId, {Acc0, State0 = #vqstate{ pending_ack = PA }}) ->
-                  {#msg_status { msg = Msg, is_delivered = IsDelivered },
-                   State1 } = read_msg(gb_trees:get(SeqId, PA), false, State0),
-                  {MsgFun(Msg, IsDelivered, SeqId, Acc0), State1}
+                  {#msg_status { msg = Msg }, State1} =
+                      read_msg(gb_trees:get(SeqId, PA), false, State0),
+                  {MsgFun(Msg, SeqId, Acc0), State1}
           end, {Acc, State}, AckTags),
     {AccN, a(StateN)}.
 

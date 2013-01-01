@@ -720,7 +720,7 @@ drop_expired_messages(State = #q{dlx                 = DLX,
                         undefined -> BQ:dropwhile(ExpirePred, BQS);
                         _         -> {Next, Msgs, BQS2} =
                                          BQ:fetchwhile(ExpirePred,
-                                                       fun accumulate_msgs/4,
+                                                       fun accumulate_msgs/3,
                                                        [], BQS),
                                      case Msgs of
                                          [] -> ok;
@@ -734,7 +734,7 @@ drop_expired_messages(State = #q{dlx                 = DLX,
                          #message_properties{expiry = Exp}  -> Exp
                      end, State#q{backing_queue_state = BQS1}).
 
-accumulate_msgs(Msg, _IsDelivered, AckTag, Acc) -> [{Msg, AckTag} | Acc].
+accumulate_msgs(Msg, AckTag, Acc) -> [{Msg, AckTag} | Acc].
 
 ensure_ttl_timer(undefined, State) ->
     State;
@@ -1203,9 +1203,8 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
                       {ok, BQS1} = BQ:ackfold(
-                                     fun (Msg, _IsDelivered, AckTag, ok) ->
-                                             DLXFun([{Msg, AckTag}])
-                                     end, ok, BQS, AckTags),
+                                     fun (M, A, ok) -> DLXFun([{M, A}]) end,
+                                     ok, BQS, AckTags),
                       State1#q{backing_queue_state = BQS1}
               end));
 

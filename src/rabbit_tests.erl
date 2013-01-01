@@ -2434,7 +2434,7 @@ test_dropfetchwhile(VQ0) ->
     {#message_properties{expiry = 6}, {Msgs, AckTags}, VQ2} =
         rabbit_variable_queue:fetchwhile(
           fun (#message_properties{expiry = Expiry}) -> Expiry =< 5 end,
-          fun (Msg, _Delivered, AckTag, {MsgAcc, AckAcc}) ->
+          fun (Msg, AckTag, {MsgAcc, AckAcc}) ->
                   {[Msg | MsgAcc], [AckTag | AckAcc]}
           end, {[], []}, VQ1),
     true = lists:seq(1, 5) == [msg2int(M) || M <- lists:reverse(Msgs)],
@@ -2473,7 +2473,7 @@ test_fetchwhile_varying_ram_duration(VQ0) ->
       fun (VQ1) ->
               {_, ok, VQ2} = rabbit_variable_queue:fetchwhile(
                                fun (_) -> false end,
-                               fun (_, _, _, A) -> A end,
+                               fun (_, _, A) -> A end,
                                ok, VQ1),
               VQ2
       end, VQ0).
@@ -2608,7 +2608,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
 test_variable_queue_fold_msg_on_disk(VQ0) ->
     VQ1 = variable_queue_publish(true, 1, VQ0),
     {VQ2, AckTags} = variable_queue_fetch(1, true, false, 1, VQ1),
-    {ok, VQ3} = rabbit_variable_queue:ackfold(fun (_M, _D, _A, ok) -> ok end,
+    {ok, VQ3} = rabbit_variable_queue:ackfold(fun (_M, _A, ok) -> ok end,
                                               ok, VQ2, AckTags),
     VQ3.
 
