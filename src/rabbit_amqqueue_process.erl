@@ -743,7 +743,7 @@ drop_expired_messages(ExpirePred, X, State = #q{dlx_routing_key     = RK,
     {Next, {ConfirmImm1, SeqNo1, UC1, QMons1}, BQS1} =
         BQ:fetchwhile(
           ExpirePred,
-          fun (Msg, _IsDelivered, AckTag, {ConfirmImm, SeqNo, UC, QMons}) ->
+          fun (Msg, AckTag, {ConfirmImm, SeqNo, UC, QMons}) ->
                   case dead_letter_publish(Msg, expired, X, RK, SeqNo, QName) of
                       []    -> {[AckTag | ConfirmImm], SeqNo, UC, QMons};
                       QPids -> {ConfirmImm, SeqNo + 1,
@@ -1222,7 +1222,9 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-                      BQS1 = BQ:foreach_ack(DLXFun, BQS, AckTags),
+                      {ok, BQS1} = BQ:ackfold(
+                                     fun (M, A, ok) -> DLXFun([{M, A}]) end,
+                                     ok, BQS, AckTags),
                       State1#q{backing_queue_state = BQS1}
               end));
 
