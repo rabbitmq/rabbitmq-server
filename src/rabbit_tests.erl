@@ -2608,8 +2608,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
 test_variable_queue_fold_msg_on_disk(VQ0) ->
     VQ1 = variable_queue_publish(true, 1, VQ0),
     {VQ2, AckTags} = variable_queue_fetch(1, true, false, 1, VQ1),
-    VQ3 = rabbit_variable_queue:foreach_ack(fun (_M, _A) -> ok end,
-                                            VQ2, AckTags),
+    {ok, VQ3} = rabbit_variable_queue:ackfold(fun (_M, _D, _A, ok) -> ok end,
+                                              ok, VQ2, AckTags),
     VQ3.
 
 test_queue_recover() ->

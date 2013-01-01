@@ -1202,8 +1202,10 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-                      BQS1 = BQ:foreach_ack(fun(M, A) -> DLXFun([{M, A}]) end,
-                                     BQS, AckTags),
+                      {ok, BQS1} = BQ:ackfold(
+                                     fun (Msg, _IsDelivered, AckTag, ok) ->
+                                             DLXFun([{Msg, AckTag}])
+                                     end, ok, BQS, AckTags),
                       State1#q{backing_queue_state = BQS1}
               end));
 
