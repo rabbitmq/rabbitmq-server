@@ -262,7 +262,7 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
-init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
+init_ttl(TTL, State) -> drop_expired_msgs(State#q{ttl = TTL}).
 
 init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
     State#q{dlx = rabbit_misc:r(QName, exchange, DLX)}.
@@ -479,7 +479,7 @@ deliver_msg_to_consumer(DeliverFun,
 deliver_from_queue_deliver(AckRequired, State) ->
     {Result, State1} = fetch(AckRequired, State),
     State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        drop_expired_messages(State1),
+        drop_expired_msgs(State1),
     {Result, BQ:is_empty(BQS), State2}.
 
 confirm_messages([], State) ->
@@ -526,7 +526,7 @@ discard(#delivery{sender = SenderPid, message = #basic_message{id = MsgId}},
 
 run_message_queue(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        drop_expired_messages(State),
+        drop_expired_msgs(State),
     {_IsEmpty1, State2} = deliver_msgs_to_consumers(
                             fun deliver_from_queue_deliver/2,
                             BQ:is_empty(BQS), State1),
@@ -711,7 +711,7 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
         T         -> now_micros() + T * 1000
     end.
 
-drop_expired_messages(State = #q{dlx                 = DLX,
+drop_expired_msgs(State = #q{dlx                 = DLX,
                                  backing_queue_state = BQS,
                                  backing_queue       = BQ }) ->
     Now = now_micros(),
@@ -1050,7 +1050,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName}}) ->
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
-    case fetch(AckRequired, drop_expired_messages(State1)) of
+    case fetch(AckRequired, drop_expired_msgs(State1)) of
         {empty, State2} ->
             reply(empty, State2);
         {{Message, IsDelivered, AckTag}, State2} ->
@@ -1123,7 +1123,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
 
 handle_call(stat, _From, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        drop_expired_messages(ensure_expiry_timer(State)),
+        drop_expired_msgs(ensure_expiry_timer(State)),
     reply({ok, BQ:len(BQS), active_consumer_count()}, State1);
 
 handle_call({delete, IfUnused, IfEmpty}, From,
@@ -1312,7 +1312,7 @@ handle_info(maybe_expire, State) ->
     end;
 
 handle_info(drop_expired, State) ->
-    noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
+    noreply(drop_expired_msgs(State#q{ttl_timer_ref = undefined}));
 
 handle_info(emit_stats, State) ->
     emit_stats(State),
