@@ -716,25 +716,46 @@ drop_expired_msgs(State = #q{dlx                 = DLX,
                              backing_queue       = BQ }) ->
     Now = now_micros(),
     ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
-    {Props, BQS1} = case DLX of
-                        undefined -> BQ:dropwhile(ExpirePred, BQS);
-                        _         -> {Next, Msgs, BQS2} =
-                                         BQ:fetchwhile(ExpirePred,
-                                                       fun accumulate_msgs/4,
-                                                       [], BQS),
-                                     case Msgs of
-                                         [] -> ok;
-                                         _  -> (dead_letter_fun(expired))(
-                                                 lists:reverse(Msgs))
-                                     end,
-                                     {Next, BQS2}
-                    end,
+    {Props, State1} =
+        case DLX of
+            undefined -> {Next, BQS1} = BQ:dropwhile(ExpirePred, BQS),
+                         {Next, State#q{backing_queue_state = BQS1}};
+            _         -> case rabbit_exchange:lookup(DLX) of
+                             {ok, X} ->
+                                 drop_expired_messages(ExpirePred, X, State);
+                             {error, not_found} ->
+                                 {Next, BQS1} = BQ:dropwhile(ExpirePred, BQS),
+                                 {Next, State#q{backing_queue_state = BQS1}}
+                         end
+        end,
     ensure_ttl_timer(case Props of
                          undefined                          -> undefined;
                          #message_properties{expiry = Exp}  -> Exp
-                     end, State#q{backing_queue_state = BQS1}).
+                     end, State1).
 
-accumulate_msgs(Msg, _IsDelivered, AckTag, Acc) -> [{Msg, AckTag} | Acc].
+drop_expired_messages(ExpirePred, X, State = #q{dlx_routing_key     = RK,
+                                                publish_seqno       = SeqNo0,
+                                                unconfirmed         = UC0,
+                                                queue_monitors      = QMons0,
+                                                backing_queue_state = BQS,
+                                                backing_queue       = BQ}) ->
+    QName = qname(State),
+    {Next, {ConfirmImm1, SeqNo1, UC1, QMons1}, BQS1} =
+        BQ:fetchwhile(
+          ExpirePred,
+          fun (Msg, AckTag, {ConfirmImm, SeqNo, UC, QMons}) ->
+                  case dead_letter_publish(Msg, expired, X, RK, SeqNo, QName) of
+                      []    -> {[AckTag | ConfirmImm], SeqNo, UC, QMons};
+                      QPids -> {ConfirmImm, SeqNo + 1,
+                                dtree:insert(SeqNo, QPids, AckTag, UC),
+                                pmon:monitor_all(QPids, QMons)}
+                  end
+          end, {[], SeqNo0, UC0, QMons0}, BQS),
+    {_Guids, BQS2} = BQ:ack(ConfirmImm1, BQS1),
+    {Next, State#q{publish_seqno       = SeqNo1,
+                   unconfirmed         = UC1,
+                   queue_monitors      = QMons1,
+                   backing_queue_state = BQS2}}.
 
 ensure_ttl_timer(undefined, State) ->
     State;
@@ -756,10 +777,12 @@ ensure_ttl_timer(_Expiry, State) ->
     State.
 
 dead_letter_fun(Reason) ->
-    fun(Msgs) -> gen_server2:cast(self(), {dead_letter, Msgs, Reason}) end.
+    fun(Msg, AckTag) ->
+            gen_server2:cast(self(), {dead_letter, Msg, AckTag, Reason})
+    end.
 
-dead_letter_publish(Msg, Reason, X, State = #q{publish_seqno = MsgSeqNo}) ->
-    DLMsg = make_dead_letter_msg(Reason, Msg, State),
+dead_letter_publish(Msg, Reason, X, RK, MsgSeqNo, QName) ->
+    DLMsg = make_dead_letter_msg(Msg, Reason, X#exchange.name, RK, QName),
     Delivery = rabbit_basic:delivery(false, DLMsg, MsgSeqNo),
     {Queues, Cycles} = detect_dead_letter_cycles(
                          DLMsg, rabbit_exchange:route(X, Delivery)),
@@ -838,19 +861,16 @@ detect_dead_letter_cycles(#basic_message{content = Content}, Queues) ->
             end
     end.
 
-make_dead_letter_msg(Reason,
-                     Msg = #basic_message{content       = Content,
+make_dead_letter_msg(Msg = #basic_message{content       = Content,
                                           exchange_name = Exchange,
                                           routing_keys  = RoutingKeys},
-                     State = #q{dlx = DLX, dlx_routing_key = DlxRoutingKey}) ->
+                     Reason, DLX, RK, #resource{name = QName}) ->
     {DeathRoutingKeys, HeadersFun1} =
-        case DlxRoutingKey of
+        case RK of
             undefined -> {RoutingKeys, fun (H) -> H end};
-            _         -> {[DlxRoutingKey],
-                          fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
+            _         -> {[RK], fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
-    #resource{name = QName} = qname(State),
     TimeSec = rabbit_misc:now_ms() div 1000,
     HeadersFun2 =
         fun (Headers) ->
@@ -1202,8 +1222,9 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-                      BQS1 = BQ:foreach_ack(fun(M, A) -> DLXFun([{M, A}]) end,
-                                     BQS, AckTags),
+                      {ok, BQS1} = BQ:ackfold(
+                                     fun (M, A, ok) -> DLXFun([{M, A}]) end,
+                                     ok, BQS, AckTags),
                       State1#q{backing_queue_state = BQS1}
               end));
 
@@ -1251,29 +1272,24 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
-handle_cast({dead_letter, Msgs, Reason}, State = #q{dlx = XName}) ->
+handle_cast({dead_letter, Msg, AckTag, Reason},
+            State = #q{dlx             = XName,
+                       dlx_routing_key = RK,
+                       publish_seqno   = SeqNo,
+                       unconfirmed     = UC,
+                       queue_monitors  = QMons}) ->
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
-            {AckImmediately, State2} =
-                lists:foldl(
-                  fun({Msg, AckTag},
-                      {Acks, State1 = #q{publish_seqno  = SeqNo,
-                                         unconfirmed    = UC,
-                                         queue_monitors = QMons}}) ->
-                          case dead_letter_publish(Msg, Reason, X, State1) of
-                              []    -> {[AckTag | Acks], State1};
-                              QPids -> UC1 = dtree:insert(
-                                               SeqNo, QPids, AckTag, UC),
-                                       QMons1 = pmon:monitor_all(QPids, QMons),
-                                       {Acks,
-                                        State1#q{publish_seqno  = SeqNo + 1,
-                                                 unconfirmed    = UC1,
-                                                 queue_monitors = QMons1}}
-                          end
-                  end, {[], State}, Msgs),
-            cleanup_after_confirm(AckImmediately, State2);
+            case dead_letter_publish(Msg, Reason, X, RK, SeqNo, qname(State)) of
+                []    -> cleanup_after_confirm([AckTag], State);
+                QPids -> UC1 = dtree:insert(SeqNo, QPids, AckTag, UC),
+                         QMons1 = pmon:monitor_all(QPids, QMons),
+                         State#q{publish_seqno  = SeqNo + 1,
+                                 unconfirmed    = UC1,
+                                 queue_monitors = QMons1}
+            end;
         {error, not_found} ->
-            cleanup_after_confirm([AckTag || {_, AckTag} <- Msgs], State)
+            cleanup_after_confirm([AckTag], State)
     end;
 
 handle_cast(start_mirroring, State = #q{backing_queue       = BQ,

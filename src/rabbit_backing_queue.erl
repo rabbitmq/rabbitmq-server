@@ -35,8 +35,7 @@
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(duration() :: ('undefined' | 'infinity' | number())).
 
--type(msg_fun() :: fun((rabbit_types:basic_message(), ack()) -> 'ok') |
-                   'undefined').
+-type(msg_fun(A) :: fun ((rabbit_types:basic_message(), ack(), A) -> A)).
 -type(msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean())).
 
 %% Called on startup with a list of durable queue names. The queues
@@ -133,14 +132,11 @@
                    -> {rabbit_types:message_properties() | undefined, state()}.
 
 %% Like dropwhile, except messages are fetched in "require
-%% acknowledgement" mode and are passed, together with their Delivered
-%% flag and ack tag, to the supplied function. The function is also
-%% fed an accumulator. The result of fetchwhile is as for dropwhile
-%% plus the accumulator.
--callback fetchwhile(msg_pred(),
-                     fun ((rabbit_types:basic_message(), boolean(), ack(), A)
-                          -> A),
-                     A, state())
+%% acknowledgement" mode and are passed, together with their ack tag,
+%% to the supplied function. The function is also fed an
+%% accumulator. The result of fetchwhile is as for dropwhile plus the
+%% accumulator.
+-callback fetchwhile(msg_pred(), msg_fun(A), A, state())
                      -> {rabbit_types:message_properties() | undefined,
                          A, state()}.
 
@@ -156,13 +152,13 @@
 %% about. Must return 1 msg_id per Ack, in the same order as Acks.
 -callback ack([ack()], state()) -> {msg_ids(), state()}.
 
-%% Acktags supplied are for messages which should be processed. The
-%% provided callback function is called with each message.
--callback foreach_ack(msg_fun(), state(), [ack()]) -> state().
-
 %% Reinsert messages into the queue which have already been delivered
 %% and were pending acknowledgement.
 -callback requeue([ack()], state()) -> {msg_ids(), state()}.
+
+%% Fold over messages by ack tag. The supplied function is called with
+%% each message, its ack tag, and an accumulator.
+-callback ackfold(msg_fun(A), A, state(), [ack()]) -> {A, state()}.
 
 %% Fold over all the messages in a queue and return the accumulated
 %% results, leaving the queue undisturbed.
@@ -233,7 +229,7 @@ behaviour_info(callbacks) ->
      {delete_and_terminate, 2}, {purge, 1}, {publish, 5},
      {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1},
      {dropwhile, 2}, {fetchwhile, 4},
-     {fetch, 2}, {ack, 2}, {foreach_ack, 3}, {requeue, 2}, {fold, 3}, {len, 1},
+     {fetch, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
      {handle_pre_hibernate, 1}, {status, 1}, {invoke, 3}, {is_duplicate, 2}] ;

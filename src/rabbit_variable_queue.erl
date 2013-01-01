@@ -19,10 +19,10 @@
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4,
-         fetch/2, drop/2, ack/2, requeue/2, fold/3, len/1,
+         fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3, len/1,
          is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, multiple_routing_keys/0, foreach_ack/3]).
+         is_duplicate/2, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
@@ -597,10 +597,9 @@ fetchwhile(Pred, Fun, Acc, State) ->
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case Pred(MsgProps) of
                 true  -> {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-                         {{Msg, IsDelivered, AckTag}, State3} =
+                         {{Msg, _IsDelivered, AckTag}, State3} =
                              internal_fetch(true, MsgStatus1, State2),
-                         Acc1 = Fun(Msg, IsDelivered, AckTag, Acc),
-                         fetchwhile(Pred, Fun, Acc1, State3);
+                         fetchwhile(Pred, Fun, Fun(Msg, AckTag, Acc), State3);
                 false -> {MsgProps, Acc, a(in_r(MsgStatus, State1))}
             end
     end.
@@ -650,16 +649,6 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-foreach_ack(undefined, State, _AckTags) ->
-    State;
-foreach_ack(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
-    a(lists:foldl(fun(SeqId, State1) ->
-                          {MsgStatus, State2} =
-                              read_msg(gb_trees:get(SeqId, PA), false, State1),
-                          MsgFun(MsgStatus#msg_status.msg, SeqId),
-                          State2
-                  end, State, AckTags)).
-
 requeue(AckTags, #vqstate { delta      = Delta,
                             q3         = Q3,
                             q4         = Q4,
@@ -680,6 +669,16 @@ requeue(AckTags, #vqstate { delta      = Delta,
                                     q4         = Q4a,
                                     in_counter = InCounter + MsgCount,
                                     len        = Len + MsgCount }))}.
+
+ackfold(MsgFun, Acc, State, AckTags) ->
+    {AccN, StateN} =
+        lists:foldl(
+          fun(SeqId, {Acc0, State0 = #vqstate{ pending_ack = PA }}) ->
+                  {#msg_status { msg = Msg }, State1} =
+                      read_msg(gb_trees:get(SeqId, PA), false, State0),
+                  {MsgFun(Msg, SeqId, Acc0), State1}
+          end, {Acc, State}, AckTags),
+    {AccN, a(StateN)}.
 
 fold(Fun, Acc, #vqstate { q1    = Q1,
                           q2    = Q2,
