@@ -1163,22 +1163,22 @@ handle_call(sync_mirrors, _From,
             State = #q{backing_queue       = rabbit_mirror_queue_master = BQ,
                        backing_queue_state = BQS}) ->
     S = fun(BQSN) -> State#q{backing_queue_state = BQSN} end,
-    InfoPull = fun (Status) ->
-                       receive {'$gen_call', From, {info, Items}} ->
-                               Infos = infos(Items, State#q{status = Status}),
-                               gen_server2:reply(From, {ok, Infos})
-                       after 0 ->
-                               ok
-                       end
-               end,
-    InfoPush = fun (Status) ->
-                       rabbit_event:if_enabled(
-                         State, #q.stats_timer,
-                         fun() -> emit_stats(State#q{status = Status}) end)
-               end,
+    HandleInfo = fun (Status) ->
+                         receive {'$gen_call', From, {info, Items}} ->
+                                 Infos = infos(Items, State#q{status = Status}),
+                                 gen_server2:reply(From, {ok, Infos})
+                         after 0 ->
+                                 ok
+                         end
+                 end,
+    EmitStats = fun (Status) ->
+                        rabbit_event:if_enabled(
+                          State, #q.stats_timer,
+                          fun() -> emit_stats(State#q{status = Status}) end)
+                end,
     case BQ:depth(BQS) - BQ:len(BQS) of
         0 -> case rabbit_mirror_queue_master:sync_mirrors(
-                    InfoPull, InfoPush, BQS) of
+                    HandleInfo, EmitStats, BQS) of
                  {shutdown, Reason, BQS1} -> {stop, Reason, S(BQS1)};
                  {Result, BQS1}           -> reply(Result, S(BQS1))
              end;

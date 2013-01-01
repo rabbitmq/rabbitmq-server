@@ -127,7 +127,7 @@ stop_mirroring(State = #state { coordinator         = CPid,
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
-sync_mirrors(InfoPull, InfoPush,
+sync_mirrors(HandleInfo, EmitStats,
              State = #state { name                = QName,
                               gm                  = GM,
                               backing_queue       = BQ,
@@ -143,7 +143,7 @@ sync_mirrors(InfoPull, InfoPush,
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
     case rabbit_mirror_queue_sync:master_go(
-           Syncer, Ref, Log, InfoPull, InfoPush, BQ, BQS) of
+           Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) of
         {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
         {sync_died, R, BQS1}   -> Log("~p", [R]),
                                   {ok, S(BQS1)};

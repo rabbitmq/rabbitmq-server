@@ -59,12 +59,12 @@ master_prepare(Ref, Log, SPids) ->
     MPid = self(),
     spawn_link(fun () -> syncer(Ref, Log, MPid, SPids) end).
 
-master_go(Syncer, Ref, Log, InfoPull, InfoPush, BQ, BQS) ->
-    Args = {Syncer, Ref, Log, InfoPull, InfoPush, rabbit_misc:get_parent()},
+master_go(Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) ->
+    Args = {Syncer, Ref, Log, HandleInfo, EmitStats, rabbit_misc:get_parent()},
     receive
         {'EXIT', Syncer, normal} -> {already_synced, BQS};
         {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS};
-        {ready, Syncer}          -> InfoPush({syncing, 0}),
+        {ready, Syncer}          -> EmitStats({syncing, 0}),
                                     master_go0(Args, BQ, BQS)
     end.
 
@@ -77,15 +77,15 @@ master_go0(Args, BQ, BQS) ->
         {_,                   BQS1} -> master_done(Args, BQS1)
     end.
 
-master_send(Msg, MsgProps, {Syncer, Ref, Log, InfoPull, InfoPush, Parent},
+master_send(Msg, MsgProps, {Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
             {I, Last}) ->
     T = case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
-            true  -> InfoPush({syncing, I}),
+            true  -> EmitStats({syncing, I}),
                      Log("~p messages", [I]),
                      erlang:now();
             false -> Last
         end,
-    InfoPull({syncing, I}),
+    HandleInfo({syncing, I}),
     receive
         {'$gen_cast', {set_maximum_since_use, Age}} ->
             ok = file_handle_cache:set_maximum_since_use(Age)
