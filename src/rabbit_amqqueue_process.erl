@@ -722,7 +722,7 @@ drop_expired_msgs(State = #q{dlx                 = DLX,
                          {Next, State#q{backing_queue_state = BQS1}};
             _         -> case rabbit_exchange:lookup(DLX) of
                              {ok, X} ->
-                                 drop_expired_messages(ExpirePred, X, State);
+                                 dead_letter_expired_msgs(ExpirePred, X, State);
                              {error, not_found} ->
                                  {Next, BQS1} = BQ:dropwhile(ExpirePred, BQS),
                                  {Next, State#q{backing_queue_state = BQS1}}
@@ -733,12 +733,12 @@ drop_expired_msgs(State = #q{dlx                 = DLX,
                          #message_properties{expiry = Exp}  -> Exp
                      end, State1).
 
-drop_expired_messages(ExpirePred, X, State = #q{dlx_routing_key     = RK,
-                                                publish_seqno       = SeqNo0,
-                                                unconfirmed         = UC0,
-                                                queue_monitors      = QMons0,
-                                                backing_queue_state = BQS,
-                                                backing_queue       = BQ}) ->
+dead_letter_expired_msgs(ExpirePred, X, State = #q{dlx_routing_key     = RK,
+                                                   publish_seqno       = SeqNo0,
+                                                   unconfirmed         = UC0,
+                                                   queue_monitors      = QMons0,
+                                                   backing_queue_state = BQS,
+                                                   backing_queue       = BQ}) ->
     QName = qname(State),
     {Next, {ConfirmImm1, SeqNo1, UC1, QMons1}, BQS1} =
         BQ:fetchwhile(
