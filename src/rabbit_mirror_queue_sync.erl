@@ -107,7 +107,7 @@ master_send(Msg, MsgProps, {Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
     end.
 
-master_done({Syncer, Ref, _Log, Parent}, BQS) ->
+master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
     receive
         {next, Ref}              -> unlink(Syncer),
                                     Syncer ! {done, Ref},
