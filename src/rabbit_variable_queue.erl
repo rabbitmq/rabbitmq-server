@@ -1132,12 +1132,11 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                   ok = msg_store_remove(MSCState, IsPersistent, [MsgId])
           end,
     Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
-    IndexState2 =
-        case {AckRequired, MsgOnDisk, IndexOnDisk} of
-            {false, true, false} -> Rem(), IndexState1;
-            {false, true,  true} -> Rem(), Ack();
-            _                    -> IndexState1
-        end,
+    IndexState2 = case {AckRequired, MsgOnDisk, IndexOnDisk} of
+                      {false, true, false} -> Rem(), IndexState1;
+                      {false, true,  true} -> Rem(), Ack();
+                      _                    -> IndexState1
+                  end,
 
     %% 3. If an ack is required, add something sensible to PA
     {AckTag, State1} = case AckRequired of
