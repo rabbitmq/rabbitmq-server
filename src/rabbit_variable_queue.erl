@@ -596,9 +596,9 @@ fetchwhile(Pred, Fun, Acc, State) ->
             {undefined, Acc, a(State1)};
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case Pred(MsgProps) of
-                true  -> {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-                         {{Msg, _IsDelivered, AckTag}, State3} =
-                             remove(true, MsgStatus1, State2),
+                true  -> {MsgStatus1 = #msg_status { msg = Msg }, State2} =
+                             read_msg(MsgStatus, State1),
+                         {AckTag, State3} = remove(true, MsgStatus1, State2),
                          fetchwhile(Pred, Fun, Fun(Msg, AckTag, Acc), State3);
                 false -> {MsgProps, Acc, a(in_r(MsgStatus, State1))}
             end
@@ -611,9 +611,11 @@ fetch(AckRequired, State) ->
         {{value, MsgStatus}, State1} ->
             %% it is possible that the message wasn't read from disk
             %% at this point, so read it in.
-            {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-            {Res, State3} = remove(AckRequired, MsgStatus1, State2),
-            {Res, a(State3)}
+            {MsgStatus1 = #msg_status { msg          = Msg,
+                                        is_delivered = IsDelivered }, State2} =
+                read_msg(MsgStatus, State1),
+            {AckTag, State3} = remove(AckRequired, MsgStatus1, State2),
+            {{Msg, IsDelivered, AckTag}, a(State3)}
     end.
 
 drop(AckRequired, State) ->
@@ -621,8 +623,7 @@ drop(AckRequired, State) ->
         {empty, State1} ->
             {empty, a(State1)};
         {{value, MsgStatus}, State1} ->
-            {{_Msg, _IsDelivered, AckTag}, State2} =
-                remove(AckRequired, MsgStatus, State1),
+            {AckTag, State2} = remove(AckRequired, MsgStatus, State1),
             {{MsgStatus#msg_status.msg_id, AckTag}, a(State2)}
     end.
 
@@ -1149,12 +1150,11 @@ remove(AckRequired, MsgStatus = #msg_status {
     PCount1      = PCount      - one_if(IsPersistent andalso not AckRequired),
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
-    {{Msg, IsDelivered, AckTag},
-     State1 #vqstate { ram_msg_count    = RamMsgCount1,
-                       out_counter      = OutCount + 1,
-                       index_state      = IndexState2,
-                       len              = Len - 1,
-                       persistent_count = PCount1 }}.
+    {AckTag, State1 #vqstate { ram_msg_count    = RamMsgCount1,
+                               out_counter      = OutCount + 1,
+                               index_state      = IndexState2,
+                               len              = Len - 1,
+                               persistent_count = PCount1 }}.
 
 purge_betas_and_deltas(LensByStore,
                        State = #vqstate { q3                = Q3,
