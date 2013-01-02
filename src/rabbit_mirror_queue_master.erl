@@ -18,11 +18,11 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/5, publish_delivered/4,
-         discard/3, fetch/2, drop/2, ack/2,
-         requeue/2, fold/3, len/1, is_empty/1, depth/1, drain_confirmed/1,
+         discard/3, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
+         len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, foreach_ack/3]).
+         status/1, invoke/3, is_duplicate/2]).
 
 -export([start/1, stop/0]).
 
@@ -281,16 +281,17 @@ ack(AckTags, State = #state { gm                  = GM,
     end,
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
-foreach_ack(MsgFun, State = #state { backing_queue       = BQ,
-                                     backing_queue_state = BQS }, AckTags) ->
-    State #state { backing_queue_state = BQ:foreach_ack(MsgFun, BQS, AckTags) }.
-
 requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,
                                   backing_queue_state = BQS }) ->
     {MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
     ok = gm:broadcast(GM, {requeue, MsgIds}),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
+
+ackfold(MsgFun, Acc, State = #state { backing_queue       = BQ,
+                                      backing_queue_state = BQS }, AckTags) ->
+    {Acc1, BQS1} = BQ:ackfold(MsgFun, Acc, BQS, AckTags),
+    {Acc1, State #state { backing_queue_state =  BQS1 }}.
 
 fold(Fun, Acc, State = #state { backing_queue = BQ,
                                 backing_queue_state = BQS }) ->
