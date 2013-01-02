@@ -1147,7 +1147,7 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                            false -> {undefined, State}
                        end,
 
-    PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
+    PCount1      = PCount      - one_if(IsPersistent andalso not AckRequired),
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
     {{Msg, IsDelivered, AckTag},
