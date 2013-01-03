@@ -19,6 +19,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
+-include("rabbit_stomp_prefixes.hrl").
 
 %%--------------------------------------------------------------------
 %% Header Processing Tests
@@ -129,15 +130,11 @@ headers_post_process_test() ->
     [] = lists:subtract(
            rabbit_stomp_util:headers_post_process(Headers), Expected).
 
-headers_post_process_noop1_test() ->
-    Headers  = [{"reply-to", "/reply-queue/something"},
-                {"header1", "1"},
-                {"header2", "12"}],
-    Expected = [{"reply-to", "/reply-queue/something"},
-                {"header1", "1"},
-                {"header2", "12"}],
-    [] = lists:subtract(
-           rabbit_stomp_util:headers_post_process(Headers), Expected).
+headers_post_process_noop_replyto_test() ->
+    [begin
+         Headers = [{"reply-to", Prefix ++ "/something"}],
+         Headers = rabbit_stomp_util:headers_post_process(Headers)
+     end || Prefix <- ?VALID_DEST_PREFIXES, Prefix /= ?TEMP_QUEUE_PREFIX].
 
 headers_post_process_noop2_test() ->
     Headers  = [{"header1", "1"},

@@ -141,14 +141,16 @@ headers_extra(SessionId, AckMode, Version,
     end.
 
 headers_post_process(Headers) ->
-    [case H of
-         {?HEADER_REPLY_TO, ?REPLY_QUEUE_PREFIX ++ _} ->
-             H;
+    Prefixes = ?VALID_DEST_PREFIXES -- [?TEMP_QUEUE_PREFIX],
+    [case Header of
          {?HEADER_REPLY_TO, V} ->
-             {?HEADER_REPLY_TO, ?REPLY_QUEUE_PREFIX ++ V};
+             case lists:any(fun (P) -> lists:prefix(P, V) end, Prefixes) of
+                 true  -> {?HEADER_REPLY_TO, V};
+                 false -> {?HEADER_REPLY_TO, ?REPLY_QUEUE_PREFIX ++ V}
+             end;
          {_, _} ->
-             H
-     end || H <- Headers].
+             Header
+     end || Header <- Headers].
 
 headers(SessionId, Delivery, Properties, AckMode, Version) ->
     headers_extra(SessionId, AckMode, Version, Delivery) ++
