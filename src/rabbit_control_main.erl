@@ -281,11 +281,12 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     rpc_call(Node, rabbit_mnesia, forget_cluster_node,
              [ClusterNode, RemoveWhenOffline]);
 
-action(sync_queue, Node, [Queue], Opts, Inform) ->
+action(sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Synchronising queue \"~s\" in vhost \"~s\"", [Queue, VHost]),
-    rpc_call(Node, rabbit_amqqueue, sync,
-             [list_to_binary(Queue), list_to_binary(VHost)]);
+    Inform("Synchronising queue \"~s\" in vhost \"~s\"", [Q, VHost]),
+    rpc_call(Node, rabbit_amqqueue, with,
+             [rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
+              fun(#amqqueue{pid = P}) -> rabbit_amqqueue:sync_mirrors(P) end]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
