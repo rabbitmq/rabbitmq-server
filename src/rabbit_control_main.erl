@@ -17,7 +17,7 @@
 -module(rabbit_control_main).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5]).
+-export([start/0, stop/0, action/5, sync_queue/1]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -284,9 +284,8 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
 action(sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Synchronising queue \"~s\" in vhost \"~s\"", [Q, VHost]),
-    rpc_call(Node, rabbit_amqqueue, with,
-             [rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
-              fun(#amqqueue{pid = P}) -> rabbit_amqqueue:sync_mirrors(P) end]);
+    rpc_call(Node, rabbit_control_main, sync_queue,
+             [rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q))]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
@@ -520,6 +519,10 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
     end.
 
 format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
+
+sync_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(#amqqueue{pid = QPid}) -> rabbit_amqqueue:sync_mirrors(QPid) end).
 
 %%----------------------------------------------------------------------------
 
