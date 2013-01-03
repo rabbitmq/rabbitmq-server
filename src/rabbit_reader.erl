@@ -612,7 +612,7 @@ process_frame(Frame, Channel, State) ->
             put(ChKey, {ChPid, NewAState}),
             post_process_frame(Frame, ChPid, control_throttle(State));
         {error, Reason} ->
-            {error, Reason}
+            handle_exception(State, Channel, Reason)
     end.
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
