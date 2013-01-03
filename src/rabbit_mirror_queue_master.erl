@@ -70,6 +70,8 @@
 -spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->
                                       master_state()).
 -spec(stop_mirroring/1 :: (master_state()) -> {atom(), any()}).
+-spec(sync_mirrors/1 :: (master_state()) ->
+    {'ok', master_state()} | {stop, any(), master_state()}).
 
 -endif.
 

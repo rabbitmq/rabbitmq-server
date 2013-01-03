@@ -52,6 +52,25 @@
 %%                 ||                 || -- sync_complete --> ||
 %%                 ||               (Dies)                    ||
 
+-ifdef(use_specs).
+
+-type(log_fun() :: fun ((string(), [any()]) -> 'ok')).
+-type(bq() :: atom()).
+-type(bqs() :: any()).
+
+-spec(master_prepare/3 :: (reference(), log_fun(), [pid()]) -> pid()).
+-spec(master_go/5 :: (pid(), reference(), log_fun(), bq(), bqs()) ->
+                          {'already_synced', bqs()} | {'ok', bqs()} |
+                          {'shutdown', any(), bqs()} |
+                          {'sync_died', any(), bqs()}).
+-spec(slave/7 :: (non_neg_integer(), reference(), timer:tref(), pid(),
+                  bq(), bqs(), fun((bq(), bqs()) -> {timer:tref(), bqs()})) ->
+                      'denied' |
+                      {'ok' | 'failed', {timer:tref(), bqs()}} |
+                      {'stop', any(), {timer:tref(), bqs()}}).
+
+-endif.
+
 %% ---------------------------------------------------------------------------
 %% Master
 

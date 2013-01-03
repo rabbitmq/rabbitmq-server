@@ -37,7 +37,7 @@
 
 -ifdef(use_specs).
 
--opaque(bump_msg() :: {pid(), non_neg_integer()}).
+-type(bump_msg() :: {pid(), non_neg_integer()}).
 -type(credit_spec() :: {non_neg_integer(), non_neg_integer()}).
 
 -spec(send/1 :: (pid()) -> 'ok').
