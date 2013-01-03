@@ -145,8 +145,7 @@ syncer(Ref, Log, MPid, SPids) ->
         SPids1 -> MPid ! {ready, self()},
                   Log("~p to sync", [[rabbit_misc:pid_to_string(SPid) ||
                                          SPid <- SPids1]]),
-                  SPids2 = syncer_loop(Ref, MPid, SPids1),
-                  [SPid ! {sync_complete, Ref} || SPid <- SPids2]
+                  syncer_loop(Ref, MPid, SPids1)
     end.
 
 syncer_loop(Ref, MPid, SPids) ->
@@ -160,7 +159,7 @@ syncer_loop(Ref, MPid, SPids) ->
              end || SPid <- SPids1],
             syncer_loop(Ref, MPid, SPids1);
         {done, Ref} ->
-            SPids
+            [SPid ! {sync_complete, Ref} || SPid <- SPids]
     end.
 
 wait_for_credit(SPids) ->
