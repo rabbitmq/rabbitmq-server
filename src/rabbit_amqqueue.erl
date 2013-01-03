@@ -600,7 +600,7 @@ set_maximum_since_use(QPid, Age) ->
 start_mirroring(QPid) -> ok = delegate:cast(QPid, start_mirroring).
 stop_mirroring(QPid)  -> ok = delegate:cast(QPid, stop_mirroring).
 
-sync_mirrors(QPid) -> delegate_call(QPid, sync_mirrors).
+sync_mirrors(QPid) -> delegate:call(QPid, sync_mirrors).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
