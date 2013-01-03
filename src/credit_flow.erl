@@ -56,6 +56,9 @@
 %% closure creation a HOF would introduce
 -define(UPDATE(Key, Default, Var, Expr),
         begin
+            %% We delibarately allow Var to escape from the case here
+            %% to be used in Expr. Any temporary var we introduced
+            %% would also escape, and might conflict.
             case get(Key) of
                 undefined -> Var = Default;
                 Var       -> ok
