@@ -148,7 +148,7 @@ syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
     MPid ! {next, Ref},
     receive
         {msg, Ref, Msg, MsgProps} ->
-            SPidsMRefs1 = wait_for_credit(SPidsMRefs, Ref),
+            SPidsMRefs1 = wait_for_credit(SPidsMRefs),
             [begin
                  credit_flow:send(SPid),
                  SPid ! {sync_msg, Ref, Msg, MsgProps}
@@ -158,10 +158,16 @@ syncer_loop({Ref, MPid} = Args, SPidsMRefs) ->
             SPidsMRefs
     end.
 
-wait_for_credit(SPidsMRefs, Ref) ->
+wait_for_credit(SPidsMRefs) ->
     case credit_flow:blocked() of
-        true  -> wait_for_credit(foreach_slave(SPidsMRefs, Ref,
-                                               fun sync_receive_credit/3), Ref);
+        true  -> receive
+                     {bump_credit, Msg} ->
+                         credit_flow:handle_bump_msg(Msg),
+                         wait_for_credit(SPidsMRefs);
+                     {'DOWN', MRef, _, SPid, _} ->
+                         credit_flow:peer_down(SPid),
+                         wait_for_credit(lists:delete({SPid, MRef}, SPidsMRefs))
+                 end;
         false -> SPidsMRefs
     end.
 
@@ -176,13 +182,6 @@ sync_receive_ready(SPid, MRef, Ref) ->
         {'DOWN', MRef, _, SPid, _} -> ignore
     end.
 
-sync_receive_credit(SPid, MRef, _Ref) ->
-    receive
-        {bump_credit, {SPid, _} = Msg} -> credit_flow:handle_bump_msg(Msg),
-                                          SPid;
-        {'DOWN', MRef, _, SPid, _}     -> credit_flow:peer_down(SPid),
-                                          ignore
-    end.
 
 sync_send_complete(SPid, _MRef, Ref) ->
     SPid ! {sync_complete, Ref}.
