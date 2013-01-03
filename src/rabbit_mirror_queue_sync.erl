@@ -221,6 +221,6 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
             {stop, Reason, {TRef, BQS}};
         %% If the master throws an exception
         {'$gen_cast', {gm, {delete_and_terminate, Reason}}} ->
-            BQS1 = BQ:delete_and_terminate(Reason, BQS),
-            {stop, Reason, {TRef, BQS1}}
+            BQ:delete_and_terminate(Reason, BQS),
+            {stop, Reason, {TRef, undefined}}
     end.
