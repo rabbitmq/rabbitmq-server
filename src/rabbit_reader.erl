@@ -594,40 +594,36 @@ handle_frame(Type, Channel, Payload, State) ->
     unexpected_frame(Type, Channel, Payload, State).
 
 process_frame(Frame, Channel, State) ->
-    {ChPid, AState} = case get({channel, Channel}) of
+    ChKey = {channel, Channel},
+    {ChPid, AState} = case get(ChKey) of
                           undefined -> create_channel(Channel, State);
                           Other     -> Other
                       end,
-    case process_channel_frame(Frame,  ChPid, AState) of
-        {ok, NewAState} -> put({channel, Channel}, {ChPid, NewAState}),
-                           post_process_frame(Frame, ChPid, State);
-        {error, Reason} -> handle_exception(State, Channel, Reason)
-    end.
-
-process_channel_frame(Frame, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
-        {ok, NewAState}                  -> {ok, NewAState};
-        {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
-                                            {ok, NewAState};
-        {ok, Method, Content, NewAState} -> rabbit_channel:do_flow(
-                                              ChPid, Method, Content),
-                                            {ok, NewAState};
-        {error, Reason}                  -> {error, Reason}
+        {ok, NewAState} ->
+            put(ChKey, {ChPid, NewAState}),
+            post_process_frame(Frame, ChPid, State);
+        {ok, Method, NewAState} ->
+            rabbit_channel:do(ChPid, Method),
+            put(ChKey, {ChPid, NewAState}),
+            post_process_frame(Frame, ChPid, State);
+        {ok, Method, Content, NewAState} ->
+            rabbit_channel:do_flow(ChPid, Method, Content),
+            put(ChKey, {ChPid, NewAState}),
+            post_process_frame(Frame, ChPid, control_throttle(State));
+        {error, Reason} ->
+            handle_exception(State, Channel, Reason)
     end.
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     channel_cleanup(ChPid),
-    control_throttle(State);
-post_process_frame({method, MethodName, _}, _ChPid,
-                   State = #v1{connection = #connection{
-                                 protocol = Protocol}}) ->
-    case Protocol:method_has_content(MethodName) of
-        true  -> erlang:bump_reductions(2000),
-                 maybe_block(control_throttle(State));
-        false -> control_throttle(State)
-    end;
+    State;
+post_process_frame({content_header, _, _, _, _}, _ChPid, State) ->
+    maybe_block(State);
+post_process_frame({content_body, _}, _ChPid, State) ->
+    maybe_block(State);
 post_process_frame(_Frame, _ChPid, State) ->
-    control_throttle(State).
+    State.
 
 %%--------------------------------------------------------------------------
 
