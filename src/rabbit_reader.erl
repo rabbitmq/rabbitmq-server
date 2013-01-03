@@ -594,24 +594,25 @@ handle_frame(Type, Channel, Payload, State) ->
     unexpected_frame(Type, Channel, Payload, State).
 
 process_frame(Frame, Channel, State) ->
-    {ChPid, AState} = case get({channel, Channel}) of
+    ChKey = {channel, Channel},
+    {ChPid, AState} = case get(ChKey) of
                           undefined -> create_channel(Channel, State);
                           Other     -> Other
                       end,
     case rabbit_command_assembler:process(Frame, AState) of
         {ok, NewAState} ->
-            put({channel, Channel}, {ChPid, NewAState}),
+            put(ChKey, {ChPid, NewAState}),
             post_process_frame(Frame, ChPid, State);
         {ok, Method, NewAState} ->
             rabbit_channel:do(ChPid, Method),
-            put({channel, Channel}, {ChPid, NewAState}),
+            put(ChKey, {ChPid, NewAState}),
             post_process_frame(Frame, ChPid, State);
         {ok, Method, Content, NewAState} ->
             rabbit_channel:do_flow(ChPid, Method, Content),
-            put({channel, Channel}, {ChPid, NewAState}),
+            put(ChKey, {ChPid, NewAState}),
             post_process_frame(Frame, ChPid, control_throttle(State));
         {error, Reason} ->
-            {error, Reason}
+            handle_exception(State, Channel, Reason)
     end.
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->

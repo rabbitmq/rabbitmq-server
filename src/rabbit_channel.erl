@@ -635,7 +635,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
-            rabbit_trace:tap_trace_in(Message, TraceState),
+            rabbit_trace:tap_in(Message, TraceState),
             Delivery = rabbit_basic:delivery(Mandatory, Message, MsgSeqNo),
             QNames = rabbit_exchange:route(Exchange, Delivery),
             {noreply,
@@ -1253,7 +1253,7 @@ record_sent(ConsumerTag, AckRequired,
         true  -> incr_stats([{queue_stats, QName, 1}], redeliver, State);
         false -> ok
     end,
-    rabbit_trace:tap_trace_out(Msg, TraceState),
+    rabbit_trace:tap_out(Msg, TraceState),
     UAMQ1 = case AckRequired of
                 true  -> queue:in({DeliveryTag, ConsumerTag, {QPid, MsgId}},
                                   UAMQ);
