@@ -19,10 +19,10 @@
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4,
-         fetch/2, drop/2, ack/2, requeue/2, fold/3, len/1,
+         fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3, len/1,
          is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, multiple_routing_keys/0, foreach_ack/3]).
+         is_duplicate/2, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
@@ -584,7 +584,7 @@ dropwhile(Pred, State) ->
             {undefined, a(State1)};
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case Pred(MsgProps) of
-                true  -> {_, State2} = internal_fetch(false, MsgStatus, State1),
+                true  -> {_, State2} = remove(false, MsgStatus, State1),
                          dropwhile(Pred, State2);
                 false -> {MsgProps, a(in_r(MsgStatus, State1))}
             end
@@ -596,11 +596,10 @@ fetchwhile(Pred, Fun, Acc, State) ->
             {undefined, Acc, a(State1)};
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case Pred(MsgProps) of
-                true  -> {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-                         {{Msg, IsDelivered, AckTag}, State3} =
-                             internal_fetch(true, MsgStatus1, State2),
-                         Acc1 = Fun(Msg, IsDelivered, AckTag, Acc),
-                         fetchwhile(Pred, Fun, Acc1, State3);
+                true  -> {MsgStatus1 = #msg_status { msg = Msg }, State2} =
+                             read_msg(MsgStatus, State1),
+                         {AckTag, State3} = remove(true, MsgStatus1, State2),
+                         fetchwhile(Pred, Fun, Fun(Msg, AckTag, Acc), State3);
                 false -> {MsgProps, Acc, a(in_r(MsgStatus, State1))}
             end
     end.
@@ -612,9 +611,11 @@ fetch(AckRequired, State) ->
         {{value, MsgStatus}, State1} ->
             %% it is possible that the message wasn't read from disk
             %% at this point, so read it in.
-            {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-            {Res, State3} = internal_fetch(AckRequired, MsgStatus1, State2),
-            {Res, a(State3)}
+            {MsgStatus1 = #msg_status { msg          = Msg,
+                                        is_delivered = IsDelivered }, State2} =
+                read_msg(MsgStatus, State1),
+            {AckTag, State3} = remove(AckRequired, MsgStatus1, State2),
+            {{Msg, IsDelivered, AckTag}, a(State3)}
     end.
 
 drop(AckRequired, State) ->
@@ -622,8 +623,7 @@ drop(AckRequired, State) ->
         {empty, State1} ->
             {empty, a(State1)};
         {{value, MsgStatus}, State1} ->
-            {{_Msg, _IsDelivered, AckTag}, State2} =
-                internal_fetch(AckRequired, MsgStatus, State1),
+            {AckTag, State2} = remove(AckRequired, MsgStatus, State1),
             {{MsgStatus#msg_status.msg_id, AckTag}, a(State2)}
     end.
 
@@ -650,16 +650,6 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-foreach_ack(undefined, State, _AckTags) ->
-    State;
-foreach_ack(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
-    a(lists:foldl(fun(SeqId, State1) ->
-                          {MsgStatus, State2} =
-                              read_msg(gb_trees:get(SeqId, PA), false, State1),
-                          MsgFun(MsgStatus#msg_status.msg, SeqId),
-                          State2
-                  end, State, AckTags)).
-
 requeue(AckTags, #vqstate { delta      = Delta,
                             q3         = Q3,
                             q4         = Q4,
@@ -680,6 +670,16 @@ requeue(AckTags, #vqstate { delta      = Delta,
                                     q4         = Q4a,
                                     in_counter = InCounter + MsgCount,
                                     len        = Len + MsgCount }))}.
+
+ackfold(MsgFun, Acc, State, AckTags) ->
+    {AccN, StateN} =
+        lists:foldl(
+          fun(SeqId, {Acc0, State0 = #vqstate{ pending_ack = PA }}) ->
+                  {#msg_status { msg = Msg }, State1} =
+                      read_msg(gb_trees:get(SeqId, PA), false, State0),
+                  {MsgFun(Msg, SeqId, Acc0), State1}
+          end, {Acc, State}, AckTags),
+    {AccN, a(StateN)}.
 
 fold(Fun, Acc, #vqstate { q1    = Q1,
                           q2    = Q2,
@@ -1108,20 +1108,20 @@ read_msg(MsgStatus = #msg_status { msg           = undefined,
 read_msg(MsgStatus, _CountDiskToRam, State) ->
     {MsgStatus, State}.
 
-internal_fetch(AckRequired, MsgStatus = #msg_status {
-                              seq_id        = SeqId,
-                              msg_id        = MsgId,
-                              msg           = Msg,
-                              is_persistent = IsPersistent,
-                              is_delivered  = IsDelivered,
-                              msg_on_disk   = MsgOnDisk,
-                              index_on_disk = IndexOnDisk },
-               State = #vqstate {ram_msg_count     = RamMsgCount,
-                                 out_counter       = OutCount,
-                                 index_state       = IndexState,
-                                 msg_store_clients = MSCState,
-                                 len               = Len,
-                                 persistent_count  = PCount }) ->
+remove(AckRequired, MsgStatus = #msg_status {
+                      seq_id        = SeqId,
+                      msg_id        = MsgId,
+                      msg           = Msg,
+                      is_persistent = IsPersistent,
+                      is_delivered  = IsDelivered,
+                      msg_on_disk   = MsgOnDisk,
+                      index_on_disk = IndexOnDisk },
+       State = #vqstate {ram_msg_count     = RamMsgCount,
+                         out_counter       = OutCount,
+                         index_state       = IndexState,
+                         msg_store_clients = MSCState,
+                         len               = Len,
+                         persistent_count  = PCount }) ->
     %% 1. Mark it delivered if necessary
     IndexState1 = maybe_write_delivered(
                     IndexOnDisk andalso not IsDelivered,
@@ -1132,12 +1132,11 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                   ok = msg_store_remove(MSCState, IsPersistent, [MsgId])
           end,
     Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
-    IndexState2 =
-        case {AckRequired, MsgOnDisk, IndexOnDisk} of
-            {false, true, false} -> Rem(), IndexState1;
-            {false, true,  true} -> Rem(), Ack();
-            _                    -> IndexState1
-        end,
+    IndexState2 = case {AckRequired, MsgOnDisk, IndexOnDisk} of
+                      {false, true, false} -> Rem(), IndexState1;
+                      {false, true,  true} -> Rem(), Ack();
+                      _                    -> IndexState1
+                  end,
 
     %% 3. If an ack is required, add something sensible to PA
     {AckTag, State1} = case AckRequired of
@@ -1148,15 +1147,14 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                            false -> {undefined, State}
                        end,
 
-    PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
+    PCount1      = PCount      - one_if(IsPersistent andalso not AckRequired),
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
-    {{Msg, IsDelivered, AckTag},
-     State1 #vqstate { ram_msg_count    = RamMsgCount1,
-                       out_counter      = OutCount + 1,
-                       index_state      = IndexState2,
-                       len              = Len - 1,
-                       persistent_count = PCount1 }}.
+    {AckTag, State1 #vqstate { ram_msg_count    = RamMsgCount1,
+                               out_counter      = OutCount + 1,
+                               index_state      = IndexState2,
+                               len              = Len - 1,
+                               persistent_count = PCount1 }}.
 
 purge_betas_and_deltas(LensByStore,
                        State = #vqstate { q3                = Q3,
