@@ -18,7 +18,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, invoke_no_result/2, invoke/2]).
+-export([start_link/1, invoke_no_result/2, invoke/2, call/2, cast/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -35,6 +35,10 @@
                                           [{pid(), term()}]}).
 -spec(invoke_no_result/2 ::
         (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
+-spec(call/2 ::
+        ( pid(),  any()) -> any();
+        ([pid()], any()) -> {[{pid(), any()}], [{pid(), term()}]}).
+-spec(cast/2 :: (pid() | [pid()], any()) -> 'ok').
 
 -endif.
 
@@ -95,6 +99,12 @@ invoke_no_result(Pids, Fun) when is_list(Pids) ->
     end,
     safe_invoke(LocalPids, Fun), %% must not die
     ok.
+
+call(PidOrPids, Msg) ->
+    invoke(PidOrPids, fun (P) -> gen_server2:call(P, Msg, infinity) end).
+
+cast(PidOrPids, Msg) ->
+    invoke_no_result(PidOrPids, fun (P) -> gen_server2:cast(P, Msg) end).
 
 %%----------------------------------------------------------------------------
 

@@ -27,9 +27,6 @@
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {protocol, user, timeout_sec, frame_max, vhost,
-                     client_properties, capabilities}).
-
 -record(content,
         {class_id,
          properties, %% either 'none', or a decoded record/tuple

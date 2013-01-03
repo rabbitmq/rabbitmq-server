@@ -18,11 +18,11 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/5, publish_delivered/4,
-         discard/3, fetch/2, drop/2, ack/2,
-         requeue/2, fold/3, len/1, is_empty/1, depth/1, drain_confirmed/1,
-         dropwhile/3, set_ram_duration_target/2, ram_duration/1,
+         discard/3, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
+         len/1, is_empty/1, depth/1, drain_confirmed/1,
+         dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, foreach_ack/3]).
+         status/1, invoke/3, is_duplicate/2]).
 
 -export([start/1, stop/0]).
 
@@ -41,7 +41,6 @@
                  backing_queue_state,
                  seen_status,
                  confirmed,
-                 ack_msg_id,
                  known_senders
                }).
 
@@ -58,7 +57,6 @@
                                  backing_queue_state :: any(),
                                  seen_status         :: dict(),
                                  confirmed           :: [rabbit_guid:guid()],
-                                 ack_msg_id          :: dict(),
                                  known_senders       :: set()
                                }).
 
@@ -119,7 +117,6 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
              backing_queue_state = BQS,
              seen_status         = dict:new(),
              confirmed           = [],
-             ack_msg_id          = dict:new(),
              known_senders       = sets:new() }.
 
 stop_mirroring(State = #state { coordinator         = CPid,
@@ -212,13 +209,11 @@ publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, State = #state { gm                  = GM,
                                           seen_status         = SS,
                                           backing_queue       = BQ,
-                                          backing_queue_state = BQS,
-                                          ack_msg_id          = AM }) ->
+                                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish_delivered, ChPid, MsgProps, Msg}),
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, BQS),
-    AM1 = maybe_store_acktag(AckTag, MsgId, AM),
-    State1 = State #state { backing_queue_state = BQS1, ack_msg_id = AM1 },
+    State1 = State #state { backing_queue_state = BQS1 },
     {AckTag, ensure_monitoring(ChPid, State1)}.
 
 discard(MsgId, ChPid, State = #state { gm                  = GM,
@@ -241,19 +236,17 @@ discard(MsgId, ChPid, State = #state { gm                  = GM,
             State
     end.
 
-dropwhile(Pred, AckRequired,
-          State = #state{gm                  = GM,
-                         backing_queue       = BQ,
-                         backing_queue_state = BQS }) ->
+dropwhile(Pred, State = #state{backing_queue       = BQ,
+                               backing_queue_state = BQS }) ->
     Len  = BQ:len(BQS),
-    {Next, Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
-    Len1 = BQ:len(BQS1),
-    Dropped = Len - Len1,
-    case Dropped of
-        0 -> ok;
-        _ -> ok = gm:broadcast(GM, {drop, Len1, Dropped, AckRequired})
-    end,
-    {Next, Msgs, State #state { backing_queue_state = BQS1 } }.
+    {Next, BQS1} = BQ:dropwhile(Pred, BQS),
+    {Next, drop(Len, false, State #state { backing_queue_state = BQS1 })}.
+
+fetchwhile(Pred, Fun, Acc, State = #state{backing_queue       = BQ,
+                                          backing_queue_state = BQS }) ->
+    Len  = BQ:len(BQS),
+    {Next, Acc1, BQS1} = BQ:fetchwhile(Pred, Fun, Acc, BQS),
+    {Next, Acc1, drop(Len, true, State #state { backing_queue_state = BQS1 })}.
 
 drain_confirmed(State = #state { backing_queue       = BQ,
                                  backing_queue_state = BQS,
@@ -289,38 +282,29 @@ fetch(AckRequired, State = #state { backing_queue       = BQ,
                                     backing_queue_state = BQS }) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
-    case Result of
-        empty ->
-            {Result, State1};
-        {#basic_message{id = MsgId}, _IsDelivered, AckTag} ->
-            {Result, drop(MsgId, AckTag, State1)}
-    end.
+    {Result, case Result of
+                 empty                          -> State1;
+                 {_MsgId, _IsDelivered, AckTag} -> drop_one(AckTag, State1)
+             end}.
 
 drop(AckRequired, State = #state { backing_queue       = BQ,
                                    backing_queue_state = BQS }) ->
     {Result, BQS1} = BQ:drop(AckRequired, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     {Result, case Result of
-                 empty           -> State1;
-                 {MsgId, AckTag} -> drop(MsgId, AckTag, State1)
+                 empty            -> State1;
+                 {_MsgId, AckTag} -> drop_one(AckTag, State1)
              end}.
 
 ack(AckTags, State = #state { gm                  = GM,
                               backing_queue       = BQ,
-                              backing_queue_state = BQS,
-                              ack_msg_id          = AM }) ->
+                              backing_queue_state = BQS }) ->
     {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
     case MsgIds of
         [] -> ok;
         _  -> ok = gm:broadcast(GM, {ack, MsgIds})
     end,
-    AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
-    {MsgIds, State #state { backing_queue_state = BQS1,
-                            ack_msg_id          = AM1 }}.
-
-foreach_ack(MsgFun, State = #state { backing_queue       = BQ,
-                                     backing_queue_state = BQS }, AckTags) ->
-    State #state { backing_queue_state = BQ:foreach_ack(MsgFun, BQS, AckTags) }.
+    {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
 requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,
@@ -328,6 +312,11 @@ requeue(AckTags, State = #state { gm                  = GM,
     {MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
     ok = gm:broadcast(GM, {requeue, MsgIds}),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
+
+ackfold(MsgFun, Acc, State = #state { backing_queue       = BQ,
+                                      backing_queue_state = BQS }, AckTags) ->
+    {Acc1, BQS1} = BQ:ackfold(MsgFun, Acc, BQS, AckTags),
+    {Acc1, State #state { backing_queue_state =  BQS1 }}.
 
 fold(Fun, Acc, State = #state { backing_queue = BQ,
                                 backing_queue_state = BQS }) ->
@@ -434,7 +423,6 @@ promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
              backing_queue_state = BQS1,
              seen_status         = Seen,
              confirmed           = [],
-             ack_msg_id          = dict:new(),
              known_senders       = sets:from_list(KS) }.
 
 sender_death_fun() ->
@@ -466,15 +454,21 @@ depth_fun() ->
 %% Helpers
 %% ---------------------------------------------------------------------------
 
-drop(MsgId, AckTag, State = #state { ack_msg_id          = AM,
-                                     gm                  = GM,
-                                     backing_queue       = BQ,
-                                     backing_queue_state = BQS }) ->
+drop_one(AckTag, State = #state { gm                  = GM,
+                                  backing_queue       = BQ,
+                                  backing_queue_state = BQS }) ->
     ok = gm:broadcast(GM, {drop, BQ:len(BQS), 1, AckTag =/= undefined}),
-    State #state { ack_msg_id = maybe_store_acktag(AckTag, MsgId, AM) }.
+    State.
 
-maybe_store_acktag(undefined, _MsgId, AM) -> AM;
-maybe_store_acktag(AckTag,     MsgId, AM) -> dict:store(AckTag, MsgId, AM).
+drop(PrevLen, AckRequired, State = #state { gm                  = GM,
+                                            backing_queue       = BQ,
+                                            backing_queue_state = BQS }) ->
+    Len = BQ:len(BQS),
+    case PrevLen - Len of
+        0       -> State;
+        Dropped -> ok = gm:broadcast(GM, {drop, Len, Dropped, AckRequired}),
+                   State
+    end.
 
 ensure_monitoring(ChPid, State = #state { coordinator = CPid,
                                           known_senders = KS }) ->
