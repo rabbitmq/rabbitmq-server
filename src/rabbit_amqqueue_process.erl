@@ -254,8 +254,7 @@ init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
 init_dlx_routing_key(RoutingKey, State) ->
     State#q{dlx_routing_key = RoutingKey}.
 
-init_max_length(MaxLen, State) ->
-    State#q{max_length = MaxLen}.
+init_max_length(MaxLen, State) -> State#q{max_length = MaxLen}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue_state = BQS} =
