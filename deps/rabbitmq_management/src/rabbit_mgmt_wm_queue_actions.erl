@@ -47,8 +47,10 @@ do_it(ReqData, Context) ->
     QName = rabbit_mgmt_util:id(queue, ReqData),
     rabbit_mgmt_util:with_decode(
       [action], ReqData, Context,
-      fun([ActionBin], _Body) ->
-              action(ActionBin, QName, VHost, ReqData, Context)
+      fun([Action], _Body) ->
+              rabbit_amqqueue:with(
+                rabbit_misc:r(VHost, queue, QName),
+                fun(Q) -> action(Action, Q, ReqData, Context) end)
       end).
 
 is_authorized(ReqData, Context) ->
@@ -56,13 +58,13 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-action(<<"sync">>, QName, VHost, ReqData, Context) ->
-    spawn(fun() -> rabbit_amqqueue:sync(QName, VHost) end),
+action(<<"sync">>, #amqqueue{pid = QPid}, ReqData, Context) ->
+    spawn(fun() -> rabbit_amqqueue:sync_mirrors(QPid) end),
     {true, ReqData, Context};
 
-action(<<"cancel_sync">>, QName, VHost, ReqData, Context) ->
-    rabbit_amqqueue:cancel_sync(QName, VHost),
+action(<<"cancel_sync">>, #amqqueue{pid = QPid}, ReqData, Context) ->
+    rabbit_amqqueue:cancel_sync_mirrors(QPid),
     {true, ReqData, Context};
 
-action(Else, _QName, _VHost, ReqData, Context) ->
+action(Else, _Q, ReqData, Context) ->
     rabbit_mgmt_util:bad_request({unknown, Else}, ReqData, Context).
