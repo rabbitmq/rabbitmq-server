@@ -17,7 +17,7 @@
 -module(rabbit_control_main).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, sync_queue/1]).
+-export([start/0, stop/0, action/5, sync_queue/1, cancel_sync_queue/1]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -51,6 +51,7 @@
          {forget_cluster_node, [?OFFLINE_DEF]},
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
+         {cancel_sync_queue, [?VHOST_DEF]},
 
          add_user,
          delete_user,
@@ -285,6 +286,12 @@ action(sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Synchronising queue \"~s\" in vhost \"~s\"", [Q, VHost]),
     rpc_call(Node, rabbit_control_main, sync_queue,
+             [rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q))]);
+
+action(cancel_sync_queue, Node, [Q], Opts, Inform) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    Inform("Stopping synchronising queue ~s in ~s", [Q, VHost]),
+    rpc_call(Node, rabbit_control_main, cancel_sync_queue,
              [rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q))]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
@@ -523,6 +530,12 @@ format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
 sync_queue(Q) ->
     rabbit_amqqueue:with(
       Q, fun(#amqqueue{pid = QPid}) -> rabbit_amqqueue:sync_mirrors(QPid) end).
+
+cancel_sync_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(#amqqueue{pid = QPid}) ->
+                 rabbit_amqqueue:cancel_sync_mirrors(QPid)
+         end).
 
 %%----------------------------------------------------------------------------
 

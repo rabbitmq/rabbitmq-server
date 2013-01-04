@@ -28,7 +28,7 @@
 
 -export([promote_backing_queue_state/8, sender_death_fun/0, depth_fun/0]).
 
--export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/1]).
+-export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/3]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -46,10 +46,11 @@
 
 -ifdef(use_specs).
 
--export_type([death_fun/0, depth_fun/0]).
+-export_type([death_fun/0, depth_fun/0, stats_fun/0]).
 
 -type(death_fun() :: fun ((pid()) -> 'ok')).
 -type(depth_fun() :: fun (() -> 'ok')).
+-type(stats_fun() :: fun ((any()) -> 'ok')).
 -type(master_state() :: #state { name                :: rabbit_amqqueue:name(),
                                  gm                  :: pid(),
                                  coordinator         :: pid(),
@@ -68,7 +69,7 @@
 -spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->
                                       master_state()).
 -spec(stop_mirroring/1 :: (master_state()) -> {atom(), any()}).
--spec(sync_mirrors/1 :: (master_state()) ->
+-spec(sync_mirrors/3 :: (stats_fun(), stats_fun(), master_state()) ->
     {'ok', master_state()} | {stop, any(), master_state()}).
 
 -endif.
@@ -126,7 +127,8 @@ stop_mirroring(State = #state { coordinator         = CPid,
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
-sync_mirrors(State = #state { name                = QName,
+sync_mirrors(HandleInfo, EmitStats,
+             State = #state { name                = QName,
                               gm                  = GM,
                               backing_queue       = BQ,
                               backing_queue_state = BQS }) ->
@@ -140,7 +142,8 @@ sync_mirrors(State = #state { name                = QName,
     Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, Log, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
-    case rabbit_mirror_queue_sync:master_go(Syncer, Ref, Log, BQ, BQS) of
+    case rabbit_mirror_queue_sync:master_go(
+           Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) of
         {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
         {sync_died, R, BQS1}   -> Log("~p", [R]),
                                   {ok, S(BQS1)};
