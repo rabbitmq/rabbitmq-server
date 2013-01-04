@@ -23,7 +23,8 @@
 -compile([export_all]).
 
 -define(TESTS, [test_queues, test_connections, test_channels, test_overview,
-                test_channel_rates, test_rate_zeroing,
+                %%test_channel_rates,
+                test_rate_zeroing,
                 test_channel_aggregation, test_exchange_aggregation,
                 test_queue_aggregation]).
 
@@ -251,7 +252,10 @@ test_queue_aggregation(_Conn, Chan) ->
 
 assert_aggregated(Key, Val, Exp, List) ->
     [Act] = [pget(stats, I) || I <- List, pget(Key, I) == Val],
-    [ActVal = pget(Type, Exp) || {Type, ActVal} <- Act].
+    [case pget(Type, Exp) of
+         undefined -> ok;
+         ExpVal    -> ExpVal = ActVal
+     end || {Type, ActVal} <- Act].
 
 %%---------------------------------------------------------------------------
 
@@ -350,7 +354,7 @@ assert_rate(Exp, Stats) ->
     CorrectedRate = Interval / 5000 * Rate,
     case abs(Exp - CorrectedRate) < 0.00001 of
         true -> ok;
-        _    -> throw({expected, Exp, got, Rate, corrected, CorrectedRate})
+        _    -> Exp = {Rate, corrected, CorrectedRate}
     end.
 
 assert_positive(Val) ->
