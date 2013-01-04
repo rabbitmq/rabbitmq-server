@@ -28,7 +28,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
 
 -export([joined/2, members_changed/3, handle_msg/3]).
 
@@ -318,7 +318,6 @@ prioritise_cast(Msg, _State) ->
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         {gm, _Msg}                           -> 5;
-        {post_commit, _Txn, _AckTags}        -> 4;
         _                                    -> 0
     end.
 
@@ -328,6 +327,8 @@ prioritise_info(Msg, _State) ->
         sync_timeout                         -> 6;
         _                                    -> 0
     end.
+
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %% ---------------------------------------------------------------------------
 %% GM
@@ -701,7 +702,7 @@ process_instruction({publish, ChPid, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(published, ChPid, MsgId, State),
-    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
+    BQS1 = BQ:publish(Msg, MsgProps, true, ChPid, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
 process_instruction({publish_delivered, ChPid, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
@@ -725,8 +726,7 @@ process_instruction({drop, Length, Dropped, AckRequired},
              end,
     State1 = lists:foldl(
                fun (const, StateN = #state{backing_queue_state = BQSN}) ->
-                       {{#basic_message{id = MsgId}, _, AckTag, _}, BQSN1} =
-                           BQ:fetch(AckRequired, BQSN),
+                       {{MsgId, AckTag}, BQSN1} = BQ:drop(AckRequired, BQSN),
                        maybe_store_ack(
                          AckRequired, MsgId, AckTag,
                          StateN #state { backing_queue_state = BQSN1 })
@@ -734,21 +734,6 @@ process_instruction({drop, Length, Dropped, AckRequired},
     {ok, case AckRequired of
              true  -> State1;
              false -> update_delta(ToDrop - Dropped, State1)
-         end};
-process_instruction({fetch, AckRequired, MsgId, Remaining},
-                    State = #state { backing_queue       = BQ,
-                                     backing_queue_state = BQS }) ->
-    QLen = BQ:len(BQS),
-    {ok, case QLen - 1 of
-             Remaining ->
-                 {{#basic_message{id = MsgId}, _IsDelivered,
-                   AckTag, Remaining}, BQS1} = BQ:fetch(AckRequired, BQS),
-                 maybe_store_ack(AckRequired, MsgId, AckTag,
-                                 State #state { backing_queue_state = BQS1 });
-             _ when QLen =< Remaining andalso AckRequired ->
-                 State;
-             _ when QLen =< Remaining ->
-                 update_delta(-1, State)
          end};
 process_instruction({ack, MsgIds},
                     State = #state { backing_queue       = BQ,

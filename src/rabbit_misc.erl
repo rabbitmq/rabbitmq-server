@@ -352,13 +352,12 @@ set_table_value(Table, Key, Type, Value) ->
     sort_field_table(
       lists:keystore(Key, 1, Table, {Key, Type, Value})).
 
-r(#resource{virtual_host = VHostPath}, Kind, Name)
-  when is_binary(Name) ->
+r(#resource{virtual_host = VHostPath}, Kind, Name) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = Name};
-r(VHostPath, Kind, Name) when is_binary(Name) andalso is_binary(VHostPath) ->
+r(VHostPath, Kind, Name) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = Name}.
 
-r(VHostPath, Kind) when is_binary(VHostPath) ->
+r(VHostPath, Kind) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = '_'}.
 
 r_arg(#resource{virtual_host = VHostPath}, Kind, Table, Key) ->
