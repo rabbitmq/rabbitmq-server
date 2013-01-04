@@ -595,7 +595,6 @@ publish_max(#delivery{message    = Message,
             BQ:publish(Message, Props, Delivered, SenderPid, BQS);
         {true, true} ->
             (dead_letter_fun(maxdepth))([{Message, undefined}]),
-            rabbit_misc:confirm_all(SenderPid, MsgSeqNo),
             nopub;
         {true, false} ->
             {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(true, BQS),
