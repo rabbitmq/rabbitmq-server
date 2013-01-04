@@ -415,9 +415,9 @@ check_int_arg({Type, _}, _) ->
 
 check_max_length_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val > 0 -> ok;
-        ok              -> {error, {value_not_positive, Val}};
-        Error           -> Error
+        ok when Val >= 0 -> ok;
+        ok               -> {error, {value_negative, Val}};
+        Error            -> Error
     end.
 
 check_expires_arg({Type, Val}, Args) ->

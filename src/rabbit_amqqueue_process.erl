@@ -571,11 +571,9 @@ deliver_or_enqueue(Delivery = #delivery{message = Message},
         {false, State2 = #q{ttl = 0, dlx = undefined}} ->
             discard(Delivery, State2);
         {false, State2} ->
-            case publish_max(Delivery, Props, Delivered, State2) of
-                nopub -> State2;
-                BQS1  -> ensure_ttl_timer(Props#message_properties.expiry,
-                                          State2#q{backing_queue_state = BQS1})
-            end
+            BQS1 = publish_max(Delivery, Props, Delivered, State2),
+            ensure_ttl_timer(Props#message_properties.expiry,
+                             State2#q{backing_queue_state = BQS1})
     end.
 
 publish_max(#delivery{message = Message,
@@ -590,16 +588,11 @@ publish_max(#delivery{message    = Message,
             Props, Delivered, #q{backing_queue       = BQ,
                                  backing_queue_state = BQS,
                                  max_length          = MaxLen}) ->
-    case {BQ:depth(BQS) >= MaxLen, BQ:len(BQS) =:= 0} of
-        {false, _} ->
-            BQ:publish(Message, Props, Delivered, SenderPid, BQS);
-        {true, true} ->
-            (dead_letter_fun(maxlen))([{Message, undefined}]),
-            nopub;
-        {true, false} ->
-            {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(true, BQS),
-            (dead_letter_fun(maxlen))([{Msg, AckTag}]),
-            BQ:publish(Message, Props, Delivered, SenderPid, BQS1)
+    case BQ:len(BQS) >= MaxLen of
+        true ->  {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(true, BQS),
+                 (dead_letter_fun(maxlen))([{Msg, AckTag}]),
+                 BQ:publish(Message, Props, Delivered, SenderPid, BQS1);
+        false -> BQ:publish(Message, Props, Delivered, SenderPid, BQS)
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
@@ -833,7 +826,7 @@ cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
                                           unconfirmed         = UC,
                                           backing_queue       = BQ,
                                           backing_queue_state = BQS}) ->
-    {_Guids, BQS1} = BQ:ack([Ack || Ack <- AckTags, Ack /= undefined], BQS),
+    {_Guids, BQS1} = BQ:ack(AckTags, BQS),
     State1 = State#q{backing_queue_state = BQS1},
     case dtree:is_empty(UC) andalso DS =/= undefined of
         true  -> case DS of
