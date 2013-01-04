@@ -1172,6 +1172,21 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
     noreply(requeue(AckTags, ChPid, State));
 
+handle_call(sync_mirrors, _From,
+            State = #q{backing_queue       = rabbit_mirror_queue_master = BQ,
+                       backing_queue_state = BQS}) ->
+    S = fun(BQSN) -> State#q{backing_queue_state = BQSN} end,
+    case BQ:depth(BQS) - BQ:len(BQS) of
+        0 -> case rabbit_mirror_queue_master:sync_mirrors(BQS) of
+                 {ok, BQS1}           -> reply(ok, S(BQS1));
+                 {stop, Reason, BQS1} -> {stop, Reason, S(BQS1)}
+             end;
+        _ -> reply({error, pending_acks}, State)
+    end;
+
+handle_call(sync_mirrors, _From, State) ->
+    reply({error, not_mirrored}, State);
+
 handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
