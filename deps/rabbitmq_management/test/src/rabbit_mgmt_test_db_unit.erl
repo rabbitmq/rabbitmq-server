@@ -62,7 +62,10 @@ format_sample_details_test() ->
       {[{30, 61}, {10, 11}], 2.5, 20, 2.5, 61}),
 
     %% Skip over some and invent some
-    %% TODO this rate calculation is dodgy, we should change it!
+    %% TODO this rate calculation is dodgy, we should change
+    %% it. Specifically we should take instantaneous rate from the
+    %% pre-formatted data, and control the period of the moving
+    %% average separately (and also take that from preformated data).
     T({0, 40, 20}, {[{10, 10}, {20, 20}, {30, 30}], 1},
       {[{40, 61}, {20, 31}, {0, 1}], 1.5, 20, 1.5, 61}),
 
