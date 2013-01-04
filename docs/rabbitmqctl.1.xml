@@ -446,6 +446,36 @@
             </para>
           </listitem>
         </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>sync_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>queue</term>
+                <listitem>
+                  <para>
+                    The name of the queue to synchronise.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instructs a mirrored queue with unsynchronised slaves to
+              synchronise itself. The queue will block while
+              synchronisation takes place (all publishers to and
+              consumers from the queue will block). The queue must be
+              mirrored, and must not have any pending unacknowledged
+              messages for this command to succeed.
+            </para>
+            <para>
+              Note that unsynchronised queues from which messages are
+              being drained will become synchronised eventually. This
+              command is primarily useful for queues which are not
+              being drained.
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 

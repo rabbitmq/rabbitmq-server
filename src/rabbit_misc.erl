@@ -67,6 +67,7 @@
 -export([check_expiry/1]).
 -export([base64url/1]).
 -export([interval_operation/4]).
+-export([get_parent/0]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -241,7 +242,7 @@
 -spec(interval_operation/4 ::
         ({atom(), atom(), any()}, float(), non_neg_integer(), non_neg_integer())
         -> {any(), non_neg_integer()}).
-
+-spec(get_parent/0 :: () -> pid()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -1045,3 +1046,37 @@ interval_operation({M, F, A}, MaxRatio, IdealInterval, LastInterval) ->
               {false, false} -> lists:max([IdealInterval,
                                            round(LastInterval / 1.5)])
           end}.
+
+%% -------------------------------------------------------------------------
+%% Begin copypasta from gen_server2.erl
+
+get_parent() ->
+    case get('$ancestors') of
+        [Parent | _] when is_pid (Parent) -> Parent;
+        [Parent | _] when is_atom(Parent) -> name_to_pid(Parent);
+        _ -> exit(process_was_not_started_by_proc_lib)
+    end.
+
+name_to_pid(Name) ->
+    case whereis(Name) of
+        undefined -> case whereis_name(Name) of
+                         undefined -> exit(could_not_find_registerd_name);
+                         Pid       -> Pid
+                     end;
+        Pid       -> Pid
+    end.
+
+whereis_name(Name) ->
+    case ets:lookup(global_names, Name) of
+        [{_Name, Pid, _Method, _RPid, _Ref}] ->
+            if node(Pid) == node() -> case erlang:is_process_alive(Pid) of
+                                          true  -> Pid;
+                                          false -> undefined
+                                      end;
+               true                -> Pid
+            end;
+        [] -> undefined
+    end.
+
+%% End copypasta from gen_server2.erl
+%% -------------------------------------------------------------------------

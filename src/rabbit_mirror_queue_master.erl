@@ -26,15 +26,16 @@
 
 -export([start/1, stop/0]).
 
--export([promote_backing_queue_state/7, sender_death_fun/0, depth_fun/0]).
+-export([promote_backing_queue_state/8, sender_death_fun/0, depth_fun/0]).
 
--export([init_with_existing_bq/3, stop_mirroring/1]).
+-export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/1]).
 
 -behaviour(rabbit_backing_queue).
 
 -include("rabbit.hrl").
 
--record(state, { gm,
+-record(state, { name,
+                 gm,
                  coordinator,
                  backing_queue,
                  backing_queue_state,
@@ -49,7 +50,8 @@
 
 -type(death_fun() :: fun ((pid()) -> 'ok')).
 -type(depth_fun() :: fun (() -> 'ok')).
--type(master_state() :: #state { gm                  :: pid(),
+-type(master_state() :: #state { name                :: rabbit_amqqueue:name(),
+                                 gm                  :: pid(),
                                  coordinator         :: pid(),
                                  backing_queue       :: atom(),
                                  backing_queue_state :: any(),
@@ -58,14 +60,16 @@
                                  known_senders       :: set()
                                }).
 
--spec(promote_backing_queue_state/7 ::
-        (pid(), atom(), any(), pid(), [any()], dict(), [pid()]) ->
-                                            master_state()).
+-spec(promote_backing_queue_state/8 ::
+        (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()], dict(),
+         [pid()]) -> master_state()).
 -spec(sender_death_fun/0 :: () -> death_fun()).
 -spec(depth_fun/0 :: () -> depth_fun()).
 -spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->
                                       master_state()).
 -spec(stop_mirroring/1 :: (master_state()) -> {atom(), any()}).
+-spec(sync_mirrors/1 :: (master_state()) ->
+    {'ok', master_state()} | {stop, any(), master_state()}).
 
 -endif.
 
@@ -106,7 +110,8 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
            end),
     {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
     rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
-    #state { gm                  = GM,
+    #state { name                = QName,
+             gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
              backing_queue_state = BQS,
@@ -120,6 +125,29 @@ stop_mirroring(State = #state { coordinator         = CPid,
     unlink(CPid),
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
+
+sync_mirrors(State = #state { name                = QName,
+                              gm                  = GM,
+                              backing_queue       = BQ,
+                              backing_queue_state = BQS }) ->
+    Log = fun (Fmt, Params) ->
+                  rabbit_log:info("Synchronising ~s: " ++ Fmt ++ "~n",
+                                  [rabbit_misc:rs(QName) | Params])
+          end,
+    Log("~p messages to synchronise", [BQ:len(BQS)]),
+    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
+    Ref = make_ref(),
+    Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, Log, SPids),
+    gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
+    S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
+    case rabbit_mirror_queue_sync:master_go(Syncer, Ref, Log, BQ, BQS) of
+        {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
+        {sync_died, R, BQS1}   -> Log("~p", [R]),
+                                  {ok, S(BQS1)};
+        {already_synced, BQS1} -> {ok, S(BQS1)};
+        {ok, BQS1}             -> Log("complete", []),
+                                  {ok, S(BQS1)}
+    end.
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue       = BQ,
@@ -144,17 +172,14 @@ delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
     stop_all_slaves(Reason, State),
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
-stop_all_slaves(Reason, #state{gm = GM}) ->
-    Info = gm:info(GM),
-    Slaves = [Pid || Pid <- proplists:get_value(group_members, Info),
-                     node(Pid) =/= node()],
-    MRefs = [erlang:monitor(process, S) || S <- Slaves],
+stop_all_slaves(Reason, #state{name = QName, gm   = GM}) ->
+    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
+    MRefs = [erlang:monitor(process, SPid) || SPid <- SPids],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
     [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
     %% Normally when we remove a slave another slave or master will
     %% notice and update Mnesia. But we just removed them all, and
     %% have stopped listening ourselves. So manually clean up.
-    QName = proplists:get_value(group_name, Info),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               [Q] = mnesia:read({rabbit_queue, QName}),
@@ -385,17 +410,18 @@ is_duplicate(Message = #basic_message { id = MsgId },
 %% Other exported functions
 %% ---------------------------------------------------------------------------
 
-promote_backing_queue_state(CPid, BQ, BQS, GM, AckTags, SeenStatus, KS) ->
+promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
     {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
     Len   = BQ:len(BQS1),
     Depth = BQ:depth(BQS1),
     true = Len == Depth, %% ASSERTION: everything must have been requeued
     ok = gm:broadcast(GM, {depth, Depth}),
-    #state { gm                  = GM,
+    #state { name                = QName,
+             gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
              backing_queue_state = BQS1,
-             seen_status         = SeenStatus,
+             seen_status         = Seen,
              confirmed           = [],
              known_senders       = sets:from_list(KS) }.
 
