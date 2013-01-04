@@ -120,26 +120,7 @@ info_keys() -> ?INFO_KEYS.
 
 init(Q) ->
     process_flag(trap_exit, true),
-    State = #q{q                   = Q#amqqueue{pid = self()},
-               exclusive_consumer  = none,
-               has_had_consumers   = false,
-               backing_queue       = undefined,
-               backing_queue_state = undefined,
-               active_consumers    = queue:new(),
-               expires             = undefined,
-               sync_timer_ref      = undefined,
-               rate_timer_ref      = undefined,
-               expiry_timer_ref    = undefined,
-               ttl                 = undefined,
-               senders             = pmon:new(),
-               dlx                 = undefined,
-               dlx_routing_key     = undefined,
-               publish_seqno       = 1,
-               unconfirmed         = dtree:empty(),
-               delayed_stop        = undefined,
-               queue_monitors      = pmon:new(),
-               msg_id_to_channel   = gb_trees:empty()},
-    {ok, rabbit_event:init_stats_timer(State, #q.stats_timer), hibernate,
+    {ok, init_state(Q#amqqueue{pid = self()}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
@@ -148,27 +129,28 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
         none -> ok;
         _    -> erlang:monitor(process, Owner)
     end,
+    State = init_state(Q),
+    State1 = State#q{backing_queue       = BQ,
+                     backing_queue_state = BQS,
+                     rate_timer_ref      = RateTRef,
+                     senders             = Senders,
+                     msg_id_to_channel   = MTC},
+    State2 = process_args(State1),
+    lists:foldl(fun (Delivery, StateN) ->
+                        deliver_or_enqueue(Delivery, true, StateN)
+                end, State2, Deliveries).
+
+init_state(Q) ->
     State = #q{q                   = Q,
                exclusive_consumer  = none,
                has_had_consumers   = false,
-               backing_queue       = BQ,
-               backing_queue_state = BQS,
                active_consumers    = queue:new(),
-               expires             = undefined,
-               sync_timer_ref      = undefined,
-               rate_timer_ref      = RateTRef,
-               expiry_timer_ref    = undefined,
-               ttl                 = undefined,
-               senders             = Senders,
+               senders             = pmon:new(),
                publish_seqno       = 1,
                unconfirmed         = dtree:empty(),
-               delayed_stop        = undefined,
                queue_monitors      = pmon:new(),
-               msg_id_to_channel   = MTC},
-    State1 = process_args(rabbit_event:init_stats_timer(State, #q.stats_timer)),
-    lists:foldl(fun (Delivery, StateN) ->
-                        deliver_or_enqueue(Delivery, true, StateN)
-                end, State1, Deliveries).
+               msg_id_to_channel   = gb_trees:empty()},
+    rabbit_event:init_stats_timer(State, #q.stats_timer).
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
