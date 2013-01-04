@@ -390,7 +390,7 @@ check_declare_arguments(QueueName, Args) ->
               {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
               {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
               {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
-              {<<"x-maxdepth">>,                fun check_maxdepth_arg/2}],
+              {<<"x-max-length">>,              fun check_max_length_arg/2}],
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;
          TypeVal   -> case Fun(TypeVal, Args) of
@@ -413,7 +413,7 @@ check_int_arg({Type, _}, _) ->
         false -> {error, {unacceptable_type, Type}}
     end.
 
-check_maxdepth_arg({Type, Val}, Args) ->
+check_max_length_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
         ok when Val > 0 -> ok;
         ok              -> {error, {value_not_positive, Val}};

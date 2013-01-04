@@ -55,7 +55,7 @@
             queue_monitors,
             dlx,
             dlx_routing_key,
-            max_depth
+            max_length
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -135,7 +135,7 @@ init(Q) ->
                senders             = pmon:new(),
                dlx                 = undefined,
                dlx_routing_key     = undefined,
-               max_depth           = undefined,
+               max_length          = undefined,
                publish_seqno       = 1,
                unconfirmed         = dtree:empty(),
                delayed_stop        = undefined,
@@ -161,7 +161,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                rate_timer_ref      = RateTRef,
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
-               max_depth           = undefined,
+               max_length          = undefined,
                senders             = Senders,
                publish_seqno       = 1,
                unconfirmed         = dtree:empty(),
@@ -262,7 +262,7 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
        {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
        {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
        {<<"x-message-ttl">>,             fun init_ttl/2},
-       {<<"x-maxdepth">>,                fun init_maxdepth/2}]).
+       {<<"x-max-length">>,              fun init_max_length/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
@@ -274,8 +274,8 @@ init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
 init_dlx_routing_key(RoutingKey, State) ->
     State#q{dlx_routing_key = RoutingKey}.
 
-init_maxdepth(MaxDepth, State) ->
-    State#q{max_depth = MaxDepth}.
+init_max_length(MaxLen, State) ->
+    State#q{max_length = MaxLen}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue_state = BQS} =
@@ -582,23 +582,23 @@ publish_max(#delivery{message = Message,
                       sender  = SenderPid},
             Props, Delivered, #q{backing_queue       = BQ,
                                  backing_queue_state = BQS,
-                                 max_depth           = undefined}) ->
+                                 max_length          = undefined}) ->
     BQ:publish(Message, Props, Delivered, SenderPid, BQS);
 publish_max(#delivery{message    = Message,
                       msg_seq_no = MsgSeqNo,
                       sender     = SenderPid},
             Props, Delivered, #q{backing_queue       = BQ,
                                  backing_queue_state = BQS,
-                                 max_depth           = MaxDepth}) ->
-    case {BQ:depth(BQS) >= MaxDepth, BQ:len(BQS) =:= 0} of
+                                 max_length          = MaxLen}) ->
+    case {BQ:depth(BQS) >= MaxLen, BQ:len(BQS) =:= 0} of
         {false, _} ->
             BQ:publish(Message, Props, Delivered, SenderPid, BQS);
         {true, true} ->
-            (dead_letter_fun(maxdepth))([{Message, undefined}]),
+            (dead_letter_fun(maxlen))([{Message, undefined}]),
             nopub;
         {true, false} ->
             {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(true, BQS),
-            (dead_letter_fun(maxdepth))([{Msg, AckTag}]),
+            (dead_letter_fun(maxlen))([{Msg, AckTag}]),
             BQ:publish(Message, Props, Delivered, SenderPid, BQS1)
     end.
 
