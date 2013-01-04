@@ -168,7 +168,7 @@ wait_for_credit(SPids) ->
                      {bump_credit, Msg} ->
                          credit_flow:handle_bump_msg(Msg),
                          wait_for_credit(SPids);
-                     {'DOWN', _, _, SPid, _} ->
+                     {'DOWN', _, process, SPid, _} ->
                          credit_flow:peer_down(SPid),
                          wait_for_credit(lists:delete(SPid, SPids))
                  end;
