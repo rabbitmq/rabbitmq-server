@@ -32,7 +32,7 @@
 
 -module(dtree).
 
--export([empty/0, insert/4, take/3, take/2, take_all/2,
+-export([empty/0, insert/4, take/3, take/2, take_all/2, take_prim/2,
          is_defined/2, is_empty/1, smallest/1, size/1]).
 
 %%----------------------------------------------------------------------------
@@ -53,6 +53,7 @@
 -spec(take/3       :: ([pk()], sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(take/2       :: (sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(take_all/2   :: (sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
+-spec(take_prim/2  :: (pk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(is_defined/2 :: (sk(), ?MODULE()) -> boolean()).
 -spec(is_empty/1   :: (?MODULE()) -> boolean()).
 -spec(smallest/1   :: (?MODULE()) -> kv()).
@@ -120,6 +121,13 @@ take_all(SK, {P, S}) ->
                         {KVs, {P1, prune(SKS, PKS, S)}}
     end.
 
+%% Drop the entry with the given primary key
+take_prim(PK, {P, S} = DTree) ->
+    case gb_trees:lookup(PK, P) of
+        none              -> {[], DTree};
+        {value, {SKS, V}} -> {[{PK, V}], take_prim2(PK, SKS, DTree)}
+    end.
+
 is_defined(SK, {_P, S}) -> gb_trees:is_defined(SK, S).
 
 is_empty({P, _S}) -> gb_trees:is_empty(P).
@@ -148,6 +156,20 @@ take_all2(PKS, P) ->
                          {[{PK, V} | KVs], gb_sets:union(SKS, SKS0),
                           gb_trees:delete(PK, P0)}
                  end, {[], gb_sets:empty(), P}, PKS).
+
+take_prim2(PK, SKS, {P, S}) ->
+    {gb_trees:delete(PK, P),
+     rabbit_misc:gb_trees_fold(
+       fun (SK0, PKS, S1) ->
+               case gb_sets:is_member(SK0, SKS) of
+                    false -> S1;
+                    true  -> PKS1 = gb_sets:delete(PK, PKS),
+                             case gb_sets:is_empty(PKS1) of
+                                  true  -> gb_trees:delete(SK0, S1);
+                                  false -> gb_trees:update(SK0, PKS1, S1)
+                             end
+               end
+       end, S, S)}.
 
 prune(SKS, PKS, S) ->
     gb_sets:fold(fun (SK0, S0) ->

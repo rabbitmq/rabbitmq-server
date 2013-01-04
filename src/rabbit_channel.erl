@@ -228,8 +228,9 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        {confirm, _MsgSeqNos, _QPid} -> 5;
-        _                            -> 0
+        {confirm,     _MsgSeqNos, _QPid} -> 5;
+        {confirm_all, _MsgSeqNo,  _QPid} -> 5;
+        _                                -> 0
     end.
 
 prioritise_info(Msg, _State) ->
@@ -554,6 +555,10 @@ confirm([], _QPid, State) ->
     State;
 confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
     {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
+    record_confirms(MXs, State#ch{unconfirmed = UC1}).
+
+confirm_all(MsgSeqNo, State = #ch{unconfirmed = UC}) ->
+    {MXs, UC1} = dtree:take_prim(MsgSeqNo, UC),
     record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
