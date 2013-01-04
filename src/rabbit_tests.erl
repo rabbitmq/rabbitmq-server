@@ -38,6 +38,7 @@ all_tests() ->
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
+    passed = test_version_equivalance(),
     passed = test_multi_call(),
     passed = test_file_handle_cache(),
     passed = test_backing_queue(),
@@ -139,6 +140,16 @@ run_cluster_dependent_tests(SecondaryNode) ->
             throw(timeout)
     end,
 
+    passed.
+
+test_version_equivalance() ->
+    true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0"),
+    true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.1"),
+    true = rabbit_misc:version_minor_equivalent("%%VSN%%", "%%VSN%%"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.1.0"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
     passed.
 
 test_multi_call() ->
@@ -2423,7 +2434,7 @@ test_dropfetchwhile(VQ0) ->
     {#message_properties{expiry = 6}, {Msgs, AckTags}, VQ2} =
         rabbit_variable_queue:fetchwhile(
           fun (#message_properties{expiry = Expiry}) -> Expiry =< 5 end,
-          fun (Msg, _Delivered, AckTag, {MsgAcc, AckAcc}) ->
+          fun (Msg, AckTag, {MsgAcc, AckAcc}) ->
                   {[Msg | MsgAcc], [AckTag | AckAcc]}
           end, {[], []}, VQ1),
     true = lists:seq(1, 5) == [msg2int(M) || M <- lists:reverse(Msgs)],
@@ -2462,7 +2473,7 @@ test_fetchwhile_varying_ram_duration(VQ0) ->
       fun (VQ1) ->
               {_, ok, VQ2} = rabbit_variable_queue:fetchwhile(
                                fun (_) -> false end,
-                               fun (_, _, _, A) -> A end,
+                               fun (_, _, A) -> A end,
                                ok, VQ1),
               VQ2
       end, VQ0).
@@ -2597,8 +2608,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
 test_variable_queue_fold_msg_on_disk(VQ0) ->
     VQ1 = variable_queue_publish(true, 1, VQ0),
     {VQ2, AckTags} = variable_queue_fetch(1, true, false, 1, VQ1),
-    VQ3 = rabbit_variable_queue:foreach_ack(fun (_M, _A) -> ok end,
-                                            VQ2, AckTags),
+    {ok, VQ3} = rabbit_variable_queue:ackfold(fun (_M, _A, ok) -> ok end,
+                                              ok, VQ2, AckTags),
     VQ3.
 
 test_queue_recover() ->

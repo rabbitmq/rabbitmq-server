@@ -283,21 +283,17 @@ terminate_shutdown(Fun, State) ->
     end.
 
 reply(Reply, NewState) ->
-    assert_invariant(NewState),
     {NewState1, Timeout} = next_state(NewState),
-    {reply, Reply, NewState1, Timeout}.
+    {reply, Reply, ensure_stats_timer(ensure_rate_timer(NewState1)), Timeout}.
 
 noreply(NewState) ->
-    assert_invariant(NewState),
     {NewState1, Timeout} = next_state(NewState),
-    {noreply, NewState1, Timeout}.
+    {noreply, ensure_stats_timer(ensure_rate_timer(NewState1)), Timeout}.
 
 next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    assert_invariant(State),
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
-    State1 = ensure_stats_timer(
-               ensure_rate_timer(
-                 confirm_messages(MsgIds, State#q{
-                                            backing_queue_state = BQS1}))),
+    State1 = confirm_messages(MsgIds, State#q{backing_queue_state = BQS1}),
     case BQ:needs_timeout(BQS1) of
         false -> {stop_sync_timer(State1),   hibernate     };
         idle  -> {stop_sync_timer(State1),   ?SYNC_INTERVAL};
@@ -327,15 +323,11 @@ ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
     TRef = erlang:send_after(
              ?RAM_DURATION_UPDATE_INTERVAL, self(), update_ram_duration),
     State#q{rate_timer_ref = TRef};
-ensure_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
-    State#q{rate_timer_ref = undefined};
 ensure_rate_timer(State) ->
     State.
 
 stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
     State;
-stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
-    State#q{rate_timer_ref = undefined};
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
     erlang:cancel_timer(TRef),
     State#q{rate_timer_ref = undefined}.
@@ -728,7 +720,7 @@ drop_expired_messages(State = #q{dlx                 = DLX,
                         undefined -> BQ:dropwhile(ExpirePred, BQS);
                         _         -> {Next, Msgs, BQS2} =
                                          BQ:fetchwhile(ExpirePred,
-                                                       fun accumulate_msgs/4,
+                                                       fun accumulate_msgs/3,
                                                        [], BQS),
                                      case Msgs of
                                          [] -> ok;
@@ -742,7 +734,7 @@ drop_expired_messages(State = #q{dlx                 = DLX,
                          #message_properties{expiry = Exp}  -> Exp
                      end, State#q{backing_queue_state = BQS1}).
 
-accumulate_msgs(Msg, _IsDelivered, AckTag, Acc) -> [{Msg, AckTag} | Acc].
+accumulate_msgs(Msg, AckTag, Acc) -> [{Msg, AckTag} | Acc].
 
 ensure_ttl_timer(undefined, State) ->
     State;
@@ -799,12 +791,9 @@ stop(State) -> stop(undefined, noreply, State).
 
 stop(From, Reply, State = #q{unconfirmed = UC}) ->
     case {dtree:is_empty(UC), Reply} of
-        {true, noreply} ->
-            {stop, normal, State};
-        {true, _} ->
-            {stop, normal, Reply, State};
-        {false, _} ->
-            noreply(State#q{delayed_stop = {From, Reply}})
+        {true, noreply} -> {stop, normal, State};
+        {true,       _} -> {stop, normal, Reply, State};
+        {false,      _} -> noreply(State#q{delayed_stop = {From, Reply}})
     end.
 
 cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
@@ -1213,8 +1202,9 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-                      BQS1 = BQ:foreach_ack(fun(M, A) -> DLXFun([{M, A}]) end,
-                                     BQS, AckTags),
+                      {ok, BQS1} = BQ:ackfold(
+                                     fun (M, A, ok) -> DLXFun([{M, A}]) end,
+                                     ok, BQS, AckTags),
                       State1#q{backing_queue_state = BQS1}
               end));
 
@@ -1327,10 +1317,10 @@ handle_info(drop_expired, State) ->
 
 handle_info(emit_stats, State) ->
     emit_stats(State),
-    {noreply, State1, Timeout} = noreply(State),
-    %% Need to reset *after* we've been through noreply/1 so we do not
-    %% just create another timer always and therefore never hibernate
-    {noreply, rabbit_event:reset_stats_timer(State1, #q.stats_timer), Timeout};
+    %% Don't call noreply/1, we don't want to set timers
+    {State1, Timeout} = next_state(rabbit_event:reset_stats_timer(
+                                     State, #q.stats_timer)),
+    {noreply, State1, Timeout};
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -1354,8 +1344,10 @@ handle_info(update_ram_duration, State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    noreply(State#q{rate_timer_ref = just_measured,
-                    backing_queue_state = BQS2});
+    %% Don't call noreply/1, we don't want to set timers
+    {State1, Timeout} = next_state(State#q{rate_timer_ref      = undefined,
+                                           backing_queue_state = BQS2}),
+    {noreply, State1, Timeout};
 
 handle_info(sync_timeout, State) ->
     noreply(backing_queue_timeout(State#q{sync_timer_ref = undefined}));
