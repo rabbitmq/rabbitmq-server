@@ -47,7 +47,7 @@ is_authorized(ReqData, Context) ->
 augmented(ReqData, Context) ->
     rabbit_mgmt_db:augment_exchanges(
       rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
-      basic).
+      rabbit_mgmt_util:range(ReqData), basic).
 
 basic(ReqData) ->
     [rabbit_mgmt_format:exchange(X) || X <- exchanges0(ReqData)].

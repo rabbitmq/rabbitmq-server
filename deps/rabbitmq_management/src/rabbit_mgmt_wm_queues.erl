@@ -48,7 +48,7 @@ augmented(ReqData, Context) ->
     rabbit_mgmt_format:strip_pids(
       rabbit_mgmt_db:augment_queues(
         rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
-        basic)).
+        rabbit_mgmt_util:range(ReqData), basic)).
 
 basic(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)].

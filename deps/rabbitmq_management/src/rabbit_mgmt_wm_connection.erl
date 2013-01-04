@@ -59,4 +59,5 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 conn(ReqData) ->
-    rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData)).
+    rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData),
+                                  rabbit_mgmt_util:range(ReqData)).

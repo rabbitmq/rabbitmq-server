@@ -17,6 +17,7 @@
 -module(rabbit_mgmt_test_db).
 -export([test/0]).
 
+-include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile([export_all]).
@@ -78,7 +79,7 @@ test_queues(_Conn, Chan) ->
     [fun() ->
              Qs = rabbit_mgmt_db:augment_queues(
                     [rabbit_mgmt_format:queue(Q) ||
-                        Q <- rabbit_amqqueue:list(<<"/">>)], basic),
+                        Q <- rabbit_amqqueue:list(<<"/">>)], range(), basic),
              Q1Info = find_by_name(Q1, Qs),
              Q2Info = find_by_name(Q2, Qs),
 
@@ -97,12 +98,12 @@ test_connections(Conn, Chan) ->
 
     [fun() ->
              Port = local_port(Conn),
-             Conns = rabbit_mgmt_db:get_all_connections(),
+             Conns = rabbit_mgmt_db:get_all_connections(range()),
              ConnInfo = find_conn_by_local_port(Port, Conns),
              %% There's little we can actually test - just retrieve and check
              %% equality.
              Name = pget(name, ConnInfo),
-             [ConnInfo2] = rabbit_mgmt_db:get_connections([Name]),
+             ConnInfo2 = rabbit_mgmt_db:get_connection(Name, range()),
              [assert_equal(Item, ConnInfo, ConnInfo2) ||
                  Item <- rabbit_reader:info_keys()]
      end].
@@ -113,7 +114,7 @@ test_overview(_Conn, Chan) ->
 
     [fun() ->
              %% Very noddy, but at least we test we can get it
-             Overview = rabbit_mgmt_db:get_overview(),
+             Overview = rabbit_mgmt_db:get_overview(range()),
              Queues = pget(queue_totals, Overview),
              assert_positive(pget(messages_unacknowledged, Queues)),
              assert_positive(pget(messages_ready, Queues)),
@@ -141,7 +142,7 @@ test_channels(Conn, Chan) ->
              7 = pget(deliver_no_ack, Stats), % Since 2nd consume ate
                                               % everything
              10 = pget(publish, Stats)
-    end].
+     end].
 
 test_channel_rates(Conn, Chan) ->
     Q = declare_queue(Chan),
@@ -220,8 +221,8 @@ test_exchange_aggregation(_Conn, Chan) ->
 
     [fun() ->
              X = get_exchange(X1),
-             110 = pget(publish, pget(message_stats_in, X)),
-             110 = pget(publish, pget(message_stats_out, X)),
+             110 = pget(publish_in, pget(message_stats, X)),
+             110 = pget(publish_out, pget(message_stats, X)),
              assert_aggregated(queue, [{name,Q1}, {vhost,<<"/">>}],
                                [{publish, 10}], pget(outgoing, X)),
              assert_aggregated(queue, [{name,Q2}, {vhost,<<"/">>}],
@@ -268,17 +269,18 @@ find_conn_by_local_port(Port, Items) ->
 
 get_channel(C, Number) ->
     Port = local_port(C),
-    hd(rabbit_mgmt_db:get_channels(
-         [rabbit_mgmt_format:print(
-            "127.0.0.1:~w -> 127.0.0.1:5672 (~w)", [Port, Number])], full)).
+    rabbit_mgmt_db:get_channel(
+      rabbit_mgmt_format:print(
+        "127.0.0.1:~w -> 127.0.0.1:5672 (~w)", [Port, Number]),
+      range(), full).
 
 get_exchange(XName) ->
     X = rabbit_mgmt_wm_exchange:exchange(<<"/">>, XName),
-    hd(rabbit_mgmt_db:augment_exchanges([X], full)).
+    hd(rabbit_mgmt_db:augment_exchanges([X], range(), full)).
 
 get_queue(QName) ->
     Q = rabbit_mgmt_wm_queue:queue(<<"/">>, QName),
-    hd(rabbit_mgmt_db:augment_queues([Q], full)).
+    hd(rabbit_mgmt_db:augment_queues([Q], range(), full)).
 
 declare_queue(Chan) ->
     #'queue.declare_ok'{ queue = Q } =
@@ -353,3 +355,7 @@ assert_rate(Exp, Stats) ->
 
 assert_positive(Val) ->
     true = is_number(Val) andalso 0 < Val.
+
+range() ->
+    Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
+    #range{first = Now - 60000, last = Now, incr = 5000}.

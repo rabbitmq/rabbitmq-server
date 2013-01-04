@@ -43,7 +43,8 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(
       hd(rabbit_mgmt_db:augment_vhosts(
-           [rabbit_vhost:info(id(ReqData))])), ReqData, Context).
+           [rabbit_vhost:info(id(ReqData))], rabbit_mgmt_util:range(ReqData))),
+      ReqData, Context).
 
 accept_content(ReqData, Context) ->
     put_vhost(id(ReqData)),
