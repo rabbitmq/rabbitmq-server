@@ -196,8 +196,7 @@
 
 %% State record
 -record(gs2_state, {parent, name, state, mod, time,
-                    timeout_state, queue, debug, prioritise_call,
-                    prioritise_cast, prioritise_info}).
+                    timeout_state, queue, debug, prioritisers}).
 
 -ifdef(use_specs).
 
@@ -638,17 +637,17 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
     {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, RandomState1}.
 
 in({'$gen_cast', Msg} = Input,
-   GS2State = #gs2_state { prioritise_cast = PC }) ->
-    in(Input, PC(Msg, GS2State), GS2State);
+   GS2State = #gs2_state { prioritisers = {_, F, _} }) ->
+    in(Input, F(Msg, GS2State), GS2State);
 in({'$gen_call', From, Msg} = Input,
-   GS2State = #gs2_state { prioritise_call = PC }) ->
-    in(Input, PC(Msg, From, GS2State), GS2State);
+   GS2State = #gs2_state { prioritisers = {F, _, _} }) ->
+    in(Input, F(Msg, From, GS2State), GS2State);
 in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
     in(Input, infinity, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
     in(Input, infinity, GS2State);
-in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
-    in(Input, PI(Input, GS2State), GS2State).
+in(Input, GS2State = #gs2_state { prioritisers = {_, _, F} }) ->
+    in(Input, F(Input, GS2State), GS2State).
 
 in(Input, Priority, GS2State = #gs2_state { queue = Queue }) ->
     GS2State # gs2_state { queue = priority_queue:in(Input, Priority, Queue) }.
@@ -1165,16 +1164,13 @@ whereis_name(Name) ->
     end.
 
 find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
-    PrioriCall = function_exported_or_default(
-                   Mod, 'prioritise_call', 3,
-                   fun (_Msg, _From, _State) -> 0 end),
-    PrioriCast = function_exported_or_default(Mod, 'prioritise_cast', 2,
-                                              fun (_Msg, _State) -> 0 end),
-    PrioriInfo = function_exported_or_default(Mod, 'prioritise_info', 2,
-                                              fun (_Msg, _State) -> 0 end),
-    GS2State #gs2_state { prioritise_call = PrioriCall,
-                          prioritise_cast = PrioriCast,
-                          prioritise_info = PrioriInfo }.
+    PCall = function_exported_or_default(Mod, 'prioritise_call', 3,
+                                         fun (_Msg, _From, _State) -> 0 end),
+    PCast = function_exported_or_default(Mod, 'prioritise_cast', 2,
+                                         fun (_Msg, _State) -> 0 end),
+    PInfo = function_exported_or_default(Mod, 'prioritise_info', 2,
+                                         fun (_Msg, _State) -> 0 end),
+    GS2State #gs2_state { prioritisers = {PCall, PCast, PInfo} }.
 
 function_exported_or_default(Mod, Fun, Arity, Default) ->
     case erlang:function_exported(Mod, Fun, Arity) of
