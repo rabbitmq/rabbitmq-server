@@ -432,15 +432,13 @@ check_resource_access(User, Resource, Perm) ->
                 undefined -> [];
                 Other     -> Other
             end,
-    CacheTail =
-        case lists:member(V, Cache) of
-            true  -> lists:delete(V, Cache);
-            false -> ok = rabbit_access_control:check_resource_access(
-                            User, Resource, Perm),
-                     lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1)
-        end,
-    put(permission_cache, [V | CacheTail]),
-    ok.
+    case lists:member(V, Cache) of
+        true  -> ok;
+        false -> ok = rabbit_access_control:check_resource_access(
+                        User, Resource, Perm),
+                 CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
+                 put(permission_cache, [V | CacheTail])
+    end.
 
 clear_permission_cache() ->
     erase(permission_cache),
