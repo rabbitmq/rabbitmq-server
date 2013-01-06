@@ -1327,6 +1327,10 @@ notify_limiter(Limiter, Acked) ->
                  end
     end.
 
+deliver_to_queues({#delivery{message = #basic_message{exchange_name = XName}},
+                   []}, State) -> %% optimisation
+    ?INCR_STATS([{exchange_stats, XName, 1}], publish, State),
+    State;
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
                                         msg_seq_no = MsgSeqNo},
