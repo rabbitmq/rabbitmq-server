@@ -1245,19 +1245,25 @@ record_sent(ConsumerTag, AckRequired,
 collect_acks(Q, 0, true) ->
     {queue:to_list(Q), queue:new()};
 collect_acks(Q, DeliveryTag, Multiple) ->
-    collect_acks([], queue:new(), Q, DeliveryTag, Multiple).
+    collect_acks([], [], Q, DeliveryTag, Multiple).
 
 collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
     case queue:out(Q) of
         {{value, UnackedMsg = {CurrentDeliveryTag, _ConsumerTag, _Msg}},
          QTail} ->
             if CurrentDeliveryTag == DeliveryTag ->
-                    {[UnackedMsg | ToAcc], queue:join(PrefixAcc, QTail)};
+                    {[UnackedMsg | ToAcc],
+                     case PrefixAcc of
+                         [] -> QTail;
+                         _  -> queue:join(
+                                 queue:from_list(lists:reverse(PrefixAcc)),
+                                 QTail)
+                     end};
                Multiple ->
                     collect_acks([UnackedMsg | ToAcc], PrefixAcc,
                                  QTail, DeliveryTag, Multiple);
                true ->
-                    collect_acks(ToAcc, queue:in(UnackedMsg, PrefixAcc),
+                    collect_acks(ToAcc, [UnackedMsg | PrefixAcc],
                                  QTail, DeliveryTag, Multiple)
             end;
         {empty, _} ->
