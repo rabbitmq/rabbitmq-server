@@ -498,11 +498,14 @@ send_or_record_confirm(#delivery{sender     = SenderPid,
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
 
-discard(#delivery{sender = SenderPid, message = #basic_message{id = MsgId}},
-        State) ->
-    %% fake an 'eventual' confirm from BQ; noop if not needed
+discard(#delivery{sender     = SenderPid,
+                  msg_seq_no = MsgSeqNo,
+                  message    = #basic_message{id = MsgId}}, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        confirm_messages([MsgId], State),
+        case MsgSeqNo of
+            undefined -> State;
+            _         -> confirm_messages([MsgId], State)
+        end,
     BQS1 = BQ:discard(MsgId, SenderPid, BQS),
     State1#q{backing_queue_state = BQS1}.
 
