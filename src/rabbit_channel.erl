@@ -1320,7 +1320,7 @@ notify_limiter(Limiter, Acked) ->
     case rabbit_limiter:is_enabled(Limiter) of
         false -> ok;
         true  -> case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
-                                      ({_, _, _}, Acc)    -> Acc + 1
+                                      ({_,    _, _}, Acc) -> Acc + 1
                                   end, 0, Acked) of
                      0     -> ok;
                      Count -> rabbit_limiter:ack(Limiter, Count)
