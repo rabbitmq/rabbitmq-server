@@ -283,9 +283,9 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
 
 action(sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Synchronising queue \"~s\" in vhost \"~s\"", [Q, VHost]),
-    rpc_call(Node, rabbit_control_main, sync_queue,
-             [rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q))]);
+    QName = rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
+    Inform("Synchronising ~s", [rabbit_misc:rs(QName)]),
+    rpc_call(Node, rabbit_control_main, sync_queue, [QName]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
