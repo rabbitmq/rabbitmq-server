@@ -432,15 +432,13 @@ check_resource_access(User, Resource, Perm) ->
                 undefined -> [];
                 Other     -> Other
             end,
-    CacheTail =
-        case lists:member(V, Cache) of
-            true  -> lists:delete(V, Cache);
-            false -> ok = rabbit_access_control:check_resource_access(
-                            User, Resource, Perm),
-                     lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1)
-        end,
-    put(permission_cache, [V | CacheTail]),
-    ok.
+    case lists:member(V, Cache) of
+        true  -> ok;
+        false -> ok = rabbit_access_control:check_resource_access(
+                        User, Resource, Perm),
+                 CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
+                 put(permission_cache, [V | CacheTail])
+    end.
 
 clear_permission_cache() ->
     erase(permission_cache),
@@ -802,14 +800,12 @@ handle_method(#'basic.recover_async'{requeue = true},
                              limiter = Limiter}) ->
     OkFun = fun () -> ok end,
     UAMQL = queue:to_list(UAMQ),
-    ok = fold_per_queue(
-           fun (QPid, MsgIds, ok) ->
-                   rabbit_misc:with_exit_handler(
-                     OkFun, fun () ->
-                                    rabbit_amqqueue:requeue(
-                                      QPid, MsgIds, self())
-                            end)
-           end, ok, UAMQL),
+    foreach_per_queue(
+      fun (QPid, MsgIds) ->
+              rabbit_misc:with_exit_handler(
+                OkFun,
+                fun () -> rabbit_amqqueue:requeue(QPid, MsgIds, self()) end)
+      end, UAMQL),
     ok = notify_limiter(Limiter, UAMQL),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
@@ -1217,10 +1213,10 @@ reject(DeliveryTag, Requeue, Multiple,
      end}.
 
 reject(Requeue, Acked, Limiter) ->
-    ok = fold_per_queue(
-           fun (QPid, MsgIds, ok) ->
-                   rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
-           end, ok, Acked),
+    foreach_per_queue(
+      fun (QPid, MsgIds) ->
+              rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
+      end, Acked),
     ok = notify_limiter(Limiter, Acked).
 
 record_sent(ConsumerTag, AckRequired,
@@ -1249,19 +1245,25 @@ record_sent(ConsumerTag, AckRequired,
 collect_acks(Q, 0, true) ->
     {queue:to_list(Q), queue:new()};
 collect_acks(Q, DeliveryTag, Multiple) ->
-    collect_acks([], queue:new(), Q, DeliveryTag, Multiple).
+    collect_acks([], [], Q, DeliveryTag, Multiple).
 
 collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
     case queue:out(Q) of
         {{value, UnackedMsg = {CurrentDeliveryTag, _ConsumerTag, _Msg}},
          QTail} ->
             if CurrentDeliveryTag == DeliveryTag ->
-                    {[UnackedMsg | ToAcc], queue:join(PrefixAcc, QTail)};
+                    {[UnackedMsg | ToAcc],
+                     case PrefixAcc of
+                         [] -> QTail;
+                         _  -> queue:join(
+                                 queue:from_list(lists:reverse(PrefixAcc)),
+                                 QTail)
+                     end};
                Multiple ->
                     collect_acks([UnackedMsg | ToAcc], PrefixAcc,
                                  QTail, DeliveryTag, Multiple);
                true ->
-                    collect_acks(ToAcc, queue:in(UnackedMsg, PrefixAcc),
+                    collect_acks(ToAcc, [UnackedMsg | PrefixAcc],
                                  QTail, DeliveryTag, Multiple)
             end;
         {empty, _} ->
@@ -1269,17 +1271,16 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
     end.
 
 ack(Acked, State = #ch{queue_names = QNames}) ->
-    Incs = fold_per_queue(
-             fun (QPid, MsgIds, L) ->
-                     ok = rabbit_amqqueue:ack(QPid, MsgIds, self()),
-                     case dict:find(QPid, QNames) of
-                         {ok, QName} -> Count = length(MsgIds),
-                                        [{queue_stats, QName, Count} | L];
-                         error       -> L
-                     end
-             end, [], Acked),
-    ok = notify_limiter(State#ch.limiter, Acked),
-    ?INCR_STATS(Incs, ack, State).
+    foreach_per_queue(
+      fun (QPid, MsgIds) ->
+              ok = rabbit_amqqueue:ack(QPid, MsgIds, self()),
+              ?INCR_STATS(case dict:find(QPid, QNames) of
+                              {ok, QName} -> Count = length(MsgIds),
+                                             [{queue_stats, QName, Count}];
+                              error       -> []
+                          end, ack, State)
+      end, Acked),
+    ok = notify_limiter(State#ch.limiter, Acked).
 
 new_tx() -> #tx{msgs = queue:new(), acks = [], nacks = []}.
 
@@ -1291,15 +1292,15 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
               sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
     {rabbit_amqqueue:notify_down_all(QPids, self()), State#ch{state = closing}}.
 
-fold_per_queue(_F, Acc, []) ->
-    Acc;
-fold_per_queue(F, Acc, [{_DTag, _CTag, {QPid, MsgId}}]) -> %% common case
-    F(QPid, [MsgId], Acc);
-fold_per_queue(F, Acc, UAL) ->
+foreach_per_queue(_F, []) ->
+    ok;
+foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}]) -> %% common case
+    F(QPid, [MsgId]);
+foreach_per_queue(F, UAL) ->
     T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) ->
                             rabbit_misc:gb_trees_cons(QPid, MsgId, T)
                     end, gb_trees:empty(), UAL),
-    rabbit_misc:gb_trees_fold(F, Acc, T).
+    rabbit_misc:gb_trees_foreach(F, T).
 
 enable_limiter(State = #ch{unacked_message_q = UAMQ,
                            limiter           = Limiter}) ->
@@ -1322,13 +1323,19 @@ notify_limiter(Limiter, Acked) ->
     case rabbit_limiter:is_enabled(Limiter) of
         false -> ok;
         true  -> case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
-                                      ({_, _, _}, Acc)    -> Acc + 1
+                                      ({_,    _, _}, Acc) -> Acc + 1
                                   end, 0, Acked) of
                      0     -> ok;
                      Count -> rabbit_limiter:ack(Limiter, Count)
                  end
     end.
 
+deliver_to_queues({#delivery{message    = #basic_message{exchange_name = XName},
+                             msg_seq_no = undefined,
+                             mandatory  = false},
+                   []}, State) -> %% optimisation
+    ?INCR_STATS([{exchange_stats, XName, 1}], publish, State),
+    State;
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
                                         msg_seq_no = MsgSeqNo},

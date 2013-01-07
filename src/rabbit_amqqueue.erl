@@ -682,6 +682,8 @@ deliver(Qs, Delivery, _Flow) ->
         R  -> {routed,     [QPid || {QPid, ok} <- R]}
     end.
 
+qpids([]) -> {[], []}; %% optimisation
+qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[QPid], SPids}; %% opt
 qpids(Qs) ->
     {MPids, SPids} = lists:foldl(fun (#amqqueue{pid = QPid, slave_pids = SPids},
                                       {MPidAcc, SPidAcc}) ->

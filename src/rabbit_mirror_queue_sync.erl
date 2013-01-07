@@ -157,8 +157,7 @@ syncer(Ref, Log, MPid, SPids) ->
                   end] of
         []     -> Log("all slaves already synced", []);
         SPids1 -> MPid ! {ready, self()},
-                  Log("~p to sync", [[rabbit_misc:pid_to_string(SPid) ||
-                                         SPid <- SPids1]]),
+                  Log("mirrors ~p to sync", [[node(SPid) || SPid <- SPids1]]),
                   syncer_loop(Ref, MPid, SPids1)
     end.
 
