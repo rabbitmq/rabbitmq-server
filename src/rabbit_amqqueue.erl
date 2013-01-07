@@ -387,14 +387,10 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
-    rabbit_misc:assert_args_equivalence(
-      Args, RequiredArgs, QueueName, [<<"x-expires">>, <<"x-message-ttl">>]).
+    rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
+                                        [Key || {Key, _Fun} <- args()]).
 
 check_declare_arguments(QueueName, Args) ->
-    Checks = [{<<"x-expires">>,                 fun check_expires_arg/2},
-              {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
-              {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
-              {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}],
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;
          TypeVal   -> case Fun(TypeVal, Args) of
@@ -405,8 +401,14 @@ check_declare_arguments(QueueName, Args) ->
                                               [Key, rabbit_misc:rs(QueueName),
                                                Error])
                       end
-     end || {Key, Fun} <- Checks],
+     end || {Key, Fun} <- args()],
     ok.
+
+args() ->
+    [{<<"x-expires">>,                 fun check_expires_arg/2},
+     {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
+     {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
+     {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}].
 
 check_string_arg({longstr, _}, _Args) -> ok;
 check_string_arg({Type,    _}, _Args) -> {error, {unacceptable_type, Type}}.
