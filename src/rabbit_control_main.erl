@@ -161,6 +161,12 @@ start() ->
                 false -> io:format("...done.~n")
             end,
             rabbit_misc:quit(0);
+        {ok, Info} ->
+            case Quiet of
+                true  -> ok;
+                false -> io:format("...done (~p).~n", [Info])
+            end,
+            rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
             PrintInvalidCommandError(),
             usage();
