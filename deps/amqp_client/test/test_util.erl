@@ -646,7 +646,7 @@ confirm_select_before_wait_test() ->
     try amqp_channel:wait_for_confirms(Channel) of
         _ -> fail
     catch
-        exit:not_in_confirm_mode -> ok
+        not_in_confirm_mode -> ok
     end,
     teardown(Connection, Channel).
 
