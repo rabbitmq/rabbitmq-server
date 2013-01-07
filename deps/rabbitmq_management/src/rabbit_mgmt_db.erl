@@ -33,7 +33,7 @@
          code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
 
 %% For testing
--export([remove_old_samples/2, format_sample_details/2]).
+-export([remove_old_samples/2, format_sample_details/4]).
 
 -import(rabbit_misc, [pget/3, pset/3]).
 
@@ -281,8 +281,8 @@ handle_call({get_overview, User, Range}, _From,
                                     X <- rabbit_exchange:list(V)])},
          {connections, F(created_events(connection_stats, Tables))},
          {channels,    F(created_events(channel_stats, Tables))}],
-    reply([{message_stats, format_samples(Range, MessageStats)},
-           {queue_totals,  format_samples(Range, QueueStats)},
+    reply([{message_stats, format_samples(Range, MessageStats, State)},
+           {queue_totals,  format_samples(Range, QueueStats, State)},
            {object_totals, ObjectTotals}], State);
 
 handle_call(_Request, _From, State) ->
@@ -705,7 +705,7 @@ simple_stats_fun(Range, Type, State) ->
     fun (Props) ->
             Id = id_lookup(Type, Props),
             extract_msg_stats(
-              format_samples(Range, read_simple_stats(Type, Id, State)))
+              format_samples(Range, read_simple_stats(Type, Id, State), State))
     end.
 
 %% i.e. fine stats that are broken out per sub-thing
@@ -742,7 +742,7 @@ extract_msg_stats(Stats) ->
 
 detail_stats(Range, Name, AggregatedStatsType, Id, State) ->
     {Name,
-     [[{stats, format_samples(Range, KVs)} | format_detail_id(G, State)]
+     [[{stats, format_samples(Range, KVs, State)} | format_detail_id(G, State)]
       || {G, KVs} <- read_detail_stats(AggregatedStatsType, Id, State)]}.
 
 format_detail_id(ChPid, State) when is_pid(ChPid) ->
@@ -751,31 +751,49 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
                  _State) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}].
 
-format_samples(Range, ManyStats) ->
+%% [0] The extra "Interval" being subtracted is to take account of the
+%% fact that data points snap forwards in time while range.last snaps
+%% backwards.
+format_samples(Range, ManyStats, #state{interval = Interval}) ->
     lists:append(
       [case is_blank_stats(Stats) of
            true  -> [];
-           false -> {Details, Counter} = format_sample_details(Range, Stats),
+           false -> {Details, Counter} = format_sample_details(
+                                           Range, Stats,
+                                           Range#range.last - Interval, %% [0]
+                                           Interval),
                     [{K,              Counter},
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
 
-format_sample_details(Range, #stats{diffs = Diffs, base = Base}) ->
+%% [0] Only display the rate if it's live - i.e. the end of the range
+%% corresponds to the last data point we have. If the end of the
+%% range is earlier we have gone silent, if it's later we have been
+%% asked for a range back in time (in which case showing the correct
+%% instantaneous rate would be quite a faff, and probably
+%% unwanted).
+format_sample_details(Range, #stats{diffs = Diffs, base = Base},
+                      RangePoint, Interval) ->
     {Samples, Count} = extract_samples(
                          Range, Base, gb_trees:iterator(Diffs), []),
-    case length(Samples) > 1 of
-        true  -> [[{sample, S3}, {timestamp, T3}],
-                  [{sample, S2}, {timestamp, T2}] | _] = Samples,
-                 [{sample,    S1},
-                  {timestamp, T1}] = lists:last(Samples),
-                 Inst = (S3 - S2) * 1000 / (T3 - T2),
-                 Avg = (S3 - S1) * 1000 / (T3 - T1),
-                 {[{rate,     Inst},
-                   {interval, T3 - T2},
-                   {avg_rate, Avg},
-                   {samples,  Samples}], Count};
-        false -> {[{samples, Samples}], Count}
-    end.
+    Part1 = case gb_trees:is_empty(Diffs) of
+                true  -> [{samples,  Samples}];
+                false -> {TS, S} = gb_trees:largest(Diffs),
+                         Rate = case TS - RangePoint of %% [0]
+                                    0 -> S * 1000 / Interval;
+                                    _ -> 0
+                                end,
+                         [{rate,     Rate},
+                          {interval, Interval},
+                          {samples,  Samples}]
+                end,
+    Part2 = case length(Samples) > 1 of
+                true  -> [{sample, S2}, {timestamp, T2}] = hd(Samples),
+                         [{sample, S1}, {timestamp, T1}] = lists:last(Samples),
+                         [{avg_rate, (S2 - S1) * 1000 / (T2 - T1)}];
+                false -> []
+            end,
+    {Part1 ++ Part2, Count}.
 
 %% What we want to do here is: given the #range{}, provide a set of
 %% samples such that we definitely provide a set of samples which

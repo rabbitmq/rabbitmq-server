@@ -45,13 +45,16 @@ remove_old_samples_test() ->
     ok.
 
 format_sample_details_test() ->
+    Interval = 10,
     T = fun ({First, Last, Incr}, Stats, Results) ->
                 ?assertEqual(format(Results),
                              rabbit_mgmt_db:format_sample_details(
                                         #range{first = First * 1000,
                                                last  = Last * 1000,
                                                incr  = Incr * 1000},
-                                        stats(Stats)))
+                                        stats(Stats),
+                               Last * 1000,
+                               Interval * 1000))
         end,
     %% Just three samples, all of which we format
     T({10, 30, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
@@ -59,14 +62,12 @@ format_sample_details_test() ->
 
     %% Skip over the second
     T({10, 30, 20}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{30, 61}, {10, 11}], 2.5, 20, 2.5, 61}),
+      {[{30, 61}, {10, 11}], 3.0, 10, 2.5, 61}),
 
-    %% Skip over some and invent some
-    %% TODO this rate calculation is dodgy, we should change
-    %% it. Specifically we should take instantaneous rate from the
-    %% pre-formatted data.
+    %% Skip over some and invent some. Note that the instantaneous
+    %% rate drops to 0 since the last event is now in the past.
     T({0, 40, 20}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{40, 61}, {20, 31}, {0, 1}], 1.5, 20, 1.5, 61}),
+      {[{40, 61}, {20, 31}, {0, 1}], 0, 10, 1.5, 61}),
 
     %% TODO more?
     ok.
@@ -89,7 +90,7 @@ millis_to_secs(L) -> [{TS div 1000, S} || {TS, S} <- L].
 format({Samples, Rate, Interval, AvgRate, Count}) ->
     {[{rate,     Rate},
       {interval, Interval * 1000},
-      {avg_rate, AvgRate},
-      {samples, [[{sample, S}, {timestamp, TS * 1000}] || {TS, S} <- Samples]}],
+      {samples, [[{sample, S}, {timestamp, TS * 1000}] || {TS, S} <- Samples]},
+      {avg_rate, AvgRate}],
      Count}.
 
