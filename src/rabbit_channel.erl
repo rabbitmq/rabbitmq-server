@@ -1079,6 +1079,37 @@ handle_method(#'channel.flow'{active = false}, _,
                  {noreply, State2}
     end;
 
+handle_method(#'basic.credit'{consumer_tag = CTag,
+                              credit = Credit,
+                              count = Count,
+                              drain = Drain}, _,
+              State = #ch{limiter      = Limiter,
+                          consumer_mapping = Consumers}) ->
+    %% We get Available first because it's likely that as soon as we set
+    %% the credit msgs will get consumed and it'll be out of date. Why do we
+    %% want that? Because at least then it's consistent with the credit value
+    %% we return. And Available is always going to be racy.
+    Available = case dict:find(CTag, Consumers) of
+                    {ok, {Q, _}} -> case rabbit_amqqueue:stat(Q) of
+                                        {ok, Len, _} -> Len;
+                                        _            -> -1
+                                    end;
+                    error        -> -1 %% TODO these -1s smell very iffy!
+                end,
+    Limiter1 = case rabbit_limiter:is_enabled(Limiter) of
+                   true  -> Limiter;
+                   false -> enable_limiter(State)
+               end,
+    Limiter3 =
+        case rabbit_limiter:set_credit(
+               Limiter1, CTag, Credit, Count, Drain) of
+            ok                   -> Limiter1;
+            {disabled, Limiter2} -> ok = limit_queues(Limiter2, State),
+                                    Limiter2
+        end,
+    State1 = State#ch{limiter = Limiter3},
+    return_ok(State1, false, #'basic.credit_ok'{available = Available});
+
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
       command_invalid, "unimplemented method", []).

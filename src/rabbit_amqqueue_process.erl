@@ -423,13 +423,17 @@ deliver_msgs_to_consumers(DeliverFun, false,
             deliver_msgs_to_consumers(DeliverFun, Stop, State1)
     end.
 
-deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
+deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer},
+                        State = #q{backing_queue       = BQ,
+                                   backing_queue_state = BQS}) ->
     C = ch_record(ChPid),
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E),
                  {false, State};
         false -> case rabbit_limiter:can_send(C#cr.limiter, self(),
-                                              Consumer#consumer.ack_required) of
+                                              Consumer#consumer.ack_required,
+                                              Consumer#consumer.tag,
+                                              BQ:len(BQS)) of
                      false -> block_consumer(C#cr{is_limit_active = true}, E),
                               {false, State};
                      true  -> AC1 = queue:in(E, State#q.active_consumers),
@@ -1245,7 +1249,8 @@ handle_cast({limit, ChPid, Limiter}, State) ->
                     true  -> ok = rabbit_limiter:register(Limiter, self());
                     false -> ok
                 end,
-                Limited = OldLimited andalso rabbit_limiter:is_enabled(Limiter),
+                Limited = OldLimited andalso rabbit_limiter:is_enabled(Limiter)
+                    andalso rabbit_limiter:is_blocked(Limiter),
                 C#cr{limiter = Limiter, is_limit_active = Limited}
         end));
 
