@@ -352,7 +352,7 @@ ch_record(ChPid) ->
         undefined -> MonitorRef = erlang:monitor(process, ChPid),
                      C = #cr{ch_pid               = ChPid,
                              monitor_ref          = MonitorRef,
-                             acktags              = sets:new(),
+                             acktags              = queue:new(),
                              consumer_count       = 0,
                              blocked_consumers    = queue:new(),
                              is_limit_active      = false,
@@ -366,9 +366,9 @@ ch_record(ChPid) ->
 update_ch_record(C = #cr{consumer_count       = ConsumerCount,
                          acktags              = ChAckTags,
                          unsent_message_count = UnsentMessageCount}) ->
-    case {sets:size(ChAckTags), ConsumerCount, UnsentMessageCount} of
-        {0, 0, 0} -> ok = erase_ch_record(C);
-        _         -> ok = store_ch_record(C)
+    case {queue:is_empty(ChAckTags), ConsumerCount, UnsentMessageCount} of
+        {true, 0, 0} -> ok = erase_ch_record(C);
+        _            -> ok = store_ch_record(C)
     end,
     C.
 
@@ -451,7 +451,7 @@ deliver_msg_to_consumer(DeliverFun,
     rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
-                     true  -> sets:add_element(AckTag, ChAckTags);
+                     true  -> queue:in(AckTag, ChAckTags);
                      false -> ChAckTags
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
@@ -638,7 +638,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                        senders          = Senders1},
             case should_auto_delete(State1) of
                 true  -> {stop, State1};
-                false -> {ok, requeue_and_run(sets:to_list(ChAckTags),
+                false -> {ok, requeue_and_run(queue:to_list(ChAckTags),
                                               ensure_expiry_timer(State1))}
             end
     end.
@@ -677,9 +677,19 @@ subtract_acks(ChPid, AckTags, State, Fun) ->
         not_found ->
             State;
         C = #cr{acktags = ChAckTags} ->
-            update_ch_record(C#cr{acktags = lists:foldl(fun sets:del_element/2,
-                                                        ChAckTags, AckTags)}),
+            update_ch_record(
+              C#cr{acktags = subtract_acks(AckTags, [], ChAckTags)}),
             Fun(State)
+    end.
+
+subtract_acks([], [], AckQ) ->
+    AckQ;
+subtract_acks([], Prefix, AckQ) ->
+    queue:join(queue:from_list(lists:reverse(Prefix)), AckQ);
+subtract_acks([T | TL] = AckTags, Prefix, AckQ) ->
+    case queue:out(AckQ) of
+        {{value,  T}, QTail} -> subtract_acks(TL,             Prefix, QTail);
+        {{value, AT}, QTail} -> subtract_acks(AckTags, [AT | Prefix], QTail)
     end.
 
 message_properties(Message, Confirm, #q{ttl = TTL}) ->
@@ -886,7 +896,7 @@ i(exclusive_consumer_tag, #q{exclusive_consumer = {_ChPid, ConsumerTag}}) ->
 i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:len(BQS);
 i(messages_unacknowledged, _) ->
-    lists:sum([sets:size(C#cr.acktags) || C <- all_ch_record()]);
+    lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]);
 i(messages, State) ->
     lists:sum([i(Item, State) || Item <- [messages_ready,
                                           messages_unacknowledged]]);
@@ -1042,7 +1052,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
                 case AckRequired of
                     true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                             ChAckTags1 = sets:add_element(AckTag, ChAckTags),
+                             ChAckTags1 = queue:in(AckTag, ChAckTags),
                              update_ch_record(C#cr{acktags = ChAckTags1}),
                              State2;
                     false -> State2
