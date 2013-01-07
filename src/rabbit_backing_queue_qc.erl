@@ -108,7 +108,8 @@ command(S) ->
                {1,  qc_is_empty(S)},
                {1,  qc_timeout(S)},
                {1,  qc_purge(S)},
-               {1,  qc_fold(S)}]).
+               {1,  qc_fold(S)},
+               {1,  qc_ackfold(S)}]).
 
 qc_publish(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish,
@@ -151,7 +152,7 @@ qc_dropwhile(#state{bqstate = BQ}) ->
     {call, ?BQMOD, dropwhile, [fun drop_fetch_pred/1, BQ]}.
 
 qc_fetchwhile(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, fetchwhile, [fun drop_fetch_pred/1, fun fetchfun/4, foldacc(), BQ]}.
+    {call, ?BQMOD, fetchwhile, [fun drop_fetch_pred/1, fun fetchfun/3, foldacc(), BQ]}.
 
 qc_is_empty(#state{bqstate = BQ}) ->
     {call, ?BQMOD, is_empty, [BQ]}.
@@ -165,6 +166,10 @@ qc_purge(#state{bqstate = BQ}) ->
 qc_fold(#state{bqstate = BQ}) ->
     {call, ?BQMOD, fold, [makefoldfun(eval(pos_integer())), foldacc(), BQ]}.
 
+qc_ackfold(#state{bqstate = BQ, acks = Acks}) ->
+    {call, ?BQMOD, ackfold, [fun (Msg, SeqId, A) -> [{Msg, SeqId} | A] end,
+                             [], BQ, proplists:get_keys(Acks)]}.
+
 %% Preconditions
 
 %% Create long queues by only allowing publishing
@@ -172,7 +177,7 @@ precondition(#state{publishing = Count}, {call, _Mod, Fun, _Arg})
   when Count > 0, Fun /= publish ->
     false;
 precondition(#state{acks = Acks}, {call, ?BQMOD, Fun, _Arg})
-  when Fun =:= ack; Fun =:= requeue ->
+  when Fun =:= ack; Fun =:= requeue; Fun =:= ackfold ->
     length(Acks) > 0;
 precondition(#state{messages = Messages},
     {call, ?BQMOD, publish_delivered, _Arg}) ->
@@ -293,6 +298,10 @@ next_state(S, Res, {call, ?BQMOD, purge, _Args}) ->
 
 next_state(S, Res, {call, ?BQMOD, fold, _Args}) ->
     BQ1 = {call, erlang, element, [2, Res]},
+    S#state{bqstate = BQ1};
+
+next_state(S, Res, {call, ?BQMOD, ackfold, _Args}) ->
+    BQ1 = {call, erlang, element, [2, Res]},
     S#state{bqstate = BQ1}.
 
 %% Postconditions
@@ -372,6 +381,13 @@ postcondition(S, {call, ?BQMOD, fold, [FoldFun, Acc0, _BQ0]}, {Res, _BQ1}) ->
                              end, {cont, Acc0}, gb_trees:to_list(Messages)),
     Model =:= Res;
 
+postcondition(S, {call, ?BQMOD, ackfold, [FoldFun, _Acc, _BQ0, AckTags]}, {Res, _BQ1}) ->
+    #state{messages = Messages, acks = Acks} = S,
+    [begin
+      {SeqId, {_MsgProps, Msg}} = proplists:get_value(A, Acks),
+      {Msg, SeqId}
+     end || A <- lists:reverse(AckTags)] =:= Res;
+
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
     ?BQMOD:len(BQ) =:= Len.
 
@@ -430,7 +446,7 @@ rand_choice(List, Selection, N)  ->
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
 
-fetchfun(Msg, _IsDelivered, AckTag, Acc) ->
+fetchfun(Msg, AckTag, Acc) ->
     [{Msg, AckTag} | Acc].
 
 makefoldfun(Size) ->
