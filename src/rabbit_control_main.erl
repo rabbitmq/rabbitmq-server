@@ -296,9 +296,9 @@ action(sync_queue, Node, [Q], Opts, Inform) ->
 
 action(cancel_sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Stopping synchronising queue ~s in ~s", [Q, VHost]),
-    rpc_call(Node, rabbit_control_main, cancel_sync_queue,
-             [rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q))]);
+    QName = rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
+    Inform("Stopping synchronising ~s", [rabbit_misc:rs(QName)]),
+    rpc_call(Node, rabbit_control_main, cancel_sync_queue, [QName]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
