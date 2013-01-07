@@ -646,8 +646,9 @@ confirm_select_before_wait_test() ->
     try amqp_channel:wait_for_confirms(Channel) of
         _ -> fail
     catch
-        exit:{{shutdown,{invalid_state, _}}, _} -> ok
-    end.
+        exit:not_in_confirm_mode -> ok
+    end,
+    teardown(Connection, Channel).
 
 confirm_barrier_timeout_test() ->
     {ok, Connection} = new_connection(),

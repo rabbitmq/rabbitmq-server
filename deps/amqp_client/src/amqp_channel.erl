@@ -224,10 +224,13 @@ wait_for_confirms(Channel) ->
 %%      Timeout = non_neg_integer() | 'infinity'
 %% @doc Wait until all messages published since the last call have
 %% been either ack'd or nack'd by the broker or the timeout expires.
-%% Note, when called on a non-Confirm channel, waitForConfirms returns
-%% an error.
+%% Note, when called on a non-Confirm channel, waitForConfirms throws
+%% an exception.
 wait_for_confirms(Channel, Timeout) ->
-    gen_server:call(Channel, {wait_for_confirms, Timeout}, infinity).
+    case gen_server:call(Channel, {wait_for_confirms, Timeout}, infinity) of
+        Normal when is_boolean(Normal) -> Normal;
+        {error, Reason}                -> throw(Reason)
+    end.
 
 %% @spec (Channel) -> true
 %% where
@@ -885,7 +888,7 @@ notify_confirm_waiters(State = #state{waiting_set        = WSet,
                 only_acks_received = true}.
 
 handle_wait_for_confirms(_From, _Timeout, State = #state{next_pub_seqno = 0}) ->
-    handle_shutdown({invalid_state, "wait requires confirms selected"}, State);
+    {reply, {error, not_in_confirm_mode}, State};
 handle_wait_for_confirms(From, Timeout,
                          State = #state{unconfirmed_set = USet,
                                         waiting_set     = WSet}) ->
