@@ -712,23 +712,19 @@ handle_method_from_server1(
     {noreply, State};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler = none} = State) ->
-    ?LOG_WARN("Channel (~p): received ~p but there is no "
-              "confirm handler registered~n", [self(), BasicAck]),
     {noreply, update_confirm_set(BasicAck, State)};
-handle_method_from_server1(
-        #'basic.ack'{} = BasicAck, none,
-        #state{confirm_handler = {ConfirmHandler, _Ref}} = State) ->
-    ConfirmHandler ! BasicAck,
+handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
+                           #state{confirm_handler = {CH, _Ref}} = State) ->
+    CH ! BasicAck,
     {noreply, update_confirm_set(BasicAck, State)};
 handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
                            #state{confirm_handler = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicNack]),
     {noreply, update_confirm_set(BasicNack, State)};
-handle_method_from_server1(
-        #'basic.nack'{} = BasicNack, none,
-        #state{confirm_handler = {ConfirmHandler, _Ref}} = State) ->
-    ConfirmHandler ! BasicNack,
+handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
+                           #state{confirm_handler = {CH, _Ref}} = State) ->
+    CH ! BasicNack,
     {noreply, update_confirm_set(BasicNack, State)};
 
 handle_method_from_server1(Method, none, State) ->
