@@ -783,19 +783,24 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_timeout(State = #vqstate { index_state = IndexState }) ->
+needs_timeout(State = #vqstate { index_state      = IndexState,
+                                 target_ram_count = TargetRamCount }) ->
     case must_sync_index(State) of
         true  -> timed;
         false ->
             case rabbit_queue_index:needs_sync(IndexState) of
                 true  -> idle;
-                false -> case reduce_memory_use(
-                                fun (_Quota, State1) -> {0, State1} end,
-                                fun (_Quota, State1) -> State1 end,
-                                fun (_Quota, State1) -> {0, State1} end,
-                                State) of
-                             {true,  _State} -> idle;
-                             {false, _State} -> false
+                false -> case TargetRamCount of
+                             infinity -> false;
+                             _ -> case
+                                      reduce_memory_use(
+                                        fun (_Quota, State1) -> {0, State1} end,
+                                        fun (_Quota, State1) -> State1 end,
+                                        fun (_Quota, State1) -> {0, State1} end,
+                                        State) of
+                                      {true,  _State} -> idle;
+                                      {false, _State} -> false
+                                  end
                          end
             end
     end.
@@ -1495,9 +1500,6 @@ delta_fold( Fun, {cont, Acc},    DeltaSeqId,  DeltaSeqIdEnd,
 %% one segment's worth of messages in q3 - and thus would risk
 %% perpetually reporting the need for a conversion when no such
 %% conversion is needed. That in turn could cause an infinite loop.
-reduce_memory_use(_AlphaBetaFun, _BetaDeltaFun, _AckFun,
-                  State = #vqstate {target_ram_count = infinity}) ->
-    {false, State};
 reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
                   State = #vqstate {
                     ram_ack_index    = RamAckIndex,
@@ -1552,6 +1554,8 @@ limit_ram_acks(Quota, State = #vqstate { pending_ack   = PA,
                                              ram_ack_index = RAI1 })
     end.
 
+reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
+    State;
 reduce_memory_use(State) ->
     {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
                                     fun push_betas_to_deltas/2,
