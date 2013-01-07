@@ -45,6 +45,11 @@
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state}).
 
+-record(connection, {name, host, peer_host, port, peer_port,
+                     protocol, user, timeout_sec, frame_max, vhost,
+                     client_properties, capabilities,
+                     auth_mechanism, auth_state}).
+
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
 

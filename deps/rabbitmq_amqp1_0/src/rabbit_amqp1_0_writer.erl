@@ -169,12 +169,12 @@ call(Pid, Msg) ->
 %% Begin 1-0
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_framing) ->
-    ?LOGMESSAGE(out, Channel, Performative, none),
+    %%?LOGMESSAGE(out, Channel, Performative, none),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, PerfBin);
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
-    ?LOGMESSAGE(out, Channel, Performative, none),
+    %%?LOGMESSAGE(out, Channel, Performative, none),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel,
                                                 ?AMQP_SASL_FRAME_TYPE, PerfBin);
@@ -182,7 +182,7 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
 %% End 1-0
 
 assemble_frame(Channel, MethodRecord, Protocol) ->
-    ?LOGMESSAGE(out, Channel, MethodRecord, none),
+    %%?LOGMESSAGE(out, Channel, MethodRecord, none),
     rabbit_binary_generator:build_simple_method_frame(
       Channel, MethodRecord, Protocol).
 
@@ -195,14 +195,14 @@ assemble_frame(Channel, MethodRecord, Protocol) ->
 
 assemble_frames(Channel, Performative, Content, FrameMax,
                 rabbit_amqp1_0_framing) ->
-    ?LOGMESSAGE(out, Channel, Performative, Content),
+    %%?LOGMESSAGE(out, Channel, Performative, Content),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]);
 
 %% End 1-0
 
 assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
-    ?LOGMESSAGE(out, Channel, MethodRecord, Content),
+    %%?LOGMESSAGE(out, Channel, MethodRecord, Content),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
     true = Protocol:method_has_content(MethodName), % assertion
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(

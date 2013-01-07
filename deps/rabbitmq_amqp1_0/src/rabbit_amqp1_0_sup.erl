@@ -42,12 +42,12 @@ init([Listeners]) ->
 
 make_listener_specs(Listeners) ->
     [make_listener_spec(Spec)
-     || Spec <- lists:append([rabbit_networking:check_tcp_listener_address(
-                                rabbit_amqp1_0_listener_sup, Listener)
-                              || Listener <- Listeners])].
+     || Spec <- lists:append(
+                  [rabbit_networking:tcp_listener_addresses(Listener)
+                   || Listener <- Listeners])].
 
-make_listener_spec({IPAddress, Port, Family, Name}) ->
-    {Name,
+make_listener_spec({IPAddress, Port, Family}) ->
+    {rabbit_misc:tcp_name(rabbit_amqp1_0_listener_sup, IPAddress, Port),
      {tcp_listener_sup, start_link,
       [IPAddress, Port,
        [Family | tcp_opts()],
