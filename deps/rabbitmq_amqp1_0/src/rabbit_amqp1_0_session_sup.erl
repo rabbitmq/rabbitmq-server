@@ -81,5 +81,5 @@ start_limiter_fun(SupPid) ->
 
 adapter_info(Sock) ->
     Info = amqp_direct_connection:socket_adapter_info(Sock),
-    Info#amqp_adapter_info{protocol = {'AMQP', {1, 0}}}.
+    Info#amqp_adapter_info{protocol = {'AMQP', "1.0"}}.
 
