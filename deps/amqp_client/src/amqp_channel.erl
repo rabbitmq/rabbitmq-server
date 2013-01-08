@@ -228,8 +228,8 @@ wait_for_confirms(Channel) ->
 %% an exception.
 wait_for_confirms(Channel, Timeout) ->
     case gen_server:call(Channel, {wait_for_confirms, Timeout}, infinity) of
-        Normal when is_boolean(Normal) -> Normal;
-        {error, Reason}                -> throw(Reason)
+        {error, Reason} -> throw(Reason);
+        Other           -> Other
     end.
 
 %% @spec (Channel) -> true
