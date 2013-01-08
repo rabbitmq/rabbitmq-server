@@ -3,5 +3,5 @@
   {vsn, "%%VSN%%"},
   {modules, []},
   {registered, []},
-  {env, []},
+  {env, [{hash, routing_key}]},
   {applications, [rabbit]}]}.
