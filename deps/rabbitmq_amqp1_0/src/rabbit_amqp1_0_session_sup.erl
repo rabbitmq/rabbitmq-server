@@ -22,8 +22,6 @@
 
 -export([init/1]).
 
-%% TODO revert when removing copypasta below.
-%% -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%----------------------------------------------------------------------------
@@ -81,56 +79,7 @@ start_limiter_fun(SupPid) ->
                    transient, ?MAX_WAIT, worker, [rabbit_limiter]})
     end.
 
-
-%% TODO begin copypasta from rabbit_stomp_reader
-
 adapter_info(Sock) ->
-    {PeerHost, PeerPort, Host, Port} =
-        case rabbit_net:socket_ends(Sock, inbound) of
-            {ok, Res} -> Res;
-            _          -> {unknown, unknown}
-        end,
-    Name = case rabbit_net:connection_string(Sock, inbound) of
-               {ok, Res3} -> Res3;
-               _          -> unknown
-           end,
-    #amqp_adapter_info{protocol        = {'AMQP', {1,0}},
-                       name            = list_to_binary(Name),
-                       host            = Host,
-                       port            = Port,
-                       peer_host       = PeerHost,
-                       peer_port       = PeerPort,
-                       additional_info = maybe_ssl_info(Sock)}.
+    Info = amqp_direct_connection:socket_adapter_info(Sock),
+    Info#amqp_adapter_info{protocol = {'AMQP', {1, 0}}}.
 
-maybe_ssl_info(Sock) ->
-    case rabbit_net:is_ssl(Sock) of
-        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
-        false -> [{ssl, false}]
-    end.
-
-ssl_info(Sock) ->
-    {Protocol, KeyExchange, Cipher, Hash} =
-        case rabbit_net:ssl_info(Sock) of
-            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
-            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
-            _                       -> {unknown, unknown, unknown, unknown}
-        end,
-    [{ssl_protocol,       Protocol},
-     {ssl_key_exchange,   KeyExchange},
-     {ssl_cipher,         Cipher},
-     {ssl_hash,           Hash}].
-
-ssl_cert_info(Sock) ->
-    case rabbit_net:peercert(Sock) of
-        {ok, Cert} ->
-            [{peer_cert_issuer,   list_to_binary(
-                                    rabbit_ssl:peer_cert_issuer(Cert))},
-             {peer_cert_subject,  list_to_binary(
-                                    rabbit_ssl:peer_cert_subject(Cert))},
-             {peer_cert_validity, list_to_binary(
-                                    rabbit_ssl:peer_cert_validity(Cert))}];
-        _ ->
-            []
-    end.
-
-%% TODO end copypasta from rabbit_stomp_reader
