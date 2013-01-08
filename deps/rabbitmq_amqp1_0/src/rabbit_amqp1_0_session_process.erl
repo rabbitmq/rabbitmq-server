@@ -118,6 +118,10 @@ handle_info(#'basic.ack'{} = Ack, State = #state{writer_pid = WriterPid,
         F <- rabbit_amqp1_0_session:flow_fields(Reply, Session)],
     {noreply, state(Session1, State)};
 
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    {noreply, State};
+
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #state{writer_pid = WriterPid}) ->
@@ -130,8 +134,9 @@ handle_info({'DOWN', _MRef, process, _QPid, _Reason}, State) ->
     %% TODO do we care any more since we're using direct client?
     {noreply, State}. % FIXME rabbit_channel uses queue_blocked?
 
-handle_cast({frame, Frame},
+handle_cast({frame, Frame, FlowPid},
             State = #state{ writer_pid = Sock }) ->
+    credit_flow:ack(FlowPid),
     try handle_control(Frame, State) of
         {reply, Replies, NewState} when is_list(Replies) ->
             lists:foreach(fun (Reply) ->

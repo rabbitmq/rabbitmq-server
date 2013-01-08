@@ -90,8 +90,8 @@ transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
                undefined -> MsgRKey;
                _         -> LinkRKey
            end,
-    amqp_channel:call(BCh, #'basic.publish'{exchange    = X,
-                                            routing_key = RKey}, Msg),
+    amqp_channel:cast_flow(BCh, #'basic.publish'{exchange    = X,
+                                                 routing_key = RKey}, Msg),
     {SendFlow, CreditUsed1} = case CreditUsed - 1 of
                                   C when C =< 0 ->
                                       {true,  ?INCOMING_CREDIT div 2};

@@ -59,7 +59,8 @@
 -record(incoming_delivery, {delivery_id}).
 
 process_frame(Pid, Frame) ->
-    gen_server2:cast(Pid, {frame, Frame}).
+    credit_flow:send(Pid),
+    gen_server2:cast(Pid, {frame, Frame, self()}).
 
 init(Channel) ->
     #session{channel_num            = Channel,
