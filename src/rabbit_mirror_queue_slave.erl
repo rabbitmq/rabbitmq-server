@@ -580,15 +580,11 @@ ensure_rate_timer(State = #state { rate_timer_ref = undefined }) ->
     TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
                              self(), update_ram_duration),
     State #state { rate_timer_ref = TRef };
-ensure_rate_timer(State = #state { rate_timer_ref = just_measured }) ->
-    State #state { rate_timer_ref = undefined };
 ensure_rate_timer(State) ->
     State.
 
 stop_rate_timer(State = #state { rate_timer_ref = undefined }) ->
     State;
-stop_rate_timer(State = #state { rate_timer_ref = just_measured }) ->
-    State #state { rate_timer_ref = undefined };
 stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
     erlang:cancel_timer(TRef),
     State #state { rate_timer_ref = undefined }.
