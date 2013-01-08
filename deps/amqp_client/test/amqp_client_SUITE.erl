@@ -68,7 +68,7 @@ confirm_barrier_test_()                 -> ?RUN([]).
 confirm_select_before_wait_test_()      -> ?RUN([]).
 confirm_barrier_timeout_test_()         -> ?RUN([]).
 confirm_barrier_die_timeout_test_()     -> ?RUN([]).
-default_consumer_test()                 -> ?RUN([]).
+default_consumer_test_()                -> ?RUN([]).
 subscribe_nowait_test_()                -> ?RUN([]).
 
 non_existent_exchange_test_()           -> ?RUN([negative]).
