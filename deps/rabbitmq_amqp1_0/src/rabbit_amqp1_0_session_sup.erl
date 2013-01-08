@@ -39,27 +39,17 @@
 
 -endif.
 
-%%----------------------------------------------------------------------------
-start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
-            Collector}) ->
-    case Protocol of
-        rabbit_amqp1_0_framing ->
-            start_link_1_0({Protocol, Sock, Channel, FrameMax, ReaderPid,
-                            Username, VHost, Collector});
-        _ ->
-            rabbit_channel_sup:start_link({Protocol, Sock, Channel, FrameMax,
-                                           ReaderPid, Username, VHost,
-                                           Collector})
-    end.
 
-start_link_1_0({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
-                Collector}) ->
+%%----------------------------------------------------------------------------
+start_link({rabbit_amqp1_0_framing, Sock, Channel, FrameMax, ReaderPid,
+            Username, VHost, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor2:start_child(
           SupPid,
           {writer, {rabbit_amqp1_0_writer, start_link,
-                    [Sock, Channel, FrameMax, Protocol, ReaderPid]},
+                    [Sock, Channel, FrameMax, rabbit_amqp1_0_framing,
+                     ReaderPid]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_writer]}),
     {ok, ChannelPid} =
         supervisor2:start_child(
@@ -69,7 +59,10 @@ start_link_1_0({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
                       Collector, start_limiter_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_session_process]}),
     %% Not bothering with the framing channel just yet
-    {ok, SupPid, ChannelPid}.
+    {ok, SupPid, ChannelPid};
+
+start_link(Args091) ->
+    rabbit_channel_sup:start_link(Args091).
 
 %%----------------------------------------------------------------------------
 
