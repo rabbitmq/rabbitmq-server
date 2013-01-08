@@ -254,7 +254,11 @@ init_dlx_routing_key(RoutingKey, State) ->
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue_state = BQS} =
-        stop_sync_timer(stop_rate_timer(State)),
+        lists:foldl(fun (F, S) -> F(S) end, State,
+                    [fun stop_sync_timer/1,
+                     fun stop_rate_timer/1,
+                     fun stop_expiry_timer/1,
+                     fun stop_ttl_timer/1]),
     case BQS of
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
@@ -289,36 +293,18 @@ backing_queue_module(Q) ->
         true  -> rabbit_mirror_queue_master
     end.
 
-ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
-    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync_timeout),
-    State#q{sync_timer_ref = TRef};
 ensure_sync_timer(State) ->
-    State.
+    rabbit_misc:ensure_timer(State, #q.sync_timer_ref,
+                             ?SYNC_INTERVAL, sync_timeout).
 
-stop_sync_timer(State = #q{sync_timer_ref = undefined}) ->
-    State;
-stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
-    erlang:cancel_timer(TRef),
-    State#q{sync_timer_ref = undefined}.
+stop_sync_timer(State) -> rabbit_misc:stop_timer(State, #q.sync_timer_ref).
 
-ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
-    TRef = erlang:send_after(
-             ?RAM_DURATION_UPDATE_INTERVAL, self(), update_ram_duration),
-    State#q{rate_timer_ref = TRef};
 ensure_rate_timer(State) ->
-    State.
+    rabbit_misc:ensure_timer(State, #q.rate_timer_ref,
+                             ?RAM_DURATION_UPDATE_INTERVAL,
+                             update_ram_duration).
 
-stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
-    State;
-stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
-    erlang:cancel_timer(TRef),
-    State#q{rate_timer_ref = undefined}.
-
-stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
-    State;
-stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
-    erlang:cancel_timer(TRef),
-    State#q{expiry_timer_ref = undefined}.
+stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #q.rate_timer_ref).
 
 %% We wish to expire only when there are no consumers *and* the expiry
 %% hasn't been refreshed (by queue.declare or basic.get) for the
@@ -328,10 +314,33 @@ ensure_expiry_timer(State = #q{expires = undefined}) ->
 ensure_expiry_timer(State = #q{expires = Expires}) ->
     case is_unused(State) of
         true  -> NewState = stop_expiry_timer(State),
-                 TRef = erlang:send_after(Expires, self(), maybe_expire),
-                 NewState#q{expiry_timer_ref = TRef};
+                 rabbit_misc:ensure_timer(NewState, #q.expiry_timer_ref,
+                                          Expires, maybe_expire);
         false -> State
     end.
+
+stop_expiry_timer(State) -> rabbit_misc:stop_timer(State, #q.expiry_timer_ref).
+
+ensure_ttl_timer(undefined, State) ->
+    State;
+ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref = undefined}) ->
+    After = (case Expiry - now_micros() of
+                 V when V > 0 -> V + 999; %% always fire later
+                 _            -> 0
+             end) div 1000,
+    TRef = erlang:send_after(After, self(), drop_expired),
+    State#q{ttl_timer_ref = TRef, ttl_timer_expiry = Expiry};
+ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
+                                    ttl_timer_expiry = TExpiry})
+  when Expiry + 1000 < TExpiry ->
+    case erlang:cancel_timer(TRef) of
+        false -> State;
+        _     -> ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined})
+    end;
+ensure_ttl_timer(_Expiry, State) ->
+    State.
+
+stop_ttl_timer(State) -> rabbit_misc:stop_timer(State, #q.ttl_timer_ref).
 
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #q.stats_timer, emit_stats).
@@ -763,25 +772,6 @@ dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
                   unconfirmed         = UC1,
                   queue_monitors      = QMons1,
                   backing_queue_state = BQS2}}.
-
-ensure_ttl_timer(undefined, State) ->
-    State;
-ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref = undefined}) ->
-    After = (case Expiry - now_micros() of
-                 V when V > 0 -> V + 999; %% always fire later
-                 _            -> 0
-             end) div 1000,
-    TRef = erlang:send_after(After, self(), drop_expired),
-    State#q{ttl_timer_ref = TRef, ttl_timer_expiry = Expiry};
-ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
-                                    ttl_timer_expiry = TExpiry})
-  when Expiry + 1000 < TExpiry ->
-    case erlang:cancel_timer(TRef) of
-        false -> State;
-        _     -> ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined})
-    end;
-ensure_ttl_timer(_Expiry, State) ->
-    State.
 
 dead_letter_publish(Msg, Reason, X, RK, MsgSeqNo, QName) ->
     DLMsg = make_dead_letter_msg(Msg, Reason, X#exchange.name, RK, QName),

@@ -589,30 +589,18 @@ next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
 backing_queue_timeout(State = #state { backing_queue = BQ }) ->
     run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
 
-ensure_sync_timer(State = #state { sync_timer_ref = undefined }) ->
-    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync_timeout),
-    State #state { sync_timer_ref = TRef };
 ensure_sync_timer(State) ->
-    State.
+    rabbit_misc:ensure_timer(State, #state.sync_timer_ref,
+                             ?SYNC_INTERVAL, sync_timeout).
 
-stop_sync_timer(State = #state { sync_timer_ref = undefined }) ->
-    State;
-stop_sync_timer(State = #state { sync_timer_ref = TRef }) ->
-    erlang:cancel_timer(TRef),
-    State #state { sync_timer_ref = undefined }.
+stop_sync_timer(State) -> rabbit_misc:stop_timer(State, #state.sync_timer_ref).
 
-ensure_rate_timer(State = #state { rate_timer_ref = undefined }) ->
-    TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
-                             self(), update_ram_duration),
-    State #state { rate_timer_ref = TRef };
 ensure_rate_timer(State) ->
-    State.
+    rabbit_misc:ensure_timer(State, #state.rate_timer_ref,
+                             ?RAM_DURATION_UPDATE_INTERVAL,
+                             update_ram_duration).
 
-stop_rate_timer(State = #state { rate_timer_ref = undefined }) ->
-    State;
-stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
-    erlang:cancel_timer(TRef),
-    State #state { rate_timer_ref = undefined }.
+stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #state.rate_timer_ref).
 
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
     State #state { known_senders = pmon:monitor(ChPid, KS) }.
