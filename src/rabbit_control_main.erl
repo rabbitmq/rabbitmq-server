@@ -168,7 +168,7 @@ start() ->
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
             usage();
-        {error, {Problem, Reason}} when is_atom(Problem); is_binary(Reason) ->
+        {error, {Problem, Reason}} when is_atom(Problem), is_binary(Reason) ->
             %% We handle this common case specially to avoid ~p since
             %% that has i18n issues
             print_error("~s: ~s", [Problem, Reason]),
