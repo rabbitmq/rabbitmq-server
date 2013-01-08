@@ -257,8 +257,12 @@ handle_cast({set_ram_duration_target, Duration},
 
 handle_info(update_ram_duration, State = #state{backing_queue       = BQ,
                                                 backing_queue_state = BQS}) ->
-    noreply(State#state{rate_timer_ref      = just_measured,
-                        backing_queue_state = update_ram_duration(BQ, BQS)});
+    BQS1 = update_ram_duration(BQ, BQS),
+    %% Don't call noreply/1, we don't want to set timers
+    {State1, Timeout} = next_state(State #state {
+                                     rate_timer_ref      = undefined,
+                                     backing_queue_state = BQS1 }),
+    {noreply, State1, Timeout};
 
 handle_info(sync_timeout, State) ->
     noreply(backing_queue_timeout(
@@ -566,17 +570,16 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
 
 noreply(State) ->
     {NewState, Timeout} = next_state(State),
-    {noreply, NewState, Timeout}.
+    {noreply, ensure_rate_timer(NewState), Timeout}.
 
 reply(Reply, State) ->
     {NewState, Timeout} = next_state(State),
-    {reply, Reply, NewState, Timeout}.
+    {reply, Reply, ensure_rate_timer(NewState), Timeout}.
 
 next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
-    State1 = ensure_rate_timer(
-               confirm_messages(MsgIds, State #state {
-                                          backing_queue_state = BQS1 })),
+    State1 = confirm_messages(MsgIds,
+                              State #state { backing_queue_state = BQS1 }),
     case BQ:needs_timeout(BQS1) of
         false -> {stop_sync_timer(State1),   hibernate     };
         idle  -> {stop_sync_timer(State1),   ?SYNC_INTERVAL};
