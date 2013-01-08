@@ -1162,7 +1162,7 @@
               <varlistentry>
                 <term>status</term>
                 <listitem><para>The status of the queue. Normally
-                'running', but may be different if the queue is
+                'running', but may be "{syncing, MsgCount}" if the queue is
                 synchronising.</para></listitem>
               </varlistentry>
             </variablelist>

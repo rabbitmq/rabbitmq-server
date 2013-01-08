@@ -176,8 +176,7 @@
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
 -spec(sync_mirrors/1 :: (pid()) ->
     'ok' | rabbit_types:error('pending_acks' | 'not_mirrored')).
--spec(cancel_sync_mirrors/1 :: (pid()) ->
-    'ok' | rabbit_types:error('not_mirrored')).
+-spec(cancel_sync_mirrors/1 :: (pid()) -> 'ok' | {'ok', 'not_syncing'}).
 
 -endif.
 
