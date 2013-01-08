@@ -644,7 +644,7 @@ confirm_select_before_wait_test() ->
     {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     try amqp_channel:wait_for_confirms(Channel) of
-        _ -> fail
+        _ -> exit(success_despite_lack_of_confirm_mode)
     catch
         not_in_confirm_mode -> ok
     end,
