@@ -68,7 +68,8 @@
 
 %% Various queries to get the status of the db
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
-                         {'running_nodes', [node()]}]).
+                         {'running_nodes', [node()]} |
+                         {'partitions', [{node(), [node()]}]}]).
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(cluster_nodes/1 :: ('all' | 'disc' | 'ram' | 'running') -> [node()]).
 -spec(node_type/0 :: () -> node_type()).
