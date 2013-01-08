@@ -21,7 +21,7 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
--export([start_link/8]).
+-export([start_link/1]).
 
 -record(state, {backing_connection, backing_channel, frame_max,
                 reader_pid, writer_pid, buffer, session}).
@@ -33,21 +33,18 @@
 
 -import(rabbit_amqp1_0_link_util, [protocol_error/3, ctag_to_handle/1]).
 
-%% TODO account for all these things
-start_link(Channel, ReaderPid, WriterPid, User, VHost, FrameMax,
-           _Collector, _StartLimiterFun) ->
-    gen_server2:start_link(
-      ?MODULE, [Channel, ReaderPid, WriterPid, User, VHost, FrameMax], []).
+start_link(Args) ->
+    gen_server2:start_link(?MODULE, Args, []).
 
 %% ---------
 
-init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
-      FrameMax]) ->
+init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
+      FrameMax, AdapterInfo, _Collector}) ->
     process_flag(trap_exit, true),
     {ok, Conn} = amqp_connection:start(
-                   %% TODO #adapter_info{}
                    #amqp_params_direct{username     = Username,
-                                       virtual_host = <<"/">>}),
+                                       virtual_host = <<"/">>,
+                                       adapter_info = AdapterInfo}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, #state{backing_connection = Conn,
                 backing_channel    = Ch,

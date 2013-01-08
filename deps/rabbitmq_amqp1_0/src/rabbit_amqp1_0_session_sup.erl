@@ -22,7 +22,9 @@
 
 -export([init/1]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
+%% TODO revert when removing copypasta below.
+%% -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -55,8 +57,8 @@ start_link({rabbit_amqp1_0_framing, Sock, Channel, FrameMax, ReaderPid,
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_amqp1_0_session_process, start_link,
-                     [Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
-                      Collector, start_limiter_fun(SupPid)]},
+                     [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
+                       adapter_info(Sock), Collector}]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_session_process]}),
     %% Not bothering with the framing channel just yet
     {ok, SupPid, ChannelPid};
@@ -78,3 +80,57 @@ start_limiter_fun(SupPid) ->
                   {limiter, {rabbit_limiter, start_link, [Me, UnackedCount]},
                    transient, ?MAX_WAIT, worker, [rabbit_limiter]})
     end.
+
+
+%% TODO begin copypasta from rabbit_stomp_reader
+
+adapter_info(Sock) ->
+    {PeerHost, PeerPort, Host, Port} =
+        case rabbit_net:socket_ends(Sock, inbound) of
+            {ok, Res} -> Res;
+            _          -> {unknown, unknown}
+        end,
+    Name = case rabbit_net:connection_string(Sock, inbound) of
+               {ok, Res3} -> Res3;
+               _          -> unknown
+           end,
+    #amqp_adapter_info{protocol        = {'AMQP', {1,0}},
+                       name            = list_to_binary(Name),
+                       host            = Host,
+                       port            = Port,
+                       peer_host       = PeerHost,
+                       peer_port       = PeerPort,
+                       additional_info = maybe_ssl_info(Sock)}.
+
+maybe_ssl_info(Sock) ->
+    case rabbit_net:is_ssl(Sock) of
+        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
+        false -> [{ssl, false}]
+    end.
+
+ssl_info(Sock) ->
+    {Protocol, KeyExchange, Cipher, Hash} =
+        case rabbit_net:ssl_info(Sock) of
+            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
+            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
+            _                       -> {unknown, unknown, unknown, unknown}
+        end,
+    [{ssl_protocol,       Protocol},
+     {ssl_key_exchange,   KeyExchange},
+     {ssl_cipher,         Cipher},
+     {ssl_hash,           Hash}].
+
+ssl_cert_info(Sock) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, Cert} ->
+            [{peer_cert_issuer,   list_to_binary(
+                                    rabbit_ssl:peer_cert_issuer(Cert))},
+             {peer_cert_subject,  list_to_binary(
+                                    rabbit_ssl:peer_cert_subject(Cert))},
+             {peer_cert_validity, list_to_binary(
+                                    rabbit_ssl:peer_cert_validity(Cert))}];
+        _ ->
+            []
+    end.
+
+%% TODO end copypasta from rabbit_stomp_reader
