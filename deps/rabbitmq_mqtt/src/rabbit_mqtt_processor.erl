@@ -453,8 +453,8 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
 
 adapter_info(Sock) ->
     Info = amqp_direct_connection:socket_adapter_info(Sock),
-    Info#amqp_adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
-                                                     ?MQTT_PROTO_MINOR}}.
+    Info#amqp_adapter_info{protocol = {'MQTT', {?MQTT_PROTO_MAJOR,
+                                                ?MQTT_PROTO_MINOR}}.
 
 send_client(Frame, #proc_state{ socket = Sock }) ->
     %rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),
