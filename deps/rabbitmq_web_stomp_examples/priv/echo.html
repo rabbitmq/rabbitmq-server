@@ -83,6 +83,8 @@
       var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
       var client = Stomp.over(ws);
 
+      client.heartbeat.outgoing = 0;
+      client.heartbeat.incoming = 0;
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {
