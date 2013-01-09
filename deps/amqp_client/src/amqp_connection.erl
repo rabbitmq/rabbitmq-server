@@ -334,7 +334,7 @@ info_keys(ConnectionPid) ->
 info_keys() ->
     amqp_gen_connection:info_keys().
 
-%% @doc Returns an #amqp_adapter_info{} based on the underlying socket
-%% for a non-AMQP network protocol.
+%% @doc Takes a socket and a protocol, returns an #amqp_adapter_info{}
+%% based on the socket for the protocol given.
 socket_adapter_info(Sock, Protocol) ->
     amqp_direct_connection:socket_adapter_info(Sock, Protocol).
