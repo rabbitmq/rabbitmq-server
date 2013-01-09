@@ -385,7 +385,8 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(
-      Args, RequiredArgs, QueueName, [<<"x-expires">>, <<"x-message-ttl">>]).
+      Args, RequiredArgs, QueueName,
+      [<<"x-expires">>, <<"x-message-ttl">>, <<"x-max-length">>]).
 
 check_declare_arguments(QueueName, Args) ->
     Checks = [{<<"x-expires">>,                 fun check_expires_arg/2},
