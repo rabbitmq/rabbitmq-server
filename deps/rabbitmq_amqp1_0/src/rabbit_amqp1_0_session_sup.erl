@@ -80,4 +80,4 @@ start_limiter_fun(SupPid) ->
     end.
 
 adapter_info(Sock) ->
-    amqp_direct_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}).
+    amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}).
