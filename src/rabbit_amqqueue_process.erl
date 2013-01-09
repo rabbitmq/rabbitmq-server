@@ -563,10 +563,18 @@ maybe_drop_head(State = #q{max_length          = MaxLen,
                            backing_queue       = BQ,
                            backing_queue_state = BQS}) ->
     case BQ:len(BQS) >= MaxLen of
-        true ->  {{Msg, _IsDelivered, AckTag}, BQS1} = BQ:fetch(true, BQS),
-                 (dead_letter_fun(maxlen))([{Msg, AckTag}]),
-                 State#q{backing_queue_state = BQS1};
-        false -> State
+        true ->
+            with_dlx(State#q.dlx,
+                     fun (X) ->
+                            {ok, State1} = dead_letter_maxlen_msgs(X, State),
+                            State1
+                     end,
+                     fun () ->
+                            {_, BQS1} = BQ:drop(false, BQS),
+                            State#q{backing_queue_state = BQS1}
+                     end);
+        false ->
+            State
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
@@ -745,6 +753,12 @@ dead_letter_rejected_msgs(AckTags, X,  State = #q{backing_queue = BQ}) ->
                   {ok, Acc1, BQS1}
           end, rejected, X, State),
     State1.
+
+dead_letter_maxlen_msgs(X, State = #q{backing_queue = BQ}) ->
+    dead_letter_msgs(fun (DLFun, Acc, BQS1) ->
+                             {{Msg, _, AckTag}, BQS2} = BQ:fetch(true, BQS1),
+                             {ok, DLFun(Msg, AckTag, Acc), BQS2}
+                     end, maxlen, X, State).
 
 dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
                                             publish_seqno       = SeqNo0,
