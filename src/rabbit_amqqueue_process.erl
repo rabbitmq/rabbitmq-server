@@ -54,7 +54,8 @@
             delayed_stop,
             queue_monitors,
             dlx,
-            dlx_routing_key
+            dlx_routing_key,
+            max_length
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -240,7 +241,8 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
       [{<<"x-expires">>,                 fun init_expires/2},
        {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
        {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
-       {<<"x-message-ttl">>,             fun init_ttl/2}]).
+       {<<"x-message-ttl">>,             fun init_ttl/2},
+       {<<"x-max-length">>,              fun init_max_length/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
@@ -251,6 +253,8 @@ init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
 
 init_dlx_routing_key(RoutingKey, State) ->
     State#q{dlx_routing_key = RoutingKey}.
+
+init_max_length(MaxLen, State) -> State#q{max_length = MaxLen}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue_state = BQS} =
@@ -548,10 +552,32 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
         %% The next one is an optimisation
         {false, State2 = #q{ttl = 0, dlx = undefined}} ->
             discard(Delivery, State2);
-        {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
+        {false, State2} ->
+            State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+                maybe_drop_head(State2),
             BQS1 = BQ:publish(Message, Props, Delivered, SenderPid, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,
-                             State2#q{backing_queue_state = BQS1})
+                             State3#q{backing_queue_state = BQS1})
+    end.
+
+maybe_drop_head(State = #q{max_length = undefined}) ->
+    State;
+maybe_drop_head(State = #q{max_length          = MaxLen,
+                           backing_queue       = BQ,
+                           backing_queue_state = BQS}) ->
+    case BQ:len(BQS) >= MaxLen of
+        true ->
+            with_dlx(State#q.dlx,
+                     fun (X) ->
+                            {ok, State1} = dead_letter_maxlen_msgs(X, State),
+                            State1
+                     end,
+                     fun () ->
+                            {_, BQS1} = BQ:drop(false, BQS),
+                            State#q{backing_queue_state = BQS1}
+                     end);
+        false ->
+            State
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
@@ -740,6 +766,12 @@ dead_letter_rejected_msgs(AckTags, X,  State = #q{backing_queue = BQ}) ->
                   {ok, Acc1, BQS1}
           end, rejected, X, State),
     State1.
+
+dead_letter_maxlen_msgs(X, State = #q{backing_queue = BQ}) ->
+    dead_letter_msgs(fun (DLFun, Acc, BQS1) ->
+                             {{Msg, _, AckTag}, BQS2} = BQ:fetch(true, BQS1),
+                             {ok, DLFun(Msg, AckTag, Acc), BQS2}
+                     end, maxlen, X, State).
 
 dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
                                             publish_seqno       = SeqNo0,
