@@ -117,7 +117,7 @@ results should follow.
 Under most circumstances the routing key is a good choice for something to
 hash. However, in some cases you need to use the routing key for some other
 purpose (for example with more complex routing involving exchange to
-exchange bindings). In this case you an configure the consistent hash
+exchange bindings). In this case you can configure the consistent hash
 exchange to route based on a named header instead. To do this, declare the
 exchange with a string argument called "hash-header" naming the header to
 be used. For example using the Erlang client as above:
