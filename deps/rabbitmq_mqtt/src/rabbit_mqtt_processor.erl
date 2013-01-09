@@ -452,22 +452,8 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
                         awaiting_seqno = SeqNo1 }.
 
 adapter_info(Sock) ->
-    {PeerHost, PeerPort, Host, Port} =
-        case rabbit_net:socket_ends(Sock, inbound) of
-            {ok, Res} -> Res;
-            _          -> {unknown, unknown}
-        end,
-    Name = case rabbit_net:connection_string(Sock, inbound) of
-               {ok, Res3} -> Res3;
-               _          -> unknown
-           end,
-    #amqp_adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
-                                                 ?MQTT_PROTO_MINOR}},
-                        name         = list_to_binary(Name),
-                        host         = Host,
-                        port         = Port,
-                        peer_host    = PeerHost,
-                        peer_port    = PeerPort}.
+    amqp_connection:socket_adapter_info(
+             Sock, {'MQTT', {?MQTT_PROTO_MAJOR, ?MQTT_PROTO_MINOR}}).
 
 send_client(Frame, #proc_state{ socket = Sock }) ->
     %rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),
