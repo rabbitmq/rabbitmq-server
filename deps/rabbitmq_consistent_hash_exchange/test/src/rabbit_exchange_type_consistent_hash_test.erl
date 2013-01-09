@@ -74,7 +74,6 @@ test0(MakeMethod, MakeMsg, DeclareArgs) ->
                                                  routing_key = <<"20">> })
      || Q <- [<<"q2">>, <<"q3">>]],
     #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
-    Msg = #amqp_msg { props = #'P_basic'{}, payload = <<>> },
     [amqp_channel:call(Chan,
                        MakeMethod(),
                        MakeMsg()) || _ <- lists:duplicate(Count, const)],
