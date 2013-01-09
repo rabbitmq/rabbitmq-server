@@ -162,8 +162,7 @@ start_processor(SupPid, Configuration, Sock) ->
 
 
 adapter_info(Sock) ->
-    Info = amqp_direct_connection:socket_adapter_info(Sock),
-    Info#amqp_adapter_info{protocol = {'STOMP', 0}}.
+    amqp_direct_connection:socket_adapter_info(Sock, {'STOMP', 0}).
 
 ssl_login_name(_Sock, #stomp_configuration{ssl_cert_login = false}) ->
     none;
