@@ -129,6 +129,8 @@ be used. For example using the Erlang client as above:
               arguments = [{<<"hash-header">>, longstr, <<"hash-me">>}]
             }).
 
+If you specify "hash-header" and then publish messages without the named
+header, they will all get routed to the same (arbitrarily-chosen) queue.
 
 Any comments or feedback welcome, to the
 [rabbitmq-discuss mailing list](https://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss)
