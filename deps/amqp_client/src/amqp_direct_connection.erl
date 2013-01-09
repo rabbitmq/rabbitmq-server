@@ -26,7 +26,7 @@
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
--export([socket_adapter_info/1]).
+-export([socket_adapter_info/2]).
 
 -record(state, {node,
                 user,
@@ -156,7 +156,7 @@ ensure_adapter_info(A = #amqp_adapter_info{name = unknown}) ->
 
 ensure_adapter_info(Info) -> Info.
 
-socket_adapter_info(Sock) ->
+socket_adapter_info(Sock, Protocol) ->
     {PeerHost, PeerPort, Host, Port} =
         case rabbit_net:socket_ends(Sock, inbound) of
             {ok, Res} -> Res;
@@ -166,7 +166,7 @@ socket_adapter_info(Sock) ->
                {ok, Res1} -> Res1;
                _          -> unknown
            end,
-    #amqp_adapter_info{protocol        = unknown,
+    #amqp_adapter_info{protocol        = Protocol,
                        name            = list_to_binary(Name),
                        host            = Host,
                        port            = Port,
