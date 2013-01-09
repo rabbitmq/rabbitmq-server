@@ -160,10 +160,10 @@ socket_adapter_info(Sock) ->
     {PeerHost, PeerPort, Host, Port} =
         case rabbit_net:socket_ends(Sock, inbound) of
             {ok, Res} -> Res;
-            _          -> {unknown, unknown}
+            _          -> {unknown, unknown, unknown, unknown}
         end,
     Name = case rabbit_net:connection_string(Sock, inbound) of
-               {ok, Res3} -> Res3;
+               {ok, Res1} -> Res1;
                _          -> unknown
            end,
     #amqp_adapter_info{protocol        = unknown,
@@ -187,10 +187,10 @@ ssl_info(Sock) ->
             {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
             _                       -> {unknown, unknown, unknown, unknown}
         end,
-    [{ssl_protocol,       Protocol},
-     {ssl_key_exchange,   KeyExchange},
-     {ssl_cipher,         Cipher},
-     {ssl_hash,           Hash}].
+    [{ssl_protocol,     Protocol},
+     {ssl_key_exchange, KeyExchange},
+     {ssl_cipher,       Cipher},
+     {ssl_hash,         Hash}].
 
 ssl_cert_info(Sock) ->
     case rabbit_net:peercert(Sock) of
