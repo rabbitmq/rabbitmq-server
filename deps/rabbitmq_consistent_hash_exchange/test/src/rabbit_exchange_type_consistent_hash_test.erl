@@ -27,30 +27,26 @@ test() ->
     ok.
 
 test_with_rk() ->
-    application:set_env(rabbitmq_consistent_hash_exchange,
-                        hash, routing_key),
     test0(fun () ->
                   #'basic.publish'{exchange = <<"e">>, routing_key = rnd()}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
-          end).
+          end, []).
 
 test_with_header() ->
-    application:set_env(rabbitmq_consistent_hash_exchange,
-                        hash, {header, <<"hashme">>}),
     test0(fun () ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
           fun() ->
                   H = [{<<"hashme">>, longstr, rnd()}],
                   #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
-          end).
+          end, [{<<"hash-header">>, longstr, <<"hashme">>}]).
 
 rnd() ->
     list_to_binary(integer_to_list(random:uniform(1000000))).
 
-test0(MakeMethod, MakeMsg) ->
+test0(MakeMethod, MakeMsg, DeclareArgs) ->
     Count = 10000,
 
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
@@ -61,7 +57,8 @@ test0(MakeMethod, MakeMsg) ->
                           #'exchange.declare' {
                             exchange = <<"e">>,
                             type = <<"x-consistent-hash">>,
-                            auto_delete = true
+                            auto_delete = true,
+                            arguments = DeclareArgs
                            }),
     [#'queue.declare_ok'{} =
          amqp_channel:call(Chan, #'queue.declare' {

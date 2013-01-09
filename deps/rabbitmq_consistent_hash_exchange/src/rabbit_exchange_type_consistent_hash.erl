@@ -50,8 +50,9 @@ description() ->
 
 serialise_events() -> false.
 
-route(#exchange { name = Name } = _X,
-      #delivery { message = Msg } = _D) ->
+route(#exchange { name      = Name,
+                  arguments = Args },
+      #delivery { message = Msg }) ->
     %% Yes, we're being exceptionally naughty here, by using ets on an
     %% mnesia table. However, RabbitMQ-server itself is just as
     %% naughty, and for good reasons.
@@ -64,7 +65,8 @@ route(#exchange { name = Name } = _X,
     %% end up as relatively deep data structures which cost a lot to
     %% continually copy to the process heap. Consequently, such
     %% approaches have not been found to be much faster, if at all.
-    H = erlang:phash2(hash(Msg), ?PHASH2_RANGE),
+    HashOn = rabbit_misc:table_lookup(Args, <<"hash-header">>),
+    H = erlang:phash2(hash(HashOn, Msg), ?PHASH2_RANGE),
     case ets:select(?TABLE, [{#bucket { source_number = {Name, '$2'},
                                         destination   = '$1',
                                         _             = '_' },
@@ -142,12 +144,11 @@ find_numbers(Source, N, Acc) ->
         [_] -> find_numbers(Source, N, Acc)
     end.
 
-hash(#basic_message { routing_keys = Routes, content = Content }) ->
-    case application:get_env(rabbitmq_consistent_hash_exchange, hash) of
-        {ok, routing_key} -> Routes;
-        {ok, {header, H}} -> Hs = rabbit_basic:extract_headers(Content),
-                             case Hs of
-                                 undefined -> undefined;
-                                 _         -> rabbit_misc:table_lookup(Hs, H)
-                             end
+hash(undefined, #basic_message { routing_keys = Routes }) ->
+    Routes;
+hash({longstr, Header}, #basic_message { content = Content }) ->
+    Headers = rabbit_basic:extract_headers(Content),
+    case Headers of
+        undefined -> undefined;
+        _         -> rabbit_misc:table_lookup(Headers, Header)
     end.

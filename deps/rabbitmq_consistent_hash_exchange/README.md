@@ -4,10 +4,11 @@ This plugin adds a consistent-hash exchange type to RabbitMQ.
 
 In various scenarios, you may wish to ensure that messages sent to an
 exchange are consistently and equally distributed across a number of
-different queues based on the routing key of the message. You could
-arrange for this to occur yourself by using a direct or topic
-exchange, binding queues to that exchange and then publishing messages
-to that exchange that match the various binding keys.
+different queues based on the routing key of the message (or a
+nominated header, see "Routing on a header" below). You could arrange
+for this to occur yourself by using a direct or topic exchange,
+binding queues to that exchange and then publishing messages to that
+exchange that match the various binding keys.
 
 However, arranging things this way can be problematic:
 
@@ -110,6 +111,24 @@ small set of routing keys are being used then there's a possibility of
 messages not being evenly distributed between the various queues. If
 the routing key is a pseudo-random session ID or such, then good
 results should follow.
+
+## Routing on a header
+
+Under most circumstances the routing key is a good choice for something to
+hash. However, in some cases you need to use the routing key for some other
+purpose (for example with more complex routing involving exchange to
+exchange bindings). In this case you an configure the consistent hash
+exchange to route based on a named header instead. To do this, declare the
+exchange with a string argument called "hash-header" naming the header to
+be used. For example using the Erlang client as above:
+
+    amqp_channel:call(
+      Chan, #'exchange.declare' {
+              exchange  = <<"e">>,
+              type      = <<"x-consistent-hash">>,
+              arguments = [{<<"hash-header">>, longstr, <<"hash-me">>}]
+            }).
+
 
 Any comments or feedback welcome, to the
 [rabbitmq-discuss mailing list](https://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss)
