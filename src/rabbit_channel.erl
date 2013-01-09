@@ -40,8 +40,6 @@
              queue_collector_pid, stats_timer, confirm_enabled, publish_seqno,
              unconfirmed, confirmed, capabilities, trace_state}).
 
--record(tx, {msgs, acks, nacks}).
-
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 -define(STATISTICS_KEYS,
@@ -622,12 +620,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             Delivery = rabbit_basic:delivery(Mandatory, Message, MsgSeqNo),
             QNames = rabbit_exchange:route(Exchange, Delivery),
             DQ = {Delivery, QNames},
-            {noreply,
-             case Tx of
-                 none             -> deliver_to_queues(DQ, State1);
-                 #tx{msgs = Msgs} -> Msgs1 = queue:in(DQ, Msgs),
-                                     State1#ch{tx = Tx#tx{msgs = Msgs1}}
-             end};
+            {noreply, case Tx of
+                          none         -> deliver_to_queues(DQ, State1);
+                          {Msgs, Acks} -> Msgs1 = queue:in(DQ, Msgs),
+                                          State1#ch{tx = {Msgs1, Acks}}
+                      end};
         {error, Reason} ->
             precondition_failed("invalid message: ~p", [Reason])
     end;
@@ -643,12 +640,12 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
               _, State = #ch{unacked_message_q = UAMQ, tx = Tx}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
-    {noreply,
-     case Tx of
-         none             -> ack(Acked, State1),
-                             State1;
-         #tx{acks = Acks} -> State1#ch{tx = Tx#tx{acks = Acked ++ Acks}}
-     end};
+    {noreply, case Tx of
+                  none         -> ack(Acked, State1),
+                                  State1;
+                  {Msgs, Acks} -> Acks1 = ack_cons(ack, Acked, Acks),
+                                  State1#ch{tx = {Msgs, Acks1}}
+              end};
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
@@ -805,7 +802,7 @@ handle_method(#'basic.recover_async'{requeue = true},
               rabbit_misc:with_exit_handler(
                 OkFun,
                 fun () -> rabbit_amqqueue:requeue(QPid, MsgIds, self()) end)
-      end, UAMQL),
+      end, lists:reverse(UAMQL)),
     ok = notify_limiter(Limiter, UAMQL),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
@@ -1032,28 +1029,25 @@ handle_method(#'tx.select'{}, _, State) ->
 handle_method(#'tx.commit'{}, _, #ch{tx = none}) ->
     precondition_failed("channel is not transactional");
 
-handle_method(#'tx.commit'{}, _, State = #ch{tx      = #tx{msgs  = Msgs,
-                                                           acks  = Acks,
-                                                           nacks = Nacks},
+handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Msgs, Acks},
                                              limiter = Limiter}) ->
     State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, Msgs),
-    ack(Acks, State1),
-    lists:foreach(
-      fun({Requeue, Acked}) -> reject(Requeue, Acked, Limiter) end, Nacks),
+    lists:foreach(fun ({ack,     A}) -> ack(A, State1);
+                      ({Requeue, A}) -> reject(Requeue, A, Limiter)
+                  end, lists:reverse(Acks)),
     {noreply, maybe_complete_tx(State1#ch{tx = committing})};
 
 handle_method(#'tx.rollback'{}, _, #ch{tx = none}) ->
     precondition_failed("channel is not transactional");
 
 handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q = UAMQ,
-                                               tx = #tx{acks  = Acks,
-                                                        nacks = Nacks}}) ->
-    NacksL = lists:append([L || {_, L} <- Nacks]),
-    UAMQ1 = queue:from_list(lists:usort(Acks ++ NacksL ++ queue:to_list(UAMQ))),
+                                               tx = {_Msgs, Acks}}) ->
+    AcksL = lists:append(lists:reverse([lists:reverse(L) || {_, L} <- Acks])),
+    UAMQ1 = queue:from_list(lists:usort(AcksL ++ queue:to_list(UAMQ))),
     {reply, #'tx.rollback_ok'{}, State#ch{unacked_message_q = UAMQ1,
                                           tx                = new_tx()}};
 
-handle_method(#'confirm.select'{}, _, #ch{tx = #tx{}}) ->
+handle_method(#'confirm.select'{}, _, #ch{tx = {_, _}}) ->
     precondition_failed("cannot switch from tx to confirm mode");
 
 handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
@@ -1204,14 +1198,14 @@ reject(DeliveryTag, Requeue, Multiple,
        State = #ch{unacked_message_q = UAMQ, tx = Tx}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
-    {noreply,
-     case Tx of
-         none               -> reject(Requeue, Acked, State1#ch.limiter),
-                               State1;
-         #tx{nacks = Nacks} -> Nacks1 = [{Requeue, Acked} | Nacks],
-                               State1#ch{tx = Tx#tx{nacks = Nacks1}}
-     end}.
+    {noreply, case Tx of
+                  none         -> reject(Requeue, Acked, State1#ch.limiter),
+                                  State1;
+                  {Msgs, Acks} -> Acks1 = ack_cons(Requeue, Acked, Acks),
+                                  State1#ch{tx = {Msgs, Acks1}}
+              end}.
 
+%% NB: Acked is in youngest-first order
 reject(Requeue, Acked, Limiter) ->
     foreach_per_queue(
       fun (QPid, MsgIds) ->
@@ -1242,8 +1236,9 @@ record_sent(ConsumerTag, AckRequired,
             end,
     State#ch{unacked_message_q = UAMQ1, next_tag = DeliveryTag + 1}.
 
+%% NB: returns acks in youngest-first order
 collect_acks(Q, 0, true) ->
-    {queue:to_list(Q), queue:new()};
+    {lists:reverse(queue:to_list(Q)), queue:new()};
 collect_acks(Q, DeliveryTag, Multiple) ->
     collect_acks([], [], Q, DeliveryTag, Multiple).
 
@@ -1270,6 +1265,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
             precondition_failed("unknown delivery tag ~w", [DeliveryTag])
     end.
 
+%% NB: Acked is in youngest-first order
 ack(Acked, State = #ch{queue_names = QNames}) ->
     foreach_per_queue(
       fun (QPid, MsgIds) ->
@@ -1282,7 +1278,19 @@ ack(Acked, State = #ch{queue_names = QNames}) ->
       end, Acked),
     ok = notify_limiter(State#ch.limiter, Acked).
 
-new_tx() -> #tx{msgs = queue:new(), acks = [], nacks = []}.
+%% {Msgs, Acks}
+%%
+%% Msgs is a queue.
+%%
+%% Acks looks s.t. like this:
+%% [{false,[5,4]},{true,[3]},{ack,[2,1]}, ...]
+%%
+%% Each element is a pair consisting of a tag and a list of
+%% ack'ed/reject'ed msg ids. The tag is one of 'ack' (to ack), 'true'
+%% (reject w requeue), 'false' (reject w/o requeue). The msg ids, as
+%% well as the list overall, are in "most-recent (generally youngest)
+%% ack first" order.
+new_tx() -> {queue:new(), []}.
 
 notify_queues(State = #ch{state = closing}) ->
     {ok, State};
@@ -1296,6 +1304,8 @@ foreach_per_queue(_F, []) ->
     ok;
 foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}]) -> %% common case
     F(QPid, [MsgId]);
+%% NB: UAL should be in youngest-first order; the tree values will
+%% then be in oldest-first order
 foreach_per_queue(F, UAL) ->
     T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) ->
                             rabbit_misc:gb_trees_cons(QPid, MsgId, T)
@@ -1440,7 +1450,12 @@ coalesce_and_send(MsgSeqNos, MkMsgFun,
             WriterPid, MkMsgFun(SeqNo, false)) || SeqNo <- Ss],
     State.
 
-maybe_complete_tx(State = #ch{tx = #tx{}}) ->
+ack_cons(Tag, Acked, [{Tag, Acks} | L]) -> [{Tag, Acked ++ Acks} | L];
+ack_cons(Tag, Acked, Acks)              -> [{Tag, Acked} | Acks].
+
+ack_len(Acks) -> lists:sum([length(L) || {ack, L} <- Acks]).
+
+maybe_complete_tx(State = #ch{tx = {_, _}}) ->
     State;
 maybe_complete_tx(State = #ch{unconfirmed = UC}) ->
     case dtree:is_empty(UC) of
@@ -1472,9 +1487,9 @@ i(name,           State)                           -> name(State);
 i(consumer_count,          #ch{consumer_mapping = CM})    -> dict:size(CM);
 i(messages_unconfirmed,    #ch{unconfirmed = UC})         -> dtree:size(UC);
 i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) -> queue:len(UAMQ);
-i(messages_uncommitted,    #ch{tx = #tx{msgs = Msgs}})    -> queue:len(Msgs);
+i(messages_uncommitted,    #ch{tx = {Msgs, _Acks}})       -> queue:len(Msgs);
 i(messages_uncommitted,    #ch{})                         -> 0;
-i(acks_uncommitted,        #ch{tx = #tx{acks = Acks}})    -> length(Acks);
+i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
 i(prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_limit(Limiter);

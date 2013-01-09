@@ -355,7 +355,7 @@ ch_record(ChPid) ->
         undefined -> MonitorRef = erlang:monitor(process, ChPid),
                      C = #cr{ch_pid               = ChPid,
                              monitor_ref          = MonitorRef,
-                             acktags              = sets:new(),
+                             acktags              = queue:new(),
                              consumer_count       = 0,
                              blocked_consumers    = queue:new(),
                              is_limit_active      = false,
@@ -369,9 +369,9 @@ ch_record(ChPid) ->
 update_ch_record(C = #cr{consumer_count       = ConsumerCount,
                          acktags              = ChAckTags,
                          unsent_message_count = UnsentMessageCount}) ->
-    case {sets:size(ChAckTags), ConsumerCount, UnsentMessageCount} of
-        {0, 0, 0} -> ok = erase_ch_record(C);
-        _         -> ok = store_ch_record(C)
+    case {queue:is_empty(ChAckTags), ConsumerCount, UnsentMessageCount} of
+        {true, 0, 0} -> ok = erase_ch_record(C);
+        _            -> ok = store_ch_record(C)
     end,
     C.
 
@@ -454,7 +454,7 @@ deliver_msg_to_consumer(DeliverFun,
     rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
-                     true  -> sets:add_element(AckTag, ChAckTags);
+                     true  -> queue:in(AckTag, ChAckTags);
                      false -> ChAckTags
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
@@ -641,7 +641,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                        senders          = Senders1},
             case should_auto_delete(State1) of
                 true  -> {stop, State1};
-                false -> {ok, requeue_and_run(sets:to_list(ChAckTags),
+                false -> {ok, requeue_and_run(queue:to_list(ChAckTags),
                                               ensure_expiry_timer(State1))}
             end
     end.
@@ -680,9 +680,19 @@ subtract_acks(ChPid, AckTags, State, Fun) ->
         not_found ->
             State;
         C = #cr{acktags = ChAckTags} ->
-            update_ch_record(C#cr{acktags = lists:foldl(fun sets:del_element/2,
-                                                        ChAckTags, AckTags)}),
+            update_ch_record(
+              C#cr{acktags = subtract_acks(AckTags, [], ChAckTags)}),
             Fun(State)
+    end.
+
+subtract_acks([], [], AckQ) ->
+    AckQ;
+subtract_acks([], Prefix, AckQ) ->
+    queue:join(queue:from_list(lists:reverse(Prefix)), AckQ);
+subtract_acks([T | TL] = AckTags, Prefix, AckQ) ->
+    case queue:out(AckQ) of
+        {{value,  T}, QTail} -> subtract_acks(TL,             Prefix, QTail);
+        {{value, AT}, QTail} -> subtract_acks(AckTags, [AT | Prefix], QTail)
     end.
 
 message_properties(Message, Confirm, #q{ttl = TTL}) ->
@@ -699,30 +709,63 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
         T         -> now_micros() + T * 1000
     end.
 
-drop_expired_msgs(State = #q{dlx                 = DLX,
-                             backing_queue_state = BQS,
+drop_expired_msgs(State = #q{backing_queue_state = BQS,
                              backing_queue       = BQ }) ->
     Now = now_micros(),
     ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
-    {Props, BQS1} = case DLX of
-                        undefined -> BQ:dropwhile(ExpirePred, BQS);
-                        _         -> {Next, Msgs, BQS2} =
-                                         BQ:fetchwhile(ExpirePred,
-                                                       fun accumulate_msgs/3,
-                                                       [], BQS),
-                                     case Msgs of
-                                         [] -> ok;
-                                         _  -> (dead_letter_fun(expired))(
-                                                 lists:reverse(Msgs))
-                                     end,
-                                     {Next, BQS2}
-                    end,
+    {Props, State1} =
+        with_dlx(
+          State#q.dlx,
+          fun (X) -> dead_letter_expired_msgs(ExpirePred, X, State) end,
+          fun () -> {Next, BQS1} = BQ:dropwhile(ExpirePred, BQS),
+                    {Next, State#q{backing_queue_state = BQS1}} end),
     ensure_ttl_timer(case Props of
                          undefined                          -> undefined;
                          #message_properties{expiry = Exp}  -> Exp
-                     end, State#q{backing_queue_state = BQS1}).
+                     end, State1).
 
-accumulate_msgs(Msg, AckTag, Acc) -> [{Msg, AckTag} | Acc].
+with_dlx(undefined, _With,  Without) -> Without();
+with_dlx(DLX,        With,  Without) -> case rabbit_exchange:lookup(DLX) of
+                                            {ok, X}            -> With(X);
+                                            {error, not_found} -> Without()
+                                        end.
+
+dead_letter_expired_msgs(ExpirePred, X, State = #q{backing_queue = BQ}) ->
+    dead_letter_msgs(fun (DLFun, Acc, BQS1) ->
+                             BQ:fetchwhile(ExpirePred, DLFun, Acc, BQS1)
+                     end, expired, X, State).
+
+dead_letter_rejected_msgs(AckTags, X,  State = #q{backing_queue = BQ}) ->
+    {ok, State1} =
+        dead_letter_msgs(
+          fun (DLFun, Acc, BQS) ->
+                  {Acc1, BQS1} = BQ:ackfold(DLFun, Acc, BQS, AckTags),
+                  {ok, Acc1, BQS1}
+          end, rejected, X, State),
+    State1.
+
+dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
+                                            publish_seqno       = SeqNo0,
+                                            unconfirmed         = UC0,
+                                            queue_monitors      = QMons0,
+                                            backing_queue_state = BQS,
+                                            backing_queue       = BQ}) ->
+    QName = qname(State),
+    {Res, {AckImm1, SeqNo1, UC1, QMons1}, BQS1} =
+        Fun(fun (Msg, AckTag, {AckImm, SeqNo, UC, QMons}) ->
+                    case dead_letter_publish(Msg, Reason,
+                                             X, RK, SeqNo, QName) of
+                        []    -> {[AckTag | AckImm], SeqNo, UC, QMons};
+                        QPids -> {AckImm, SeqNo + 1,
+                                  dtree:insert(SeqNo, QPids, AckTag, UC),
+                                  pmon:monitor_all(QPids, QMons)}
+                    end
+            end, {[], SeqNo0, UC0, QMons0}, BQS),
+    {_Guids, BQS2} = BQ:ack(AckImm1, BQS1),
+    {Res, State#q{publish_seqno       = SeqNo1,
+                  unconfirmed         = UC1,
+                  queue_monitors      = QMons1,
+                  backing_queue_state = BQS2}}.
 
 ensure_ttl_timer(undefined, State) ->
     State;
@@ -743,11 +786,8 @@ ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
 ensure_ttl_timer(_Expiry, State) ->
     State.
 
-dead_letter_fun(Reason) ->
-    fun(Msgs) -> gen_server2:cast(self(), {dead_letter, Msgs, Reason}) end.
-
-dead_letter_publish(Msg, Reason, X, State = #q{publish_seqno = MsgSeqNo}) ->
-    DLMsg = make_dead_letter_msg(Reason, Msg, State),
+dead_letter_publish(Msg, Reason, X, RK, MsgSeqNo, QName) ->
+    DLMsg = make_dead_letter_msg(Msg, Reason, X#exchange.name, RK, QName),
     Delivery = rabbit_basic:delivery(false, DLMsg, MsgSeqNo),
     {Queues, Cycles} = detect_dead_letter_cycles(
                          DLMsg, rabbit_exchange:route(X, Delivery)),
@@ -826,19 +866,16 @@ detect_dead_letter_cycles(#basic_message{content = Content}, Queues) ->
             end
     end.
 
-make_dead_letter_msg(Reason,
-                     Msg = #basic_message{content       = Content,
+make_dead_letter_msg(Msg = #basic_message{content       = Content,
                                           exchange_name = Exchange,
                                           routing_keys  = RoutingKeys},
-                     State = #q{dlx = DLX, dlx_routing_key = DlxRoutingKey}) ->
+                     Reason, DLX, RK, #resource{name = QName}) ->
     {DeathRoutingKeys, HeadersFun1} =
-        case DlxRoutingKey of
+        case RK of
             undefined -> {RoutingKeys, fun (H) -> H end};
-            _         -> {[DlxRoutingKey],
-                          fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
+            _         -> {[RK], fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
-    #resource{name = QName} = qname(State),
     TimeSec = rabbit_misc:now_ms() div 1000,
     HeadersFun2 =
         fun (Headers) ->
@@ -889,7 +926,7 @@ i(exclusive_consumer_tag, #q{exclusive_consumer = {_ChPid, ConsumerTag}}) ->
 i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:len(BQS);
 i(messages_unacknowledged, _) ->
-    lists:sum([sets:size(C#cr.acktags) || C <- all_ch_record()]);
+    lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]);
 i(messages, State) ->
     lists:sum([i(Item, State) || Item <- [messages_ready,
                                           messages_unacknowledged]]);
@@ -1047,7 +1084,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
                 case AckRequired of
                     true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                             ChAckTags1 = sets:add_element(AckTag, ChAckTags),
+                             ChAckTags1 = queue:in(AckTag, ChAckTags),
                              update_ch_record(C#cr{acktags = ChAckTags1}),
                              State2;
                     false -> State2
@@ -1216,20 +1253,15 @@ handle_cast({ack, AckTags, ChPid}, State) ->
 handle_cast({reject, AckTags, true, ChPid}, State) ->
     noreply(requeue(AckTags, ChPid, State));
 
-handle_cast({reject, AckTags, false, ChPid}, State = #q{dlx = undefined}) ->
-    noreply(ack(AckTags, ChPid, State));
-
 handle_cast({reject, AckTags, false, ChPid}, State) ->
-    DLXFun = dead_letter_fun(rejected),
-    noreply(subtract_acks(
-              ChPid, AckTags, State,
-              fun (State1 = #q{backing_queue       = BQ,
-                               backing_queue_state = BQS}) ->
-                      {ok, BQS1} = BQ:ackfold(
-                                     fun (M, A, ok) -> DLXFun([{M, A}]) end,
-                                     ok, BQS, AckTags),
-                      State1#q{backing_queue_state = BQS1}
-              end));
+    noreply(with_dlx(
+              State#q.dlx,
+              fun (X) -> subtract_acks(ChPid, AckTags, State,
+                                       fun (State1) ->
+                                               dead_letter_rejected_msgs(
+                                                 AckTags, X, State1)
+                                       end) end,
+              fun () -> ack(AckTags, ChPid, State) end));
 
 handle_cast(delete_immediately, State) ->
     stop(State);
@@ -1274,31 +1306,6 @@ handle_cast({set_ram_duration_target, Duration},
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
-
-handle_cast({dead_letter, Msgs, Reason}, State = #q{dlx = XName}) ->
-    case rabbit_exchange:lookup(XName) of
-        {ok, X} ->
-            {AckImmediately, State2} =
-                lists:foldl(
-                  fun({Msg, AckTag},
-                      {Acks, State1 = #q{publish_seqno  = SeqNo,
-                                         unconfirmed    = UC,
-                                         queue_monitors = QMons}}) ->
-                          case dead_letter_publish(Msg, Reason, X, State1) of
-                              []    -> {[AckTag | Acks], State1};
-                              QPids -> UC1 = dtree:insert(
-                                               SeqNo, QPids, AckTag, UC),
-                                       QMons1 = pmon:monitor_all(QPids, QMons),
-                                       {Acks,
-                                        State1#q{publish_seqno  = SeqNo + 1,
-                                                 unconfirmed    = UC1,
-                                                 queue_monitors = QMons1}}
-                          end
-                  end, {[], State}, Msgs),
-            cleanup_after_confirm(AckImmediately, State2);
-        {error, not_found} ->
-            cleanup_after_confirm([AckTag || {_, AckTag} <- Msgs], State)
-    end;
 
 handle_cast(start_mirroring, State = #q{backing_queue       = BQ,
 					backing_queue_state = BQS}) ->

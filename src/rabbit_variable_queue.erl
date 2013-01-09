@@ -255,8 +255,8 @@
           q3,
           q4,
           next_seq_id,
-          pending_ack,
-          ram_ack_index,
+          ram_pending_ack,
+          disk_pending_ack,
           index_state,
           msg_store_clients,
           durable,
@@ -348,8 +348,8 @@
              q3                    :: ?QUEUE:?QUEUE(),
              q4                    :: ?QUEUE:?QUEUE(),
              next_seq_id           :: seq_id(),
-             pending_ack           :: gb_tree(),
-             ram_ack_index         :: gb_set(),
+             ram_pending_ack       :: gb_tree(),
+             disk_pending_ack      :: gb_tree(),
              index_state           :: any(),
              msg_store_clients     :: 'undefined' | {{any(), binary()},
                                                     {any(), binary()}},
@@ -670,12 +670,11 @@ requeue(AckTags, #vqstate { delta      = Delta,
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
-        lists:foldl(
-          fun(SeqId, {Acc0, State0 = #vqstate{ pending_ack = PA }}) ->
-                  MsgStatus = gb_trees:get(SeqId, PA),
-                  {Msg, State1} = read_msg(MsgStatus, false, State0),
-                  {MsgFun(Msg, SeqId, Acc0), State1}
-          end, {Acc, State}, AckTags),
+        lists:foldl(fun(SeqId, {Acc0, State0}) ->
+                            MsgStatus = lookup_pending_ack(SeqId, State0),
+                            {Msg, State1} = read_msg(MsgStatus, false, State0),
+                            {MsgFun(Msg, SeqId, Acc0), State1}
+                    end, {Acc, State}, AckTags),
     {AccN, a(StateN)}.
 
 fold(Fun, Acc, #vqstate { q1    = Q1,
@@ -702,8 +701,8 @@ len(#vqstate { len = Len }) -> Len.
 
 is_empty(State) -> 0 == len(State).
 
-depth(State = #vqstate { pending_ack = Ack }) ->
-    len(State) + gb_trees:size(Ack).
+depth(State = #vqstate { ram_pending_ack = RPA, disk_pending_ack = DPA }) ->
+    len(State) + gb_trees:size(RPA) + gb_trees:size(DPA).
 
 set_ram_duration_target(
   DurationTarget, State = #vqstate {
@@ -740,7 +739,7 @@ ram_duration(State = #vqstate {
                ack_out_counter    = AckOutCount,
                ram_msg_count      = RamMsgCount,
                ram_msg_count_prev = RamMsgCountPrev,
-               ram_ack_index      = RamAckIndex,
+               ram_pending_ack    = RPA,
                ram_ack_count_prev = RamAckCountPrev }) ->
     Now = now(),
     {AvgEgressRate,   Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
@@ -751,7 +750,7 @@ ram_duration(State = #vqstate {
     {AvgAckIngressRate, AckIngress1} =
         update_rate(Now, AckTimestamp, AckInCount, AckIngress),
 
-    RamAckCount = gb_sets:size(RamAckIndex),
+    RamAckCount = gb_trees:size(RPA),
 
     Duration = %% msgs+acks / (msgs+acks/sec) == sec
         case (AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
@@ -783,19 +782,24 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_timeout(State = #vqstate { index_state = IndexState }) ->
+needs_timeout(State = #vqstate { index_state      = IndexState,
+                                 target_ram_count = TargetRamCount }) ->
     case must_sync_index(State) of
         true  -> timed;
         false ->
             case rabbit_queue_index:needs_sync(IndexState) of
                 true  -> idle;
-                false -> case reduce_memory_use(
-                                fun (_Quota, State1) -> {0, State1} end,
-                                fun (_Quota, State1) -> State1 end,
-                                fun (_Quota, State1) -> {0, State1} end,
-                                State) of
-                             {true,  _State} -> idle;
-                             {false, _State} -> false
+                false -> case TargetRamCount of
+                             infinity -> false;
+                             _ -> case
+                                      reduce_memory_use(
+                                        fun (_Quota, State1) -> {0, State1} end,
+                                        fun (_Quota, State1) -> State1 end,
+                                        fun (_Quota, State1) -> {0, State1} end,
+                                        State) of
+                                      {true,  _State} -> idle;
+                                      {false, _State} -> false
+                                  end
                          end
             end
     end.
@@ -811,8 +815,8 @@ handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
 status(#vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
           len              = Len,
-          pending_ack      = PA,
-          ram_ack_index    = RAI,
+          ram_pending_ack  = RPA,
+          disk_pending_ack = DPA,
           target_ram_count = TargetRamCount,
           ram_msg_count    = RamMsgCount,
           next_seq_id      = NextSeqId,
@@ -827,10 +831,10 @@ status(#vqstate {
       {q3                  , ?QUEUE:len(Q3)},
       {q4                  , ?QUEUE:len(Q4)},
       {len                 , Len},
-      {pending_acks        , gb_trees:size(PA)},
+      {pending_acks        , gb_trees:size(RPA) + gb_trees:size(DPA)},
       {target_ram_count    , TargetRamCount},
       {ram_msg_count       , RamMsgCount},
-      {ram_ack_count       , gb_sets:size(RAI)},
+      {ram_ack_count       , gb_trees:size(RPA)},
       {next_seq_id         , NextSeqId},
       {persistent_count    , PersistentCount},
       {avg_ingress_rate    , AvgIngressRate},
@@ -962,7 +966,7 @@ maybe_write_delivered(false, _SeqId, IndexState) ->
 maybe_write_delivered(true, SeqId, IndexState) ->
     rabbit_queue_index:deliver([SeqId], IndexState).
 
-betas_from_index_entries(List, TransientThreshold, PA, IndexState) ->
+betas_from_index_entries(List, TransientThreshold, RPA, DPA, IndexState) ->
     {Filtered, Delivers, Acks} =
         lists:foldr(
           fun ({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered},
@@ -971,7 +975,8 @@ betas_from_index_entries(List, TransientThreshold, PA, IndexState) ->
                       true  -> {Filtered1,
                                 cons_if(not IsDelivered, SeqId, Delivers1),
                                 [SeqId | Acks1]};
-                      false -> case gb_trees:is_defined(SeqId, PA) of
+                      false -> case (gb_trees:is_defined(SeqId, RPA) orelse
+                                     gb_trees:is_defined(SeqId, DPA)) of
                                    false ->
                                        {?QUEUE:in_r(
                                            m(#msg_status {
@@ -1033,8 +1038,8 @@ init(IsDurable, IndexState, DeltaCount, Terms, AsyncCallback,
       q3                  = ?QUEUE:new(),
       q4                  = ?QUEUE:new(),
       next_seq_id         = NextSeqId,
-      pending_ack         = gb_trees:empty(),
-      ram_ack_index       = gb_sets:empty(),
+      ram_pending_ack     = gb_trees:empty(),
+      disk_pending_ack    = gb_trees:empty(),
       index_state         = IndexState1,
       msg_store_clients   = {PersistentClient, TransientClient},
       durable             = IsDurable,
@@ -1248,33 +1253,47 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 %%----------------------------------------------------------------------------
 
 record_pending_ack(#msg_status { seq_id = SeqId, msg = Msg } = MsgStatus,
-                   State = #vqstate { pending_ack     = PA,
-                                      ram_ack_index   = RAI,
-                                      ack_in_counter  = AckInCount}) ->
-    RAI1 = case Msg of
-               undefined -> RAI;
-               _         -> gb_sets:insert(SeqId, RAI)
-           end,
-    State #vqstate { pending_ack    = gb_trees:insert(SeqId, MsgStatus, PA),
-                     ram_ack_index  = RAI1,
-                     ack_in_counter = AckInCount + 1}.
+                   State = #vqstate { ram_pending_ack  = RPA,
+                                      disk_pending_ack = DPA,
+                                      ack_in_counter   = AckInCount}) ->
+    {RPA1, DPA1} =
+        case Msg of
+            undefined -> {RPA, gb_trees:insert(SeqId, MsgStatus, DPA)};
+            _         -> {gb_trees:insert(SeqId, MsgStatus, RPA), DPA}
+        end,
+    State #vqstate { ram_pending_ack  = RPA1,
+                     disk_pending_ack = DPA1,
+                     ack_in_counter   = AckInCount + 1}.
 
-remove_pending_ack(SeqId, State = #vqstate { pending_ack   = PA,
-                                             ram_ack_index = RAI }) ->
-    {gb_trees:get(SeqId, PA),
-     State #vqstate { pending_ack   = gb_trees:delete(SeqId, PA),
-                      ram_ack_index = gb_sets:delete_any(SeqId, RAI) }}.
+lookup_pending_ack(SeqId, #vqstate { ram_pending_ack  = RPA,
+                                     disk_pending_ack = DPA }) ->
+    case gb_trees:lookup(SeqId, RPA) of
+        {value, V} -> V;
+        none       -> gb_trees:get(SeqId, DPA)
+    end.
+
+remove_pending_ack(SeqId, State = #vqstate { ram_pending_ack  = RPA,
+                                             disk_pending_ack = DPA }) ->
+    case gb_trees:lookup(SeqId, RPA) of
+        {value, V} -> RPA1 = gb_trees:delete(SeqId, RPA),
+                      {V, State #vqstate { ram_pending_ack = RPA1 }};
+        none       -> DPA1 = gb_trees:delete(SeqId, DPA),
+                      {gb_trees:get(SeqId, DPA),
+                       State #vqstate { disk_pending_ack = DPA1 }}
+    end.
 
 purge_pending_ack(KeepPersistent,
-                  State = #vqstate { pending_ack       = PA,
+                  State = #vqstate { ram_pending_ack   = RPA,
+                                     disk_pending_ack  = DPA,
                                      index_state       = IndexState,
                                      msg_store_clients = MSCState }) ->
+    F = fun (_SeqId, MsgStatus, Acc) -> accumulate_ack(MsgStatus, Acc) end,
     {IndexOnDiskSeqIds, MsgIdsByStore, _AllMsgIds} =
-        rabbit_misc:gb_trees_fold(fun (_SeqId, MsgStatus, Acc) ->
-                                          accumulate_ack(MsgStatus, Acc)
-                                  end, accumulate_ack_init(), PA),
-    State1 = State #vqstate { pending_ack   = gb_trees:empty(),
-                              ram_ack_index = gb_sets:empty() },
+        rabbit_misc:gb_trees_fold(
+          F, rabbit_misc:gb_trees_fold(F, accumulate_ack_init(), RPA), DPA),
+    State1 = State #vqstate { ram_pending_ack  = gb_trees:empty(),
+                              disk_pending_ack = gb_trees:empty() },
+
     case KeepPersistent of
         true  -> case orddict:find(false, MsgIdsByStore) of
                      error        -> State1;
@@ -1495,12 +1514,9 @@ delta_fold( Fun, {cont, Acc},    DeltaSeqId,  DeltaSeqIdEnd,
 %% one segment's worth of messages in q3 - and thus would risk
 %% perpetually reporting the need for a conversion when no such
 %% conversion is needed. That in turn could cause an infinite loop.
-reduce_memory_use(_AlphaBetaFun, _BetaDeltaFun, _AckFun,
-                  State = #vqstate {target_ram_count = infinity}) ->
-    {false, State};
 reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
                   State = #vqstate {
-                    ram_ack_index    = RamAckIndex,
+                    ram_pending_ack  = RPA,
                     ram_msg_count    = RamMsgCount,
                     target_ram_count = TargetRamCount,
                     rates            = #rates { avg_ingress = AvgIngress,
@@ -1510,8 +1526,7 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
                    }) ->
 
     {Reduce, State1 = #vqstate { q2 = Q2, q3 = Q3 }} =
-        case chunk_size(RamMsgCount + gb_sets:size(RamAckIndex),
-                        TargetRamCount) of
+        case chunk_size(RamMsgCount + gb_trees:size(RPA), TargetRamCount) of
             0  -> {false, State};
             %% Reduce memory of pending acks and alphas. The order is
             %% determined based on which is growing faster. Whichever
@@ -1536,22 +1551,23 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
 
 limit_ram_acks(0, State) ->
     {0, State};
-limit_ram_acks(Quota, State = #vqstate { pending_ack   = PA,
-                                         ram_ack_index = RAI }) ->
-    case gb_sets:is_empty(RAI) of
+limit_ram_acks(Quota, State = #vqstate { ram_pending_ack  = RPA,
+                                         disk_pending_ack = DPA }) ->
+    case gb_trees:is_empty(RPA) of
         true ->
             {Quota, State};
         false ->
-            {SeqId, RAI1} = gb_sets:take_largest(RAI),
-            MsgStatus = gb_trees:get(SeqId, PA),
+            {SeqId, MsgStatus, RPA1} = gb_trees:take_largest(RPA),
             {MsgStatus1, State1} =
                 maybe_write_to_disk(true, false, MsgStatus, State),
-            PA1 = gb_trees:update(SeqId, m(trim_msg_status(MsgStatus1)), PA),
+            DPA1 = gb_trees:insert(SeqId, m(trim_msg_status(MsgStatus1)), DPA),
             limit_ram_acks(Quota - 1,
-                           State1 #vqstate { pending_ack   = PA1,
-                                             ram_ack_index = RAI1 })
+                           State1 #vqstate { ram_pending_ack  = RPA1,
+                                             disk_pending_ack = DPA1 })
     end.
 
+reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
+    State;
 reduce_memory_use(State) ->
     {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
                                     fun push_betas_to_deltas/2,
@@ -1617,7 +1633,8 @@ maybe_deltas_to_betas(State = #vqstate {
                         delta                = Delta,
                         q3                   = Q3,
                         index_state          = IndexState,
-                        pending_ack          = PA,
+                        ram_pending_ack      = RPA,
+                        disk_pending_ack     = DPA,
                         transient_threshold  = TransientThreshold }) ->
     #delta { start_seq_id = DeltaSeqId,
              count        = DeltaCount,
@@ -1625,10 +1642,10 @@ maybe_deltas_to_betas(State = #vqstate {
     DeltaSeqId1 =
         lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
                    DeltaSeqIdEnd]),
-    {List, IndexState1} =
-        rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
-    {Q3a, IndexState2} =
-        betas_from_index_entries(List, TransientThreshold, PA, IndexState1),
+    {List, IndexState1} = rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1,
+                                                  IndexState),
+    {Q3a, IndexState2} = betas_from_index_entries(List, TransientThreshold,
+                                                  RPA, DPA, IndexState1),
     State1 = State #vqstate { index_state = IndexState2 },
     case ?QUEUE:len(Q3a) of
         0 ->
