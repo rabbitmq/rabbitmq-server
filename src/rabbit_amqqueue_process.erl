@@ -1249,8 +1249,7 @@ handle_cast({limit, ChPid, Limiter}, State) ->
                     true  -> ok = rabbit_limiter:register(Limiter, self());
                     false -> ok
                 end,
-                Limited = OldLimited andalso rabbit_limiter:is_enabled(Limiter)
-                    andalso rabbit_limiter:is_blocked(Limiter),
+                Limited = OldLimited andalso rabbit_limiter:is_enabled(Limiter),
                 C#cr{limiter = Limiter, is_limit_active = Limited}
         end));
 
