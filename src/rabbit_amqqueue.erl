@@ -32,6 +32,7 @@
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1]).
+-export([inform_limiter/3]).
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
@@ -175,6 +176,7 @@
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
 -spec(sync_mirrors/1 :: (pid()) ->
     'ok' | rabbit_types:error('pending_acks' | 'not_mirrored')).
+-spec(inform_limiter/3 :: (pid(), pid(), any()) -> 'ok').
 
 -endif.
 
@@ -603,6 +605,9 @@ start_mirroring(QPid) -> ok = delegate:cast(QPid, start_mirroring).
 stop_mirroring(QPid)  -> ok = delegate:cast(QPid, stop_mirroring).
 
 sync_mirrors(QPid) -> delegate:call(QPid, sync_mirrors).
+
+inform_limiter(ChPid, QPid, Msg) ->
+    delegate:cast(QPid, {inform_limiter, ChPid, Msg}).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(

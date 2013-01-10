@@ -430,18 +430,24 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer},
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E),
                  {false, State};
-        false -> case rabbit_limiter:can_send(C#cr.limiter, self(),
-                                              Consumer#consumer.ack_required,
-                                              Consumer#consumer.tag,
-                                              BQ:len(BQS)) of
-                     false -> block_consumer(C#cr{is_limit_active = true}, E),
+        false -> #cr{limiter = Limiter, ch_pid = ChPid} = C,
+                 {CanSend, Lim2} =
+                     rabbit_limiter:can_send(
+                       Limiter, ChPid, self(), Consumer#consumer.ack_required,
+                       Consumer#consumer.tag, BQ:len(BQS)),
+                 case CanSend of
+                     false -> block_consumer(C#cr{is_limit_active = true,
+                                                  limiter         = Lim2}, E),
                               {false, State};
-                     true  -> AC1 = queue:in(E, State#q.active_consumers),
+                     true  -> update_ch_record(C#cr{limiter = Lim2}), %%[0]
+                              AC1 = queue:in(E, State#q.active_consumers),
                               deliver_msg_to_consumer(
                                 DeliverFun, Consumer, C,
                                 State#q{active_consumers = AC1})
                  end
     end.
+
+%% [0] TODO is this a hotspot in the case where the limiter has not changed?
 
 deliver_msg_to_consumer(DeliverFun,
                         #consumer{tag          = ConsumerTag,
@@ -1250,7 +1256,9 @@ handle_cast({limit, ChPid, Limiter}, State) ->
                     false -> ok
                 end,
                 Limited = OldLimited andalso rabbit_limiter:is_enabled(Limiter),
-                C#cr{limiter = Limiter, is_limit_active = Limited}
+                C#cr{limiter         = rabbit_limiter:copy_queue_state(
+                                         OldLimiter, Limiter),
+                     is_limit_active = Limited}
         end));
 
 handle_cast({flush, ChPid}, State) ->
@@ -1307,6 +1315,14 @@ handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
     {BQ1, BQS1} = BQ:stop_mirroring(BQS),
     noreply(State#q{backing_queue       = BQ1,
 		    backing_queue_state = BQS1});
+
+handle_cast({inform_limiter, ChPid, Msg},
+            State = #q{backing_queue       = BQ,
+                       backing_queue_state = BQS}) ->
+    C = #cr{limiter = Limiter} = ch_record(ChPid),
+    Limiter2 = rabbit_limiter:inform(Limiter, ChPid, BQ:len(BQS), Msg),
+    update_ch_record(C#cr{limiter = Limiter2}),
+    noreply(State);
 
 handle_cast(wake_up, State) ->
     noreply(State).
