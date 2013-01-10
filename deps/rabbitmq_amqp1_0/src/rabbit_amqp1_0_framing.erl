@@ -137,7 +137,7 @@ descriptor(Number) when is_number(Number) ->
 pprint(Thing) when is_tuple(Thing) ->
     case rabbit_amqp1_0_framing0:fields(Thing) of
         unknown -> Thing;
-        Names   -> [_|L] = tuple_to_list(Thing),
-                   lists:zip(Names, [pprint(I) || I <- L])
+        Names   -> [T|L] = tuple_to_list(Thing),
+                   {T, lists:zip(Names, [pprint(I) || I <- L])}
     end;
 pprint(Other) -> Other.
