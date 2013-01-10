@@ -17,7 +17,7 @@
 -module(rabbit_amqp1_0_framing).
 
 -export([encode/1, encode_described/3, decode/1, version/0,
-         symbol_for/1, number_for/1, encode_bin/1]).
+         symbol_for/1, number_for/1, encode_bin/1, pprint/1]).
 
 %% debug
 -export([fill_from_list/2, fill_from_map/2]).
@@ -132,3 +132,12 @@ descriptor(Symbol) when is_list(Symbol) ->
     {symbol, Symbol};
 descriptor(Number) when is_number(Number) ->
     {ulong, Number}.
+
+
+pprint(Thing) when is_tuple(Thing) ->
+    case rabbit_amqp1_0_framing0:fields(Thing) of
+        unknown -> Thing;
+        Names   -> [_|L] = tuple_to_list(Thing),
+                   lists:zip(Names, [pprint(I) || I <- L])
+    end;
+pprint(Other) -> Other.

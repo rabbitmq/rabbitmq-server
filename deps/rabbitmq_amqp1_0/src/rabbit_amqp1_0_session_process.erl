@@ -296,7 +296,7 @@ handle_control(Flow = #'v1_0.flow'{},
 
 handle_control(Frame, State) ->
     %% FIXME should this bork?
-    io:format("Ignoring frame: ~p~n", [Frame]),
+    io:format("Ignoring frame: ~p~n", [rabbit_amqp1_0_framing:pprint(Frame)]),
     {noreply, State}.
 
 run_buffer(State = #state{ writer_pid = WriterPid,

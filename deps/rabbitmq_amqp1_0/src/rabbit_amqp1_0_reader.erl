@@ -283,7 +283,7 @@ parse_1_0_frame(Payload) ->
                    <<>> -> Perf;
                    _    -> {Perf, Rest}
                end,
-    ?DEBUG("1.0 frame decoded: ~p~n", [Sections]),
+    ?DEBUG("1.0 frame decoded: ~p~n", [rabbit_amqp1_0_framing:pprint(Perf)]),
     Sections.
 
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
