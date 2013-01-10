@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 
 <!--
-
 Copyright Bank of America, N.A., Barclays Bank PLC, Cisco Systems, Credit
-Suisse, Deutsche Boerse Systems, Goldman Sachs, HCL Technologies Ltd, INETCO
-Systems Limited, Informatica Corporation, JPMorgan Chase Bank Inc. N.A,
+Suisse, Deutsche Boerse, Envoy Technologies Inc., Goldman Sachs, HCL
+Technologies Ltd, IIT Software GmbH, iMatix Corporation, INETCO Systems Limited,
+Informatica Corporation, JPMorgan Chase & Co., Kaazing Corporation, N.A,
 Microsoft Corporation, my-Channels, Novell, Progress Software, Red Hat Inc.,
 Software AG, Solace Systems Inc., StormMQ Ltd., Tervela Inc., TWIST Process
-Innovations Ltd, VMware Inc. and WS02 Inc. 2006-2011. All rights reserved.
+Innovations Ltd, VMware, Inc., and WS02 Inc. 2006-2011. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -33,7 +33,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
 
 <amqp name="transport" xmlns="http://www.amqp.org/schema/amqp.xsd">
-  <section name="frame-bodies">
+  <section name="performatives">
     <type name="open" class="composite" source="list" provides="frame">
       <descriptor name="amqp:open:list" code="0x00000000:0x00000010"/>
       <field name="container-id" type="string" mandatory="true"/>
