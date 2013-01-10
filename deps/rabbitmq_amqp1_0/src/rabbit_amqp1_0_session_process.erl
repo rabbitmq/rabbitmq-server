@@ -189,8 +189,7 @@ handle_control(#'v1_0.attach'{handle = Handle,
                          Confirm, session(State)), State));
 
 handle_control(#'v1_0.attach'{handle                 = Handle,
-                              role                   = ?RECV_ROLE,
-                              initial_delivery_count = undefined} = Attach,
+                              role                   = ?RECV_ROLE} = Attach,
                State = #state{backing_channel    = BCh,
                               backing_connection = Conn}) ->
     {ok, Reply, Link} =
