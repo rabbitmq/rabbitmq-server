@@ -198,7 +198,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
        delivery_count = undefined},
     HeadersBin = rabbit_amqp1_0_framing:encode_bin(Header10),
     PropsBin =
-        case rabbit_misc:table_lookup(Headers, ?PROPERTIES_HEADER) of
+        case table_lookup(Headers, ?PROPERTIES_HEADER) of
             {_, Props10Bin} ->
                 Props10Bin;
             undefined ->
@@ -207,8 +207,13 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                   user_id = wrap(Props#'P_basic'.user_id),
                   to = undefined,
                   subject = wrap(RKey),
-                  reply_to = wrap(<<"/queue/",
-                                    (Props#'P_basic'.reply_to)/binary>>),
+                  reply_to = case Props#'P_basic'.reply_to of
+                                 undefined ->
+                                     undefined;
+                                 _ ->
+                                     wrap(<<"/queue/",
+                                            (Props#'P_basic'.reply_to)/binary>>)
+                             end,
                   correlation_id = wrap(Props#'P_basic'.correlation_id),
                   content_type = wrap(Props#'P_basic'.content_type),
                   content_encoding = wrap(Props#'P_basic'.content_encoding),
@@ -218,7 +223,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                 rabbit_amqp1_0_framing:encode_bin(Props10)
         end,
     AppPropsBin =
-        case rabbit_misc:table_lookup(Headers, ?APP_PROPERTIES_HEADER) of
+        case table_lookup(Headers, ?APP_PROPERTIES_HEADER) of
             {_, AppProps10Bin} ->
                 AppProps10Bin;
             undefined ->
@@ -242,3 +247,7 @@ wrap(_Type, undefined) ->
     undefined;
 wrap(Type, Val) ->
     {Type, Val}.
+
+table_lookup(undefined, _)    -> undefined;
+table_lookup(Headers, Header) -> rabbit_misc:table_lookup(Headers, Header).
+
