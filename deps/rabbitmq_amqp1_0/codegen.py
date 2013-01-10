@@ -42,7 +42,7 @@ def print_erl(types):
         print """record_for({symbol, "%s"}) ->
     #'v1_0.%s'{};""" % (t.desc, t.name)
         if t.code:
-            print """record_for({ulong, %d}) ->
+            print """record_for({_, %d}) ->
     #'v1_0.%s'{};""" % (t.number, t.name)
             print "%% %s\n" % t.code
 
