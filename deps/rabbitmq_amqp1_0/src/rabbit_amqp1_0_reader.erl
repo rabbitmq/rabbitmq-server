@@ -414,6 +414,14 @@ handle_1_0_sasl_frame(#'v1_0.sasl_response'{response = {binary, Response}},
 handle_1_0_sasl_frame(Frame, State) ->
     throw({unexpected_1_0_sasl_frame, Frame, State}).
 
+%% We need to handle restarts...
+handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
+    start_1_0_connection(amqp, State);
+
+%% 3 stands for "SASL" (keeping this here for when we do TLS)
+handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
+    start_1_0_connection(sasl, State);
+
 handle_input({frame_header_1_0, Mode},
              Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
              State) when DOff >= 2 ->
