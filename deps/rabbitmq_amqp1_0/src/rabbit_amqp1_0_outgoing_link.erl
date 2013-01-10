@@ -47,12 +47,13 @@ attach(#'v1_0.attach'{name = Name,
          OutgoingLink = #outgoing_link{ queue = QueueName,
                                         delivery_count = Count }} ->
             CTag = handle_to_ctag(Handle),
-            %% Zero the credit before we start consuming, so that we only
-            %% use explicitly given credit.
-            amqp_channel:cast(BCh, #'basic.credit'{consumer_tag = CTag,
-                                                   credit       = 0,
-                                                   count        = Count,
-                                                   drain        = false}),
+            %% TODO rework 23749 appropriately and re-enable this
+            %% %% Zero the credit before we start consuming, so that we only
+            %% %% use explicitly given credit.
+            %% amqp_channel:cast(BCh, #'basic.credit'{consumer_tag = CTag,
+            %%                                        credit       = 0,
+            %%                                        count        = Count,
+            %%                                        drain        = false}),
             case amqp_channel:subscribe(
                    BCh, #'basic.consume' { queue = QueueName,
                                            consumer_tag = CTag,
