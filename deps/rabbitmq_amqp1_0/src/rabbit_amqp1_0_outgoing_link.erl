@@ -27,6 +27,8 @@
 -define(INIT_TXFR_COUNT, 0).
 
 -record(outgoing_link, {queue,
+                        %% Note: this is maintained by the queue-limiter too.
+                        %% TODO: Do we care?
                         delivery_count = 0,
                         no_ack,
                         default_outcome}).
@@ -119,13 +121,12 @@ flow(#outgoing_link{delivery_count = LocalCount},
                       undefined     -> LocalCount;
                       {uint, Count} -> Count
                   end,
-    %% Rebase to our transfer-count
-    Credit = RemoteCount + RemoteCredit - LocalCount,
+    %% See section 2.6.7
+    LocalCredit = RemoteCount + RemoteCredit - LocalCount,
     CTag = handle_to_ctag(Handle),
     #'basic.credit_ok'{available = Available} =
-        %% FIXME calculate the credit based on the transfer count
         amqp_channel:call(BCh, #'basic.credit'{consumer_tag = CTag,
-                                               credit       = Credit,
+                                               credit       = LocalCredit,
                                                count        = LocalCount,
                                                drain        = Drain}),
     case Available of
@@ -138,7 +139,7 @@ flow(#outgoing_link{delivery_count = LocalCount},
             {ok, [#'v1_0.flow'{
                     handle         = Handle,
                     delivery_count = {uint, LocalCount},
-                    link_credit    = {uint, Credit},
+                    link_credit    = {uint, LocalCredit},
                     available      = {uint, Available},
                     drain          = Drain}]}
     end.
