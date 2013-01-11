@@ -31,6 +31,8 @@ import json
 import os
 import socket
 
+VERSION = '%%VSN%%'
+
 LISTABLE = {'connections': {'vhost': False},
             'channels':    {'vhost': False},
             'exchanges':   {'vhost': True},
@@ -297,11 +299,16 @@ def make_parser():
     add("--bash-completion", action="store_true",
         dest="bash_completion",
         help="Print bash completion script")
+    add("--version", action="store_true",
+        dest="version",
+        help="Display version and exit")
 
 def make_configuration():
     make_parser()
     (options, args) = parser.parse_args()
     setattr(options, "declare_vhost", None)
+    if options.version:
+        print_version()
     if options.node is None and options.config:
         options.node = "default"
     elif options.node and options.config is None:
@@ -333,6 +340,10 @@ def assert_usage(expr, error):
         output("\nERROR: {0}\n".format(error))
         output("{0} --help for help\n".format(os.path.basename(sys.argv[0])))
         sys.exit(1)
+
+def print_version():
+    output("rabbitmqadmin {0}".format(VERSION))
+    sys.exit(0)
 
 def column_sort_key(col):
     if col in PROMOTE_COLUMNS:
