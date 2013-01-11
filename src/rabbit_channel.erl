@@ -1082,9 +1082,8 @@ handle_method(#'channel.flow'{active = false}, _,
 handle_method(#'basic.credit'{consumer_tag = CTag,
                               credit       = Credit,
                               count        = Count,
-                              drain        = Drain} = M, _,
+                              drain        = Drain}, _,
               State = #ch{consumer_mapping = Consumers}) ->
-    %%io:format("  ~p~n", [M]),
     case dict:find(CTag, Consumers) of
         {ok, Q} -> ok = rabbit_amqqueue:inform_limiter(
                           self(), Q#amqqueue.pid,

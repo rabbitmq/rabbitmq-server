@@ -60,7 +60,7 @@
 %% -spec(set_credit/5 :: (token(), rabbit_types:ctag(),
 %%                        non_neg_integer(),
 %%                        non_neg_integer(), boolean()) -> 'ok').
--spec(inform/4 :: (token(), pid(), non_neg_integer(), any()) -> token()).
+%%-spec(inform/4 :: (token(), pid(), non_neg_integer(), any()) -> token()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -135,8 +135,9 @@ is_blocked(Limiter) ->
 
 inform(Limiter = #token{q_state = Credits},
        ChPid, Len, {basic_credit, CTag, Credit, Count, Drain}) ->
-    Credits2 = reset_credit(CTag, Len, ChPid, Credit, Count, Drain, Credits),
-    Limiter#token{q_state = Credits2}.
+    {Unblock, Credits2} =
+        update_credit(CTag, Len, ChPid, Credit, Count, Drain, Credits),
+    {Unblock, Limiter#token{q_state = Credits2}}.
 
 %%----------------------------------------------------------------------------
 %% Queue-local code
@@ -150,26 +151,26 @@ inform(Limiter = #token{q_state = Credits},
 
 can_send_q(CTag, Len, ChPid, Credits) ->
     case dict:find(CTag, Credits) of
-        {ok, #credit{credit = 0}} -> exit(bang), {false, Credits};
-        {ok, Cred}                -> Credits2 =
-                                         decr_credit(
-                                           CTag, Len, ChPid, Cred, Credits),
-                                     {true, Credits2};
-        _                         -> {true, Credits}
+        {ok, #credit{credit = C} = Cred} ->
+            if C > 0 -> Credits2 = decr_credit(CTag, Len, ChPid, Cred, Credits),
+                        {true, Credits2};
+               true  -> {false, Credits}
+            end;
+        _ ->
+            {true, Credits}
     end.
 
 decr_credit(CTag, Len, ChPid, Cred, Credits) ->
     #credit{credit = Credit, count = Count, drain = Drain} = Cred,
     {NewCredit, NewCount} =
-        case {Credit, Len, Drain} of
-            {1, _, _}    -> {0, serial_add(Count, 1)};
-            {_, 1, true} -> %% Drain, so advance til credit = 0
-                            NewCount0 = serial_add(Count, (Credit - 1)),
-                            send_drained(ChPid, CTag, NewCount0),
-                            {0, NewCount0}; %% Magic reduction to 0
-            {_, _, _}    -> {Credit - 1, serial_add(Count, 1)}
+        case {Len, Drain} of
+            {1, true} -> %% Drain, so advance til credit = 0
+                         NewCount0 = serial_add(Count, (Credit - 1)),
+                         send_drained(ChPid, CTag, NewCount0),
+                         {0, NewCount0}; %% Magic reduction to 0
+            {_, _}    -> {Credit - 1, serial_add(Count, 1)}
         end,
-    update_credit(CTag, NewCredit, NewCount, Drain, Credits).
+    write_credit(CTag, NewCredit, NewCount, Drain, Credits).
 
 send_drained(ChPid, CTag, Count) ->
     rabbit_channel:send_command(ChPid,
@@ -179,29 +180,27 @@ send_drained(ChPid, CTag, Count) ->
                                                       available    = 0,
                                                       drain        = true}).
 
-%% Assert the credit state. The count may not match ours, in which
-%% case we must rebase the credit.
+%% Update the credit state.
 %% TODO Edge case: if the queue has nothing in it, and drain is set,
 %% we want to send a basic.credit back.
-reset_credit(CTag, Len, ChPid, Credit0, Count0, Drain, Credits) ->
+update_credit(CTag, Len, ChPid, Credit, Count0, Drain, Credits) ->
     Count =
         case dict:find(CTag, Credits) of
-            {ok, #credit{ count = LocalCount }} ->
-                LocalCount;
-            _ -> Count0
+            %% Use our count if we can, more accurate
+            {ok, #credit{ count = LocalCount }} -> LocalCount;
+            %% But if this is new, take it from the adapter
+            _                                   -> Count0
         end,
-    %% Our credit may have been reduced while messages are in flight,
-    %% so we bottom out at 0.
-    Credit = erlang:max(0, serial_diff(serial_add(Count0, Credit0), Count)),
-    rabbit_channel:send_command(ChPid,
-                                #'basic.credit_ok'{available = Len}),
-    update_credit(CTag, Credit, Count, Drain, Credits).
+    rabbit_channel:send_command(ChPid, #'basic.credit_ok'{available = Len}),
+    NewCredits = write_credit(CTag, Credit, Count, Drain, Credits),
+    case Credit > 0 of
+        true  -> {[CTag], NewCredits};
+        false -> {[],     NewCredits}
+    end.
 
-%% Store the credit
-update_credit(CTag, -1, _Count, _Drain, Credits) ->
-    dict:erase(CTag, Credits);
-
-update_credit(CTag, Credit, Count, Drain, Credits) ->
+%% TODO currently we leak when a single session creates and destroys
+%% lot of links.
+write_credit(CTag, Credit, Count, Drain, Credits) ->
     dict:store(CTag, #credit{credit = Credit,
                              count  = Count,
                              drain  = Drain}, Credits).

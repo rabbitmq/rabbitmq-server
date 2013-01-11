@@ -439,15 +439,12 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer},
                      false -> block_consumer(C#cr{is_limit_active = true,
                                                   limiter         = Lim2}, E),
                               {false, State};
-                     true  -> update_ch_record(C#cr{limiter = Lim2}), %%[0]
-                              AC1 = queue:in(E, State#q.active_consumers),
+                     true  -> AC1 = queue:in(E, State#q.active_consumers),
                               deliver_msg_to_consumer(
-                                DeliverFun, Consumer, C,
+                                DeliverFun, Consumer, C#cr{limiter = Lim2},
                                 State#q{active_consumers = AC1})
                  end
     end.
-
-%% [0] TODO is this a hotspot in the case where the limiter has not changed?
 
 deliver_msg_to_consumer(DeliverFun,
                         #consumer{tag          = ConsumerTag,
@@ -1317,12 +1314,26 @@ handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
 		    backing_queue_state = BQS1});
 
 handle_cast({inform_limiter, ChPid, Msg},
-            State = #q{backing_queue       = BQ,
+            State = #q{active_consumers    = AC,
+                       backing_queue       = BQ,
                        backing_queue_state = BQS}) ->
-    C = #cr{limiter = Limiter} = ch_record(ChPid),
-    Limiter2 = rabbit_limiter:inform(Limiter, ChPid, BQ:len(BQS), Msg),
-    update_ch_record(C#cr{limiter = Limiter2}),
-    noreply(State);
+    C = #cr{limiter           = Limiter,
+            blocked_consumers = Blocked} = ch_record(ChPid),
+    {Unblock, Limiter2} =
+        rabbit_limiter:inform(Limiter, ChPid, BQ:len(BQS), Msg),
+    NewBlocked = queue:filter(fun({_ChPid, #consumer{tag = CTag}}) ->
+                                      not lists:member(CTag, Unblock)
+                              end, Blocked),
+    NewUnblocked = queue:filter(fun({_ChPid, #consumer{tag = CTag}}) ->
+                                        lists:member(CTag, Unblock)
+                                end, Blocked),
+    %% TODO can this whole thing be replaced by possibly_unblock?
+    %% TODO that is_limit_active = false thing is wrong - but we do
+    %% not allow for per-consumer blocking!
+    update_ch_record(C#cr{limiter = Limiter2, blocked_consumers = NewBlocked,
+                          is_limit_active = false}),
+    AC1 = queue:join(NewUnblocked, AC),
+    noreply(run_message_queue(State#q{active_consumers = AC1}));
 
 handle_cast(wake_up, State) ->
     noreply(State).
