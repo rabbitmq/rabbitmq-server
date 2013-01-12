@@ -1468,23 +1468,20 @@ next({delta, Delta = #delta{start_seq_id = SeqId, end_seq_id = SeqIdEnd}},
          State#vqstate{index_state = IndexState1});
 next({delta, Delta, []}, State) -> next({delta, Delta}, State);
 next({delta, Delta, [M | Rest]}, State) ->
-    {MsgId, _SeqId, MsgProps, IsPersistent, _IsDelivered} = M,
-    {Msg, State1} = read_msg(MsgId, IsPersistent, State),
-    {value, Msg, MsgProps, {delta, Delta, Rest}, State1};
+    {value, beta_msg_status(M), {delta, Delta, Rest}, State};
 next({Key, Q}, State) ->
     case ?QUEUE:out(Q) of
         {empty, _Q}              -> next(istate(Key, State), State);
-        {{value, MsgStatus}, QN} -> {Msg, State1} = read_msg(MsgStatus, State),
-                                    MsgProps = MsgStatus#msg_status.msg_props,
-                                    {value, Msg, MsgProps, {Key, QN}, State1}
+        {{value, MsgStatus}, QN} -> {value, MsgStatus, {Key, QN}, State}
     end.
 
 ifold(Fun, Acc, It, State) ->
     case next(It, State) of
-        {value, Msg, MsgProps, Next, State1} ->
-            case Fun(Msg, MsgProps, Acc) of
-                {stop, Acc1} -> {Acc1, State1};
-                {cont, Acc1} -> ifold(Fun, Acc1, Next, State1)
+        {value, MsgStatus, Next, State1} ->
+            {Msg, State2} = read_msg(MsgStatus, State1),
+            case Fun(Msg, MsgStatus#msg_status.msg_props, Acc) of
+                {stop, Acc1} -> {Acc1, State2};
+                {cont, Acc1} -> ifold(Fun, Acc1, Next, State2)
             end;
         {empty, State1} ->
             {Acc, State1}
