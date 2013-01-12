@@ -1122,7 +1122,7 @@ remove(AckRequired, MsgStatus = #msg_status {
                          index_state       = IndexState,
                          msg_store_clients = MSCState,
                          len               = Len,
-                         persistent_count  = PCount }) ->
+                         persistent_count  = PCount}) ->
     %% 1. Mark it delivered if necessary
     IndexState1 = maybe_write_delivered(
                     IndexOnDisk andalso not IsDelivered,
@@ -1151,11 +1151,11 @@ remove(AckRequired, MsgStatus = #msg_status {
     PCount1      = PCount      - one_if(IsPersistent andalso not AckRequired),
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
-    {AckTag, State1 #vqstate { ram_msg_count    = RamMsgCount1,
-                               out_counter      = OutCount + 1,
-                               index_state      = IndexState2,
-                               len              = Len - 1,
-                               persistent_count = PCount1 }}.
+    {AckTag, State1 #vqstate {ram_msg_count    = RamMsgCount1,
+                              out_counter      = OutCount + 1,
+                              index_state      = IndexState2,
+                              len              = Len - 1,
+                              persistent_count = PCount1}}.
 
 purge_betas_and_deltas(LensByStore,
                        State = #vqstate { q3                = Q3,
