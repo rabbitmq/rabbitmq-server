@@ -897,11 +897,25 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 msg_status(IsPersistent, IsDelivered, SeqId,
-           Msg = #basic_message { id = MsgId }, MsgProps) ->
-    #msg_status { seq_id = SeqId, msg_id = MsgId, msg = Msg,
-                  is_persistent = IsPersistent, is_delivered = IsDelivered,
-                  msg_on_disk = false, index_on_disk = false,
-                  msg_props = MsgProps }.
+           Msg = #basic_message {id = MsgId}, MsgProps) ->
+    #msg_status{seq_id        = SeqId,
+                msg_id        = MsgId,
+                msg           = Msg,
+                is_persistent = IsPersistent,
+                is_delivered  = IsDelivered,
+                msg_on_disk   = false,
+                index_on_disk = false,
+                msg_props     = MsgProps}.
+
+beta_msg_status({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered}) ->
+  #msg_status{seq_id        = SeqId,
+              msg_id        = MsgId,
+              msg           = undefined,
+              is_persistent = IsPersistent,
+              is_delivered  = IsDelivered,
+              msg_on_disk   = true,
+              index_on_disk = true,
+              msg_props     = MsgProps}.
 
 trim_msg_status(MsgStatus) -> MsgStatus #msg_status { msg = undefined }.
 
@@ -968,7 +982,7 @@ maybe_write_delivered(true, SeqId, IndexState) ->
 betas_from_index_entries(List, TransientThreshold, RPA, DPA, IndexState) ->
     {Filtered, Delivers, Acks} =
         lists:foldr(
-          fun ({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered},
+          fun ({_MsgId, SeqId, _MsgProps, IsPersistent, IsDelivered} = M,
                {Filtered1, Delivers1, Acks1} = Acc) ->
                   case SeqId < TransientThreshold andalso not IsPersistent of
                       true  -> {Filtered1,
@@ -976,21 +990,10 @@ betas_from_index_entries(List, TransientThreshold, RPA, DPA, IndexState) ->
                                 [SeqId | Acks1]};
                       false -> case (gb_trees:is_defined(SeqId, RPA) orelse
                                      gb_trees:is_defined(SeqId, DPA)) of
-                                   false ->
-                                       {?QUEUE:in_r(
-                                           m(#msg_status {
-                                                seq_id        = SeqId,
-                                                msg_id        = MsgId,
-                                                msg           = undefined,
-                                                is_persistent = IsPersistent,
-                                                is_delivered  = IsDelivered,
-                                                msg_on_disk   = true,
-                                                index_on_disk = true,
-                                                msg_props     = MsgProps
-                                               }), Filtered1),
-                                        Delivers1, Acks1};
-                                   true ->
-                                       Acc
+                                   false -> {?QUEUE:in_r(m(beta_msg_status(M)),
+                                                         Filtered1),
+                                             Delivers1, Acks1};
+                                   true  -> Acc
                            end
                   end
           end, {?QUEUE:new(), [], []}, List),
