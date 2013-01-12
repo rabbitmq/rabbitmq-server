@@ -1449,42 +1449,45 @@ delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
 
 iterator(State) -> istate(start, State).
 
-istate(start, State) -> {q4,    State#vqstate.q4};
-istate(q4,    State) -> {q3,    State#vqstate.q3};
-istate(q3,    State) -> {delta, State#vqstate.delta};
-istate(delta, State) -> {q2,    State#vqstate.q2};
-istate(q2,    State) -> {q1,    State#vqstate.q1};
+istate(start, State) -> {q4,    State#vqstate.q4,    State};
+istate(q4,    State) -> {q3,    State#vqstate.q3,    State};
+istate(q3,    State) -> {delta, State#vqstate.delta, State};
+istate(delta, State) -> {q2,    State#vqstate.q2,    State};
+istate(q2,    State) -> {q1,    State#vqstate.q1,    State};
 istate(q1,   _State) -> done.
 
-next(done, State) -> {empty, State};
-next({delta, #delta{start_seq_id = SeqId, end_seq_id = SeqId}}, State) ->
-    next(istate(delta, State), State);
-next({delta, Delta = #delta{start_seq_id = SeqId, end_seq_id = SeqIdEnd}},
-     State = #vqstate{index_state = IndexState}) ->
+next(done, IndexState) -> {empty, IndexState};
+next({delta, #delta{start_seq_id = SeqId,
+                    end_seq_id   = SeqId}, State}, IndexState) ->
+    next(istate(delta, State), IndexState);
+next({delta, #delta{start_seq_id = SeqId,
+                    end_seq_id   = SeqIdEnd} = Delta, State}, IndexState) ->
     SeqIdB = rabbit_queue_index:next_segment_boundary(SeqId),
     SeqId1 = lists:min([SeqIdB, SeqIdEnd]),
     {List, IndexState1} = rabbit_queue_index:read(SeqId, SeqId1, IndexState),
-    next({delta, Delta#delta{start_seq_id = SeqId1}, List},
-         State#vqstate{index_state = IndexState1});
-next({delta, Delta, []}, State) -> next({delta, Delta}, State);
-next({delta, Delta, [M | Rest]}, State) ->
-    {value, beta_msg_status(M), {delta, Delta, Rest}, State};
-next({Key, Q}, State) ->
+    next({delta, Delta#delta{start_seq_id = SeqId1}, List, State}, IndexState1);
+next({delta, Delta, [], State}, IndexState) ->
+    next({delta, Delta, State}, IndexState);
+next({delta, Delta, [M | Rest], State}, IndexState) ->
+    {value, beta_msg_status(M), {delta, Delta, Rest, State}, IndexState};
+next({Key, Q, State}, IndexState) ->
     case ?QUEUE:out(Q) of
-        {empty, _Q}              -> next(istate(Key, State), State);
-        {{value, MsgStatus}, QN} -> {value, MsgStatus, {Key, QN}, State}
+        {empty, _Q}              -> next(istate(Key, State), IndexState);
+        {{value, MsgStatus}, QN} -> {value, MsgStatus, {Key, QN, State},
+                                     IndexState}
     end.
 
-ifold(Fun, Acc, It, State) ->
-    case next(It, State) of
-        {value, MsgStatus, Next, State1} ->
+ifold(Fun, Acc, It, State = #vqstate{index_state = IndexState}) ->
+    case next(It, IndexState) of
+        {value, MsgStatus, Next, IndexState1} ->
+            State1 = State#vqstate{index_state = IndexState1},
             {Msg, State2} = read_msg(MsgStatus, State1),
             case Fun(Msg, MsgStatus#msg_status.msg_props, Acc) of
                 {stop, Acc1} -> {Acc1, State2};
                 {cont, Acc1} -> ifold(Fun, Acc1, Next, State2)
             end;
-        {empty, State1} ->
-            {Acc, State1}
+        {empty, IndexState1} ->
+            {Acc, State#vqstate{index_state = IndexState1}}
     end.
 
 %%----------------------------------------------------------------------------
