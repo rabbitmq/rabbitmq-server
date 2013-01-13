@@ -677,17 +677,10 @@ ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, a(StateN)}.
 
 fold(Fun, Acc, State = #vqstate{index_state = IndexState}) ->
-    {Its, IndexState1} =
-        lists:foldl(fun (It, {Its, IndexState2}) ->
-                            case next(It, IndexState2) of
-                                {empty, IndexState3} ->
-                                    {Its, IndexState3};
-                                {value, MsgStatus, It1, IndexState3} ->
-                                    {[{MsgStatus, It1} | Its], IndexState3}
-                            end
-                    end, {[], IndexState}, [msg_iterator(State),
-                                            disk_ack_iterator(State),
-                                            ram_ack_iterator(State)]),
+    {Its, IndexState1} = lists:foldl(fun inext/2, {[], IndexState},
+                                     [msg_iterator(State),
+                                      disk_ack_iterator(State),
+                                      ram_ack_iterator(State)]),
     ifold(Fun, Acc, Its, State#vqstate{index_state = IndexState1}).
 
 len(#vqstate { len = Len }) -> Len.
@@ -1500,6 +1493,14 @@ next({Key, Q, State}, IndexState) ->
                                     {value, MsgStatus, Next, IndexState}
     end.
 
+inext(It, {Its, IndexState}) ->
+    case next(It, IndexState) of
+        {empty, IndexState1} ->
+            {Its, IndexState1};
+        {value, MsgStatus1, It1, IndexState1} ->
+            {[{MsgStatus1, It1} | Its], IndexState1}
+    end.
+
 ifold(_Fun, Acc, [], State) ->
     {Acc, State};
 ifold(Fun, Acc, Its, State) ->
@@ -1513,14 +1514,8 @@ ifold(Fun, Acc, Its, State) ->
         {stop, Acc1} ->
             {Acc1, State};
         {cont, Acc1} ->
-            case next(It, State1#vqstate.index_state) of
-                {empty, IndexState1} ->
-                    ifold(Fun, Acc1, Rest,
-                          State1#vqstate{index_state = IndexState1});
-                {value, MsgStatus1, It1, IndexState1} ->
-                    ifold(Fun, Acc1, [{MsgStatus1, It1} | Rest],
-                          State1#vqstate{index_state = IndexState1})
-            end
+            {Its1, IndexState1} = inext(It, {Rest, State1#vqstate.index_state}),
+            ifold(Fun, Acc1, Its1, State1#vqstate{index_state = IndexState1})
     end.
 
 %%----------------------------------------------------------------------------
