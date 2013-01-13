@@ -1473,8 +1473,8 @@ next({delta, Delta, [M | Rest], State}, IndexState) ->
 next({Key, Q, State}, IndexState) ->
     case ?QUEUE:out(Q) of
         {empty, _Q}              -> next(istate(Key, State), IndexState);
-        {{value, MsgStatus}, QN} -> {value, MsgStatus, {Key, QN, State},
-                                     IndexState}
+        {{value, MsgStatus}, QN} -> Next = {Key, QN, State},
+                                    {value, MsgStatus, Next, IndexState}
     end.
 
 ifold(Fun, Acc, It, State = #vqstate{index_state = IndexState}) ->
