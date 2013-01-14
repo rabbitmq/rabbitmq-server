@@ -395,6 +395,23 @@ handle_1_0_session_frame(Channel, Frame, State) ->
             end
     end.
 
+%% TODO: write a proper ANONYMOUS plugin and unify with STOMP
+handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism = {symbol, "ANONYMOUS"},
+                                        hostname = _Hostname},
+                      State = #v1{connection_state = starting,
+                                  sock             = Sock}) ->
+    case application:get_env(rabbitmq_amqp1_0, default_user) of
+        {ok, none} ->
+            %% No need to do anything, we will blow up in start_connection
+            ok;
+        {ok, _} ->
+            %% We only need to send the frame, again start_connection
+            %% will set up the default user.
+            Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 0}},
+            ok = send_on_channel0(Sock, Outcome, rabbit_amqp1_0_sasl),
+            switch_callback(State#v1{connection_state = waiting_amqp0100},
+                            handshake, 8)
+    end;
 handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism        = {symbol, Mechanism},
                                         initial_response = {binary, Response},
                                         hostname         = _Hostname},
