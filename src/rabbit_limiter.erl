@@ -27,7 +27,7 @@
 -export([limit/2, can_ch_send/3, can_cons_send/4,
          ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
--export([inform/4]).
+-export([inform/4, forget_consumer/2]).
 
 -import(rabbit_misc, [serial_add/2, serial_diff/2]).
 
@@ -141,6 +141,9 @@ inform(Limiter = #token{q_state = Credits},
         update_credit(CTag, Len, ChPid, Credit, Count, Drain, Credits),
     {Unblock, Limiter#token{q_state = Credits2}}.
 
+forget_consumer(Limiter = #token{q_state = Credits}, CTag) ->
+    Limiter#token{q_state = dict:erase(CTag, Credits)}.
+
 %%----------------------------------------------------------------------------
 %% Queue-local code
 %%----------------------------------------------------------------------------
@@ -200,8 +203,6 @@ update_credit(CTag, Len, ChPid, Credit, Count0, Drain, Credits) ->
         false -> {[],     NewCredits}
     end.
 
-%% TODO currently we leak when a single session creates and destroys
-%% lot of links.
 write_credit(CTag, Credit, Count, Drain, Credits) ->
     dict:store(CTag, #credit{credit = Credit,
                              count  = Count,

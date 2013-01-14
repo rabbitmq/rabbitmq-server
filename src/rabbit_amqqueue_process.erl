@@ -1152,10 +1152,12 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
     case lookup_ch(ChPid) of
         not_found ->
             reply(ok, State);
-        C = #cr{blocked_consumers = Blocked} ->
+        C = #cr{limiter = Limiter, blocked_consumers = Blocked} ->
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State)),
+            Limiter1 = rabbit_limiter:forget_consumer(Limiter, ConsumerTag),
             Blocked1 = remove_consumer(ChPid, ConsumerTag, Blocked),
-            update_consumer_count(C#cr{blocked_consumers = Blocked1}, -1),
+            update_consumer_count(C#cr{limiter           = Limiter1,
+                                       blocked_consumers = Blocked1}, -1),
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, ConsumerTag} -> none;
