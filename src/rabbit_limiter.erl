@@ -136,9 +136,13 @@ is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
 
 inform(Limiter = #token{q_state = Credits},
-       ChPid, Len, {basic_credit, CTag, Credit, Count, Drain}) ->
-    {Unblock, Credits2} =
-        update_credit(CTag, Len, ChPid, Credit, Count, Drain, Credits),
+       ChPid, Len, {basic_credit, CTag, Credit, Count, Drain, Reply}) ->
+    {Unblock, Credits2} = update_credit(CTag, Credit, Count, Drain, Credits),
+    case Reply of
+        true  -> rabbit_channel:send_command(
+                   ChPid, #'basic.credit_ok'{available = Len});
+        false -> ok
+    end,
     {Unblock, Limiter#token{q_state = Credits2}}.
 
 forget_consumer(Limiter = #token{q_state = Credits}, CTag) ->
@@ -188,7 +192,7 @@ send_drained(ChPid, CTag, Count) ->
 %% Update the credit state.
 %% TODO Edge case: if the queue has nothing in it, and drain is set,
 %% we want to send a basic.credit back.
-update_credit(CTag, Len, ChPid, Credit, Count0, Drain, Credits) ->
+update_credit(CTag, Credit, Count0, Drain, Credits) ->
     Count =
         case dict:find(CTag, Credits) of
             %% Use our count if we can, more accurate
@@ -196,7 +200,6 @@ update_credit(CTag, Len, ChPid, Credit, Count0, Drain, Credits) ->
             %% But if this is new, take it from the adapter
             _                                   -> Count0
         end,
-    rabbit_channel:send_command(ChPid, #'basic.credit_ok'{available = Len}),
     NewCredits = write_credit(CTag, Credit, Count, Drain, Credits),
     case Credit > 0 of
         true  -> {[CTag], NewCredits};
