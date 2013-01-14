@@ -7,6 +7,8 @@
 -define(DEBUG(F, A), ok).
 -endif.
 
+-define(pprint(F), io:format("~p~n", [rabbit_amqp1_0_framing:pprint(F)])).
+
 %% General consts
 
 -define(FRAME_1_0_MIN_SIZE, 512).
