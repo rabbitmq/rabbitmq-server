@@ -24,7 +24,8 @@
 
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
--export([limit/2, can_send/6, ack/2, register/2, unregister/2]).
+-export([limit/2, can_ch_send/3, can_cons_send/4,
+         ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 -export([inform/4]).
 
@@ -47,6 +48,7 @@
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
+-spec(can_ch_send/3 :: (token(), pid(), boolean()) -> boolean()).
 %% TODO
 %% -spec(can_send/5 :: (token(), pid(), boolean(),
 %%                      rabbit_types:ctag(), non_neg_integer()) -> boolean()).
@@ -98,18 +100,18 @@ limit(Limiter, PrefetchCount) ->
 %% breaching a limit. Note that we don't use maybe_call here in order
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
-can_send(#token{pid = Pid, enabled = true, q_state = QState} = Token,
-         ChPid, QPid, AckRequired, CTag, Len) ->
+can_ch_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
-      fun () -> {true, Token} end,
+      fun () -> true end,
       fun () ->
-              CanLim = gen_server2:call(Pid, {can_send, QPid, AckRequired},
-                                        infinity),
-              {CanQ, NewQState} = can_send_q(CTag, Len, ChPid, QState),
-              {CanLim andalso CanQ, Token#token{q_state = NewQState}}
+              gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
       end);
-can_send(Token, _, _, _, _, _) ->
-    {true, Token}.
+can_ch_send(_, _, _) ->
+    true.
+
+can_cons_send(#token{q_state = QState} = Token, ChPid, CTag, Len) ->
+    {CanQ, NewQState} = can_send_q(CTag, Len, ChPid, QState),
+    {CanQ, Token#token{q_state = NewQState}}.
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
