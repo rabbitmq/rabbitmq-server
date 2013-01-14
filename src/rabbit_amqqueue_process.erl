@@ -445,7 +445,6 @@ deliver_msg_to_consumer(DeliverFun,
             case rabbit_limiter:can_cons_send(
                    Limiter, ChPid, CTag, BQ:len(BQS)) of
                 {false, Lim2} ->
-                    %% TODO unify with first case?
                     block_consumer(C#cr{limiter       = Lim2,
                                         blocked_ctags = [CTag | BCTags]}, E),
                     {false, State};
