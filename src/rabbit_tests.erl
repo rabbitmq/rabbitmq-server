@@ -2336,8 +2336,12 @@ test_variable_queue_fold(VQ0) ->
     VQ4 = variable_queue_publish(
             true, JustOverTwoSegs + 1, 64,
             fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ3),
-    [false = V == 0 || {K, V} <- rabbit_variable_queue:status(VQ4),
-                       lists:member(K, [q1, delta, q3])], %% precondition
+    [false = case V of
+                 {delta, _, 0, _} -> true;
+                 0                -> true;
+                 _                -> false
+             end || {K, V} <- rabbit_variable_queue:status(VQ4),
+                    lists:member(K, [q1, delta, q3])], %% precondition
     Count = JustOverTwoSegs + 64,
     lists:foldl(
       fun (Cut, VQ5) -> test_variable_queue_fold(Cut, Count, VQ5) end,
