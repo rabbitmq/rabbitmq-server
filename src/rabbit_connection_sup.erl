@@ -42,10 +42,17 @@ start_link() ->
           SupPid,
           {collector, {rabbit_queue_collector, start_link, []},
            intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
+    %% Note that rabbit_amqp1_0_session_sup_sup despite the name can
+    %% mimic rabbit_channel_sup_sup when we handle a 0-9-1 connection
+    %% and the 1.0 plugin is loaded.
+    ChannelSupSupModule = case code:is_loaded(rabbit_amqp1_0_session_sup_sup) of
+                              false -> rabbit_channel_sup_sup;
+                              _     -> rabbit_amqp1_0_session_sup_sup
+                          end,
     {ok, ChannelSupSupPid} =
         supervisor2:start_child(
           SupPid,
-          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
+          {channel_sup_sup, {ChannelSupSupModule, start_link, []},
            intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(

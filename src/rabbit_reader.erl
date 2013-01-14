@@ -689,6 +689,15 @@ handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
 handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
+%% ... and finally, the 1.0 spec is crystal clear!  Note that the
+%% FIXME TLS uses a different protocol number, and would go here.
+handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
+    become_1_0(amqp, [0, 1, 0, 0], State);
+
+%% 3 stands for "SASL"
+handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
+    become_1_0(sasl, [0, 3, 0, 0], State);
+
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_version, A, B, C, D});
 
@@ -981,3 +990,28 @@ cert_info(F, #v1{sock = Sock}) ->
 emit_stats(State) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),
     rabbit_event:reset_stats_timer(State, #v1.stats_timer).
+
+%% 1.0 stub
+
+become_1_0(Mode, HandshakeBytes, State = #v1{sock = Sock}) ->
+    case code:is_loaded(rabbit_amqp1_0_reader) of
+        false -> refuse_connection(
+                   Sock, list_to_tuple([bad_version | HandshakeBytes]));
+        _     -> apply0(rabbit_amqp1_0_reader, become,
+                        [Mode, pack_for_1_0(State)])
+    end.
+
+%% Fool xref. Simply using apply(M, F, A) with constants is not enough.
+apply0(M, F, A) -> apply(M, F, A).
+
+pack_for_1_0(#v1{parent              = Parent,
+                 sock                = Sock,
+                 recv_len            = RecvLen,
+                 pending_recv        = PendingRecv,
+                 queue_collector     = QueueCollector,
+                 channel_sup_sup_pid = ChannelSupSupPid,
+                 start_heartbeat_fun = SHF,
+                 buf                 = Buf,
+                 buf_len             = BufLen}) ->
+    {Parent, Sock, RecvLen, PendingRecv, QueueCollector,
+     ChannelSupSupPid, SHF, Buf, BufLen}.

@@ -1079,6 +1079,20 @@ handle_method(#'channel.flow'{active = false}, _,
                  {noreply, State2}
     end;
 
+handle_method(#'basic.credit'{consumer_tag = CTag,
+                              credit       = Credit,
+                              count        = Count,
+                              drain        = Drain}, _,
+              State = #ch{consumer_mapping = Consumers}) ->
+    case dict:find(CTag, Consumers) of
+        {ok, Q} -> ok = rabbit_amqqueue:inform_limiter(
+                          self(), Q#amqqueue.pid,
+                          {basic_credit, CTag, Credit, Count, Drain}),
+                   {noreply, State};
+        error   -> rabbit_misc:protocol_error(
+                     not_allowed, "unknown consumer tag '~s'", [CTag])
+    end;
+
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
       command_invalid, "unimplemented method", []).
