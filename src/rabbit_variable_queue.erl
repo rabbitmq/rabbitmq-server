@@ -676,25 +676,7 @@ ackfold(MsgFun, Acc, State, AckTags) ->
                     end, {Acc, State}, AckTags),
     {AccN, a(StateN)}.
 
-fold(Fun, Acc, #vqstate { q1    = Q1,
-                          q2    = Q2,
-                          delta = #delta { start_seq_id = DeltaSeqId,
-                                           end_seq_id   = DeltaSeqIdEnd },
-                          q3    = Q3,
-                          q4    = Q4 } = State) ->
-    QFun = fun(MsgStatus, {Acc0, State0}) ->
-                   {Msg, State1} = read_msg(MsgStatus, State0),
-                   {StopGo, AccNext} =
-                       Fun(Msg, MsgStatus#msg_status.msg_props, Acc0),
-                   {StopGo, {AccNext, State1}}
-           end,
-    {Cont1, {Acc1, State1}} = qfoldl(QFun, {cont,  {Acc,  State }}, Q4),
-    {Cont2, {Acc2, State2}} = qfoldl(QFun, {Cont1, {Acc1, State1}}, Q3),
-    {Cont3, {Acc3, State3}} = delta_fold(Fun, {Cont2, Acc2},
-                                         DeltaSeqId, DeltaSeqIdEnd, State2),
-    {Cont4, {Acc4, State4}} = qfoldl(QFun, {Cont3, {Acc3, State3}}, Q2),
-    {_,     {Acc5, State5}} = qfoldl(QFun, {Cont4, {Acc4, State4}}, Q1),
-    {Acc5, State5}.
+fold(Fun, Acc, State) -> ifold(Fun, Acc, iterator(State), State).
 
 len(#vqstate { len = Len }) -> Len.
 
@@ -1101,13 +1083,15 @@ queue_out(State = #vqstate { q4 = Q4 }) ->
 
 read_msg(#msg_status{msg           = undefined,
                      msg_id        = MsgId,
-                     is_persistent = IsPersistent},
-         State = #vqstate{msg_store_clients = MSCState}) ->
-    {{ok, Msg = #basic_message {}}, MSCState1} =
-        msg_store_read(MSCState, IsPersistent, MsgId),
-    {Msg, State #vqstate {msg_store_clients = MSCState1}};
+                     is_persistent = IsPersistent}, State) ->
+    read_msg(MsgId, IsPersistent, State);
 read_msg(#msg_status{msg = Msg}, State) ->
     {Msg, State}.
+
+read_msg(MsgId, IsPersistent, State = #vqstate{msg_store_clients = MSCState}) ->
+    {{ok, Msg = #basic_message {}}, MSCState1} =
+        msg_store_read(MSCState, IsPersistent, MsgId),
+    {Msg, State #vqstate {msg_store_clients = MSCState1}}.
 
 inc_ram_msg_count(State = #vqstate{ram_msg_count = RamMsgCount}) ->
     State#vqstate{ram_msg_count = RamMsgCount + 1}.
@@ -1389,7 +1373,7 @@ msg_indices_written_to_disk(Callback, MsgIdSet) ->
              end).
 
 %%----------------------------------------------------------------------------
-%% Internal plumbing for requeue and fold
+%% Internal plumbing for requeue
 %%----------------------------------------------------------------------------
 
 publish_alpha(#msg_status { msg = undefined } = MsgStatus, State) ->
@@ -1459,40 +1443,52 @@ beta_limit(Q) ->
 delta_limit(?BLANK_DELTA_PATTERN(_X))             -> undefined;
 delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
 
-qfoldl(_Fun, {stop, _Acc} = A, _Q) -> A;
-qfoldl( Fun, {cont,  Acc} = A,  Q) ->
+%%----------------------------------------------------------------------------
+%% Iterator
+%%----------------------------------------------------------------------------
+
+iterator(State) -> istate(start, State).
+
+istate(start, State) -> {q4,    State#vqstate.q4,    State};
+istate(q4,    State) -> {q3,    State#vqstate.q3,    State};
+istate(q3,    State) -> {delta, State#vqstate.delta, State};
+istate(delta, State) -> {q2,    State#vqstate.q2,    State};
+istate(q2,    State) -> {q1,    State#vqstate.q1,    State};
+istate(q1,   _State) -> done.
+
+next(done, IndexState) -> {empty, IndexState};
+next({delta, #delta{start_seq_id = SeqId,
+                    end_seq_id   = SeqId}, State}, IndexState) ->
+    next(istate(delta, State), IndexState);
+next({delta, #delta{start_seq_id = SeqId,
+                    end_seq_id   = SeqIdEnd} = Delta, State}, IndexState) ->
+    SeqIdB = rabbit_queue_index:next_segment_boundary(SeqId),
+    SeqId1 = lists:min([SeqIdB, SeqIdEnd]),
+    {List, IndexState1} = rabbit_queue_index:read(SeqId, SeqId1, IndexState),
+    next({delta, Delta#delta{start_seq_id = SeqId1}, List, State}, IndexState1);
+next({delta, Delta, [], State}, IndexState) ->
+    next({delta, Delta, State}, IndexState);
+next({delta, Delta, [M | Rest], State}, IndexState) ->
+    {value, beta_msg_status(M), {delta, Delta, Rest, State}, IndexState};
+next({Key, Q, State}, IndexState) ->
     case ?QUEUE:out(Q) of
-        {empty, _Q}      -> A;
-        {{value, V}, Q1} -> qfoldl(Fun, Fun(V, Acc), Q1)
+        {empty, _Q}              -> next(istate(Key, State), IndexState);
+        {{value, MsgStatus}, QN} -> Next = {Key, QN, State},
+                                    {value, MsgStatus, Next, IndexState}
     end.
 
-lfoldl(_Fun, {stop, _Acc} = A,      _L) -> A;
-lfoldl(_Fun, {cont, _Acc} = A,      []) -> A;
-lfoldl( Fun, {cont,  Acc},     [H | T]) -> lfoldl(Fun, Fun(H, Acc), T).
-
-delta_fold(_Fun, {stop, Acc},   _DeltaSeqId, _DeltaSeqIdEnd, State) ->
-    {stop, {Acc, State}};
-delta_fold(_Fun, {cont, Acc}, DeltaSeqIdEnd,  DeltaSeqIdEnd, State) ->
-    {cont, {Acc, State}};
-delta_fold( Fun, {cont, Acc},    DeltaSeqId,  DeltaSeqIdEnd,
-           #vqstate { index_state       = IndexState,
-                      msg_store_clients = MSCState } = State) ->
-    DeltaSeqId1 = lists:min(
-                    [rabbit_queue_index:next_segment_boundary(DeltaSeqId),
-                     DeltaSeqIdEnd]),
-    {List, IndexState1} = rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1,
-                                                  IndexState),
-    {StopCont, {Acc1, MSCState1}} =
-        lfoldl(fun ({MsgId, _SeqId, MsgProps, IsPersistent, _IsDelivered},
-                    {Acc0, MSCState0}) ->
-                       {{ok, Msg = #basic_message {}}, MSCState1} =
-                           msg_store_read(MSCState0, IsPersistent, MsgId),
-                       {StopCont, AccNext} = Fun(Msg, MsgProps, Acc0),
-                       {StopCont, {AccNext, MSCState1}}
-               end, {cont, {Acc, MSCState}}, List),
-    delta_fold(Fun, {StopCont, Acc1}, DeltaSeqId1, DeltaSeqIdEnd,
-               State #vqstate { index_state       = IndexState1,
-                                msg_store_clients = MSCState1 }).
+ifold(Fun, Acc, It, State = #vqstate{index_state = IndexState}) ->
+    case next(It, IndexState) of
+        {value, MsgStatus, Next, IndexState1} ->
+            State1 = State#vqstate{index_state = IndexState1},
+            {Msg, State2} = read_msg(MsgStatus, State1),
+            case Fun(Msg, MsgStatus#msg_status.msg_props, Acc) of
+                {stop, Acc1} -> {Acc1, State2};
+                {cont, Acc1} -> ifold(Fun, Acc1, Next, State2)
+            end;
+        {empty, IndexState1} ->
+            {Acc, State#vqstate{index_state = IndexState1}}
+    end.
 
 %%----------------------------------------------------------------------------
 %% Phase changes
