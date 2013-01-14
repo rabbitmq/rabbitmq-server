@@ -2227,10 +2227,10 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
 
 variable_queue_publish(IsPersistent, Count, PropFun, VQ) ->
-    variable_queue_publish(IsPersistent, Count, PropFun,
+    variable_queue_publish(IsPersistent, 1, Count, PropFun,
                            fun (_N) -> <<>> end, VQ).
 
-variable_queue_publish(IsPersistent, Count, PropFun, PayloadFun, VQ) ->
+variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
     lists:foldl(
       fun (N, VQN) ->
               rabbit_variable_queue:publish(
@@ -2242,7 +2242,7 @@ variable_queue_publish(IsPersistent, Count, PropFun, PayloadFun, VQ) ->
                                                    end},
                                    PayloadFun(N)),
                 PropFun(N, #message_properties{}), false, self(), VQN)
-      end, VQ, lists:seq(1, Count)).
+      end, VQ, lists:seq(Start, Start + Count - 1)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
@@ -2327,13 +2327,21 @@ test_variable_queue() ->
     passed.
 
 test_variable_queue_fold(VQ0) ->
-    Count = rabbit_queue_index:next_segment_boundary(0) * 2 + 64,
+    JustOverTwoSegs = rabbit_queue_index:next_segment_boundary(0) * 2 + 64,
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(
-            true, Count, fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
+            true, 1, JustOverTwoSegs,
+            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
+    VQ3 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ2),
+    VQ4 = variable_queue_publish(
+            true, JustOverTwoSegs + 1, 64,
+            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ3),
+    [false = V == 0 || {K, V} <- rabbit_variable_queue:status(VQ4),
+                       lists:member(K, [q1, delta, q3])], %% precondition
+    Count = JustOverTwoSegs + 64,
     lists:foldl(
-      fun (Cut, VQ3) -> test_variable_queue_fold(Cut, Count, VQ3) end,
-      VQ2, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
+      fun (Cut, VQ5) -> test_variable_queue_fold(Cut, Count, VQ5) end,
+      VQ4, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
 
 test_variable_queue_fold(Cut, Count, VQ0) ->
     {Acc, VQ1} = rabbit_variable_queue:fold(
@@ -2426,7 +2434,7 @@ test_dropfetchwhile(VQ0) ->
 
     %% add messages with sequential expiry
     VQ1 = variable_queue_publish(
-            false, Count,
+            false, 1, Count,
             fun (N, Props) -> Props#message_properties{expiry = N} end,
             fun erlang:term_to_binary/1, VQ0),
 
