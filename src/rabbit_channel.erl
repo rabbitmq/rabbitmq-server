@@ -1100,7 +1100,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                           credit_map       = CMap}) ->
     case dict:find(CTag, Consumers) of
         {ok, Q} -> ok = rabbit_amqqueue:inform_limiter(
-                          self(), Q#amqqueue.pid,
+                          Q, self(),
                           {basic_credit, CTag, Credit, Count, Drain, true}),
                    {noreply, State};
         error   -> CMap2 = dict:store(CTag, {Credit, Count, Drain}, CMap),

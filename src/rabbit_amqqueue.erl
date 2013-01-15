@@ -145,7 +145,7 @@
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: (qpids(), pid(), rabbit_limiter:token()) ->
                           ok_or_errors()).
--spec(inform_limiter/3 :: (pid(), pid(), any()) -> 'ok').
+-spec(inform_limiter/3 :: (rabbit_types:amqqueue(), pid(), any()) -> 'ok').
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
@@ -534,7 +534,7 @@ notify_down_all(QPids, ChPid) ->
 limit_all(QPids, ChPid, Limiter) ->
     delegate:cast(QPids, {limit, ChPid, Limiter}).
 
-inform_limiter(ChPid, QPid, Msg) ->
+inform_limiter(#amqqueue{pid = QPid}, ChPid, Msg) ->
     delegate:cast(QPid, {inform_limiter, ChPid, Msg}).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
