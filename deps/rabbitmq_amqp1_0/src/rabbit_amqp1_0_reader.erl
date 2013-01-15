@@ -442,7 +442,6 @@ handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
 handle_input({frame_header_1_0, Mode},
              Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
              State) when DOff >= 2 ->
-    ?DEBUG("1.0 frame header: doff: ~p size: ~p~n", [DOff, Size]),
     case {Mode, Type} of
         {amqp, 0} -> ok;
         {sasl, 1} -> ok;
@@ -461,7 +460,6 @@ handle_input({frame_payload_1_0, Mode, DOff, Channel},
     SkipBits = (DOff * 32 - 64), % DOff = 4-byte words, we've read 8 already
     <<Skip:SkipBits, FramePayload/binary>> = FrameBin,
     Skip = Skip, %% hide warning when debug is off
-    ?DEBUG("1.0 frame: ~p (skipped ~p)~n", [FramePayload, Skip]),
     handle_1_0_frame(Mode, Channel, FramePayload,
                      switch_callback(State, {frame_header_1_0, Mode}, 8));
 

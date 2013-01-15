@@ -17,6 +17,7 @@
 -module(rabbit_amqp1_0_writer).
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include("rabbit_amqp1_0.hrl").
 
 -export([start/5, start_link/5, start/6, start_link/6]).
 -export([send_command/2, send_command/3,
@@ -204,12 +205,12 @@ call(Pid, Msg) ->
 %% Begin 1-0
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_framing) ->
-    %%?LOGMESSAGE(out, Channel, Performative, none),
+    ?LOGMESSAGE(out, Channel, Performative, none),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, PerfBin);
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
-    %%?LOGMESSAGE(out, Channel, Performative, none),
+    ?LOGMESSAGE(out, Channel, Performative, none),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel,
                                                 ?AMQP_SASL_FRAME_TYPE, PerfBin);
@@ -229,7 +230,7 @@ assemble_frame(Channel, MethodRecord, Protocol) ->
 
 assemble_frames(Channel, Performative, Content, FrameMax,
                 rabbit_amqp1_0_framing) ->
-    %%?LOGMESSAGE(out, Channel, Performative, Content),
+    ?LOGMESSAGE(out, Channel, Performative, Content),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]);
 
