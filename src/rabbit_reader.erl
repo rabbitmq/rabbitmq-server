@@ -696,7 +696,7 @@ handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
 
 %% 3 stands for "SASL"
 handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
-    become_1_0(sasl, [0, 3, 0, 0], State);
+    become_1_0(sasl, [3, 1, 0, 0], State);
 
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_version, A, B, C, D});
