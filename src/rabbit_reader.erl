@@ -996,12 +996,9 @@ emit_stats(State) ->
 become_1_0(Mode, Version, State = #v1{sock = Sock}) ->
     case code:is_loaded(rabbit_amqp1_0_reader) of
         false -> refuse_connection(Sock, {bad_version, Version});
-        _     -> apply0(rabbit_amqp1_0_reader, become,
-                        [Mode, pack_for_1_0(State)])
+        _     -> M = rabbit_amqp1_0_reader, %% fool xref
+                 M:become(Mode, pack_for_1_0(State))
     end.
-
-%% Fool xref. Simply using apply(M, F, A) with constants is not enough.
-apply0(M, F, A) -> apply(M, F, A).
 
 pack_for_1_0(#v1{parent              = Parent,
                  sock                = Sock,
