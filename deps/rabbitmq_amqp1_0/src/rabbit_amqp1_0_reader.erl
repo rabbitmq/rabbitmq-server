@@ -260,30 +260,31 @@ is_connection_frame(_)               -> false.
 
 %% Nothing specifies that connection methods have to be on a
 %% particular channel.
-handle_1_0_frame(_Mode, _Channel, Payload,
+handle_1_0_frame(_Mode, Channel, Payload,
                  State = #v1{ connection_state = CS}) when
       CS =:= closing; CS =:= closed ->
-    Sections = parse_1_0_frame(Payload),
+    Sections = parse_1_0_frame(Payload, Channel),
     case is_connection_frame(Sections) of
         true  -> handle_1_0_connection_frame(Sections, State);
         false -> State
     end;
 handle_1_0_frame(Mode, Channel, Payload, State) ->
-    Sections = parse_1_0_frame(Payload),
+    Sections = parse_1_0_frame(Payload, Channel),
     case {Mode, is_connection_frame(Sections)} of
         {amqp, true}  -> handle_1_0_connection_frame(Sections, State);
         {amqp, false} -> handle_1_0_session_frame(Channel, Sections, State);
         {sasl, false} -> handle_1_0_sasl_frame(Sections, State)
     end.
 
-parse_1_0_frame(Payload) ->
+parse_1_0_frame(Payload, _Channel) ->
     {PerfDesc, Rest} = rabbit_amqp1_0_binary_parser:parse(Payload),
     Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
     Sections = case Rest of
                    <<>> -> Perf;
                    _    -> {Perf, Rest}
                end,
-    ?DEBUG("1.0 frame decoded: ~p~n", [rabbit_amqp1_0_framing:pprint(Perf)]),
+    ?DEBUG("Channel ~p ->~n~p~n~n",
+           [_Channel, rabbit_amqp1_0_framing:pprint(Perf)]),
     Sections.
 
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,

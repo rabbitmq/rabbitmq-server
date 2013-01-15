@@ -205,12 +205,14 @@ call(Pid, Msg) ->
 %% Begin 1-0
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_framing) ->
-    ?LOGMESSAGE(out, Channel, Performative, none),
+    ?DEBUG("Channel ~p <-~n~p~n~n",
+           [Channel, rabbit_amqp1_0_framing:pprint(Performative)]),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, PerfBin);
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
-    ?LOGMESSAGE(out, Channel, Performative, none),
+    ?DEBUG("Channel ~p <-~n~p~n~n",
+           [Channel, rabbit_amqp1_0_framing:pprint(Performative)]),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel,
                                                 ?AMQP_SASL_FRAME_TYPE, PerfBin);
@@ -230,7 +232,11 @@ assemble_frame(Channel, MethodRecord, Protocol) ->
 
 assemble_frames(Channel, Performative, Content, FrameMax,
                 rabbit_amqp1_0_framing) ->
-    ?LOGMESSAGE(out, Channel, Performative, Content),
+    ?DEBUG("Channel ~p <-~n~p~n  with content:~n  ~p~n~n",
+           [Channel, rabbit_amqp1_0_framing:pprint(Performative),
+            [rabbit_amqp1_0_framing:pprint(Section) ||
+                Section <- rabbit_amqp1_0_framing:decode_bin(
+                             iolist_to_binary(Content))]]),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]);
 

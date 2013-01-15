@@ -17,7 +17,7 @@
 -module(rabbit_amqp1_0_framing).
 
 -export([encode/1, encode_described/3, decode/1, version/0,
-         symbol_for/1, number_for/1, encode_bin/1, pprint/1]).
+         symbol_for/1, number_for/1, encode_bin/1, decode_bin/1, pprint/1]).
 
 %% debug
 -export([fill_from_list/2, fill_from_map/2]).
@@ -121,6 +121,11 @@ encode(X) ->
 
 encode_bin(X) ->
     rabbit_amqp1_0_binary_generator:generate(encode(X)).
+
+decode_bin(X) -> [decode(PerfDesc) || PerfDesc <- decode_bin0(X)].
+decode_bin0(<<>>) -> [];
+decode_bin0(X)    -> {PerfDesc, Rest} = rabbit_amqp1_0_binary_parser:parse(X),
+                     [PerfDesc | decode_bin0(Rest)].
 
 symbol_for(X) ->
     rabbit_amqp1_0_framing0:symbol_for(X).

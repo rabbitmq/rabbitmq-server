@@ -1,14 +1,11 @@
+-define(debug, true).
 
 -ifdef(debug).
 -define(DEBUG0(F), io:format(F, [])).
 -define(DEBUG(F, A), io:format(F, A)).
--define(LOGMESSAGE(Dir, Channel, Perf, Cont),
-        ?DEBUG("1.0 frame dir ~p chan ~p ~p~n content:~p~n",
-               [Dir, Channel, rabbit_amqp1_0_framing:pprint(Perf), Cont])).
 -else.
 -define(DEBUG0(F), ok).
 -define(DEBUG(F, A), ok).
--define(LOGMESSAGE(_Dir, _Channel, _Perf, _Cont), ok).
 -endif.
 
 -define(pprint(F), io:format("~p~n", [rabbit_amqp1_0_framing:pprint(F)])).
