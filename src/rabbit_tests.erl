@@ -2330,14 +2330,16 @@ test_variable_queue_fold(VQ0) ->
     {Count, PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
         variable_queue_with_holes(VQ0),
     Msgs = lists:sort(PendingMsgs ++ RequeuedMsgs ++ FreshMsgs),
-    lists:foldl(
-      fun (Cut, VQ2) -> test_variable_queue_fold(Cut, Msgs, VQ2) end,
-      VQ1, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
+    lists:foldl(fun (Cut, VQ2) ->
+                        test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ2)
+                end, VQ1, [0, 1, 2, Count div 2,
+                           Count - 1, Count, Count + 1, Count * 2]).
 
-test_variable_queue_fold(Cut, Msgs, VQ0) ->
+test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ0) ->
     {Acc, VQ1} = rabbit_variable_queue:fold(
-                   fun (M, _, A) ->
+                   fun (M, _, Pending, A) ->
                            MInt = msg2int(M),
+                           Pending = lists:member(MInt, PendingMsgs), %% assert
                            case MInt =< Cut of
                                true  -> {cont, [MInt | A]};
                                false -> {stop, A}
