@@ -54,7 +54,7 @@ follows:
     Header                                   Properties
       durable              <--------------->   delivery-mode   [1]
       priority             <--------------->   priority
-      ttl                                                      [2]
+      ttl                  <--------------->   expiration      [2]
       first-acquirer                                           [3]
       delivery-count                                           [4]
     Properties
@@ -66,14 +66,15 @@ follows:
       correlation-id       <--------------->   correlation-id
       content-type         <--------------->   content-type
       content-encoding     <--------------->   content-encoding
-      absolute-expiry-time <--------------->   expiration      [7]
+      absolute-expiry-time                                     [7]
       creation-time        <--------------->   timestamp
     Application headers    <-------/------->   headers         [8]
 
 [1] `durable` is `true` if and only if `delivery-mode` is `2`.
 
-[2] `ttl` has no corresponding field in AMQP 0-9-1, and is not supported
-per message in RabbitMQ in any case.
+[2] `expiration` is a shortstr; since RabbitMQ will expect this to be
+an encoded string, we translate a `ttl` to the string representation
+of its integer value.
 
 [3] `first-acquirer` is true if and only if the `basic.deliver` field
 `redelivered` is false.
@@ -84,11 +85,8 @@ per message in RabbitMQ in any case.
 
 [6] See Routing and Addressing below.
 
-[7] `expiration` is a shortstr; since many clients will expect this to
-be an encoded string, we translate an `absolute-expiry-time` to the
-string representation of its integer value. An expiration that is not
-a string representation of an integer is discarded (going via a string
-also avoids some ambiguity)
+[7] `absolute-expiry-time` has no corresponding field in AMQP 0-9-1,
+and is not supported in RabbitMQ in any case.
 
 [8] The application headers section and the `basic.properties` field
 `headers` are natural analogues. However, rather than try to transcode

@@ -125,6 +125,7 @@ translate_header(Header10, Props) ->
                           _    -> 1
                       end,
       priority = unwrap(Header10#'v1_0.header'.priority),
+      expiration = to_expiration(Header10#'v1_0.header'.ttl),
       type = undefined,
       app_id = undefined,
       cluster_id = undefined}.
@@ -137,7 +138,6 @@ translate_properties(Props10, Props10Bin,
       content_type     = unwrap(Props10#'v1_0.properties'.content_type),
       content_encoding = unwrap(Props10#'v1_0.properties'.content_encoding),
       correlation_id   = unwrap(Props10#'v1_0.properties'.correlation_id),
-      expiration       = to_expiration(Props10 #'v1_0.properties'.absolute_expiry_time),
       reply_to         = case unwrap(Props10#'v1_0.properties'.reply_to) of
                              <<"/queue/", Q/binary>> -> Q;
                              Else                    -> Else
