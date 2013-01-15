@@ -692,14 +692,14 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
 %% ... and finally, the 1.0 spec is crystal clear!  Note that the
 %% TLS uses a different protocol number, and would go here.
 handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
-    become_1_0(amqp, [0, 1, 0, 0], State);
+    become_1_0(amqp, {0, 1, 0, 0}, State);
 
 %% 3 stands for "SASL"
 handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
-    become_1_0(sasl, [3, 1, 0, 0], State);
+    become_1_0(sasl, {3, 1, 0, 0}, State);
 
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_version, A, B, C, D});
+    refuse_connection(Sock, {bad_version, {A, B, C, D}});
 
 handle_input(handshake, Other, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_header, Other});
@@ -993,10 +993,9 @@ emit_stats(State) ->
 
 %% 1.0 stub
 
-become_1_0(Mode, HandshakeBytes, State = #v1{sock = Sock}) ->
+become_1_0(Mode, Version, State = #v1{sock = Sock}) ->
     case code:is_loaded(rabbit_amqp1_0_reader) of
-        false -> refuse_connection(
-                   Sock, list_to_tuple([bad_version | HandshakeBytes]));
+        false -> refuse_connection(Sock, {bad_version, Version});
         _     -> apply0(rabbit_amqp1_0_reader, become,
                         [Mode, pack_for_1_0(State)])
     end.
