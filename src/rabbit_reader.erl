@@ -690,7 +690,7 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 %% ... and finally, the 1.0 spec is crystal clear!  Note that the
-%% FIXME TLS uses a different protocol number, and would go here.
+%% TLS uses a different protocol number, and would go here.
 handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
     become_1_0(amqp, [0, 1, 0, 0], State);
 

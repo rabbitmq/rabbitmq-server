@@ -72,6 +72,9 @@
               blocked = false,
               queues = orddict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
+%% 'Notify' is a boolean that indicates whether a queue should be
+%% notified of a change in the limit or volume that may allow it to
+%% deliver more messages via the limiter's channel.
 
 -record(credit, {count = 0, credit = 0, drain = false}).
 
