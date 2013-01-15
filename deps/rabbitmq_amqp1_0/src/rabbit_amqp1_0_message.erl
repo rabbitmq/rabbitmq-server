@@ -150,6 +150,7 @@ routing_key(Props10) ->
 
 %% TODO <new codec>
 unwrap({utf8, Bin})  -> Bin;
+unwrap({binary, Bin})-> Bin;
 unwrap({ubyte, Num}) -> Num;
 unwrap({uint, Num})  -> Num;
 unwrap({ulong, Num}) -> Num;

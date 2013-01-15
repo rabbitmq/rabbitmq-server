@@ -19,7 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([check_queue/2, check_exchange/2, create_queue/2, create_bound_queue/3,
+-export([declare_queue/2, check_exchange/2, create_queue/2, create_bound_queue/3,
          parse_destination/2, parse_destination/1, queue_address/1, outcomes/1,
          protocol_error/3, ctag_to_handle/1, handle_to_ctag/1]).
 
@@ -29,15 +29,12 @@
                    ?V_1_0_SYMBOL_REJECTED,
                    ?V_1_0_SYMBOL_RELEASED]).
 
-%% Check that a queue exists
-check_queue(QueueName, DCh) when is_list(QueueName) ->
-    check_queue(list_to_binary(QueueName), DCh);
-check_queue(QueueName, DCh) ->
-    QDecl = #'queue.declare'{queue = QueueName, passive = true},
-    case catch amqp_channel:call(DCh, QDecl) of
-        {'EXIT', _Reason}     -> {error, not_found};
-        #'queue.declare_ok'{} -> {ok, QueueName}
-    end.
+declare_queue(QueueName, DCh) when is_list(QueueName) ->
+    declare_queue(list_to_binary(QueueName), DCh);
+declare_queue(QueueName, DCh) ->
+    QDecl = #'queue.declare'{queue = QueueName},
+    #'queue.declare_ok'{} = amqp_channel:call(DCh, QDecl),
+    {ok, QueueName}.
 
 check_exchange(ExchangeName, DCh) when is_list(ExchangeName) ->
     check_exchange(list_to_binary(ExchangeName), DCh);

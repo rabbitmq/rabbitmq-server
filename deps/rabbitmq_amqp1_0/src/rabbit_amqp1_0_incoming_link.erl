@@ -175,13 +175,13 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                   when Enc =:= utf8 orelse Enc =:= utf16 ->
                     case rabbit_amqp1_0_link_util:parse_destination(Destination, Enc) of
                         ["queue", Name] ->
-                            case rabbit_amqp1_0_link_util:check_queue(Name, DCh) of
+                            case rabbit_amqp1_0_link_util:declare_queue(Name, DCh) of
                                 {ok, QueueName} ->
                                     {ok, Target,
                                      Link#incoming_link{exchange = <<"">>,
                                                         routing_key = QueueName}};
-                                {error, Reason} ->
-                                    {error, Reason}
+                                _ ->
+                                    {error, "Declaring queue " ++ Name ++ " failed."}
                             end;
                         ["queue"] ->
                             %% Rely on the Subject being set
