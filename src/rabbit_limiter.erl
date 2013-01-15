@@ -27,7 +27,7 @@
 -export([limit/2, can_ch_send/3, can_cons_send/4,
          ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
--export([inform/4, forget_consumer/2]).
+-export([inform/4, forget_consumer/2, copy_queue_state/2]).
 
 -import(rabbit_misc, [serial_add/2, serial_diff/2]).
 
@@ -49,9 +49,8 @@
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
 -spec(can_ch_send/3 :: (token(), pid(), boolean()) -> boolean()).
-%% TODO
-%% -spec(can_send/5 :: (token(), pid(), boolean(),
-%%                      rabbit_types:ctag(), non_neg_integer()) -> boolean()).
+-spec(can_cons_send/4 :: (token(), pid(), rabbit_types:ctag(),
+                          non_neg_integer()) -> {boolean(), token()}).
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
 -spec(unregister/2 :: (token(), pid()) -> 'ok').
@@ -59,10 +58,11 @@
 -spec(block/1 :: (token()) -> 'ok').
 -spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (token()) -> boolean()).
-%% -spec(set_credit/5 :: (token(), rabbit_types:ctag(),
-%%                        non_neg_integer(),
-%%                        non_neg_integer(), boolean()) -> 'ok').
-%%-spec(inform/4 :: (token(), pid(), non_neg_integer(), any()) -> token()).
+-spec(inform/4 :: (token(), pid(), non_neg_integer(), any()) ->
+                       {[rabbit_types:ctag()], token()}).
+-spec(forget_consumer/2 :: (token(), rabbit_types:ctag()) -> token()).
+-spec(copy_queue_state/2 :: (token(), token()) -> token()).
+
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -150,6 +150,9 @@ inform(Limiter = #token{q_state = Credits},
 
 forget_consumer(Limiter = #token{q_state = Credits}, CTag) ->
     Limiter#token{q_state = dict:erase(CTag, Credits)}.
+
+copy_queue_state(#token{q_state = Credits}, Token) ->
+    Token#token{q_state = Credits}.
 
 %%----------------------------------------------------------------------------
 %% Queue-local code
