@@ -279,13 +279,20 @@ handle_1_0_frame(Mode, Channel, Payload, State) ->
 parse_1_0_frame(Payload, _Channel) ->
     {PerfDesc, Rest} = rabbit_amqp1_0_binary_parser:parse(Payload),
     Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
-    Sections = case Rest of
-                   <<>> -> Perf;
-                   _    -> {Perf, Rest}
-               end,
-    ?DEBUG("Channel ~p ->~n~p~n~n",
-           [_Channel, rabbit_amqp1_0_framing:pprint(Perf)]),
-    Sections.
+    ?DEBUG("Channel ~p ->~n~p~n~s~n",
+           [_Channel, rabbit_amqp1_0_framing:pprint(Perf),
+            case Rest of
+                <<>> -> <<>>;
+                _    -> rabbit_misc:format(
+                          "  with content:~n  ~p~n",
+                          [[rabbit_amqp1_0_framing:pprint(Section) ||
+                               Section <- rabbit_amqp1_0_framing:decode_bin(
+                                            Rest)]])
+            end]),
+    case Rest of
+        <<>> -> Perf;
+        _    -> {Perf, Rest}
+    end.
 
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                           channel_max = ClientChannelMax,
