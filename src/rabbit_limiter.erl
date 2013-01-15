@@ -24,7 +24,7 @@
 
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
--export([limit/2, can_ch_send/3, can_cons_send/4,
+-export([limit/2, can_ch_send/3, can_cons_send/2, record_cons_send/4,
          ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 -export([inform/4, forget_consumer/2, copy_queue_state/2]).
@@ -49,8 +49,7 @@
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
 -spec(can_ch_send/3 :: (token(), pid(), boolean()) -> boolean()).
--spec(can_cons_send/4 :: (token(), pid(), rabbit_types:ctag(),
-                          non_neg_integer()) -> {boolean(), token()}).
+-spec(can_cons_send/2 :: (token(), rabbit_types:ctag()) -> boolean()).
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
 -spec(unregister/2 :: (token(), pid()) -> 'ok').
@@ -112,9 +111,15 @@ can_ch_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
 can_ch_send(_, _, _) ->
     true.
 
-can_cons_send(#token{q_state = QState} = Token, ChPid, CTag, Len) ->
-    {CanQ, NewQState} = can_send_q(CTag, Len, ChPid, QState),
-    {CanQ, Token#token{q_state = NewQState}}.
+can_cons_send(#token{q_state = Credits}, CTag) ->
+    case dict:find(CTag, Credits) of
+        {ok, #credit{credit = C}} when C > 0 -> true;
+        {ok, #credit{}}                      -> false;
+        error                                -> true
+    end.
+
+record_cons_send(#token{q_state = QState} = Token, ChPid, CTag, Len) ->
+    Token#token{q_state = record_send_q(CTag, Len, ChPid, QState)}.
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
@@ -164,15 +169,12 @@ copy_queue_state(#token{q_state = Credits}, Token) ->
 %% we get the queue to hold a bit of state for us (#token.q_state), and
 %% maintain a fiction that the limiter is making the decisions...
 
-can_send_q(CTag, Len, ChPid, Credits) ->
+record_send_q(CTag, Len, ChPid, Credits) ->
     case dict:find(CTag, Credits) of
-        {ok, #credit{credit = C} = Cred} ->
-            if C > 0 -> Credits2 = decr_credit(CTag, Len, ChPid, Cred, Credits),
-                        {true, Credits2};
-               true  -> {false, Credits}
-            end;
-        _ ->
-            {true, Credits}
+        {ok, #credit{credit = C} = Cred} when C > 0 ->
+            decr_credit(CTag, Len, ChPid, Cred, Credits);
+        error ->
+            Credits
     end.
 
 decr_credit(CTag, Len, ChPid, Cred, Credits) ->
