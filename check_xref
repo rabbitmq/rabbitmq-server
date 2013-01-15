@@ -163,7 +163,8 @@ filters() ->
 
 filter_chain(FnChain) ->
     fun(AnalysisResult) ->
-        lists:foldl(fun(F, false) -> F(cleanup(AnalysisResult));
+        Result = cleanup(AnalysisResult),
+        lists:foldl(fun(F, false) -> F(Result);
                        (_F, true) -> true
                     end, false, FnChain)
     end.
