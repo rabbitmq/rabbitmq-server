@@ -28,12 +28,11 @@
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, notify_sent_queue_down/1, unblock/2, flush_all/2]).
--export([notify_down_all/2, limit_all/3]).
+-export([notify_down_all/2, limit_all/3, inform_limiter/3]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
          cancel_sync_mirrors/1]).
--export([inform_limiter/3]).
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
@@ -146,6 +145,7 @@
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: (qpids(), pid(), rabbit_limiter:token()) ->
                           ok_or_errors()).
+-spec(inform_limiter/3 :: (pid(), pid(), any()) -> 'ok').
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
@@ -178,7 +178,6 @@
 -spec(sync_mirrors/1 :: (pid()) ->
     'ok' | rabbit_types:error('pending_acks' | 'not_mirrored')).
 -spec(cancel_sync_mirrors/1 :: (pid()) -> 'ok' | {'ok', 'not_syncing'}).
--spec(inform_limiter/3 :: (pid(), pid(), any()) -> 'ok').
 
 -endif.
 
@@ -535,6 +534,9 @@ notify_down_all(QPids, ChPid) ->
 limit_all(QPids, ChPid, Limiter) ->
     delegate:cast(QPids, {limit, ChPid, Limiter}).
 
+inform_limiter(ChPid, QPid, Msg) ->
+    delegate:cast(QPid, {inform_limiter, ChPid, Msg}).
+
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck}).
 
@@ -608,9 +610,6 @@ stop_mirroring(QPid)  -> ok = delegate:cast(QPid, stop_mirroring).
 
 sync_mirrors(QPid)        -> delegate:call(QPid, sync_mirrors).
 cancel_sync_mirrors(QPid) -> delegate:call(QPid, cancel_sync_mirrors).
-
-inform_limiter(ChPid, QPid, Msg) ->
-    delegate:cast(QPid, {inform_limiter, ChPid, Msg}).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
