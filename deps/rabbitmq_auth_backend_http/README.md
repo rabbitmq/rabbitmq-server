@@ -16,9 +16,7 @@ conceptually very simple.
 You can build and install it like any other plugin (see
 [the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
 
-**Binary packages are available at github in the downloads section.**
-
-This plugin does not depend on any others.
+This plugin depends on the Erlang client (just to grab a URI parser).
 
 # Enabling the plugin
 
