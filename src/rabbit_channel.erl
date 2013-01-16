@@ -707,7 +707,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                            case dict:find(ActualConsumerTag, CreditMap) of
                                {ok, {Credit, Count, Drain}} ->
                                    ok = rabbit_amqqueue:inform_limiter(
-                                          self(), Q#amqqueue.pid,
+                                          Q, self(),
                                           {basic_credit, ActualConsumerTag,
                                            Credit, Count, Drain, false});
                                error ->
