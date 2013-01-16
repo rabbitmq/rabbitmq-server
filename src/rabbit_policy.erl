@@ -218,10 +218,13 @@ validation(_Name, Terms) when is_list(Terms) ->
                         rabbit_registry:lookup_all(policy_validator)),
     [] = dups(Keys), %% ASSERTION
     Validators = lists:zipwith(fun (M, K) ->  {M, a2b(K)} end, Modules, Keys),
-    {TermKeys, _} = lists:unzip(Terms),
-    case dups(TermKeys) of
-        []   -> validation0(Validators, Terms);
-        Dup  -> {error, "~p duplicate keys not allowed", [Dup]}
+    case is_proplist(Terms) of
+        true  -> {TermKeys, _} = lists:unzip(Terms),
+                 case dups(TermKeys) of
+                     []   -> validation0(Validators, Terms);
+                     Dup  -> {error, "~p duplicate keys not allowed", [Dup]}
+                 end;
+        false -> {error, "definition must be a dictionary: ~p", [Terms]}
     end;
 validation(_Name, Term) ->
     {error, "parse error while reading policy: ~p", [Term]}.
@@ -249,3 +252,5 @@ validation0(Validators, Terms) ->
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
 dups(L) -> L -- lists:usort(L).
+
+is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).
