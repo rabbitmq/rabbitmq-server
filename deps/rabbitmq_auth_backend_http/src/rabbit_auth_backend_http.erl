@@ -69,7 +69,11 @@ bool_req(PathName, Props) ->
     end.
 
 http_get(Path) ->
-    case httpc:request(get, {Path, []}, ?HTTPC_OPTS, []) of
+    URI = uri_parser:parse(Path, [{port, 80}]),
+    {host, Host} = lists:keyfind(host, 1, URI),
+    {port, Port} = lists:keyfind(port, 1, URI),
+    HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
+    case httpc:request(get, {Path, [{"Host", HostHdr}]}, ?HTTPC_OPTS, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             case Code of
                 200 -> case parse_resp(Body) of
