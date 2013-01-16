@@ -11,3 +11,6 @@ syntax: regexp
 ^src/rabbit_amqp1_0_framing0.erl$
 ^amqp/
 ^qpid/
+^test/swiftmq/build/
+^test/swiftmq/out/
+^test/swiftmq/swiftmq_.*_client.zip$
