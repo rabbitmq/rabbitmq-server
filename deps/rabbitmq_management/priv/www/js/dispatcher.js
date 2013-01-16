@@ -25,9 +25,14 @@ dispatcher_add(function(sammy) {
                 'connection', '#/connections');
         });
     sammy.del('#/connections', function() {
-            if (sync_delete(this, '/connections/:name'))
-                go_to('#/connections');
-            return false;
+            var options = {headers: {
+              'X-Reason': this.params['reason']
+            }};
+            if (sync_delete(this, '/connections/:name', options)) {
+              go_to('#/connections');
+            }
+
+           return false;
         });
 
     path('#/channels', {'channels': '/channels'}, 'channels');

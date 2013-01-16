@@ -212,8 +212,11 @@ Content-Length: 0</pre>
         <td>X</td>
         <td></td>
         <td class="path">/api/connections/<i>name</i></td>
-        <td>An individual connection. DELETEing it will close the
-        connection.</td>
+        <td>
+          An individual connection. DELETEing it will close the
+          connection. Optionally set the "X-Reason" header when
+          DELETEing to provide a reason.
+        </td>
       </tr>
       <tr>
         <td>X</td>
