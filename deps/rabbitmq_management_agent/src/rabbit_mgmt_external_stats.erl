@@ -214,14 +214,12 @@ rabbit_mochiweb_registry_list_all() ->
     case code:is_loaded(rabbit_mochiweb_registry) of
         false -> [];
         _     -> try
-                     apply0(rabbit_mochiweb_registry, list_all, [])
+                     M = rabbit_mochiweb_registry, %% Fool xref
+                     M:list_all()
                  catch exit:{noproc, _} ->
                          []
                  end
     end.
-
-%% Fool xref. Simply using apply(M, F, A) with constants is not enough.
-apply0(M, F, A) -> apply(M, F, A).
 
 format_context({Path, Description, Rest}) ->
     [{description, list_to_binary(Description)},
