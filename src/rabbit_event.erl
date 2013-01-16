@@ -112,8 +112,10 @@ stop_stats_timer(C, P) ->
     case element(P, C) of
         #state{level = Level, timer = TRef} = State
           when Level =/= none andalso TRef =/= undefined ->
-            erlang:cancel_timer(TRef),
-            setelement(P, C, State#state{timer = undefined});
+            case erlang:cancel_timer(TRef) of
+                false -> C;
+                _     -> setelement(P, C, State#state{timer = undefined})
+            end;
         #state{} ->
             C
     end.
