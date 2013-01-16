@@ -20,6 +20,9 @@
 
 -export([http_get/1, http_put/3, http_delete/2]).
 
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2]).
+-import(rabbit_misc, [pget/2]).
+
 overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
@@ -1094,35 +1097,3 @@ auth_header(Username, Password) ->
     {"Authorization",
      "Basic " ++ binary_to_list(base64:encode(Username ++ ":" ++ Password))}.
 
-%%---------------------------------------------------------------------------
-
-assert_list(Exp, Act) ->
-    case length(Exp) == length(Act) of
-        true  -> ok;
-        false -> throw({expected, Exp, actual, Act})
-    end,
-    [case length(lists:filter(fun(ActI) -> test_item(ExpI, ActI) end, Act)) of
-         1 -> ok;
-         N -> throw({found, N, ExpI, in, Act})
-     end || ExpI <- Exp].
-
-assert_item(Exp, Act) ->
-    case test_item0(Exp, Act) of
-        [] -> ok;
-        Or -> throw(Or)
-    end.
-
-test_item(Exp, Act) ->
-    case test_item0(Exp, Act) of
-        [] -> true;
-        _  -> false
-    end.
-
-test_item0(Exp, Act) ->
-    [{did_not_find, ExpI, in, Act} || ExpI <- Exp,
-                                      not lists:member(ExpI, Act)].
-
-%%---------------------------------------------------------------------------
-
-pget(K, L) ->
-     proplists:get_value(K, L).
