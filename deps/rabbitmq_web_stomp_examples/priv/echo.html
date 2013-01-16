@@ -80,10 +80,11 @@
         };
 
       // Stomp.js boilerplate
-      Stomp.WebSocketClass = SockJS;
+      var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
+      var client = Stomp.over(ws);
 
-      var client = Stomp.client('http://' + window.location.hostname + ':15674/stomp');
-
+      client.heartbeat.outgoing = 0;
+      client.heartbeat.incoming = 0;
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {
