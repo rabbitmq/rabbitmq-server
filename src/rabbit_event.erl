@@ -110,8 +110,7 @@ ensure_stats_timer(C, P, Msg) ->
 
 stop_stats_timer(C, P) ->
     case element(P, C) of
-        #state{timer = TRef} = State
-          when TRef =/= undefined ->
+        #state{timer = TRef} = State when TRef =/= undefined ->
             case erlang:cancel_timer(TRef) of
                 false -> C;
                 _     -> setelement(P, C, State#state{timer = undefined})
@@ -122,8 +121,7 @@ stop_stats_timer(C, P) ->
 
 reset_stats_timer(C, P) ->
     case element(P, C) of
-        #state{timer = TRef} = State
-          when TRef =/= undefined ->
+        #state{timer = TRef} = State when TRef =/= undefined ->
             setelement(P, C, State#state{timer = undefined});
         #state{} ->
             C
