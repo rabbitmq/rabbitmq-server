@@ -82,6 +82,7 @@ route(#exchange { name = Name } = X,
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
+delete(transaction, X, Bindings) -> remove_bindings(transaction, X, Bindings);
 delete(_Tx, _X, _Bs) -> ok.
 policy_changed(_Tx, _X1, _X2) -> ok.
 
