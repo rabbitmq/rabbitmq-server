@@ -55,13 +55,10 @@ init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
                 session            = rabbit_amqp1_0_session:init(Channel)
                }}.
 
-terminate(_Reason, _State = #state{backing_connection = Conn,
-                                   backing_channel    = Ch}) ->
+terminate(_Reason, _State = #state{backing_connection = Conn}) ->
     ?DEBUG("Shutting down session ~p", [_State]),
-    amqp_channel:close(Ch),
-    %% TODO: closing the connection here leads to errors in the logs
-    amqp_connection:close(Conn),
-    ok.
+    rabbit_misc:with_exit_handler(fun () -> ok end,
+                                  fun () -> amqp_connection:close(Conn) end).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
