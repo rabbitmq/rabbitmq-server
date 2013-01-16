@@ -207,7 +207,7 @@ update_last_blocked_by(Throttle = #throttle{conserve_resources = false}) ->
 
 handle_dependent_exit(ChPid, Reason, State) ->
     %% TODO handle sessions
-    case {undefined, termination_kind(Reason)} of
+    case {ChPid, termination_kind(Reason)} of
         {undefined, uncontrolled} ->
             exit({abnormal_dependent_exit, ChPid, Reason});
         {_Channel, controlled} ->
