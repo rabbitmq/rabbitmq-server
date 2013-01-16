@@ -54,7 +54,8 @@
             delayed_stop,
             queue_monitors,
             dlx,
-            dlx_routing_key
+            dlx_routing_key,
+            status
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -97,7 +98,8 @@
          memory,
          slave_pids,
          synchronised_slave_pids,
-         backing_queue_status
+         backing_queue_status,
+         status
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -149,7 +151,8 @@ init_state(Q) ->
                publish_seqno       = 1,
                unconfirmed         = dtree:empty(),
                queue_monitors      = pmon:new(),
-               msg_id_to_channel   = gb_trees:empty()},
+               msg_id_to_channel   = gb_trees:empty(),
+               status              = running},
     rabbit_event:init_stats_timer(State, #q.stats_timer).
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
@@ -938,6 +941,8 @@ i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
         false -> '';
         true  -> SSPids
     end;
+i(status, #q{status = Status}) ->
+    Status;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
 i(Item, _) ->
@@ -1161,8 +1166,22 @@ handle_call(sync_mirrors, _From,
             State = #q{backing_queue       = rabbit_mirror_queue_master = BQ,
                        backing_queue_state = BQS}) ->
     S = fun(BQSN) -> State#q{backing_queue_state = BQSN} end,
+    HandleInfo = fun (Status) ->
+                         receive {'$gen_call', From, {info, Items}} ->
+                                 Infos = infos(Items, State#q{status = Status}),
+                                 gen_server2:reply(From, {ok, Infos})
+                         after 0 ->
+                                 ok
+                         end
+                 end,
+    EmitStats = fun (Status) ->
+                        rabbit_event:if_enabled(
+                          State, #q.stats_timer,
+                          fun() -> emit_stats(State#q{status = Status}) end)
+                end,
     case BQ:depth(BQS) - BQ:len(BQS) of
-        0 -> case rabbit_mirror_queue_master:sync_mirrors(BQS) of
+        0 -> case rabbit_mirror_queue_master:sync_mirrors(
+                    HandleInfo, EmitStats, BQS) of
                  {ok, BQS1}           -> reply(ok, S(BQS1));
                  {stop, Reason, BQS1} -> {stop, Reason, S(BQS1)}
              end;
@@ -1171,6 +1190,10 @@ handle_call(sync_mirrors, _From,
 
 handle_call(sync_mirrors, _From, State) ->
     reply({error, not_mirrored}, State);
+
+%% By definition if we get this message here we do not have to do anything.
+handle_call(cancel_sync_mirrors, _From, State) ->
+    reply({ok, not_syncing}, State);
 
 handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->

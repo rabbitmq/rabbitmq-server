@@ -64,6 +64,10 @@
          State#v1.connection_state =:= blocking orelse
          State#v1.connection_state =:= blocked)).
 
+-define(IS_STOPPING(State),
+        (State#v1.connection_state =:= closing orelse
+         State#v1.connection_state =:= closed)).
+
 %%--------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -323,9 +327,7 @@ handle_other({'DOWN', _MRef, process, ChPid, Reason}, Deb, State) ->
 handle_other(terminate_connection, _Deb, State) ->
     State;
 handle_other(handshake_timeout, Deb, State)
-  when ?IS_RUNNING(State) orelse
-       State#v1.connection_state =:= closing orelse
-       State#v1.connection_state =:= closed ->
+  when ?IS_RUNNING(State) orelse ?IS_STOPPING(State) ->
     mainloop(Deb, State);
 handle_other(handshake_timeout, _Deb, State) ->
     throw({handshake_timeout, State#v1.callback});
@@ -572,17 +574,13 @@ all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
 %%--------------------------------------------------------------------------
 
 handle_frame(Type, 0, Payload,
-             State = #v1{connection_state = CS,
-                         connection = #connection{protocol = Protocol}})
-  when CS =:= closing; CS =:= closed ->
+             State = #v1{connection = #connection{protocol = Protocol}})
+  when ?IS_STOPPING(State) ->
     case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         _Other -> State
     end;
-handle_frame(_Type, _Channel, _Payload, State = #v1{connection_state = CS})
-  when CS =:= closing; CS =:= closed ->
-    State;
 handle_frame(Type, 0, Payload,
              State = #v1{connection = #connection{protocol = Protocol}}) ->
     case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
@@ -600,6 +598,8 @@ handle_frame(Type, Channel, Payload,
         heartbeat -> unexpected_frame(Type, Channel, Payload, State);
         Frame     -> process_frame(Frame, Channel, State)
     end;
+handle_frame(_Type, _Channel, _Payload, State) when ?IS_STOPPING(State) ->
+    State;
 handle_frame(Type, Channel, Payload, State) ->
     unexpected_frame(Type, Channel, Payload, State).
 
@@ -820,10 +820,9 @@ handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
 handle_method0(#'connection.close'{},
-               State = #v1{connection_state = CS,
-                           connection = #connection{protocol = Protocol},
+               State = #v1{connection = #connection{protocol = Protocol},
                            sock = Sock})
-  when CS =:= closing; CS =:= closed ->
+  when ?IS_STOPPING(State) ->
     %% We're already closed or closing, so we don't need to cleanup
     %% anything.
     ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
@@ -832,8 +831,7 @@ handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
     self() ! terminate_connection,
     State;
-handle_method0(_Method, State = #v1{connection_state = CS})
-  when CS =:= closing; CS =:= closed ->
+handle_method0(_Method, State) when ?IS_STOPPING(State) ->
     State;
 handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(

@@ -863,7 +863,7 @@ dispatch(Info, Mod, State) ->
 common_reply(_Name, From, Reply, _NState, [] = _Debug) ->
     reply(From, Reply),
     [];
-common_reply(Name, {To, Tag} = From, Reply, NState, Debug) ->
+common_reply(Name, {To, _Tag} = From, Reply, NState, Debug) ->
     reply(From, Reply),
     sys:handle_debug(Debug, fun print_event/3, Name, {out, Reply, To, NState}).
 
