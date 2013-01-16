@@ -579,7 +579,7 @@ class Management:
             assert_usage(name in mandatory or name in optional.keys(),
                          'Argument "{0}" not recognised'.format(name))
             if 'json' in obj and name in obj['json']:
-                upload[name] = json.loads(value)
+                upload[name] = self.parse_json(value)
             else:
                 upload[name] = value
         for m in mandatory:
@@ -597,6 +597,13 @@ class Management:
                     uri_args['destination_char'] = v[0]
         uri = uri_template.format(**uri_args)
         return (uri, upload)
+
+    def parse_json(self, text):
+        try:
+            return json.loads(text)
+        except ValueError:
+            print "Could not parse JSON:\n  {0}".format(text)
+            sys.exit(1)
 
 def format_list(json_list, columns, args, options):
     format = options.format
