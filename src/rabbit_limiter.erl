@@ -172,7 +172,7 @@ copy_queue_state(#token{q_state = Credits}, Token) ->
 
 record_send_q(CTag, Len, ChPid, Credits) ->
     case dict:find(CTag, Credits) of
-        {ok, #credit{credit = C} = Cred} when C > 0 ->
+        {ok, Cred} ->
             decr_credit(CTag, Len, ChPid, Cred, Credits);
         error ->
             Credits
