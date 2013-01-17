@@ -37,7 +37,8 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len, throttle}).
+             channel_sup_sup_pid, conn_sup_pid, start_heartbeat_fun,
+             buf, buf_len, throttle}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
                      protocol, user, timeout_sec, frame_max, vhost,
@@ -105,12 +106,12 @@ start_link(ChannelSupSupPid, Collector, StartHeartbeatFun) ->
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
-init(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun) ->
+init(Parent, ConnSupPid, Collector, StartHeartbeatFun) ->
     Deb = sys:debug_options([]),
     receive
         {go, Sock, SockTransform} ->
             start_connection(
-              Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb, Sock,
+              Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb, Sock,
               SockTransform)
     end.
 
@@ -199,7 +200,7 @@ name(Sock) ->
 socket_ends(Sock) ->
     socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end).
 
-start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
+start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
     Name = name(Sock),
@@ -230,7 +231,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 connection_state    = pre_init,
                 queue_collector     = Collector,
                 heartbeater         = none,
-                channel_sup_sup_pid = ChannelSupSupPid,
+                conn_sup_pid        = ConnSupPid,
+                channel_sup_sup_pid = none,
                 start_heartbeat_fun = StartHeartbeatFun,
                 buf                 = [],
                 buf_len             = 0,
@@ -714,7 +716,13 @@ handle_input(Callback, Data, _State) ->
 %% are similar enough that clients will be happy with either.
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                  Protocol,
-                 State = #v1{sock = Sock, connection = Connection}) ->
+                 State = #v1{sock = Sock, connection = Connection,
+                             conn_sup_pid = ConnSupPid}) ->
+    {ok, ChannelSupSupPid} =
+        supervisor2:start_child(
+          ConnSupPid,
+          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
     Start = #'connection.start'{
       version_major = ProtocolMajor,
       version_minor = ProtocolMinor,
@@ -725,6 +733,7 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
     switch_callback(State#v1{connection = Connection#connection{
                                             timeout_sec = ?NORMAL_TIMEOUT,
                                             protocol = Protocol},
+                             channel_sup_sup_pid = ChannelSupSupPid,
                              connection_state = starting},
                     frame_header, 7).
 
@@ -1007,9 +1016,9 @@ pack_for_1_0(#v1{parent              = Parent,
                  recv_len            = RecvLen,
                  pending_recv        = PendingRecv,
                  queue_collector     = QueueCollector,
-                 channel_sup_sup_pid = ChannelSupSupPid,
+                 conn_sup_pid        = ConnSupPid,
                  start_heartbeat_fun = SHF,
                  buf                 = Buf,
                  buf_len             = BufLen}) ->
-    {Parent, Sock, RecvLen, PendingRecv, QueueCollector,
-     ChannelSupSupPid, SHF, Buf, BufLen}.
+    {Parent, Sock, RecvLen, PendingRecv, QueueCollector, ConnSupPid, SHF,
+     Buf, BufLen}.
