@@ -2327,36 +2327,23 @@ test_variable_queue() ->
     passed.
 
 test_variable_queue_fold(VQ0) ->
-    JustOverTwoSegs = rabbit_queue_index:next_segment_boundary(0) * 2 + 64,
-    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
-    VQ2 = variable_queue_publish(
-            true, 1, JustOverTwoSegs,
-            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
-    VQ3 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ2),
-    VQ4 = variable_queue_publish(
-            true, JustOverTwoSegs + 1, 64,
-            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ3),
-    [false = case V of
-                 {delta, _, 0, _} -> true;
-                 0                -> true;
-                 _                -> false
-             end || {K, V} <- rabbit_variable_queue:status(VQ4),
-                    lists:member(K, [q1, delta, q3])], %% precondition
-    Count = JustOverTwoSegs + 64,
+    {Count, RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
+    Msgs = RequeuedMsgs ++ FreshMsgs,
     lists:foldl(
-      fun (Cut, VQ5) -> test_variable_queue_fold(Cut, Count, VQ5) end,
-      VQ4, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
+      fun (Cut, VQ2) -> test_variable_queue_fold(Cut, Msgs, VQ2) end,
+      VQ1, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
 
-test_variable_queue_fold(Cut, Count, VQ0) ->
+test_variable_queue_fold(Cut, Msgs, VQ0) ->
     {Acc, VQ1} = rabbit_variable_queue:fold(
                    fun (M, _, A) ->
-                           case msg2int(M) =< Cut of
-                               true  -> {cont, [M | A]};
+                           MInt = msg2int(M),
+                           case MInt =< Cut of
+                               true  -> {cont, [MInt | A]};
                                false -> {stop, A}
                            end
                    end, [], VQ0),
-    true = [N || N <- lists:seq(lists:min([Cut, Count]), 1, -1)] ==
-        [msg2int(M) || M <- Acc],
+    Expected = lists:takewhile(fun (I) -> I =< Cut end, Msgs),
+    Expected = lists:reverse(Acc), %% assertion
     VQ1.
 
 msg2int(#basic_message{content = #content{ payload_fragments_rev = P}}) ->
