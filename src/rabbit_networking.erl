@@ -117,6 +117,9 @@
 %%----------------------------------------------------------------------------
 
 boot() ->
+    %% This exists to disambiguate 0-x connections from 1.0 ones
+    %% (since they are both children of the same supervisor).
+    ets:new(?CONNECTION_TABLE, [public, named_table]),
     ok = start(),
     ok = boot_tcp(),
     ok = boot_ssl().
@@ -299,15 +302,7 @@ connections() ->
                                      rabbit_networking, connections_local, []).
 
 connections_local() ->
-    [Reader ||
-        {_, ConnSup, supervisor, _}
-            <- supervisor:which_children(rabbit_tcp_client_sup),
-        Reader <- [try
-                       rabbit_connection_sup:reader(ConnSup)
-                   catch exit:{noproc, _} ->
-                           noproc
-                   end],
-        Reader =/= noproc].
+    [P || {P} <- ets:tab2list(?CONNECTION_TABLE)].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 

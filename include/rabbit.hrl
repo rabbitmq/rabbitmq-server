@@ -109,3 +109,5 @@
 -define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
 -define(DELETED_HEADER, <<"BCC">>).
+
+-define(CONNECTION_TABLE, rabbit_connection).

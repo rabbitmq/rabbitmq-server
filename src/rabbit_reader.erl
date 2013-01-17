@@ -265,6 +265,7 @@ start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
         %% the socket. However, to keep the file_handle_cache
         %% accounting as accurate as possible we ought to close the
         %% socket w/o delay before termination.
+        ets:delete(?CONNECTION_TABLE, self()),
         rabbit_net:fast_close(ClientSock),
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
@@ -721,6 +722,7 @@ handle_input(Callback, Data, _State) ->
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                  Protocol,
                  State = #v1{sock = Sock, connection = Connection}) ->
+    ets:insert(?CONNECTION_TABLE, {self()}),
     Start = #'connection.start'{
       version_major = ProtocolMajor,
       version_minor = ProtocolMinor,
