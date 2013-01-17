@@ -82,7 +82,13 @@ route(#exchange { name = Name } = X,
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
-delete(transaction, X, Bindings) -> remove_bindings(transaction, X, Bindings);
+delete(transaction, #exchange { name = Name }, _Bs) ->
+    ok = mnesia:write_lock_table(?TABLE),
+    [ok = mnesia:delete_object(?TABLE, R, write) ||
+        R <- mnesia:match_object(
+               ?TABLE, #bucket{source_number = {Name, '_'}, _ = '_'}, write)],
+    ok;
+
 delete(_Tx, _X, _Bs) -> ok.
 policy_changed(_Tx, _X1, _X2) -> ok.
 
