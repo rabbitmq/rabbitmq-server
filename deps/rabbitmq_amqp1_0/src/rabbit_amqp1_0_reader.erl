@@ -475,9 +475,7 @@ handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
 become(Mode, PackedState) ->
-    %% By invoking recvloop here we become 1.0. Note that we have not
-    %% cleared residual 0-9-1 stack frames, so if we drop off the end
-    %% of recvloop we become a 0-9-1 reader again!
+    %% By invoking recvloop here we become 1.0.
     recvloop(sys:debug_options([]),
              start_1_0_connection(Mode, unpack_from_0_9_1(PackedState))).
 
