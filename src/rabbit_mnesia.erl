@@ -142,7 +142,7 @@ init_from_config({TryNodes, NodeType} = Config) ->
                     %% first such node then we should start unclustered,
                     %% otherwise we should wait for someone else to establish
                     %% the cluster and try again.
-                    [First | _] = TryNodes,
+                    [First | _] = lists:usort(TryNodes),
                     case node() of
                         First ->
                             error_logger:info_msg(
