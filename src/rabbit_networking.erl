@@ -117,8 +117,6 @@
 %%----------------------------------------------------------------------------
 
 boot() ->
-    %% This exists to disambiguate 0-x connections from 1.0 ones
-    %% (since they are both children of the same supervisor).
     ets:new(?CONNECTION_TABLE, [public, named_table]),
     ok = start(),
     ok = boot_tcp(),
@@ -301,8 +299,7 @@ connections() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
-connections_local() ->
-    [P || {P} <- ets:tab2list(?CONNECTION_TABLE)].
+connections_local() -> [P || {P} <- ets:tab2list(?CONNECTION_TABLE)].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
