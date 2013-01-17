@@ -58,11 +58,7 @@ start_link({rabbit_amqp1_0_framing, Sock, Channel, FrameMax, ReaderPid,
                      [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
                        adapter_info(Sock), Collector}]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_session_process]}),
-    %% Not bothering with the framing channel just yet
-    {ok, SupPid, ChannelPid};
-
-start_link(Args091) ->
-    rabbit_channel_sup:start_link(Args091).
+    {ok, SupPid, ChannelPid}.
 
 %%----------------------------------------------------------------------------
 
