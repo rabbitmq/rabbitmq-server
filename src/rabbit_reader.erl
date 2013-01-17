@@ -245,6 +245,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                                       handshake, 8)),
         log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
+        throw:{become, M, F, A} ->
+            apply(M, F, A);
         Ex -> log(case Ex of
                       connection_closed_abruptly -> warning;
                       _                          -> error
@@ -996,8 +998,8 @@ emit_stats(State) ->
 become_1_0(Mode, Version, State = #v1{sock = Sock}) ->
     case code:is_loaded(rabbit_amqp1_0_reader) of
         false -> refuse_connection(Sock, {bad_version, Version});
-        _     -> M = rabbit_amqp1_0_reader, %% fool xref
-                 M:become(Mode, pack_for_1_0(State))
+        _     -> throw({become, rabbit_amqp1_0_reader, become,
+                        [Mode, pack_for_1_0(State)]})
     end.
 
 pack_for_1_0(#v1{parent              = Parent,
