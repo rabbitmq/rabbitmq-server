@@ -108,35 +108,59 @@ init() ->
     ok.
 
 init_from_config() ->
-    {TryNodes, NodeType} =
-        case application:get_env(rabbit, cluster_nodes) of
-            {ok, Nodes} when is_list(Nodes) ->
-                Config = {Nodes -- [node()], case lists:member(node(), Nodes) of
-                                                 true  -> disc;
-                                                 false -> ram
-                                             end},
-                error_logger:warning_msg(
-                  "Converting legacy 'cluster_nodes' configuration~n    ~w~n"
-                  "to~n    ~w.~n~n"
-                  "Please update the configuration to the new format "
-                  "{Nodes, NodeType}, where Nodes contains the nodes that the "
-                  "node will try to cluster with, and NodeType is either "
-                  "'disc' or 'ram'~n", [Nodes, Config]),
-                Config;
-            {ok, Config} ->
-                Config
-        end,
+    init_from_config(
+      case application:get_env(rabbit, cluster_nodes) of
+          {ok, Nodes} when is_list(Nodes) ->
+              Config = {Nodes -- [node()], case lists:member(node(), Nodes) of
+                                               true  -> disc;
+                                               false -> ram
+                                           end},
+              error_logger:warning_msg(
+                "Converting legacy 'cluster_nodes' configuration~n    ~w~n"
+                "to~n    ~w.~n~n"
+                "Please update the configuration to the new format "
+                "{Nodes, NodeType}, where Nodes contains the nodes that the "
+                "node will try to cluster with, and NodeType is either "
+                "'disc' or 'ram'~n", [Nodes, Config]),
+              Config;
+          {ok, Config} ->
+              Config
+      end).
+
+init_from_config({TryNodes, NodeType} = Config) ->
     case find_good_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
-            rabbit_log:info("Node '~p' selected for clustering from "
+            error_logger:info_msg("Node '~p' selected for clustering from "
                             "configuration~n", [Node]),
-            {ok, {_, DiscNodes, _}} = discover_cluster(Node),
-            init_db_and_upgrade(DiscNodes, NodeType, true),
-            rabbit_node_monitor:notify_joined_cluster();
+            case discover_cluster(Node) of
+                {ok, {_, DiscNodes, _}} ->
+                    init_db_and_upgrade(DiscNodes, NodeType, true),
+                    rabbit_node_monitor:notify_joined_cluster();
+                {error, _} ->
+                    %% We came up simultaneously with some other virgin nodes
+                    %% which also wanted to cluster with us. If we are the
+                    %% first such node then we should start unclustered,
+                    %% otherwise we should wait for someone else to establish
+                    %% the cluster and try again.
+                    [First | _] = TryNodes,
+                    case node() of
+                        First ->
+                            error_logger:info_msg(
+                              "Started simultaneously with ~p; this node was "
+                              "first~n", [TryNodes]),
+                            init_db_and_upgrade([node()], disc, false);
+                        _ ->
+                            error_logger:info_msg(
+                              "Started simultaneously with ~p; this node was "
+                              "not first~n", [TryNodes]),
+                            timer:sleep(1000),
+                            init_from_config(Config)
+                    end
+            end;
         none ->
-            rabbit_log:warning("Could not find any suitable node amongst the "
-                               "ones provided in the configuration: ~p~n",
-                               [TryNodes]),
+            error_logger:info_msg(
+              "Could not find any alive node from configuration ~p - "
+              "assuming this is the first~n", [TryNodes]),
             init_db_and_upgrade([node()], disc, false)
     end.
 
@@ -611,6 +635,7 @@ discover_cluster(Node) ->
                               rabbit_mnesia, cluster_status_from_mnesia, []) of
                     {badrpc, _Reason}           -> OfflineError;
                     {error, mnesia_not_running} -> OfflineError;
+                    {error, tables_not_present} -> OfflineError;
                     {ok, Res}                   -> {ok, Res}
                 end
     end.
