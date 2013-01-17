@@ -853,21 +853,39 @@ _rabbitmqadmin()
 	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-@(H|-host))
+	-H)
 	    COMPREPLY=( $(compgen -A hostname ${cur}) )
             return 0
             ;;
-	-@(V|-vhost))
+	--host)
+	    COMPREPLY=( $(compgen -A hostname ${cur}) )
+            return 0
+            ;;
+	-V)
             opts="$(rabbitmqadmin -q -f bash list vhosts)"
 	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-@(u|-username))
+	--vhost)
+            opts="$(rabbitmqadmin -q -f bash list vhosts)"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            return 0
+            ;;
+	-u)
             opts="$(rabbitmqadmin -q -f bash list users)"
 	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-@(f|-format))
+	--username)
+            opts="$(rabbitmqadmin -q -f bash list users)"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            return 0
+            ;;
+	-f)
+	    COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
+            return 0
+            ;;
+	--format)
 	    COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
             return 0
             ;;
