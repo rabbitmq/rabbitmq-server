@@ -37,7 +37,7 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, conn_sup_pid, start_heartbeat_fun,
+             conn_sup_pid, channel_sup_sup_pid, start_heartbeat_fun,
              buf, buf_len, throttle}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
@@ -720,13 +720,7 @@ handle_input(Callback, Data, _State) ->
 %% are similar enough that clients will be happy with either.
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                  Protocol,
-                 State = #v1{sock = Sock, connection = Connection,
-                             conn_sup_pid = ConnSupPid}) ->
-    {ok, ChannelSupSupPid} =
-        supervisor2:start_child(
-          ConnSupPid,
-          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
+                 State = #v1{sock = Sock, connection = Connection}) ->
     Start = #'connection.start'{
       version_major = ProtocolMajor,
       version_minor = ProtocolMinor,
@@ -737,7 +731,6 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
     switch_callback(State#v1{connection = Connection#connection{
                                             timeout_sec = ?NORMAL_TIMEOUT,
                                             protocol = Protocol},
-                             channel_sup_sup_pid = ChannelSupSupPid,
                              connection_state = starting},
                     frame_header, 7).
 
@@ -823,17 +816,24 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            connection       = Connection = #connection{
                                                 user = User,
                                                 protocol = Protocol},
+                           conn_sup_pid     = ConnSupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    Throttle1 = Throttle#throttle{conserve_resources = Conserve},
+    {ok, ChannelSupSupPid} =
+        supervisor2:start_child(
+          ConnSupPid,
+          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
     State1 = control_throttle(
-               State#v1{connection_state   = running,
-                        connection         = NewConnection,
-                        throttle           = Throttle#throttle{
-                                               conserve_resources = Conserve}}),
+               State#v1{connection_state    = running,
+                        connection          = NewConnection,
+                        channel_sup_sup_pid = ChannelSupSupPid,
+                        throttle            = Throttle1}),
     rabbit_event:notify(connection_created,
                         [{type, network} |
                          infos(?CREATION_EVENT_KEYS, State1)]),
