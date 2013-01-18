@@ -74,12 +74,19 @@ fine_stats_aggregation_test() ->
                           {q2, x, 5}]),
     stats_ch_q  (ch1, 0, [{q1, 2},
                           {q2, 1}]),
+    fine_stats_aggregation_test0(true),
+    delete_q(q2, 0),
+    fine_stats_aggregation_test0(false),
+    delete_ch(ch1, 1),
+    delete_ch(ch2, 1),
+    ok.
+
+fine_stats_aggregation_test0(Q2Exists) ->
     R = range(0, 1, 1),
     Ch1 = get_ch(ch1, R),
     Ch2 = get_ch(ch2, R),
     X   = get_x(x, R),
     Q1  = get_q(q1, R),
-    Q2  = get_q(q2, R),
     V   = get_vhost(R),
     O   = get_overview(R),
     Assert = fun (m, Type, N, Obj) ->
@@ -89,14 +96,15 @@ fine_stats_aggregation_test() ->
                      Act = find_detailed_stats(Name, pget(expand(T2), Obj)),
                      assert_item(simple_details(Type, N), Act)
              end,
+    AssertNegative = fun ({T2, Name}, Obj) ->
+                             detailed_stats_absent(Name, pget(expand(T2), Obj))
+                     end,
     Assert(m, publish,     100, Ch1),
     Assert(m, publish,     10,  Ch2),
     Assert(m, publish_in,  110, X),
     Assert(m, publish_out, 165, X),
     Assert(m, publish,     150, Q1),
-    Assert(m, publish,     15,  Q2),
     Assert(m, deliver_get, 2,   Q1),
-    Assert(m, deliver_get, 1,   Q2),
     Assert(m, deliver_get, 3,   Ch1),
     Assert(m, publish,     110, V),
     Assert(m, deliver_get, 3,   V),
@@ -107,16 +115,20 @@ fine_stats_aggregation_test() ->
     Assert({in,  ch1}, publish, 100, X),
     Assert({in,  ch2}, publish, 10,  X),
     Assert({out, q1},  publish, 150, X),
-    Assert({out, q2},  publish, 15,  X),
     Assert({in,  x},   publish, 150, Q1),
-    Assert({in,  x},   publish, 15,  Q2),
     Assert({del, ch1}, deliver_get, 2, Q1),
-    Assert({del, ch1}, deliver_get, 1, Q2),
     Assert({del, q1},  deliver_get, 2, Ch1),
-    Assert({del, q2},  deliver_get, 1, Ch1),
-    %% TODO Delete something and make sure the correct things change
-    delete_ch(ch1, 1),
-    delete_ch(ch2, 1),
+    case Q2Exists of
+        true  -> Q2  = get_q(q2, R),
+                 Assert(m, publish,     15,  Q2),
+                 Assert(m, deliver_get, 1,   Q2),
+                 Assert({out, q2},  publish, 15,  X),
+                 Assert({in,  x},   publish, 15,  Q2),
+                 Assert({del, ch1}, deliver_get, 1, Q2),
+                 Assert({del, q2},  deliver_get, 1, Ch1);
+        false -> AssertNegative({out, q2}, X),
+                 AssertNegative({del, q2}, Ch1)
+    end,
     ok.
 
 %%----------------------------------------------------------------------------
@@ -216,9 +228,15 @@ atom_suffix(Atom, Suffix) ->
     list_to_atom(atom_to_list(Atom) ++ Suffix).
 
 find_detailed_stats(Name, List) ->
-    [S] = [Stats || [{stats, Stats}, {_, Details}] <- List,
-                    pget(name, Details) =:= a2b(Name)],
+    [S] = filter_detailed_stats(Name, List),
     S.
+
+detailed_stats_absent(Name, List) ->
+    [] = filter_detailed_stats(Name, List).
+
+filter_detailed_stats(Name, List) ->
+    [Stats || [{stats, Stats}, {_, Details}] <- List,
+              pget(name, Details) =:= a2b(Name)].
 
 expand(in)  -> incoming;
 expand(out) -> outgoing;
