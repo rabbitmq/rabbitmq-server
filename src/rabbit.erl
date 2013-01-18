@@ -740,8 +740,8 @@ log_banner() ->
              end,
     Banner = iolist_to_binary(
                rabbit_misc:format(
-                 "~s ~s~n~s~n~s~n~s~n",
-                 [Product, Version, ?PROTOCOL_VERSION, ?COPYRIGHT_MESSAGE,
+                 "~s ~s~n~s~n~s~n",
+                 [Product, Version, ?COPYRIGHT_MESSAGE,
                   ?INFORMATION_MESSAGE]) ++
                    [case S of
                         {"config file(s)" = K, []} ->
