@@ -132,30 +132,29 @@ init_from_config({TryNodes, NodeType} = Config) ->
         {ok, Node} ->
             error_logger:info_msg("Node '~p' selected for clustering from "
                             "configuration~n", [Node]),
+            [First | _] = lists:usort(TryNodes),
             case discover_cluster(Node) of
                 {ok, {_, DiscNodes, _}} ->
                     init_db_and_upgrade(DiscNodes, NodeType, true),
                     rabbit_node_monitor:notify_joined_cluster();
+                {error, _} when First == node() ->
+                    %% We came up simultaneously with some other
+                    %% virgin nodes which also wanted to cluster with
+                    %% us. Exactly one of these nodes needs to proceed
+                    %% with an unclustered startup. We pick the node
+                    %% that is alphabetically first.
+                    error_logger:info_msg(
+                      "Started simultaneously with ~p; this node was first~n",
+                      [TryNodes]),
+                    init_db_and_upgrade([node()], disc, false);
                 {error, _} ->
-                    %% We came up simultaneously with some other virgin nodes
-                    %% which also wanted to cluster with us. If we are the
-                    %% first such node then we should start unclustered,
-                    %% otherwise we should wait for someone else to establish
-                    %% the cluster and try again.
-                    [First | _] = lists:usort(TryNodes),
-                    case node() of
-                        First ->
-                            error_logger:info_msg(
-                              "Started simultaneously with ~p; this node was "
-                              "first~n", [TryNodes]),
-                            init_db_and_upgrade([node()], disc, false);
-                        _ ->
-                            error_logger:info_msg(
-                              "Started simultaneously with ~p; this node was "
-                              "not first~n", [TryNodes]),
-                            timer:sleep(1000),
-                            init_from_config(Config)
-                    end
+                    %% See above.
+                    error_logger:info_msg(
+                      "Started simultaneously with ~p; this node was not "
+                      "first. Waiting for another node to start.~n",
+                      [TryNodes]),
+                    timer:sleep(1000),
+                    init_from_config(Config)
             end;
         none ->
             error_logger:info_msg(
