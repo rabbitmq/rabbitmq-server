@@ -37,6 +37,12 @@
 -rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
 -rabbit_upgrade({topic_trie_node,       mnesia, []}).
 -rabbit_upgrade({runtime_parameters,    mnesia, []}).
+-rabbit_upgrade({exchange_scratches,    mnesia, [exchange_scratch]}).
+-rabbit_upgrade({policy,                mnesia,
+                 [exchange_scratches, ha_mirrors]}).
+-rabbit_upgrade({sync_slave_pids,       mnesia, [policy]}).
+-rabbit_upgrade({no_mirror_nodes,       mnesia, [sync_slave_pids]}).
+-rabbit_upgrade({gm_pids,               mnesia, [no_mirror_nodes]}).
 
 %% -------------------------------------------------------------------
 
@@ -58,6 +64,10 @@
 -spec(mirrored_supervisor/0   :: () -> 'ok').
 -spec(topic_trie_node/0       :: () -> 'ok').
 -spec(runtime_parameters/0    :: () -> 'ok').
+-spec(policy/0                :: () -> 'ok').
+-spec(sync_slave_pids/0       :: () -> 'ok').
+-spec(no_mirror_nodes/0       :: () -> 'ok').
+-spec(gm_pids/0               :: () -> 'ok').
 
 -endif.
 
@@ -193,15 +203,96 @@ runtime_parameters() ->
             {attributes, [key, value]},
             {disc_copies, [node()]}]).
 
+exchange_scratches() ->
+    ok = exchange_scratches(rabbit_exchange),
+    ok = exchange_scratches(rabbit_durable_exchange).
+
+exchange_scratches(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type = <<"x-federation">>, Dur, AutoDel, Int, Args,
+            Scratch}) ->
+              Scratches = orddict:store(federation, Scratch, orddict:new()),
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches};
+          %% We assert here that nothing else uses the scratch mechanism ATM
+          ({exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches]).
+
+policy() ->
+    ok = exchange_policy(rabbit_exchange),
+    ok = exchange_policy(rabbit_durable_exchange),
+    ok = queue_policy(rabbit_queue),
+    ok = queue_policy(rabbit_durable_queue).
+
+exchange_policy(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches,
+               undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches,
+       policy]).
+
+queue_policy(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Dur, AutoDel, Excl, Args, Pid, SPids, MNodes}) ->
+              {amqqueue, Name, Dur, AutoDel, Excl, Args, Pid, SPids, MNodes,
+               undefined}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid,
+       slave_pids, mirror_nodes, policy]).
+
+sync_slave_pids() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    AddSyncSlavesFun =
+        fun ({amqqueue, N, D, AD, Excl, Args, Pid, SPids, MNodes, Pol}) ->
+                {amqqueue, N, D, AD, Excl, Args, Pid, SPids, [], MNodes, Pol}
+        end,
+    [ok = transform(T, AddSyncSlavesFun,
+                    [name, durable, auto_delete, exclusive_owner, arguments,
+                     pid, slave_pids, sync_slave_pids, mirror_nodes, policy])
+     || T <- Tables],
+    ok.
+
+no_mirror_nodes() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    RemoveMirrorNodesFun =
+        fun ({amqqueue, N, D, AD, O, A, Pid, SPids, SSPids, _MNodes, Pol}) ->
+                {amqqueue, N, D, AD, O, A, Pid, SPids, SSPids, Pol}
+        end,
+    [ok = transform(T, RemoveMirrorNodesFun,
+                    [name, durable, auto_delete, exclusive_owner, arguments,
+                     pid, slave_pids, sync_slave_pids, policy])
+     || T <- Tables],
+    ok.
+
+gm_pids() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    AddGMPidsFun =
+        fun ({amqqueue, N, D, AD, O, A, Pid, SPids, SSPids, Pol}) ->
+                {amqqueue, N, D, AD, O, A, Pid, SPids, SSPids, Pol, []}
+        end,
+    [ok = transform(T, AddGMPidsFun,
+                    [name, durable, auto_delete, exclusive_owner, arguments,
+                     pid, slave_pids, sync_slave_pids, policy, gm_pids])
+     || T <- Tables],
+    ok.
+
+
+
 %%--------------------------------------------------------------------
 
 transform(TableName, Fun, FieldList) ->
-    rabbit_mnesia:wait_for_tables([TableName]),
+    rabbit_table:wait([TableName]),
     {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList),
     ok.
 
 transform(TableName, Fun, FieldList, NewRecordName) ->
-    rabbit_mnesia:wait_for_tables([TableName]),
+    rabbit_table:wait([TableName]),
     {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList,
                                           NewRecordName),
     ok.

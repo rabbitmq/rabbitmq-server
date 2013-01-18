@@ -86,8 +86,8 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
     set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
 )
 
-if "!RABBITMQ_PLUGINS_DIR!"=="" ( 
-    set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins 
+if "!RABBITMQ_PLUGINS_DIR!"=="" (
+    set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 )
 
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
@@ -96,7 +96,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
-        -sname rabbitmqprelaunch!RANDOM! ^
+        -sname rabbitmqprelaunch!RANDOM!!TIME:~9! ^
         -extra "!RABBITMQ_NODENAME!"
 
 if ERRORLEVEL 1 (

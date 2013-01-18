@@ -400,19 +400,19 @@ blank_state_dir(Dir) ->
                on_sync             = fun (_) -> ok end,
                unsynced_msg_ids    = gb_sets:new() }.
 
-clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
+clean_filename(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
 detect_clean_shutdown(Dir) ->
-    case rabbit_file:delete(clean_file_name(Dir)) of
+    case rabbit_file:delete(clean_filename(Dir)) of
         ok              -> true;
         {error, enoent} -> false
     end.
 
 read_shutdown_terms(Dir) ->
-    rabbit_file:read_term_file(clean_file_name(Dir)).
+    rabbit_file:read_term_file(clean_filename(Dir)).
 
 store_clean_shutdown(Terms, Dir) ->
-    CleanFileName = clean_file_name(Dir),
+    CleanFileName = clean_filename(Dir),
     ok = rabbit_file:ensure_dir(CleanFileName),
     rabbit_file:write_term_file(CleanFileName, Terms).
 
@@ -537,7 +537,7 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     State = blank_state(QueueName),
     ok = scan_segments(
            fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok) ->
-                   gatherer:in(Gatherer, {MsgId, 1});
+                   gatherer:sync_in(Gatherer, {MsgId, 1});
                (_SeqId, _MsgId, _MsgProps, _IsPersistent, _IsDelivered,
                 _IsAcked, Acc) ->
                    Acc

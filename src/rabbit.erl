@@ -20,7 +20,8 @@
 
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
-         is_running/1, environment/0, rotate_logs/1, force_event_refresh/0]).
+         is_running/1, environment/0, rotate_logs/1, force_event_refresh/0,
+         start_fhc/0]).
 
 -export([start/2, stop/1]).
 
@@ -35,7 +36,7 @@
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
-                                   check_empty_content_body_frame_size,
+                                   check_empty_frame_size,
                                    []}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
@@ -53,8 +54,7 @@
 
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
-                                   [file_handle_cache]}},
+                    {mfa,         {rabbit, start_fhc, []}},
                     {requires,    pre_boot},
                     {enables,     worker_pool}]}).
 
@@ -176,8 +176,14 @@
 
 -rabbit_boot_step({notify_cluster,
                    [{description, "notify cluster nodes"},
-                    {mfa,         {rabbit_node_monitor, notify_cluster, []}},
+                    {mfa,         {rabbit_node_monitor, notify_node_up, []}},
                     {requires,    networking}]}).
+
+-rabbit_boot_step({background_gc,
+                   [{description, "background garbage collection"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [background_gc]}},
+                    {enables,     networking}]}).
 
 %%---------------------------------------------------------------------------
 
@@ -304,7 +310,10 @@ start() ->
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
                      ok = ensure_working_log_handlers(),
-                     ok = app_utils:start_applications(app_startup_order()),
+                     rabbit_node_monitor:prepare_cluster_status_files(),
+                     rabbit_mnesia:check_cluster_consistency(),
+                     ok = app_utils:start_applications(
+                            app_startup_order(), fun handle_app_error/2),
                      ok = log_broker_started(rabbit_plugins:active())
              end).
 
@@ -313,28 +322,43 @@ boot() ->
                      ok = ensure_application_loaded(),
                      maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
+                     rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+                     %% It's important that the consistency check happens after
+                     %% the upgrade, since if we are a secondary node the
+                     %% primary node will have forgotten us
+                     rabbit_mnesia:check_cluster_consistency(),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
                      ok = app_utils:load_applications(ToBeLoaded),
                      StartupApps = app_utils:app_dependency_order(ToBeLoaded,
                                                                   false),
-                     ok = app_utils:start_applications(StartupApps),
+                     ok = app_utils:start_applications(
+                            StartupApps, fun handle_app_error/2),
                      ok = log_broker_started(Plugins)
              end).
+
+handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
+    throw({could_not_start, App, Reason});
+
+handle_app_error(App, Reason) ->
+    throw({could_not_start, App, Reason}).
 
 start_it(StartFun) ->
     try
         StartFun()
-    catch _:Reason ->
-            boot_error("Error description:~n~n~p~n~n", [Reason])
+    catch
+        throw:{could_not_start, _App, _Reason}=Err ->
+            boot_error(Err, not_available);
+         _:Reason ->
+            boot_error(Reason, erlang:get_stacktrace())
     after
         %% give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
-    rabbit_log:info("Stopping Rabbit~n"),
+    rabbit_log:info("Stopping RabbitMQ~n"),
     ok = app_utils:stop_applications(app_shutdown_order()).
 
 stop_and_halt() ->
@@ -354,7 +378,7 @@ status() ->
           {running_applications, application:which_applications(infinity)},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
-          {memory,               erlang:memory()}],
+          {memory,               rabbit_vm:memory()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -379,13 +403,11 @@ status() ->
 
 is_running() -> is_running(node()).
 
-is_running(Node) ->
-    rabbit_nodes:is_running(Node, rabbit).
+is_running(Node) -> rabbit_nodes:is_running(Node, rabbit).
 
 environment() ->
-    lists:keysort(
-      1, [P || P = {K, _} <- application:get_all_env(rabbit),
-               K =/= default_pass]).
+    lists:keysort(1, [P || P = {K, _} <- application:get_all_env(rabbit),
+                           K =/= default_pass]).
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
@@ -402,6 +424,9 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
+            {ok, Vsn} = application:get_key(rabbit, vsn),
+            error_logger:info_msg("Starting RabbitMQ ~s on Erlang ~s~n",
+                                  [Vsn, erlang:system_info(otp_release)]),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
             print_banner(),
@@ -413,12 +438,11 @@ start(normal, []) ->
     end.
 
 stop(_State) ->
-    ok = rabbit_mnesia:record_running_nodes(),
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
              true  -> rabbit_amqqueue:on_node_down(node());
-             false -> rabbit_mnesia:empty_ram_only_tables()
+             false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
 
@@ -444,7 +468,7 @@ run_boot_step({_StepName, Attributes}) ->
             [try
                  apply(M,F,A)
              catch
-                 _:Reason -> boot_step_error(Reason, erlang:get_stacktrace())
+                 _:Reason -> boot_error(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             ok
     end.
@@ -482,14 +506,17 @@ sort_boot_steps(UnsortedSteps) ->
                      {mfa, {M,F,A}}         <- Attributes,
                      not erlang:function_exported(M, F, length(A))] of
                 []               -> SortedSteps;
-                MissingFunctions -> boot_error(
+                MissingFunctions -> basic_boot_error(
+                                      {missing_functions, MissingFunctions},
                                       "Boot step functions not exported: ~p~n",
                                       [MissingFunctions])
             end;
         {error, {vertex, duplicate, StepName}} ->
-            boot_error("Duplicate boot step name: ~w~n", [StepName]);
+            basic_boot_error({duplicate_boot_step, StepName},
+                             "Duplicate boot step name: ~w~n", [StepName]);
         {error, {edge, Reason, From, To}} ->
-            boot_error(
+            basic_boot_error(
+              {invalid_boot_step_dependency, From, To},
               "Could not add boot step dependency of ~w on ~w:~n~s",
               [To, From,
                case Reason of
@@ -503,30 +530,38 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
-boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+    AllNodes = rabbit_mnesia:cluster_nodes(all),
     {Err, Nodes} =
-        case rabbit_mnesia:read_previously_running_nodes() of
+        case AllNodes -- [node()] of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
                    " shut down forcefully~nit cannot determine which nodes"
-                   " are timing out. Details on all nodes will~nfollow.~n",
-                   rabbit_mnesia:all_clustered_nodes() -- [node()]};
+                   " are timing out.~n", []};
             Ns -> {rabbit_misc:format(
                      "Timeout contacting cluster nodes: ~p.~n", [Ns]),
                    Ns}
         end,
-    boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
+    basic_boot_error(Term,
+                     Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
+boot_error(Reason, Stacktrace) ->
+    Fmt = "Error description:~n   ~p~n~n" ++
+        "Log files (may contain more information):~n   ~s~n   ~s~n~n",
+    Args = [Reason, log_location(kernel), log_location(sasl)],
+    boot_error(Reason, Fmt, Args, Stacktrace).
 
-boot_step_error(Reason, Stacktrace) ->
-    boot_error("Error description:~n   ~p~n~n"
-               "Log files (may contain more information):~n   ~s~n   ~s~n~n"
-               "Stack trace:~n   ~p~n~n",
-               [Reason, log_location(kernel), log_location(sasl), Stacktrace]).
+boot_error(Reason, Fmt, Args, Stacktrace) ->
+    case Stacktrace of
+        not_available -> basic_boot_error(Reason, Fmt, Args);
+        _             -> basic_boot_error(Reason, Fmt ++
+                                              "Stack trace:~n   ~p~n~n",
+                                          Args ++ [Stacktrace])
+    end.
 
-boot_error(Format, Args) ->
+basic_boot_error(Reason, Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
-    error_logger:error_msg(Format, Args),
+    rabbit_misc:local_info_msg(Format, Args),
     timer:sleep(1000),
-    exit({?MODULE, failure_during_boot}).
+    exit({?MODULE, failure_during_boot, Reason}).
 
 %%---------------------------------------------------------------------------
 %% boot step functions
@@ -536,10 +571,13 @@ boot_delegate() ->
     rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
 recover() ->
-    rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
+    Qs = rabbit_amqqueue:recover(),
+    ok = rabbit_binding:recover(rabbit_exchange:recover(),
+                                [QName || #amqqueue{name = QName} <- Qs]),
+    rabbit_amqqueue:start(Qs).
 
 maybe_insert_default_data() ->
-    case rabbit_mnesia:is_db_empty() of
+    case rabbit_table:is_empty() of
         true -> insert_default_data();
         false -> ok
     end.
@@ -718,3 +756,10 @@ config_files() ->
                            [File] <- Files];
         error       -> []
     end.
+
+%% We don't want this in fhc since it references rabbit stuff. And we can't put
+%% this in the bootstep directly.
+start_fhc() ->
+    rabbit_sup:start_restartable_child(
+      file_handle_cache,
+      [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]).

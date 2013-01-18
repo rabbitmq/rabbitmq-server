@@ -943,15 +943,12 @@ next_state(State = #msstate { cref_to_msg_ids = CTM }) ->
         _ -> {State, 0}
     end.
 
-start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync),
-    State #msstate { sync_timer_ref = TRef }.
+start_sync_timer(State) ->
+    rabbit_misc:ensure_timer(State, #msstate.sync_timer_ref,
+                             ?SYNC_INTERVAL, sync).
 
-stop_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    State;
-stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
-    erlang:cancel_timer(TRef),
-    State #msstate { sync_timer_ref = undefined }.
+stop_sync_timer(State) ->
+    rabbit_misc:stop_timer(State, #msstate.sync_timer_ref).
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,
                                  cref_to_msg_ids     = CTM }) ->
@@ -1394,7 +1391,7 @@ filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 
 filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 
-list_sorted_file_names(Dir, Ext) ->
+list_sorted_filenames(Dir, Ext) ->
     lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
                filelib:wildcard("*" ++ Ext, Dir)).
 
@@ -1531,8 +1528,8 @@ count_msg_refs(Gen, Seed, State) ->
     end.
 
 recover_crashed_compactions(Dir) ->
-    FileNames =    list_sorted_file_names(Dir, ?FILE_EXTENSION),
-    TmpFileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP),
+    FileNames =    list_sorted_filenames(Dir, ?FILE_EXTENSION),
+    TmpFileNames = list_sorted_filenames(Dir, ?FILE_EXTENSION_TMP),
     lists:foreach(
       fun (TmpFileName) ->
               NonTmpRelatedFileName =
@@ -1609,7 +1606,7 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     {ok, Pid} = gatherer:start_link(),
     case [filename_to_num(FileName) ||
-             FileName <- list_sorted_file_names(Dir, ?FILE_EXTENSION)] of
+             FileName <- list_sorted_filenames(Dir, ?FILE_EXTENSION)] of
         []     -> build_index(Pid, undefined, [State #msstate.current_file],
                               State);
         Files  -> {Offset, State1} = build_index(Pid, undefined, Files, State),
@@ -2023,7 +2020,7 @@ transform_dir(BaseDir, Store, TransformFun) ->
     CopyFile = fun (Src, Dst) -> {ok, _Bytes} = file:copy(Src, Dst), ok end,
     case filelib:is_dir(TmpDir) of
         true  -> throw({error, transform_failed_previously});
-        false -> FileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+        false -> FileList = list_sorted_filenames(Dir, ?FILE_EXTENSION),
                  foreach_file(Dir, TmpDir, TransformFile,     FileList),
                  foreach_file(Dir,         fun file:delete/1, FileList),
                  foreach_file(TmpDir, Dir, CopyFile,          FileList),

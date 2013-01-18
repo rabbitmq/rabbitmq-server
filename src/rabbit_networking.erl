@@ -21,7 +21,7 @@
          node_listeners/1, connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
-         close_connection/2, force_connection_event_refresh/0]).
+         close_connection/2, force_connection_event_refresh/0, tcp_host/1]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/6,
@@ -160,7 +160,19 @@ ssl_transform_fun(SslOpts) ->
             case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
                 {ok, SslSock} ->
                     {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
+                {error, timeout} ->
+                    {error, {ssl_upgrade_error, timeout}};
                 {error, Reason} ->
+                    %% We have no idea what state the ssl_connection
+                    %% process is in - it could still be happily
+                    %% going, it might be stuck, or it could be just
+                    %% about to fail. There is little that our caller
+                    %% can do but close the TCP socket, but this could
+                    %% cause ssl alerts to get dropped (which is bad
+                    %% form, according to the TLS spec). So we give
+                    %% the ssl_connection a little bit of time to send
+                    %% such alerts.
+                    timer:sleep(?SSL_TIMEOUT * 1000),
                     {error, {ssl_upgrade_error, Reason}};
                 {'EXIT', Reason} ->
                     {error, {ssl_upgrade_failure, Reason}}
@@ -283,7 +295,7 @@ start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
 connections() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
 connections_local() ->

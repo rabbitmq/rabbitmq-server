@@ -288,91 +288,67 @@
       <title>Cluster management</title>
 
       <variablelist>
-        <varlistentry id="cluster">
-          <term><cmdsynopsis><command>cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+        <varlistentry id="join_cluster">
+          <term><cmdsynopsis><command>join_cluster</command> <arg choice="req"><replaceable>clusternode</replaceable></arg><arg choice="opt"><replaceable>--ram</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
                 <term>clusternode</term>
-                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
+                <listitem><para>Node to cluster with.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term><cmdsynopsis><arg choice="opt">--ram</arg></cmdsynopsis></term>
+                <listitem>
+                  <para>
+                    If provided, the node will join the cluster as a RAM node.
+                  </para>
+                </listitem>
               </varlistentry>
             </variablelist>
             <para>
-              Instruct the node to become member of a cluster with the
-              specified nodes.  To cluster with currently offline nodes,
-              use <link linkend="force_cluster"><command>force_cluster</command></link>.
+              Instruct the node to become a member of the cluster that the
+              specified node is in. Before clustering, the node is reset, so be
+              careful when using this command. For this command to succeed the
+              RabbitMQ application must have been stopped, e.g. with <link
+              linkend="stop_app"><command>stop_app</command></link>.
             </para>
             <para>
-              Cluster nodes can be of two types: disk or ram. Disk nodes
-              replicate data in ram and on disk, thus providing
-              redundancy in the event of node failure and recovery from
-              global events such as power failure across all nodes. Ram
-              nodes replicate data in ram only and are mainly used for
-              scalability. A cluster must always have at least one disk node.
+              Cluster nodes can be of two types: disc or RAM. Disc nodes
+              replicate data in RAM and on disc, thus providing redundancy in
+              the event of node failure and recovery from global events such
+              as power failure across all nodes. RAM nodes replicate data in
+              RAM only (with the exception of queue contents, which can reside
+              on disc if the queue is persistent or too big to fit in memory)
+              and are mainly used for scalability. RAM nodes are more
+              performant only when managing resources (e.g. adding/removing
+              queues, exchanges, or bindings). A cluster must always have at
+              least one disc node, and usually should have more than one.
             </para>
             <para>
-              If the current node is to become a disk node it needs to
-              appear in the cluster node list. Otherwise it becomes a
-              ram node. If the node list is empty or only contains the
-              current node then the node becomes a standalone,
-              i.e. non-clustered, (disk) node.
+              The node will be a disc node by default. If you wish to
+              create a RAM node, provide the <command>--ram</command> flag.
             </para>
             <para>
               After executing the <command>cluster</command> command, whenever
-              the RabbitMQ application is started on the current node it
-              will attempt to connect to the specified nodes, thus
-              becoming an active node in the cluster comprising those
-              nodes (and possibly others).
+              the RabbitMQ application is started on the current node it will
+              attempt to connect to the nodes that were in the cluster when the
+              node went down.
             </para>
             <para>
-              The list of nodes does not have to contain all the
-              cluster's nodes; a subset is sufficient. Also, clustering
-              generally succeeds as long as at least one of the
-              specified nodes is active. Hence adjustments to the list
-              are only necessary if the cluster configuration is to be
-              altered radically.
+              To leave a cluster, <command>reset</command> the node. You can
+              also remove nodes remotely with the
+              <command>forget_cluster_node</command> command.
             </para>
             <para>
-              For this command to succeed the RabbitMQ application must
-              have been stopped, e.g. with <link linkend="stop_app"><command>stop_app</command></link>. Furthermore,
-              turning a standalone node into a clustered node requires
-              the node be <link linkend="reset"><command>reset</command></link> first,
-              in order to avoid accidental destruction of data with the
-              <command>cluster</command> command.
-            </para>
-            <para>
-              For more details see the <ulink url="http://www.rabbitmq.com/clustering.html">clustering guide</ulink>.
+              For more details see the <ulink
+              url="http://www.rabbitmq.com/clustering.html">clustering
+              guide</ulink>.
             </para>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl cluster rabbit@tanto hare@elena</screen>
+            <screen role="example">rabbitmqctl join_cluster hare@elena --ram</screen>
             <para role="example">
-              This command instructs the RabbitMQ node to join the
-              cluster with nodes <command>rabbit@tanto</command> and
-              <command>hare@elena</command>. If the node is one of these then
-              it becomes a disk node, otherwise a ram node.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry id="force_cluster">
-          <term><cmdsynopsis><command>force_cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>clusternode</term>
-                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para>
-              Instruct the node to become member of a cluster with the
-              specified nodes.  This will succeed even if the specified nodes
-              are offline.  For a more detailed description, see
-              <link linkend="cluster"><command>cluster</command>.</link>
-            </para>
-            <para>
-              Note that this variant of the cluster command just
-              ignores the current status of the specified nodes.
-              Clustering may still fail for a variety of other
-              reasons.
+              This command instructs the RabbitMQ node to join the cluster that
+              <command>hare@elena</command> is part of, as a ram node.
             </para>
           </listitem>
         </varlistentry>
@@ -387,6 +363,136 @@
             <screen role="example">rabbitmqctl cluster_status</screen>
             <para role="example">
               This command displays the nodes in the cluster.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>change_cluster_node_type</command> <arg choice="req">disc | ram</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <para>
+              Changes the type of the cluster node. The node must be stopped for
+              this operation to succeed, and when turning a node into a RAM node
+              the node must not be the only disc node in the cluster.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl change_cluster_node_type disc</screen>
+            <para role="example">
+              This command will turn a RAM node into a disc node.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>forget_cluster_node</command> <arg choice="opt">--offline</arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term><cmdsynopsis><arg choice="opt">--offline</arg></cmdsynopsis></term>
+                <listitem>
+                  <para>
+                    Enables node removal from an offline node. This is only
+                    useful in the situation where all the nodes are offline and
+                    the last node to go down cannot be brought online, thus
+                    preventing the whole cluster from starting. It should not be
+                    used in any other circumstances since it can lead to
+                    inconsistencies.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Removes a cluster node remotely. The node that is being removed
+              must be offline, while the node we are removing from must be
+              online, except when using the <command>--offline</command> flag.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl -n hare@mcnulty forget_cluster_node rabbit@stringer</screen>
+            <para role="example">
+              This command will remove the node
+              <command>rabbit@stringer</command> from the node
+              <command>hare@mcnulty</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>update_cluster_nodes</command> <arg choice="req">clusternode</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>clusternode</term>
+                <listitem>
+                  <para>
+                    The node to consult for up to date information.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instructs an already clustered node to contact
+              <command>clusternode</command> to cluster when waking up. This is
+              different from <command>join_cluster</command> since it does not
+              join any cluster - it checks that the node is already in a cluster
+              with <command>clusternode</command>.
+            </para>
+            <para>
+              The need for this command is motivated by the fact that clusters
+              can change while a node is offline. Consider the situation in
+              which node A and B are clustered. A goes down, C clusters with B,
+              and then B leaves the cluster. When A wakes up, it'll try to
+              contact B, but this will fail since B is not in the cluster
+              anymore. <command>update_cluster_nodes -n A C</command> will solve
+              this situation.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>sync_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>queue</term>
+                <listitem>
+                  <para>
+                    The name of the queue to synchronise.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instructs a mirrored queue with unsynchronised slaves to
+              synchronise itself. The queue will block while
+              synchronisation takes place (all publishers to and
+              consumers from the queue will block). The queue must be
+              mirrored, and must not have any pending unacknowledged
+              messages for this command to succeed.
+            </para>
+            <para>
+              Note that unsynchronised queues from which messages are
+              being drained will become synchronised eventually. This
+              command is primarily useful for queues which are not
+              being drained.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>cancel_sync_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>queue</term>
+                <listitem>
+                  <para>
+                    The name of the queue to cancel synchronisation for.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instructs a synchronising mirrored queue to stop
+              synchronising itself.
             </para>
           </listitem>
         </varlistentry>
@@ -581,7 +687,7 @@
             </para>
             <para>
               Deleting a virtual host deletes all its exchanges,
-              queues, user mappings and associated permissions.
+              queues, bindings, user permissions, parameters and policies.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl delete_vhost test</screen>
@@ -750,15 +856,16 @@
         Certain features of RabbitMQ (such as the federation plugin)
         are controlled by dynamic,
         cluster-wide <emphasis>parameters</emphasis>. Each parameter
-        consists of a component name, a key and a value. The
-        component name and key are strings, and the value is an
-        Erlang term. Parameters can be set, cleared and listed. In
-        general you should refer to the documentation for the feature
-        in question to see how to set parameters.
+        consists of a component name, a name and a value, and is
+        associated with a virtual host. The component name and name are
+        strings, and the value is an Erlang term. Parameters can be
+        set, cleared and listed. In general you should refer to the
+        documentation for the feature in question to see how to set
+        parameters.
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_parameter</command> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_parameter</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Sets a parameter.
@@ -772,29 +879,29 @@
                 </para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>key</term>
+                <term>name</term>
                 <listitem><para>
-                    The key for which the parameter is being set.
+                    The name of the parameter being set.
                 </para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>value</term>
                 <listitem><para>
-                    The value for the parameter, as an
-                    Erlang term. In most shells you are very likely to
+                    The value for the parameter, as a
+                    JSON term. In most shells you are very likely to
                     need to quote this.
                 </para></listitem>
               </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl set_parameter federation local_username '&lt;&lt;"guest">>'</screen>
+            <screen role="example">rabbitmqctl set_parameter federation local_username '"guest"'</screen>
             <para role="example">
-              This command sets the parameter <command>local_username</command> for the <command>federation</command> component to the Erlang term <command>&lt;&lt;"guest">></command>.
+              This command sets the parameter <command>local_username</command> for the <command>federation</command> component in the default virtual host to the JSON term <command>"guest"</command>.
             </para>
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>clear_parameter</command> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>clear_parameter</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Clears a parameter.
@@ -808,29 +915,116 @@
                 </para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>key</term>
+                <term>name</term>
                 <listitem><para>
-                    The key for which the parameter is being cleared.
+                    The name of the parameter being cleared.
                 </para></listitem>
               </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl clear_parameter federation local_username</screen>
             <para role="example">
-              This command clears the parameter <command>local_username</command> for the <command>federation</command> component.
+              This command clears the parameter <command>local_username</command> for the <command>federation</command> component in the default virtual host.
             </para>
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>list_parameters</command></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_parameters</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
-              Lists all parameters.
+              Lists all parameters for a virtual host.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_parameters</screen>
             <para role="example">
-              This command lists all parameters.
+              This command lists all parameters in the default virtual host.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Policy Management</title>
+      <para>
+        Policies are used to control and modify the behaviour of queues
+        and exchanges on a cluster-wide basis. Policies apply within a
+        given vhost, and consist of a name, pattern, definition and an
+        optional priority. Policies can be set, cleared and listed.
+      </para>
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg> <arg choice="opt"><replaceable>priority</replaceable></arg> </cmdsynopsis></term>
+          <listitem>
+            <para>
+              Sets a policy.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>
+                    The name of the policy.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>pattern</term>
+                <listitem><para>
+                    The regular expression, which when matches on a given resources causes the policy to apply.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>definition</term>
+                <listitem><para>
+                    The definition of the policy, as a
+                    JSON term. In most shells you are very likely to
+                    need to quote this.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>priority</term>
+                <listitem><para>
+                    The priority of the policy as an integer, defaulting to 0. Higher numbers indicate greater precedence.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_policy federate-me "^amq." '{"federation-upstream-set":"all"}'</screen>
+            <para role="example">
+              This command sets the policy <command>federate-me</command> in the default virtual host so that built-in exchanges are federated.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Clears a policy.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>
+                    The name of the policy being cleared.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_policy federate-me</screen>
+            <para role="example">
+              This command clears the <command>federate-me</command> policy in the default virtual host.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>list_policies</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Lists all policies for a virtual host.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_policies</screen>
+            <para role="example">
+              This command lists all policies in the default virtual host.
             </para>
           </listitem>
         </varlistentry>
@@ -887,6 +1081,10 @@
                 <listitem><para>Queue arguments.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>policy</term>
+                <listitem><para>Policy name applying to the queue.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>pid</term>
                 <listitem><para>Id of the Erlang process associated with the queue.</para></listitem>
               </varlistentry>
@@ -925,6 +1123,27 @@
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>active_consumers</term>
+                <listitem>
+                  <para>
+                    Number of active consumers. An active consumer is
+                    one which could immediately receive any messages
+                    sent to the queue - i.e. it is not limited by its
+                    prefetch count, TCP congestion, flow control, or
+                    because it has issued channel.flow. At least one
+                    of messages_ready and active_consumers must always
+                    be zero.
+                  </para>
+                  <para>
+                    Note that this value is an instantaneous snapshot
+                    - when consumers are restricted by their prefetch
+                    count they may only appear to be active for small
+                    fractions of a second until more messages are sent
+                    out.
+                  </para>
+                </listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>memory</term>
                 <listitem><para>Bytes of memory consumed by the Erlang process associated with the
                   queue, including stack, heap and internal structures.</para></listitem>
@@ -939,6 +1158,12 @@
                 the current slaves which are synchronised with the master -
                 i.e. those which could take over from the master without
                 message loss.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>status</term>
+                <listitem><para>The status of the queue. Normally
+                'running', but may be "{syncing, MsgCount}" if the queue is
+                synchronising.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
@@ -998,6 +1223,10 @@
               <varlistentry>
                 <term>arguments</term>
                 <listitem><para>Exchange arguments.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>policy</term>
+                <listitem><para>Policy name for applying to the exchange.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
@@ -1109,20 +1338,24 @@
                 <listitem><para>Readable name for the connection.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>address</term>
-                <listitem><para>Server IP address.</para></listitem>
-              </varlistentry>
-              <varlistentry>
                 <term>port</term>
                 <listitem><para>Server port.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>peer_address</term>
-                <listitem><para>Peer address.</para></listitem>
+                <term>host</term>
+                <listitem><para>Server hostname obtained via reverse
+                DNS, or its IP address if reverse DNS failed or was
+                not enabled.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>peer_port</term>
                 <listitem><para>Peer port.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_host</term>
+                <listitem><para>Peer hostname obtained via reverse
+                DNS, or its IP address if reverse DNS failed or was
+                not enabled.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>ssl</term>
@@ -1207,7 +1440,7 @@
               </varlistentry>
               <varlistentry>
                 <term>timeout</term>
-                <listitem><para>Connection timeout.</para></listitem>
+                <listitem><para>Connection timeout / negotiated heartbeat interval, in seconds.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>frame_max</term>
@@ -1241,7 +1474,7 @@
             </variablelist>
             <para>
               If no <command>connectioninfoitem</command>s are
-              specified then user, peer address, peer port, time since
+              specified then user, peer host, peer port, time since
               flow control and memory block state are displayed.
             </para>
 

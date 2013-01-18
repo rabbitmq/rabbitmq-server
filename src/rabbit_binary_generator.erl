@@ -18,20 +18,11 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
-%% EMPTY_CONTENT_BODY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
-%%  - 1 byte of frame type
-%%  - 2 bytes of channel number
-%%  - 4 bytes of frame payload length
-%%  - 1 byte of payload trailer FRAME_END byte
-%% See definition of check_empty_content_body_frame_size/0,
-%% an assertion called at startup.
--define(EMPTY_CONTENT_BODY_FRAME_SIZE, 8).
-
 -export([build_simple_method_frame/3,
          build_simple_content_frames/4,
          build_heartbeat_frame/0]).
--export([generate_table/1, encode_properties/2]).
--export([check_empty_content_body_frame_size/0]).
+-export([generate_table/1]).
+-export([check_empty_frame_size/0]).
 -export([ensure_content_encoded/2, clear_encoded_content/1]).
 -export([map_exception/3]).
 
@@ -51,9 +42,7 @@
         -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
 -spec(generate_table/1 :: (rabbit_framing:amqp_table()) -> binary()).
--spec(encode_properties/2 ::
-        ([rabbit_framing:amqp_property_type()], [any()]) -> binary()).
--spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
+-spec(check_empty_frame_size/0 :: () -> 'ok').
 -spec(ensure_content_encoded/2 ::
         (rabbit_types:content(), rabbit_types:protocol()) ->
                                        rabbit_types:encoded_content()).
@@ -88,10 +77,8 @@ build_simple_content_frames(ChannelInt, Content, FrameMax, Protocol) ->
     [HeaderFrame | ContentFrames].
 
 build_content_frames(FragsRev, FrameMax, ChannelInt) ->
-    BodyPayloadMax = if FrameMax == 0 ->
-                             iolist_size(FragsRev);
-                        true ->
-                             FrameMax - ?EMPTY_CONTENT_BODY_FRAME_SIZE
+    BodyPayloadMax = if FrameMax == 0 -> iolist_size(FragsRev);
+                        true          -> FrameMax - ?EMPTY_FRAME_SIZE
                      end,
     build_content_frames(0, [], BodyPayloadMax, [],
                          lists:reverse(FragsRev), BodyPayloadMax, ChannelInt).
@@ -129,51 +116,24 @@ create_frame(TypeInt, ChannelInt, Payload) ->
 %% table_field_to_binary supports the AMQP 0-8/0-9 standard types, S,
 %% I, D, T and F, as well as the QPid extensions b, d, f, l, s, t, x,
 %% and V.
+table_field_to_binary({FName, T, V}) ->
+    [short_string_to_binary(FName) | field_value_to_binary(T, V)].
 
-table_field_to_binary({FName, Type, Value}) ->
-    [short_string_to_binary(FName) | field_value_to_binary(Type, Value)].
-
-field_value_to_binary(longstr, Value) ->
-    ["S", long_string_to_binary(Value)];
-
-field_value_to_binary(signedint, Value) ->
-    ["I", <<Value:32/signed>>];
-
-field_value_to_binary(decimal, {Before, After}) ->
-    ["D", Before, <<After:32>>];
-
-field_value_to_binary(timestamp, Value) ->
-    ["T", <<Value:64>>];
-
-field_value_to_binary(table, Value) ->
-    ["F", table_to_binary(Value)];
-
-field_value_to_binary(array, Value) ->
-    ["A", array_to_binary(Value)];
-
-field_value_to_binary(byte, Value) ->
-    ["b", <<Value:8/unsigned>>];
-
-field_value_to_binary(double, Value) ->
-    ["d", <<Value:64/float>>];
-
-field_value_to_binary(float, Value) ->
-    ["f", <<Value:32/float>>];
-
-field_value_to_binary(long, Value) ->
-    ["l", <<Value:64/signed>>];
-
-field_value_to_binary(short, Value) ->
-    ["s", <<Value:16/signed>>];
-
-field_value_to_binary(bool, Value) ->
-    ["t", if Value -> 1; true -> 0 end];
-
-field_value_to_binary(binary, Value) ->
-    ["x", long_string_to_binary(Value)];
-
-field_value_to_binary(void, _Value) ->
-    ["V"].
+field_value_to_binary(longstr,   V) -> ["S", long_string_to_binary(V)];
+field_value_to_binary(signedint, V) -> ["I", <<V:32/signed>>];
+field_value_to_binary(decimal,   V) -> {Before, After} = V,
+                                       ["D", Before, <<After:32>>];
+field_value_to_binary(timestamp, V) -> ["T", <<V:64>>];
+field_value_to_binary(table,     V) -> ["F", table_to_binary(V)];
+field_value_to_binary(array,     V) -> ["A", array_to_binary(V)];
+field_value_to_binary(byte,      V) -> ["b", <<V:8/unsigned>>];
+field_value_to_binary(double,    V) -> ["d", <<V:64/float>>];
+field_value_to_binary(float,     V) -> ["f", <<V:32/float>>];
+field_value_to_binary(long,      V) -> ["l", <<V:64/signed>>];
+field_value_to_binary(short,     V) -> ["s", <<V:16/signed>>];
+field_value_to_binary(bool,      V) -> ["t", if V -> 1; true -> 0 end];
+field_value_to_binary(binary,    V) -> ["x", long_string_to_binary(V)];
+field_value_to_binary(void,     _V) -> ["V"].
 
 table_to_binary(Table) when is_list(Table) ->
     BinTable = generate_table(Table),
@@ -187,9 +147,8 @@ generate_table(Table) when is_list(Table) ->
     list_to_binary(lists:map(fun table_field_to_binary/1, Table)).
 
 generate_array(Array) when is_list(Array) ->
-    list_to_binary(lists:map(
-                     fun ({Type, Value}) -> field_value_to_binary(Type, Value) end,
-                     Array)).
+    list_to_binary(lists:map(fun ({T, V}) -> field_value_to_binary(T, V) end,
+                             Array)).
 
 short_string_to_binary(String) when is_binary(String) ->
     Len = size(String),
@@ -207,65 +166,12 @@ long_string_to_binary(String) when is_binary(String) ->
 long_string_to_binary(String) ->
     [<<(length(String)):32>>, String].
 
-encode_properties([], []) ->
-    <<0, 0>>;
-encode_properties(TypeList, ValueList) ->
-    encode_properties(0, TypeList, ValueList, 0, [], []).
-
-encode_properties(_Bit, [], [], FirstShortAcc, FlagsAcc, PropsAcc) ->
-    list_to_binary([lists:reverse(FlagsAcc), <<FirstShortAcc:16>>, lists:reverse(PropsAcc)]);
-encode_properties(_Bit, [], _ValueList, _FirstShortAcc, _FlagsAcc, _PropsAcc) ->
-    exit(content_properties_values_overflow);
-encode_properties(15, TypeList, ValueList, FirstShortAcc, FlagsAcc, PropsAcc) ->
-    NewFlagsShort = FirstShortAcc bor 1, % set the continuation low bit
-    encode_properties(0, TypeList, ValueList, 0, [<<NewFlagsShort:16>> | FlagsAcc], PropsAcc);
-encode_properties(Bit, [bit | TypeList], [Value | ValueList], FirstShortAcc, FlagsAcc, PropsAcc) ->
-    case Value of
-        true -> encode_properties(Bit + 1, TypeList, ValueList,
-                                  FirstShortAcc bor (1 bsl (15 - Bit)), FlagsAcc, PropsAcc);
-        false -> encode_properties(Bit + 1, TypeList, ValueList,
-                                   FirstShortAcc, FlagsAcc, PropsAcc);
-        Other -> exit({content_properties_illegal_bit_value, Other})
-    end;
-encode_properties(Bit, [T | TypeList], [Value | ValueList], FirstShortAcc, FlagsAcc, PropsAcc) ->
-    case Value of
-        undefined -> encode_properties(Bit + 1, TypeList, ValueList,
-                                       FirstShortAcc, FlagsAcc, PropsAcc);
-        _ -> encode_properties(Bit + 1, TypeList, ValueList,
-                               FirstShortAcc bor (1 bsl (15 - Bit)),
-                               FlagsAcc,
-                               [encode_property(T, Value) | PropsAcc])
-    end.
-
-encode_property(shortstr, String) ->
-    Len = size(String),
-    if Len < 256 -> <<Len:8, String:Len/binary>>;
-       true      -> exit(content_properties_shortstr_overflow)
-    end;
-encode_property(longstr, String) ->
-    Len = size(String), <<Len:32, String:Len/binary>>;
-encode_property(octet, Int) ->
-    <<Int:8/unsigned>>;
-encode_property(shortint, Int) ->
-    <<Int:16/unsigned>>;
-encode_property(longint, Int) ->
-    <<Int:32/unsigned>>;
-encode_property(longlongint, Int) ->
-    <<Int:64/unsigned>>;
-encode_property(timestamp, Int) ->
-    <<Int:64/unsigned>>;
-encode_property(table, Table) ->
-    table_to_binary(Table).
-
-check_empty_content_body_frame_size() ->
-    %% Intended to ensure that EMPTY_CONTENT_BODY_FRAME_SIZE is
-    %% defined correctly.
-    ComputedSize = iolist_size(create_frame(?FRAME_BODY, 0, <<>>)),
-    if ComputedSize == ?EMPTY_CONTENT_BODY_FRAME_SIZE ->
-            ok;
-       true ->
-            exit({incorrect_empty_content_body_frame_size,
-                  ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
+check_empty_frame_size() ->
+    %% Intended to ensure that EMPTY_FRAME_SIZE is defined correctly.
+    case iolist_size(create_frame(?FRAME_BODY, 0, <<>>)) of
+        ?EMPTY_FRAME_SIZE -> ok;
+        ComputedSize      -> exit({incorrect_empty_frame_size,
+                                   ComputedSize, ?EMPTY_FRAME_SIZE})
     end.
 
 ensure_content_encoded(Content = #content{properties_bin = PropBin,
