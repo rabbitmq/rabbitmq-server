@@ -131,7 +131,7 @@ init_from_config({TryNodes, NodeType} = Config) ->
     case find_good_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
             error_logger:info_msg("Node '~p' selected for clustering from "
-                            "configuration~n", [Node]),
+                                  "configuration~n", [Node]),
             [First | _] = lists:usort(TryNodes),
             case discover_cluster(Node) of
                 {ok, {_, DiscNodes, _}} ->
