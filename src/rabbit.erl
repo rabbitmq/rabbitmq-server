@@ -691,12 +691,6 @@ force_event_refresh() ->
 %%---------------------------------------------------------------------------
 %% misc
 
-log_broker_started([]) ->
-    rabbit_misc:with_local_io(
-      fun() ->
-              error_logger:info_msg("Server startup complete~n", []),
-              io:format("~nBroker running~n")
-      end);
 log_broker_started(Plugins) ->
     rabbit_misc:with_local_io(
       fun() ->
