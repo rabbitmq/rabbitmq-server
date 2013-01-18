@@ -23,7 +23,7 @@
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/4, mainloop/2]).
+-export([init/4, mainloop/2, recvloop/2]).
 
 -export([conserve_resources/3, server_properties/1]).
 
@@ -37,7 +37,8 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len, throttle}).
+             conn_sup_pid, channel_sup_sup_pid, start_heartbeat_fun,
+             buf, buf_len, throttle}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
                      protocol, user, timeout_sec, frame_max, vhost,
@@ -109,12 +110,12 @@ start_link(ChannelSupSupPid, Collector, StartHeartbeatFun) ->
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
-init(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun) ->
+init(Parent, ConnSupPid, Collector, StartHeartbeatFun) ->
     Deb = sys:debug_options([]),
     receive
         {go, Sock, SockTransform} ->
             start_connection(
-              Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb, Sock,
+              Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb, Sock,
               SockTransform)
     end.
 
@@ -203,7 +204,7 @@ name(Sock) ->
 socket_ends(Sock) ->
     socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end).
 
-start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
+start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
     Name = name(Sock),
@@ -234,7 +235,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 connection_state    = pre_init,
                 queue_collector     = Collector,
                 heartbeater         = none,
-                channel_sup_sup_pid = ChannelSupSupPid,
+                conn_sup_pid        = ConnSupPid,
+                channel_sup_sup_pid = none,
                 start_heartbeat_fun = StartHeartbeatFun,
                 buf                 = [],
                 buf_len             = 0,
@@ -244,9 +246,10 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                   last_blocked_at    = never}},
     try
         ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
-        recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
-                                       State, #v1.stats_timer),
-                                      handshake, 8)),
+        run({?MODULE, recvloop,
+             [Deb, switch_callback(rabbit_event:init_stats_timer(
+                                     State, #v1.stats_timer),
+                                   handshake, 8)]}),
         log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
         Ex -> log(case Ex of
@@ -263,9 +266,15 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
         %% accounting as accurate as possible we ought to close the
         %% socket w/o delay before termination.
         rabbit_net:fast_close(ClientSock),
+        rabbit_networking:unregister_connection(self()),
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
+
+run({M, F, A}) ->
+    try apply(M, F, A)
+    catch {become, MFA} -> run(MFA)
+    end.
 
 recvloop(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
@@ -689,8 +698,17 @@ handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
 handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
+%% ... and finally, the 1.0 spec is crystal clear!  Note that the
+%% TLS uses a different protocol number, and would go here.
+handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
+    become_1_0(amqp, {0, 1, 0, 0}, State);
+
+%% 3 stands for "SASL"
+handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
+    become_1_0(sasl, {3, 1, 0, 0}, State);
+
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_version, A, B, C, D});
+    refuse_connection(Sock, {bad_version, {A, B, C, D}});
 
 handle_input(handshake, Other, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_header, Other});
@@ -704,6 +722,7 @@ handle_input(Callback, Data, _State) ->
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                  Protocol,
                  State = #v1{sock = Sock, connection = Connection}) ->
+    rabbit_networking:register_connection(self()),
     Start = #'connection.start'{
       version_major = ProtocolMajor,
       version_minor = ProtocolMinor,
@@ -799,17 +818,24 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            connection       = Connection = #connection{
                                                 user = User,
                                                 protocol = Protocol},
+                           conn_sup_pid     = ConnSupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    Throttle1 = Throttle#throttle{conserve_resources = Conserve},
+    {ok, ChannelSupSupPid} =
+        supervisor2:start_child(
+          ConnSupPid,
+          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
     State1 = control_throttle(
-               State#v1{connection_state   = running,
-                        connection         = NewConnection,
-                        throttle           = Throttle#throttle{
-                                               conserve_resources = Conserve}}),
+               State#v1{connection_state    = running,
+                        connection          = NewConnection,
+                        channel_sup_sup_pid = ChannelSupSupPid,
+                        throttle            = Throttle1}),
     rabbit_event:notify(connection_created,
                         [{type, network} |
                          infos(?CREATION_EVENT_KEYS, State1)]),
@@ -979,3 +1005,24 @@ cert_info(F, #v1{sock = Sock}) ->
 emit_stats(State) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),
     rabbit_event:reset_stats_timer(State, #v1.stats_timer).
+
+%% 1.0 stub
+
+become_1_0(Mode, Version, State = #v1{sock = Sock}) ->
+    case code:is_loaded(rabbit_amqp1_0_reader) of
+        false -> refuse_connection(Sock, {bad_version, Version});
+        _     -> throw({become, {rabbit_amqp1_0_reader, become,
+                                 [Mode, pack_for_1_0(State)]}})
+    end.
+
+pack_for_1_0(#v1{parent              = Parent,
+                 sock                = Sock,
+                 recv_len            = RecvLen,
+                 pending_recv        = PendingRecv,
+                 queue_collector     = QueueCollector,
+                 conn_sup_pid        = ConnSupPid,
+                 start_heartbeat_fun = SHF,
+                 buf                 = Buf,
+                 buf_len             = BufLen}) ->
+    {Parent, Sock, RecvLen, PendingRecv, QueueCollector, ConnSupPid, SHF,
+     Buf, BufLen}.
