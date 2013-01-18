@@ -1123,7 +1123,8 @@ test_server_status() ->
         [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
               N =:= node()],
 
-    {ok, _C} = gen_tcp:connect(H, P, []),
+    {ok, C} = gen_tcp:connect(H, P, []),
+    gen_tcp:send(C, <<"AMQP", 0, 0, 9, 1>>),
     timer:sleep(100),
     ok = info_action(list_connections,
                      rabbit_networking:connection_info_keys(), false),
