@@ -66,14 +66,16 @@ URIS = {
 
 DECLARABLE = {
     'exchange':   {'mandatory': ['name', 'type'],
+                   'json':      ['arguments'],
                    'optional':  {'auto_delete': 'false', 'durable': 'true',
-                                 'internal': 'false'}},
+                                 'internal': 'false', 'arguments': {}}},
     'queue':      {'mandatory': ['name'],
+                   'json':      ['arguments'],
                    'optional':  {'auto_delete': 'false', 'durable': 'true',
-                                 'node': None}},
-    'binding':    {'mandatory': ['source', 'destination_type', 'destination',
-                                 'routing_key'],
-                   'optional':  {}},
+                                 'arguments': {}, 'node': None}},
+    'binding':    {'mandatory': ['source', 'destination_type', 'destination'],
+                   'json':      ['arguments'],
+                   'optional':  {'routing_key': "", 'arguments': {}}},
     'vhost':      {'mandatory': ['name'],
                    'optional':  {}},
     'user':       {'mandatory': ['name', 'password', 'tags'],
@@ -585,7 +587,6 @@ class Management:
         for m in mandatory:
             assert_usage(m in upload.keys(),
                          'mandatory argument "{0}" required'.format(m))
-        upload['arguments'] = {}
         if 'vhost' not in mandatory:
             upload['vhost'] = self.options.vhost or self.options.declare_vhost
         uri_args = {}
