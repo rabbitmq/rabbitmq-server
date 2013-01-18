@@ -695,7 +695,7 @@ log_broker_started(Plugins) ->
     rabbit_misc:with_local_io(
       fun() ->
               error_logger:info_msg(
-                "Server startup complete; plugins are:~n~n~p~n", [Plugins]),
+                "Server startup complete; plugins are: ~p~n", [Plugins]),
               io:format("~nBroker running with ~p plugins.~n",
                         [length(Plugins)])
       end).
@@ -745,7 +745,7 @@ log_banner() ->
                         {K, V} ->
                             Format(K, V)
                     end || S <- Settings]),
-    error_logger:info_msg("~s~n", [Banner]).
+    error_logger:info_msg("~s", [Banner]).
 
 home_dir() ->
     case init:get_argument(home) of
