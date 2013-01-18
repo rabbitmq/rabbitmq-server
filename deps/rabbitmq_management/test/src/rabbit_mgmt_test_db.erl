@@ -15,351 +15,255 @@
 %%
 
 -module(rabbit_mgmt_test_db).
--export([test/0]).
 
 -include("rabbit_mgmt.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
--compile([export_all]).
+-import(rabbit_misc, [pget/2]).
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2]).
 
--define(TESTS, [test_queues, test_connections, test_channels, test_overview,
-                %%test_channel_rates,
-                test_rate_zeroing,
-                test_channel_aggregation, test_exchange_aggregation,
-                test_queue_aggregation]).
+-define(debugVal2(E),
+	((fun (__V) ->
+		  ?debugFmt(<<"~s = ~p">>, [(??E), __V]),
+		  __V
+	  end)(E))).
 
--define(X, <<"">>).
+%%----------------------------------------------------------------------------
+%% Tests
+%%----------------------------------------------------------------------------
 
-test() ->
-    io:format("~n*** Statistics DB tests ***~n", []),
-    ContinuationLists = [setup(Test) || Test <- ?TESTS],
-    apply_continuations(1, ContinuationLists),
-    [teardown(Conn, Chan) || {_, _, Conn, Chan} <- ContinuationLists],
-    io:format("All tests passed.~n", []).
+queue_coarse_test() ->
+    create_q(test, 0),
+    create_q(test2, 0),
+    stats_q(test, 0, 10),
+    stats_q(test2, 0, 1),
+    Exp = fun(N) -> simple_details(messages, N) end,
+    assert_item(Exp(10), get_q(test, range(0, 1, 1))),
+    assert_item(Exp(11), get_vhost(range(0, 1, 1))),
+    assert_item(Exp(11), get_overview_q(range(0, 1, 1))),
+    delete_q(test, 1),
+    assert_item(Exp(1), get_vhost(range(0, 1, 1))),
+    assert_item(Exp(1), get_overview_q(range(0, 1, 1))),
+    delete_q(test2, 1),
+    assert_item(Exp(0), get_vhost(range(0, 1, 1))),
+    assert_item(Exp(0), get_overview_q(range(0, 1, 1))),
+    ok.
 
-setup(Test) ->
-    io:format("Set up ~p... ", [Test]),
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
-    Continuations = apply(rabbit_mgmt_test_db, Test, [Conn, Chan]),
-    io:format("done.~n", []),
-    {Test, Continuations, Conn, Chan}.
+connection_coarse_test() ->
+    create_conn(test, 0),
+    create_conn(test2, 0),
+    stats_conn(test, 0, 10),
+    stats_conn(test2, 0, 1),
+    Exp = fun(N) -> simple_details(recv_oct, N) end,
+    assert_item(Exp(10), get_conn(test, range(0, 1, 1))),
+    assert_item(Exp(1), get_conn(test2, range(0, 1, 1))),
+    delete_conn(test, 1),
+    delete_conn(test2, 1),
+    assert_list([], rabbit_mgmt_db:get_all_connections(range(0, 1, 1))),
+    ok.
 
-teardown(Conn, Chan) ->
-    amqp_channel:close(Chan),
-    amqp_connection:close(Conn).
+fine_stats_aggregation_test() ->
+    create_ch(ch1, 0),
+    create_ch(ch2, 0),
+    stats_ch_x  (ch1, 0, [{x, 100}]),
+    stats_ch_x  (ch2, 0, [{x, 10}]),
+    stats_ch_q_x(ch1, 0, [{q1, x, 100},
+                          {q2, x, 10}]),
+    stats_ch_q_x(ch2, 0, [{q1, x, 50},
+                          {q2, x, 5}]),
+    stats_ch_q  (ch1, 0, [{q1, 2},
+                          {q2, 1}]),
+    fine_stats_aggregation_test0(true),
+    delete_q(q2, 0),
+    fine_stats_aggregation_test0(false),
+    delete_ch(ch1, 1),
+    delete_ch(ch2, 1),
+    ok.
 
-apply_continuations(_, []) ->
-    ok;
+fine_stats_aggregation_test0(Q2Exists) ->
+    R = range(0, 1, 1),
+    Ch1 = get_ch(ch1, R),
+    Ch2 = get_ch(ch2, R),
+    X   = get_x(x, R),
+    Q1  = get_q(q1, R),
+    V   = get_vhost(R),
+    O   = get_overview(R),
+    Assert = fun (m, Type, N, Obj) ->
+                     Act = pget(message_stats, Obj),
+                     assert_item(simple_details(Type, N), Act);
+                 ({T2, Name}, Type, N, Obj) ->
+                     Act = find_detailed_stats(Name, pget(expand(T2), Obj)),
+                     assert_item(simple_details(Type, N), Act)
+             end,
+    AssertNegative = fun ({T2, Name}, Obj) ->
+                             detailed_stats_absent(Name, pget(expand(T2), Obj))
+                     end,
+    Assert(m, publish,     100, Ch1),
+    Assert(m, publish,     10,  Ch2),
+    Assert(m, publish_in,  110, X),
+    Assert(m, publish_out, 165, X),
+    Assert(m, publish,     150, Q1),
+    Assert(m, deliver_get, 2,   Q1),
+    Assert(m, deliver_get, 3,   Ch1),
+    Assert(m, publish,     110, V),
+    Assert(m, deliver_get, 3,   V),
+    Assert(m, publish,     110, O),
+    Assert(m, deliver_get, 3,   O),
+    Assert({pub, x},   publish, 100, Ch1),
+    Assert({pub, x},   publish, 10,  Ch2),
+    Assert({in,  ch1}, publish, 100, X),
+    Assert({in,  ch2}, publish, 10,  X),
+    Assert({out, q1},  publish, 150, X),
+    Assert({in,  x},   publish, 150, Q1),
+    Assert({del, ch1}, deliver_get, 2, Q1),
+    Assert({del, q1},  deliver_get, 2, Ch1),
+    case Q2Exists of
+        true  -> Q2  = get_q(q2, R),
+                 Assert(m, publish,     15,  Q2),
+                 Assert(m, deliver_get, 1,   Q2),
+                 Assert({out, q2},  publish, 15,  X),
+                 Assert({in,  x},   publish, 15,  Q2),
+                 Assert({del, ch1}, deliver_get, 1, Q2),
+                 Assert({del, q2},  deliver_get, 1, Ch1);
+        false -> AssertNegative({out, q2}, X),
+                 AssertNegative({del, q2}, Ch1)
+    end,
+    ok.
 
-apply_continuations(Count, Lists) ->
-    io:format("~nRound ~p, ~p tests remain...~n", [Count, length(Lists)]),
-    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    timer:sleep(Interval + 10),
-    NewLists = [New ||
-                   List <- Lists,
-                   New = {_, Rest, _, _} <- [apply_continuation(List)],
-                   Rest =/= []],
-    apply_continuations(Count + 1, NewLists).
+%%----------------------------------------------------------------------------
+%% Events in
+%%----------------------------------------------------------------------------
 
-apply_continuation({Test, [Continuation|Rest], Conn, Chan}) ->
-    io:format("Run ~p... ", [Test]),
-    Continuation(),
-    io:format("passed.~n", []),
-    {Test, Rest, Conn, Chan}.
+create_q(Name, Timestamp) ->
+    %% Technically we do not need this, the DB ignores it, but let's
+    %% be symmetrical...
+    event(queue_created, [{name, q(Name)}], Timestamp).
 
-%%---------------------------------------------------------------------------
+create_conn(Name, Timestamp) ->
+    event(connection_created, [{pid,  pid(Name)},
+                               {name, a2b(Name)}], Timestamp).
 
-test_queues(_Conn, Chan) ->
-    Q1 = declare_queue(Chan),
-    Q2 = declare_queue(Chan),
-    publish(Chan, ?X, Q1, 4),
-    basic_get(Chan, Q1, true, false),
-    basic_get(Chan, Q1, false, false),
+create_ch(Name, Timestamp) ->
+    event(channel_created, [{pid,  pid(Name)},
+                            {name, a2b(Name)}], Timestamp).
 
-    [fun() ->
-             Qs = rabbit_mgmt_db:augment_queues(
-                    [rabbit_mgmt_format:queue(Q) ||
-                        Q <- rabbit_amqqueue:list(<<"/">>)], range(), basic),
-             Q1Info = find_by_name(Q1, Qs),
-             Q2Info = find_by_name(Q2, Qs),
+stats_q(Name, Timestamp, Msgs) ->
+    event(queue_stats, [{name,     q(Name)},
+                        {messages, Msgs}], Timestamp).
 
-             3 = pget(messages, Q1Info),
-             2 = pget(messages_ready, Q1Info),
-             1 = pget(messages_unacknowledged, Q1Info),
+stats_conn(Name, Timestamp, Oct) ->
+    event(connection_stats, [{pid ,     pid(Name)},
+                             {recv_oct, Oct}], Timestamp).
 
-             0 = pget(messages, Q2Info),
-             0 = pget(messages_ready, Q2Info),
-             0 = pget(messages_unacknowledged, Q2Info)
-     end].
+stats_ch_x(Name, Timestamp, Stats) ->
+    stats_ch(Name, Timestamp, channel_exchange_stats,
+             [{x(XName), [{publish, N}]} || {XName, N} <- Stats]).
 
-test_connections(Conn, Chan) ->
-    Q = declare_queue(Chan),
-    publish(Chan, ?X, Q, 10),
+stats_ch_q(Name, Timestamp, Stats) ->
+    stats_ch(Name, Timestamp, channel_queue_stats,
+             [{q(QName), [{deliver_no_ack, N}]} || {QName, N} <- Stats]).
 
-    [fun() ->
-             Port = local_port(Conn),
-             Conns = rabbit_mgmt_db:get_all_connections(range()),
-             ConnInfo = find_conn_by_local_port(Port, Conns),
-             %% There's little we can actually test - just retrieve and check
-             %% equality.
-             Name = pget(name, ConnInfo),
-             ConnInfo2 = rabbit_mgmt_db:get_connection(Name, range()),
-             [assert_equal(Item, ConnInfo, ConnInfo2) ||
-                 Item <- rabbit_reader:info_keys()]
-     end].
+stats_ch_q_x(Name, Timestamp, Stats) ->
+    stats_ch(
+      Name, Timestamp, channel_queue_exchange_stats,
+      [{{q(QName), x(XName)}, [{publish, N}]} || {QName, XName, N} <- Stats]).
 
-test_overview(_Conn, Chan) ->
-    Q = declare_queue(Chan),
-    publish(Chan, ?X, Q, 10),
+stats_ch(Name, Timestamp, Type, Stats) ->
+    event(channel_stats, [{pid,  pid(Name)},
+                          {Type, Stats}], Timestamp).
 
-    [fun() ->
-             %% Very noddy, but at least we test we can get it
-             Overview = rabbit_mgmt_db:get_overview(range()),
-             Queues = pget(queue_totals, Overview),
-             assert_positive(pget(messages_unacknowledged, Queues)),
-             assert_positive(pget(messages_ready, Queues)),
-             assert_positive(pget(messages, Queues)),
-             Stats = pget(message_stats, Overview),
-             assert_positive(pget(publish, Stats)),
-             assert_positive(pget(deliver, Stats)),
-             assert_positive(pget(ack, Stats))
-     end].
+delete_q(Name, Timestamp) ->
+    event(queue_deleted, [{name, q(Name)}], Timestamp).
 
-test_channels(Conn, Chan) ->
-    Q = declare_queue(Chan),
-    publish(Chan, ?X, Q, 10),
-    basic_get(Chan, Q, true, false),
-    basic_get(Chan, Q, false, true),
-    consume(Chan, Q, 1, true, false),
-    consume(Chan, Q, 1, false, true),
+delete_conn(Name, Timestamp) ->
+    event(connection_closed, [{pid, pid_del(Name)}], Timestamp).
 
-    [fun() ->
-             Stats = pget(message_stats, get_channel(Conn, 1)),
-             1 = pget(get, Stats),
-             1 = pget(get_no_ack, Stats),
-             2 = pget(ack, Stats),
-             1 = pget(deliver, Stats),
-             7 = pget(deliver_no_ack, Stats), % Since 2nd consume ate
-                                              % everything
-             10 = pget(publish, Stats)
-     end].
+delete_ch(Name, Timestamp) ->
+    event(channel_closed, [{pid, pid_del(Name)}], Timestamp).
 
-test_channel_rates(Conn, Chan) ->
-    Q = declare_queue(Chan),
-    X2 = <<"channel-rates-exch">>,
-    declare_exchange(Chan, X2),
-    bind_queue(Chan, X2, Q),
-    publish(Chan, ?X, Q, 5),
+event(Type, Stats, Timestamp) ->
+    gen_server:cast({global, rabbit_mgmt_db},
+                    {event, #event{type      = Type,
+                                   props     = Stats,
+                                   timestamp = sec_to_triple(Timestamp)}}).
 
-    [fun() ->
-             publish(Chan, ?X, Q, 5),
-             publish(Chan, X2, Q, 5)
-     end,
-     fun() ->
-             publish(Chan, ?X, Q, 5),
-             publish(Chan, X2, Q, 5),
-             assert_ch_rate(Conn, 1, [{publish_details, 1}])
-     end,
-     fun() ->
-             publish(Chan, X2, Q, 5),
-             assert_ch_rate(Conn, 1, [{publish_details, 2}])
-     end,
-     fun() ->
-             assert_ch_rate(Conn, 1, [{publish_details, 1}]),
-             Stats = pget(message_stats, get_channel(Conn, 1)),
-             30 = pget(publish, Stats)
-     end].
+sec_to_triple(Sec) -> {Sec div 1000000, Sec rem 1000000, 0}.
 
-test_rate_zeroing(Conn, Chan) ->
-    Q = declare_queue(Chan),
-    publish(Chan, ?X, Q, 5),
+%%----------------------------------------------------------------------------
+%% Events out
+%%----------------------------------------------------------------------------
 
-    [fun() ->
-             publish(Chan, ?X, Q, 5)
-     end,
-     fun() ->
-             assert_ch_rate(Conn, 1, [{publish_details, 1}])
-     end,
-     fun() ->
-             assert_ch_rate(Conn, 1, [{publish_details, 0}])
-     end].
+range(F, L, I) -> #range{first = F * 1000, last = L * 1000, incr = I * 1000}.
 
-assert_ch_rate(Conn, ChNum, Rates) ->
-    Ch = get_channel(Conn, ChNum),
-    Stats = pget(message_stats, Ch),
-    [assert_rate(Exp, pget(Type, Stats)) || {Type, Exp} <- Rates].
+get_x(Name, Range) ->
+    [X] = rabbit_mgmt_db:augment_exchanges([x2(Name)], Range, full),
+    X.
 
-test_channel_aggregation(Conn, Chan) ->
-    X1 = <<"channel-aggregation-exch1">>,
-    X2 = <<"channel-aggregation-exch2">>,
-    declare_exchange(Chan, X1),
-    declare_exchange(Chan, X2),
-    Q = declare_queue(Chan),
-    bind_queue(Chan, X1, Q),
-    bind_queue(Chan, X2, Q),
-    publish(Chan, X1, <<"">>, 10),
-    publish(Chan, X2, <<"">>, 100),
-
-    [fun() ->
-             Ch = get_channel(Conn, 1),
-             110 = pget(publish, pget(message_stats, Ch)),
-             assert_aggregated(exchange, [{name,X1}, {vhost,<<"/">>}],
-                               [{publish, 10}], pget(publishes, Ch)),
-             assert_aggregated(exchange, [{name,X2}, {vhost,<<"/">>}],
-                               [{publish, 100}], pget(publishes, Ch))
-     end].
-
-test_exchange_aggregation(_Conn, Chan) ->
-    X1 = <<"exchange-aggregation">>,
-    declare_exchange(Chan, X1),
-    Q1 = declare_queue(Chan),
-    Q2 = declare_queue(Chan),
-    bind_queue(Chan, X1, Q1),
-    bind_queue(Chan, X1, Q2),
-    publish(Chan, X1, Q1, 10),
-    publish(Chan, X1, Q2, 100),
-
-    [fun() ->
-             X = get_exchange(X1),
-             110 = pget(publish_in, pget(message_stats, X)),
-             110 = pget(publish_out, pget(message_stats, X)),
-             assert_aggregated(queue, [{name,Q1}, {vhost,<<"/">>}],
-                               [{publish, 10}], pget(outgoing, X)),
-             assert_aggregated(queue, [{name,Q2}, {vhost,<<"/">>}],
-                               [{publish, 100}], pget(outgoing, X))
-     end].
-
-test_queue_aggregation(_Conn, Chan) ->
-    X1 = <<"queue-aggregation-1">>,
-    X2 = <<"queue-aggregation-2">>,
-    declare_exchange(Chan, X1),
-    declare_exchange(Chan, X2),
-    Q1 = declare_queue(Chan),
-    bind_queue(Chan, X1, Q1),
-    bind_queue(Chan, X2, Q1),
-    publish(Chan, X1, Q1, 10),
-    publish(Chan, X2, Q1, 100),
-
-    [fun() ->
-             Q = get_queue(Q1),
-             110 = pget(publish, pget(message_stats, Q)),
-             assert_aggregated(exchange, [{name,X1}, {vhost,<<"/">>}],
-                               [{publish, 10}], pget(incoming, Q)),
-             assert_aggregated(exchange, [{name,X2}, {vhost,<<"/">>}],
-                               [{publish, 100}], pget(incoming, Q))
-     end].
-
-assert_aggregated(Key, Val, Exp, List) ->
-    [Act] = [pget(stats, I) || I <- List, pget(Key, I) == Val],
-    [case pget(Type, Exp) of
-         undefined -> ok;
-         ExpVal    -> ExpVal = ActVal
-     end || {Type, ActVal} <- Act].
-
-%%---------------------------------------------------------------------------
-
-find_by_name(Name, Items) ->
-    [Thing] = lists:filter(fun(Item) -> pget(name, Item) == Name end, Items),
-    Thing.
-
-find_conn_by_local_port(Port, Items) ->
-    [Conn] = lists:filter(
-               fun(Conn) ->
-                       pget(peer_port, Conn) == Port andalso
-                           pget(peer_host, Conn) == <<"127.0.0.1">>
-               end, Items),
-    Conn.
-
-get_channel(C, Number) ->
-    Port = local_port(C),
-    rabbit_mgmt_db:get_channel(
-      rabbit_mgmt_format:print(
-        "127.0.0.1:~w -> 127.0.0.1:5672 (~w)", [Port, Number]),
-      range(), full).
-
-get_exchange(XName) ->
-    X = rabbit_mgmt_wm_exchange:exchange(<<"/">>, XName),
-    hd(rabbit_mgmt_db:augment_exchanges([X], range(), full)).
-
-get_queue(QName) ->
-    Q = rabbit_mgmt_wm_queue:queue(<<"/">>, QName),
-    hd(rabbit_mgmt_db:augment_queues([Q], range(), full)).
-
-declare_queue(Chan) ->
-    #'queue.declare_ok'{ queue = Q } =
-        amqp_channel:call(Chan, #'queue.declare'{ exclusive = true }),
+get_q(Name, Range) ->
+    [Q] = rabbit_mgmt_db:augment_queues([q2(Name)], Range, full),
     Q.
 
-declare_exchange(Chan, X) ->
-    amqp_channel:call(Chan, #'exchange.declare'{ exchange = X,
-                                                 type = <<"direct">>,
-                                                 auto_delete = true}).
-bind_queue(Chan, X, Q) ->
-    amqp_channel:call(Chan, #'queue.bind'{ queue = Q,
-                                           exchange = X,
-                                           routing_key = Q}).
+get_vhost(Range) ->
+    [VHost] = rabbit_mgmt_db:augment_vhosts([[{name, <<"/">>}]], Range),
+    VHost.
 
-publish(Chan, X, Q) ->
-    amqp_channel:call(Chan, #'basic.publish' { exchange    = X,
-                                               routing_key = Q },
-                      #amqp_msg { payload = <<"">> }).
+get_conn(Name, Range) -> rabbit_mgmt_db:get_connection(a2b(Name), Range).
+get_ch(Name, Range) -> rabbit_mgmt_db:get_channel(a2b(Name), Range, full).
 
-publish(Chan, X, Q, Count) ->
-    [publish(Chan, X, Q) || _ <- lists:seq(1, Count)].
+get_overview(Range) -> rabbit_mgmt_db:get_overview(Range).
+get_overview_q(Range) -> pget(queue_totals, get_overview(Range)).
 
-basic_get(Chan, Q, ExplicitAck, AutoAck) ->
-    {#'basic.get_ok'{delivery_tag = Tag}, _} =
-        amqp_channel:call(Chan, #'basic.get' { queue = Q,
-                                               no_ack = AutoAck }),
-    case ExplicitAck of
-        true  -> amqp_channel:call(Chan, #'basic.ack' { delivery_tag = Tag });
-        false -> ok
+details(R, AR, L) ->
+    [{rate,     R},
+     {interval, 5000},
+     {samples,  [[{sample, S}, {timestamp, T * 1000}] || {T, S} <- L]},
+     {avg_rate, AR}].
+
+simple_details(Thing, N) ->
+    [{Thing, N},
+     {atom_suffix(Thing, "_details"), details(0, 0.0, [{1, N}, {0, N}])}].
+
+atom_suffix(Atom, Suffix) ->
+    list_to_atom(atom_to_list(Atom) ++ Suffix).
+
+find_detailed_stats(Name, List) ->
+    [S] = filter_detailed_stats(Name, List),
+    S.
+
+detailed_stats_absent(Name, List) ->
+    [] = filter_detailed_stats(Name, List).
+
+filter_detailed_stats(Name, List) ->
+    [Stats || [{stats, Stats}, {_, Details}] <- List,
+              pget(name, Details) =:= a2b(Name)].
+
+expand(in)  -> incoming;
+expand(out) -> outgoing;
+expand(del) -> deliveries;
+expand(pub) -> publishes.
+
+%%----------------------------------------------------------------------------
+%% Util
+%%----------------------------------------------------------------------------
+
+x(Name) -> rabbit_misc:r(<<"/">>, exchange, a2b(Name)).
+x2(Name) -> q2(Name).
+q(Name) -> rabbit_misc:r(<<"/">>, queue, a2b(Name)).
+q2(Name) -> [{name,  a2b(Name)},
+             {vhost, <<"/">>}].
+
+pid(Name) ->
+    case get({pid, Name}) of
+        undefined -> P = spawn(fun() -> ok end),
+                     put({pid, Name}, P),
+                     P;
+        Pid       -> Pid
     end.
 
-%% NB: Using AutoAck will actually consume everything.
-consume(Chan, Q, Count, ExplicitAck, AutoAck) ->
-    amqp_channel:call(Chan, #'basic.qos' { prefetch_count = Count }),
-    amqp_channel:subscribe(Chan, #'basic.consume' { queue = Q,
-                                                    no_ack = AutoAck },
-                           self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = CTag} -> ok
-    end,
-    [receive {#'basic.deliver'{}, _} -> ok end || _ <- lists:seq(1, Count)],
-    amqp_channel:call(Chan, #'basic.cancel' { consumer_tag = CTag }),
-    receive
-        #'basic.cancel_ok'{consumer_tag = CTag} -> ok
-    end,
-    case ExplicitAck of
-        true  -> amqp_channel:call(Chan, #'basic.ack' { multiple = true });
-        false -> ok
-    end.
+pid_del(Name) ->
+    Pid = pid(Name),
+    erase({pid, Name}),
+    Pid.
 
-pget(K, L) ->
-     proplists:get_value(K, L).
-
-local_port(Conn) ->
-    [{sock, Sock}] = amqp_connection:info(Conn, [sock]),
-    {ok, Port} = inet:port(Sock),
-    Port.
-
-assert_equal(Item, PList1, PList2) ->
-    Expected = pget(Item, PList1),
-    Expected = pget(Item, PList2).
-
-assert_rate(Exp, Stats) ->
-    Interval = pget(interval, Stats),
-    Rate = pget(rate, Stats),
-    CorrectedRate = Interval / 5000 * Rate,
-    case abs(Exp - CorrectedRate) < 0.00001 of
-        true -> ok;
-        _    -> Exp = {Rate, corrected, CorrectedRate}
-    end.
-
-assert_positive(Val) ->
-    true = is_number(Val) andalso 0 < Val.
-
-range() ->
-    Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
-    #range{first = Now - 60000, last = Now, incr = 5000}.
+a2b(A) -> list_to_binary(atom_to_list(A)).
