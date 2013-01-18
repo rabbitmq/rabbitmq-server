@@ -29,6 +29,7 @@
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
+-define(CLOSING_TIMEOUT, 30).
 -define(SILENT_CLOSE_DELAY, 3).
 
 %% TODO there are still a number of cases (essentially errors) where
@@ -96,15 +97,26 @@ log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
-recvloop(Deb, State = #v1{pending_recv = true}) ->
+recvloop(Deb, State) ->
+    try
+        recvloop1(Deb, State)
+    catch
+        error:Reason ->
+            Trace = erlang:get_stacktrace(),
+            handle_exception(State, 0, {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                       "Reader error: ~p~n~p~n",
+                                       [Reason, Trace]})
+    end.
+
+recvloop1(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
-recvloop(Deb, State = #v1{connection_state = blocked}) ->
+recvloop1(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
-recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
+recvloop1(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
     ok = rabbit_net:setopts(Sock, [{active, once}]),
     mainloop(Deb, State#v1{pending_recv = true});
-recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
+recvloop1(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of
                                     [B] -> B;
                                     _   -> list_to_binary(lists:reverse(Buf))
@@ -170,6 +182,8 @@ handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
 handle_other({bump_credit, Msg}, Deb, State) ->
     credit_flow:handle_bump_msg(Msg),
     recvloop(Deb, control_throttle(State));
+handle_other(terminate_connection, _Deb, State) ->
+    State;
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
@@ -205,6 +219,14 @@ update_last_blocked_by(Throttle = #throttle{conserve_resources = false}) ->
 %%--------------------------------------------------------------------------
 %% error handling / termination
 
+close_connection(State = #v1{connection = #connection{
+                               timeout_sec = TimeoutSec}}) ->
+    erlang:send_after((if TimeoutSec > 0 andalso
+                          TimeoutSec < ?CLOSING_TIMEOUT -> TimeoutSec;
+                          true                          -> ?CLOSING_TIMEOUT
+                       end) * 1000, self(), terminate_connection),
+    State#v1{connection_state = closed}.
+
 handle_dependent_exit(ChPid, Reason, State) ->
     %% TODO handle sessions
     case {ChPid, termination_kind(Reason)} of
@@ -222,27 +244,40 @@ termination_kind(_)      -> uncontrolled.
 
 maybe_close(State = #v1{connection_state = closing,
                         sock = Sock}) ->
+    NewState = close_connection(State),
     ok = send_on_channel0(Sock, #'v1_0.close'{}),
-    State;
+    NewState;
 maybe_close(State) ->
     State.
 
-handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
-    log(error, "AMQP connection ~p (~p), channel ~p - error:~n~p~n",
-        [self(), closed, Channel, Reason]),
+error_frame(Condition, Text) ->
+    #'v1_0.error'{condition = Condition,
+                  description = {utf8, list_to_binary(Text)}}.
+
+error_text(Reason, Args) ->
+    lists:flatten(io_lib:format(Reason, Args)).
+
+handle_exception(State = #v1{connection_state = closed}, Channel,
+                 {_Condition, Reason, Args}) ->
+    Text = error_text(Reason, Args),
+    log(error, "AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
+        [self(), closed, Channel, Text]),
     State;
-handle_exception(State = #v1{connection_state = CS},
-                 Channel, Reason)
+handle_exception(State = #v1{connection_state = CS}, Channel,
+                 {Condition, Reason, Args})
   when ?IS_RUNNING(State) orelse CS =:= closing ->
-    log(error, "AMQP connection ~p (~p), channel ~p - error:~n~p~n",
-        [self(), CS, Channel, Reason]),
-    %% TODO ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
-    State;
-handle_exception(State, Channel, Reason) ->
+    Text = error_text(Reason, Args),
+    log(error, "AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
+        [self(), CS, Channel, Text]),
+    State1 = close_connection(State),
+    ok = send_on_channel0(State#v1.sock,
+                          #'v1_0.close'{error = error_frame(Condition, Text)}),
+    State1;
+handle_exception(State, Channel, Error) ->
     %% We don't trust the client at this point - force them to wait
     %% for a bit so they can't DOS us with repeated failed logins etc.
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-    throw({handshake_error, State#v1.connection_state, Channel, Reason}).
+    throw({handshake_error, State#v1.connection_state, Channel, Error}).
 
 %%--------------------------------------------------------------------------
 
