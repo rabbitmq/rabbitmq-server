@@ -265,12 +265,21 @@ maybe_hipe_compile() ->
     {ok, Want} = application:get_env(rabbit, hipe_compile),
     Can = code:which(hipe) =/= non_existing,
     case {Want, Can} of
-        {true,  true}  -> hipe_compile();
-        {true,  false} -> io:format("Not HiPE compiling: HiPE not found in "
-                                    "this Erlang installation.~n");
-        {false, _}     -> ok
+        {true,  true}  -> hipe_compile(),
+                          true;
+        {true,  false} -> false;
+        {false, _}     -> true
     end.
 
+warn_if_hipe_compilation_failed(true) ->
+    ok;
+warn_if_hipe_compilation_failed(false) ->
+    error_logger:warning_msg(
+      "Not HiPE compiling: HiPE not found in this Erlang installation.~n").
+
+%% HiPE compilation happens before we have log handlers and can take a
+%% long time, so make an exception to our no-stdout policy and display
+%% progress via stdout.
 hipe_compile() ->
     Count = length(?HIPE_WORTHY),
     io:format("~nHiPE compiling:  |~s|~n                 |",
@@ -320,8 +329,9 @@ start() ->
 boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
-                     maybe_hipe_compile(),
+                     Success = maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
+                     warn_if_hipe_compilation_failed(Success),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
