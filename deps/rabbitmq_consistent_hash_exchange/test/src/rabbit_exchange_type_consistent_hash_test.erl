@@ -22,11 +22,16 @@
 %% deal here.
 
 test() ->
+    %% Run the test twice to test we clean up correctly
+    t(<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>),
+    t(<<"q4">>, <<"q5">>, <<"q6">>, <<"q7">>).
+
+t(Q1, Q2, Q3, Q4) ->
     Count = 10000,
 
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
-    Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
+    Queues = [Q1, Q2, Q3, Q4],
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
@@ -41,12 +46,12 @@ test() ->
          amqp_channel:call(Chan, #'queue.bind' { queue = Q,
                                                  exchange = <<"e">>,
                                                  routing_key = <<"10">> })
-     || Q <- [<<"q0">>, <<"q1">>]],
+     || Q <- [Q1, Q2]],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' { queue = Q,
                                                  exchange = <<"e">>,
                                                  routing_key = <<"20">> })
-     || Q <- [<<"q2">>, <<"q3">>]],
+     || Q <- [Q3, Q4]],
     #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
     Msg = #amqp_msg { props = #'P_basic'{}, payload = <<>> },
     [amqp_channel:call(Chan,
