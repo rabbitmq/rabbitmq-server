@@ -1007,7 +1007,12 @@ emit_stats(State) ->
     rabbit_event:reset_stats_timer(State, #v1.stats_timer).
 
 %% 1.0 stub
-
+-ifdef(use_specs).
+-spec(become_1_0/3 :: ('amqp' | 'sasl',
+                       {non_neg_integer(), non_neg_integer(),
+                        non_neg_integer(), non_neg_integer()},
+                       #v1{}) -> no_return()).
+-endif.
 become_1_0(Mode, Version, State = #v1{sock = Sock}) ->
     case code:is_loaded(rabbit_amqp1_0_reader) of
         false -> refuse_connection(Sock, {bad_version, Version});

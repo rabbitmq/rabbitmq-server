@@ -412,8 +412,14 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
             {stop, normal, State1}
     end.
 
+-ifdef(use_specs).
+-spec(precondition_failed/1 :: (string()) -> no_return()).
+-endif.
 precondition_failed(Format) -> precondition_failed(Format, []).
 
+-ifdef(use_specs).
+-spec(precondition_failed/2 :: (string(), [any()]) -> no_return()).
+-endif.
 precondition_failed(Format, Params) ->
     rabbit_misc:protocol_error(precondition_failed, Format, Params).
 
