@@ -230,7 +230,6 @@ handle_cast({sync_start, Ref, Syncer},
     S = fun({TRefN, BQSN}) -> State1#state{depth_delta         = undefined,
                                            rate_timer_ref      = TRefN,
                                            backing_queue_state = BQSN} end,
-    %% [0] We can only sync when there are no pending acks
     case rabbit_mirror_queue_sync:slave(
            DD, Ref, TRef, Syncer, BQ, BQS,
            fun (BQN, BQSN) ->
@@ -240,7 +239,7 @@ handle_cast({sync_start, Ref, Syncer},
                    {TRefN, BQSN1}
            end) of
         denied              -> noreply(State1);
-        {ok,           Res} -> noreply(set_delta(0, S(Res))); %% [0]
+        {ok,           Res} -> noreply(set_delta(0, S(Res)));
         {failed,       Res} -> noreply(S(Res));
         {stop, Reason, Res} -> {stop, Reason, S(Res)}
     end;

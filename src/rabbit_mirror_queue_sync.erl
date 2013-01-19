@@ -91,16 +91,16 @@ master_go(Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) ->
     end.
 
 master_go0(Args, BQ, BQS) ->
-    case BQ:fold(fun (Msg, MsgProps, false, Acc) ->
-                         master_send(Msg, MsgProps, Args, Acc)
+    case BQ:fold(fun (Msg, MsgProps, Unacked, Acc) ->
+                         master_send(Msg, MsgProps, Unacked, Args, Acc)
                  end, {0, erlang:now()}, BQS) of
         {{shutdown,  Reason}, BQS1} -> {shutdown,  Reason, BQS1};
         {{sync_died, Reason}, BQS1} -> {sync_died, Reason, BQS1};
         {_,                   BQS1} -> master_done(Args, BQS1)
     end.
 
-master_send(Msg, MsgProps, {Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
-            {I, Last}) ->
+master_send(Msg, MsgProps, Unacked,
+            {Syncer, Ref, Log, HandleInfo, EmitStats, Parent}, {I, Last}) ->
     T = case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
             true  -> EmitStats({syncing, I}),
                      Log("~p messages", [I]),
@@ -119,7 +119,7 @@ master_send(Msg, MsgProps, {Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
          cancel_sync_mirrors}    -> stop_syncer(Syncer, {cancel, Ref}),
                                     gen_server2:reply(From, ok),
                                     {stop, cancelled};
-        {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps},
+        {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps, Unacked},
                                     {cont, {I + 1, T}};
         {'EXIT', Parent, Reason} -> {stop, {shutdown,  Reason}};
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
@@ -164,11 +164,11 @@ syncer(Ref, Log, MPid, SPids) ->
 syncer_loop(Ref, MPid, SPids) ->
     MPid ! {next, Ref},
     receive
-        {msg, Ref, Msg, MsgProps} ->
+        {msg, Ref, Msg, MsgProps, Unacked} ->
             SPids1 = wait_for_credit(SPids),
             [begin
                  credit_flow:send(SPid),
-                 SPid ! {sync_msg, Ref, Msg, MsgProps}
+                 SPid ! {sync_msg, Ref, Msg, MsgProps, Unacked}
              end || SPid <- SPids1],
             syncer_loop(Ref, MPid, SPids1);
         {cancel, Ref} ->
@@ -204,7 +204,7 @@ slave(0, Ref, _TRef, Syncer, _BQ, _BQS, _UpdateRamDuration) ->
 slave(_DD, Ref, TRef, Syncer, BQ, BQS, UpdateRamDuration) ->
     MRef = erlang:monitor(process, Syncer),
     Syncer ! {sync_ready, Ref, self()},
-    {_MsgCount, BQS1} = BQ:purge(BQS),
+    {_MsgCount, BQS1} = BQ:purge(BQ:purge_acks(BQS)),
     slave_sync_loop({Ref, MRef, Syncer, BQ, UpdateRamDuration,
                      rabbit_misc:get_parent()}, TRef, BQS1).
 
@@ -237,10 +237,16 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
         update_ram_duration ->
             {TRef1, BQS1} = UpdateRamDuration(BQ, BQS),
             slave_sync_loop(Args, TRef1, BQS1);
-        {sync_msg, Ref, Msg, Props} ->
+        {sync_msg, Ref, Msg, Props, Unacked} ->
             credit_flow:ack(Syncer),
             Props1 = Props#message_properties{needs_confirming = false},
-            BQS1 = BQ:publish(Msg, Props1, true, none, BQS),
+            BQS1 = case Unacked of
+                       false -> BQ:publish(Msg, Props1, true, none, BQS);
+                       true  -> {_AckTag, BQS2} = BQ:publish_delivered(
+                                                    Msg, Props1, none, BQS),
+                                %% TODO do something w AckTag
+                                BQS2
+                   end,
             slave_sync_loop(Args, TRef, BQS1);
         {'EXIT', Parent, Reason} ->
             {stop, Reason, {TRef, BQS}};
