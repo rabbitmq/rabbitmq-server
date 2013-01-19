@@ -71,8 +71,8 @@
 %% content.
 -callback delete_and_terminate(any(), state()) -> state().
 
-%% Remove all messages in the queue, but not messages which have been
-%% fetched and are pending acks.
+%% Remove all 'fetchable' messages from the queue, i.e. all messages
+%% except those that have been fetched already and are pending acks.
 -callback purge(state()) -> {purged_msg_count(), state()}.
 
 %% Publish a message.
