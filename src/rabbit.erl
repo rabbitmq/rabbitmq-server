@@ -552,13 +552,11 @@ boot_error(Reason, Stacktrace) ->
     Args = [Reason, log_location(kernel), log_location(sasl)],
     boot_error(Reason, Fmt, Args, Stacktrace).
 
+boot_error(Reason, Fmt, Args, not_available) ->
+    basic_boot_error(Reason, Fmt, Args);
 boot_error(Reason, Fmt, Args, Stacktrace) ->
-    case Stacktrace of
-        not_available -> basic_boot_error(Reason, Fmt, Args);
-        _             -> basic_boot_error(Reason, Fmt ++
-                                              "Stack trace:~n   ~p~n~n",
-                                          Args ++ [Stacktrace])
-    end.
+    basic_boot_error(Reason, Fmt ++ "Stack trace:~n   ~p~n~n",
+                     Args ++ [Stacktrace]).
 
 basic_boot_error(Reason, Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
