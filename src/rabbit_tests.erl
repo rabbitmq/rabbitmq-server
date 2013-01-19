@@ -2328,7 +2328,8 @@ test_variable_queue() ->
     passed.
 
 test_variable_queue_fold(VQ0) ->
-    {Count, RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
+    {RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
+    Count = rabbit_variable_queue:len(VQ1),
     Msgs = RequeuedMsgs ++ FreshMsgs,
     lists:foldl(
       fun (Cut, VQ2) -> test_variable_queue_fold(Cut, Msgs, VQ2) end,
@@ -2398,10 +2399,10 @@ variable_queue_with_holes(VQ0) ->
     Depth = rabbit_variable_queue:depth(VQ8),
     Len = Depth - length(Subset3),
     Len = rabbit_variable_queue:len(VQ8),
-    {Len, (Seq -- Seq3), lists:seq(Count + 1, Count + 64), VQ8}.
+    {(Seq -- Seq3), lists:seq(Count + 1, Count + 64), VQ8}.
 
 test_variable_queue_requeue(VQ0) ->
-    {_, RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
+    {RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
     Msgs =
         lists:zip(RequeuedMsgs,
                   lists:duplicate(length(RequeuedMsgs), true)) ++
