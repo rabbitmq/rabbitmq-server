@@ -91,7 +91,7 @@ master_go(Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) ->
     end.
 
 master_go0(Args, BQ, BQS) ->
-    case BQ:fold(fun (Msg, MsgProps, Acc) ->
+    case BQ:fold(fun (Msg, MsgProps, false, Acc) ->
                          master_send(Msg, MsgProps, Args, Acc)
                  end, {0, erlang:now()}, BQS) of
         {{shutdown,  Reason}, BQS1} -> {shutdown,  Reason, BQS1};

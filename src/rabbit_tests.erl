@@ -2328,17 +2328,20 @@ test_variable_queue() ->
     passed.
 
 test_variable_queue_fold(VQ0) ->
-    {RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
-    Count = rabbit_variable_queue:len(VQ1),
-    Msgs = RequeuedMsgs ++ FreshMsgs,
-    lists:foldl(
-      fun (Cut, VQ2) -> test_variable_queue_fold(Cut, Msgs, VQ2) end,
-      VQ1, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
+    {PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
+        variable_queue_with_holes(VQ0),
+    Count = rabbit_variable_queue:depth(VQ1),
+    Msgs = lists:sort(PendingMsgs ++ RequeuedMsgs ++ FreshMsgs),
+    lists:foldl(fun (Cut, VQ2) ->
+                        test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ2)
+                end, VQ1, [0, 1, 2, Count div 2,
+                           Count - 1, Count, Count + 1, Count * 2]).
 
-test_variable_queue_fold(Cut, Msgs, VQ0) ->
+test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ0) ->
     {Acc, VQ1} = rabbit_variable_queue:fold(
-                   fun (M, _, A) ->
+                   fun (M, _, Pending, A) ->
                            MInt = msg2int(M),
+                           Pending = lists:member(MInt, PendingMsgs), %% assert
                            case MInt =< Cut of
                                true  -> {cont, [MInt | A]};
                                false -> {stop, A}
@@ -2399,10 +2402,11 @@ variable_queue_with_holes(VQ0) ->
     Depth = rabbit_variable_queue:depth(VQ8),
     Len = Depth - length(Subset3),
     Len = rabbit_variable_queue:len(VQ8),
-    {(Seq -- Seq3), lists:seq(Count + 1, Count + 64), VQ8}.
+    {Seq3, Seq -- Seq3, lists:seq(Count + 1, Count + 64), VQ8}.
 
 test_variable_queue_requeue(VQ0) ->
-    {RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
+    {_PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
+        variable_queue_with_holes(VQ0),
     Msgs =
         lists:zip(RequeuedMsgs,
                   lists:duplicate(length(RequeuedMsgs), true)) ++
