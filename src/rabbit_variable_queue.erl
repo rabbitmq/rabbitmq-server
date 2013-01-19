@@ -16,7 +16,7 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/2, delete_and_terminate/2, purge/1,
+-export([init/3, terminate/2, delete_and_terminate/2, purge/1, purge_acks/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4,
          fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3, len/1,
@@ -518,6 +518,8 @@ purge(State = #vqstate { q4                = Q4,
                               len               = 0,
                               ram_msg_count     = 0,
                               persistent_count  = PCount1 })}.
+
+purge_acks(State) -> a(purge_pending_ack(false, State)).
 
 publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
