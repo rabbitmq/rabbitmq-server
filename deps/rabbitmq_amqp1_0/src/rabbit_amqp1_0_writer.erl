@@ -215,15 +215,7 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
            [Channel, rabbit_amqp1_0_framing:pprint(Performative)]),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel,
-                                                ?AMQP_SASL_FRAME_TYPE, PerfBin);
-
-%% End 1-0
-
-assemble_frame(Channel, MethodRecord, Protocol) ->
-    rabbit_binary_generator:build_simple_method_frame(
-      Channel, MethodRecord, Protocol).
-
-%% Begin 1-0
+                                                ?AMQP_SASL_FRAME_TYPE, PerfBin).
 
 %% Note: a transfer record can be followed by a number of other
 %% records to make a complete frame but unlike 0-9-1 we may have many
@@ -238,18 +230,9 @@ assemble_frames(Channel, Performative, Content, FrameMax,
                 Section <- rabbit_amqp1_0_framing:decode_bin(
                              iolist_to_binary(Content))]]),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
-    rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]);
+    rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]).
 
 %% End 1-0
-
-assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
-    MethodName = rabbit_misc:method_record_type(MethodRecord),
-    true = Protocol:method_has_content(MethodName), % assertion
-    MethodFrame = rabbit_binary_generator:build_simple_method_frame(
-                    Channel, MethodRecord, Protocol),
-    ContentFrames = rabbit_binary_generator:build_simple_content_frames(
-                      Channel, Content, FrameMax, Protocol),
-    [MethodFrame | ContentFrames].
 
 tcp_send(Sock, Data) ->
     rabbit_misc:throw_on_error(inet_error,
