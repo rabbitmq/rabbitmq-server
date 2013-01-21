@@ -284,7 +284,8 @@ handle_cast(ready_for_close, State = #ch{state      = closing,
     ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
     {stop, normal, State};
 
-handle_cast(terminate, State) ->
+handle_cast(terminate, State = #ch{writer_pid = WriterPid}) ->
+    ok = rabbit_writer:flush(WriterPid),
     {stop, normal, State};
 
 handle_cast({command, #'basic.consume_ok'{consumer_tag = ConsumerTag} = Msg},

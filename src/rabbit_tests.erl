@@ -2323,6 +2323,7 @@ test_variable_queue() ->
               fun test_dropwhile_varying_ram_duration/1,
               fun test_fetchwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
+              fun test_variable_queue_purge/1,
               fun test_variable_queue_requeue/1,
               fun test_variable_queue_fold/1]],
     passed.
@@ -2421,6 +2422,21 @@ test_variable_queue_requeue(VQ0) ->
                       end, VQ1, Msgs),
     {empty, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
     VQ3.
+
+test_variable_queue_purge(VQ0) ->
+    LenDepth = fun (VQ) ->
+                       {rabbit_variable_queue:len(VQ),
+                        rabbit_variable_queue:depth(VQ)}
+               end,
+    VQ1         = variable_queue_publish(false, 10, VQ0),
+    {VQ2, Acks} = variable_queue_fetch(6, false, false, 10, VQ1),
+    {4, VQ3}    = rabbit_variable_queue:purge(VQ2),
+    {0, 6}      = LenDepth(VQ3),
+    {_, VQ4}    = rabbit_variable_queue:requeue(lists:sublist(Acks, 2), VQ3),
+    {2, 6}      = LenDepth(VQ4),
+    VQ5         = rabbit_variable_queue:purge_acks(VQ4),
+    {2, 2}      = LenDepth(VQ5),
+    VQ5.
 
 test_variable_queue_ack_limiting(VQ0) ->
     %% start by sending in a bunch of messages

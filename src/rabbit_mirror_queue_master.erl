@@ -17,7 +17,7 @@
 -module(rabbit_mirror_queue_master).
 
 -export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/5, publish_delivered/4,
+         purge/1, purge_acks/1, publish/5, publish_delivered/4,
          discard/3, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
          len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
@@ -197,6 +197,8 @@ purge(State = #state { gm                  = GM,
     ok = gm:broadcast(GM, {drop, 0, BQ:len(BQS), false}),
     {Count, BQS1} = BQ:purge(BQS),
     {Count, State #state { backing_queue_state = BQS1 }}.
+
+purge_acks(_State) -> exit({not_implemented, {?MODULE, purge_acks}}).
 
 publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid,
         State = #state { gm                  = GM,
