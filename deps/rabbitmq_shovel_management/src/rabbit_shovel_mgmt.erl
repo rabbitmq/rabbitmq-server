@@ -48,7 +48,7 @@ status() ->
 
 status(Node) ->
     case rpc:call(Node, rabbit_shovel_status, status, [], infinity) of
-        {badrpc, {'EXIT', {undef, _}}} ->
+        {badrpc, {'EXIT', _}} ->
             [];
         Status ->
             [format(Node, I) || I <- Status]
