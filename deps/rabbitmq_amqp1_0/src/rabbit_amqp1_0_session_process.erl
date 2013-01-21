@@ -128,7 +128,8 @@ handle_info({'DOWN', _MRef, process, _QPid, _Reason}, State) ->
     {noreply, State}. % FIXME rabbit_channel uses queue_blocked?
 
 handle_cast({frame, Frame, FlowPid},
-            State = #state{ writer_pid = Sock }) ->
+            State = #state{ reader_pid = ReaderPid,
+                            writer_pid = Sock }) ->
     credit_flow:ack(FlowPid),
     try handle_control(Frame, State) of
         {reply, Replies, NewState} when is_list(Replies) ->
@@ -146,7 +147,9 @@ handle_cast({frame, Frame, FlowPid},
     catch exit:Reason = #'v1_0.error'{} ->
             %% TODO shut down nicely like rabbit_channel
             Close = #'v1_0.end'{ error = Reason },
-            ok = rabbit_amqp1_0_writer:send_command(Sock, Close),
+            rabbit_log:warning("Closing session for connection ~p: ~p~n",
+                               [ReaderPid, Reason]),
+            ok = rabbit_amqp1_0_writer:send_command_sync(Sock, Close),
             {stop, normal, State};
           exit:normal ->
             {stop, normal, State};
