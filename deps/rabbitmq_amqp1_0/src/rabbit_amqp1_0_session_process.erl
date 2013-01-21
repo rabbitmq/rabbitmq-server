@@ -56,7 +56,6 @@ init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
                }}.
 
 terminate(_Reason, _State = #state{backing_connection = Conn}) ->
-    ?DEBUG("Shutting down session ~p", [_State]),
     rabbit_misc:with_exit_handler(fun () -> ok end,
                                   fun () -> amqp_connection:close(Conn) end).
 
