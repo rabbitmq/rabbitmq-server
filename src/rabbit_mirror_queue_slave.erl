@@ -37,17 +37,9 @@
 
 -include("rabbit.hrl").
 
-%%----------------------------------------------------------------------------
-
 -include("gm_specs.hrl").
 
--ifdef(use_specs).
-%% Shut dialyzer up
--spec(promote_me/2 :: (_, _) -> no_return()).
--endif.
-
 %%----------------------------------------------------------------------------
-
 
 -define(CREATION_EVENT_KEYS,
         [pid,
@@ -78,6 +70,8 @@
                  %% Master depth - local depth
                  depth_delta
                }).
+
+%%----------------------------------------------------------------------------
 
 start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
@@ -469,6 +463,9 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
 handle_process_result({ok,   State}) -> noreply(State);
 handle_process_result({stop, State}) -> {stop, normal, State}.
 
+-ifdef(use_specs).
+-spec(promote_me/2 :: ({pid(), term()}, #state{}) -> no_return()).
+-endif.
 promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           gm                  = GM,
                           backing_queue       = BQ,

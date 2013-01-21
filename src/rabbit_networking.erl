@@ -41,8 +41,6 @@
 
 -define(FIRST_TEST_BIND_PORT, 10000).
 
--define(CONNECTION_TABLE, rabbit_connection).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -122,7 +120,6 @@
 %%----------------------------------------------------------------------------
 
 boot() ->
-    ets:new(?CONNECTION_TABLE, [public, named_table]),
     ok = start(),
     ok = boot_tcp(),
     ok = boot_ssl().
@@ -300,15 +297,15 @@ start_client(Sock) ->
 start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
-register_connection(Pid) -> ets:insert(?CONNECTION_TABLE, {Pid}), ok.
+register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
 
-unregister_connection(Pid) -> ets:delete(?CONNECTION_TABLE, Pid), ok.
+unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
 
 connections() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
-connections_local() -> [P || {P} <- ets:tab2list(?CONNECTION_TABLE)].
+connections_local() -> pg_local:get_members(rabbit_connections).
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
