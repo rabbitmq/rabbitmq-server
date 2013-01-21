@@ -16,8 +16,6 @@ public class SwiftMQTests extends TestCase {
     private static final int CONSUMER_LINK_CREDIT =200;
     private static final String QUEUE = "/queue/test";
 
-    private Connection conn;
-
     private AMQPMessage msg() {
         AMQPMessage m = new AMQPMessage();
         m.addData(data());
@@ -28,17 +26,11 @@ public class SwiftMQTests extends TestCase {
         return new Data("Hello World".getBytes());
     }
 
-    protected void setUp() throws Exception {
-        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
-        conn = new Connection(ctx, "localhost", 5672, false);
-        conn.connect();
-    }
-
-    protected void tearDown() {
-        conn.close();
-    }
-
     public void testRoundTrip() throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, "localhost", 5672, false);
+        conn.connect();
+
         Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
         Producer p = s.createProducer(QUEUE, QoS.AT_LEAST_ONCE);
         p.send(msg());
