@@ -198,8 +198,7 @@ handle_control(#'v1_0.attach'{handle                 = Handle,
     reply(Reply, State);
 
 handle_control({Txfr = #'v1_0.transfer'{handle      = Handle,
-                                        settled     = Settled,
-                                        delivery_id = {uint, DeliveryId}},
+                                        settled     = Settled},
                 MsgPart},
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
@@ -211,7 +210,7 @@ handle_control({Txfr = #'v1_0.transfer'{handle      = Handle,
             {Flows, Session1} = rabbit_amqp1_0_session:incr_incoming_id(Session),
             case rabbit_amqp1_0_incoming_link:transfer(
                    Txfr, MsgPart, Link, BCh) of
-                {message, Reply, Link1} ->
+                {message, Reply, Link1, DeliveryId} ->
                     put({in, Handle}, Link1),
                     Session2 = rabbit_amqp1_0_session:record_delivery(
                                  DeliveryId, Settled, Session1),

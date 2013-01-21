@@ -27,6 +27,7 @@
 -define(INCOMING_CREDIT, 65536).
 
 -record(incoming_link, {name, exchange, routing_key,
+                        delivery_id = undefined,
                         delivery_count = 0,
                         credit_used = ?INCOMING_CREDIT div 2,
                         msg_acc = []}).
@@ -75,12 +76,19 @@ attach(#'v1_0.attach'{name = Name,
                                "Attach rejected: ~p", [Reason])
     end.
 
+transfer(#'v1_0.transfer'{more = true,
+                          delivery_id = {uint, DeliveryId}}, MsgPart,
+         #incoming_link{msg_acc = MsgAcc,
+                        delivery_id = undefined} = Link, _BCh) ->
+    {ok, Link#incoming_link{msg_acc     = [MsgPart | MsgAcc],
+                            delivery_id = DeliveryId}};
 transfer(#'v1_0.transfer'{more = true}, MsgPart,
          #incoming_link{msg_acc = MsgAcc} = Link, _BCh) ->
     {ok, Link#incoming_link{msg_acc = [MsgPart | MsgAcc]}};
 transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
          #incoming_link{exchange       = X,
                         routing_key    = LinkRKey,
+                        delivery_id    = DeliveryId,
                         delivery_count = Count,
                         credit_used    = CreditUsed,
                         msg_acc        = MsgAcc} = Link, BCh) ->
@@ -99,6 +107,7 @@ transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
                                       {false, D}
                               end,
     NewLink = Link#incoming_link{
+                delivery_id    = undefined,
                 delivery_count = rabbit_misc:serial_add(Count, 1),
                 credit_used    = CreditUsed1,
                 msg_acc        = []},
@@ -107,7 +116,7 @@ transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
                          [incoming_flow(NewLink, Handle)];
                 false -> []
             end,
-    {message, Reply, NewLink}.
+    {message, Reply, NewLink, DeliveryId}.
 
 %% There are a few things that influence what source and target
 %% definitions mean for our purposes.
