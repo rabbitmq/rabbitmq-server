@@ -3,5 +3,6 @@
   {vsn, "%%VSN%%"},
   {modules, []},
   {registered, []},
-  {env, [{default_user,  "guest"}]},
+  {env, [{default_user, "guest"},
+         {protocol_strict_mode, false}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.

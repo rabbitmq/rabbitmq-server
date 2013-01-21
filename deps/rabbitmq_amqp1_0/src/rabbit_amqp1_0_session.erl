@@ -327,10 +327,15 @@ flow(#'v1_0.flow'{next_incoming_id = FlowNextIn0,
                                   LocalNextOut)}
             end;
         _ ->
-            protocol_error(?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
-                           "Remote outgoing id (~p) not equal to "
-                           "local incoming id (~p)",
-                           [FlowNextOut, LocalNextIn])
+            case application:get_env(rabbitmq_amqp1_0, protocol_strict_mode) of
+                {ok, false} ->
+                    Session#session{next_incoming_id = FlowNextOut};
+                {ok, true} ->
+                    protocol_error(?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
+                                   "Remote outgoing id (~p) not equal to "
+                                   "local incoming id (~p)",
+                                   [FlowNextOut, LocalNextIn])
+            end
     end.
 
 %% An acknowledgement from the queue, which we'll get if we are
