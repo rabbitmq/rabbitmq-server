@@ -76,19 +76,24 @@ attach(#'v1_0.attach'{name = Name,
                                "Attach rejected: ~p", [Reason])
     end.
 
-transfer(#'v1_0.transfer'{more = true,
-                          delivery_id = {uint, DeliveryId}}, MsgPart,
-         #incoming_link{msg_acc = MsgAcc,
-                        delivery_id = undefined} = Link, _BCh) ->
-    {ok, Link#incoming_link{msg_acc     = [MsgPart | MsgAcc],
-                            delivery_id = DeliveryId}};
-transfer(#'v1_0.transfer'{more = true}, MsgPart,
+set_delivery_id({uint, D},
+                #incoming_link{delivery_id = undefined} = Link) ->
+    Link#incoming_link{delivery_id = D};
+set_delivery_id(DeliveryId,
+                #incoming_link{delivery_id = D} = Link)
+  when DeliveryId == {uint, D} orelse DeliveryId == undefined ->
+    Link.
+
+transfer(#'v1_0.transfer'{delivery_id = DeliveryId,
+                          more        = true}, MsgPart,
          #incoming_link{msg_acc = MsgAcc} = Link, _BCh) ->
-    {ok, Link#incoming_link{msg_acc = [MsgPart | MsgAcc]}};
-transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
+    {ok, set_delivery_id(DeliveryId,
+                         Link#incoming_link{msg_acc = [MsgPart | MsgAcc]})};
+transfer(#'v1_0.transfer'{delivery_id = DeliveryId0,
+                          handle      = Handle},
+         MsgPart,
          #incoming_link{exchange       = X,
                         routing_key    = LinkRKey,
-                        delivery_id    = DeliveryId,
                         delivery_count = Count,
                         credit_used    = CreditUsed,
                         msg_acc        = MsgAcc} = Link, BCh) ->
@@ -109,6 +114,8 @@ transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
                                   D ->
                                       {false, D}
                               end,
+    #incoming_link{delivery_id = DeliveryId} =
+      set_delivery_id(DeliveryId0, Link),
     NewLink = Link#incoming_link{
                 delivery_id    = undefined,
                 delivery_count = rabbit_misc:serial_add(Count, 1),
