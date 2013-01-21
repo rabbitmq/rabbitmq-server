@@ -292,7 +292,6 @@ handle_control(Flow = #'v1_0.flow'{},
     end;
 
 handle_control(Frame, State) ->
-    io:format("Unexpected frame: ~p~n", [rabbit_amqp1_0_framing:pprint(Frame)]),
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                    "Unexpected frame ~p",
                    [rabbit_amqp1_0_framing:pprint(Frame)]).
