@@ -31,6 +31,10 @@ description() ->
 
 serialise_events() -> false.
 
+-ifdef(use_specs).
+-spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                 -> no_return()).
+-endif.
 route(#exchange{name = Name, type = Type}, _) ->
     rabbit_misc:protocol_error(
       precondition_failed,

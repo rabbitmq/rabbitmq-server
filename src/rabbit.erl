@@ -400,13 +400,11 @@ status() ->
 
 is_running() -> is_running(node()).
 
-is_running(Node) ->
-    rabbit_nodes:is_running(Node, rabbit).
+is_running(Node) -> rabbit_nodes:is_running(Node, rabbit).
 
 environment() ->
-    lists:keysort(
-      1, [P || P = {K, _} <- application:get_all_env(rabbit),
-               K =/= default_pass]).
+    lists:keysort(1, [P || P = {K, _} <- application:get_all_env(rabbit),
+                           K =/= default_pass]).
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
@@ -535,6 +533,9 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
+-ifdef(use_specs).
+-spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
+-endif.
 boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     {Err, Nodes} =
@@ -554,13 +555,15 @@ boot_error(Reason, Stacktrace) ->
     Args = [Reason, log_location(kernel), log_location(sasl)],
     boot_error(Reason, Fmt, Args, Stacktrace).
 
+-ifdef(use_specs).
+-spec(boot_error/4 :: (term(), string(), [any()], not_available | [tuple()])
+                      -> no_return()).
+-endif.
+boot_error(Reason, Fmt, Args, not_available) ->
+    basic_boot_error(Reason, Fmt, Args);
 boot_error(Reason, Fmt, Args, Stacktrace) ->
-    case Stacktrace of
-        not_available -> basic_boot_error(Reason, Fmt, Args);
-        _             -> basic_boot_error(Reason, Fmt ++
-                                              "Stack trace:~n   ~p~n~n",
-                                          Args ++ [Stacktrace])
-    end.
+    basic_boot_error(Reason, Fmt ++ "Stack trace:~n   ~p~n~n",
+                     Args ++ [Stacktrace]).
 
 basic_boot_error(Reason, Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
