@@ -1,14 +1,20 @@
 %%-define(debug, true).
 
 -ifdef(debug).
--define(DEBUG0(F), io:format(F, [])).
--define(DEBUG(F, A), io:format(F, A)).
+-define(DEBUG0(F), ?SAFE(io:format(F, []))).
+-define(DEBUG(F, A), ?SAFE(io:format(F, A))).
 -else.
 -define(DEBUG0(F), ok).
 -define(DEBUG(F, A), ok).
 -endif.
 
 -define(pprint(F), io:format("~p~n", [rabbit_amqp1_0_framing:pprint(F)])).
+
+-define(SAFE(F), try F
+                 catch T:E ->
+                         io:format("~p:~p thrown debugging~n~p~n",
+                                   [T, E, erlang:get_stacktrace()])
+                 end).
 
 %% General consts
 
