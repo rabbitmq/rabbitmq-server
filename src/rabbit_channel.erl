@@ -715,7 +715,9 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                    ok = rabbit_amqqueue:inform_limiter(
                                           Q, self(),
                                           {basic_credit, ActualConsumerTag,
-                                           Credit, Count, Drain, false});
+                                           Credit, Count, Drain,
+                                           fun (_) -> ok end,
+                                           send_drained_fun(self())});
                                error ->
                                    ok
                            end,
@@ -1104,10 +1106,16 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                               drain        = Drain}, _,
               State = #ch{consumer_mapping = Consumers,
                           credit_map       = CMap}) ->
+    Self = self(),
     case dict:find(CTag, Consumers) of
         {ok, Q} -> ok = rabbit_amqqueue:inform_limiter(
-                          Q, self(),
-                          {basic_credit, CTag, Credit, Count, Drain, true}),
+                          Q, Self,
+                          {basic_credit, CTag, Credit, Count, Drain,
+                          fun (Available) ->
+                                  send_command(
+                                    Self,
+                                    #'basic.credit_ok'{available = Available})
+                          end, send_drained_fun(self())}),
                    {noreply, State};
         error   -> CMap2 = dict:store(CTag, {Credit, Count, Drain}, CMap),
                    {reply, #'basic.credit_ok'{available = 0},
@@ -1467,6 +1475,16 @@ send_confirms(Cs, State) ->
                                   #'basic.ack'{delivery_tag = MsgSeqNo,
                                                multiple     = Multiple}
                           end, State).
+
+send_drained_fun(ChPid) ->
+    fun (CTag, Count) ->
+            send_command(ChPid,
+                         #'basic.credit_state'{consumer_tag = CTag,
+                                               credit       = 0,
+                                               count        = Count,
+                                               available    = 0,
+                                               drain        = true})
+    end.
 
 coalesce_and_send(MsgSeqNos, MkMsgFun,
                   State = #ch{writer_pid = WriterPid, unconfirmed = UC}) ->

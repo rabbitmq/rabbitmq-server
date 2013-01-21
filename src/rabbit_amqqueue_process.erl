@@ -476,7 +476,7 @@ deliver_msg_to_consumer(DeliverFun,
                         State = #q{q = #amqqueue{name = QName},
                                    backing_queue       = BQ,
                                    backing_queue_state = BQS}) ->
-    rabbit_limiter:record_cons_send(Limiter, ChPid, ConsumerTag, BQ:len(BQS)),
+    rabbit_limiter:record_cons_send(Limiter, ConsumerTag, BQ:len(BQS)),
     {{Message, IsDelivered, AckTag}, Stop, State1} =
         DeliverFun(AckRequired, State),
     rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
@@ -1345,7 +1345,7 @@ handle_cast({inform_limiter, ChPid, Msg},
                        backing_queue_state = BQS}) ->
     #cr{limiter       = Lim,
         blocked_ctags = BCTags} = ch_record(ChPid),
-    {Unblock, Lim2} = rabbit_limiter:inform(Lim, ChPid, BQ:len(BQS), Msg),
+    {Unblock, Lim2} = rabbit_limiter:inform(Lim, BQ:len(BQS), Msg),
     noreply(possibly_unblock(
               State, ChPid, fun(C) -> C#cr{blocked_ctags = BCTags -- Unblock,
                                            limiter       = Lim2} end));
