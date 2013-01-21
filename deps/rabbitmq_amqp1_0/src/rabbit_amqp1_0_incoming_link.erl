@@ -93,6 +93,9 @@ transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
                         credit_used    = CreditUsed,
                         msg_acc        = MsgAcc} = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
+    ?DEBUG("Inbound content:~p~n",
+           [[rabbit_amqp1_0_framing:pprint(Section) ||
+                Section <- rabbit_amqp1_0_framing:decode_bin(MsgBin)]]),
     {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(MsgBin),
     RKey = case LinkRKey of
                undefined -> MsgRKey;

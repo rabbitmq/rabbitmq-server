@@ -322,10 +322,7 @@ parse_1_0_frame(Payload, _Channel) ->
             case Rest of
                 <<>> -> <<>>;
                 _    -> rabbit_misc:format(
-                          "  with content:~n  ~p~n",
-                          [[rabbit_amqp1_0_framing:pprint(Section) ||
-                               Section <- rabbit_amqp1_0_framing:decode_bin(
-                                            Rest)]])
+                          "  followed by ~p bytes of content~n", [size(Rest)])
             end]),
     case Rest of
         <<>> -> Perf;
