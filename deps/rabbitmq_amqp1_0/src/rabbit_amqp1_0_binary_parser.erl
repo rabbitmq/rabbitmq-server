@@ -37,7 +37,6 @@ parse(Rest) ->
 
 parse_described(Bin) ->
     {Descriptor, Rest1} = parse(Bin),
-%%    io:format("Descriptor: ~p~n", [Descriptor]),
     {Value, Rest2} = parse(Rest1),
     {{described, Descriptor, Value}, Rest2}.
 
