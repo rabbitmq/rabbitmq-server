@@ -51,11 +51,12 @@ public class SwiftMQTests extends TestCase {
 
     public void testMessageFragmentation() throws Exception {
         AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
-        conn = new Connection(ctx, "localhost", 5672, false);
-        conn.setMaxFrameSize(512L);
-        conn.connect();
+        Connection conn2;
+        conn2 = new Connection(ctx, "localhost", 5672, false);
+        conn2.setMaxFrameSize(512L);
+        conn2.connect();
 
-        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        Session s = conn2.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
         Producer p = s.createProducer(QUEUE, QoS.AT_LEAST_ONCE);
         AMQPMessage msg = new AMQPMessage();
         msg.addData(new Data(new byte [600]));
@@ -64,6 +65,7 @@ public class SwiftMQTests extends TestCase {
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
         AMQPMessage m = c.receive();
         assertEquals(600, m.getData().size());
+        conn2.close();
     }
 
 }

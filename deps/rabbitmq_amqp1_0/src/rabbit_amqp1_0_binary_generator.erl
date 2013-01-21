@@ -28,6 +28,7 @@
 
 -define(AMQP_FRAME_TYPE, 0).
 -define(DOFF, 2).
+-define(VAR_1_LIMIT, 16#FF).
 
 build_frame(Channel, Payload) ->
     build_frame(Channel, ?AMQP_FRAME_TYPE, Payload).
@@ -91,7 +92,10 @@ generate({binary, Value}) ->
     end;
 
 %% FIXME variable sizes too
-generate({utf8, Value}) -> [ <<?VAR_1:4,1:4,(size(Value)):8>>, Value ];
+generate({utf8, Value}) when size(Value) < ?VAR_1_LIMIT ->
+    [ <<?VAR_1:4,1:4,(size(Value)):8>>, Value ];
+generate({utf8, Value}) ->
+    [ <<?VAR_4:4,1:4,(size(Value)):32>>, Value ];
 generate({utf16, Value}) -> [ <<?VAR_1:4,2:4,(size(Value)):8>>, Value ];
 
 generate({symbol, Value}) -> [ <<?VAR_1:4,3:4,(length(Value)):8>>,
