@@ -137,7 +137,7 @@ init_from_config({TryNodes0, NodeType} = Config) ->
         {ok, {_, DiscNodes, _}} ->
             init_db_and_upgrade(DiscNodes, NodeType, true),
             rabbit_node_monitor:notify_joined_cluster();
-        {error, tables_not_present} when First < node() andalso
+        {error, tables_not_present} when node() < First andalso
                                          NodeType =:= disc ->
             %% We came up simultaneously with some other virgin nodes which
             %% also wanted to cluster with us. Exactly one of these nodes
