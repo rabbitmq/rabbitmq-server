@@ -571,26 +571,23 @@ function data_rates(id, stats) {
 }
 
 function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt) {
-    var res = '';
+    var suffix = '<span class="rate-options" for="' + id + '">(...)</span>';
+    var suffix_p = '<p class="rate-options-p">' + suffix + '</p>';
+
     if (keys(stats).length > 0) {
         var res;
         var mode = get_pref('rate-mode-' + id);
         if (mode == 'chart') {
-            res = rates_chart(id, items, stats, chart_fmt);
+            res = rates_chart(id, items, stats, chart_fmt) + suffix_p;
         }
         else {
-            res = rates_text(items, stats, mode, text_fmt);
+            res = rates_text(items, stats, mode, text_fmt) + suffix_p;
         }
-        if (res == "") {
-            res = '<p>Waiting for data...</p>';
-        }
+        return (res == "") ? '<p>Waiting for data... ' + suffix + '</p>' : res;
     }
     else {
-        res = '<p>Currently idle</p>';
+        return '<p>Currently idle ' + suffix + '</p>';
     }
-
-    return res + '<p class="rate-options-p"><span class="rate-options" for="' +
-        id + '">(...)</span></p>';
 }
 
 function rates_chart(id, items, stats, rate_fmt) {
