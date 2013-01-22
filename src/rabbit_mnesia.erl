@@ -127,40 +127,36 @@ init_from_config() ->
               Config
       end).
 
-init_from_config({TryNodes, NodeType} = Config) ->
-    case find_good_node(nodes_excl_me(TryNodes)) of
-        {ok, Node} ->
-            error_logger:info_msg("Node '~p' selected for clustering from "
-                                  "configuration~n", [Node]),
-            [First | _] = lists:usort(TryNodes),
-            case discover_cluster(Node) of
-                {ok, {_, DiscNodes, _}} ->
-                    init_db_and_upgrade(DiscNodes, NodeType, true),
-                    rabbit_node_monitor:notify_joined_cluster();
-                {error, _} when First == node() ->
-                    %% We came up simultaneously with some other
-                    %% virgin nodes which also wanted to cluster with
-                    %% us. Exactly one of these nodes needs to proceed
-                    %% with an unclustered startup. We pick the node
-                    %% that is alphabetically first.
-                    error_logger:info_msg(
-                      "Started simultaneously with ~p; this node was first~n",
-                      [TryNodes]),
-                    init_db_and_upgrade([node()], disc, false);
-                {error, _} ->
-                    %% See above.
-                    error_logger:info_msg(
-                      "Started simultaneously with ~p; this node was not "
-                      "first. Waiting for another node to start.~n",
-                      [TryNodes]),
-                    timer:sleep(1000),
-                    init_from_config(Config)
-            end;
-        none ->
+init_from_config({TryNodes0, NodeType} = Config) ->
+    [First | _] = TryNodes = lists:usort(nodes_excl_me(TryNodes0)),
+    case discover_cluster(TryNodes) of
+        {ok, {_, DiscNodes, _}} ->
+            init_db_and_upgrade(DiscNodes, NodeType, true),
+            rabbit_node_monitor:notify_joined_cluster();
+        {error, tables_not_present} when First < node() andalso
+                                         NodeType =:= disc ->
+            %% We came up simultaneously with some other virgin nodes which
+            %% also wanted to cluster with us. Exactly one of these nodes
+            %% needs to proceed with an unclustered startup. We pick the node
+            %% that is alphabetically first.
+            error_logger:info_msg(
+              "Started simultaneously with ~p; this node was first~n",
+              [TryNodes]),
+            init_db_and_upgrade([node()], disc, false);
+        {error, tables_not_present} when NodeType =:= disc ->
+            %% See above.
+            error_logger:info_msg(
+              "Started simultaneously with ~p; this node was not "
+              "first. Waiting for another node to start.~n", [TryNodes]),
+            timer:sleep(1000),
+            init_from_config(Config);
+        {error, _} ->
+            %% Note that if we are a ram node this will fail - but that's all
+            %% right, we want to fail anyway.
             error_logger:info_msg(
               "Could not find any alive node from configuration ~p - "
               "assuming this is the first~n", [TryNodes]),
-            init_db_and_upgrade([node()], disc, false)
+            init_db_and_upgrade([node()], NodeType, false)
     end.
 
 %% Make the node join a cluster. The node will be reset automatically
@@ -634,7 +630,7 @@ discover_cluster(Node) ->
                               rabbit_mnesia, cluster_status_from_mnesia, []) of
                     {badrpc, _Reason}           -> OfflineError;
                     {error, mnesia_not_running} -> OfflineError;
-                    {error, tables_not_present} -> OfflineError;
+                    {error, tables_not_present} -> {error, tables_not_present};
                     {ok, Res}                   -> {ok, Res}
                 end
     end.
@@ -760,10 +756,6 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
 
 is_running_remote() -> {mnesia:system_info(is_running) =:= yes, node()}.
 
-check_consistency(OTP, Rabbit) ->
-    rabbit_misc:sequence_error(
-      [check_otp_consistency(OTP), check_rabbit_consistency(Rabbit)]).
-
 check_consistency(OTP, Rabbit, Node, Status) ->
     rabbit_misc:sequence_error(
       [check_otp_consistency(OTP),
@@ -827,17 +819,6 @@ is_virgin_node() ->
                              rabbit_node_monitor:running_nodes_filename()]);
         {ok, _} ->
             false
-    end.
-
-find_good_node([]) ->
-    none;
-find_good_node([Node | Nodes]) ->
-    case rpc:call(Node, rabbit_mnesia, node_info, []) of
-        {badrpc, _Reason} -> find_good_node(Nodes);
-        {OTP, Rabbit, _}  -> case check_consistency(OTP, Rabbit) of
-                                 {error, _} -> find_good_node(Nodes);
-                                 ok         -> {ok, Node}
-                             end
     end.
 
 is_only_clustered_disc_node() ->
