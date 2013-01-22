@@ -127,6 +127,10 @@ init_from_config() ->
               Config
       end).
 
+init_from_config({[], NodeType}) ->
+    %% No config, and we're a virgin node - just start.
+    init_db_and_upgrade([node()], NodeType, false);
+
 init_from_config({TryNodes0, NodeType} = Config) ->
     [First | _] = TryNodes = lists:usort(nodes_excl_me(TryNodes0)),
     case discover_cluster(TryNodes) of
