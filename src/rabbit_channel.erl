@@ -95,6 +95,9 @@
 -spec(deliver/4 ::
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
+-spec(send_credit_reply/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(send_drained/3 :: (pid(), rabbit_types:ctag(), non_neg_integer())
+                        -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
