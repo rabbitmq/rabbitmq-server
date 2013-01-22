@@ -696,7 +696,7 @@ log_broker_started(Plugins) ->
       fun() ->
               error_logger:info_msg(
                 "Server startup complete; plugins are: ~p~n", [Plugins]),
-              io:format("~nBroker running with ~p plugins.~n",
+              io:format("~n            Broker running with ~p plugins.~n",
                         [length(Plugins)])
       end).
 
@@ -711,10 +711,10 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
-    io:format("~n~s ~s. ~s~n~s~n~n",
+    io:format("~n##  ##      ~s ~s. ~s~n##  ##      ~s~n##########  ~n",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
-    io:format("Logs: ~s~n      ~s~n", [log_location(kernel),
-                                       log_location(sasl)]).
+    io:format("######  ##  Logs: ~s~n##########        ~s~n",
+              [log_location(kernel), log_location(sasl)]).
 
 log_banner() ->
     {ok, Product} = application:get_key(id),
