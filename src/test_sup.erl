@@ -50,7 +50,7 @@ test_supervisor_delayed_restart(SupPid) ->
     ok = exit_child(SupPid),
     timer:sleep(100),
     timeout = ping_child(SupPid),
-    timer:sleep(1100),
+    timer:sleep(1000),
     ok = ping_child(SupPid),
     passed.
 
@@ -73,7 +73,7 @@ ping_child(SupPid) ->
     Ref = make_ref(),
     with_child_pid(SupPid, fun(ChildPid) -> ChildPid ! {ping, Ref, self()} end),
     receive {pong, Ref} -> ok
-    after 1100          -> timeout
+    after 1000          -> timeout
     end.
 
 exit_child(SupPid) ->
