@@ -108,16 +108,9 @@ parse_primitive(?VAR_4, 0,
 parse_primitive(?VAR_1, 1, 
                 <<Size:8/unsigned,Value:Size/binary,Rest/binary>>) ->
     {{utf8, Value}, Rest};
-parse_primitive(?VAR_1, 2,
-                <<Size:8/unsigned,Value:Size/binary,Rest/binary>>) ->
-    {{utf16, Value}, Rest};
-
 parse_primitive(?VAR_4, 1,
                 <<Size:32/unsigned,Value:Size/binary,Rest/binary>>) ->
     {{utf8, Value}, Rest};
-parse_primitive(?VAR_4, 2,
-                <<Size:32/unsigned,Value:Size/binary,Rest/binary>>) ->
-    {{utf16, Value}, Rest};
 
 parse_primitive(?VAR_1, 3, 
                 <<Size:8/unsigned,Value:Size/binary,Rest/binary>>) ->

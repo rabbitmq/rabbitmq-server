@@ -517,7 +517,10 @@ become(Mode, PackedState) ->
 start_1_0_connection(sasl, State = #v1{sock = Sock}) ->
     send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
     Ms = {array, symbol,
-          ["ANONYMOUS"] ++ [ atom_to_list(M) || M <- auth_mechanisms(Sock)]},
+          case application:get_env(rabbitmq_amqp1_0, default_user)  of
+              {ok, none} -> [];
+              {ok, _}    -> ["ANONYMOUS"]
+          end ++ [ atom_to_list(M) || M <- auth_mechanisms(Sock)]},
     Mechanisms = #'v1_0.sasl_mechanisms'{sasl_server_mechanisms = Ms},
     ok = send_on_channel0(Sock, Mechanisms, rabbit_amqp1_0_sasl),
     start_1_0_connection0(sasl, State);
