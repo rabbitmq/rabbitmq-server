@@ -638,7 +638,6 @@ send_to_new_1_0_session(Channel, Frame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
         connection = #connection{frame_max = FrameMax,
-                                 %% FIXME SASL, TLS, etc.
                                  user      = User}} = State,
     {ok, ChSupPid, ChFrPid} =
         %% Note: the equivalent, start_channel is in channel_sup_sup
