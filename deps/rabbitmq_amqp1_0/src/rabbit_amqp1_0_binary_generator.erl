@@ -56,11 +56,13 @@ generate(false) -> <<?FIXED_0:4,2:4>>;
 generate({ubyte, Value}) -> <<?FIXED_1:4,0:4,Value:8/unsigned>>;
 generate({ushort, Value}) -> <<?FIXED_2:4,0:4,Value:16/unsigned>>;
 generate({uint, Value}) ->
-    if Value < 256 -> <<?FIXED_1:4,2:4,Value:8/unsigned>>;
+    if Value =:= 0 -> <<?FIXED_0:4,3:4>>;
+       Value < 256 -> <<?FIXED_1:4,2:4,Value:8/unsigned>>;
        true        -> <<?FIXED_4:4,0:4,Value:32/unsigned>>
     end;
 generate({ulong, Value}) ->
-    if Value < 256 -> <<?FIXED_1:4,3:4,Value:8/unsigned>>;
+    if Value =:= 0 -> <<?FIXED_0:4,4:4>>;
+       Value < 256 -> <<?FIXED_1:4,3:4,Value:8/unsigned>>;
        true        -> <<?FIXED_8:4,0:4,Value:64/unsigned>>
     end;
 generate({byte, Value}) -> <<?FIXED_1:4,1:4,Value:8/signed>>;
