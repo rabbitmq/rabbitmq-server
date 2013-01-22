@@ -36,7 +36,7 @@ attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
                       source = Source,
                       rcv_settle_mode = RcvSettleMode}, BCh, DCh) ->
-    {DefaultOutcome, _Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
+    {DefaultOutcome, Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
     %% Default is first
     NoAck = RcvSettleMode =/= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND,
     DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
@@ -71,12 +71,8 @@ attach(#'v1_0.attach'{name = Name,
                        handle = Handle,
                        initial_delivery_count = {uint, ?INIT_TXFR_COUNT},
                        source = Source1#'v1_0.source'{
-                                  default_outcome = DefaultOutcome
-                                  %% TODO this breaks the Python client, when it
-                                  %% tries to send us back a matching detach message
-                                  %% it gets confused between described(true, [...])
-                                  %% and [...]. We think we're correct here
-                                  %% outcomes = Outcomes
+                                  default_outcome = DefaultOutcome,
+                                  outcomes        = Outcomes
                                  },
                        role = ?SEND_ROLE}], OutgoingLink};
                 Fail ->
