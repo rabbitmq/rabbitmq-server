@@ -98,7 +98,7 @@ transfer(#'v1_0.transfer'{delivery_id = DeliveryId0,
                         credit_used    = CreditUsed,
                         msg_acc        = MsgAcc} = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
-    ?DEBUG("Inbound content:~p~n",
+    ?DEBUG("Inbound content:~n  ~p~n",
            [[rabbit_amqp1_0_framing:pprint(Section) ||
                 Section <- rabbit_amqp1_0_framing:decode_bin(MsgBin)]]),
     {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(MsgBin),

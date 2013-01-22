@@ -216,6 +216,10 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
                             batchable = false},
     Msg1_0 = rabbit_amqp1_0_message:annotated_message(
                RKey, Deliver, Msg),
+    ?DEBUG("Outbound content:~n  ~p~n",
+           [[rabbit_amqp1_0_framing:pprint(Section) ||
+                Section <- rabbit_amqp1_0_framing:decode_bin(
+                             iolist_to_binary(Msg1_0))]]),
     %% FIXME Ugh
     TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(Txfr)),
     Frames = case FrameMax of

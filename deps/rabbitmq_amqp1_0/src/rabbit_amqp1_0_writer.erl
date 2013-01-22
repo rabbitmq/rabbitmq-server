@@ -224,11 +224,9 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
 
 assemble_frames(Channel, Performative, Content, FrameMax,
                 rabbit_amqp1_0_framing) ->
-    ?DEBUG("Channel ~p <-~n~p~n  with content:~n  ~p~n~n",
+    ?DEBUG("Channel ~p <-~n~p~n  followed by ~p bytes of content~n~n",
            [Channel, rabbit_amqp1_0_framing:pprint(Performative),
-            [rabbit_amqp1_0_framing:pprint(Section) ||
-                Section <- rabbit_amqp1_0_framing:decode_bin(
-                             iolist_to_binary(Content))]]),
+            iolist_size(Content)]),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]).
 
