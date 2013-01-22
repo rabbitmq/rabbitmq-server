@@ -93,7 +93,6 @@ generate({binary, Value}) ->
             [ <<?VAR_4:4,0:4,Size:32>>, Value ]
     end;
 
-%% FIXME variable sizes too
 generate({utf8, Value}) when size(Value) < ?VAR_1_LIMIT ->
     [ <<?VAR_1:4,1:4,(size(Value)):8>>, Value ];
 generate({utf8, Value}) ->
