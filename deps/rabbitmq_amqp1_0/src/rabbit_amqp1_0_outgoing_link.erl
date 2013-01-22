@@ -162,7 +162,6 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                              Dynamic, Address}}
             end;
         _ ->
-            %% TODO ugh. This will go away after the planned codec rewrite.
             case Address of
                 {Enc, Destination}
                   when Enc =:= utf8 orelse Enc =:= utf16 ->

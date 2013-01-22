@@ -148,7 +148,6 @@ translate_properties(Props10, Props10Bin,
 routing_key(Props10) ->
     unwrap(Props10#'v1_0.properties'.subject).
 
-%% TODO <new codec>
 unwrap({utf8, Bin})  -> Bin;
 unwrap({binary, Bin})-> Bin;
 unwrap({ubyte, Num}) -> Num;
@@ -239,7 +238,6 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
               end,
     [HeadersBin, PropsBin, AppPropsBin, DataBin].
 
-%% TODO <new codec>.
 wrap(Bin) when is_binary(Bin) -> {utf8, Bin};
 wrap(Num) when is_number(Num) -> {ulong, Num};
 wrap(undefined)               -> undefined.
