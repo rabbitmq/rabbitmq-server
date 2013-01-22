@@ -21,7 +21,8 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, flushed/2]).
+-export([send_command/2, deliver/4, send_credit_reply/2, send_drained/3,
+         flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([force_event_refresh/0]).
@@ -137,6 +138,12 @@ send_command(Pid, Msg) ->
 
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
+
+send_credit_reply(Pid, Len) ->
+    gen_server2:cast(Pid, {send_credit_reply, Len}).
+
+send_drained(Pid, ConsumerTag, Count) ->
+    gen_server2:cast(Pid, {send_drained, ConsumerTag, Count}).
 
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
@@ -313,6 +320,21 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                             routing_key  = RoutingKey},
            Content),
     noreply(record_sent(ConsumerTag, AckRequired, Msg, State));
+
+handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
+    ok = rabbit_writer:send_command(
+           WriterPid, #'basic.credit_ok'{available = Len}),
+    noreply(State);
+
+handle_cast({send_drained, ConsumerTag, Count},
+            State = #ch{writer_pid = WriterPid}) ->
+    ok = rabbit_writer:send_command(
+           WriterPid, #'basic.credit_state'{consumer_tag = ConsumerTag,
+                                            credit       = 0,
+                                            count        = Count,
+                                            available    = 0,
+                                            drain        = true}),
+    noreply(State);
 
 handle_cast(force_event_refresh, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),

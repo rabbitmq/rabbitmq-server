@@ -148,8 +148,7 @@ inform(Limiter = #token{q_state = Credits},
     {Unblock, Credits2} = update_credit(
                             CTag, Len, ChPid, Credit, Count, Drain, Credits),
     case Reply of
-        true  -> rabbit_channel:send_command(
-                   ChPid, #'basic.credit_ok'{available = Len});
+        true  -> rabbit_channel:send_credit_reply(ChPid, Len);
         false -> ok
     end,
     {Unblock, Limiter#token{q_state = Credits2}}.
@@ -194,12 +193,7 @@ maybe_drain(_, _, _, _, Credit, Count) ->
     {Credit, Count}.
 
 send_drained(ChPid, CTag, Count) ->
-    rabbit_channel:send_command(ChPid,
-                                #'basic.credit_state'{consumer_tag = CTag,
-                                                      credit       = 0,
-                                                      count        = Count,
-                                                      available    = 0,
-                                                      drain        = true}).
+    rabbit_channel:send_drained(ChPid, CTag, Count).
 
 update_credit(CTag, Len, ChPid, Credit, Count0, Drain, Credits) ->
     Count = case dict:find(CTag, Credits) of
