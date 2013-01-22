@@ -87,7 +87,7 @@ generate({uuid, Value}) -> <<?FIXED_16:4,8:4,Value:16/binary>>;
 
 generate({binary, Value}) ->
     Size = iolist_size(Value),
-    if  Size < 16#ff ->
+    if  Size < ?VAR_1_LIMIT ->
             [ <<?VAR_1:4,0:4,Size:8>>, Value ];
         true ->
             [ <<?VAR_4:4,0:4,Size:32>>, Value ]
@@ -98,7 +98,6 @@ generate({utf8, Value}) when size(Value) < ?VAR_1_LIMIT ->
     [ <<?VAR_1:4,1:4,(size(Value)):8>>, Value ];
 generate({utf8, Value}) ->
     [ <<?VAR_4:4,1:4,(size(Value)):32>>, Value ];
-generate({utf16, Value}) -> [ <<?VAR_1:4,2:4,(size(Value)):8>>, Value ];
 
 generate({symbol, Value}) -> [ <<?VAR_1:4,3:4,(length(Value)):8>>,
                                list_to_binary(Value) ];
