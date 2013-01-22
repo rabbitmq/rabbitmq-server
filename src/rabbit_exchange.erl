@@ -39,8 +39,7 @@
 -spec(recover/0 :: () -> [name()]).
 -spec(callback/4::
         (rabbit_types:exchange(), fun_name(),
-         fun((boolean()) -> non_neg_integer()) | atom(),
-            [any()]) -> 'ok').
+         fun((boolean()) -> non_neg_integer()) | atom(), [any()]) -> 'ok').
 -spec(policy_changed/2 ::
         (rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok').
 -spec(declare/6 ::
@@ -114,26 +113,19 @@ recover() ->
     [XName || #exchange{name = XName} <- Xs].
 
 callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
-    Serial = fun (Bool) ->
-                     case Serial0 of
-                         _ when is_atom(Serial0) -> Serial0;
-                         _                       -> Serial0(Bool)
-                     end
+    Serial = if is_function(Serial0) -> Serial0;
+                is_atom(Serial0)     -> fun (_Bool) -> Serial0 end
              end,
-    [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args])
-     || M <- decorators()],
+    [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args]) ||
+        M <- decorators()],
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
 policy_changed(X1, X2) -> callback(X1, policy_changed, none, [X1, X2]).
 
 serialise_events(X = #exchange{type = Type}) ->
-    case [Serialise || M <- decorators(),
-                       Serialise <- [M:serialise_events(X)],
-                       Serialise == true] of
-        [] -> (type_to_module(Type)):serialise_events();
-        _  -> true
-    end.
+    lists:any(fun (M) -> M:serialise_events(X) end, decorators())
+        orelse (type_to_module(Type)):serialise_events().
 
 serial(#exchange{name = XName} = X) ->
     Serial = case serialise_events(X) of
@@ -318,22 +310,19 @@ route(#exchange{name = #resource{name = <<"">>, virtual_host = VHost}},
     [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
 
 route(X = #exchange{name = XName}, Delivery) ->
-    route1(Delivery, {queue:from_list([X]), XName, []}).
+    route1(Delivery, {[X], XName, []}).
 
-route1(Delivery, {WorkList, SeenXs, QNames}) ->
-    case queue:out(WorkList) of
-        {empty, _WorkList} ->
-            lists:usort(QNames);
-        {{value, X = #exchange{type = Type}}, WorkList1} ->
-            DstNames = process_alternate(
-                         X, ((type_to_module(Type)):route(X, Delivery))),
-            route1(Delivery,
-                   lists:foldl(fun process_route/2, {WorkList1, SeenXs, QNames},
-                               DstNames))
-    end.
+route1(_, {[], _, QNames}) ->
+    lists:usort(QNames);
+route1(Delivery, {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
+    DstNames = process_alternate(
+                 X, ((type_to_module(Type)):route(X, Delivery))),
+    route1(Delivery,
+           lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
+                       DstNames)).
 
 process_alternate(#exchange{arguments = []}, Results) -> %% optimisation
-     Results;
+    Results;
 process_alternate(#exchange{name = XName, arguments = Args}, []) ->
     case rabbit_misc:r_arg(XName, exchange, Args, <<"alternate-exchange">>) of
         undefined -> [];
@@ -347,22 +336,24 @@ process_route(#resource{kind = exchange} = XName,
     Acc;
 process_route(#resource{kind = exchange} = XName,
               {WorkList, #resource{kind = exchange} = SeenX, QNames}) ->
-    {case lookup(XName) of
-         {ok, X}            -> queue:in(X, WorkList);
-         {error, not_found} -> WorkList
-     end, gb_sets:from_list([SeenX, XName]), QNames};
+    {cons_if_present(XName, WorkList),
+     gb_sets:from_list([SeenX, XName]), QNames};
 process_route(#resource{kind = exchange} = XName,
               {WorkList, SeenXs, QNames} = Acc) ->
     case gb_sets:is_element(XName, SeenXs) of
         true  -> Acc;
-        false -> {case lookup(XName) of
-                      {ok, X}            -> queue:in(X, WorkList);
-                      {error, not_found} -> WorkList
-                  end, gb_sets:add_element(XName, SeenXs), QNames}
+        false -> {cons_if_present(XName, WorkList),
+                  gb_sets:add_element(XName, SeenXs), QNames}
     end;
 process_route(#resource{kind = queue} = QName,
               {WorkList, SeenXs, QNames}) ->
     {WorkList, SeenXs, [QName | QNames]}.
+
+cons_if_present(XName, L) ->
+    case lookup(XName) of
+        {ok, X}            -> [X | L];
+        {error, not_found} -> L
+    end.
 
 call_with_exchange(XName, Fun) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
