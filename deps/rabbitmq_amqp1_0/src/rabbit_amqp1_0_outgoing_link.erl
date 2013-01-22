@@ -28,7 +28,6 @@
 
 -record(outgoing_link, {queue,
                         %% Note: this is maintained by the queue-limiter too.
-                        %% TODO: Do we care?
                         delivery_count = 0,
                         no_ack,
                         default_outcome}).
