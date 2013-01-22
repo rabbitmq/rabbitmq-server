@@ -620,8 +620,9 @@ running_disc_nodes() ->
 %%--------------------------------------------------------------------
 
 discover_cluster(Nodes) when is_list(Nodes) ->
-    lists:foldl(fun (_, {ok, Res})     -> {ok, Res};
-                    (Node, {error, _}) -> discover_cluster(Node)
+    lists:foldl(fun (_, {ok, Res}) -> {ok, Res};
+                    (Node, E)      -> prefer_result(
+                                        discover_cluster(Node), E)
                 end, {error, no_nodes_provided}, Nodes);
 discover_cluster(Node) ->
     OfflineError =
@@ -638,6 +639,16 @@ discover_cluster(Node) ->
                     {ok, Res}                   -> {ok, Res}
                 end
     end.
+
+prefer_result(E1, E2) -> case result_priority(E1) - result_priority(E2) of
+                             N when N > 0 -> E1;
+                             _            -> E2
+                         end.
+
+result_priority({ok,    _})                  -> 99;
+result_priority({error, no_nodes_provided})  -> 0;
+result_priority({error, tables_not_present}) -> 1;
+result_priority({error, _})                  -> 2.
 
 schema_ok_or_move() ->
     case rabbit_table:check_schema_integrity() of
