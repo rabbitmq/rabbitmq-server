@@ -1086,7 +1086,7 @@ test_policy_validation() ->
 
 test_server_status() ->
     %% create a few things so there is some useful information to list
-    Writer = spawn(fun () -> receive shutdown -> ok end end),
+    Writer = spawn(fun test_writer/0),
     {ok, Ch} = rabbit_channel:start_link(
                  1, self(), Writer, self(), "", rabbit_framing_amqp_0_9_1,
                  user(<<"user">>), <<"/">>, [], self(),
@@ -1161,10 +1161,15 @@ test_server_status() ->
 
     passed.
 
+test_writer() -> test_writer(none).
+
 test_writer(Pid) ->
     receive
-        shutdown               -> ok;
-        {send_command, Method} -> Pid ! Method, test_writer(Pid)
+        {'$gen_call', From, flush} -> gen_server:reply(From, ok),
+                                      test_writer(Pid);
+        {send_command, Method}     -> Pid ! Method,
+                                      test_writer(Pid);
+        shutdown                   -> ok
     end.
 
 test_spawn() ->
