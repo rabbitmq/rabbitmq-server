@@ -751,27 +751,18 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
                  _State) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}].
 
-%% [0] The extra "Interval" being subtracted is to take account of the
-%% fact that data points snap forwards in time while range.last snaps
-%% backwards.
 format_samples(Range, ManyStats, #state{interval = Interval}) ->
     lists:append(
       [case is_blank_stats(Stats) of
            true  -> [];
            false -> {Details, Counter} = format_sample_details(
                                            Range, Stats,
-                                           Range#range.last - Interval, %% [0]
+                                           Range#range.last, %% [0]
                                            Interval),
                     [{K,              Counter},
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
 
-%% [0] Only display the rate if it's live - i.e. the end of the range
-%% corresponds to the last data point we have. If the end of the
-%% range is earlier we have gone silent, if it's later we have been
-%% asked for a range back in time (in which case showing the correct
-%% instantaneous rate would be quite a faff, and probably
-%% unwanted).
 format_sample_details(Range, #stats{diffs = Diffs, base = Base},
                       RangePoint, Interval) ->
     {Samples, Count} = extract_samples(
@@ -780,8 +771,9 @@ format_sample_details(Range, #stats{diffs = Diffs, base = Base},
                 true  -> [{samples,  Samples}];
                 false -> {TS, S} = gb_trees:largest(Diffs),
                          Rate = case TS - RangePoint of %% [0]
-                                    0 -> S * 1000 / Interval;
-                                    _ -> 0
+                                    D when D =< Interval andalso
+                                           D >= 0 -> S * 1000 / Interval;
+                                    _             -> 0
                                 end,
                          [{rate,     Rate},
                           {interval, Interval},
@@ -794,6 +786,12 @@ format_sample_details(Range, #stats{diffs = Diffs, base = Base},
                 false -> []
             end,
     {Part1 ++ Part2, Count}.
+%% [0] Only display the rate if it's live - i.e. the end of the range
+%% corresponds to the last data point we have. If the end of the
+%% range is earlier we have gone silent, if it's later we have been
+%% asked for a range back in time (in which case showing the correct
+%% instantaneous rate would be quite a faff, and probably
+%% unwanted).
 
 %% What we want to do here is: given the #range{}, provide a set of
 %% samples such that we definitely provide a set of samples which
