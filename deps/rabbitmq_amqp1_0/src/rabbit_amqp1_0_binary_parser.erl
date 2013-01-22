@@ -100,18 +100,18 @@ parse_primitive(?FIXED_16, 8, <<Uuid:16/binary,Rest/binary>>) ->
 parse_primitive(?VAR_1, 0,
                 <<Size:8/unsigned, Value:Size/binary,Rest/binary>>) ->
     {{binary, Value}, Rest};
-parse_primitive(?VAR_4, 0, 
+parse_primitive(?VAR_4, 0,
                 <<Size:32/unsigned,Value:Size/binary,Rest/binary>>) ->
     {{binary, Value}, Rest};
 
-parse_primitive(?VAR_1, 1, 
+parse_primitive(?VAR_1, 1,
                 <<Size:8/unsigned,Value:Size/binary,Rest/binary>>) ->
     {{utf8, Value}, Rest};
 parse_primitive(?VAR_4, 1,
                 <<Size:32/unsigned,Value:Size/binary,Rest/binary>>) ->
     {{utf8, Value}, Rest};
 
-parse_primitive(?VAR_1, 3, 
+parse_primitive(?VAR_1, 3,
                 <<Size:8/unsigned,Value:Size/binary,Rest/binary>>) ->
     {{symbol, binary_to_list(Value)}, Rest};
 parse_primitive(?VAR_4, 3,

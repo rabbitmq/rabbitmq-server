@@ -65,7 +65,7 @@ attach(#'v1_0.attach'{name = Name,
                                            %% TODO exclusive?
                                            exclusive = false}, self()) of
                 #'basic.consume_ok'{} ->
-                    %% FIXME we should avoid the race by getting the queue to send
+                    %% TODO we should avoid the race by getting the queue to send
                     %% attach back, but a.t.m. it would use the wrong codec.
                     {ok, [#'v1_0.attach'{
                        name = Name,
@@ -102,7 +102,7 @@ update_credit(#'basic.credit_state'{credit       = LinkCredit,
     %% all the deliveries and transfered them, or the queue will have
     %% advanced it due to drain. So we adopt the queue's idea of the
     %% count.
-    %% FIXME account for it not being there any more
+    %% TODO account for it not being there any more
     F = #'v1_0.flow'{ handle      = Handle,
                       delivery_count = {uint, Count},
                       link_credit = {uint, LinkCredit},
@@ -220,7 +220,7 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
            [[rabbit_amqp1_0_framing:pprint(Section) ||
                 Section <- rabbit_amqp1_0_framing:decode_bin(
                              iolist_to_binary(Msg1_0))]]),
-    %% FIXME Ugh
+    %% TODO Ugh
     TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(Txfr)),
     Frames = case FrameMax of
                  unlimited ->

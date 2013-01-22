@@ -77,7 +77,7 @@ handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
     Handle = ctag_to_handle(ConsumerTag),
     case get({out, Handle}) of
         undefined ->
-            %% FIXME handle missing link -- why does the queue think it's there?
+            %% TODO handle missing link -- why does the queue think it's there?
             rabbit_log:warning("Delivery to non-existent consumer ~p",
                                [ConsumerTag]),
             {noreply, State};
@@ -125,7 +125,7 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, _QPid, _Reason}, State) ->
     %% TODO do we care any more since we're using direct client?
-    {noreply, State}. % FIXME rabbit_channel uses queue_blocked?
+    {noreply, State}. % TODO rabbit_channel uses queue_blocked?
 
 handle_cast({frame, Frame, FlowPid},
             State = #state{ reader_pid = ReaderPid,

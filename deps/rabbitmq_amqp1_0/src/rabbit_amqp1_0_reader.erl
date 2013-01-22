@@ -293,7 +293,7 @@ is_connection_frame(#'v1_0.open'{})  -> true;
 is_connection_frame(#'v1_0.close'{}) -> true;
 is_connection_frame(_)               -> false.
 
-%% FIXME Handle depending on connection state
+%% TODO Handle depending on connection state
 %% TODO It'd be nice to only decode up to the descriptor
 
 %% Nothing specifies that connection methods have to be on a
@@ -340,7 +340,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                               connection = Connection,
                               throttle   = Throttle,
                               sock = Sock}) ->
-    Interval = undefined, %% TODO does 1-0 really no longer have heartbeating?
+    Interval = undefined, %% TODO implement heartbeating
     ClientProps = case Props of
                       undefined -> [];
                       {map, Ps} -> Ps

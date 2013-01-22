@@ -52,7 +52,7 @@ fill_from_map(Record, Fields) ->
                  {Record, 2}, keys(Record)),
     Res.
 
-%% TODO this should be part of a more general handler for AMQP values etc.
+%% TODO should this be part of a more general handler for AMQP values etc?
 fill_from_binary(F = #'v1_0.data'{}, Field) ->
     F#'v1_0.data'{content = Field}.
 

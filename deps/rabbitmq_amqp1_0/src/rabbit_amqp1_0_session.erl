@@ -231,7 +231,7 @@ settle(Disp = #'v1_0.disposition'{first   = First0,
             {HWM, _} = gb_trees:largest(Unsettled),
             if Last < LWM ->
                     {none, Session};
-               %% FIXME this should probably be an error, rather than ignored.
+               %% TODO this should probably be an error, rather than ignored.
                First > HWM ->
                     {none, Session};
                true ->
