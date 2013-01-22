@@ -40,113 +40,66 @@ parse_described(Bin) ->
     {Value, Rest2} = parse(Rest1),
     {{described, Descriptor, Value}, Rest2}.
 
-parse_primitive0(<<Subcategory:4,Subtype:4,Rest/binary>>) ->
-    parse_primitive(Subcategory, Subtype, Rest).
+parse_primitive0(<<Type,Rest/binary>>) ->
+    parse_primitive(Type, Rest).
 
-parse_primitive(?FIXED_0, 0, Rest) ->
-    {null, Rest};
-parse_primitive(?FIXED_0, 1, Rest) ->
-    {true, Rest};
-parse_primitive(?FIXED_0, 2, Rest) ->
-    {false, Rest};
-parse_primitive(?FIXED_1, 6, <<0:8/unsigned,Rest/binary>>) ->
-    {false, Rest};
-parse_primitive(?FIXED_1, 6, <<1:8/unsigned,Rest/binary>>) ->
-    {true, Rest};
+-define(SYM(V), {symbol, binary_to_list(V)}).
 
+%% Constants
+parse_primitive(16#40, Rest) -> {null,       Rest};
+parse_primitive(16#41, Rest) -> {true,       Rest};
+parse_primitive(16#42, Rest) -> {false,      Rest};
+parse_primitive(16#43, Rest) -> {{uint, 0},  Rest};
+parse_primitive(16#44, Rest) -> {{ulong, 0}, Rest};
 
-%% Most integral types have a compact encoding as a byte.
-parse_primitive(?FIXED_1, 0, <<Value:8/unsigned,Rest/binary>>) ->
-    {{ubyte, Value}, Rest};
-parse_primitive(?FIXED_2, 0, <<Value:16/unsigned,Rest/binary>>) ->
-    {{ushort, Value}, Rest};
-parse_primitive(?FIXED_0, 3, Rest) ->
-    {{uint, 0}, Rest};
-parse_primitive(?FIXED_1, 2, <<Value:8/unsigned,Rest/binary>>) ->
-    {{uint, Value}, Rest};
-parse_primitive(?FIXED_4, 0, <<Value:32/unsigned,Rest/binary>>) ->
-    {{uint, Value}, Rest};
-parse_primitive(?FIXED_0, 4, Rest) ->
-    {{ulong, 0}, Rest};
-parse_primitive(?FIXED_1, 3, <<Value:8/unsigned,Rest/binary>>) ->
-    {{ulong, Value}, Rest};
-parse_primitive(?FIXED_8, 0, <<Value:64/unsigned,Rest/binary>>) ->
-    {{ulong, Value}, Rest};
-parse_primitive(?FIXED_1, 1, <<Value:8/signed,Rest/binary>>) ->
-    {{byte, Value}, Rest};
-parse_primitive(?FIXED_2, 1, <<Value:16/signed,Rest/binary>>) ->
-    {{short, Value}, Rest};
-parse_primitive(?FIXED_1, 4, <<Value:8/signed,Rest/binary>>) ->
-    {{int, Value}, Rest};
-parse_primitive(?FIXED_4, 1, <<Value:32/signed,Rest/binary>>) ->
-    {{int, Value}, Rest};
-parse_primitive(?FIXED_1, 5, <<Value:8/signed,Rest/binary>>) ->
-    {{long, Value}, Rest};
-parse_primitive(?FIXED_8, 1, <<Value:64/signed,Rest/binary>>) ->
-    {{long, Value}, Rest};
+%% Fixed-widths. Most integral types have a compact encoding as a byte.
+parse_primitive(16#50, <<V:8/unsigned,  R/binary>>) -> {{ubyte, V},      R};
+parse_primitive(16#51, <<V:8/signed,    R/binary>>) -> {{byte, V},       R};
+parse_primitive(16#52, <<V:8/unsigned,  R/binary>>) -> {{uint, V},       R};
+parse_primitive(16#53, <<V:8/unsigned,  R/binary>>) -> {{ulong, V},      R};
+parse_primitive(16#54, <<V:8/signed,    R/binary>>) -> {{int, V},        R};
+parse_primitive(16#55, <<V:8/signed,    R/binary>>) -> {{long, V},       R};
+parse_primitive(16#56, <<0:8/unsigned,  R/binary>>) -> {false,           R};
+parse_primitive(16#56, <<1:8/unsigned,  R/binary>>) -> {true,            R};
+parse_primitive(16#60, <<V:16/unsigned, R/binary>>) -> {{ushort, V},     R};
+parse_primitive(16#61, <<V:16/signed,   R/binary>>) -> {{short, V},      R};
+parse_primitive(16#70, <<V:32/unsigned, R/binary>>) -> {{uint, V},       R};
+parse_primitive(16#71, <<V:32/signed,   R/binary>>) -> {{int, V},        R};
+parse_primitive(16#72, <<V:32/float,    R/binary>>) -> {{float, V},      R};
+parse_primitive(16#73, <<Utf32:4/binary,R/binary>>) -> {{char, Utf32},   R};
+parse_primitive(16#80, <<V:64/unsigned, R/binary>>) -> {{ulong, V},      R};
+parse_primitive(16#81, <<V:64/signed,   R/binary>>) -> {{long, V},       R};
+parse_primitive(16#82, <<V:64/float,    R/binary>>) -> {{double, V},     R};
+parse_primitive(16#83, <<TS:64/signed,  R/binary>>) -> {{timestamp, TS}, R};
+parse_primitive(16#98, <<Uuid:16/binary,R/binary>>) -> {{uuid, Uuid},    R};
 
-parse_primitive(?FIXED_4, 2, <<Value:32/float,Rest/binary>>) ->
-    {{float, Value}, Rest};
-parse_primitive(?FIXED_8, 2, <<Value:64/float,Rest/binary>>) ->
-    {{double, Value}, Rest};
+%% Variable-widths
+parse_primitive(16#a0,<<S:8/unsigned, V:S/binary,R/binary>>)-> {{binary, V}, R};
+parse_primitive(16#a1,<<S:8/unsigned, V:S/binary,R/binary>>)-> {{utf8, V},   R};
+parse_primitive(16#a3,<<S:8/unsigned, V:S/binary,R/binary>>)-> {?SYM(V),     R};
+parse_primitive(16#b3,<<S:32/unsigned,V:S/binary,R/binary>>)-> {?SYM(V),     R};
+parse_primitive(16#b0,<<S:32/unsigned,V:S/binary,R/binary>>)-> {{binary, V}, R};
+parse_primitive(16#b1,<<S:32/unsigned,V:S/binary,R/binary>>)-> {{utf8, V},   R};
 
-parse_primitive(?FIXED_4, 3, <<Utf32Char:4/binary,Rest/binary>>) ->
-    {{char, Utf32Char}, Rest};
-parse_primitive(?FIXED_8, 3, <<Timestamp:64/signed,Rest/binary>>) ->
-    {{timestamp, Timestamp}, Rest};
-parse_primitive(?FIXED_16, 8, <<Uuid:16/binary,Rest/binary>>) ->
-    {{uuid, Uuid}, Rest};
-
-parse_primitive(?VAR_1, 0,
-                <<Size:8/unsigned, Value:Size/binary,Rest/binary>>) ->
-    {{binary, Value}, Rest};
-parse_primitive(?VAR_4, 0,
-                <<Size:32/unsigned,Value:Size/binary,Rest/binary>>) ->
-    {{binary, Value}, Rest};
-
-parse_primitive(?VAR_1, 1,
-                <<Size:8/unsigned,Value:Size/binary,Rest/binary>>) ->
-    {{utf8, Value}, Rest};
-parse_primitive(?VAR_4, 1,
-                <<Size:32/unsigned,Value:Size/binary,Rest/binary>>) ->
-    {{utf8, Value}, Rest};
-
-parse_primitive(?VAR_1, 3,
-                <<Size:8/unsigned,Value:Size/binary,Rest/binary>>) ->
-    {{symbol, binary_to_list(Value)}, Rest};
-parse_primitive(?VAR_4, 3,
-                <<Size:32/unsigned,Value:Size/binary,Rest/binary>>) ->
-    {{symbol, binary_to_list(Value)}, Rest};
-
-parse_primitive(?FIXED_0, 5, Rest) ->
-    {{list, []}, Rest};
-parse_primitive(?COMPOUND_1, 0,
-                <<Size:8/unsigned,
-                 CountAndValue:Size/binary,Rest/binary>>) ->
-    {{list, parse_compound(8, CountAndValue)}, Rest};
-parse_primitive(?COMPOUND_4, 0,
-                <<Size:32/unsigned,
-                 CountAndValue:Size/binary,Rest/binary>>) ->
-    {{list, parse_compound(32, CountAndValue)}, Rest};
-parse_primitive(?ARRAY_1, 0,
-                <<Size:8/unsigned,
-                 CountAndValue:Size/binary,Rest/binary>>) ->
-    {{list, parse_array(8, CountAndValue)}, Rest};
-parse_primitive(?ARRAY_4, 0,
-                <<Size:32/unsigned,
-                 CountAndValue:Size/binary,Rest/binary>>) ->
-    {{list, parse_array(32, CountAndValue)}, Rest};
-
-parse_primitive(?COMPOUND_1, 1,
-               <<Size:8/unsigned,
-                CountAndValue:Size/binary,Rest/binary>>) ->
+%% Compounds
+parse_primitive(16#45, R) ->
+    {{list, []}, R};
+parse_primitive(16#c0,<<S:8/unsigned,CountAndValue:S/binary,R/binary>>) ->
+    {{list, parse_compound(8, CountAndValue)}, R};
+parse_primitive(16#c1,<<S:8/unsigned,CountAndValue:S/binary,R/binary>>) ->
     List = parse_compound(8, CountAndValue),
-    {{map, mapify(List)}, Rest};
-parse_primitive(?COMPOUND_4, 1,
-               <<Size:32/unsigned,
-                CountAndValue:Size/binary,Rest/binary>>) ->
+    {{map, mapify(List)}, R};
+parse_primitive(16#d0,<<S:32/unsigned,CountAndValue:S/binary,R/binary>>) ->
+    {{list, parse_compound(32, CountAndValue)}, R};
+parse_primitive(16#d1,<<S:32/unsigned,CountAndValue:S/binary,R/binary>>) ->
     List = parse_compound(32, CountAndValue),
-    {{map, mapify(List)}, Rest}.
+    {{map, mapify(List)}, R};
+
+%% Arrays
+parse_primitive(16#e0,<<S:8/unsigned,CountAndV:S/binary,R/binary>>) ->
+    {{list, parse_array(8, CountAndV)}, R};
+parse_primitive(16#f0,<<S:32/unsigned,CountAndV:S/binary,R/binary>>) ->
+    {{list, parse_array(32, CountAndV)}, R}.
 
 parse_compound(UnitSize, Bin) ->
     <<Count:UnitSize, Bin1/binary>> = Bin,
@@ -168,14 +121,14 @@ parse_array1(Count, <<?DESCRIBED,Rest/binary>>) ->
     lists:map(fun (Value) ->
                       {described, Descriptor, Value}
               end, List);
-parse_array1(Count, <<SubCategory:4,SubType:4,ArrayBin/binary>>) ->
-    parse_array2(Count, SubCategory, SubType, ArrayBin, []).
+parse_array1(Count, <<Type,ArrayBin/binary>>) ->
+    parse_array2(Count, Type, ArrayBin, []).
 
-parse_array2(0, _SubCat, _SubType, <<>>, Acc) ->
+parse_array2(0, _Type, <<>>, Acc) ->
     lists:reverse(Acc);
-parse_array2(Count, SubCat, SubType, Bin, Acc) ->
-    {Value, Rest} = parse_primitive(SubCat, SubType, Bin),
-    parse_array2(Count - 1, SubCat, SubType, Rest, [Value | Acc]).
+parse_array2(Count, Type, Bin, Acc) ->
+    {Value, Rest} = parse_primitive(Type, Bin),
+    parse_array2(Count - 1, Type, Rest, [Value | Acc]).
 
 mapify([]) ->
     [];
