@@ -541,23 +541,28 @@ handle_fine_stat(Id, Stats, Timestamp, State) ->
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    append_samples(Stats1, Timestamp, {fine, Id}, ?FINE_STATS, State).
+    append_samples(Stats1, Timestamp, {fine, Id}, all, State).
 
 delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
     ets:match_delete(ETS, {{{Type, Id}, '_'}, '_'}).
 
 append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
     OldStats = lookup_element(OldTable, Id),
-    [append_sample(Stats, TS, OldStats, Id, Key, State) || Key <- Keys],
+    NewMS = ceil(TS, State),
+    case Keys of
+        all -> [append_sample(Key, Value, NewMS, OldStats, Id, State)
+                || {Key, Value} <- Stats];
+        _   -> [append_sample(Key, pget(Key, Stats), NewMS, OldStats, Id, State)
+                || Key <- Keys]
+    end,
     ets:insert(OldTable, {Id, Stats}).
 
-append_sample(Stats, NewTS, OldStats, Id, Key, State) ->
-    NewMS = ceil(NewTS, State),
-    case pget(Key, Stats) of
-        unknown -> ok;
-        New     -> Args = {Key, New - pget(Key, OldStats, 0), NewMS, State},
-                   record_sample(Id, Args, State)
-    end.
+append_sample(_Key, unknown, _NewMS, _OldStats, _Id, _State) ->
+    ok;
+
+append_sample(Key, Value, NewMS, OldStats, Id, State) ->
+    record_sample(
+      Id, {Key, Value - pget(Key, OldStats, 0), NewMS, State}, State).
 
 record_sample({coarse, Id}, Args, State) ->
     record_sample0(Id, Args),
