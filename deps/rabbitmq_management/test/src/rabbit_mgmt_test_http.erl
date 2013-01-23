@@ -747,6 +747,13 @@ queue_purge_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+queue_actions_test() ->
+    http_put("/queues/%2f/q", [], ?NO_CONTENT),
+    http_post("/queues/%2f/q/actions", [{action, sync}], ?NO_CONTENT),
+    http_post("/queues/%2f/q/actions", [{action, cancel_sync}], ?NO_CONTENT),
+    http_post("/queues/%2f/q/actions", [{action, change_colour}], ?BAD_REQUEST),
+    http_delete("/queues/%2f/q", ?NO_CONTENT),
+    ok.
 
 exclusive_consumer_test() ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
