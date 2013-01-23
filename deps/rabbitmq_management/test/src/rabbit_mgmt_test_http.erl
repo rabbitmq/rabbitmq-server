@@ -189,7 +189,7 @@ permissions_test() ->
 
 connections_test() ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    LocalPort = rabbit_mgmt_test_db:local_port(Conn),
+    LocalPort = local_port(Conn),
     Path = binary_to_list(
              rabbit_mgmt_format:print(
                "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
@@ -486,7 +486,7 @@ get_conn(Username, Password) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{
                                         username = list_to_binary(Username),
                                         password = list_to_binary(Password)}),
-    LocalPort = rabbit_mgmt_test_db:local_port(Conn),
+    LocalPort = local_port(Conn),
     ConnPath = binary_to_list(
                  rabbit_mgmt_format:print(
                    "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
@@ -1011,6 +1011,11 @@ msg(Key, Headers, Body, Enc) ->
                          {headers,       Headers}]},
      {payload,          Body},
      {payload_encoding, Enc}].
+
+local_port(Conn) ->
+    [{sock, Sock}] = amqp_connection:info(Conn, [sock]),
+    {ok, Port} = inet:port(Sock),
+    Port.
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->
