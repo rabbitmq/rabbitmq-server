@@ -699,9 +699,12 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 %% ... and finally, the 1.0 spec is crystal clear!  Note that the
-%% TLS uses a different protocol number, and would go here.
 handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
     become_1_0(amqp, {0, 1, 0, 0}, State);
+
+%% 2 stands for TLS
+handle_input(handshake, <<"AMQP", 2, 1, 0, 0>>, #v1{sock = Sock}) ->
+    refuse_1_0_connection(Sock, tls_request_refused);
 
 %% 3 stands for "SASL"
 handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
@@ -738,6 +741,10 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
 
 refuse_connection(Sock, Exception) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
+    throw(Exception).
+
+refuse_1_0_connection(Sock, Exception) ->
+    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,1,0,0>>) end),
     throw(Exception).
 
 ensure_stats_timer(State = #v1{connection_state = running}) ->
