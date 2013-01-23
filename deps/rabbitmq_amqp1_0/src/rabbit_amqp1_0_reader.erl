@@ -387,7 +387,6 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                   ClientHeartbeat, ReceiveFun),
                 State#v1{connection_state = running,
                          connection = Connection#connection{
-                                        timeout_sec = ClientHeartbeat,
                                         frame_max = FrameMax},
                          heartbeater = Heartbeater}
         end,
