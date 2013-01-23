@@ -230,15 +230,16 @@ close_connection(State = #v1{connection = #connection{
     State#v1{connection_state = closed}.
 
 handle_dependent_exit(ChPid, Reason, State) ->
-    %% TODO handle sessions
     case {ChPid, termination_kind(Reason)} of
         {undefined, uncontrolled} ->
             exit({abnormal_dependent_exit, ChPid, Reason});
         {_Channel, controlled} ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
-            maybe_close(handle_exception(control_throttle(State),
-                                         Channel, Reason))
+            {RealReason, Trace} = Reason,
+            R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                 "Session error: ~p~n~p~n", [RealReason, Trace]},
+            maybe_close(handle_exception(control_throttle(State), Channel, R))
     end.
 
 termination_kind(normal) -> controlled;
@@ -257,7 +258,7 @@ error_frame(Condition, Text) ->
                   description = {utf8, list_to_binary(Text)}}.
 
 error_text(Reason, Args) ->
-    lists:flatten(io_lib:format(Reason, Args)).
+    rabbit_misc:format(Reason, Args).
 
 handle_exception(State = #v1{connection_state = closed}, Channel,
                  {_Condition, Reason, Args}) ->
