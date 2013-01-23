@@ -442,6 +442,8 @@ args({struct, L}) -> args(L);
 args(L)           -> rabbit_mgmt_format:to_amqp_table(L).
 
 %% Make replying to a post look like anything else...
+post_respond({true, ReqData, Context}) ->
+    {true, ReqData, Context};
 post_respond({{halt, Code}, ReqData, Context}) ->
     {{halt, Code}, ReqData, Context};
 post_respond({JSON, ReqData, Context}) ->

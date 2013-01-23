@@ -487,15 +487,16 @@ get_conn(Username, Password) ->
                                         username = list_to_binary(Username),
                                         password = list_to_binary(Password)}),
     LocalPort = local_port(Conn),
-    ConnPath = binary_to_list(
-                 rabbit_mgmt_format:print(
-                   "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
-                   [LocalPort])),
-    ChPath = binary_to_list(
-               rabbit_mgmt_format:print(
-                 "/channels/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672%20(1)",
-                 [LocalPort])),
-    {Conn, ConnPath, ChPath}.
+    ConnPath = rabbit_misc:format(
+                 "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
+                 [LocalPort]),
+    ChPath = rabbit_misc:format(
+               "/channels/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672%20(1)",
+               [LocalPort]),
+    ConnChPath = rabbit_misc:format(
+                   "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672/channels",
+                   [LocalPort]),
+    {Conn, ConnPath, ChPath, ConnChPath}.
 
 permissions_connection_channel_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
@@ -505,9 +506,9 @@ permissions_connection_channel_test() ->
     http_put("/users/monitor", [{password, <<"monitor">>},
                             {tags, <<"monitoring">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/monitor", PermArgs, ?NO_CONTENT),
-    {Conn1, UserConn, UserCh} = get_conn("user", "user"),
-    {Conn2, MonConn, MonCh} = get_conn("monitor", "monitor"),
-    {Conn3, AdmConn, AdmCh} = get_conn("guest", "guest"),
+    {Conn1, UserConn, UserCh, UserConnCh} = get_conn("user", "user"),
+    {Conn2, MonConn, MonCh, MonConnCh} = get_conn("monitor", "monitor"),
+    {Conn3, AdmConn, AdmCh, AdmConnCh} = get_conn("guest", "guest"),
     {ok, _Ch1} = amqp_connection:open_channel(Conn1),
     {ok, _Ch2} = amqp_connection:open_channel(Conn2),
     {ok, _Ch3} = amqp_connection:open_channel(Conn3),
@@ -533,6 +534,9 @@ permissions_connection_channel_test() ->
     AssertRead(UserCh, ?OK),
     AssertRead(MonCh, ?NOT_AUTHORISED),
     AssertRead(AdmCh, ?NOT_AUTHORISED),
+    AssertRead(UserConnCh, ?OK),
+    AssertRead(MonConnCh, ?NOT_AUTHORISED),
+    AssertRead(AdmConnCh, ?NOT_AUTHORISED),
 
     AssertClose = fun(Path, User, Status) ->
                           http_delete(Path, User, User, Status)
@@ -746,6 +750,13 @@ queue_purge_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+queue_actions_test() ->
+    http_put("/queues/%2f/q", [], ?NO_CONTENT),
+    http_post("/queues/%2f/q/actions", [{action, sync}], ?NO_CONTENT),
+    http_post("/queues/%2f/q/actions", [{action, cancel_sync}], ?NO_CONTENT),
+    http_post("/queues/%2f/q/actions", [{action, change_colour}], ?BAD_REQUEST),
+    http_delete("/queues/%2f/q", ?NO_CONTENT),
+    ok.
 
 exclusive_consumer_test() ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
@@ -997,6 +1008,10 @@ policy_test() ->
     0 = length(http_get("/policies")),
     0 = length(http_get("/policies/%2f")),
     rabbit_runtime_parameters_test:unregister_policy_validator(),
+    ok.
+
+extensions_test() ->
+    [[{javascript,<<"dispatcher.js">>}]] = http_get("/extensions", ?OK),
     ok.
 
 %%---------------------------------------------------------------------------

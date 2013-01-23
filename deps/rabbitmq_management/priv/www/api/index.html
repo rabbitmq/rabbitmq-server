@@ -212,8 +212,11 @@ Content-Length: 0</pre>
         <td>X</td>
         <td></td>
         <td class="path">/api/connections/<i>name</i></td>
-        <td>An individual connection. DELETEing it will close the
-        connection.</td>
+        <td>
+          An individual connection. DELETEing it will close the
+          connection. Optionally set the "X-Reason" header when
+          DELETEing to provide a reason.
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -341,6 +344,20 @@ Content-Length: 0</pre>
         <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/contents</td>
         <td>Contents of a queue. DELETE to purge. Note you can't GET this.</td>
       </tr>
+
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/actions</td>
+        <td>
+          Actions that can be taken on a queue. POST a body like:
+          <pre>{"action":"sync"}</pre> Currently the actions which are
+          supported are <code>sync</code> and <code>cancel_sync</code>.
+        </td>
+      </tr>
+
       <tr>
         <td></td>
         <td></td>

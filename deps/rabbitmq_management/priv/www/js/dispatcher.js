@@ -25,9 +25,14 @@ dispatcher_add(function(sammy) {
                 'connection', '#/connections');
         });
     sammy.del('#/connections', function() {
-            if (sync_delete(this, '/connections/:name'))
-                go_to('#/connections');
-            return false;
+            var options = {headers: {
+              'X-Reason': this.params['reason']
+            }};
+            if (sync_delete(this, '/connections/:name', options)) {
+              go_to('#/connections');
+            }
+
+           return false;
         });
 
     path('#/channels', {'channels': '/channels'}, 'channels');
@@ -85,6 +90,13 @@ dispatcher_add(function(sammy) {
         });
     sammy.post('#/queues/get', function() {
             get_msgs(this.params);
+            return false;
+        });
+    sammy.post('#/queues/actions', function() {
+            if (sync_post(this, '/queues/:vhost/:name/actions'))
+                // We can't refresh fast enough, it's racy. So grey
+                // the button and wait for a normal refresh.
+                $('#action-button').prop('disabled', true);
             return false;
         });
     sammy.post('#/bindings', function() {

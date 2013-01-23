@@ -31,6 +31,8 @@ import json
 import os
 import socket
 
+VERSION = '%%VSN%%'
+
 LISTABLE = {'connections': {'vhost': False},
             'channels':    {'vhost': False},
             'exchanges':   {'vhost': True},
@@ -64,14 +66,17 @@ URIS = {
 
 DECLARABLE = {
     'exchange':   {'mandatory': ['name', 'type'],
+                   'json':      ['arguments'],
                    'optional':  {'auto_delete': 'false', 'durable': 'true',
-                                 'internal': 'false'}},
+                                 'internal': 'false', 'arguments': {}}},
     'queue':      {'mandatory': ['name'],
+                   'json':      ['arguments'],
                    'optional':  {'auto_delete': 'false', 'durable': 'true',
-                                 'node': None}},
-    'binding':    {'mandatory': ['source', 'destination_type', 'destination',
-                                 'routing_key'],
-                   'optional':  {}},
+                                 'arguments': {}, 'node': None}},
+    'binding':    {'mandatory': ['source', 'destination'],
+                   'json':      ['arguments'],
+                   'optional':  {'destination_type': 'queue',
+                                 'routing_key': '', 'arguments': {}}},
     'vhost':      {'mandatory': ['name'],
                    'optional':  {}},
     'user':       {'mandatory': ['name', 'password', 'tags'],
@@ -297,11 +302,16 @@ def make_parser():
     add("--bash-completion", action="store_true",
         dest="bash_completion",
         help="Print bash completion script")
+    add("--version", action="store_true",
+        dest="version",
+        help="Display version and exit")
 
 def make_configuration():
     make_parser()
     (options, args) = parser.parse_args()
     setattr(options, "declare_vhost", None)
+    if options.version:
+        print_version()
     if options.node is None and options.config:
         options.node = "default"
     elif options.node and options.config is None:
@@ -333,6 +343,10 @@ def assert_usage(expr, error):
         output("\nERROR: {0}\n".format(error))
         output("{0} --help for help\n".format(os.path.basename(sys.argv[0])))
         sys.exit(1)
+
+def print_version():
+    output("rabbitmqadmin {0}".format(VERSION))
+    sys.exit(0)
 
 def column_sort_key(col):
     if col in PROMOTE_COLUMNS:
@@ -568,13 +582,12 @@ class Management:
             assert_usage(name in mandatory or name in optional.keys(),
                          'Argument "{0}" not recognised'.format(name))
             if 'json' in obj and name in obj['json']:
-                upload[name] = json.loads(value)
+                upload[name] = self.parse_json(value)
             else:
                 upload[name] = value
         for m in mandatory:
             assert_usage(m in upload.keys(),
                          'mandatory argument "{0}" required'.format(m))
-        upload['arguments'] = {}
         if 'vhost' not in mandatory:
             upload['vhost'] = self.options.vhost or self.options.declare_vhost
         uri_args = {}
@@ -586,6 +599,13 @@ class Management:
                     uri_args['destination_char'] = v[0]
         uri = uri_template.format(**uri_args)
         return (uri, upload)
+
+    def parse_json(self, text):
+        try:
+            return json.loads(text)
+        except ValueError:
+            print "Could not parse JSON:\n  {0}".format(text)
+            sys.exit(1)
 
 def format_list(json_list, columns, args, options):
     format = options.format
@@ -846,21 +866,39 @@ _rabbitmqadmin()
 	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-@(H|-host))
+	-H)
 	    COMPREPLY=( $(compgen -A hostname ${cur}) )
             return 0
             ;;
-	-@(V|-vhost))
+	--host)
+	    COMPREPLY=( $(compgen -A hostname ${cur}) )
+            return 0
+            ;;
+	-V)
             opts="$(rabbitmqadmin -q -f bash list vhosts)"
 	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-@(u|-username))
+	--vhost)
+            opts="$(rabbitmqadmin -q -f bash list vhosts)"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            return 0
+            ;;
+	-u)
             opts="$(rabbitmqadmin -q -f bash list users)"
 	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-@(f|-format))
+	--username)
+            opts="$(rabbitmqadmin -q -f bash list users)"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            return 0
+            ;;
+	-f)
+	    COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
+            return 0
+            ;;
+	--format)
 	    COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
             return 0
             ;;

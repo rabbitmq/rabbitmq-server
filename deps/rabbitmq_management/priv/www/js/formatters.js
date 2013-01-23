@@ -136,6 +136,14 @@ function fmt_mirrors(queue) {
     return res;
 }
 
+function fmt_sync_status(queue) {
+    var res = '<p><b>Syncing: ';
+    res += (queue.messages == 0) ? 100 : Math.round(100 * queue.sync_messages /
+                                                    queue.messages);
+    res += '%</b></p>';
+    return res;
+}
+
 function fmt_channel_mode(ch) {
     if (ch.transactional) {
         return '<acronym title="Transactional">T</acronym>';
@@ -486,17 +494,23 @@ function fmt_shortened_uri(uri0) {
 function fmt_client_name(properties) {
     var res = [];
     if (properties.product != undefined) {
-        res.push(properties.product);
+        res.push(fmt_trunc(properties.product, 10));
     }
     if (properties.platform != undefined) {
-        res.push(properties.platform);
+        res.push(fmt_trunc(properties.platform, 10));
     }
     res = res.join(" / ");
 
     if (properties.version != undefined) {
-        res += '<sub>' + properties.version + '</sub>';
+        res += '<sub>' + fmt_trunc(properties.version) + '</sub>';
     }
     return res;
+}
+
+function fmt_trunc(str, max_length) {
+    return str.length > max_length ?
+        ('<acronym class="normal" title="' + str + '">' +
+         str.substring(0, max_length) + '...</acronym>') : str;
 }
 
 function alt_rows(i) {
