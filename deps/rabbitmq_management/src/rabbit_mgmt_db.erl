@@ -500,9 +500,8 @@ handle_stats(TName, Stats, Timestamp, Funs, RatesKeys,
              State = #state{tables = Tables}) ->
     Id = id(TName, Stats),
     append_samples(Stats, Timestamp, {coarse, {TName, Id}}, RatesKeys, State),
-    Stats1 = lists:foldl(
-               fun (K, StatsAcc) -> proplists:delete(K, StatsAcc) end,
-               Stats, [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES),
+    StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
+    Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
     ets:insert(orddict:fetch(TName, Tables), {{Id, stats}, Stats2, Timestamp}),
     {ok, State}.
