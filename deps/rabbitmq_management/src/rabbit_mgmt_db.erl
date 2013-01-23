@@ -139,6 +139,8 @@
 -define(COARSE_QUEUE_STATS,
         [messages, messages_ready, messages_unacknowledged]).
 
+-define(REMOVE_OLD_SAMPLES_INTERVAL, 5 * 60 * 1000).
+
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
@@ -311,8 +313,9 @@ code_change(_OldVsn, State, _Extra) ->
 reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 noreply(NewState) -> {noreply, NewState, hibernate}.
 
-set_remove_timer(State = #state{interval = Interval}) ->
-    TRef = erlang:send_after(Interval, self(), remove_old_samples),
+set_remove_timer(State) ->
+    TRef = erlang:send_after(
+             ?REMOVE_OLD_SAMPLES_INTERVAL, self(), remove_old_samples),
     State#state{remove_old_samples_timer = TRef}.
 
 handle_pre_hibernate(State) ->
