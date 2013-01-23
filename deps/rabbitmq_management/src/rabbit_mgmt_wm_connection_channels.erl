@@ -45,7 +45,8 @@ to_json(ReqData, Context) ->
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_user(
+      ReqData, Context, rabbit_mgmt_wm_connection:conn(ReqData)).
 
 %%--------------------------------------------------------------------
 
