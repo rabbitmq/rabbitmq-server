@@ -27,6 +27,8 @@
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 -export([conserve_resources/3]).
 
+-import(rabbit_amqp1_0_link_util, [protocol_error/3]).
+
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
@@ -359,9 +361,9 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                  end,
     State1 =
         if (FrameMax =/= unlimited) and (FrameMax < ?FRAME_1_0_MIN_SIZE) ->
-                rabbit_misc:protocol_error(
-                  not_allowed, "frame_max=~w < ~w min size",
-                  [FrameMax, ?FRAME_1_0_MIN_SIZE]);
+                protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
+                               "frame_max=~w < ~w min size",
+                               [FrameMax, ?FRAME_1_0_MIN_SIZE]);
            %% TODO Python client sets 2^32-1
            %% (ServerFrameMax /= 0) and (FrameMax > ServerFrameMax) ->
            %%      rabbit_misc:protocol_error(
@@ -585,18 +587,16 @@ send_on_channel0(Sock, Method, Framing) ->
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
-            rabbit_misc:protocol_error(
-              command_invalid, "unknown authentication mechanism '~s'",
-              [TypeBin]);
+            protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
+                           "unknown authentication mechanism '~s'", [TypeBin]);
         T ->
             case {lists:member(T, auth_mechanisms(Sock)),
                   rabbit_registry:lookup_module(auth_mechanism, T)} of
                 {true, {ok, Module}} ->
                     Module;
                 _ ->
-                    rabbit_misc:protocol_error(
-                      command_invalid,
-                      "invalid authentication mechanism '~s'", [T])
+                    protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
+                                   "invalid authentication mechanism '~s'", [T])
             end
     end.
 
@@ -614,12 +614,12 @@ auth_phase_1_0(Response,
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Msg, Args} ->
-            rabbit_misc:protocol_error(
-              access_refused, "~s login refused: ~s",
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~s login refused: ~s",
               [proplists:get_value(name, AuthMechanism:description()),
                io_lib:format(Msg, Args)]);
         {protocol_error, Msg, Args} ->
-            rabbit_misc:protocol_error(syntax_error, Msg, Args);
+            protocol_error(?V_1_0_AMQP_ERROR_DECODE_ERROR, Msg, Args);
         {challenge, Challenge, AuthState1} ->
             Secure = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
             ok = send_on_channel0(Sock, Secure, rabbit_amqp1_0_sasl),
