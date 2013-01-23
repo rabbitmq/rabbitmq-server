@@ -1163,7 +1163,7 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     noreply(requeue(AckTags, ChPid, State));
 
 handle_call(sync_mirrors, _From,
-            State = #q{backing_queue       = rabbit_mirror_queue_master = BQ,
+            State = #q{backing_queue       = rabbit_mirror_queue_master,
                        backing_queue_state = BQS}) ->
     S = fun(BQSN) -> State#q{backing_queue_state = BQSN} end,
     HandleInfo = fun (Status) ->
@@ -1179,13 +1179,9 @@ handle_call(sync_mirrors, _From,
                           State, #q.stats_timer,
                           fun() -> emit_stats(State#q{status = Status}) end)
                 end,
-    case BQ:depth(BQS) - BQ:len(BQS) of
-        0 -> case rabbit_mirror_queue_master:sync_mirrors(
-                    HandleInfo, EmitStats, BQS) of
-                 {ok, BQS1}           -> reply(ok, S(BQS1));
-                 {stop, Reason, BQS1} -> {stop, Reason, S(BQS1)}
-             end;
-        _ -> reply({error, pending_acks}, State)
+    case rabbit_mirror_queue_master:sync_mirrors(HandleInfo, EmitStats, BQS) of
+        {ok, BQS1}           -> reply(ok, S(BQS1));
+        {stop, Reason, BQS1} -> {stop, Reason, S(BQS1)}
     end;
 
 handle_call(sync_mirrors, _From, State) ->

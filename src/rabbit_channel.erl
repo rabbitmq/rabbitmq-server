@@ -284,7 +284,8 @@ handle_cast(ready_for_close, State = #ch{state      = closing,
     ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
     {stop, normal, State};
 
-handle_cast(terminate, State) ->
+handle_cast(terminate, State = #ch{writer_pid = WriterPid}) ->
+    ok = rabbit_writer:flush(WriterPid),
     {stop, normal, State};
 
 handle_cast({command, #'basic.consume_ok'{consumer_tag = ConsumerTag} = Msg},
@@ -412,8 +413,14 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
             {stop, normal, State1}
     end.
 
+-ifdef(use_specs).
+-spec(precondition_failed/1 :: (string()) -> no_return()).
+-endif.
 precondition_failed(Format) -> precondition_failed(Format, []).
 
+-ifdef(use_specs).
+-spec(precondition_failed/2 :: (string(), [any()]) -> no_return()).
+-endif.
 precondition_failed(Format, Params) ->
     rabbit_misc:protocol_error(precondition_failed, Format, Params).
 
