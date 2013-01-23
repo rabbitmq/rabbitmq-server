@@ -2,7 +2,7 @@
     "extension": {
 	"name": "demo",
 	"version": "1.0",
-	"copyright": "Copyright (C) 2009-2012 VMware, Inc."
+	"copyright": "Copyright (C) 2009-2013 VMware, Inc."
     },
     "domains": [
 	["foo-domain", "shortstr"]
