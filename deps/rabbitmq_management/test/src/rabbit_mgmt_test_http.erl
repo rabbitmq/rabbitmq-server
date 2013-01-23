@@ -1000,6 +1000,10 @@ policy_test() ->
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     ok.
 
+extensions_test() ->
+    [[{javascript,<<"dispatcher.js">>}]] = http_get("/extensions", ?OK),
+    ok.
+
 %%---------------------------------------------------------------------------
 
 msg(Key, Headers, Body) ->
