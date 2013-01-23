@@ -136,6 +136,14 @@ function fmt_mirrors(queue) {
     return res;
 }
 
+function fmt_sync_status(queue) {
+    var res = '<p><b>Syncing: ';
+    res += (queue.messages == 0) ? 100 : Math.round(100 * queue.sync_messages /
+                                                    queue.messages);
+    res += '%</b></p>';
+    return res;
+}
+
 function fmt_channel_mode(ch) {
     if (ch.transactional) {
         return '<acronym title="Transactional">T</acronym>';
