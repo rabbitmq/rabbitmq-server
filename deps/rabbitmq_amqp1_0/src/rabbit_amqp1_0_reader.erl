@@ -103,7 +103,7 @@ recvloop(Deb, State) ->
     try
         recvloop1(Deb, State)
     catch
-        error:Reason ->
+        _:Reason ->
             Trace = erlang:get_stacktrace(),
             handle_exception(State, 0, {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                        "Reader error: ~p~n~p~n",
