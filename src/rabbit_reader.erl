@@ -1018,7 +1018,7 @@ become_1_0(Id, State = #v1{sock = Sock}) ->
                                    Sock, {unsupported_amqp1_0_protocol_id, Id},
                                    {2, 1, 0, 0})
                         end,
-                 throw({become, {rabbit_amqp1_0_reader, become,
+                 throw({become, {rabbit_amqp1_0_reader, init,
                                  [Mode, pack_for_1_0(State)]}})
     end.
 
