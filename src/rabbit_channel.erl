@@ -576,8 +576,10 @@ handle_method(_Method, _, #ch{state = starting}) ->
 handle_method(#'channel.close_ok'{}, _, #ch{state = closing}) ->
     stop;
 
-handle_method(#'channel.close'{}, _, State = #ch{state = closing}) ->
-    {reply, #'channel.close_ok'{}, State};
+handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid,
+                                                 state      = closing}) ->
+    ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
+    {noreply, State};
 
 handle_method(_Method, _, State = #ch{state = closing}) ->
     {noreply, State};
