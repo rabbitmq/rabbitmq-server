@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Console.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2012 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2012-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rfc6455_client).
