@@ -334,7 +334,7 @@ postcondition(S, {call, ?BQMOD, fold, [FoldFun, Acc0, _BQ0]}, {Res, _BQ1}) ->
     {_, Model} = lists:foldl(fun ({_SeqId, {_MsgProps, _Msg}}, {stop, Acc}) ->
                                      {stop, Acc};
                                  ({_SeqId, {MsgProps, Msg}}, {cont, Acc}) ->
-                                     FoldFun(Msg, MsgProps, Acc)
+                                     FoldFun(Msg, MsgProps, false, Acc)
                              end, {cont, Acc0}, gb_trees:to_list(Messages)),
     true = Model =:= Res;
 
@@ -397,10 +397,11 @@ rand_choice(List, Selection, N)  ->
                        N - 1).
 
 makefoldfun(Size) ->
-    fun (Msg, _MsgProps, Acc) ->
-            case length(Acc) > Size of
-                false -> {cont, [Msg | Acc]};
-                true  -> {stop, Acc}
+    fun (Msg, _MsgProps, Unacked, Acc) ->
+            case {length(Acc) > Size, Unacked} of
+                {false, false} -> {cont, [Msg | Acc]};
+                {false, true}  -> {cont, Acc};
+                {true, _}      -> {stop, Acc}
             end
     end.
 foldacc() -> [].
