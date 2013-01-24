@@ -20,7 +20,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([become/2]).
+-export([init/2]).
 
 %% TODO which of these are needed?
 -export([shutdown/2]).
@@ -511,7 +511,7 @@ handle_input({frame_payload_1_0, Mode, DOff, Channel},
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
-become(Mode, PackedState) ->
+init(Mode, PackedState) ->
     %% By invoking recvloop here we become 1.0.
     recvloop(sys:debug_options([]),
              start_1_0_connection(Mode, unpack_from_0_9_1(PackedState))).
