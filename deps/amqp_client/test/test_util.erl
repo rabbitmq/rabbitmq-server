@@ -640,13 +640,14 @@ confirm_barrier_test() ->
     true = amqp_channel:wait_for_confirms(Channel),
     teardown(Connection, Channel).
 
-confirm_barrier_nop_test() ->
+confirm_select_before_wait_test() ->
     {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    true = amqp_channel:wait_for_confirms(Channel),
-    amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
-                      #amqp_msg{payload = <<"foo">>}),
-    true = amqp_channel:wait_for_confirms(Channel),
+    try amqp_channel:wait_for_confirms(Channel) of
+        _ -> exit(success_despite_lack_of_confirm_mode)
+    catch
+        not_in_confirm_mode -> ok
+    end,
     teardown(Connection, Channel).
 
 confirm_barrier_timeout_test() ->
