@@ -20,7 +20,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([become/2]).
+-export([init/2]).
 
 %% TODO which of these are needed?
 -export([shutdown/2]).
@@ -103,7 +103,7 @@ recvloop(Deb, State) ->
     try
         recvloop1(Deb, State)
     catch
-        error:Reason ->
+        _:Reason ->
             Trace = erlang:get_stacktrace(),
             handle_exception(State, 0, {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                        "Reader error: ~p~n~p~n",
@@ -230,15 +230,16 @@ close_connection(State = #v1{connection = #connection{
     State#v1{connection_state = closed}.
 
 handle_dependent_exit(ChPid, Reason, State) ->
-    %% TODO handle sessions
     case {ChPid, termination_kind(Reason)} of
         {undefined, uncontrolled} ->
             exit({abnormal_dependent_exit, ChPid, Reason});
         {_Channel, controlled} ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
-            maybe_close(handle_exception(control_throttle(State),
-                                         Channel, Reason))
+            {RealReason, Trace} = Reason,
+            R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                 "Session error: ~p~n~p~n", [RealReason, Trace]},
+            maybe_close(handle_exception(control_throttle(State), Channel, R))
     end.
 
 termination_kind(normal) -> controlled;
@@ -257,7 +258,7 @@ error_frame(Condition, Text) ->
                   description = {utf8, list_to_binary(Text)}}.
 
 error_text(Reason, Args) ->
-    lists:flatten(io_lib:format(Reason, Args)).
+    rabbit_misc:format(Reason, Args).
 
 handle_exception(State = #v1{connection_state = closed}, Channel,
                  {_Condition, Reason, Args}) ->
@@ -386,7 +387,6 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                   ClientHeartbeat, ReceiveFun),
                 State#v1{connection_state = running,
                          connection = Connection#connection{
-                                        timeout_sec = ClientHeartbeat,
                                         frame_max = FrameMax},
                          heartbeater = Heartbeater}
         end,
@@ -511,7 +511,7 @@ handle_input({frame_payload_1_0, Mode, DOff, Channel},
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
-become(Mode, PackedState) ->
+init(Mode, PackedState) ->
     %% By invoking recvloop here we become 1.0.
     recvloop(sys:debug_options([]),
              start_1_0_connection(Mode, unpack_from_0_9_1(PackedState))).

@@ -15,18 +15,24 @@ You can consume from:
 * /exchange/<Name>/<Pattern>
 * /queue/<Name>
 
+What is known to work
+=====================
+
+* Message fragmentation
+    Incoming messages may be split across multiple transfer frames, though the frame size limit is not enforced
+    Outgoing messages will be split across multiple transfer frames, honouring the frame size limit
+* Errors
+    Many connection and link errors will be reported to the connected party
 
 What is known not to work
 =========================
 
 * sasl-mechanisms frame is not sent
 * Multiple-section messages
-* Multiple-transfer messages
 * amqp-sequence messages (maybe)
 * delivery-annotations, message-annotations and application-properties
 * lots of header / footer stuff will just be dropped or wrong
 * Much in the way of error recovery is missing
-* mixed snd_settle_mode
 * Probably lots around unusual combinations of settlement and outcomes
 * Session window is quite flaky
 * virtual hosts other than "/" don't work
@@ -34,4 +40,11 @@ What is known not to work
 * link recovery
 * TLS
 * Probably lots of other things
+
+* Transfer:
+    sender-settle-mode of unsettled and mixed are treated as the same
+    the settled         flag is ignored / settlement mode can only be selected when attaching a link
+    the rcv-settle-mode flag is ignored
+    the aborted         flag is ignored
+
 
