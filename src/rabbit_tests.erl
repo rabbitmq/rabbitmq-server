@@ -62,6 +62,7 @@ all_tests() ->
     passed = test_runtime_parameters(),
     passed = test_policy_validation(),
     passed = test_server_status(),
+    passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed =
         do_if_secondary_node(
@@ -1143,10 +1144,7 @@ test_server_status() ->
             rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 
     %% list connections
-    [#listener{host = H, port = P} | _] =
-        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
-              N =:= node()],
-
+    {H, P} = find_listener(),
     {ok, C} = gen_tcp:connect(H, P, []),
     gen_tcp:send(C, <<"AMQP", 0, 0, 9, 1>>),
     timer:sleep(100),
@@ -1184,6 +1182,25 @@ test_server_status() ->
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
+
+test_amqp_connection_refusal() ->
+    [passed = test_amqp_connection_refusal(V) ||
+        V <- [<<"AMQP",9,9,9,9>>, <<"AMQP",0,1,0,0>>, <<"XXXX",0,0,9,1>>]],
+    passed.
+
+test_amqp_connection_refusal(Header) ->
+    {H, P} = find_listener(),
+    {ok, C} = gen_tcp:connect(H, P, [binary, {active, false}]),
+    ok = gen_tcp:send(C, Header),
+    {ok, <<"AMQP",0,0,9,1>>} = gen_tcp:recv(C, 8, 100),
+    ok = gen_tcp:close(C),
+    passed.
+
+find_listener() ->
+    [#listener{host = H, port = P} | _] =
+        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
+              N =:= node()],
+    {H, P}.
 
 test_writer(Pid) ->
     receive
