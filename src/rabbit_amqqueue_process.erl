@@ -94,7 +94,6 @@
          messages_unacknowledged,
          messages,
          consumers,
-         active_consumers,
          memory,
          slave_pids,
          synchronised_slave_pids,
@@ -665,13 +664,8 @@ check_exclusive_access(none, true, State) ->
         false -> in_use
     end.
 
-consumer_count() -> consumer_count(fun (_) -> false end).
-
-active_consumer_count() -> consumer_count(fun is_ch_blocked/1).
-
-consumer_count(Exclude) ->
-    lists:sum([Count || C = #cr{consumer_count = Count} <- all_ch_record(),
-                        not Exclude(C)]).
+consumer_count() ->
+    lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 
 is_unused(_State) -> consumer_count() == 0.
 
@@ -922,8 +916,6 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     consumer_count();
-i(active_consumers, _) ->
-    active_consumer_count();
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
@@ -1141,7 +1133,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
 handle_call(stat, _From, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         drop_expired_msgs(ensure_expiry_timer(State)),
-    reply({ok, BQ:len(BQS), active_consumer_count()}, State1);
+    reply({ok, BQ:len(BQS), consumer_count()}, State1);
 
 handle_call({delete, IfUnused, IfEmpty}, From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
