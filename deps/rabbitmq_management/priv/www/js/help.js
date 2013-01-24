@@ -186,8 +186,6 @@ HELP = {
 
     'resource-counts' : 'Shows total number of objects for all virtual hosts the current user has access to.',
 
-    'active-consumers' : '<p>An active consumer is one which could immediately receive any messages sent to the queue - i.e. it is not limited by its prefetch count, TCP congestion, flow control, or because it has issued channel.flow. Therefore at least one of Ready Messages and Active Consumers must always be zero.</p><p>Note that this value is an instantaneous snapshot - when consumers are restricted by their prefetch count they may only appear to be active for small fractions of a second until more messages are sent out.</p>',
-
     'memory-use' : '<p>Note that the memory details shown here are only updated on request - they could be too expensive to calculate every few seconds on a busy server.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
 
     'policy-definitions' : '<dl>\

@@ -39,11 +39,7 @@
       </tr>
       <tr>
         <th>Consumers</th>
-        <td>
-          <%= fmt_string(queue.active_consumers) %> active
-          <span class="help" id="active-consumers"></span><br/>
-          <%= fmt_string(queue.consumers) %> total
-        </td>
+        <td><%= fmt_string(queue.consumers) %></td>
       </tr>
       <tr>
         <th>Memory</th>
