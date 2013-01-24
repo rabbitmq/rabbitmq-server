@@ -33,7 +33,7 @@
          code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
 
 %% For testing
--export([remove_old_samples/2, format_sample_details/4]).
+-export([remove_old_samples/2, format_sample_details/3]).
 
 -import(rabbit_misc, [pget/3, pset/3]).
 
@@ -765,28 +765,26 @@ format_samples(Range, ManyStats, #state{interval = Interval}) ->
            true  -> [];
            false -> {Details, Counter} = format_sample_details(
                                            Range, Stats,
-                                           Range#range.last, %% [0]
                                            Interval),
                     [{K,              Counter},
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
 
-format_sample_details(Range, #stats{diffs = Diffs, base = Base},
-                      RangePoint, Interval) ->
+format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
+    RangePoint = Range#range.last - Interval,
     {Samples, Count} = extract_samples(
                          Range, Base, gb_trees:iterator(Diffs), []),
-    Part1 = case gb_trees:is_empty(Diffs) of
-                true  -> [{samples,  Samples}];
-                false -> {TS, S} = gb_trees:largest(Diffs),
-                         Rate = case TS - RangePoint of %% [0]
-                                    D when D =< Interval andalso
-                                           D >= 0 -> S * 1000 / Interval;
-                                    _             -> 0
-                                end,
-                         [{rate,     Rate},
-                          {interval, Interval},
-                          {samples,  Samples}]
-                end,
+    Rate = case nth_largest(Diffs, 2) of
+               false   -> 0;
+               {TS, S} -> case TS - RangePoint of %% [0]
+                              D when D =< Range#range.incr andalso
+                                     D >= 0 -> S * 1000 / Interval;
+                              _             -> 0
+                          end
+           end,
+    Part1 = [{rate,     Rate},
+             {interval, Interval},
+             {samples,  Samples}],
     Part2 = case length(Samples) > 1 of
                 true  -> [{sample, S2}, {timestamp, T2}] = hd(Samples),
                          [{sample, S1}, {timestamp, T1}] = lists:last(Samples),
@@ -794,12 +792,23 @@ format_sample_details(Range, #stats{diffs = Diffs, base = Base},
                 false -> []
             end,
     {Part1 ++ Part2, Count}.
-%% [0] Only display the rate if it's live - i.e. the end of the range
-%% corresponds to the last data point we have. If the end of the
-%% range is earlier we have gone silent, if it's later we have been
-%% asked for a range back in time (in which case showing the correct
-%% instantaneous rate would be quite a faff, and probably
-%% unwanted).
+%% [0] Only display the rate if it's live - i.e. ((the end of the
+%% range) - interval) corresponds to the second to last data point we
+%% have. If the end of the range is earlier we have gone silent, if
+%% it's later we have been asked for a range back in time (in which
+%% case showing the correct instantaneous rate would be quite a faff,
+%% and probably unwanted). Why the second to last? Because data is
+%% still arriving for the last...
+
+nth_largest(Tree, N) ->
+    case gb_trees:is_empty(Tree) of
+        true  -> false;
+        false -> case N of
+                     1 -> gb_trees:largest(Tree);
+                     _ -> {_, _, Tree2} = gb_trees:take_largest(Tree),
+                          nth_largest(Tree2, N - 1)
+                 end
+    end.
 
 %% What we want to do here is: given the #range{}, provide a set of
 %% samples such that we definitely provide a set of samples which

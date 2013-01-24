@@ -53,16 +53,16 @@ format_sample_details_test() ->
                                                last  = Last * 1000,
                                                incr  = Incr * 1000},
                                         stats(Stats),
-                               Last * 1000,
                                Interval * 1000))
         end,
-    %% Just three samples, all of which we format
+    %% Just three samples, all of which we format. Note the
+    %% instantaneous rate is taken from the penultimate sample.
     T({10, 30, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{30, 61}, {20, 31}, {10, 11}], 3.0, 10, 2.5, 61}),
+      {[{30, 61}, {20, 31}, {10, 11}], 2.0, 10, 2.5, 61}),
 
-    %% Skip over the second
+    %% Skip over the second (and ditto).
     T({10, 30, 20}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{30, 61}, {10, 11}], 3.0, 10, 2.5, 61}),
+      {[{30, 61}, {10, 11}], 2.0, 10, 2.5, 61}),
 
     %% Skip over some and invent some. Note that the instantaneous
     %% rate drops to 0 since the last event is now in the past.
