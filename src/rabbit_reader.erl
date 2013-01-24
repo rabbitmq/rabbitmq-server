@@ -1016,7 +1016,7 @@ become_1_0(Id, State = #v1{sock = Sock}) ->
                             2 -> sasl;
                             _ -> refuse_connection(
                                    Sock, {unsupported_amqp1_0_protocol_id, Id},
-                                   {0, 1, 0, 0})
+                                   {2, 1, 0, 0})
                         end,
                  throw({become, {rabbit_amqp1_0_reader, become,
                                  [Mode, pack_for_1_0(State)]}})
