@@ -104,8 +104,6 @@ advance_blocks({B1, B2, B3, B4}, I) ->
     B5 = erlang:phash2({B1, I}, 4294967296),
     {{(B2 bxor B5), (B3 bxor B5), (B4 bxor B5), B5}, I+1}.
 
-blocks_to_binary({B1, B2, B3, B4}) -> <<B1:32, B2:32, B3:32, B4:32>>.
-
 %% generate a GUID. This function should be used when performance is a
 %% priority and predictability is not an issue. Otherwise use
 %% gen_secure/0.
@@ -114,14 +112,15 @@ gen() ->
     %% time we need a new guid we rotate them producing a new hash
     %% with the aid of the counter. Look at the comments in
     %% advance_blocks/2 for details.
-    {BS, I} = case get(guid) of
-                  undefined -> <<B1:32, B2:32, B3:32, B4:32>> =
-                                   erlang:md5(term_to_binary(fresh())),
-                               {{B1,B2,B3,B4}, 0};
-                  {BS0, I0} -> advance_blocks(BS0, I0)
-              end,
-    put(guid, {BS, I}),
-    blocks_to_binary(BS).
+    case get(guid) of
+        undefined -> <<B1:32, B2:32, B3:32, B4:32>> = Res =
+                         erlang:md5(term_to_binary(fresh())),
+                     put(guid, {{B1, B2, B3, B4}, 0}),
+                     Res;
+        {BS, I}   -> {{B1, B2, B3, B4}, _} = S = advance_blocks(BS, I),
+                     put(guid, S),
+                     <<B1:32, B2:32, B3:32, B4:32>>
+    end.
 
 %% generate a non-predictable GUID.
 %%

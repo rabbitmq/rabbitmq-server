@@ -68,7 +68,8 @@
 
 %% Various queries to get the status of the db
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
-                         {'running_nodes', [node()]}]).
+                         {'running_nodes', [node()]} |
+                         {'partitions', [{node(), [node()]}]}]).
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(cluster_nodes/1 :: ('all' | 'disc' | 'ram' | 'running') -> [node()]).
 -spec(node_type/0 :: () -> node_type()).
@@ -600,19 +601,16 @@ discover_cluster(Nodes) when is_list(Nodes) ->
     lists:foldl(fun (_, {ok, Res})     -> {ok, Res};
                     (Node, {error, _}) -> discover_cluster(Node)
                 end, {error, no_nodes_provided}, Nodes);
+discover_cluster(Node) when Node == node() ->
+    {error, {cannot_discover_cluster, "Cannot cluster node with itself"}};
 discover_cluster(Node) ->
     OfflineError =
         {error, {cannot_discover_cluster,
                  "The nodes provided are either offline or not running"}},
-    case node() of
-        Node -> {error, {cannot_discover_cluster,
-                         "Cannot cluster node with itself"}};
-        _    -> case rpc:call(Node,
-                              rabbit_mnesia, cluster_status_from_mnesia, []) of
-                    {badrpc, _Reason}           -> OfflineError;
-                    {error, mnesia_not_running} -> OfflineError;
-                    {ok, Res}                   -> {ok, Res}
-                end
+    case rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []) of
+        {badrpc, _Reason}           -> OfflineError;
+        {error, mnesia_not_running} -> OfflineError;
+        {ok, Res}                   -> {ok, Res}
     end.
 
 schema_ok_or_move() ->

@@ -62,6 +62,13 @@ invoke(Pid, Fun) when is_pid(Pid) ->
             erlang:raise(Class, Reason, StackTrace)
     end;
 
+invoke([], _Fun) -> %% optimisation
+    {[], []};
+invoke([Pid], Fun) when node(Pid) =:= node() -> %% optimisation
+    case safe_invoke(Pid, Fun) of
+        {ok,    _, Result} -> {[{Pid, Result}], []};
+        {error, _, Error}  -> {[], [{Pid, Error}]}
+    end;
 invoke(Pids, Fun) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
     %% The use of multi_call is only safe because the timeout is
@@ -90,6 +97,11 @@ invoke_no_result(Pid, Fun) when is_pid(Pid) andalso node(Pid) =:= node() ->
 invoke_no_result(Pid, Fun) when is_pid(Pid) ->
     invoke_no_result([Pid], Fun);
 
+invoke_no_result([], _Fun) -> %% optimisation
+    ok;
+invoke_no_result([Pid], Fun) when node(Pid) =:= node() -> %% optimisation
+    safe_invoke(Pid, Fun), %% must not die
+    ok;
 invoke_no_result(Pids, Fun) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
     case orddict:fetch_keys(Grouped) of

@@ -19,6 +19,8 @@
 -export([new/0, monitor/2, monitor_all/2, demonitor/2, is_monitored/2, erase/2,
          monitored/1, is_empty/1]).
 
+-compile({no_auto_import, [monitor/2]}).
+
 -ifdef(use_specs).
 
 %%----------------------------------------------------------------------------
@@ -48,7 +50,9 @@ monitor(Item, M) ->
         false -> dict:store(Item, erlang:monitor(process, Item), M)
     end.
 
-monitor_all(Items, M) -> lists:foldl(fun monitor/2, M, Items).
+monitor_all([],     M) -> M;                %% optimisation
+monitor_all([Item], M) -> monitor(Item, M); %% optimisation
+monitor_all(Items,  M) -> lists:foldl(fun monitor/2, M, Items).
 
 demonitor(Item, M) ->
     case dict:find(Item, M) of
