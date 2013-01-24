@@ -72,8 +72,8 @@ mainloop(State0 = #reader_state{socket = Sock}) ->
     State = run_socket(State0),
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
-            process_received_bytes(
-              Data, State#reader_state{recv_outstanding = false});
+            mainloop(process_received_bytes(
+                       Data, State#reader_state{recv_outstanding = false}));
         {inet_async, _Sock, _Ref, {error, closed}} ->
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
@@ -87,7 +87,7 @@ mainloop(State0 = #reader_state{socket = Sock}) ->
     end.
 
 process_received_bytes([], State) ->
-    mainloop(State);
+    State;
 process_received_bytes(Bytes,
                        State = #reader_state{
                          processor   = Processor,
@@ -95,7 +95,7 @@ process_received_bytes(Bytes,
                          state       = S}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
-            mainloop(State#reader_state{parse_state = ParseState1});
+            State#reader_state{parse_state = ParseState1};
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
@@ -162,53 +162,7 @@ start_processor(SupPid, Configuration, Sock) ->
 
 
 adapter_info(Sock) ->
-    {PeerHost, PeerPort, Host, Port} =
-        case rabbit_net:socket_ends(Sock, inbound) of
-            {ok, Res} -> Res;
-            _          -> {unknown, unknown}
-        end,
-    Name = case rabbit_net:connection_string(Sock, inbound) of
-               {ok, Res3} -> Res3;
-               _          -> unknown
-           end,
-    #amqp_adapter_info{protocol        = {'STOMP', 0},
-                       name            = list_to_binary(Name),
-                       host            = Host,
-                       port            = Port,
-                       peer_host       = PeerHost,
-                       peer_port       = PeerPort,
-                       additional_info = maybe_ssl_info(Sock)}.
-
-maybe_ssl_info(Sock) ->
-    case rabbit_net:is_ssl(Sock) of
-        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
-        false -> [{ssl, false}]
-    end.
-
-ssl_info(Sock) ->
-    {Protocol, KeyExchange, Cipher, Hash} =
-        case rabbit_net:ssl_info(Sock) of
-            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
-            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
-            _                       -> {unknown, unknown, unknown, unknown}
-        end,
-    [{ssl_protocol,       Protocol},
-     {ssl_key_exchange,   KeyExchange},
-     {ssl_cipher,         Cipher},
-     {ssl_hash,           Hash}].
-
-ssl_cert_info(Sock) ->
-    case rabbit_net:peercert(Sock) of
-        {ok, Cert} ->
-            [{peer_cert_issuer,   list_to_binary(
-                                    rabbit_ssl:peer_cert_issuer(Cert))},
-             {peer_cert_subject,  list_to_binary(
-                                    rabbit_ssl:peer_cert_subject(Cert))},
-             {peer_cert_validity, list_to_binary(
-                                    rabbit_ssl:peer_cert_validity(Cert))}];
-        _ ->
-            []
-    end.
+    amqp_connection:socket_adapter_info(Sock, {'STOMP', 0}).
 
 ssl_login_name(_Sock, #stomp_configuration{ssl_cert_login = false}) ->
     none;
