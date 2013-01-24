@@ -88,7 +88,6 @@
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2012 VMware, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
--define(PROTOCOL_VERSION, "AMQP 0-9-1 / 0-9 / 0-8").
 -define(ERTS_MINIMUM, "5.6.3").
 
 %% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1

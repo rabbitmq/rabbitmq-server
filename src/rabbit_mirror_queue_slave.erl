@@ -221,10 +221,12 @@ handle_cast({sync_start, Ref, Syncer},
                              backing_queue       = BQ,
                              backing_queue_state = BQS }) ->
     State1 = #state{rate_timer_ref = TRef} = ensure_rate_timer(State),
-    S = fun({TRefN, BQSN}) -> State1#state{depth_delta         = undefined,
-                                           rate_timer_ref      = TRefN,
-                                           backing_queue_state = BQSN} end,
-    %% [0] We can only sync when there are no pending acks
+    S = fun({MA, TRefN, BQSN}) ->
+                State1#state{depth_delta         = undefined,
+                             msg_id_ack          = dict:from_list(MA),
+                             rate_timer_ref      = TRefN,
+                             backing_queue_state = BQSN}
+        end,
     case rabbit_mirror_queue_sync:slave(
            DD, Ref, TRef, Syncer, BQ, BQS,
            fun (BQN, BQSN) ->
@@ -234,7 +236,7 @@ handle_cast({sync_start, Ref, Syncer},
                    {TRefN, BQSN1}
            end) of
         denied              -> noreply(State1);
-        {ok,           Res} -> noreply(set_delta(0, S(Res))); %% [0]
+        {ok,           Res} -> noreply(set_delta(0, S(Res)));
         {failed,       Res} -> noreply(S(Res));
         {stop, Reason, Res} -> {stop, Reason, S(Res)}
     end;

@@ -1111,7 +1111,7 @@ test_policy_validation() ->
 
 test_server_status() ->
     %% create a few things so there is some useful information to list
-    Writer = spawn(fun () -> receive shutdown -> ok end end),
+    Writer = spawn(fun test_writer/0),
     {ok, Ch} = rabbit_channel:start_link(
                  1, self(), Writer, self(), "", rabbit_framing_amqp_0_9_1,
                  user(<<"user">>), <<"/">>, [], self(),
@@ -1202,10 +1202,34 @@ find_listener() ->
               N =:= node()],
     {H, P}.
 
+test_amqp_connection_refusal() ->
+    [passed = test_amqp_connection_refusal(V) ||
+        V <- [<<"AMQP",9,9,9,9>>, <<"AMQP",0,1,0,0>>, <<"XXXX",0,0,9,1>>]],
+    passed.
+
+test_amqp_connection_refusal(Header) ->
+    {H, P} = find_listener(),
+    {ok, C} = gen_tcp:connect(H, P, [binary, {active, false}]),
+    ok = gen_tcp:send(C, Header),
+    {ok, <<"AMQP",0,0,9,1>>} = gen_tcp:recv(C, 8, 100),
+    ok = gen_tcp:close(C),
+    passed.
+
+find_listener() ->
+    [#listener{host = H, port = P} | _] =
+        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
+              N =:= node()],
+    {H, P}.
+
+test_writer() -> test_writer(none).
+
 test_writer(Pid) ->
     receive
-        shutdown               -> ok;
-        {send_command, Method} -> Pid ! Method, test_writer(Pid)
+        {'$gen_call', From, flush} -> gen_server:reply(From, ok),
+                                      test_writer(Pid);
+        {send_command, Method}     -> Pid ! Method,
+                                      test_writer(Pid);
+        shutdown                   -> ok
     end.
 
 test_spawn() ->
@@ -2364,22 +2388,26 @@ test_variable_queue() ->
               fun test_dropwhile_varying_ram_duration/1,
               fun test_fetchwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
+              fun test_variable_queue_purge/1,
               fun test_variable_queue_requeue/1,
               fun test_variable_queue_fold/1]],
     passed.
 
 test_variable_queue_fold(VQ0) ->
-    {RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
-    Count = rabbit_variable_queue:len(VQ1),
-    Msgs = RequeuedMsgs ++ FreshMsgs,
-    lists:foldl(
-      fun (Cut, VQ2) -> test_variable_queue_fold(Cut, Msgs, VQ2) end,
-      VQ1, [0, 1, 2, Count div 2, Count - 1, Count, Count + 1, Count * 2]).
+    {PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
+        variable_queue_with_holes(VQ0),
+    Count = rabbit_variable_queue:depth(VQ1),
+    Msgs = lists:sort(PendingMsgs ++ RequeuedMsgs ++ FreshMsgs),
+    lists:foldl(fun (Cut, VQ2) ->
+                        test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ2)
+                end, VQ1, [0, 1, 2, Count div 2,
+                           Count - 1, Count, Count + 1, Count * 2]).
 
-test_variable_queue_fold(Cut, Msgs, VQ0) ->
+test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ0) ->
     {Acc, VQ1} = rabbit_variable_queue:fold(
-                   fun (M, _, A) ->
+                   fun (M, _, Pending, A) ->
                            MInt = msg2int(M),
+                           Pending = lists:member(MInt, PendingMsgs), %% assert
                            case MInt =< Cut of
                                true  -> {cont, [MInt | A]};
                                false -> {stop, A}
@@ -2440,10 +2468,11 @@ variable_queue_with_holes(VQ0) ->
     Depth = rabbit_variable_queue:depth(VQ8),
     Len = Depth - length(Subset3),
     Len = rabbit_variable_queue:len(VQ8),
-    {(Seq -- Seq3), lists:seq(Count + 1, Count + 64), VQ8}.
+    {Seq3, Seq -- Seq3, lists:seq(Count + 1, Count + 64), VQ8}.
 
 test_variable_queue_requeue(VQ0) ->
-    {RequeuedMsgs, FreshMsgs, VQ1} = variable_queue_with_holes(VQ0),
+    {_PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
+        variable_queue_with_holes(VQ0),
     Msgs =
         lists:zip(RequeuedMsgs,
                   lists:duplicate(length(RequeuedMsgs), true)) ++
@@ -2458,6 +2487,21 @@ test_variable_queue_requeue(VQ0) ->
                       end, VQ1, Msgs),
     {empty, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
     VQ3.
+
+test_variable_queue_purge(VQ0) ->
+    LenDepth = fun (VQ) ->
+                       {rabbit_variable_queue:len(VQ),
+                        rabbit_variable_queue:depth(VQ)}
+               end,
+    VQ1         = variable_queue_publish(false, 10, VQ0),
+    {VQ2, Acks} = variable_queue_fetch(6, false, false, 10, VQ1),
+    {4, VQ3}    = rabbit_variable_queue:purge(VQ2),
+    {0, 6}      = LenDepth(VQ3),
+    {_, VQ4}    = rabbit_variable_queue:requeue(lists:sublist(Acks, 2), VQ3),
+    {2, 6}      = LenDepth(VQ4),
+    VQ5         = rabbit_variable_queue:purge_acks(VQ4),
+    {2, 2}      = LenDepth(VQ5),
+    VQ5.
 
 test_variable_queue_ack_limiting(VQ0) ->
     %% start by sending in a bunch of messages
