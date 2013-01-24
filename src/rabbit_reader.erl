@@ -699,13 +699,8 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 %% ... and finally, the 1.0 spec is crystal clear!  Note that the
-%% TLS uses a different protocol number, and would go here.
-handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
-    become_1_0(amqp, {0, 1, 0, 0}, State);
-
-%% 3 stands for "SASL"
-handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
-    become_1_0(sasl, {3, 1, 0, 0}, State);
+handle_input(handshake, <<"AMQP", Id, 1, 0, 0>>, State) ->
+    become_1_0(Id, State);
 
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_version, {A, B, C, D}});
@@ -736,9 +731,12 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                              connection_state = starting},
                     frame_header, 7).
 
-refuse_connection(Sock, Exception) ->
-    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
+refuse_connection(Sock, Exception, {A, B, C, D}) ->
+    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",A,B,C,D>>) end),
     throw(Exception).
+
+refuse_connection(Sock, Exception) ->
+    refuse_connection(Sock, Exception, {0, 0, 9, 1}).
 
 ensure_stats_timer(State = #v1{connection_state = running}) ->
     rabbit_event:ensure_stats_timer(State, #v1.stats_timer, emit_stats);
@@ -1008,15 +1006,19 @@ emit_stats(State) ->
 
 %% 1.0 stub
 -ifdef(use_specs).
--spec(become_1_0/3 :: ('amqp' | 'sasl',
-                       {non_neg_integer(), non_neg_integer(),
-                        non_neg_integer(), non_neg_integer()},
-                       #v1{}) -> no_return()).
+-spec(become_1_0/2 :: (non_neg_integer(), #v1{}) -> no_return()).
 -endif.
-become_1_0(Mode, Version, State = #v1{sock = Sock}) ->
+become_1_0(Id, State = #v1{sock = Sock}) ->
     case code:is_loaded(rabbit_amqp1_0_reader) of
-        false -> refuse_connection(Sock, {bad_version, Version});
-        _     -> throw({become, {rabbit_amqp1_0_reader, become,
+        false -> refuse_connection(Sock, amqp1_0_plugin_not_enabled);
+        _     -> Mode = case Id of
+                            0 -> amqp;
+                            2 -> sasl;
+                            _ -> refuse_connection(
+                                   Sock, {unsupported_amqp1_0_protocol_id, Id},
+                                   {2, 1, 0, 0})
+                        end,
+                 throw({become, {rabbit_amqp1_0_reader, init,
                                  [Mode, pack_for_1_0(State)]}})
     end.
 
