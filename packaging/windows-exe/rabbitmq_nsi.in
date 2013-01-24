@@ -37,7 +37,7 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "RabbitMQ Server"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "Comments" ""
 VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "VMware, Inc"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalTrademarks" "" ; TODO ?
-VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (c) 2007-2012 VMware, Inc.  All rights reserved."
+VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (c) 2007-2013 VMware, Inc.  All rights reserved."
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "RabbitMQ Server"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "%%VERSION%%"
 
