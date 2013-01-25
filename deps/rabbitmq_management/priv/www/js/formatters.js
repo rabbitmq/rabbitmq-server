@@ -178,7 +178,8 @@ function fmt_rate_num(num) {
 }
 
 function fmt_rate(obj, name, mode) {
-    return fmt_rate0(obj, name, mode, fmt_rate_num) + '/s';
+    var raw = fmt_rate0(obj, name, mode, fmt_rate_num);
+    return raw == '' ? '' : (raw + '/s');
 }
 
 function fmt_rate_bytes(obj, name, mode) {
