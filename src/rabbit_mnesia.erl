@@ -620,29 +620,26 @@ running_disc_nodes() ->
 %%--------------------------------------------------------------------
 
 discover_cluster(Nodes) when is_list(Nodes) ->
-    lists:foldl(fun (_, {ok, Res}) -> {ok, Res};
-                    (Node, E)      -> prefer_result(
-                                        discover_cluster(Node), E)
-                end, {error, no_nodes_provided}, Nodes);
+    lists:foldl(
+      fun (_,    {ok, Res}) -> {ok, Res};
+          (Node, E)         -> prefer_result(discover_cluster(Node), E)
+      end, {error, no_nodes_provided}, Nodes);
+discover_cluster(Node) when Node =:= node() ->
+    {error, {cannot_discover_cluster, "Cannot cluster node with itself"}};
 discover_cluster(Node) ->
     OfflineError =
         {error, {cannot_discover_cluster,
                  "The nodes provided are either offline or not running"}},
-    case node() of
-        Node -> {error, {cannot_discover_cluster,
-                         "Cannot cluster node with itself"}};
-        _    -> case rpc:call(Node,
-                              rabbit_mnesia, cluster_status_from_mnesia, []) of
-                    {badrpc, _Reason}           -> OfflineError;
-                    {error, mnesia_not_running} -> OfflineError;
-                    {error, tables_not_present} -> {error, tables_not_present};
-                    {ok, Res}                   -> {ok, Res}
-                end
+    case rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []) of
+        {badrpc, _Reason}           -> OfflineError;
+        {error, mnesia_not_running} -> OfflineError;
+        {error, tables_not_present} -> {error, tables_not_present};
+        {ok, Res}                   -> {ok, Res}
     end.
 
-prefer_result(E1, E2) -> case result_priority(E1) - result_priority(E2) of
-                             N when N > 0 -> E1;
-                             _            -> E2
+prefer_result(E1, E2) -> case result_priority(E1) > result_priority(E2) of
+                             true  -> E1;
+                             false -> E2
                          end.
 
 %% We prioritise like this since when we are in init_from_config/1 we
