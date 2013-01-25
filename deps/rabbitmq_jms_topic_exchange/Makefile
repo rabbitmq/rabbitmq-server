@@ -8,7 +8,7 @@ UMBRELLA:=rabbitmq-public-umbrella
 RABBIT_VERSION:=rabbitmq_v2_8_7
 
 # command targets ##################################
-.PHONY: all clean dist init cleandist
+.PHONY: all clean dist init cleandist run-in-broker
 
 all: dist
 
@@ -23,6 +23,9 @@ init: $(addprefix $(UMBRELLA)/,$(EXCHANGE) $(RABBIT_DEPS))
 
 cleandist: init
 	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) clean
+
+run-in-broker: dist
+	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) run-in-broker
 
 # artefact targets #################################
 $(UMBRELLA).co:

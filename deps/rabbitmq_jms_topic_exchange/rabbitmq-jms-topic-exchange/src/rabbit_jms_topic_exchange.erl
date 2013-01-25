@@ -35,14 +35,14 @@
 
 %% Register exchange type
 -rabbit_boot_step({ ?MODULE
-                  , [ {description,"JMS topic exchange type"}
+                  , [ {description, "exchange type JMS topic"}
                     , {mfa, {rabbit_registry, register, [exchange, ?X_TYPE_NAME, ?MODULE]}}
                     , {requires, rabbit_registry}
                     , {enables, kernel_ready} ] }).
 
 %% Initialise database
 -rabbit_boot_step({ rabbit_jms_topic_exchange_mnesia
-                  , [ {description, "JMS topic exchange: mnesia"}
+                  , [ {description, "database exchange type JMS topic"}
                     , {mfa, {?MODULE, setup_db_schema, []}}
                     , {requires, database}
                     , {enables, external_infrastructure} ] }).

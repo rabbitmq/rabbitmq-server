@@ -1,10 +1,8 @@
 { application, rabbitmq_jms_topic_exchange
-, [ { description, "RabbitMQ JMS topic exchange plugin"}
+, [ {description, "RabbitMQ JMS topic exchange plugin"}
   , {vsn, "0.1.0"}
   , {modules, []}
   , {registered, []}
-  , {env, []}
-  , {mod, {rabbit_jms_topic_exchange, []}}
   , {applications, [kernel, stdlib, rabbit, mnesia]}
   ]
 }.
