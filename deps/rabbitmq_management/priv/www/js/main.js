@@ -348,8 +348,13 @@ function apply_state(reqs) {
     var reqs2 = {};
     for (k in reqs) {
         var req = reqs[k];
+        var options = {};
+        if (typeof(req) == "object") {
+            options = req.options;
+            req = req.path;
+        }
         var req2;
-        if (vhost_query(req) && current_vhost != '') {
+        if (options['vhost'] != undefined && current_vhost != '') {
             req2 = req + '/' + esc(current_vhost);
         }
         else {
@@ -357,11 +362,11 @@ function apply_state(reqs) {
         }
 
         var qs = [];
-        if (req in SORT_QUERIES && current_sort != null) {
+        if (options['sort'] != undefined && current_sort != null) {
             qs.push('sort=' + current_sort);
             qs.push('sort_reverse=' + current_sort_reverse);
         }
-        if (req in RANGE_QUERIES) {
+        if (options['range'] != undefined) {
             qs.push('sample_age=' + current_range_age);
             qs.push('sample_incr=' + current_range_incr);
         }
@@ -371,14 +376,6 @@ function apply_state(reqs) {
         reqs2[k] = req2 + qs;
     }
     return reqs2;
-}
-
-function vhost_query(req) {
-    for (i in VHOST_QUERIES) {
-        var query = VHOST_QUERIES[i];
-        if (req.match(query)) return true;
-    }
-    return false;
 }
 
 function show_popup(type, text) {

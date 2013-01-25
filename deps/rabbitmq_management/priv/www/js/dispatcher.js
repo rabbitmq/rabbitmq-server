@@ -5,7 +5,7 @@ dispatcher_add(function(sammy) {
             });
     }
     sammy.get('#/', function() {
-            var reqs = {'overview': '/overview'};
+            var reqs = {'overview': {path: '/overview', options: {range:true}}};
             if (user_monitor) {
                 reqs['nodes'] = '/nodes';
             }
@@ -17,7 +17,9 @@ dispatcher_add(function(sammy) {
                    'node', '');
         });
 
-    path('#/connections', {'connections': '/connections'}, 'connections');
+    path('#/connections',
+         {'connections': {path: '/connections', options: {sort:true}}},
+        'connections');
     sammy.get('#/connections/:name', function() {
             var name = esc(this.params['name']);
             render({'connection': '/connections/' + name,
@@ -35,16 +37,21 @@ dispatcher_add(function(sammy) {
            return false;
         });
 
-    path('#/channels', {'channels': '/channels'}, 'channels');
+    path('#/channels', {'channels': {path: '/channels', options: {sort:true}}},
+         'channels');
     sammy.get('#/channels/:name', function() {
-            render({'channel': '/channels/' + esc(this.params['name'])}, 'channel',
-                   '#/channels');
+            render({'channel': {path:   '/channels/' + esc(this.params['name']),
+                                options:{range:true}}},
+                   'channel', '#/channels');
         });
 
-    path('#/exchanges', {'exchanges': '/exchanges', 'vhosts': '/vhosts'}, 'exchanges');
+    path('#/exchanges', {'exchanges':  {path:    '/exchanges',
+                                        options: {sort:true,vhost:true}},
+                         'vhosts': '/vhosts'}, 'exchanges');
     sammy.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
-            render({'exchange': path,
+            render({'exchange': {path:    path,
+                                 options: {range:true}},
                     'bindings_source': path + '/bindings/source',
                     'bindings_destination': path + '/bindings/destination'},
                 'exchange', '#/exchanges');
@@ -64,10 +71,13 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
-    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
+    path('#/queues', {'queues':  {path:    '/queues',
+                                  options: {sort:true,vhost:true}},
+                      'vhosts': '/vhosts'}, 'queues');
     sammy.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
-            render({'queue': path,
+            render({'queue': {path:    path,
+                              options: {range:true}},
                     'bindings': path + '/bindings'}, 'queue', '#/queues');
         });
     sammy.put('#/queues', function() {
@@ -110,9 +120,12 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
-    path('#/vhosts', {'vhosts': '/vhosts', 'permissions': '/permissions'}, 'vhosts');
+    path('#/vhosts', {'vhosts':  {path:    '/vhosts',
+                                  options: {sort:true}},
+                      'permissions': '/permissions'}, 'vhosts');
     sammy.get('#/vhosts/:id', function() {
-            render({'vhost': '/vhosts/' + esc(this.params['id']),
+            render({'vhost': {path:    '/vhosts/' + esc(this.params['id']),
+                              options: {range:true}},
                     'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
                     'users': '/users/'},
                 'vhost', '#/vhosts');
@@ -132,7 +145,9 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
-    path('#/users', {'users': '/users', 'permissions': '/permissions'}, 'users');
+    path('#/users', {'users': {path:    '/users',
+                               options: {sort:true}},
+                     'permissions': '/permissions'}, 'users');
     sammy.get('#/users/:id', function() {
             render({'user': '/users/' + esc(this.params['id']),
                     'permissions': '/users/' + esc(this.params['id']) + '/permissions',

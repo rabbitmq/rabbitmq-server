@@ -13,19 +13,6 @@ function map(list) {
     return res;
 }
 
-// Which queries need to have the current vhost appended (if there is one)?
-var VHOST_QUERIES = [new RegExp('^/queues$'),
-                     new RegExp('^/exchanges$'),
-                     new RegExp('^/parameters/[^/]*$')];
-
-// Which queries need to have the current sort appended (if there is one)?
-var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
-                         '/queues', '/exchanges']);
-
-// Which queries need to have the current range appended?
-var RANGE_QUERIES  = map(['/overview', '/connections', '/channels', '/vhosts',
-                          '/queues', '/exchanges']);
-
 // Extension arguments that we know about and present specially in the UI.
 var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'},
                   'x-message-ttl':             {'short': 'TTL', 'type': 'int'},
