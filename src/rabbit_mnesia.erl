@@ -642,13 +642,14 @@ prefer_result(E1, E2) -> case result_priority(E1) > result_priority(E2) of
                              false -> E2
                          end.
 
-%% We prioritise like this since when we are in init_from_config/1 we
-%% only want to go into the special handling for {error, tables_not_present}
-%% if *all* nodes are in that state.
+%% We prioritise like this since when we are in init_from_config/1
+%% with a mixture of nodes that report tables_not_present and other
+%% errors, we want to ignore the latter nodes (essentially treating
+%% them as absent) and try sequencing the startup of the other nodes.
 result_priority({ok,    _})                  -> 99;
 result_priority({error, no_nodes_provided})  -> 0;
-result_priority({error, tables_not_present}) -> 1;
-result_priority({error, _})                  -> 2.
+result_priority({error, tables_not_present}) -> 2;
+result_priority({error, _})                  -> 1.
 
 schema_ok_or_move() ->
     case rabbit_table:check_schema_integrity() of
