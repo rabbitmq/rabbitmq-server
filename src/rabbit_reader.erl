@@ -1013,10 +1013,10 @@ become_1_0(Id, State = #v1{sock = Sock}) ->
         false -> refuse_connection(Sock, amqp1_0_plugin_not_enabled);
         _     -> Mode = case Id of
                             0 -> amqp;
-                            2 -> sasl;
+                            3 -> sasl;
                             _ -> refuse_connection(
                                    Sock, {unsupported_amqp1_0_protocol_id, Id},
-                                   {2, 1, 0, 0})
+                                   {3, 1, 0, 0})
                         end,
                  throw({become, {rabbit_amqp1_0_reader, init,
                                  [Mode, pack_for_1_0(State)]}})
