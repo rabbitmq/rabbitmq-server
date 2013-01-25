@@ -42,7 +42,6 @@ What is known not to work
 * Probably lots of other things
 
 * Transfer:
-    sender-settle-mode of unsettled and mixed are treated as the same
     the settled         flag is ignored / settlement mode can only be selected when attaching a link
     the rcv-settle-mode flag is ignored
     the aborted         flag is ignored

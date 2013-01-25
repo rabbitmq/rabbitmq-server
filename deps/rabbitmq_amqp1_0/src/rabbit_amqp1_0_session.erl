@@ -135,13 +135,9 @@ record_delivery(DeliveryId, Settled,
               _ -> Id + 1 % this ought to be a serial number in the broker, but isn't
           end,
     Unsettled1 = case Settled of
-                     true  -> Unsettled;
-                     %% Be lenient -- this is a boolean and really ought
-                     %% to have a value, but the spec doesn't currently
-                     %% require it.
-                     Symbol when
-                           Symbol =:= false orelse
-                           Symbol =:= undefined ->
+                     true ->
+                         Unsettled;
+                     false ->
                          gb_trees:insert(Id,
                                          #incoming_delivery{
                                            delivery_id = DeliveryId },

@@ -29,6 +29,7 @@
 -record(incoming_link, {name, exchange, routing_key,
                         delivery_id = undefined,
                         delivery_count = 0,
+                        send_settle_mode = undefined,
                         credit_used = ?INCOMING_CREDIT div 2,
                         msg_acc = []}).
 
@@ -44,15 +45,14 @@ attach(#'v1_0.attach'{name = Name,
         {ok, ServerTarget,
          IncomingLink = #incoming_link{ delivery_count = InitTransfer }} ->
             {_, _Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
-            %% Default is mixed!
+            %% Default is mixed
             Confirm =
                 case SndSettleMode of
                     ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
                         false;
-                    _ ->
-                        %% TODO we need to deal with mixed settlement mode -
-                        %% presumably by turning on confirms and then throwing
-                        %% some away.
+                    _ when SndSettleMode == undefined;
+                           SndSettleMode == ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED;
+                           SndSettleMode == ?V_1_0_SENDER_SETTLE_MODE_MIXED ->
                         amqp_channel:register_confirm_handler(BCh, self()),
                         amqp_channel:call(BCh, #'confirm.select'{}),
                         true
@@ -84,19 +84,43 @@ set_delivery_id(DeliveryId,
   when DeliveryId == {uint, D} orelse DeliveryId == undefined ->
     Link.
 
+effective_send_settle_mode(undefined, undefined) ->
+    false;
+effective_send_settle_mode(undefined, SettleMode)
+  when is_boolean(SettleMode) ->
+    SettleMode;
+effective_send_settle_mode(SettleMode, undefined)
+  when is_boolean(SettleMode) ->
+    SettleMode;
+effective_send_settle_mode(SettleMode, SettleMode)
+  when is_boolean(SettleMode) ->
+    SettleMode.
+
+% TODO: validate effective send settle mode against
+%       the declared settle mode during attach
+
+% TODO: handle aborted transfers
+
 transfer(#'v1_0.transfer'{delivery_id = DeliveryId,
-                          more        = true}, MsgPart,
-         #incoming_link{msg_acc = MsgAcc} = Link, _BCh) ->
-    {ok, set_delivery_id(DeliveryId,
-                         Link#incoming_link{msg_acc = [MsgPart | MsgAcc]})};
+                          more        = true,
+                          settled     = Settled}, MsgPart,
+         #incoming_link{msg_acc = MsgAcc,
+                        send_settle_mode = SSM} = Link, _BCh) ->
+    {ok, set_delivery_id(
+           DeliveryId,
+           Link#incoming_link{msg_acc = [MsgPart | MsgAcc],
+                              send_settle_mode =
+                                effective_send_settle_mode(Settled, SSM)})};
 transfer(#'v1_0.transfer'{delivery_id = DeliveryId0,
+                          settled     = Settled,
                           handle      = Handle},
          MsgPart,
-         #incoming_link{exchange       = X,
-                        routing_key    = LinkRKey,
-                        delivery_count = Count,
-                        credit_used    = CreditUsed,
-                        msg_acc        = MsgAcc} = Link, BCh) ->
+         #incoming_link{exchange         = X,
+                        routing_key      = LinkRKey,
+                        delivery_count   = Count,
+                        credit_used      = CreditUsed,
+                        msg_acc          = MsgAcc,
+                        send_settle_mode = SSM} = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
     ?DEBUG("Inbound content:~n  ~p~n",
            [[rabbit_amqp1_0_framing:pprint(Section) ||
@@ -117,16 +141,18 @@ transfer(#'v1_0.transfer'{delivery_id = DeliveryId0,
     #incoming_link{delivery_id = DeliveryId} =
       set_delivery_id(DeliveryId0, Link),
     NewLink = Link#incoming_link{
-                delivery_id    = undefined,
-                delivery_count = rabbit_misc:serial_add(Count, 1),
-                credit_used    = CreditUsed1,
-                msg_acc        = []},
+                delivery_id      = undefined,
+                send_settle_mode = undefined,
+                delivery_count   = rabbit_misc:serial_add(Count, 1),
+                credit_used      = CreditUsed1,
+                msg_acc          = []},
     Reply = case SendFlow of
                 true  -> ?DEBUG("sending flow for incoming ~p", [NewLink]),
                          [incoming_flow(NewLink, Handle)];
                 false -> []
             end,
-    {message, Reply, NewLink, DeliveryId}.
+    {message, Reply, NewLink, DeliveryId,
+     effective_send_settle_mode(Settled, SSM)}.
 
 %% There are a few things that influence what source and target
 %% definitions mean for our purposes.
