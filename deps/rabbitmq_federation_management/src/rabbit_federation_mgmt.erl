@@ -45,8 +45,10 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
+    Chs = rabbit_mgmt_db:get_all_channels(
+            rabbit_mgmt_util:range(ReqData), basic),
     rabbit_mgmt_util:reply_list(
-      filter_vhost(status(), ReqData), ReqData, Context).
+      filter_vhost(status(Chs), ReqData), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
@@ -58,17 +60,17 @@ filter_vhost(List, ReqData) ->
       ReqData,
       fun(V) -> lists:filter(fun(I) -> pget(vhost, I) =:= V end, List) end).
 
-status() ->
-    lists:append([status(Node) || Node <- [node() | nodes()]]).
+status(Chs) ->
+    lists:append([status(Node, Chs) || Node <- [node() | nodes()]]).
 
-status(Node) ->
+status(Node, Chs) ->
     case rpc:call(Node, rabbit_federation_status, status, [], infinity) of
         {badrpc, {'EXIT', {undef, _}}}  -> [];
         {badrpc, {'EXIT', {noproc, _}}} -> [];
-        Status                          -> [format(Node, I) || I <- Status]
+        Status                          -> [format(Node, I, Chs) || I <- Status]
     end.
 
-format(Node, Info0) ->
+format(Node, Info0, Chs) ->
     Info1 = proplists:delete(status, Info0),
     Info = case pget(status, Info0) of
                {running, Name}   -> [{status,           running},
@@ -79,7 +81,7 @@ format(Node, Info0) ->
                S when is_atom(S) -> [{status, S} | Info1]
            end,
     LocalCh = case rabbit_mgmt_format:strip_pids(
-                     [Ch || Ch <- rabbit_mgmt_db:get_all_channels(basic),
+                     [Ch || Ch <- Chs,
                             pget(name, pget(connection_details, Ch))
                                 =:= pget(local_connection, Info)]) of
                   [Ch] -> [{local_channel, Ch}];
