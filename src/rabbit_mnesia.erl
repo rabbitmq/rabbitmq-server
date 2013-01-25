@@ -132,35 +132,34 @@ init_from_config({[], NodeType}) ->
     init_db_and_upgrade([node()], NodeType, false);
 
 init_from_config({TryNodes0, NodeType} = Config) ->
-    [First | _] = TryNodes = lists:usort(nodes_excl_me(TryNodes0)),
+    TryNodes = nodes_excl_me(TryNodes0),
     case discover_cluster(TryNodes) of
         {ok, {_, DiscNodes, _}} ->
             init_db_and_upgrade(DiscNodes, NodeType, true),
             rabbit_node_monitor:notify_joined_cluster();
-        {error, tables_not_present} when node() < First andalso
-                                         NodeType =:= disc ->
-            %% We came up simultaneously with some other virgin nodes which
-            %% also wanted to cluster with us. Exactly one of these nodes
-            %% needs to proceed with an unclustered startup. We pick the node
-            %% that is alphabetically first.
-            %% that is alphabetically first.
-            error_logger:info_msg(
-              "Virgin node started simultaneously with ~p; "
-              "this node has precedence~n", [TryNodes]),
-            init_db_and_upgrade([node()], disc, false);
-        {error, tables_not_present} when NodeType =:= disc ->
-            %% See above.
-            error_logger:info_msg(
-              "Virgin node started simultaneously with ~p; "
-              "waiting for another node to start.~n", [TryNodes]),
-            timer:sleep(1000),
-            init_from_config(Config);
+        {error, {tables_not_present, StartingNodes}} when NodeType =:= disc ->
+            %% We came up simultaneously with some other virgin nodes
+            %% which also wanted to cluster with us. Exactly one of
+            %% these nodes needs to proceed with an unclustered
+            %% startup. We pick the node that is alphabetically first.
+            Log = fun (Msg) ->
+                          error_logger:info_msg(
+                            "Virgin node started simultaneously with ~p; " ++
+                                Msg ++ ".~n", [StartingNodes])
+                  end,
+            case lists:any(fun (N) -> N < node() end, StartingNodes) of
+                false -> Log("this node has precedence"),
+                         init_db_and_upgrade([node()], disc, false);
+                true  -> Log("waiting for another node to start"),
+                         timer:sleep(1000),
+                         init_from_config(Config)
+            end;
         {error, _} ->
             %% Note that if we are a ram node this will fail - but that's all
             %% right, we want to fail anyway.
             error_logger:info_msg(
               "Could not find any alive node from configuration ~p - "
-              "assuming this is the first~n", [TryNodes]),
+              "assuming this is the first.~n", [TryNodes]),
             init_db_and_upgrade([node()], NodeType, false)
     end.
 
@@ -621,10 +620,14 @@ running_disc_nodes() ->
 %%--------------------------------------------------------------------
 
 discover_cluster(Nodes) when is_list(Nodes) ->
-    lists:foldl(
-      fun (_,    {ok, Res}) -> {ok, Res};
-          (Node, E)         -> prefer_result(discover_cluster(Node), E)
-      end, {error, no_nodes_provided}, Nodes);
+    lists:foldl(fun (_,     {ok, Res}) ->
+                        {ok, Res};
+                    (Node, {error, E}) ->
+                        case discover_cluster(Node) of
+                            {ok, Res}   -> {ok, Res};
+                            {error, E1} -> {error, merge_errors(Node, E1, E)}
+                        end
+                end, {error, no_nodes_provided}, Nodes);
 discover_cluster(Node) when Node =:= node() ->
     {error, {cannot_discover_cluster, "Cannot cluster node with itself"}};
 discover_cluster(Node) ->
@@ -638,19 +641,18 @@ discover_cluster(Node) ->
         {ok, Res}                   -> {ok, Res}
     end.
 
-prefer_result(E1, E2) -> case result_priority(E1) > result_priority(E2) of
-                             true  -> E1;
-                             false -> E2
-                         end.
-
-%% We prioritise like this since when we are in init_from_config/1
+%% We combine errors this way since when we are in init_from_config/1
 %% with a mixture of nodes that report tables_not_present and other
 %% errors, we want to ignore the latter nodes (essentially treating
 %% them as absent) and try sequencing the startup of the other nodes.
-result_priority({ok,    _})                  -> 99;
-result_priority({error, no_nodes_provided})  -> 0;
-result_priority({error, tables_not_present}) -> 2;
-result_priority({error, _})                  -> 1.
+merge_errors(N, tables_not_present, {tables_not_present, Nodes}) ->
+    {tables_not_present, [N | Nodes]};
+merge_errors(N, tables_not_present, _) ->
+    {tables_not_present, [N]};
+merge_errors(_, _, {tables_not_present, _} = E) ->
+    E;
+merge_errors(_, E, _) ->
+    E.
 
 schema_ok_or_move() ->
     case rabbit_table:check_schema_integrity() of
