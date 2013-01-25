@@ -627,7 +627,7 @@ function rates_chart(id, items, stats, rate_fmt) {
     }
     var html = '<div id="chart-' + id + '" class="chart chart-' + size +
         (rate_fmt ? ' chart-rates' : '') + '"></div>';
-    html += '<table class="facts">';
+    html += '<table class="facts facts-fixed-width">';
     for (var i = 0; i < show.length; i++) {
         html += '<tr><th>' + show[i][0] + '</th><td>';
         html += '<div class="colour-key" style="background: ' + chart_colors[i];

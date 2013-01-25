@@ -95,6 +95,8 @@ table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px;
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
+table.facts-fixed-width th, table.facts-fixed-width td { width: 100px; }
+
 table.mini th { border: none; padding: 0 2px 2px 2px; text-align: right; }
 table.mini td { border: none; padding: 0 2px 2px 2px; }
 
@@ -131,7 +133,7 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
 .highlight, .micro-highlight { float: left; }
 
-.chart { margin: 0 0 20px 0; float: left; }
+.chart { margin: 0 20px 20px 0; float: left; }
 .chart-small  { width: 400px; height: 100px; }
 .chart-medium { width: 600px; height: 200px; }
 .chart-large  { width: 800px; height: 300px; }
