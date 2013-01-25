@@ -585,7 +585,7 @@ record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, _State) ->
     record_sampleX(publish_in,              X,         Args),
     record_sample0({vhost_stats,            vhost(X)}, Args);
 
-%% Publishes / confirms (Ch -> X -> Q)
+%% Publishes (but not confirms) (Ch -> X -> Q)
 record_sample({fine, {_Ch,
                       Q = #resource{kind = queue},
                       X = #resource{kind = exchange}}}, Args, _State) ->
@@ -609,7 +609,9 @@ vhost({TName, Pid}, #state{tables = Tables}) ->
 
 %% exchanges have two sets of "publish" stats, so rearrange things a touch
 record_sampleX(RenamePublishTo, X, {publish, Diff, TS, State}) ->
-    record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, TS, State}).
+    record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, TS, State});
+record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
+    record_sample0({exchange_stats, X}, {Type, Diff, TS, State}).
 
 record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats = ETS}}) ->
     Id = {Id0, Key},
