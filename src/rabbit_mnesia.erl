@@ -143,15 +143,16 @@ init_from_config({TryNodes0, NodeType} = Config) ->
             %% also wanted to cluster with us. Exactly one of these nodes
             %% needs to proceed with an unclustered startup. We pick the node
             %% that is alphabetically first.
+            %% that is alphabetically first.
             error_logger:info_msg(
-              "Started simultaneously with ~p; this node was first~n",
-              [TryNodes]),
+              "Virgin node started simultaneously with ~p; "
+              "this node has precedence~n", [TryNodes]),
             init_db_and_upgrade([node()], disc, false);
         {error, tables_not_present} when NodeType =:= disc ->
             %% See above.
             error_logger:info_msg(
-              "Started simultaneously with ~p; this node was not "
-              "first. Waiting for another node to start.~n", [TryNodes]),
+              "Virgin node started simultaneously with ~p; "
+              "waiting for another node to start.~n", [TryNodes]),
             timer:sleep(1000),
             init_from_config(Config);
         {error, _} ->
