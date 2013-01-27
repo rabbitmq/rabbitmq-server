@@ -76,7 +76,7 @@
 	 start_child/2, restart_child/2,
 	 delete_child/2, terminate_child/2,
 	 which_children/1, count_children/1,
-         find_child/2, check_childspecs/1]).
+	 find_child/2, check_childspecs/1]).
 
 %% Internal exports
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
