@@ -285,6 +285,15 @@ which_children(Supervisor) ->
 count_children(Supervisor) ->
     call(Supervisor, count_children).
 
+-ifdef(use_specs).
+-spec find_child(Supervisor, Name) -> [pid()] when
+      Supervisor :: sup_ref(),
+      Name :: child_id().
+-endif.
+find_child(Supervisor, Name) ->
+    [Pid || {Name1, Pid, _Type, _Modules} <- which_children(Supervisor),
+            Name1 =:= Name].
+
 call(Supervisor, Req) ->
     gen_server:call(Supervisor, Req, infinity).
 
@@ -312,15 +321,6 @@ try_again_restart(Supervisor, Child) ->
 
 cast(Supervisor, Req) ->
     gen_server:cast(Supervisor, Req).
-
--ifdef(use_specs).
--spec find_child(Supervisor, Name) -> [pid()] when
-      Supervisor :: sup_ref(),
-      Name :: child_id().
--endif.
-find_child(Supervisor, Name) ->
-    [Pid || {Name1, Pid, _Type, _Modules} <- which_children(Supervisor),
-            Name1 =:= Name].
 
 %%% ---------------------------------------------------
 %%% 
