@@ -5,7 +5,14 @@
 %%
 %% 2) a find_child/2 utility function has been added
 %%
-%% 3) child specifications can contain, as the restart type, a tuple
+%% 3) Added an 'intrinsic' restart type. Like the transient type, this
+%%    type means the child should only be restarted if the child exits
+%%    abnormally. Unlike the transient type, if the child exits
+%%    normally, the supervisor itself also exits normally. If the
+%%    child is a supervisor and it exits normally (i.e. with reason of
+%%    'shutdown') then the child's parent also exits normally.
+%%
+%% 4) child specifications can contain, as the restart type, a tuple
 %%    {permanent, Delay} | {transient, Delay} | {intrinsic, Delay}
 %%    where Delay >= 0 (see point (4) below for intrinsic). The delay,
 %%    in seconds, indicates what should happen if a child, upon being
@@ -37,13 +44,6 @@
 %%    gen_server will not log the error. Thus from gen_server's
 %%    perspective it's a normal exit, whilst from supervisor's
 %%    perspective, it's an abnormal exit.
-%%
-%% 4) Added an 'intrinsic' restart type. Like the transient type, this
-%%    type means the child should only be restarted if the child exits
-%%    abnormally. Unlike the transient type, if the child exits
-%%    normally, the supervisor itself also exits normally. If the
-%%    child is a supervisor and it exits normally (i.e. with reason of
-%%    'shutdown') then the child's parent also exits normally.
 %%
 %% 5) normal, and {shutdown, _} exit reasons are all treated the same
 %%    (i.e. are regarded as normal exits)
