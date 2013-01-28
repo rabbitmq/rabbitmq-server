@@ -135,6 +135,15 @@ thus:
     AMQP 1.0             AMQP 0-9-1
     /queue/ReplyTo <---> ReplyTo
 
+## Virtual Hosts
+
+AMQP 1.0 has no equivalent of AMQP 0-9-1 virtual hosts. A virtual host
+on the broker may be addressed when opening an AMQP 1.0 connection by setting
+the `hostname` field, prefixing with "vhost:". Setting the `hostname` field
+to "vhost:/" addresses the default virtual host. If the `hostname` field
+does not start with "vhost:" then the broker `default_vhost` configuration
+setting will be consulted.
+
 # Limitations and unsupported features
 
 At the minute, the RabbitMQ AMQP 1.0 adapter does not support:

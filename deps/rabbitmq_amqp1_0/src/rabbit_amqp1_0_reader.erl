@@ -43,7 +43,8 @@
              connection_state, queue_collector, heartbeater, conn_sup_pid,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len, throttle}).
 
--record(connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state}).
+-record(connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
+                     hostname}).
 
 -record(throttle, {conserve_resources, last_blocked_by, last_blocked_at}).
 
@@ -335,7 +336,7 @@ parse_1_0_frame(Payload, _Channel) ->
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                           channel_max = ClientChannelMax,
                                           idle_time_out = {uint, Interval},
-                                          hostname = _Hostname,
+                                          hostname = Hostname,
                                           properties = Props },
                             State = #v1{
                               start_heartbeat_fun = SHF,
@@ -388,7 +389,8 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                   ReceiverHeartbeatSec, ReceiveFun),
                 State#v1{connection_state = running,
                          connection = Connection#connection{
-                                                   frame_max = FrameMax},
+                                                   frame_max = FrameMax,
+                                                   hostname = Hostname},
                          heartbeater = Heartbeater}
         end,
     %% TODO enforce channel_max
@@ -644,6 +646,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
         connection = #connection{frame_max = FrameMax,
+                                 hostname  = Hostname,
                                  user      = User}} = State,
     {ok, ChSupPid, ChFrPid} =
         %% Note: the equivalent, start_channel is in channel_sup_sup
@@ -654,11 +657,17 @@ send_to_new_1_0_session(Channel, Frame, State) ->
                            unlimited -> unlimited;
                            _         -> FrameMax - 8
                        end,
-                       self(), User, "/", Collector}), %% TODO is that "/" used?
+                       self(), User, vhost(Hostname), Collector}),
     erlang:monitor(process, ChFrPid),
     put({channel, Channel}, {ch_fr_pid, ChFrPid}),
     put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
     put({ch_fr_pid, ChFrPid}, {channel, Channel}),
     ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame).
+
+vhost({utf8, <<"vhost:", VHost/binary>>}) ->
+    VHost;
+vhost(_) ->
+    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
+    DefaultVHost.
 
 %% End 1-0

@@ -43,7 +43,7 @@ init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
     process_flag(trap_exit, true),
     {ok, Conn} = amqp_connection:start(
                    #amqp_params_direct{username     = Username,
-                                       virtual_host = list_to_binary(VHost),
+                                       virtual_host = VHost,
                                        adapter_info = AdapterInfo}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, #state{backing_connection = Conn,
