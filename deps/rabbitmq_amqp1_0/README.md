@@ -150,6 +150,13 @@ At the minute, the RabbitMQ AMQP 1.0 adapter does not support:
  - Source/target expiry-policy other than link-detach and timeout
    other than 0
  - Max message size for links
+ - Aborted transfers
+ - TLS negotiation via the AMQP2100 handshake (although SSL is supported)
+ - Use of virtual hosts other than "/"
+ - Multiple-section messages
+ - amqp-sequence messages (maybe)
+ - delivery-annotations, message-annotations and application-properties
+ - lots of header / footer stuff will just be dropped or wrong
 
 [10] We do not deduplicate as a target, though we may resend as a
 source (messages that have no settled outcome when an outgoing link is
