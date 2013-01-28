@@ -985,7 +985,7 @@ remove_old_samples_single({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
 
 remove_old_samples(Cutoff, #stats{diffs = Diffs,
                                   base  = Base}) ->
-    List = gb_trees:to_list(Diffs),
+    List = lists:reverse(gb_trees:to_list(Diffs)),
     remove_old_samples(Cutoff, List, [], Base).
 
 %% Go through the list, amalgamating all too-old samples with the next
@@ -994,13 +994,13 @@ remove_old_samples(Cutoff, #stats{diffs = Diffs,
 %% invent one and move it there [1]. But if it's just outright too
 %% old, move it to the base [2].
 remove_old_samples(_Cutoff, [], Keep, Base) ->
-    #stats{diffs = gb_trees:from_orddict(lists:reverse(Keep)), base = Base};
+    #stats{diffs = gb_trees:from_orddict(Keep), base = Base};
 remove_old_samples(Cutoff, [H = {TS, S} | T], Keep, Base) ->
     case {keep(Cutoff, TS), Keep} of
         {keep,       _} -> remove_old_samples(Cutoff, T, [H | Keep], Base);
-        {drop,       _} -> remove_old_samples(Cutoff, T, [], Base + S); %% [2]
+        {drop,       _} -> remove_old_samples(Cutoff, T, Keep, Base + S); %% [2]
         {{move, D}, []} -> remove_old_samples(
-                             Cutoff, T, [{TS - D, S}], Base); %% [1]
+                             Cutoff, T, [{TS + D, S}], Base); %% [1]
         {{move, _},  _} -> [{KTS, KS} | KT] = Keep,
                            remove_old_samples(
                              Cutoff, T, [{KTS, KS + S} | KT], Base) %% [0]
@@ -1011,9 +1011,10 @@ keep({Policy, Now}, TS) ->
                         prefer_action(
                           Action,
                           case (Now - TS) =< (AgeSec * 1000) of
-                              true  -> case TS rem (DivisorSec * 1000) of
+                              true  -> DivisorMillis = DivisorSec * 1000,
+                                       case TS rem DivisorMillis of
                                            0   -> keep;
-                                           Rem -> {move, Rem}
+                                           Rem -> {move, DivisorMillis - Rem}
                                        end;
                               false -> drop
                           end)
