@@ -41,10 +41,7 @@
         ]).
 
 %% Used internally in rpc calls
--export([node_info/0,
-         remove_node_if_mnesia_running/1,
-         is_running_remote/0
-        ]).
+-export([node_info/0, remove_node_if_mnesia_running/1]).
 
 -include("rabbit.hrl").
 
@@ -336,7 +333,7 @@ status() ->
                   IfNonEmpty(ram, cluster_nodes(ram)))}] ++
         case mnesia:system_info(is_running) of
             yes -> RunningNodes = cluster_nodes(running),
-                   [{running_nodes, cluster_nodes(running)},
+                   [{running_nodes, RunningNodes},
                     {partitions,    mnesia_partitions(RunningNodes)}];
             no  -> []
         end.
@@ -731,8 +728,6 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
         {{ok, Nodes}, _} ->
             Nodes
     end.
-
-is_running_remote() -> {mnesia:system_info(is_running) =:= yes, node()}.
 
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
