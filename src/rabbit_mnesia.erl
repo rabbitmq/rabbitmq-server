@@ -335,7 +335,7 @@ status() ->
                   IfNonEmpty(ram, cluster_nodes(ram)))}] ++
         case mnesia:system_info(is_running) of
             yes -> RunningNodes = cluster_nodes(running),
-                   [{running_nodes, cluster_nodes(running)},
+                   [{running_nodes, RunningNodes},
                     {partitions,    mnesia_partitions(RunningNodes)}];
             no  -> []
         end.
