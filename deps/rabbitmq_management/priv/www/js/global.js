@@ -97,6 +97,9 @@ function setup_global_vars(user) {
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     current_vhost = get_pref('vhost');
     exchange_types = overview.exchange_types;
+    var range = get_pref('chart-range').split('|');
+    current_range_age = parseInt(range[0]);
+    current_range_incr = parseInt(range[1]);
 }
 
 ////////////////////////////////////////////////////
@@ -122,8 +125,8 @@ var current_sort;
 var current_sort_reverse = false;
 
 // What is our current range
-var current_range_age = 3600;
-var current_range_incr = 60;
+var current_range_age;
+var current_range_incr;
 
 // The timer object for auto-updates, and how often it goes off
 var timer;

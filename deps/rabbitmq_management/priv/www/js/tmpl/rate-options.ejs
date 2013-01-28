@@ -42,9 +42,11 @@
       <th><label>Chart range:</label></th>
       <td>
         <select name="range">
-          <%= fmt_option('Last minute', '60|5', range) %>
-          <%= fmt_option('Last hour', '3600|60', range) %>
-          <%= fmt_option('Last day', '86400|1200', range) %>
+          <%= fmt_option('Last minute',           '60|5', range) %>
+          <%= fmt_option('Last twenty minutes', '1200|60', range) %>
+          <%= fmt_option('Last hour',           '3600|60', range) %>
+          <%= fmt_option('Last six hours',     '21600|360', range) %>
+          <%= fmt_option('Last day',           '86400|1200', range) %>
         </select>
       </td>
     </tr>
