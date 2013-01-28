@@ -155,7 +155,6 @@ At the minute, the RabbitMQ AMQP 1.0 adapter does not support:
  - Some complex message formats including multiple-section messages,
    amqp-sequence messages, delivery-annotations, message-annotations and
    application-properties
- - Idle time-out
 
 [10] We do not deduplicate as a target, though we may resend as a
 source (messages that have no settled outcome when an outgoing link is
