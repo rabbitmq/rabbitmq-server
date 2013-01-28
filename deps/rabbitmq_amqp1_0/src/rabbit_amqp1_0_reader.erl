@@ -334,7 +334,7 @@ parse_1_0_frame(Payload, _Channel) ->
 
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                           channel_max = ClientChannelMax,
-                                          %% TODO idle_time_out
+                                          idle_time_out = {uint, Interval},
                                           hostname = _Hostname,
                                           properties = Props },
                             State = #v1{
@@ -343,15 +343,11 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                               connection = Connection,
                               throttle   = Throttle,
                               sock = Sock}) ->
-    Interval = undefined, %% TODO implement heartbeating
     ClientProps = case Props of
                       undefined -> [];
                       {map, Ps} -> Ps
                   end,
-    ClientHeartbeat = case Interval of
-                          undefined -> 0;
-                          {_, HB} -> HB
-                      end,
+    ClientHeartbeatSec = Interval div 1000,
     FrameMax = case ClientFrameMax of
                    undefined -> unlimited;
                    {_, FM} -> FM
@@ -360,6 +356,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                      undefined -> unlimited;
                      {_, CM} -> CM
                  end,
+    {ok, HeartbeatSec} = application:get_env(rabbit, heartbeat),
     State1 =
         if (FrameMax =/= unlimited) and (FrameMax < ?FRAME_1_0_MIN_SIZE) ->
                 protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
@@ -371,7 +368,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
            %%        not_allowed, "frame_max=~w > ~w max size",
            %%        [FrameMax, ServerFrameMax]);
            true ->
-            SendFun =
+                SendFun =
                     fun() ->
                             Frame =
                                 rabbit_amqp1_0_binary_generator:build_heartbeat_frame(),
@@ -381,13 +378,17 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                 Parent = self(),
                 ReceiveFun =
                     fun() ->
-                            Parent ! timeout
+                            Parent ! heartbeat_timeout
                     end,
-                Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
-                                  ClientHeartbeat, ReceiveFun),
+                %% [2.4.5] the value in idle-time-out SHOULD be half the peer's
+                %%         actual timeout threshold
+                ReceiverHeartbeatSec = lists:min([HeartbeatSec * 2, 4294967]),
+                %% TODO: only start heartbeat receive timer at next next frame
+                Heartbeater = SHF(Sock, ClientHeartbeatSec, SendFun,
+                                  ReceiverHeartbeatSec, ReceiveFun),
                 State#v1{connection_state = running,
                          connection = Connection#connection{
-                                        frame_max = FrameMax},
+                                                   frame_max = FrameMax},
                          heartbeater = Heartbeater}
         end,
     %% TODO enforce channel_max
@@ -395,6 +396,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
            Sock,
            #'v1_0.open'{channel_max = ClientChannelMax,
                         max_frame_size = ClientFrameMax,
+                        idle_time_out = {uint, HeartbeatSec * 1000},
                         container_id = {utf8, list_to_binary(atom_to_list(node()))}}),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     control_throttle(
@@ -414,8 +416,12 @@ handle_1_0_session_frame(Channel, Frame, State) ->
                     State;
                 #'v1_0.transfer'{} ->
                     case (State#v1.connection_state =:= blocking) of
-                        true  -> State#v1{connection_state = blocked};
-                        false -> State
+                        true ->
+                            ok = rabbit_heartbeat:pause_monitor(
+                                   State#v1.heartbeater),
+                            State#v1{connection_state = blocked};
+                        false ->
+                            State
                     end;
                 _ ->
                     State
