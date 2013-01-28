@@ -4,7 +4,7 @@ function render_charts() {
     });
 }
 
-var chart_colors = ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed'];
+var chart_colors = ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666666', '#aaaaaa'];
 
 function render_chart(div) {
     var id = div.attr('id').substring('chart-'.length);
