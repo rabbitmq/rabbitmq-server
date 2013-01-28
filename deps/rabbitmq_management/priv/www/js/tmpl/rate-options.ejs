@@ -16,21 +16,17 @@
     <tr>
       <th><label>Display:</label></th>
       <td>
-        <select name="mode">
-          <%= fmt_option('Charts', 'chart', mode) %>
-          <%= fmt_option('Rates (instantaneous)', 'inst', mode) %>
-          <%= fmt_option('Rates (moving average)', 'avg', mode) %>
-        </select>
+        <%= fmt_radio('mode', 'Charts', 'chart', mode) %>
+        <%= fmt_radio('mode', 'Rates (instantaneous)', 'inst', mode) %>
+        <%= fmt_radio('mode', 'Rates (moving average)', 'avg', mode) %>
       </td>
     </tr>
     <tr>
       <th><label>Chart size:</label></th>
       <td>
-        <select name="size">
-          <%= fmt_option('Small', 'small', size) %>
-          <%= fmt_option('Medium', 'Medium', size) %>
-          <%= fmt_option('Large', 'large', size) %>
-        </select>
+        <%= fmt_radio('size', 'Small', 'small', size) %>
+        <%= fmt_radio('size', 'Medium', 'Medium', size) %>
+        <%= fmt_radio('size', 'Large', 'large', size) %>
       </td>
     </tr>
     <tr>
@@ -41,13 +37,11 @@
     <tr>
       <th><label>Chart range:</label></th>
       <td>
-        <select name="range">
-          <%= fmt_option('Last minute',           '60|5', range) %>
-          <%= fmt_option('Last twenty minutes', '1200|60', range) %>
-          <%= fmt_option('Last hour',           '3600|60', range) %>
-          <%= fmt_option('Last six hours',     '21600|360', range) %>
-          <%= fmt_option('Last day',           '86400|1200', range) %>
-        </select>
+        <%= fmt_radio('range', 'Last minute',           '60|5', range) %>
+        <%= fmt_radio('range', 'Last twenty minutes', '1200|60', range) %>
+        <%= fmt_radio('range', 'Last hour',           '3600|60', range) %>
+        <%= fmt_radio('range', 'Last six hours',     '21600|360', range) %>
+        <%= fmt_radio('range', 'Last day',           '86400|1200', range) %>
       </td>
     </tr>
   </table>

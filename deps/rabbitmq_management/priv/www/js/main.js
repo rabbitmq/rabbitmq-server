@@ -378,17 +378,29 @@ function apply_state(reqs) {
     return reqs2;
 }
 
-function show_popup(type, text) {
+function show_popup(type, text, mode) {
     var cssClass = '.form-popup-' + type;
     function hide() {
-        $(cssClass).slideUp(200, function() {
+        if (mode == 'fade') {
+            $(cssClass).fadeOut(200, function() {
                 $(this).remove();
             });
+        }
+        else {
+            $(cssClass).slideUp(200, function() {
+                $(this).remove();
+            });
+        }
     }
 
     hide();
     $('h1').after(format('error-popup', {'type': type, 'text': text}));
-    $(cssClass).center().slideDown(200);
+    if (mode == 'fade') {
+        $(cssClass).fadeIn(200);
+    }
+    else {
+        $(cssClass).center().slideDown(200);
+    }
     $(cssClass + ' span').click(hide);
 }
 
@@ -439,7 +451,8 @@ function postprocess() {
         help($(this).attr('id'))
     });
     $('.rate-options').die().live('click', function() {
-        show_popup('help', format('rate-options', {span: $(this)}));
+        show_popup('rate-options', format('rate-options', {span: $(this)}),
+                   'fade');
     });
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.

@@ -696,10 +696,15 @@ function fmt_permissions(obj, permissions, lookup, show, warning) {
     return res.length == 0 ? warning : res.join(', ');
 }
 
-function fmt_option(name, value, current) {
-    return '<option value="' + value + '"' +
-        ((value == current) ? ' selected="selected"' : '') +
-        '>' + name + '</option>';
+var radio_id = 0;
+
+function fmt_radio(name, text, value, current) {
+    radio_id++;
+    return '<label class="radio" for="radio-' + radio_id + '">' +
+        '<input type="radio" id="radio-' + radio_id + '" name="' + name + 
+        '" value="' + value + '"' +
+        ((value == current) ? ' checked="checked"' : '') +
+        '>' + text + '</label>';
 }
 
 function properties_size(obj) {
