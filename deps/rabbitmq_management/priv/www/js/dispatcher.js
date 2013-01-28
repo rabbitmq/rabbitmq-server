@@ -22,7 +22,8 @@ dispatcher_add(function(sammy) {
         'connections');
     sammy.get('#/connections/:name', function() {
             var name = esc(this.params['name']);
-            render({'connection': '/connections/' + name,
+            render({'connection': {path:    '/connections/' + name,
+                                   options: {range:true}},
                     'channels': '/connections/' + name + '/channels'},
                 'connection', '#/connections');
         });
