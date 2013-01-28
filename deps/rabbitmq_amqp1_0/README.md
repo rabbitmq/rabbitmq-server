@@ -146,7 +146,6 @@ At the minute, the RabbitMQ AMQP 1.0 adapter does not support:
  - "Modified" outcome
  - Filters [12]
  - Transactions
- - Mixed settlement mode
  - Source/target expiry-policy other than link-detach and timeout
    other than 0
  - Max message size for links
