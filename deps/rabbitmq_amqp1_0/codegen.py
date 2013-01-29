@@ -19,7 +19,9 @@ class AMQPType:
         # These are 'restricted' types, rather than composite, so they
         # do not have defined fields.
         if self.desc in ['amqp:data:binary', 'amqp:amqp-sequence:list',
-                         'amqp:amqp-value:*', 'amqp:application-properties:map']:
+                         'amqp:amqp-value:*', 'amqp:application-properties:map',
+                         'amqp:delivery-annotations:map',
+                         'amqp:message-annotations:map']:
             self.fields = ['content']
 
     def define(self):

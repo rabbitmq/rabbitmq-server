@@ -88,9 +88,11 @@ decode({described, Descriptor, {list, Fields}}) ->
 decode({described, Descriptor, {map, Fields}}) ->
     case rabbit_amqp1_0_framing0:record_for(Descriptor) of
         #'v1_0.application_properties'{} ->
-            #'v1_0.application_properties'{
-                                        content = [{decode(K), decode(V)} ||
-                                                      {K, V} <- Fields]};
+            #'v1_0.application_properties'{content = decode_map(Fields)};
+        #'v1_0.delivery_annotations'{} ->
+            #'v1_0.delivery_annotations'{content = decode_map(Fields)};
+        #'v1_0.message_annotations'{} ->
+            #'v1_0.message_annotations'{content = decode_map(Fields)};
         Else ->
             fill_from_map(Else, Fields)
     end;
@@ -102,6 +104,9 @@ decode(null) ->
     undefined;
 decode(Other) ->
      Other.
+
+decode_map(Fields) ->
+    [{decode(K), decode(V)} || {K, V} <- Fields].
 
 encode_described(list, ListOrNumber, Frame) ->
     Desc = descriptor(ListOrNumber),

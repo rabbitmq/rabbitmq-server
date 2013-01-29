@@ -30,13 +30,19 @@ assemble(MsgBin) ->
                                       decode_section(MsgBin), MsgBin),
     {RKey, #amqp_msg{props = Props, payload = Content}}.
 
-%% TODO handle delivery-annotations and application-properties
-
 assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
     assemble(message_annotations, {R, translate_header(H, P), C},
              decode_section(Rest), Rest);
 assemble(header, {R, P, C}, Else, Uneaten) ->
     assemble(message_annotations, {R, P, C}, Else, Uneaten);
+
+assemble(delivery_annotations, RPC, {#'v1_0.delivery_annotations'{}, Rest},
+         Uneaten) ->
+    %% ignore delivery annotations for now
+    %% TODO: handle "rejected" error
+    assemble(message_annotations, RPC, Rest, Uneaten);
+assemble(delivery_annotations, RPC, Else, Uneaten) ->
+    assemble(message_annotations, RPC, Else, Uneaten);
 
 assemble(message_annotations, {R, P = #'P_basic'{headers = Headers}, C},
          {#'v1_0.message_annotations'{}, Rest}, Uneaten) ->
