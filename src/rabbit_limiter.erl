@@ -15,13 +15,11 @@
 %%
 
 -module(rabbit_limiter).
--include("rabbit_framing.hrl").
 
 -behaviour(gen_server2).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
-
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
 -export([limit/2, can_send/6, ack/2, register/2, unregister/2]).
