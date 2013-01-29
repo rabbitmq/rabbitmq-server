@@ -28,7 +28,7 @@
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, notify_sent_queue_down/1, unblock/2, flush_all/2]).
--export([notify_down_all/2, limit_all/3, inform_limiter/3]).
+-export([notify_down_all/2, limit_all/3, credit/6]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
@@ -145,7 +145,8 @@
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: (qpids(), pid(), rabbit_limiter:token()) ->
                           ok_or_errors()).
--spec(inform_limiter/3 :: (rabbit_types:amqqueue(), pid(), any()) -> 'ok').
+-spec(credit/6 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(),
+                   non_neg_integer(), boolean(), boolean()) -> 'ok').
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
@@ -533,8 +534,8 @@ notify_down_all(QPids, ChPid) ->
 limit_all(QPids, ChPid, Limiter) ->
     delegate:cast(QPids, {limit, ChPid, Limiter}).
 
-inform_limiter(#amqqueue{pid = QPid}, ChPid, Msg) ->
-    delegate:cast(QPid, {inform_limiter, ChPid, Msg}).
+credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain, Reply) ->
+    delegate:cast(QPid, {credit, ChPid, CTag, Credit, Drain, Reply}).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck}).

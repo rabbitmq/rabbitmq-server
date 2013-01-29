@@ -1118,9 +1118,8 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                               drain        = Drain}, _,
               State = #ch{consumer_mapping = Consumers}) ->
     case dict:find(CTag, Consumers) of
-        {ok, Q} -> ok = rabbit_amqqueue:inform_limiter(
-                          Q, self(),
-                          {basic_credit, CTag, Credit, Drain, true}),
+        {ok, Q} -> ok = rabbit_amqqueue:credit(
+                          Q, self(), CTag, Credit, Drain, true),
                    {noreply, State};
         error   -> precondition_failed("unknown consumer tag '~s'", [CTag])
     end;
@@ -1196,10 +1195,8 @@ maybe_set_initial_credit(Arguments, CTag, Q) ->
         {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
                             rabbit_misc:table_lookup(T, <<"drain">>)} of
                           {{long, Credit}, {boolean, Drain}} ->
-                              ok = rabbit_amqqueue:inform_limiter(
-                                     Q, self(),
-                                     {basic_credit, CTag, Credit, Drain,
-                                      false});
+                              ok = rabbit_amqqueue:credit(
+                                     Q, self(), CTag, Credit, Drain, false);
                           _ ->
                               ok
                       end;

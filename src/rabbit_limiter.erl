@@ -27,7 +27,7 @@
 -export([limit/2, can_ch_send/3, can_cons_send/2, record_cons_send/4,
          ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
--export([inform/4, forget_consumer/2, copy_queue_state/2]).
+-export([credit/7, forget_consumer/2, copy_queue_state/2]).
 
 -import(rabbit_misc, [serial_add/2, serial_diff/2]).
 
@@ -57,8 +57,9 @@
 -spec(block/1 :: (token()) -> 'ok').
 -spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (token()) -> boolean()).
--spec(inform/4 :: (token(), pid(), non_neg_integer(), any()) ->
-                       {[rabbit_types:ctag()], token()}).
+-spec(credit/7 :: (token(), pid(), rabbit_types:ctag(),
+                   non_neg_integer(), boolean(), boolean(), non_neg_integer())
+                  -> {[rabbit_types:ctag()], token()}).
 -spec(forget_consumer/2 :: (token(), rabbit_types:ctag()) -> token()).
 -spec(copy_queue_state/2 :: (token(), token()) -> token()).
 
@@ -143,8 +144,8 @@ unblock(Limiter) ->
 is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
 
-inform(Limiter = #token{q_state = Credits},
-       ChPid, Len, {basic_credit, CTag, Credit, Drain, Reply}) ->
+credit(Limiter = #token{q_state = Credits},
+       ChPid, CTag, Credit, Drain, Reply, Len) ->
     {Unblock, Credits2} = update_credit(
                             CTag, Len, ChPid, Credit, Drain, Credits),
     case Reply of

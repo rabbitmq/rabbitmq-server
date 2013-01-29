@@ -1329,12 +1329,13 @@ handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
     noreply(State#q{backing_queue       = BQ1,
 		    backing_queue_state = BQS1});
 
-handle_cast({inform_limiter, ChPid, Msg},
+handle_cast({credit, ChPid, CTag, Credit, Drain, Reply},
             State = #q{backing_queue       = BQ,
                        backing_queue_state = BQS}) ->
     #cr{limiter       = Lim,
         blocked_ctags = BCTags} = ch_record(ChPid),
-    {Unblock, Lim2} = rabbit_limiter:inform(Lim, ChPid, BQ:len(BQS), Msg),
+    {Unblock, Lim2} = rabbit_limiter:credit(
+                        Lim, ChPid, CTag, Credit, Drain, Reply, BQ:len(BQS)),
     noreply(possibly_unblock(
               State, ChPid, fun(C) -> C#cr{blocked_ctags = BCTags -- Unblock,
                                            limiter       = Lim2} end));
