@@ -44,25 +44,22 @@ attach(#'v1_0.attach'{name = Name,
                        #outgoing_link{ delivery_count = ?INIT_TXFR_COUNT,
                                        no_ack = NoAck,
                                        default_outcome = DOSym}, DCh) of
-        {ok, Source1,
-         OutgoingLink = #outgoing_link{ queue = QueueName,
-                                        delivery_count = Count }} ->
+        {ok, Source1, OutgoingLink = #outgoing_link{queue = QueueName}} ->
             CTag = handle_to_ctag(Handle),
-            %% Zero the credit before we start consuming, so that we only
-            %% use explicitly given credit.
-            amqp_channel:cast(BCh, #'basic.credit'{consumer_tag = CTag,
-                                                   credit       = 0,
-                                                   count        = Count,
-                                                   drain        = false}),
             case amqp_channel:subscribe(
-                   BCh, #'basic.consume' { queue = QueueName,
-                                           consumer_tag = CTag,
-                                           %% we will ack when we've transfered
-                                           %% a message, or when we get an ack
-                                           %% from the client.
-                                           no_ack = false,
-                                           %% TODO exclusive?
-                                           exclusive = false}, self()) of
+                   BCh, #'basic.consume'{
+                     queue = QueueName,
+                     consumer_tag = CTag,
+                     %% we will ack when we've transfered
+                     %% a message, or when we get an ack
+                     %% from the client.
+                     no_ack = false,
+                     %% TODO exclusive?
+                     exclusive = false,
+                     arguments = [{<<"x-credit">>, table,
+                                   [{<<"credit">>, long,    0},
+                                    {<<"drain">>,  boolean, false}]}]},
+                   self()) of
                 #'basic.consume_ok'{} ->
                     %% TODO we should avoid the race by getting the queue to send
                     %% attach back, but a.t.m. it would use the wrong codec.
