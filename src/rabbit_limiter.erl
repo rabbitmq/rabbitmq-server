@@ -24,7 +24,7 @@
          disable/1]).
 -export([limit/2, can_send/6, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
--export([credit/7, forget_consumer/2, copy_queue_state/2]).
+-export([initial_credit/6, credit/6, forget_consumer/2, copy_queue_state/2]).
 
 -import(rabbit_misc, [serial_add/2, serial_diff/2]).
 
@@ -55,8 +55,11 @@
 -spec(block/1 :: (token()) -> 'ok').
 -spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (token()) -> boolean()).
--spec(credit/7 :: (token(), pid(), rabbit_types:ctag(),
-                   non_neg_integer(), boolean(), boolean(), non_neg_integer())
+-spec(initial_credit/6 :: (token(), pid(), rabbit_types:ctag(),
+                           non_neg_integer(), boolean(), non_neg_integer())
+                          -> token()).
+-spec(credit/6 :: (token(), pid(), rabbit_types:ctag(),
+                   non_neg_integer(), boolean(), non_neg_integer())
                   -> {[rabbit_types:ctag()], token()}).
 -spec(forget_consumer/2 :: (token(), rabbit_types:ctag()) -> token()).
 -spec(copy_queue_state/2 :: (token(), token()) -> token()).
@@ -147,14 +150,17 @@ unblock(Limiter) ->
 is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
 
+initial_credit(Limiter = #token{q_state = Credits},
+               ChPid, CTag, Credit, Drain, Len) ->
+    {[], Credits2} = update_credit(
+                            CTag, Len, ChPid, Credit, Drain, Credits),
+    Limiter#token{q_state = Credits2}.
+
 credit(Limiter = #token{q_state = Credits},
-       ChPid, CTag, Credit, Drain, Reply, Len) ->
+       ChPid, CTag, Credit, Drain, Len) ->
     {Unblock, Credits2} = update_credit(
                             CTag, Len, ChPid, Credit, Drain, Credits),
-    case Reply of
-        true  -> rabbit_channel:send_credit_reply(ChPid, Len);
-        false -> ok
-    end,
+    rabbit_channel:send_credit_reply(ChPid, Len),
     {Unblock, Limiter#token{q_state = Credits2}}.
 
 forget_consumer(Limiter = #token{q_state = Credits}, CTag) ->

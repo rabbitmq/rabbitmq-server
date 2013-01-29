@@ -1096,14 +1096,24 @@ handle_call({basic_get, ChPid, NoAck}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, Limiter,
-             ConsumerTag, ExclusiveConsume, OkMsg},
-            _From, State = #q{exclusive_consumer = Holder}) ->
+             ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg},
+            _From, State = #q{exclusive_consumer  = Holder,
+                              backing_queue       = BQ,
+                              backing_queue_state = BQS}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
         in_use ->
             reply({error, exclusive_consume_unavailable}, State);
         ok ->
             C = ch_record(ChPid),
-            C1 = update_consumer_count(C#cr{limiter = Limiter}, +1),
+            Limiter2 = case CreditArgs of
+                           none ->
+                               Limiter;
+                           {Credit, Drain} ->
+                               rabbit_limiter:initial_credit(
+                                 Limiter, ChPid, ConsumerTag, Credit, Drain,
+                                 BQ:len(BQS))
+                       end,
+            C1 = update_consumer_count(C#cr{limiter = Limiter2}, +1),
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
@@ -1326,13 +1336,13 @@ handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
     noreply(State#q{backing_queue       = BQ1,
 		    backing_queue_state = BQS1});
 
-handle_cast({credit, ChPid, CTag, Credit, Drain, Reply},
+handle_cast({credit, ChPid, CTag, Credit, Drain},
             State = #q{backing_queue       = BQ,
                        backing_queue_state = BQS}) ->
     #cr{limiter       = Lim,
         blocked_ctags = BCTags} = ch_record(ChPid),
     {Unblock, Lim2} = rabbit_limiter:credit(
-                        Lim, ChPid, CTag, Credit, Drain, Reply, BQ:len(BQS)),
+                        Lim, ChPid, CTag, Credit, Drain, BQ:len(BQS)),
     noreply(possibly_unblock(
               State, ChPid, fun(C) -> C#cr{blocked_ctags = BCTags -- Unblock,
                                            limiter       = Lim2} end));

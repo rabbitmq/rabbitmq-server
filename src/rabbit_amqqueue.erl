@@ -26,9 +26,9 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, wake_up/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
--export([basic_get/3, basic_consume/7, basic_cancel/4]).
+-export([basic_get/3, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2, notify_sent_queue_down/1, unblock/2, flush_all/2]).
--export([notify_down_all/2, limit_all/3, credit/6]).
+-export([notify_down_all/2, limit_all/3, credit/5]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
@@ -145,13 +145,14 @@
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: (qpids(), pid(), rabbit_limiter:token()) ->
                           ok_or_errors()).
--spec(credit/6 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(),
-                   non_neg_integer(), boolean(), boolean()) -> 'ok').
+-spec(credit/5 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(),
+                   non_neg_integer(), boolean()) -> 'ok').
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
--spec(basic_consume/7 ::
+-spec(basic_consume/8 ::
         (rabbit_types:amqqueue(), boolean(), pid(),
-         rabbit_limiter:token(), rabbit_types:ctag(), boolean(), any())
+         rabbit_limiter:token(), rabbit_types:ctag(), boolean(),
+         {non_neg_integer(), boolean()} | 'none', any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
@@ -534,16 +535,16 @@ notify_down_all(QPids, ChPid) ->
 limit_all(QPids, ChPid, Limiter) ->
     delegate:cast(QPids, {limit, ChPid, Limiter}).
 
-credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain, Reply) ->
-    delegate:cast(QPid, {credit, ChPid, CTag, Credit, Drain, Reply}).
+credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
+    delegate:cast(QPid, {credit, ChPid, CTag, Credit, Drain}).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck}).
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, Limiter,
-              ConsumerTag, ExclusiveConsume, OkMsg) ->
-    delegate:call(QPid, {basic_consume, NoAck, ChPid,
-                         Limiter, ConsumerTag, ExclusiveConsume, OkMsg}).
+              ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg) ->
+    delegate:call(QPid, {basic_consume, NoAck, ChPid, Limiter,
+                         ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     delegate:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).

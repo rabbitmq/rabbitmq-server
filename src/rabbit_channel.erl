@@ -717,7 +717,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                no_ack       = NoAck,
                                exclusive    = ExclusiveConsume,
                                nowait       = NoWait,
-                               arguments    = Args},
+                               arguments    = Arguments},
               _, State = #ch{conn_pid          = ConnPid,
                              limiter           = Limiter,
                              consumer_mapping  = ConsumerMapping}) ->
@@ -738,10 +738,10 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
             case rabbit_amqqueue:with_exclusive_access_or_die(
                    QueueName, ConnPid,
                    fun (Q) ->
-                           maybe_set_initial_credit(Args, ActualConsumerTag, Q),
                            {rabbit_amqqueue:basic_consume(
                               Q, NoAck, self(), Limiter,
                               ActualConsumerTag, ExclusiveConsume,
+                              parse_credit_args(Arguments),
                               ok_msg(NoWait, #'basic.consume_ok'{
                                        consumer_tag = ActualConsumerTag})),
                             Q}
@@ -1119,7 +1119,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
               State = #ch{consumer_mapping = Consumers}) ->
     case dict:find(CTag, Consumers) of
         {ok, Q} -> ok = rabbit_amqqueue:credit(
-                          Q, self(), CTag, Credit, Drain, true),
+                          Q, self(), CTag, Credit, Drain),
                    {noreply, State};
         error   -> precondition_failed("unknown consumer tag '~s'", [CTag])
     end;
@@ -1190,17 +1190,14 @@ handle_consuming_queue_down(QPid,
 handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
     State#ch{delivering_queues = sets:del_element(QPid, DQ)}.
 
-maybe_set_initial_credit(Arguments, CTag, Q) ->
+parse_credit_args(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-credit">>) of
         {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
                             rabbit_misc:table_lookup(T, <<"drain">>)} of
-                          {{long, Credit}, {boolean, Drain}} ->
-                              ok = rabbit_amqqueue:credit(
-                                     Q, self(), CTag, Credit, Drain, false);
-                          _ ->
-                              ok
+                          {{long, Credit}, {boolean, Drain}} -> {Credit, Drain};
+                          _                                  -> none
                       end;
-        undefined  -> ok
+        undefined  -> none
     end.
 
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
