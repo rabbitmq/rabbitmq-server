@@ -21,6 +21,7 @@
 -define(PROPERTIES_HEADER, <<"x-amqp-1.0-properties">>).
 -define(APP_PROPERTIES_HEADER, <<"x-amqp-1.0-app-properties">>).
 -define(MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
+-define(FOOTER, <<"x-amqp-1.0-footer">>).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -103,8 +104,10 @@ assemble(amqp10body, {R, P, C}, {{Type, _}, Rest}, Uneaten)
 assemble(amqp10body, {R, P, C}, Else, Uneaten) ->
     assemble(footer, {R, P, compile_body(C)}, Else, Uneaten);
 
-assemble(footer, {R, P, C}, {#'v1_0.footer'{}, <<>>}, _) ->
-    {R, P, C};
+assemble(footer, {R, P = #'P_basic'{headers = Headers}, C},
+         {#'v1_0.footer'{}, <<>>}, Uneaten) ->
+    {R, P#'P_basic'{headers = set_header(?FOOTER,
+                                         Uneaten, Headers)}, C};
 assemble(footer, {R, P, C}, none, _) ->
     {R, P, C};
 assemble(footer, _, Else, _) ->
@@ -213,6 +216,11 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
        first_acquirer = not Redelivered,
        delivery_count = undefined},
     HeadersBin = rabbit_amqp1_0_framing:encode_bin(Header10),
+    MsgAnnoBin =
+        case table_lookup(Headers, ?MESSAGE_ANNOTATIONS_HEADER) of
+            undefined -> <<>>;
+            {_, Bin}  -> Bin
+    end,
     PropsBin =
         case table_lookup(Headers, ?PROPERTIES_HEADER) of
             {_, Props10Bin} ->
@@ -252,7 +260,12 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                       rabbit_amqp1_0_framing:encode_bin(
                         #'v1_0.data'{content = Content})
               end,
-    [HeadersBin, PropsBin, AppPropsBin, DataBin].
+    FooterBin =
+        case table_lookup(Headers, ?FOOTER) of
+            undefined -> <<>>;
+            {_, Bin}  -> Bin
+    end,
+    [HeadersBin, MsgAnnoBin, PropsBin, AppPropsBin, DataBin, FooterBin].
 
 wrap(Bin) when is_binary(Bin) -> {utf8, Bin};
 wrap(Num) when is_number(Num) -> {ulong, Num};
