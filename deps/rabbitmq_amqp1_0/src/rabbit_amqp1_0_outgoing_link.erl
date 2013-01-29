@@ -27,7 +27,6 @@
 -define(INIT_TXFR_COUNT, 0).
 
 -record(outgoing_link, {queue,
-                        %% Note: this is maintained by the queue-limiter too.
                         delivery_count = 0,
                         no_ack,
                         default_outcome}).
@@ -113,7 +112,6 @@ flow(#outgoing_link{delivery_count = LocalCount},
     #'basic.credit_ok'{available = Available} =
         amqp_channel:call(BCh, #'basic.credit'{consumer_tag = CTag,
                                                credit       = LocalCredit,
-                                               count        = LocalCount,
                                                drain        = Drain}),
     case Available of
         -1 ->
