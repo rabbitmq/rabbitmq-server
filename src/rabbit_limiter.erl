@@ -75,7 +75,7 @@
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
 
--record(credit, {count = 0, credit = 0, drain = false}).
+-record(credit, {credit = 0, drain = false}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -144,9 +144,9 @@ is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
 
 inform(Limiter = #token{q_state = Credits},
-       ChPid, Len, {basic_credit, CTag, Credit, Count, Drain, Reply}) ->
+       ChPid, Len, {basic_credit, CTag, Credit, Drain, Reply}) ->
     {Unblock, Credits2} = update_credit(
-                            CTag, Len, ChPid, Credit, Count, Drain, Credits),
+                            CTag, Len, ChPid, Credit, Drain, Credits),
     case Reply of
         true  -> rabbit_channel:send_credit_reply(ChPid, Len);
         false -> ok
@@ -178,40 +178,30 @@ record_send_q(CTag, Len, ChPid, Credits) ->
     end.
 
 decr_credit(CTag, Len, ChPid, Cred, Credits) ->
-    #credit{credit = Credit, count = Count, drain = Drain} = Cred,
-    {NewCredit, NewCount} = maybe_drain(Len - 1, Drain, CTag, ChPid,
-                                        Credit - 1, serial_add(Count, 1)),
-    write_credit(CTag, NewCredit, NewCount, Drain, Credits).
+    #credit{credit = Credit, drain = Drain} = Cred,
+    NewCredit = maybe_drain(Len - 1, Drain, CTag, ChPid, Credit - 1),
+    write_credit(CTag, NewCredit, Drain, Credits).
 
-maybe_drain(0, true, CTag, ChPid, Credit, Count) ->
-    %% Drain, so advance til credit = 0
-    NewCount = serial_add(Count, Credit - 2),
+maybe_drain(0, true, CTag, ChPid, Credit) ->
     send_drained(ChPid, CTag, Credit),
-    {0, NewCount}; %% Magic reduction to 0
+    0; %% Magic reduction to 0
 
-maybe_drain(_, _, _, _, Credit, Count) ->
-    {Credit, Count}.
+maybe_drain(_, _, _, _, Credit) ->
+    Credit.
 
 send_drained(ChPid, CTag, CreditDrained) ->
     rabbit_channel:send_drained(ChPid, CTag, CreditDrained).
 
-update_credit(CTag, Len, ChPid, Credit, Count0, Drain, Credits) ->
-    Count = case dict:find(CTag, Credits) of
-                %% Use our count if we can, more accurate
-                {ok, #credit{ count = LocalCount }} -> LocalCount;
-                %% But if this is new, take it from the adapter
-                _                                   -> Count0
-            end,
-    {NewCredit, NewCount} = maybe_drain(Len, Drain, CTag, ChPid, Credit, Count),
-    NewCredits = write_credit(CTag, NewCredit, NewCount, Drain, Credits),
+update_credit(CTag, Len, ChPid, Credit, Drain, Credits) ->
+    NewCredit = maybe_drain(Len, Drain, CTag, ChPid, Credit),
+    NewCredits = write_credit(CTag, NewCredit, Drain, Credits),
     case NewCredit > 0 of
         true  -> {[CTag], NewCredits};
         false -> {[],     NewCredits}
     end.
 
-write_credit(CTag, Credit, Count, Drain, Credits) ->
+write_credit(CTag, Credit, Drain, Credits) ->
     dict:store(CTag, #credit{credit = Credit,
-                             count  = Count,
                              drain  = Drain}, Credits).
 
 %%----------------------------------------------------------------------------
