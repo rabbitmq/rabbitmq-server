@@ -69,6 +69,11 @@ symbolify(FieldName) when is_atom(FieldName) ->
 %% Some fields are allowed to be 'multiple', in which case they are
 %% either undefined, a single value, or given the descriptor true and a
 %% list value. (Yes that is gross)
+
+%% TODO: in fields of composite types with multiple=true, "a null
+%% value and a zero-length array (with a correct type for its
+%% elements) both describe an absence of a value and should be treated
+%% as semantically identical." (see section 1.3)
 decode({described, true, {list, Fields}}) ->
     [decode(F) || F <- Fields];
 %% A sequence comes as an arbitrary list of values; it's not a
