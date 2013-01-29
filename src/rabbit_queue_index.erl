@@ -616,8 +616,8 @@ add_to_journal(RelSeq, Action, JEntries) ->
                   end;
               ({Pub, no_del, no_ack}) when Action == del ->
                   {Pub, del, no_ack};
-              ({Pub,    Del, no_ack}) when Action == ack ->
-                  {Pub, Del,    ack}
+              ({Pub,    del, no_ack}) when Action == ack ->
+                  {Pub, del,    ack}
           end,
     array:set(RelSeq, Val, JEntries).
 
