@@ -20,6 +20,7 @@
 
 -define(PROPERTIES_HEADER, <<"x-amqp-1.0-properties">>).
 -define(APP_PROPERTIES_HEADER, <<"x-amqp-1.0-app-properties">>).
+-define(MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -29,13 +30,22 @@ assemble(MsgBin) ->
                                       decode_section(MsgBin), MsgBin),
     {RKey, #amqp_msg{props = Props, payload = Content}}.
 
-%% TODO handle delivery-annotations, message-annotations and
-%% application-properties
+%% TODO handle delivery-annotations and application-properties
 
 assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
-    assemble(properties, {R, translate_header(H, P), C},
+    assemble(message_annotations, {R, translate_header(H, P), C},
              decode_section(Rest), Rest);
 assemble(header, {R, P, C}, Else, Uneaten) ->
+    assemble(message_annotations, {R, P, C}, Else, Uneaten);
+
+assemble(message_annotations, {R, P = #'P_basic'{headers = Headers}, C},
+         {#'v1_0.message_annotations'{}, Rest}, Uneaten) ->
+    MsgAnnoBin = chunk(Rest, Uneaten),
+    assemble(properties, {R, P#'P_basic'{
+                               headers = set_header(?MESSAGE_ANNOTATIONS_HEADER,
+                                                    MsgAnnoBin, Headers)}, C},
+             decode_section(Rest), Rest);
+assemble(message_annotations, {R, P, C}, Else, Uneaten) ->
     assemble(properties, {R, P, C}, Else, Uneaten);
 
 assemble(properties, {_R, P, C}, {X = #'v1_0.properties'{}, Rest}, Uneaten) ->
