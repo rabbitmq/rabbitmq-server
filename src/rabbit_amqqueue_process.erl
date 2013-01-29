@@ -437,7 +437,9 @@ deliver_msgs_to_consumers(DeliverFun, false,
             deliver_msgs_to_consumers(DeliverFun, Stop, State1)
     end.
 
-deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
+deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer},
+                        State = #q{backing_queue       = BQ,
+                                   backing_queue_state = BQS}) ->
     C = ch_record(ChPid),
     case is_ch_blocked(C) of
         true ->
@@ -446,36 +448,30 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
         false ->
             #cr{limiter = Limiter, ch_pid = ChPid, blocked_ctags = BCTags} = C,
             #consumer{tag = CTag} = Consumer,
-            case rabbit_limiter:can_cons_send(Limiter, CTag) of
-                false ->
+            case rabbit_limiter:can_send(
+                   Limiter, self(), Consumer#consumer.ack_required,
+                   ChPid, CTag, BQ:len(BQS)) of
+                consumer_blocked ->
                     block_consumer(C#cr{blocked_ctags = [CTag | BCTags]}, E),
                     {false, State};
-                true ->
-                    case rabbit_limiter:can_ch_send(
-                           Limiter, self(), Consumer#consumer.ack_required) of
-                        false ->
-                            block_consumer(C#cr{is_limit_active = true}, E),
-                            {false, State};
-                        true ->
-                            AC1 = queue:in(E, State#q.active_consumers),
-                            deliver_msg_to_consumer(
-                              DeliverFun, Consumer, C,
-                              State#q{active_consumers = AC1})
-                    end
+                channel_blocked ->
+                    block_consumer(C#cr{is_limit_active = true}, E),
+                    {false, State};
+                Limiter2 ->
+                    AC1 = queue:in(E, State#q.active_consumers),
+                    deliver_msg_to_consumer(
+                      DeliverFun, Limiter2, Consumer, C,
+                      State#q{active_consumers = AC1})
             end
     end.
 
-deliver_msg_to_consumer(DeliverFun,
+deliver_msg_to_consumer(DeliverFun, NewLimiter,
                         #consumer{tag          = ConsumerTag,
                                   ack_required = AckRequired},
                         C = #cr{ch_pid               = ChPid,
                                 acktags              = ChAckTags,
-                                limiter              = Limiter,
                                 unsent_message_count = Count},
-                        State = #q{q = #amqqueue{name = QName},
-                                   backing_queue       = BQ,
-                                   backing_queue_state = BQS}) ->
-    rabbit_limiter:record_cons_send(Limiter, ChPid, ConsumerTag, BQ:len(BQS)),
+                        State = #q{q = #amqqueue{name = QName}}) ->
     {{Message, IsDelivered, AckTag}, Stop, State1} =
         DeliverFun(AckRequired, State),
     rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
@@ -485,6 +481,7 @@ deliver_msg_to_consumer(DeliverFun,
                      false -> ChAckTags
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
+                          limiter              = NewLimiter,
                           unsent_message_count = Count + 1}),
     {Stop, State1}.
 

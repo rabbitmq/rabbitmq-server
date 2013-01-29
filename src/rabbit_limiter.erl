@@ -24,8 +24,7 @@
 
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
--export([limit/2, can_ch_send/3, can_cons_send/2, record_cons_send/4,
-         ack/2, register/2, unregister/2]).
+-export([limit/2, can_send/6, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 -export([credit/7, forget_consumer/2, copy_queue_state/2]).
 
@@ -48,8 +47,9 @@
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
--spec(can_ch_send/3 :: (token(), pid(), boolean()) -> boolean()).
--spec(can_cons_send/2 :: (token(), rabbit_types:ctag()) -> boolean()).
+-spec(can_send/6 :: (token(), pid(), boolean(), pid(), rabbit_types:ctag(),
+                     non_neg_integer())
+                    -> token() | 'consumer_blocked' | 'channel_blocked').
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
 -spec(unregister/2 :: (token(), pid()) -> 'ok').
@@ -103,24 +103,29 @@ limit(Limiter, PrefetchCount) ->
 %% breaching a limit. Note that we don't use maybe_call here in order
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
-can_ch_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
+can_send(Token, QPid, AckRequired, ChPid, CTag, Len) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
-      fun () ->
-              gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
-      end);
-can_ch_send(_, _, _) ->
-    true.
+      fun () -> can_send0(Token, QPid, AckRequired, ChPid, CTag, Len) end).
 
-can_cons_send(#token{q_state = Credits}, CTag) ->
-    case dict:find(CTag, Credits) of
-        {ok, #credit{credit = C}} when C > 0 -> true;
-        {ok, #credit{}}                      -> false;
-        error                                -> true
+can_send0(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
+          QPid, AckRequired, ChPid, CTag, Len) ->
+    ConsAllows = case dict:find(CTag, Credits) of
+                     {ok, #credit{credit = C}} when C > 0 -> true;
+                     {ok, #credit{}}                      -> false;
+                     error                                -> true
+                 end,
+    case ConsAllows of
+        true  -> case Enabled andalso
+                     gen_server2:call(
+                       Pid, {can_send, QPid, AckRequired}, infinity) of
+                     true  -> Credits2 = record_send_q(
+                                           CTag, Len, ChPid, Credits),
+                              Token#token{q_state = Credits2};
+                     false -> channel_blocked
+                 end;
+        false -> consumer_blocked
     end.
-
-record_cons_send(#token{q_state = QState} = Token, ChPid, CTag, Len) ->
-    Token#token{q_state = record_send_q(CTag, Len, ChPid, QState)}.
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
