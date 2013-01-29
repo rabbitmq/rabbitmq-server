@@ -335,7 +335,7 @@ parse_1_0_frame(Payload, _Channel) ->
 
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                           channel_max = ClientChannelMax,
-                                          idle_time_out = {uint, Interval},
+                                          idle_time_out = IdleTimeout,
                                           hostname = Hostname,
                                           properties = Props },
                             State = #v1{
@@ -348,7 +348,10 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                       undefined -> [];
                       {map, Ps} -> Ps
                   end,
-    ClientHeartbeatSec = Interval div 1000,
+    ClientHeartbeatSec = case IdleTimeout of
+                             undefined        -> 0;
+                             {uint, Interval} -> Interval div 1000
+                         end,
     FrameMax = case ClientFrameMax of
                    undefined -> unlimited;
                    {_, FM} -> FM
