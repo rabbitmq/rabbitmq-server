@@ -145,8 +145,8 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 send_credit_reply(Pid, Len) ->
     gen_server2:cast(Pid, {send_credit_reply, Len}).
 
-send_drained(Pid, ConsumerTag, Count) ->
-    gen_server2:cast(Pid, {send_drained, ConsumerTag, Count}).
+send_drained(Pid, ConsumerTag, CreditDrained) ->
+    gen_server2:cast(Pid, {send_drained, ConsumerTag, CreditDrained}).
 
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
@@ -330,14 +330,11 @@ handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
            WriterPid, #'basic.credit_ok'{available = Len}),
     noreply(State);
 
-handle_cast({send_drained, ConsumerTag, Count},
+handle_cast({send_drained, ConsumerTag, CreditDrained},
             State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(
-           WriterPid, #'basic.credit_state'{consumer_tag = ConsumerTag,
-                                            credit       = 0,
-                                            count        = Count,
-                                            available    = 0,
-                                            drain        = true}),
+           WriterPid, #'basic.credit_drained'{consumer_tag   = ConsumerTag,
+                                              credit_drained = CreditDrained}),
     noreply(State);
 
 handle_cast(force_event_refresh, State) ->

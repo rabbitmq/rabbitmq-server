@@ -186,14 +186,14 @@ decr_credit(CTag, Len, ChPid, Cred, Credits) ->
 maybe_drain(0, true, CTag, ChPid, Credit, Count) ->
     %% Drain, so advance til credit = 0
     NewCount = serial_add(Count, Credit - 2),
-    send_drained(ChPid, CTag, NewCount),
+    send_drained(ChPid, CTag, Credit),
     {0, NewCount}; %% Magic reduction to 0
 
 maybe_drain(_, _, _, _, Credit, Count) ->
     {Credit, Count}.
 
-send_drained(ChPid, CTag, Count) ->
-    rabbit_channel:send_drained(ChPid, CTag, Count).
+send_drained(ChPid, CTag, CreditDrained) ->
+    rabbit_channel:send_drained(ChPid, CTag, CreditDrained).
 
 update_credit(CTag, Len, ChPid, Credit, Count0, Drain, Credits) ->
     Count = case dict:find(CTag, Credits) of
