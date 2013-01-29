@@ -412,7 +412,6 @@
                          "name": "nack"},
                         {"id": 257,
                          "arguments": [{"type": "shortstr", "name": "consumer-tag", "default-value": ""},
-                                       {"type": "long", "name": "count"},
                                        {"type": "long", "name": "credit"},
                                        {"type": "bit", "name": "drain"}],
                          "name": "credit",
