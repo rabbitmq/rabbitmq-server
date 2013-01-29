@@ -93,14 +93,13 @@ handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
                         state(Session1, State#state{ buffer = Buffer1 }))}
     end;
 
-%% A message from the queue saying that the credit is either exhausted
-%% or there are no more messages
-handle_info(#'basic.credit_state'{consumer_tag = CTag} = CreditState,
+%% A message from the queue saying that there are no more messages
+handle_info(#'basic.credit_drained'{consumer_tag = CTag} = CreditDrained,
             State = #state{writer_pid = WriterPid}) ->
     Handle = ctag_to_handle(CTag),
     Link = get({out, Handle}),
-    Link1 = rabbit_amqp1_0_outgoing_link:update_credit(
-              CreditState, Handle, Link, WriterPid),
+    Link1 = rabbit_amqp1_0_outgoing_link:credit_drained(
+              CreditDrained, Handle, Link, WriterPid),
     put({out, Handle}, Link1),
     {noreply, State};
 

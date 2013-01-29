@@ -16,7 +16,7 @@
 
 -module(rabbit_amqp1_0_outgoing_link).
 
--export([attach/3, delivery/6, transfered/3, update_credit/4, flow/3]).
+-export([attach/3, delivery/6, transfered/3, credit_drained/4, flow/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -80,15 +80,10 @@ attach(#'v1_0.attach'{name = Name,
             {ok, [#'v1_0.attach'{source = undefined}]}
     end.
 
-update_credit(#'basic.credit_state'{credit       = LinkCredit,
-                                    count        = Count,
-                                    available    = Available0,
-                                    drain        = Drain},
-              Handle, Link, WriterPid) ->
-    Available = case Available0 of
-                    -1  -> undefined;
-                    Num -> {uint, Num}
-                end,
+credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
+               Handle, Link = #outgoing_link{delivery_count = Count0},
+               WriterPid) ->
+    Count = Count0 + CreditDrained,
     %% The transfer count that is given by the queue should be at
     %% least that we have locally, since we will either have received
     %% all the deliveries and transfered them, or the queue will have
@@ -97,9 +92,9 @@ update_credit(#'basic.credit_state'{credit       = LinkCredit,
     %% TODO account for it not being there any more
     F = #'v1_0.flow'{ handle      = Handle,
                       delivery_count = {uint, Count},
-                      link_credit = {uint, LinkCredit},
-                      available   = Available,
-                      drain       = Drain },
+                      link_credit = {uint, 0},
+                      available   = {uint, 0},
+                      drain       = true },
     rabbit_amqp1_0_writer:send_command(WriterPid, F),
     Link#outgoing_link{delivery_count = Count}.
 
