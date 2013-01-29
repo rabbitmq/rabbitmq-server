@@ -114,7 +114,7 @@ can_send0(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
                      error                                -> true
                  end,
     case ConsAllows of
-        true  -> case Enabled andalso
+        true  -> case not Enabled orelse
                      gen_server2:call(
                        Pid, {can_send, QPid, AckRequired}, infinity) of
                      true  -> Credits2 = record_send_q(
