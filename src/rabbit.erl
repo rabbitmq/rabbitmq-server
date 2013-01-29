@@ -716,10 +716,13 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
-    io:format("~n##  ##      ~s ~s. ~s~n##  ##      ~s~n##########  ~n",
-              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
-    io:format("######  ##  Logs: ~s~n##########        ~s~n",
-              [log_location(kernel), log_location(sasl)]).
+    io:format("~n##  ##      ~s ~s. ~s"
+              "~n##  ##      ~s"
+              "~n##########"
+              "~n######  ##  Logs: ~s"
+              "~n##########        ~s~n",
+              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE,
+               log_location(kernel), log_location(sasl)]).
 
 log_banner() ->
     {ok, Product} = application:get_key(id),

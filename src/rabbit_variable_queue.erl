@@ -830,7 +830,8 @@ status(#vqstate {
       {avg_ack_ingress_rate, AvgAckIngressRate},
       {avg_ack_egress_rate , AvgAckEgressRate} ].
 
-invoke(?MODULE, Fun, State) -> Fun(?MODULE, State).
+invoke(?MODULE, Fun, State) -> Fun(?MODULE, State);
+invoke(      _,   _, State) -> State.
 
 is_duplicate(_Msg, State) -> {false, State}.
 
