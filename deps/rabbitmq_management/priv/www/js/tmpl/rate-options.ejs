@@ -17,8 +17,8 @@
       <th><label>Display:</label></th>
       <td>
         <%= fmt_radio('mode', 'Charts', 'chart', mode) %>
-        <%= fmt_radio('mode', 'Rates (instantaneous)', 'inst', mode) %>
-        <%= fmt_radio('mode', 'Rates (moving average)', 'avg', mode) %>
+        <%= fmt_radio('mode', 'Instantaneous value', 'inst', mode) %>
+        <%= fmt_radio('mode', 'Moving average', 'avg', mode) %>
       </td>
     </tr>
     <tr>
@@ -37,11 +37,13 @@
     <tr>
       <th><label>Chart range:</label></th>
       <td>
-        <%= fmt_radio('range', 'Last minute',           '60|5', range) %>
-        <%= fmt_radio('range', 'Last twenty minutes', '1200|60', range) %>
-        <%= fmt_radio('range', 'Last hour',           '3600|60', range) %>
-        <%= fmt_radio('range', 'Last six hours',     '21600|1200', range) %>
-        <%= fmt_radio('range', 'Last day',           '86400|1200', range) %>
+<%
+   for (p in CHART_PERIODS) {
+%>
+    <%= fmt_radio('range', CHART_PERIODS[p], p, range) %>
+<%
+   }
+%>
       </td>
     </tr>
   </table>

@@ -571,38 +571,57 @@ function message_rates(id, stats) {
                  ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                  ['Get (noack)', 'get_no_ack'],
                  ['Return', 'return_unroutable']];
-    return rates_chart_or_text(id, stats, items, fmt_rate, fmt_rate_large);
+    return rates_chart_or_text(id, stats, items, fmt_rate, fmt_rate_large, 'Message rates', 'message-rates');
 }
 
 function queue_lengths(id, stats) {
     var items = [['Ready', 'messages_ready'],
                  ['Unacknowledged', 'messages_unacknowledged'],
                  ['Total', 'messages']];
-    return rates_chart_or_text(id, stats, items, null, null);
+    return rates_chart_or_text(id, stats, items, null, null, 'Queued messages', 'queued-messages');
 }
 
 function data_rates(id, stats) {
     var items = [['From client', 'recv_oct'], ['To client', 'send_oct']];
-    return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_large);
+    return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_large, 'Data rates');
 }
 
-function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt) {
-    var suffix = '<span class="rate-options" for="' + id + '">(...)</span>';
-    var suffix_p = '<p class="rate-options-p">' + suffix + '</p>';
+function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt,
+                             heading, heading_help) {
+    var mode = get_pref('rate-mode-' + id);
+    var prefix = '<h3>' + heading +
+        ' <span class="rate-options" for="'
+        + id + '">(' + prefix_title(mode) + ')</span>' +
+        (heading_help == undefined ? '' :
+         ' <span class="help" id="' + heading_help + '"></span>') +
+        '</h3>';
+    var res;
 
     if (keys(stats).length > 0) {
-        var res;
-        var mode = get_pref('rate-mode-' + id);
         if (mode == 'chart') {
-            res = rates_chart(id, items, stats, chart_fmt) + suffix_p;
+            res = rates_chart(id, items, stats, chart_fmt);
         }
         else {
-            res = rates_text(items, stats, mode, text_fmt) + suffix_p;
+            res = rates_text(items, stats, mode, text_fmt);
         }
-        return (res == "") ? '<p>Waiting for data... ' + suffix + '</p>' : res;
+        if (res == "") res = '<p>Waiting for data...</p>';
     }
     else {
-        return '<p>Currently idle ' + suffix + '</p>';
+        res = '<p>Currently idle</p>';
+    }
+    return prefix + res;
+}
+
+function prefix_title(mode) {
+    var desc = CHART_PERIODS[current_range_age + '|' + current_range_incr];
+    if (mode == 'chart') {
+        return 'chart: ' + desc.toLowerCase();
+    }
+    else if (mode == 'inst') {
+        return 'instantaneous value';
+    }
+    else {
+        return 'moving average: ' + desc.toLowerCase();
     }
 }
 
@@ -625,7 +644,8 @@ function rates_chart(id, items, stats, rate_fmt) {
             }
         }
     }
-    var html = '<div id="chart-' + id + '" class="chart chart-' + size +
+    var html = '<div class="box"><div id="chart-' + id +
+        '" class="chart chart-' + size +
         (rate_fmt ? ' chart-rates' : '') + '"></div>';
     html += '<table class="facts facts-fixed-width">';
     for (var i = 0; i < show.length; i++) {
@@ -633,7 +653,7 @@ function rates_chart(id, items, stats, rate_fmt) {
         html += '<div class="colour-key" style="background: ' + chart_colors[i];
         html += ';"></div>' + show[i][1] + '</td></tr>'
     }
-    html += '</table>';
+    html += '</table></div>';
     return show.length > 0 ? html : '';
 }
 
@@ -659,7 +679,7 @@ function rates_text(items, stats, mode, rate_fmt) {
             res += '</div>';
         }
     }
-    return res;
+    return res == '' ? '' : '<div class="box">' + res + '</div>';
 }
 
 function maybe_truncate(items) {

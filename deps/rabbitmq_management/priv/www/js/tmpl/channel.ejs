@@ -4,10 +4,7 @@
 <h2>Overview</h2>
 <div class="hider updatable">
 <% if (statistics_level == 'fine') { %>
-    <h3>Message rates</h3>
-    <div class="box">
-      <%= message_rates('cr', channel.message_stats) %>
-    </div>
+    <%= message_rates('cr', channel.message_stats) %>
 <% } %>
 
 <h3>Details</h3>

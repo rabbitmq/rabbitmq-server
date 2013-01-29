@@ -40,6 +40,12 @@ var NAVIGATION = {'Overview':    ['#/',                            false],
                                    'Policies':      ['#/policies', true]}, true]
                  };
 
+var CHART_PERIODS = {'60|5':       'Last minute',
+                     '1200|60':    'Last twenty minutes',
+                     '3600|60':    'Last hour',
+                     '21600|1200': 'Last six hours',
+                     '86400|1200': 'Last day'};
+
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
 // Mostly constant, typically get set once at startup (or rarely anyway) //
