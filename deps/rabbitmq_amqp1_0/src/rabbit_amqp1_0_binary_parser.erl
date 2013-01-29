@@ -96,6 +96,11 @@ parse_primitive(16#d1,<<S:32/unsigned,CountAndValue:S/binary,R/binary>>) ->
     {{map, mapify(List)}, R};
 
 %% Arrays
+
+%% TODO: a null value and a zero-length array (with a correct type for its
+%% elements) both describe an absence of a value and MUST be treated as
+%% semantically identical.
+
 parse_primitive(16#e0,<<S:8/unsigned,CountAndV:S/binary,R/binary>>) ->
     {{list, parse_array(8, CountAndV)}, R};
 parse_primitive(16#f0,<<S:32/unsigned,CountAndV:S/binary,R/binary>>) ->
