@@ -3,6 +3,7 @@ package com.rabbitmq.amqp1_0.tests.swiftmq;
 import com.swiftmq.amqp.AMQPContext;
 import com.swiftmq.amqp.v100.client.*;
 import com.swiftmq.amqp.v100.generated.messaging.message_format.Data;
+import com.swiftmq.amqp.v100.generated.messaging.message_format.Footer;
 import com.swiftmq.amqp.v100.generated.messaging.message_format.MessageAnnotations;
 import com.swiftmq.amqp.v100.messaging.AMQPMessage;
 import com.swiftmq.amqp.v100.types.AMQPString;
@@ -77,39 +78,67 @@ public class SwiftMQTests extends TestCase {
         conn.close();
     }
 
-    private void addEntries(Map<AMQPString, AMQPType> annotations){
-        annotations.put(new AMQPString("string1"), new AMQPString("value1"));
-        annotations.put(new AMQPString("string1"), new AMQPString("value2"));
+    public void testMessageAnnotations() throws Exception {
+        decorationTest(new DecorationProtocol() {
+            @Override
+            public void decorateMessage(AMQPMessage msg, Map<AMQPString, AMQPType> m) throws IOException {
+                msg.setMessageAnnotations(new MessageAnnotations(m));
+            }
+            @Override
+            public Map<AMQPType, AMQPType> getDecoration(AMQPMessage msg) throws IOException {
+                return msg.getMessageAnnotations().getValue();
+            }
+        }, annotationMap());
     }
 
-    private void compareMaps(Map<AMQPType, AMQPType> m1, Map<AMQPType, AMQPType> m2){
+    public void testFooter() throws Exception {
+        decorationTest(new DecorationProtocol() {
+            @Override
+            public void decorateMessage(AMQPMessage msg, Map<AMQPString, AMQPType> m) throws IOException {
+                msg.setFooter(new Footer(m));
+            }
+            @Override
+            public Map<AMQPType, AMQPType> getDecoration(AMQPMessage msg) throws IOException {
+                return msg.getFooter().getValue();
+            }
+        }, annotationMap());
+    }
+
+    private void decorationTest(DecorationProtocol d, Map<AMQPString, AMQPType> map) throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        Producer p = s.createProducer(QUEUE, QoS.AT_LEAST_ONCE);
+        AMQPMessage msg = msg();
+
+        d.decorateMessage(msg, map);
+        p.send(msg);
+        p.close();
+        Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
+        AMQPMessage recvMsg = c.receive();
+
+        compareMaps(map, d.getDecoration(recvMsg));
+        conn.close();
+    }
+
+    private void compareMaps(Map<AMQPString, AMQPType> m1, Map<AMQPType, AMQPType> m2){
         Set e1 = m1.entrySet();
         Set e2 = m2.entrySet();
         assertTrue(e1.containsAll(e2));
         assertTrue(e2.containsAll(e1));
     }
 
-    public void testMessageAnnotations() throws Exception {
-        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
-        Connection conn = new Connection(ctx, host, port, false);
-        conn.connect();
-
-        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
-        Producer p = s.createProducer(QUEUE, QoS.AT_LEAST_ONCE);
-        AMQPMessage msg = new AMQPMessage();
-        msg.addData(new Data(new byte [10]));
-
-        Map<AMQPString, AMQPType> annotationsMap = new HashMap<AMQPString, AMQPType>();
-        addEntries(annotationsMap);
-        MessageAnnotations ma = new MessageAnnotations(annotationsMap);
-        msg.setMessageAnnotations(ma);
-        p.send(msg);
-        p.close();
-
-        Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
-        AMQPMessage recvMsg = c.receive();
-        MessageAnnotations recvMsgAnno = recvMsg.getMessageAnnotations();
-        compareMaps(ma.getValue(), recvMsgAnno.getValue());
-        conn.close();
+    private Map<AMQPString, AMQPType> annotationMap() throws IOException {
+        Map<AMQPString, AMQPType> annotations = new HashMap<AMQPString, AMQPType>();
+        annotations.put(new AMQPString("key1"), new AMQPString("value1"));
+        annotations.put(new AMQPString("key2"), new AMQPString("value2"));
+        return annotations;
     }
+
+    private interface DecorationProtocol {
+        void decorateMessage(AMQPMessage msg, Map<AMQPString, AMQPType> m) throws IOException;
+        Map<AMQPType, AMQPType> getDecoration(AMQPMessage _) throws IOException;
+    }
+
 }
