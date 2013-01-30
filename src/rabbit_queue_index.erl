@@ -610,19 +610,21 @@ add_to_journal(RelSeq, Action,
                                end};
 
 add_to_journal(RelSeq, Action, JEntries) ->
-    Val = case array:get(RelSeq, JEntries) of
-              undefined ->
-                  case Action of
-                      ?PUB -> {Action, no_del, no_ack};
-                      del  -> {no_pub,    del, no_ack};
-                      ack  -> {no_pub, no_del,    ack}
-                  end;
-              ({Pub, no_del, no_ack}) when Action == del ->
-                  {Pub, del, no_ack};
-              ({Pub,    Del, no_ack}) when Action == ack ->
-                  {Pub, Del,    ack}
-          end,
-    array:set(RelSeq, Val, JEntries).
+    case array:get(RelSeq, JEntries) of
+        undefined ->
+            array:set(RelSeq,
+                      case Action of
+                          ?PUB -> {Action, no_del, no_ack};
+                          del  -> {no_pub,    del, no_ack};
+                          ack  -> {no_pub, no_del,    ack}
+                      end, JEntries);
+        ({?PUB,   del, no_ack}) when Action == ack ->
+            array:reset(RelSeq, JEntries);
+        ({Pub, no_del, no_ack}) when Action == del ->
+            array:set(RelSeq, {Pub, del, no_ack}, JEntries);
+        ({Pub,    Del, no_ack}) when Action == ack ->
+            array:set(RelSeq, {Pub, Del,    ack}, JEntries)
+    end.
 
 maybe_flush_journal(State = #qistate { dirty_count = DCount,
                                        max_journal_entries = MaxJournal })
