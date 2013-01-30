@@ -766,16 +766,20 @@ format_samples(Range, ManyStats, #state{interval = Interval}) ->
       [case is_blank_stats(Stats) of
            true  -> [];
            false -> {Details, Counter} = format_sample_details(
-                                           Range, Stats,
-                                           Interval),
+                                           Range, Stats, Interval),
                     [{K,              Counter},
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
 
 format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
     RangePoint = Range#range.last - Interval,
-    {Samples, Count} = extract_samples(
-                         Range, Base, gb_trees:iterator(Diffs), []),
+    FirstTS = case gb_trees:is_empty(Diffs) of
+                  true  -> 0;
+                  false -> {TS1, _} = gb_trees:smallest(Diffs),
+                           TS1
+              end,
+    {Samples, Count} = extract_samples(Range, FirstTS, Base,
+                                       gb_trees:iterator(Diffs), []),
     Rate = case nth_largest(Diffs, 2) of
                false   -> 0;
                {TS, S} -> case TS - RangePoint of %% [0]
@@ -818,30 +822,45 @@ nth_largest(Tree, N) ->
 %% not have it. We need to spin up over the entire range of the
 %% samples we *do* have since they are diff-based (and we convert to
 %% absolute values here).
-extract_samples(Range = #range{first = Next}, Base, It, Samples) ->
+%%
+%% We want to ensure that we return a range that starts and ends where
+%% requested (inventing samples of 0 as necessary) and that has
+%% increments that are no smaller than requested. But if the request
+%% is for increments smaller than we have, we don't want to invent
+%% samples mid-range (since that will just make it harder to infer
+%% historical instantaneous rates, and bloat our responses).
+extract_samples(Range = #range{first = Next}, FirstTS, Base, It, Samples) ->
     case gb_trees:next(It) of
-        {TS, S, It2} -> extract_samples1(Range, Base, TS,   S, It2, Samples);
-        none         -> extract_samples1(Range, Base, Next, 0, It,  Samples)
+        {TS, S, It2} -> extract_samples1(
+                          Range, FirstTS, Base, TS,   S, It2, Samples);
+        none ->         extract_samples1(
+                          Range, FirstTS, Base, Next, 0, It,  Samples)
     end.
 
 extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
-                 Base, TS, S, It, Samples) ->
+                 FirstTS, Base, TS, S, It, Samples) ->
     if
         %% We've gone over the range. Terminate.
         Next > Last ->
             {Samples, Base};
         %% We've hit bang on a sample. Record it and move to the next.
+        %% TODO record nearby samples if we don't mesh.
         Next =:= TS ->
-            extract_samples(Range#range{first = Next + Incr}, Base + S, It,
-                            append(Base + S, Next, Samples));
-        %% We haven't yet hit the beginning of our range.
+            extract_samples(Range#range{first = Next + Incr}, FirstTS, Base + S,
+                            It, append(Base + S, Next, Samples));
+        %% We haven't yet hit the beginning of our range. Next sample.
         Next > TS ->
-            extract_samples(Range, Base + S, It, Samples);
-        %% We have a valid sample, but we haven't used it up
-        %% yet. Append it and loop around.
-        Next < TS ->
-            extract_samples1(Range#range{first = Next + Incr}, Base, TS, S, It,
-                             append(Base, Next, Samples))
+            extract_samples(Range, FirstTS, Base + S, It, Samples);
+        %% We are in the range, but have yet to get to the first sample, so
+        %% keep inventing samples.
+        Next < TS andalso FirstTS =:= TS ->
+            extract_samples1(Range#range{first = Next + Incr}, FirstTS, Base,
+                             TS, S, It, append(Base, Next, Samples));
+        %% We are in the range and have a valid sample, but we haven't
+        %% used it yet. Advance.
+        true ->
+            extract_samples1(Range#range{first = Next + Incr}, FirstTS, Base,
+                             TS, S, It, Samples)
     end.
 
 append(S, TS, Samples) -> [[{sample, S}, {timestamp, TS}] | Samples].
