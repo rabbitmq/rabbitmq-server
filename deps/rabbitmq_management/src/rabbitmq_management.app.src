@@ -8,6 +8,7 @@
          {redirect_old_port, true},
          {http_log_dir,      none},
          {load_definitions,  none},
+         {db_module,         rabbit_mgmt_db},
          {sample_retention_policies,
           %% List of {MaxAgeSecs, IfTimestampDivisibleBySecs}
           [{global,   [{60, 5}, {3600, 60}, {86400, 1200}]},
