@@ -22,11 +22,6 @@
 
 -export([start_link/0]).
 
--export([augment_exchanges/2, augment_queues/2, augment_nodes/1,
-         get_channels/2, get_connections/1,
-         get_all_channels/1, get_all_connections/0,
-         get_overview/1, get_overview/0]).
-
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
 
@@ -97,31 +92,10 @@ start_link() ->
     %% name if it existed before. We therefore rely on
     %% mirrored_supervisor to maintain the uniqueness of this process.
     case gen_server2:start_link(?MODULE, [], []) of
-        {ok, Pid} -> yes = global:re_register_name(?MODULE, Pid),
+        {ok, Pid} -> yes = global:re_register_name(rabbit_mgmt_db, Pid),
                      rabbit:force_event_refresh(),
                      {ok, Pid};
         Else      -> Else
-    end.
-
-augment_exchanges(Xs, Mode) -> safe_call({augment_exchanges, Xs, Mode}, Xs).
-augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
-augment_nodes(Nodes)        -> safe_call({augment_nodes, Nodes}, Nodes).
-
-get_channels(Cs, Mode)      -> safe_call({get_channels, Cs, Mode}, Cs).
-get_connections(Cs)         -> safe_call({get_connections, Cs}, Cs).
-
-get_all_channels(Mode)      -> safe_call({get_all_channels, Mode}).
-get_all_connections()       -> safe_call(get_all_connections).
-
-get_overview(User)          -> safe_call({get_overview, User}).
-get_overview()              -> safe_call({get_overview, all}).
-
-safe_call(Term) -> safe_call(Term, []).
-
-safe_call(Term, Item) ->
-    try
-        gen_server2:call({global, ?MODULE}, Term, infinity)
-    catch exit:{noproc, _} -> Item
     end.
 
 %%----------------------------------------------------------------------------
@@ -150,8 +124,8 @@ lookup_element(Table, Key, Pos) ->
     catch error:badarg -> []
     end.
 
-result_or_error([]) -> error;
-result_or_error(S)  -> S.
+result_or_error([])      -> not_found;
+result_or_error([Thing]) -> Thing.
 
 rates(Stats, Timestamp, OldStats, OldTimestamp, Keys) ->
     Stats ++ [R || Key <- Keys,
@@ -236,37 +210,41 @@ init([]) ->
                                Key <- ?TABLES])}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({augment_exchanges, Xs, basic}, _From, State) ->
+handle_call({augment_exchanges, Xs, _Range, basic}, _From, State) ->
     reply(exchange_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, State), State);
 
-handle_call({augment_exchanges, Xs, full}, _From, State) ->
+handle_call({augment_exchanges, Xs, _Range, full}, _From, State) ->
     reply(exchange_stats(Xs, ?FINE_STATS_EXCHANGE_DETAIL, State), State);
 
-handle_call({augment_queues, Qs, basic}, _From, State) ->
+handle_call({augment_queues, Qs, _Range, basic}, _From, State) ->
     reply(list_queue_stats(Qs, State), State);
 
-handle_call({augment_queues, Qs, full}, _From, State) ->
+handle_call({augment_queues, Qs, _Range, full}, _From, State) ->
     reply(detail_queue_stats(Qs, State), State);
 
 handle_call({augment_nodes, Nodes}, _From, State) ->
     {reply, node_stats(Nodes, State), State};
 
-handle_call({get_channels, Names, Mode}, _From,
+handle_call({augment_vhosts, VHosts, _Range}, _From, State) ->
+    reply(VHosts, State);
+
+handle_call({get_channel, Name, _Range, Mode}, _From,
             State = #state{tables = Tables}) ->
-    Chans = created_event(Names, channel_stats, Tables),
+    Chans = created_event([Name], channel_stats, Tables),
     Result = case Mode of
                  basic -> list_channel_stats(Chans, State);
                  full  -> detail_channel_stats(Chans, State)
              end,
-    reply(lists:map(fun result_or_error/1, Result), State);
+    reply(result_or_error(Result), State);
 
-handle_call({get_connections, Names}, _From,
+handle_call({get_connection, Name, _Range}, _From,
             State = #state{tables = Tables}) ->
-    Conns = created_event(Names, connection_stats, Tables),
+    Conns = created_event([Name], connection_stats, Tables),
     Result = connection_stats(Conns, State),
-    reply(lists:map(fun result_or_error/1, Result), State);
+    reply(result_or_error(Result), State);
 
-handle_call({get_all_channels, Mode}, _From, State = #state{tables = Tables}) ->
+handle_call({get_all_channels, _Range, Mode}, _From,
+            State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
     Result = case Mode of
                  basic -> list_channel_stats(Chans, State);
@@ -274,11 +252,13 @@ handle_call({get_all_channels, Mode}, _From, State = #state{tables = Tables}) ->
              end,
     reply(Result, State);
 
-handle_call(get_all_connections, _From, State = #state{tables = Tables}) ->
+handle_call({get_all_connections, _Range}, _From,
+            State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
     reply(connection_stats(Conns, State), State);
 
-handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
+handle_call({get_overview, User, _Range}, _From,
+            State = #state{tables = Tables}) ->
     VHosts = case User of
                  all -> rabbit_vhost:list();
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
@@ -680,8 +660,22 @@ queue_funs(State) ->
     [basic_stats_fun(queue_stats, State), augment_msg_stats_fun(State)].
 
 exchange_stats(Objs, FineSpecs, State) ->
-    merge_stats(Objs, [fine_stats_fun(FineSpecs, State),
-                       augment_msg_stats_fun(State)]).
+    [exchange_reformat(X) ||
+        X <- merge_stats(Objs, [fine_stats_fun(FineSpecs, State),
+                                augment_msg_stats_fun(State)])].
+
+exchange_reformat(X0) ->
+    In = pget(message_stats_in, X0, []),
+    Out = pget(message_stats_out, X0, []),
+    X1 = proplists:delete(message_stats_in,
+                          proplists:delete(message_stats_out, X0)),
+    [{message_stats,
+      [{K, V} || {K, V} <-
+                     [{publish_in,          pget(publish, In)},
+                      {publish_in_details,  pget(publish_details, In)},
+                      {publish_out,         pget(publish, Out)},
+                      {publish_out_details, pget(publish_details, Out)}],
+                 V =/= unknown]} | X1].
 
 connection_stats(Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(connection_stats, State),
