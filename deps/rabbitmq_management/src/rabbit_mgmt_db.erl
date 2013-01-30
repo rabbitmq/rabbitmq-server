@@ -89,10 +89,6 @@
 
 -define(DROP_LENGTH, 1000).
 
-%% All the calls are requests, better to respond to them than process
-%% more stats
-prioritise_call(_Msg, _From, _Len, _State) -> 9.
-
 prioritise_cast({event, #event{type  = Type,
                                props = Props}}, Len, _State)
   when (Type =:= channel_stats orelse
