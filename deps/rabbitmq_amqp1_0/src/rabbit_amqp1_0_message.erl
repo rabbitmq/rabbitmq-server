@@ -198,8 +198,7 @@ set_1_0_type(Type, Props = #'P_basic'{}) ->
 
 %%--------------------------------------------------------------------
 
-%% TODO create delivery-annotations, message-annotations and
-%% application-properties if we feel like it.
+%% TODO create delivery-annotations
 
 annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                   #amqp_msg{props = Props,
