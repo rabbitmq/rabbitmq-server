@@ -210,7 +210,7 @@
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/1 :: (qistate()) -> qistate()).
--spec(needs_sync/1 :: (qistate()) -> boolean()).
+-spec(needs_sync/1 :: (qistate()) -> 'confirms' | boolean()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_types:msg_id(), seq_id(),
@@ -305,8 +305,11 @@ sync(State = #qistate { journal_handle = JournalHdl }) ->
 
 needs_sync(#qistate { journal_handle = undefined }) ->
     false;
-needs_sync(#qistate { journal_handle = JournalHdl }) ->
-    file_handle_cache:needs_sync(JournalHdl).
+needs_sync(#qistate { journal_handle = JournalHdl, unconfirmed = UC }) ->
+    case gb_sets:is_empty(UC) of
+        true  -> file_handle_cache:needs_sync(JournalHdl);
+        false -> confirms
+    end.
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).

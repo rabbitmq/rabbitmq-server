@@ -755,20 +755,17 @@ ram_duration(State = #vqstate {
                  ram_ack_count_prev = RamAckCount }}.
 
 needs_timeout(State = #vqstate { index_state = IndexState }) ->
-    case must_sync_index(State) of
-        true  -> timed;
-        false ->
-            case rabbit_queue_index:needs_sync(IndexState) of
-                true  -> idle;
-                false -> case reduce_memory_use(
-                                fun (_Quota, State1) -> {0, State1} end,
-                                fun (_Quota, State1) -> State1 end,
-                                fun (_Quota, State1) -> {0, State1} end,
-                                State) of
-                             {true,  _State} -> idle;
-                             {false, _State} -> false
-                         end
-            end
+    case rabbit_queue_index:needs_sync(IndexState) of
+        confirms -> timed;
+        true     -> idle;
+        false    -> case reduce_memory_use(
+                           fun (_Quota, State1) -> {0, State1} end,
+                           fun (_Quota, State1) -> State1 end,
+                           fun (_Quota, State1) -> {0, State1} end,
+                           State) of
+                        {true,  _State} -> idle;
+                        {false, _State} -> false
+                    end
     end.
 
 timeout(State = #vqstate { index_state = IndexState }) ->
@@ -1303,21 +1300,6 @@ record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
       msg_indices_on_disk = rabbit_misc:gb_sets_difference(MIOD, MsgIdSet),
       unconfirmed         = rabbit_misc:gb_sets_difference(UC,   MsgIdSet),
       confirmed           = gb_sets:union(C, MsgIdSet) }.
-
-must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
-                           unconfirmed = UC }) ->
-    %% If UC is empty then by definition, MIOD and MOD are also empty
-    %% and there's nothing that can be pending a sync.
-
-    %% If UC is not empty, then we want to find is_empty(UC - MIOD),
-    %% but the subtraction can be expensive. Thus instead, we test to
-    %% see if UC is a subset of MIOD. This can only be the case if
-    %% MIOD == UC, which would indicate that every message in UC is
-    %% also in MIOD and is thus _all_ pending on a msg_store sync, not
-    %% on a qi sync. Thus the negation of this is sufficient. Because
-    %% is_subset is short circuiting, this is more efficient than the
-    %% subtraction.
-    not (gb_sets:is_empty(UC) orelse gb_sets:is_subset(UC, MIOD)).
 
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
     Callback(?MODULE,
