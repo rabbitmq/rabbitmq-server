@@ -21,7 +21,7 @@ class AMQPType:
         if self.desc in ['amqp:data:binary', 'amqp:amqp-sequence:list',
                          'amqp:amqp-value:*', 'amqp:application-properties:map',
                          'amqp:delivery-annotations:map',
-                         'amqp:message-annotations:map']:
+                         'amqp:message-annotations:map', 'amqp:footer:map']:
             self.fields = ['content']
 
     def define(self):

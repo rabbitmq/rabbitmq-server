@@ -106,8 +106,7 @@ assemble(amqp10body, {R, P, C}, Else, Uneaten) ->
 
 assemble(footer, {R, P = #'P_basic'{headers = Headers}, C},
          {#'v1_0.footer'{}, <<>>}, Uneaten) ->
-    {R, P#'P_basic'{headers = set_header(?FOOTER,
-                                         Uneaten, Headers)}, C};
+    {R, P#'P_basic'{headers = set_header(?FOOTER, Uneaten, Headers)}, C};
 assemble(footer, {R, P, C}, none, _) ->
     {R, P, C};
 assemble(footer, _, Else, _) ->
@@ -218,8 +217,8 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
     HeadersBin = rabbit_amqp1_0_framing:encode_bin(Header10),
     MsgAnnoBin =
         case table_lookup(Headers, ?MESSAGE_ANNOTATIONS_HEADER) of
-            undefined -> <<>>;
-            {_, Bin}  -> Bin
+            undefined  -> <<>>;
+            {_, MABin} -> MABin
     end,
     PropsBin =
         case table_lookup(Headers, ?PROPERTIES_HEADER) of
@@ -263,7 +262,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
     FooterBin =
         case table_lookup(Headers, ?FOOTER) of
             undefined -> <<>>;
-            {_, Bin}  -> Bin
+            {_, FBin} -> FBin
     end,
     [HeadersBin, MsgAnnoBin, PropsBin, AppPropsBin, DataBin, FooterBin].
 
