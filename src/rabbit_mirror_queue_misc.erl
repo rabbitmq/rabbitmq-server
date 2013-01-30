@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_misc).
@@ -133,15 +133,15 @@ on_node_up() ->
                             end
                     end, [], rabbit_queue)
           end),
-    [{ok, _} = add_mirror(QName, node()) || QName <- QNames],
+    [add_mirror(QName, node()) || QName <- QNames],
     ok.
 
 drop_mirrors(QName, Nodes) ->
-    [{ok, _} = drop_mirror(QName, Node)  || Node <- Nodes],
+    [drop_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 drop_mirror(QName, MirrorNode) ->
-    if_mirrored_queue(
+    rabbit_amqqueue:with(
       QName,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids }) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
@@ -159,11 +159,11 @@ drop_mirror(QName, MirrorNode) ->
       end).
 
 add_mirrors(QName, Nodes) ->
-    [{ok, _} = add_mirror(QName, Node)  || Node <- Nodes],
+    [add_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 add_mirror(QName, MirrorNode) ->
-    if_mirrored_queue(
+    rabbit_amqqueue:with(
       QName,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
@@ -183,15 +183,7 @@ start_child(Name, MirrorNode, Q) ->
            fun () ->
                    rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
            end) of
-        {ok, undefined} ->
-            %% this means the mirror process was
-            %% already running on the given node.
-            {ok, already_mirrored};
-        {ok, down} ->
-            %% Node went down between us deciding to start a mirror
-            %% and actually starting it. Which is fine.
-            {ok, node_down};
-        {ok, SPid} ->
+        {ok, SPid} when is_pid(SPid)  ->
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                             [rabbit_misc:rs(Name), MirrorNode, SPid]),
             {ok, started};
@@ -205,15 +197,6 @@ start_child(Name, MirrorNode, Q) ->
         Other ->
             Other
     end.
-
-if_mirrored_queue(QName, Fun) ->
-    rabbit_amqqueue:with(QName, fun (Q) ->
-                                        case is_mirrored(Q) of
-                                            false -> ok;
-                                            true  -> Fun(Q)
-                                        end
-                                end,
-                         fun (E) -> {ok, E} end).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
@@ -324,8 +307,8 @@ update_mirrors(OldQ = #amqqueue{pid = QPid},
     case {is_mirrored(OldQ), is_mirrored(NewQ)} of
         {false, false} -> ok;
         {true,  false} -> rabbit_amqqueue:stop_mirroring(QPid);
-        {false, true}  -> rabbit_amqqueue:start_mirroring(QPid);
-        {true, true}   -> update_mirrors0(OldQ, NewQ)
+        {false,  true} -> rabbit_amqqueue:start_mirroring(QPid);
+        {true,   true} -> update_mirrors0(OldQ, NewQ)
     end.
 
 update_mirrors0(OldQ = #amqqueue{name = QName},

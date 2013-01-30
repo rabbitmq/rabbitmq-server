@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_policy).
@@ -166,8 +166,8 @@ update_policies(VHost) ->
                           [update_queue(Q, Policies) ||
                               Q <- rabbit_amqqueue:list(VHost)]}
                  end),
-    [notify(X) || X <- Xs],
-    [notify(Q) || Q <- Qs],
+    [catch notify(X) || X <- Xs],
+    [catch notify(Q) || Q <- Qs],
     ok.
 
 update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
@@ -218,10 +218,13 @@ validation(_Name, Terms) when is_list(Terms) ->
                         rabbit_registry:lookup_all(policy_validator)),
     [] = dups(Keys), %% ASSERTION
     Validators = lists:zipwith(fun (M, K) ->  {M, a2b(K)} end, Modules, Keys),
-    {TermKeys, _} = lists:unzip(Terms),
-    case dups(TermKeys) of
-        []   -> validation0(Validators, Terms);
-        Dup  -> {error, "~p duplicate keys not allowed", [Dup]}
+    case is_proplist(Terms) of
+        true  -> {TermKeys, _} = lists:unzip(Terms),
+                 case dups(TermKeys) of
+                     []   -> validation0(Validators, Terms);
+                     Dup  -> {error, "~p duplicate keys not allowed", [Dup]}
+                 end;
+        false -> {error, "definition must be a dictionary: ~p", [Terms]}
     end;
 validation(_Name, Term) ->
     {error, "parse error while reading policy: ~p", [Term]}.
@@ -249,3 +252,5 @@ validation0(Validators, Terms) ->
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
 dups(L) -> L -- lists:usort(L).
+
+is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).

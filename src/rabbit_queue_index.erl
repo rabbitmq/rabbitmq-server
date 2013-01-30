@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_queue_index).
@@ -616,8 +616,8 @@ add_to_journal(RelSeq, Action, JEntries) ->
                   end;
               ({Pub, no_del, no_ack}) when Action == del ->
                   {Pub, del, no_ack};
-              ({Pub,    Del, no_ack}) when Action == ack ->
-                  {Pub, Del,    ack}
+              ({Pub,    del, no_ack}) when Action == ack ->
+                  {Pub, del,    ack}
           end,
     array:set(RelSeq, Val, JEntries).
 

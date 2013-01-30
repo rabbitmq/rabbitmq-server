@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_invalid).
@@ -31,6 +31,10 @@ description() ->
 
 serialise_events() -> false.
 
+-ifdef(use_specs).
+-spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                 -> no_return()).
+-endif.
 route(#exchange{name = Name, type = Type}, _) ->
     rabbit_misc:protocol_error(
       precondition_failed,

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mnesia).
@@ -41,10 +41,7 @@
         ]).
 
 %% Used internally in rpc calls
--export([node_info/0,
-         remove_node_if_mnesia_running/1,
-         is_running_remote/0
-        ]).
+-export([node_info/0, remove_node_if_mnesia_running/1]).
 
 -include("rabbit.hrl").
 
@@ -68,7 +65,8 @@
 
 %% Various queries to get the status of the db
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
-                         {'running_nodes', [node()]}]).
+                         {'running_nodes', [node()]} |
+                         {'partitions', [{node(), [node()]}]}]).
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(cluster_nodes/1 :: ('all' | 'disc' | 'ram' | 'running') -> [node()]).
 -spec(node_type/0 :: () -> node_type()).
@@ -277,16 +275,16 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         true  -> ok;
         false -> e(not_a_cluster_node)
     end,
-    case {RemoveWhenOffline, mnesia:system_info(is_running)} of
-        {true,   no} -> remove_node_offline_node(Node);
-        {true,  yes} -> e(online_node_offline_flag);
-        {false,  no} -> e(offline_node_no_offline_flag);
-        {false, yes} -> rabbit_misc:local_info_msg(
-                          "Removing node ~p from cluster~n", [Node]),
-                        case remove_node_if_mnesia_running(Node) of
-                            ok               -> ok;
-                            {error, _} = Err -> throw(Err)
-                        end
+    case {RemoveWhenOffline, is_running()} of
+        {true,  false} -> remove_node_offline_node(Node);
+        {true,   true} -> e(online_node_offline_flag);
+        {false, false} -> e(offline_node_no_offline_flag);
+        {false,  true} -> rabbit_misc:local_info_msg(
+                            "Removing node ~p from cluster~n", [Node]),
+                          case remove_node_if_mnesia_running(Node) of
+                              ok               -> ok;
+                              {error, _} = Err -> throw(Err)
+                          end
     end.
 
 remove_node_offline_node(Node) ->
@@ -333,17 +331,19 @@ status() ->
                  end,
     [{nodes, (IfNonEmpty(disc, cluster_nodes(disc)) ++
                   IfNonEmpty(ram, cluster_nodes(ram)))}] ++
-        case mnesia:system_info(is_running) of
-            yes -> RunningNodes = cluster_nodes(running),
-                   [{running_nodes, cluster_nodes(running)},
-                    {partitions,    mnesia_partitions(RunningNodes)}];
-            no  -> []
+        case is_running() of
+            true  -> RunningNodes = cluster_nodes(running),
+                     [{running_nodes, RunningNodes},
+                      {partitions,    mnesia_partitions(RunningNodes)}];
+            false -> []
         end.
 
 mnesia_partitions(Nodes) ->
     {Replies, _BadNodes} = rpc:multicall(
                              Nodes, rabbit_node_monitor, partitions, []),
     [Reply || Reply = {_, R} <- Replies, R =/= []].
+
+is_running() -> mnesia:system_info(is_running) =:= yes.
 
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
@@ -354,10 +354,10 @@ cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 %% the data from mnesia. Obviously it'll work only when mnesia is
 %% running.
 cluster_status_from_mnesia() ->
-    case mnesia:system_info(is_running) of
-        no ->
+    case is_running() of
+        false ->
             {error, mnesia_not_running};
-        yes ->
+        true ->
             %% If the tables are not present, it means that
             %% `init_db/3' hasn't been run yet. In other words, either
             %% we are a virgin node or a restarted RAM node. In both
@@ -600,19 +600,16 @@ discover_cluster(Nodes) when is_list(Nodes) ->
     lists:foldl(fun (_, {ok, Res})     -> {ok, Res};
                     (Node, {error, _}) -> discover_cluster(Node)
                 end, {error, no_nodes_provided}, Nodes);
+discover_cluster(Node) when Node == node() ->
+    {error, {cannot_discover_cluster, "Cannot cluster node with itself"}};
 discover_cluster(Node) ->
     OfflineError =
         {error, {cannot_discover_cluster,
                  "The nodes provided are either offline or not running"}},
-    case node() of
-        Node -> {error, {cannot_discover_cluster,
-                         "Cannot cluster node with itself"}};
-        _    -> case rpc:call(Node,
-                              rabbit_mnesia, cluster_status_from_mnesia, []) of
-                    {badrpc, _Reason}           -> OfflineError;
-                    {error, mnesia_not_running} -> OfflineError;
-                    {ok, Res}                   -> {ok, Res}
-                end
+    case rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []) of
+        {badrpc, _Reason}           -> OfflineError;
+        {error, mnesia_not_running} -> OfflineError;
+        {ok, Res}                   -> {ok, Res}
     end.
 
 schema_ok_or_move() ->
@@ -671,8 +668,10 @@ move_db() ->
     ok.
 
 remove_node_if_mnesia_running(Node) ->
-    case mnesia:system_info(is_running) of
-        yes ->
+    case is_running() of
+        false ->
+            {error, mnesia_not_running};
+        true ->
             %% Deleting the the schema copy of the node will result in
             %% the node being removed from the cluster, with that
             %% change being propagated to all nodes
@@ -682,9 +681,7 @@ remove_node_if_mnesia_running(Node) ->
                     ok;
                 {aborted, Reason} ->
                     {error, {failed_to_remove_node, Node, Reason}}
-            end;
-        no  ->
-            {error, mnesia_not_running}
+            end
     end.
 
 leave_cluster() ->
@@ -734,8 +731,6 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-is_running_remote() -> {mnesia:system_info(is_running) =:= yes, node()}.
-
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
       [check_otp_consistency(OTP), check_rabbit_consistency(Rabbit)]).
@@ -757,9 +752,16 @@ check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
                                         [node(), Node, Node])}}
     end.
 
-check_version_consistency(This, Remote, _) when This =:= Remote ->
-    ok;
 check_version_consistency(This, Remote, Name) ->
+    check_version_consistency(This, Remote, Name, fun (A, B) -> A =:= B end).
+
+check_version_consistency(This, Remote, Name, Comp) ->
+    case Comp(This, Remote) of
+        true  -> ok;
+        false -> version_error(Name, This, Remote)
+    end.
+
+version_error(Name, This, Remote) ->
     {error, {inconsistent_cluster,
              rabbit_misc:format("~s version mismatch: local node is ~s, "
                                 "remote node ~s", [Name, This, Remote])}}.
@@ -767,8 +769,15 @@ check_version_consistency(This, Remote, Name) ->
 check_otp_consistency(Remote) ->
     check_version_consistency(erlang:system_info(otp_release), Remote, "OTP").
 
+%% Unlike the rest of 3.0.x, 3.0.0 is not compatible. This can be
+%% removed after 3.1.0 is released.
+check_rabbit_consistency("3.0.0") ->
+    version_error("Rabbit", rabbit_misc:version(), "3.0.0");
+
 check_rabbit_consistency(Remote) ->
-    check_version_consistency(rabbit_misc:version(), Remote, "Rabbit").
+    check_version_consistency(
+      rabbit_misc:version(), Remote, "Rabbit",
+      fun rabbit_misc:version_minor_equivalent/2).
 
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
