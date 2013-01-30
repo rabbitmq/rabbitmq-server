@@ -99,7 +99,10 @@ parse_primitive(16#d1,<<S:32/unsigned,CountAndValue:S/binary,R/binary>>) ->
 parse_primitive(16#e0,<<S:8/unsigned,CountAndV:S/binary,R/binary>>) ->
     {{list, parse_array(8, CountAndV)}, R};
 parse_primitive(16#f0,<<S:32/unsigned,CountAndV:S/binary,R/binary>>) ->
-    {{list, parse_array(32, CountAndV)}, R}.
+    {{list, parse_array(32, CountAndV)}, R};
+
+parse_primitive(Type, _) ->
+    throw({primitive_type_unsupported, Type}).
 
 parse_compound(UnitSize, Bin) ->
     <<Count:UnitSize, Bin1/binary>> = Bin,
@@ -107,6 +110,11 @@ parse_compound(UnitSize, Bin) ->
 
 parse_compound1(0, <<>>, List) ->
     lists:reverse(List);
+parse_compound1(_Left, <<>>, List) ->
+    case application:get_env(rabbitmq_amqp1_0, protocol_strict_mode) of
+        {ok, false} -> lists:reverse(List); %% ignore miscount
+        {ok, true}  -> throw(compound_datatype_miscount)
+    end;
 parse_compound1(Count, Bin, Acc) ->
     {Value, Rest} = parse(Bin),
     parse_compound1(Count - 1, Rest, [Value | Acc]).
