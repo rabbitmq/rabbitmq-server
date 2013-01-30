@@ -638,7 +638,7 @@ function rates_chart(id, items, stats, rate_fmt) {
             if (rate_fmt) {
                 show.push([name, rate_fmt(stats, key)]);
             }
-            else {
+            else if (stats[key_details].samples != undefined) {
                 show.push([name,
                            stats[key_details].samples[0].sample + " msg"]);
             }
