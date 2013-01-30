@@ -59,9 +59,7 @@ def print_erl(types):
     for t in types:
         print """encode(Frame = #'v1_0.%s'{}) ->
     rabbit_amqp1_0_framing:encode_described('%s', %s, Frame);""" % (t.name, t.source, t.number)
-    print """encode(L) when is_list(L) ->
-    {described, true, {list, [encode(I) || I <- L]}};
-encode(undefined) -> null;
+    print """encode(undefined) -> null;
 encode(Other) -> Other.
 
 """
