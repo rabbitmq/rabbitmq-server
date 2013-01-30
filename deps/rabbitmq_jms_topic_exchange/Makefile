@@ -13,8 +13,7 @@ RABBIT_VERSION:=rabbitmq_v2_8_7
 all: dist
 
 clean:
-	rm -rf $(UMBRELLA)
-	rm $(UMBRELLA).co
+	rm -rf $(UMBRELLA)*
 
 dist: init
 	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) dist
@@ -31,6 +30,7 @@ run-in-broker: dist
 $(UMBRELLA).co:
 	hg clone $(HG_BASE)/$(UMBRELLA)
 	cd $(UMBRELLA); hg up $(RABBIT_VERSION)
+	touch $@
 
 $(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/*
 	rm -rf $(UMBRELLA)/$(EXCHANGE)
