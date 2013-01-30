@@ -883,8 +883,7 @@ cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
-%% when requeueing, we re-add a msg_id to the unconfirmed set
-gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
+gb_sets_maybe_insert(true,   Val, Set) -> gb_sets:add(Val, Set).
 
 msg_status(IsPersistent, IsDelivered, SeqId,
            Msg = #basic_message {id = MsgId}, MsgProps) ->
