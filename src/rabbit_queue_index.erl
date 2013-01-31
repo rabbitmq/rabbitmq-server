@@ -621,12 +621,12 @@ add_to_journal(RelSeq, Action, JEntries) ->
                           del  -> {no_pub,    del, no_ack};
                           ack  -> {no_pub, no_del,    ack}
                       end, JEntries);
-        ({?PUB,   del, no_ack}) when Action == ack ->
-            array:reset(RelSeq, JEntries);
-        ({Pub, no_del, no_ack}) when Action == del ->
-            array:set(RelSeq, {Pub, del, no_ack}, JEntries);
-        ({Pub,    Del, no_ack}) when Action == ack ->
-            array:set(RelSeq, {Pub, Del,    ack}, JEntries)
+        ({Pub,    no_del, no_ack}) when Action == del ->
+            array:set(RelSeq, {Pub,    del, no_ack}, JEntries);
+        ({no_pub,    del, no_ack}) when Action == ack ->
+            array:set(RelSeq, {no_pub, del,    ack}, JEntries);
+        ({?PUB,      del, no_ack}) when Action == ack ->
+            array:reset(RelSeq, JEntries)
     end.
 
 maybe_flush_journal(State = #qistate { dirty_count = DCount,
