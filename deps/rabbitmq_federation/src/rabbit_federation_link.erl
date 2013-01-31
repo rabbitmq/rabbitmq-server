@@ -131,6 +131,8 @@ handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
     {noreply, State#state{unacked = remove_delivery_tags(Seq, Multiple,
                                                          Unacked)}};
 
+%% Note: at time of writing the broker will never send requeue=false. And it's
+%% hard to imagine why it would. But we may as well handle it.
 handle_info(#'basic.nack'{delivery_tag = Seq,
                           multiple     = Multiple,
                           requeue      = ReQueue},
