@@ -30,6 +30,7 @@
                         delivery_id = undefined,
                         delivery_count = 0,
                         send_settle_mode = undefined,
+                        recv_settle_mode = undefined,
                         credit_used = ?INCOMING_CREDIT div 2,
                         msg_acc = []}).
 
@@ -37,9 +38,16 @@ attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
                       source = Source,
                       snd_settle_mode = SndSettleMode,
+                      rcv_settle_mode = RcvSettleMode,
                       target = Target,
+                      unsettled = Unsettled,
                       initial_delivery_count = {uint, InitTransfer}},
        BCh, DCh) ->
+    case Unsettled of
+        undefined -> ok;
+        {map, []} -> ok;
+        _         -> throw(resuming_links_unsupported)
+    end,
     %% TODO associate link name with target
     case ensure_target(Target, #incoming_link{ name = Name }, DCh) of
         {ok, ServerTarget,
@@ -64,11 +72,14 @@ attach(#'v1_0.attach'{name = Name,
             Attach = #'v1_0.attach'{
               name = Name,
               handle = Handle,
+              rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_FIRST,
               source = Source,
               target = ServerTarget,
               initial_delivery_count = undefined, % must be, I am the recvr
               role = ?RECV_ROLE}, %% server is receiver
-            {ok, [Attach, Flow], IncomingLink, Confirm};
+            IncomingLink1 =
+                IncomingLink#incoming_link{recv_settle_mode = RcvSettleMode},
+            {ok, [Attach, Flow], IncomingLink1, Confirm};
         {error, Reason} ->
             rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
             %% TODO proper link estalishment protocol here?
@@ -96,8 +107,15 @@ effective_send_settle_mode(SettleMode, SettleMode)
   when is_boolean(SettleMode) ->
     SettleMode.
 
-% TODO: validate effective send settle mode against
-%       the declared settle mode during attach
+effective_recv_settle_mode(undefined, undefined) ->
+    ?V_1_0_RECEIVER_SETTLE_MODE_FIRST;
+effective_recv_settle_mode(undefined, Mode) ->
+    Mode;
+effective_recv_settle_mode(Mode, _) ->
+    Mode.
+
+% TODO: validate effective settle modes against
+%       those declared during attach
 
 % TODO: handle aborted transfers
 
@@ -111,16 +129,18 @@ transfer(#'v1_0.transfer'{delivery_id = DeliveryId,
            Link#incoming_link{msg_acc = [MsgPart | MsgAcc],
                               send_settle_mode =
                                 effective_send_settle_mode(Settled, SSM)})};
-transfer(#'v1_0.transfer'{delivery_id = DeliveryId0,
-                          settled     = Settled,
-                          handle      = Handle},
+transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
+                          settled         = Settled,
+                          rcv_settle_mode = RcvSettleMode,
+                          handle          = Handle},
          MsgPart,
          #incoming_link{exchange         = X,
                         routing_key      = LinkRKey,
                         delivery_count   = Count,
                         credit_used      = CreditUsed,
                         msg_acc          = MsgAcc,
-                        send_settle_mode = SSM} = Link, BCh) ->
+                        send_settle_mode = SSM,
+                        recv_settle_mode = RSM} = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
     ?DEBUG("Inbound content:~n  ~p~n",
            [[rabbit_amqp1_0_framing:pprint(Section) ||
@@ -151,8 +171,15 @@ transfer(#'v1_0.transfer'{delivery_id = DeliveryId0,
                          [incoming_flow(NewLink, Handle)];
                 false -> []
             end,
+    EffectiveSendSettleMode = effective_send_settle_mode(Settled, SSM),
+    EffectiveRecvSettleMode = effective_recv_settle_mode(RcvSettleMode, RSM),
+    case not EffectiveSendSettleMode andalso
+         EffectiveRecvSettleMode =:= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND of
+        true  -> throw(receiver_settle_mode_second_unsupported);
+        false -> ok
+    end,
     {message, Reply, NewLink, DeliveryId,
-     effective_send_settle_mode(Settled, SSM)}.
+     EffectiveSendSettleMode}.
 
 %% There are a few things that influence what source and target
 %% definitions mean for our purposes.
