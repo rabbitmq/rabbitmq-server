@@ -132,8 +132,8 @@ handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
                                                          Unacked)}};
 
 handle_info(#'basic.nack'{delivery_tag = Seq,
-                          multiple = Multiple,
-                          requeue=ReQueue},
+                          multiple     = Multiple,
+                          requeue      = ReQueue},
             State = #state{unacked = Unacked}) ->
     nack(gb_trees:get(Seq, Unacked), Multiple, ReQueue, State),
     {noreply, State#state{unacked = remove_delivery_tags(Seq, Multiple,
