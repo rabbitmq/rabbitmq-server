@@ -102,10 +102,18 @@ parse_primitive(16#f0,<<S:32/unsigned,CountAndV:S/binary,R/binary>>) ->
     {{list, parse_array(32, CountAndV)}, R};
 
 %% NaN or +-inf
-parse_primitive(16#72, <<V:32, _/binary>>) ->
-    throw({unsupported_floating_point_value, <<V:32>>});
-parse_primitive(16#82, <<V:64, _/binary>>) ->
-    throw({unsupported_floating_point_value, <<V:64>>});
+parse_primitive(16#72, <<V:32, R/binary>>) ->
+    {{as_is, 16#72, <<V:32>>}, R};
+parse_primitive(16#82, <<V:64, R/binary>>) ->
+    {{as_is, 16#82, <<V:64>>}, R};
+
+%% decimals
+parse_primitive(16#74, <<V:32, R/binary>>) ->
+    {{as_is, 16#74, <<V:32>>}, R};
+parse_primitive(16#84, <<V:64, R/binary>>) ->
+    {{as_is, 16#84, <<V:64>>}, R};
+parse_primitive(16#94, <<V:128, R/binary>>) ->
+    {{as_is, 16#94, <<V:128>>}, R};
 
 parse_primitive(Type, _) ->
     throw({primitive_type_unsupported, Type}).

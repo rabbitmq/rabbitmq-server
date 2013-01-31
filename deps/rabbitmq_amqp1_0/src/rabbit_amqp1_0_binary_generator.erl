@@ -113,7 +113,10 @@ generate({array, Type, List}) ->
     %% S < 256 -> Count < 256
     if S > 255 -> [<<16#f0, (S + 4):32/unsigned, Count:32/unsigned>>, Body];
        true    -> [<<16#e0, (S + 1):8/unsigned, Count:8/unsigned>>,   Body]
-    end.
+    end;
+
+generate({as_is, TypeCode, Bin}) ->
+    <<TypeCode, Bin>>.
 
 %% TODO again these are a stub to get SASL working. New codec? Will
 %% that ever happen? If not we really just need to split generate/1
