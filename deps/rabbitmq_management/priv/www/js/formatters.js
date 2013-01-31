@@ -589,9 +589,10 @@ function data_rates(id, stats) {
 function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt,
                              heading, heading_help) {
     var mode = get_pref('rate-mode-' + id);
+    var range = get_pref('chart-range-' + id);
     var prefix = '<h3>' + heading +
         ' <span class="rate-options" for="'
-        + id + '">(' + prefix_title(mode) + ')</span>' +
+        + id + '">(' + prefix_title(mode, range) + ')</span>' +
         (heading_help == undefined ? '' :
          ' <span class="help" id="' + heading_help + '"></span>') +
         '</h3>';
@@ -612,8 +613,8 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt,
     return prefix + res;
 }
 
-function prefix_title(mode) {
-    var desc = CHART_PERIODS[current_range_age + '|' + current_range_incr];
+function prefix_title(mode, range) {
+    var desc = CHART_PERIODS[range];
     if (mode == 'chart') {
         return 'chart: ' + desc.toLowerCase();
     }

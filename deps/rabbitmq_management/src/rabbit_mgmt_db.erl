@@ -139,6 +139,8 @@
 -define(COARSE_QUEUE_STATS,
         [messages, messages_ready, messages_unacknowledged]).
 
+-define(COARSE_CONN_STATS, [recv_oct, send_oct]).
+
 -define(REMOVE_OLD_SAMPLES_INTERVAL, 5 * 60 * 1000).
 
 %%----------------------------------------------------------------------------
@@ -160,7 +162,7 @@ start_link() ->
         Else      -> Else
     end.
 
-%% R = Range, M = Mode
+%% R = Ranges, M = Mode
 augment_exchanges(Xs, R, M) -> safe_call({augment_exchanges, Xs, R, M}, Xs).
 augment_queues(Qs, R, M)    -> safe_call({augment_queues, Qs, R, M}, Qs).
 augment_vhosts(VHosts, R)   -> safe_call({augment_vhosts, VHosts, R}, VHosts).
@@ -201,59 +203,59 @@ init([]) ->
                                  aggregated_stats = Table()}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({augment_exchanges, Xs, Range, basic}, _From, State) ->
-    reply(list_exchange_stats(Range, Xs, State), State);
+handle_call({augment_exchanges, Xs, Ranges, basic}, _From, State) ->
+    reply(list_exchange_stats(Ranges, Xs, State), State);
 
-handle_call({augment_exchanges, Xs, Range, full}, _From, State) ->
-    reply(detail_exchange_stats(Range, Xs, State), State);
+handle_call({augment_exchanges, Xs, Ranges, full}, _From, State) ->
+    reply(detail_exchange_stats(Ranges, Xs, State), State);
 
-handle_call({augment_queues, Qs, Range, basic}, _From, State) ->
-    reply(list_queue_stats(Range, Qs, State), State);
+handle_call({augment_queues, Qs, Ranges, basic}, _From, State) ->
+    reply(list_queue_stats(Ranges, Qs, State), State);
 
-handle_call({augment_queues, Qs, Range, full}, _From, State) ->
-    reply(detail_queue_stats(Range, Qs, State), State);
+handle_call({augment_queues, Qs, Ranges, full}, _From, State) ->
+    reply(detail_queue_stats(Ranges, Qs, State), State);
 
-handle_call({augment_vhosts, VHosts, Range}, _From, State) ->
-    reply(vhost_stats(Range, VHosts, State), State);
+handle_call({augment_vhosts, VHosts, Ranges}, _From, State) ->
+    reply(vhost_stats(Ranges, VHosts, State), State);
 
 handle_call({augment_nodes, Nodes}, _From, State) ->
     {reply, node_stats(Nodes, State), State};
 
-handle_call({get_channel, Name, Range, Mode}, _From,
+handle_call({get_channel, Name, Ranges, Mode}, _From,
             State = #state{tables = Tables}) ->
     case created_event(Name, channel_stats, Tables) of
         not_found -> reply(not_found, State);
-        Chan      -> [Result] =
+        Ch        -> [Result] =
                          case Mode of
-                             basic -> list_channel_stats(Range, [Chan], State);
-                             full  -> detail_channel_stats(Range, [Chan], State)
+                             basic -> list_channel_stats(Ranges, [Ch], State);
+                             full  -> detail_channel_stats(Ranges, [Ch], State)
                          end,
                      reply(Result, State)
     end;
 
-handle_call({get_connection, Name, Range}, _From,
+handle_call({get_connection, Name, Ranges}, _From,
             State = #state{tables = Tables}) ->
     case created_event(Name, connection_stats, Tables) of
         not_found -> reply(not_found, State);
-        Conn      -> [Result] = connection_stats(Range, [Conn], State),
+        Conn      -> [Result] = connection_stats(Ranges, [Conn], State),
                      reply(Result, State)
     end;
 
-handle_call({get_all_channels, Range, Mode}, _From,
+handle_call({get_all_channels, Ranges, Mode}, _From,
             State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
     Result = case Mode of
-                 basic -> list_channel_stats(Range, Chans, State);
-                 full  -> detail_channel_stats(Range, Chans, State)
+                 basic -> list_channel_stats(Ranges, Chans, State);
+                 full  -> detail_channel_stats(Ranges, Chans, State)
              end,
     reply(Result, State);
 
-handle_call({get_all_connections, Range}, _From,
+handle_call({get_all_connections, Ranges}, _From,
             State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
-    reply(connection_stats(Range, Conns, State), State);
+    reply(connection_stats(Ranges, Conns, State), State);
 
-handle_call({get_overview, User, Range}, _From,
+handle_call({get_overview, User, Ranges}, _From,
             State = #state{tables = Tables}) ->
     VHosts = case User of
                  all -> rabbit_vhost:list();
@@ -283,8 +285,8 @@ handle_call({get_overview, User, Range}, _From,
                                     X <- rabbit_exchange:list(V)])},
          {connections, F(created_events(connection_stats, Tables))},
          {channels,    F(created_events(channel_stats, Tables))}],
-    reply([{message_stats, format_samples(Range, MessageStats, State)},
-           {queue_totals,  format_samples(Range, QueueStats, State)},
+    reply([{message_stats, format_samples(Ranges, MessageStats, State)},
+           {queue_totals,  format_samples(Ranges, QueueStats, State)},
            {object_totals, ObjectTotals}], State);
 
 handle_call(_Request, _From, State) ->
@@ -434,7 +436,7 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
              State) ->
-    handle_stats(connection_stats, Stats, Timestamp, [], [recv_oct, send_oct],
+    handle_stats(connection_stats, Stats, Timestamp, [], ?COARSE_CONN_STATS,
                  State);
 
 handle_event(Event = #event{type  = connection_closed,
@@ -647,53 +649,53 @@ add(TS, Diff, Stats = #stats{diffs = Diffs}) ->
 first(Id)  -> {Id, '$1'}.
 second(Id) -> {'$1', Id}.
 
-list_queue_stats(Range, Objs, State) ->
+list_queue_stats(Ranges, Objs, State) ->
     adjust_hibernated_memory_use(
-      merge_stats(Objs, queue_funs(Range, State))).
+      merge_stats(Objs, queue_funs(Ranges, State))).
 
-detail_queue_stats(Range, Objs, State) ->
+detail_queue_stats(Ranges, Objs, State) ->
     adjust_hibernated_memory_use(
       merge_stats(Objs, [consumer_details_fun(
                            fun (Props) ->
                                    {id_lookup(queue_stats, Props), '_'}
                            end, State),
-                         detail_stats_fun(Range, ?QUEUE_DETAILS, State)
-                         | queue_funs(Range, State)])).
+                         detail_stats_fun(Ranges, ?QUEUE_DETAILS, State)
+                         | queue_funs(Ranges, State)])).
 
-queue_funs(Range, State) ->
+queue_funs(Ranges, State) ->
     [basic_stats_fun(queue_stats, State),
-     simple_stats_fun(Range, queue_stats, State),
+     simple_stats_fun(Ranges, queue_stats, State),
      augment_msg_stats_fun(State)].
 
-list_exchange_stats(Range, Objs, State) ->
-    merge_stats(Objs, [simple_stats_fun(Range, exchange_stats, State),
+list_exchange_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, State),
                        augment_msg_stats_fun(State)]).
 
-detail_exchange_stats(Range, Objs, State) ->
-    merge_stats(Objs, [simple_stats_fun(Range, exchange_stats, State),
-                       detail_stats_fun(Range, ?EXCHANGE_DETAILS, State),
+detail_exchange_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, State),
+                       detail_stats_fun(Ranges, ?EXCHANGE_DETAILS, State),
                        augment_msg_stats_fun(State)]).
 
-connection_stats(Range, Objs, State) ->
+connection_stats(Ranges, Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(connection_stats, State),
-                       simple_stats_fun(Range, connection_stats, State),
+                       simple_stats_fun(Ranges, connection_stats, State),
                        augment_msg_stats_fun(State)]).
 
-list_channel_stats(Range, Objs, State) ->
+list_channel_stats(Ranges, Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(channel_stats, State),
-                       simple_stats_fun(Range, channel_stats, State),
+                       simple_stats_fun(Ranges, channel_stats, State),
                        augment_msg_stats_fun(State)]).
 
-detail_channel_stats(Range, Objs, State) ->
+detail_channel_stats(Ranges, Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(channel_stats, State),
-                       simple_stats_fun(Range, channel_stats, State),
+                       simple_stats_fun(Ranges, channel_stats, State),
                        consumer_details_fun(
                          fun (Props) -> {'_', pget(pid, Props)} end, State),
-                       detail_stats_fun(Range, ?CHANNEL_DETAILS, State),
+                       detail_stats_fun(Ranges, ?CHANNEL_DETAILS, State),
                        augment_msg_stats_fun(State)]).
 
-vhost_stats(Range, Objs, State) ->
-    merge_stats(Objs, [simple_stats_fun(Range, vhost_stats, State)]).
+vhost_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(Ranges, vhost_stats, State)]).
 
 node_stats(Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(node_stats, State)]).
@@ -711,18 +713,18 @@ basic_stats_fun(Type, #state{tables = Tables}) ->
     end.
 
 %% i.e. coarse stats, and fine stats aggregated up to a single number per thing
-simple_stats_fun(Range, Type, State) ->
+simple_stats_fun(Ranges, Type, State) ->
     fun (Props) ->
             Id = id_lookup(Type, Props),
             extract_msg_stats(
-              format_samples(Range, read_simple_stats(Type, Id, State), State))
+              format_samples(Ranges, read_simple_stats(Type, Id, State), State))
     end.
 
 %% i.e. fine stats that are broken out per sub-thing
-detail_stats_fun(Range, {IdType, FineSpecs}, State) ->
+detail_stats_fun(Ranges, {IdType, FineSpecs}, State) ->
     fun (Props) ->
             Id = id_lookup(IdType, Props),
-            [detail_stats(Range, Name, AggregatedStatsType, IdFun(Id), State)
+            [detail_stats(Ranges, Name, AggregatedStatsType, IdFun(Id), State)
              || {Name, AggregatedStatsType, IdFun} <- FineSpecs]
     end.
 
@@ -750,9 +752,9 @@ extract_msg_stats(Stats) ->
         lists:partition(fun({K, _}) -> lists:member(K, FineStats) end, Stats),
     [{message_stats, MsgStats} | Other].
 
-detail_stats(Range, Name, AggregatedStatsType, Id, State) ->
+detail_stats(Ranges, Name, AggregatedStatsType, Id, State) ->
     {Name,
-     [[{stats, format_samples(Range, KVs, State)} | format_detail_id(G, State)]
+     [[{stats, format_samples(Ranges, KVs, State)} | format_detail_id(G, State)]
       || {G, KVs} <- read_detail_stats(AggregatedStatsType, Id, State)]}.
 
 format_detail_id(ChPid, State) when is_pid(ChPid) ->
@@ -761,15 +763,25 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
                  _State) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}].
 
-format_samples(Range, ManyStats, #state{interval = Interval}) ->
+format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
     lists:append(
       [case is_blank_stats(Stats) of
            true  -> [];
            false -> {Details, Counter} = format_sample_details(
-                                           Range, Stats, Interval),
+                                           pick_range(K, Ranges),
+                                           Stats, Interval),
                     [{K,              Counter},
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
+
+pick_range(K, {RangeL, RangeM, RangeD}) ->
+    case {lists:member(K, ?COARSE_QUEUE_STATS),
+          lists:member(K, ?FINE_STATS),
+          lists:member(K, ?COARSE_CONN_STATS)} of
+        {true, false, false} -> RangeL;
+        {false, true, false} -> RangeM;
+        {false, false, true} -> RangeD
+    end.
 
 format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
     RangePoint = Range#range.last - Interval,

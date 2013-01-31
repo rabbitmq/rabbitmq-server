@@ -194,7 +194,9 @@ sec_to_triple(Sec) -> {Sec div 1000000, Sec rem 1000000, 0}.
 %% Events out
 %%----------------------------------------------------------------------------
 
-range(F, L, I) -> #range{first = F * 1000, last = L * 1000, incr = I * 1000}.
+range(F, L, I) ->
+    R = #range{first = F * 1000, last = L * 1000, incr = I * 1000},
+    {R, R, R}.
 
 get_x(Name, Range) ->
     [X] = rabbit_mgmt_db:augment_exchanges([x2(Name)], Range, full),

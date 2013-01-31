@@ -5,7 +5,9 @@ dispatcher_add(function(sammy) {
             });
     }
     sammy.get('#/', function() {
-            var reqs = {'overview': {path: '/overview', options: {range:true}}};
+            var reqs = {'overview': {path:    '/overview',
+                                     options: {ranges: ['lengths-over',
+                                                        'msg-rates-over']}}};
             if (user_monitor) {
                 reqs['nodes'] = '/nodes';
             }
@@ -23,7 +25,7 @@ dispatcher_add(function(sammy) {
     sammy.get('#/connections/:name', function() {
             var name = esc(this.params['name']);
             render({'connection': {path:    '/connections/' + name,
-                                   options: {range:true}},
+                                   options: {ranges: ['data-rates-conn']}},
                     'channels': '/connections/' + name + '/channels'},
                 'connection', '#/connections');
         });
@@ -42,7 +44,7 @@ dispatcher_add(function(sammy) {
          'channels');
     sammy.get('#/channels/:name', function() {
             render({'channel': {path:   '/channels/' + esc(this.params['name']),
-                                options:{range:true}}},
+                                options:{ranges:['msg-rates-ch']}}},
                    'channel', '#/channels');
         });
 
@@ -52,7 +54,7 @@ dispatcher_add(function(sammy) {
     sammy.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'exchange': {path:    path,
-                                 options: {range:true}},
+                                 options: {ranges:['msg-rates-x']}},
                     'bindings_source': path + '/bindings/source',
                     'bindings_destination': path + '/bindings/destination'},
                 'exchange', '#/exchanges');
@@ -78,7 +80,7 @@ dispatcher_add(function(sammy) {
     sammy.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'queue': {path:    path,
-                              options: {range:true}},
+                              options: {ranges:['lengths-q', 'msg-rates-q']}},
                     'bindings': path + '/bindings'}, 'queue', '#/queues');
         });
     sammy.put('#/queues', function() {
@@ -126,7 +128,9 @@ dispatcher_add(function(sammy) {
                       'permissions': '/permissions'}, 'vhosts');
     sammy.get('#/vhosts/:id', function() {
             render({'vhost': {path:    '/vhosts/' + esc(this.params['id']),
-                              options: {range:true}},
+                              options: {ranges: ['lengths-vhost',
+                                                 'msg-rates-vhost',
+                                                 'data-rates-vhost']}},
                     'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
                     'users': '/users/'},
                 'vhost', '#/vhosts');

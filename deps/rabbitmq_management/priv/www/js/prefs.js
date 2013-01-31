@@ -24,9 +24,9 @@ function section_pref(template, name) {
 // ---------------------------------------------------------------------------
 
 function default_pref(k) {
-    if (k == 'chart-range')                  return '60|5';
-    if (k.substring(0, 11) == 'chart-size-') return 'small';
-    if (k.substring(0, 10) == 'rate-mode-')  return 'chart';
+    if (k.substring(0, 12) == 'chart-range-') return '60|5';
+    if (k.substring(0, 11) == 'chart-size-')  return 'small';
+    if (k.substring(0, 10) == 'rate-mode-')   return 'chart';
     return null;
 }
 

@@ -366,9 +366,24 @@ function apply_state(reqs) {
             qs.push('sort=' + current_sort);
             qs.push('sort_reverse=' + current_sort_reverse);
         }
-        if (options['range'] != undefined) {
-            qs.push('sample_age=' + current_range_age);
-            qs.push('sample_incr=' + current_range_incr);
+        if (options['ranges'] != undefined) {
+            for (i in options['ranges']) {
+                var type = options['ranges'][i];
+                var range = get_pref('chart-range-' + type).split('|');
+                var prefix;
+                if (type.substring(0, 8) == 'lengths-') {
+                    prefix = 'lengths';
+                }
+                else if (type.substring(0, 10) == 'msg-rates-') {
+                    prefix = 'msg_rates';
+                }
+                else if (type.substring(0, 11) == 'data-rates-') {
+                    prefix = 'data_rates';
+                }
+                else debug("type: " + type);
+                qs.push(prefix + '_age=' + parseInt(range[0]));
+                qs.push(prefix + '_incr=' + parseInt(range[1]));
+            }
         }
         qs = qs.join('&');
         if (qs != '') qs = '?' + qs;

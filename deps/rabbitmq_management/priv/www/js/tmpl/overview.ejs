@@ -6,9 +6,9 @@
 <h2>Totals</h2>
 <div class="hider updatable">
 <% if (overview.statistics_db_node != 'not_running') { %>
-  <%= queue_lengths('ol', overview.queue_totals) %>
+  <%= queue_lengths('lengths-over', overview.queue_totals) %>
 <% if (statistics_level == 'fine') { %>
-  <%= message_rates('or', overview.message_stats) %>
+  <%= message_rates('msg-rates-over', overview.message_stats) %>
 <% } %>
 <% } else { %>
     Totals not available

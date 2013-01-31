@@ -487,9 +487,13 @@ b64decode_or_throw(B64) ->
             throw({error, {not_base64, B64}})
     end.
 
-range(ReqData) ->
-    Age = int(wrq:get_qs_value("sample_age", ReqData), 5) * 1000,
-    Incr = int(wrq:get_qs_value("sample_incr", ReqData), 5) * 1000,
+range(ReqData) -> {range("lengths",    ReqData),
+                   range("msg_rates",  ReqData),
+                   range("data_rates", ReqData)}.
+
+range(Prefix, ReqData) ->
+    Age = int(wrq:get_qs_value(Prefix ++ "_age", ReqData), 5) * 1000,
+    Incr = int(wrq:get_qs_value(Prefix ++ "_incr", ReqData), 5) * 1000,
     %% Take floor on queries so we make sure we only return samples
     %% for which we've finished receiving events. Fixes the "drop at
     %% the end" problem.

@@ -46,13 +46,8 @@ function render_chart(div) {
 
 function update_rate_options(sammy) {
     var id = sammy.params['id'];
-    var range = sammy.params['range'];
-    var r = range.split('|');
-    current_range_age = r[0];
-    current_range_incr = r[1];
-
     store_pref('rate-mode-' + id, sammy.params['mode']);
     store_pref('chart-size-' + id, sammy.params['size']);
-    store_pref('chart-range', range);
+    store_pref('chart-range-' + id, sammy.params['range']);
     partial_update();
 }
