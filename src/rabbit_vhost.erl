@@ -123,7 +123,7 @@ with(VHostPath, Thunk) ->
 infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,    VHost) -> VHost;
-i(tracing, VHost) -> rabbit_trace:tracing(VHost);
+i(tracing, VHost) -> rabbit_trace:enabled(VHost);
 i(Item, _)        -> throw({bad_argument, Item}).
 
 info(VHost)        -> infos(?INFO_KEYS, VHost).
