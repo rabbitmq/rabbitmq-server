@@ -104,22 +104,15 @@ limit(Limiter, PrefetchCount) ->
 %% breaching a limit. Note that we don't use maybe_call here in order
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
-can_send(Token, QPid, AckRequired, ChPid, CTag, Len) ->
-    rabbit_misc:with_exit_handler(
-      fun () -> true end,
-      fun () -> can_send0(Token, QPid, AckRequired, ChPid, CTag, Len) end).
-
-can_send0(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
-          QPid, AckRequired, ChPid, CTag, Len) ->
+can_send(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
+         QPid, AckReq, ChPid, CTag, Len) ->
     ConsAllows = case dict:find(CTag, Credits) of
                      {ok, #credit{credit = C}} when C > 0 -> true;
                      {ok, #credit{}}                      -> false;
                      error                                -> true
                  end,
     case ConsAllows of
-        true  -> case not Enabled orelse
-                     gen_server2:call(
-                       Pid, {can_send, QPid, AckRequired}, infinity) of
+        true  -> case not Enabled orelse call_can_send(Pid, QPid, AckReq) of
                      true  -> Credits2 = record_send_q(
                                            CTag, Len, ChPid, Credits),
                               Token#token{q_state = Credits2};
@@ -127,6 +120,13 @@ can_send0(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
                  end;
         false -> consumer_blocked
     end.
+
+call_can_send(Pid, QPid, AckRequired) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> true end,
+      fun () ->
+              gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
+      end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
