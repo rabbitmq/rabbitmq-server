@@ -1,13 +1,13 @@
 <h1>Exchange: <b><%= fmt_exchange(exchange.name) %></b></h1>
 
 <div class="section">
+  <div class="hider updatable">
   <h2>Overview</h2>
 <% if (statistics_level == 'fine') { %>
     <%= message_rates('xr', exchange.message_stats) %>
 <% } %>
 
 <h3>Details</h3>
-  <div class="hider updatable">
     <table class="facts">
       <tr>
         <th>Type</th>
