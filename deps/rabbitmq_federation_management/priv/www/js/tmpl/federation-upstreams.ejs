@@ -16,6 +16,7 @@
     <th>Max Hops</th>
     <th>Prefetch Count</th>
     <th>Reconnect Delay</th>
+    <th>Ack mode</th>
     <th>Trust User-ID</th>
   </tr>
  </thead>
@@ -35,6 +36,7 @@
      <td class="r"><%= upstream.value['max-hops'] %></td>
      <td class="r"><%= upstream.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
+     <td class="c"><%= fmt_string(upstream.value['ack-mode']) %></td>
      <td class="c"><%= fmt_boolean(upstream.value['trust-user-id']) %></td>
    </tr>
 <% } %>
@@ -118,6 +120,21 @@
             </label>
           </th>
           <td><input type="text" name="reconnect-delay"/> s</td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Acknowledgement Mode:
+              <span class="help" id="federation-ack-mode"></span>
+            </label>
+          </th>
+          <td>
+            <select name="ack-mode">
+              <option value="on-confirm">On confirm</option>
+              <option value="on-publish">On publish</option>
+              <option value="no-ack">No ack</option>
+            </select>
+          </td>
         </tr>
         <tr>
           <th>

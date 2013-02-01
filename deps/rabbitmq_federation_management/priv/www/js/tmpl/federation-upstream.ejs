@@ -33,6 +33,10 @@
         <td><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
       </tr>
       <tr>
+        <th>Ack Mode</th>
+        <td><%= fmt_string(upstream.value['ack-mode']) %></td>
+      </tr>
+      <tr>
         <th>Trust User-ID</th>
         <td><%= fmt_boolean(upstream.value['trust-user-id']) %></td>
       </tr>
