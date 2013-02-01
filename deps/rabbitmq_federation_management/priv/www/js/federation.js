@@ -63,6 +63,16 @@ HELP['federation-prefetch'] =
 HELP['federation-reconnect'] =
     'Time in seconds to wait after a network link goes down before attempting reconnection. Defaults to 1 if not set.';
 
+HELP['federation-ack-mode'] =
+    '<dl>\
+       <dt><code>on-confirm</code></dt>\
+       <dd>Messages are acknowledged to the upstream broker after they have been confirmed downstream. Handles network errors and broker failures without losing messages. The slowest option, and the default.</dd>\
+       <dt><code>on-publish</code></dt>\
+       <dd>Messages are acknowledged to the upstream broker after they have been published downstream. Handles network errors without losing messages, but may lose messages in the event of broker failures.</dd>\
+       <dt><code>no-ack</code></dt>\
+       <dd>Message acknowledgements are not used. The fastest option, but may lose messages in the event of network or broker failures.</dd>\
+</dl>';
+
 HELP['federation-trust-user-id'] =
     'Set "Yes" to preserve the "user-id" field across a federation link, even if the user-id does not match that used to republish the message. Set to "No" to clear the "user-id" field when messages are federated. Only set this to "Yes" if you trust the upstream broker not to forge user-ids.';
 
