@@ -26,7 +26,8 @@ dispatcher_add(function(sammy) {
             var num_keys = ['expires', 'message-ttl', 'max-hops',
                             'prefetch-count', 'reconnect-delay'];
             var bool_keys = ['trust-user-id'];
-            put_parameter(this, [], num_keys, bool_keys);
+            var arrayable_keys = ['uri'];
+            put_parameter(this, [], num_keys, bool_keys, arrayable_keys);
             return false;
         });
     sammy.del('#/fed-parameters', function() {
