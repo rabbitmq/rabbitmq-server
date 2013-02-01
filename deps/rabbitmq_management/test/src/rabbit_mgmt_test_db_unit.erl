@@ -19,12 +19,6 @@
 -include("rabbit_mgmt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(debugVal2(E),
-	((fun (__V) ->
-		  ?debugFmt(<<"~s = ~p">>, [(??E), __V]),
-		  __V
-	  end)(E))).
-
 remove_old_samples_test() ->
     T = fun (Before, After) ->
                 ?assertEqual(After, unstats(rabbit_mgmt_db:remove_old_samples(
@@ -53,16 +47,14 @@ remove_old_samples_test() ->
 format_sample_details_test() ->
     Interval = 10,
     T = fun ({First, Last, Incr}, Stats, Results) ->
-                Exp = format(Results),
-                Act = rabbit_mgmt_db:format_sample_details(
-                        #range{first = First * 1000,
-                               last  = Last * 1000,
-                               incr  = Incr * 1000},
-                        stats(Stats),
-                        Interval * 1000),
-                ?assertEqual(Exp, Act)
+                ?assertEqual(format(Results),
+                             rabbit_mgmt_db:format_sample_details(
+                                        #range{first = First * 1000,
+                                               last  = Last * 1000,
+                                               incr  = Incr * 1000},
+                                        stats(Stats),
+                               Interval * 1000))
         end,
-
     %% Just three samples, all of which we format. Note the
     %% instantaneous rate is taken from the penultimate sample.
     T({10, 30, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
@@ -76,16 +68,6 @@ format_sample_details_test() ->
     %% rate drops to 0 since the last event is now in the past.
     T({0, 40, 20}, {[{10, 10}, {20, 20}, {30, 30}], 1},
       {[{40, 61}, {20, 31}, {0, 1}], 0, 10, 1.5, 61}),
-
-    %% Invent more samples outside the range of what we have, but not
-    %% inside.
-    T({0, 40, 5}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{40, 61}, {35, 61}, {30, 61}, {20, 31}, {10, 11}, {5, 1}, {0, 1}],
-       0, 10, 1.5, 61}),
-
-    %% And a case where the range starts after the samples
-    T({20, 40, 5}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{40, 61}, {35, 61}, {30, 61}, {20, 31}], 0, 10, 1.5, 61}),
 
     %% TODO more?
     ok.

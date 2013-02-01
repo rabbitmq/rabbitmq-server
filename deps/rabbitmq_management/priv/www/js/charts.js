@@ -28,6 +28,11 @@ function render_chart(div) {
             var x = samples[j].timestamp;
             var y;
             if (rate_mode) {
+                // TODO This doesn't work well if you are looking at
+                // stuff in the browser that is finer granularity than
+                // the data we have in the DB (and thus we get
+                // duplicated entries). Do we care? We should just
+                // never allow that...
                 y = (samples[j - 1].sample - samples[j].sample) * 1000 /
                     (samples[j - 1].timestamp - samples[j].timestamp);
             }
