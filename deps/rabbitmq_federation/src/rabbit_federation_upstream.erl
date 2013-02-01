@@ -84,7 +84,13 @@ from_set_element(UpstreamSetElem, X) ->
     end.
 
 from_props_connection(U, Name, C, X) ->
-    URI = bget(uri, U, C),
+    URIParam = bget(uri, U, C),
+    URIs = case URIParam of
+               B when is_binary(B) -> [B];
+               L when is_list(L)   -> L
+           end,
+    random:seed(now()),
+    URI = lists:nth(random:uniform(length(URIs)), URIs),
     {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(X)),
     XNameBin = bget(exchange, U, C, name(X)),
     #upstream{params          = Params,
