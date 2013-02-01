@@ -7,6 +7,7 @@
  <thead>
   <tr>
     <th>Connection</th>
+    <th>URI</th>
 <% if (vhosts_interesting) { %>
     <th>Virtual Host</th>
 <% } %>
@@ -31,6 +32,7 @@
       <sub><%= fmt_string(link.upstream_exchange) %></sub>
       <% } %>
     </td>
+    <td><%= fmt_string(link.uri) %></td>
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(link.vhost) %></td>
 <% } %>
