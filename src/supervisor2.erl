@@ -682,13 +682,11 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State)
   when ?is_simple(State) ->
-    {ok, NState} = do_restart(RestartType, Reason, Child, State),
-    {noreply, NState};
+    delayed_restart(RestartType, Reason, Child, State);
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State) ->
     case get_child(Child#child.name, State) of
         {value, Child1} ->
-            {ok, NState} = do_restart(RestartType, Reason, Child1, State),
-            {noreply, NState};
+            delayed_restart(RestartType, Reason, Child1, State);
         _What ->
             {noreply, State}
     end;
@@ -697,6 +695,12 @@ handle_info(Msg, State) ->
     error_logger:error_msg("Supervisor received unexpected message: ~p~n", 
 			   [Msg]),
     {noreply, State}.
+
+delayed_restart(RestartType, Reason, Child, State) ->
+    case do_restart(RestartType, Reason, Child, State) of
+        {ok, NState}           -> {noreply, NState};
+        {try_again, _, NState} -> {noreply, NState}
+    end.
 
 %%
 %% Terminate this server.
