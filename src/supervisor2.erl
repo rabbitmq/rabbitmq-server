@@ -81,7 +81,7 @@
 %% Internal exports
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
--export([try_again_restart/2]).
+-export([try_again_restart/3]).
 
 %%--------------------------------------------------------------------------
 -ifdef(use_specs).
@@ -312,12 +312,13 @@ check_childspecs(X) -> {error, {badarg, X}}.
 %%%-----------------------------------------------------------------
 %%% Called by timer:apply_after from restart/2
 -ifdef(use_specs).
--spec try_again_restart(SupRef, Child) -> ok when
+-spec try_again_restart(SupRef, Child, Reason) -> ok when
       SupRef :: sup_ref(),
-      Child :: child_id() | pid().
+      Child :: child_id() | pid(),
+      Reason :: term().
 -endif.
-try_again_restart(Supervisor, Child) ->
-    cast(Supervisor, {try_again_restart, Child}).
+try_again_restart(Supervisor, Child, Reason) ->
+    cast(Supervisor, {try_again_restart, Child, Reason}).
 
 cast(Supervisor, Req) ->
     gen_server:cast(Supervisor, Req).
@@ -362,7 +363,7 @@ init_children(State, StartSpec) ->
             case start_children(Children, SupName) of
                 {ok, NChildren} ->
                     {ok, State#state{children = NChildren}};
-                {error, NChildren} ->
+                {error, _, NChildren} ->
                     terminate_children(NChildren, SupName),
                     {stop, shutdown}
             end;
@@ -402,7 +403,7 @@ start_children([Child|Chs], NChildren, SupName) ->
 	    start_children(Chs, [Child#child{pid = Pid}|NChildren], SupName);
 	{error, Reason} ->
 	    report_error(start_error, Reason, Child, SupName),
-	    {error, lists:reverse(Chs) ++ [Child | NChildren]}
+	    {error, Reason, lists:reverse(Chs) ++ [Child | NChildren]}
     end;
 start_children([], NChildren, _SupName) ->
     {ok, NChildren}.
@@ -630,10 +631,10 @@ count_child(#child{pid = Pid, child_type = supervisor},
 %%% timer:apply_after(0,...) in order to give gen_server the chance to
 %%% check it's inbox before trying again.
 -ifdef(use_specs).
--spec handle_cast({try_again_restart, child_id() | pid()}, state()) ->
+-spec handle_cast({try_again_restart, child_id() | pid(), term()}, state()) ->
 			 {'noreply', state()} | {stop, shutdown, state()}.
 -endif.
-handle_cast({try_again_restart,Pid}, #state{children=[Child]}=State)
+handle_cast({try_again_restart,Pid,Reason}, #state{children=[Child]}=State)
   when ?is_simple(State) ->
     RT = Child#child.restart_type,
     RPid = restarting(Pid),
@@ -641,7 +642,7 @@ handle_cast({try_again_restart,Pid}, #state{children=[Child]}=State)
 	{ok, Args} ->
 	    {M, F, _} = Child#child.mfargs,
 	    NChild = Child#child{pid = RPid, mfargs = {M, F, Args}},
-	    case restart(NChild,State) of
+	    case restart_child(NChild,Reason,State) of
 		{ok, State1} ->
 		    {noreply, State1};
 		{shutdown, State1} ->
@@ -651,10 +652,10 @@ handle_cast({try_again_restart,Pid}, #state{children=[Child]}=State)
             {noreply, State}
     end;
 
-handle_cast({try_again_restart,Name}, State) ->
+handle_cast({try_again_restart,Name,Reason}, State) ->
     case lists:keyfind(Name,#child.name,State#state.children) of
 	Child = #child{pid=?restarting(_)} ->
-	    case restart(Child,State) of
+	    case restart_child(Child,Reason,State) of
 		{ok, State1} ->
 		    {noreply, State1};
 		{shutdown, State1} ->
@@ -867,27 +868,27 @@ do_restart(temporary, Reason, Child, State) ->
     {ok, NState}.
 
 do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
-    case restart1(Child, State) of
-        {ok, NState} ->
-            {ok, NState};
-        {terminate, NState} ->
-            _TRef = erlang:send_after(trunc(Delay*1000), self(),
-                                      {delayed_restart,
-                                       {{RestartType, Delay}, Reason, Child}}),
-            {ok, state_del_child(Child, NState)}
-    end.
-
-restart1(Child, State) ->
     case add_restart(State) of
-	{ok, NState} ->
-	    restart(NState#state.strategy, Child, NState);
-	{terminate, _NState} ->
+        {ok, NState} ->
+            restart(NState#state.strategy, Child, NState);
+        {try_again, Reason, NState} ->
+            %% See restart/2 for an explanation of try_again_restart
+            Id = if ?is_simple(State) -> Child#child.pid;
+                    true -> Child#child.name
+                 end,
+            timer:apply_after(0,?MODULE,try_again_restart,[self(),Id,Reason]),
+            {ok, NState};
+        {terminate, _NState} ->
             %% we've reached the max restart intensity, but the
             %% add_restart will have added to the restarts
             %% field. Given we don't want to die here, we need to go
             %% back to the old restarts field otherwise we'll never
-            %% attempt to restart later.
-            {terminate, State}
+            %% attempt to restart later, which is why we ignore
+            %% NState for this clause.
+            _TRef = erlang:send_after(trunc(Delay*1000), self(),
+                                      {delayed_restart,
+                                       {{RestartType, Delay}, Reason, Child}}),
+            {ok, state_del_child(Child, State)}
     end.
 
 del_child_and_maybe_shutdown(intrinsic, Child, State) ->
@@ -901,7 +902,7 @@ restart(Child, State) ->
     case add_restart(State) of
 	{ok, NState} ->
 	    case restart(NState#state.strategy, Child, NState) of
-		{try_again,NState2} ->
+		{try_again, Reason, NState2} ->
 		    %% Leaving control back to gen_server before
 		    %% trying again. This way other incoming requsts
 		    %% for the supervisor can be handled - e.g. a
@@ -910,7 +911,7 @@ restart(Child, State) ->
 		    Id = if ?is_simple(State) -> Child#child.pid;
 			    true -> Child#child.name
 			 end,
-		    timer:apply_after(0,?MODULE,try_again_restart,[self(),Id]),
+		    timer:apply_after(0,?MODULE,try_again_restart,[self(),Id,Reason]),
 		    {ok,NState2};
 		Other ->
 		    Other
@@ -936,7 +937,7 @@ restart(simple_one_for_one, Child, State) ->
 	    NState = State#state{dynamics = ?DICT:store(restarting(OldPid), A,
 							Dynamics)},
 	    report_error(start_error, Error, Child, State#state.name),
-	    {try_again, NState}
+	    {try_again, Error, NState}
     end;
 restart(one_for_one, Child, State) ->
     OldPid = Child#child.pid,
@@ -950,7 +951,7 @@ restart(one_for_one, Child, State) ->
 	{error, Reason} ->
 	    NState = replace_child(Child#child{pid = restarting(OldPid)}, State),
 	    report_error(start_error, Reason, Child, State#state.name),
-	    {try_again, NState}
+	    {try_again, Reason, NState}
     end;
 restart(rest_for_one, Child, State) ->
     {ChAfter, ChBefore} = split_child(Child#child.pid, State#state.children),
@@ -958,10 +959,10 @@ restart(rest_for_one, Child, State) ->
     case start_children(ChAfter2, State#state.name) of
 	{ok, ChAfter3} ->
 	    {ok, State#state{children = ChAfter3 ++ ChBefore}};
-	{error, ChAfter3} ->
+	{error, Reason, ChAfter3} ->
 	    NChild = Child#child{pid=restarting(Child#child.pid)},
 	    NState = State#state{children = ChAfter3 ++ ChBefore},
-	    {try_again, replace_child(NChild,NState)}
+	    {try_again, Reason, replace_child(NChild,NState)}
     end;
 restart(one_for_all, Child, State) ->
     Children1 = del_child(Child#child.pid, State#state.children),
@@ -969,10 +970,10 @@ restart(one_for_all, Child, State) ->
     case start_children(Children2, State#state.name) of
 	{ok, NChs} ->
 	    {ok, State#state{children = NChs}};
-	{error, NChs} ->
+	{error, Reason, NChs} ->
 	    NChild = Child#child{pid=restarting(Child#child.pid)},
 	    NState = State#state{children = NChs},
-	    {try_again, replace_child(NChild,NState)}
+	    {try_again, Reason, replace_child(NChild,NState)}
     end.
 
 restarting(Pid) when is_pid(Pid) -> ?restarting(Pid);
