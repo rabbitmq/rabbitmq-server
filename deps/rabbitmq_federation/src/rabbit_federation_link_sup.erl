@@ -26,11 +26,13 @@
 -export([start_link/1, adjust/3]).
 -export([init/1]).
 
+-import(rabbit_federation_util, [name/1]).
+
 start_link(X) ->
     supervisor2:start_link(?MODULE, X).
 
 adjust(Sup, X, everything) ->
-    [stop(Sup, Upstream) ||
+    [stop(Sup, Upstream, X) ||
         {Upstream, _, _, _} <- supervisor2:which_children(Sup)],
     [{ok, _Pid} = supervisor2:start_child(Sup, Spec) || Spec <- specs(X)];
 
@@ -49,13 +51,13 @@ adjust(Sup, X, {upstream, UpstreamName}) ->
                       false -> {OldUs, NewUs}
                   end
           end, {OldUpstreams0, NewUpstreams0}, OldUpstreams0),
-    [stop(Sup, OldUpstream) || OldUpstream <- OldUpstreams],
+    [stop(Sup, OldUpstream, X) || OldUpstream <- OldUpstreams],
     [start(Sup, NewUpstream, X) || NewUpstream <- NewUpstreams];
 
 adjust(Sup, X = #exchange{name = XName}, {clear_upstream, UpstreamName}) ->
     ok = rabbit_federation_db:prune_scratch(
            XName, rabbit_federation_upstream:for(X)),
-    [stop(Sup, Upstream) || Upstream <- children(Sup, UpstreamName)];
+    [stop(Sup, Upstream, X) || Upstream <- children(Sup, UpstreamName)];
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
 adjust(Sup, X = #exchange{name = XName}, {upstream_set, Set}) ->
@@ -72,7 +74,7 @@ start(Sup, Upstream, X) ->
     {ok, _Pid} = supervisor2:start_child(Sup, spec(Upstream, X)),
     ok.
 
-stop(Sup, Upstream) ->
+stop(Sup, Upstream, #exchange{name = XName}) ->
     ok = supervisor2:terminate_child(Sup, Upstream),
     ok = supervisor2:delete_child(Sup, Upstream),
     %% While the link will report its own removal, that only works if
@@ -80,7 +82,8 @@ stop(Sup, Upstream) ->
     %% come up, the possibility exists that there *is* no link
     %% process, but we still have a report in the status table. So
     %% remove it here too.
-    rabbit_federation_status:remove_upstream(Upstream).
+    #upstream{name = UpstreamName, exchange = UX} = Upstream,
+    rabbit_federation_status:remove(Upstream, XName).
 
 children(Sup, UpstreamName) ->
     rabbit_federation_util:find_upstreams(
