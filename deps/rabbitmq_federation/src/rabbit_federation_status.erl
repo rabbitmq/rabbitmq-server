@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([report/3, remove_exchange/1, remove/2, status/0]).
+-export([report/4, remove_exchange/1, remove/2, status/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -38,8 +38,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-report(Upstream, XName, Status) ->
-    gen_server:cast(?SERVER, {report, Upstream, XName, Status,
+report(Upstream, UParams, XName, Status) ->
+    gen_server:cast(?SERVER, {report, Upstream, UParams, XName, Status,
                               calendar:local_time()}).
 
 remove_exchange(XName) ->
@@ -57,28 +57,24 @@ init([]) ->
     {ok, #state{}}.
 
 handle_call({remove_exchange, XName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, #entry{key       = xkey(XName),
-                                              status    = '_',
-                                              timestamp = '_'}),
+    true = ets:match_delete(?ETS_NAME, match_entry(xkey(XName))),
     {reply, ok, State};
 
 handle_call({remove, Upstream, XName}, _From, State) ->
-    #upstream{name = UpstreamName, exchange = UX} = Upstream,
-    true = ets:match_delete(?ETS_NAME, #entry{key       = key(XName, Upstream),
-                                              status    = '_',
-                                              timestamp = '_'}),
+    true = ets:match_delete(?ETS_NAME, match_entry(key(XName, Upstream))),
     {reply, ok, State};
 
 handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
     {reply, [format(Entry) || Entry <- Entries], State}.
 
-handle_cast({report, Upstream = #upstream{original_uri = URI}, XName,
-             Status, Timestamp}, State) ->
-    true = ets:insert(?ETS_NAME, #entry{key        = key(XName, Upstream),
-                                        status     = Status,
-                                        uri        = URI,
-                                        timestamp  = Timestamp}),
+handle_cast({report, Upstream, #upstream_params{uri = URI},
+             XName, Status, Timestamp}, State) ->
+    true = ets:insert(?ETS_NAME,
+                      #entry{key        = key(XName, Upstream),
+                             status     = Status,
+                             uri        = URI,
+                             timestamp  = Timestamp}),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -93,7 +89,7 @@ code_change(_OldVsn, State, _Extra) ->
 format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = exchange,
                                      name         = XNameBin},
-                           Connection, UX},
+                           Connection, UXNameBin},
               status    = Status,
               uri       = URI,
               timestamp = Timestamp}) ->
@@ -101,14 +97,20 @@ format(#entry{key       = {#resource{virtual_host = VHost,
          {vhost,             VHost},
          {connection,        Connection},
          {uri,               URI},
-         {upstream_exchange, name(UX)},
+         {upstream_exchange, UXNameBin},
          {status,            Status},
          {timestamp,         Timestamp}].
 
 %% We don't want to key off the entire upstream, bits of it may change
-key(XName, #upstream{name     = UpstreamName,
-                     exchange = #exchange{name = UXName}}) ->
-    {XName, UpstreamName, UXName}.
+key(XName, #upstream{name          = UpstreamName,
+                     exchange_name = UXNameBin}) ->
+    {XName, UpstreamName, UXNameBin}.
 
 xkey(XName) ->
     {XName, '_', '_'}.
+
+match_entry(Key) ->
+    #entry{key               = Key,
+           uri               = '_',
+           status            = '_',
+           timestamp         = '_'}.

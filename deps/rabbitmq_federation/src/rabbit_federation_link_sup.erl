@@ -82,7 +82,6 @@ stop(Sup, Upstream, #exchange{name = XName}) ->
     %% come up, the possibility exists that there *is* no link
     %% process, but we still have a report in the status table. So
     %% remove it here too.
-    #upstream{name = UpstreamName, exchange = UX} = Upstream,
     rabbit_federation_status:remove(Upstream, XName).
 
 children(Sup, UpstreamName) ->

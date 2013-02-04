@@ -14,9 +14,8 @@
 %% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
--record(upstream, {params,
-                   original_uri,
-                   exchange,
+-record(upstream, {uris,
+                   exchange_name,
                    prefetch_count,
                    max_hops,
                    reconnect_delay,
@@ -25,6 +24,8 @@
                    trust_user_id,
                    ha_policy,
                    name}).
+
+-record(upstream_params, {uri, params, exchange}).
 
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(BINDING_HEADER, <<"x-bound-from">>).
