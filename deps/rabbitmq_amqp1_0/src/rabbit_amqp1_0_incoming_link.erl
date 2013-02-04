@@ -46,7 +46,8 @@ attach(#'v1_0.attach'{name = Name,
     case Unsettled of
         undefined -> ok;
         {map, []} -> ok;
-        _         -> throw(resuming_links_unsupported)
+        _         -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                                    "Link recovery not supported", [])
     end,
     %% TODO associate link name with target
     case ensure_target(Target, #incoming_link{ name = Name }, DCh) of
@@ -175,8 +176,9 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
     EffectiveRecvSettleMode = effective_recv_settle_mode(RcvSettleMode, RSM),
     case not EffectiveSendSettleMode andalso
          EffectiveRecvSettleMode =:= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND of
-        true  -> throw(receiver_settle_mode_second_unsupported);
-        false -> ok
+        false -> ok;
+        true  -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                                "rcv-settle-mode second not supported", [])
     end,
     {message, Reply, NewLink, DeliveryId,
      EffectiveSendSettleMode}.
