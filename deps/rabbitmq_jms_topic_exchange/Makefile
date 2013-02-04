@@ -1,5 +1,6 @@
 # Make this RabbitMQ plugin
 EXCHANGE:=rabbitmq-jms-topic-exchange
+ARTEFACT:=rabbitmq_jms_topic_exchange
 
 HG_BASE:=http://hg.rabbitmq.com
 
@@ -8,15 +9,20 @@ UMBRELLA:=rabbitmq-public-umbrella
 RABBIT_VERSION:=rabbitmq_v2_8_7
 
 # command targets ##################################
-.PHONY: all clean dist init cleandist run-in-broker
+.PHONY: all clean package dist init cleandist run-in-broker
 
 all: dist
 
 clean:
 	rm -rf $(UMBRELLA)*
+	rm -rf target*
 
 dist: init
 	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) dist
+
+package: dist
+	mkdir -p target/plugins
+	cp $(UMBRELLA)/$(EXCHANGE)/dist/$(ARTEFACT)* target/plugins/.
 
 init: $(addprefix $(UMBRELLA)/,$(EXCHANGE) $(RABBIT_DEPS))
 
