@@ -33,7 +33,7 @@
 -define(ETS_NAME, ?MODULE).
 
 -record(state, {}).
--record(entry, {key, status, timestamp}).
+-record(entry, {key, uri, status, timestamp}).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
@@ -73,9 +73,11 @@ handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
     {reply, [format(Entry) || Entry <- Entries], State}.
 
-handle_cast({report, Upstream, XName, Status, Timestamp}, State) ->
+handle_cast({report, Upstream = #upstream{original_uri = URI}, XName,
+             Status, Timestamp}, State) ->
     true = ets:insert(?ETS_NAME, #entry{key        = key(XName, Upstream),
                                         status     = Status,
+                                        uri        = URI,
                                         timestamp  = Timestamp}),
     {noreply, State}.
 
@@ -93,10 +95,12 @@ format(#entry{key       = {#resource{virtual_host = VHost,
                                      name         = XNameBin},
                            Connection, UX},
               status    = Status,
+              uri       = URI,
               timestamp = Timestamp}) ->
         [{exchange,          XNameBin},
          {vhost,             VHost},
          {connection,        Connection},
+         {uri,               URI},
          {upstream_exchange, name(UX)},
          {status,            Status},
          {timestamp,         Timestamp}].
