@@ -725,34 +725,29 @@ print_banner() ->
                log_location(kernel), log_location(sasl)]).
 
 log_banner() ->
-    {ok, Product} = application:get_key(id),
-    {ok, Version} = application:get_key(vsn),
+    error_logger:info_msg("~s ~s~n",
+                          [?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
                 {"cookie hash",    rabbit_nodes:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
-                {"database dir",   rabbit_mnesia:dir()},
-                {"erlang version", erlang:system_info(otp_release)}],
+                {"database dir",   rabbit_mnesia:dir()}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = fun (K, V) ->
                      rabbit_misc:format(
                        "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n", [K, V])
              end,
     Banner = iolist_to_binary(
-               rabbit_misc:format(
-                 "~s ~s~n~s~n~s~n",
-                 [Product, Version, ?COPYRIGHT_MESSAGE,
-                  ?INFORMATION_MESSAGE]) ++
-                   [case S of
-                        {"config file(s)" = K, []} ->
-                            Format(K, "(none)");
-                        {"config file(s)" = K, [V0 | Vs]} ->
-                            Format(K, V0), [Format("", V) || V <- Vs];
-                        {K, V} ->
-                            Format(K, V)
-                    end || S <- Settings]),
+               [case S of
+                    {"config file(s)" = K, []} ->
+                        Format(K, "(none)");
+                    {"config file(s)" = K, [V0 | Vs]} ->
+                        Format(K, V0), [Format("", V) || V <- Vs];
+                    {K, V} ->
+                        Format(K, V)
+                end || S <- Settings]),
     error_logger:info_msg("~s", [Banner]).
 
 home_dir() ->
