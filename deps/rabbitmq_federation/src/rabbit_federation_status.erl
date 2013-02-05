@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([report/3, remove_exchange/1, remove_upstream/1, remove/2, status/0]).
+-export([report/3, remove_exchange/1, remove/2, status/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -45,9 +45,6 @@ report(Upstream, XName, Status) ->
 remove_exchange(XName) ->
     gen_server:call(?SERVER, {remove_exchange, XName}, infinity).
 
-remove_upstream(Upstream) ->
-    gen_server:call(?SERVER, {remove_upstream, Upstream}, infinity).
-
 remove(Upstream, XName) ->
     gen_server:call(?SERVER, {remove, Upstream, XName}, infinity).
 
@@ -65,13 +62,8 @@ handle_call({remove_exchange, XName}, _From, State) ->
                                               timestamp = '_'}),
     {reply, ok, State};
 
-handle_call({remove_upstream, Upstream}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, #entry{key       = ukey(Upstream),
-                                              status    = '_',
-                                              timestamp = '_'}),
-    {reply, ok, State};
-
 handle_call({remove, Upstream, XName}, _From, State) ->
+    #upstream{name = UpstreamName, exchange = UX} = Upstream,
     true = ets:match_delete(?ETS_NAME, #entry{key       = key(XName, Upstream),
                                               status    = '_',
                                               timestamp = '_'}),
@@ -110,11 +102,9 @@ format(#entry{key       = {#resource{virtual_host = VHost,
          {timestamp,         Timestamp}].
 
 %% We don't want to key off the entire upstream, bits of it may change
-key(XName, #upstream{name = UpstreamName, exchange = UX}) ->
-    {XName, UpstreamName, UX}.
+key(XName, #upstream{name     = UpstreamName,
+                     exchange = #exchange{name = UXName}}) ->
+    {XName, UpstreamName, UXName}.
 
 xkey(XName) ->
     {XName, '_', '_'}.
-
-ukey(#upstream{name = UpstreamName, exchange = UX}) ->
-    {'_', UpstreamName, UX}.
