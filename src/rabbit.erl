@@ -699,8 +699,11 @@ force_event_refresh() ->
 log_broker_started(Plugins) ->
     rabbit_misc:with_local_io(
       fun() ->
+              PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
+                                             || P <- Plugins]),
               error_logger:info_msg(
-                "Server startup complete; plugins are: ~p~n", [Plugins]),
+                "Server startup complete; ~b plugins started.~n~s~n",
+                [length(Plugins), PluginList]),
               io:format("~n            Broker running with ~p plugins.~n",
                         [length(Plugins)])
       end).
