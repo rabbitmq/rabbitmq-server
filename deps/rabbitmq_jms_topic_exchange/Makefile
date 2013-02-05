@@ -6,7 +6,7 @@ HG_BASE:=http://hg.rabbitmq.com
 
 RABBIT_DEPS:=rabbitmq-server rabbitmq-erlang-client rabbitmq-codegen
 UMBRELLA:=rabbitmq-public-umbrella
-RABBIT_VERSION:=rabbitmq_v2_8_7
+RABBIT_VERSION:=rabbitmq_v3_0_1
 
 # command targets ##################################
 .PHONY: all clean package dist init cleandist run-in-broker
