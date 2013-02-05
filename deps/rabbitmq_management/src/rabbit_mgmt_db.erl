@@ -788,7 +788,6 @@ format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
                           end
            end,
     Part1 = [{rate,     Rate},
-             {interval, Interval},
              {samples,  Samples}],
     Length = length(Samples),
     Part2 = case Length > 1 of

@@ -218,7 +218,6 @@ get_overview_q(Range) -> pget(queue_totals, get_overview(Range)).
 
 details(R, AR, A, L) ->
     [{rate,     R},
-     {interval, 5000},
      {samples,  [[{sample, S}, {timestamp, T * 1000}] || {T, S} <- L]},
      {avg_rate, AR},
      {avg,      A}].
