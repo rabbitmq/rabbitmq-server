@@ -26,7 +26,8 @@ dispatcher_add(function(sammy) {
             var num_keys = ['expires', 'message-ttl', 'max-hops',
                             'prefetch-count', 'reconnect-delay'];
             var bool_keys = ['trust-user-id'];
-            put_parameter(this, [], num_keys, bool_keys);
+            var arrayable_keys = ['uri'];
+            put_parameter(this, [], num_keys, bool_keys, arrayable_keys);
             return false;
         });
     sammy.del('#/fed-parameters', function() {
@@ -47,6 +48,9 @@ HELP['federation-explicit-identity'] =
 
 HELP['federation-local-username'] =
     'The name of a local user which can be used to publish messages received over federated links.';
+
+HELP['federation-uri'] =
+    'URI to connect to. If upstream is a cluster and can have several URIs, you can enter them here separated by spaces.';
 
 HELP['federation-expires'] =
     'Time in milliseconds that the upstream should remember about this node for. After this time all upstream state will be removed. Leave this blank to mean "forever".';
