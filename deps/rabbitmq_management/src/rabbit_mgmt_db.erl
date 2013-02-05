@@ -995,10 +995,11 @@ remove_old_samples(Cutoff, #stats{diffs = Diffs,
     remove_old_samples(Cutoff, List, [], Base).
 
 %% Go through the list, amalgamating all too-old samples with the next
-%% oldest keepable one [0]. If the sample is too old, but would not be
-%% too old if moved to a rounder timestamp which does not exist then
-%% invent one and move it there [1]. But if it's just outright too
-%% old, move it to the base [2].
+%% newest keepable one [0] (we move samples forward in time since the
+%% semantics of a sample is "we had this many x by this time"). If the
+%% sample is too old, but would not be too old if moved to a rounder
+%% timestamp which does not exist then invent one and move it there
+%% [1]. But if it's just outright too old, move it to the base [2].
 remove_old_samples(_Cutoff, [], Keep, Base) ->
     #stats{diffs = gb_trees:from_orddict(Keep), base = Base};
 remove_old_samples(Cutoff, [H = {TS, S} | T], Keep, Base) ->
