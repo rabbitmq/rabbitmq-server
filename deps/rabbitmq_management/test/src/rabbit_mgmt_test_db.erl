@@ -211,7 +211,7 @@ get_vhost(Range) ->
     VHost.
 
 get_conn(Name, Range) -> rabbit_mgmt_db:get_connection(a2b(Name), Range).
-get_ch(Name, Range) -> rabbit_mgmt_db:get_channel(a2b(Name), Range, full).
+get_ch(Name, Range) -> rabbit_mgmt_db:get_channel(a2b(Name), Range).
 
 get_overview(Range) -> rabbit_mgmt_db:get_overview(Range).
 get_overview_q(Range) -> pget(queue_totals, get_overview(Range)).

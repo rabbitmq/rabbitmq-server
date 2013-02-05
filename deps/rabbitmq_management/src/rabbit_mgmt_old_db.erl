@@ -228,13 +228,10 @@ handle_call({augment_nodes, Nodes}, _From, State) ->
 handle_call({augment_vhosts, VHosts, _Range}, _From, State) ->
     reply(VHosts, State);
 
-handle_call({get_channel, Name, _Range, Mode}, _From,
+handle_call({get_channel, Name, _Range}, _From,
             State = #state{tables = Tables}) ->
     Chans = created_event([Name], channel_stats, Tables),
-    Result = case Mode of
-                 basic -> list_channel_stats(Chans, State);
-                 full  -> detail_channel_stats(Chans, State)
-             end,
+    Result = detail_channel_stats(Chans, State),
     reply(result_or_error(Result), State);
 
 handle_call({get_connection, Name, _Range}, _From,
@@ -243,14 +240,10 @@ handle_call({get_connection, Name, _Range}, _From,
     Result = connection_stats(Conns, State),
     reply(result_or_error(Result), State);
 
-handle_call({get_all_channels, _Range, Mode}, _From,
+handle_call({get_all_channels, _Range}, _From,
             State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
-    Result = case Mode of
-                 basic -> list_channel_stats(Chans, State);
-                 full  -> detail_channel_stats(Chans, State)
-             end,
-    reply(Result, State);
+    reply(list_channel_stats(Chans, State), State);
 
 handle_call({get_all_connections, _Range}, _From,
             State = #state{tables = Tables}) ->

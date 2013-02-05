@@ -25,8 +25,8 @@
 
 -export([augment_exchanges/3, augment_queues/3,
          augment_nodes/1, augment_vhosts/2,
-         get_channel/3, get_connection/2,
-         get_all_channels/2, get_all_connections/1,
+         get_channel/2, get_connection/2,
+         get_all_channels/1, get_all_connections/1,
          get_overview/2, get_overview/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -168,10 +168,10 @@ augment_queues(Qs, R, M)    -> safe_call({augment_queues, Qs, R, M}, Qs).
 augment_vhosts(VHosts, R)   -> safe_call({augment_vhosts, VHosts, R}, VHosts).
 augment_nodes(Nodes)        -> safe_call({augment_nodes, Nodes}, Nodes).
 
-get_channel(Name, R, M)     -> safe_call({get_channel, Name, R, M}, not_found).
+get_channel(Name, R)        -> safe_call({get_channel, Name, R}, not_found).
 get_connection(Name, R)     -> safe_call({get_connection, Name, R}, not_found).
 
-get_all_channels(R, M)      -> safe_call({get_all_channels, R, M}).
+get_all_channels(R)         -> safe_call({get_all_channels, R}).
 get_all_connections(R)      -> safe_call({get_all_connections, R}).
 
 get_overview(User, R)       -> safe_call({get_overview, User, R}).
@@ -221,15 +221,11 @@ handle_call({augment_vhosts, VHosts, Ranges}, _From, State) ->
 handle_call({augment_nodes, Nodes}, _From, State) ->
     {reply, node_stats(Nodes, State), State};
 
-handle_call({get_channel, Name, Ranges, Mode}, _From,
+handle_call({get_channel, Name, Ranges}, _From,
             State = #state{tables = Tables}) ->
     case created_event(Name, channel_stats, Tables) of
         not_found -> reply(not_found, State);
-        Ch        -> [Result] =
-                         case Mode of
-                             basic -> list_channel_stats(Ranges, [Ch], State);
-                             full  -> detail_channel_stats(Ranges, [Ch], State)
-                         end,
+        Ch        -> [Result] = detail_channel_stats(Ranges, [Ch], State),
                      reply(Result, State)
     end;
 
@@ -241,14 +237,10 @@ handle_call({get_connection, Name, Ranges}, _From,
                      reply(Result, State)
     end;
 
-handle_call({get_all_channels, Ranges, Mode}, _From,
+handle_call({get_all_channels, Ranges}, _From,
             State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
-    Result = case Mode of
-                 basic -> list_channel_stats(Ranges, Chans, State);
-                 full  -> detail_channel_stats(Ranges, Chans, State)
-             end,
-    reply(Result, State);
+    reply(list_channel_stats(Ranges, Chans, State), State);
 
 handle_call({get_all_connections, Ranges}, _From,
             State = #state{tables = Tables}) ->
