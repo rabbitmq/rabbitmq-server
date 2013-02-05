@@ -49,10 +49,10 @@ format_sample_details_test() ->
     T = fun ({First, Last, Incr}, Stats, Results) ->
                 ?assertEqual(format(Results),
                              rabbit_mgmt_db:format_sample_details(
-                                        #range{first = First * 1000,
-                                               last  = Last * 1000,
-                                               incr  = Incr * 1000},
-                                        stats(Stats),
+                               #range{first = First * 1000,
+                                      last  = Last * 1000,
+                                      incr  = Incr * 1000},
+                               stats(Stats),
                                Interval * 1000))
         end,
 
@@ -85,6 +85,20 @@ format_sample_details_test() ->
     %% TODO more?
     ok.
 
+format_sample_details_no_range_test() ->
+    Interval = 10,
+    T = fun (Stats, Results) ->
+                ?assertEqual(format(Results),
+                             rabbit_mgmt_db:format_sample_details(
+                               no_range, stats(Stats), Interval * 1000))
+        end,
+
+    %% Just three samples
+    T({[{10, 10}, {20, 20}, {30, 30}], 1},
+      {2.0, 61}),
+    ok.
+
+
 %%--------------------------------------------------------------------
 
 cutoff() ->
@@ -99,6 +113,10 @@ unstats(#stats{diffs = Diffs, base = Base}) ->
 
 secs_to_millis(L) -> [{TS * 1000, S} || {TS, S} <- L].
 millis_to_secs(L) -> [{TS div 1000, S} || {TS, S} <- L].
+
+format({Rate, Count}) ->
+    {[{rate,     Rate}],
+     Count};
 
 format({Samples, Rate, Count}) ->
     {[{rate,     Rate},

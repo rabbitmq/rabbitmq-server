@@ -492,16 +492,27 @@ range(ReqData) -> {range("lengths",    ReqData),
                    range("data_rates", ReqData)}.
 
 range(Prefix, ReqData) ->
-    Age = int(wrq:get_qs_value(Prefix ++ "_age", ReqData), 5) * 1000,
-    Incr = int(wrq:get_qs_value(Prefix ++ "_incr", ReqData), 5) * 1000,
-    %% Take floor on queries so we make sure we only return samples
-    %% for which we've finished receiving events. Fixes the "drop at
-    %% the end" problem.
-    Last = (rabbit_mgmt_format:timestamp_ms(erlang:now()) div Incr) * Incr,
-    #range{first = Last - Age, last = Last, incr = Incr}.
+    Age = int(Prefix ++ "_age", ReqData),
+    Incr = int(Prefix ++ "_incr", ReqData),
+    if
+        is_integer(Age) andalso is_integer(Incr) ->
+            %% Take floor on queries so we make sure we only return samples
+            %% for which we've finished receiving events. Fixes the "drop at
+            %% the end" problem.
+            Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
+            Last = (Now div Incr) * Incr,
+            #range{first = (Last - Age) * 1000,
+                   last  = Last * 1000,
+                   incr  = Incr * 1000};
+        true ->
+            no_range
+    end.
 
-int(Str, Default) ->
-    case catch list_to_integer(Str) of
-        {'EXIT', _} -> Default;
-        Integer     -> Integer
+int(Name, ReqData) ->
+    case wrq:get_qs_value(Name, ReqData) of
+        undefined -> undefined;
+        Str       -> case catch list_to_integer(Str) of
+                         {'EXIT', _} -> undefined;
+                         Integer     -> Integer
+                     end
     end.

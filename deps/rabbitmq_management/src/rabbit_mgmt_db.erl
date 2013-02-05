@@ -775,6 +775,14 @@ pick_range(K, {RangeL, RangeM, RangeD}) ->
         {false, false, true} -> RangeD
     end.
 
+format_sample_details(no_range, #stats{diffs = Diffs, base = Base}, Interval) ->
+    Rate = case nth_largest(Diffs, 2) of
+               false    -> 0;
+               {_TS, S} -> S * 1000 / Interval
+           end,
+    Count = sum_entire_tree(gb_trees:iterator(Diffs), Base),
+    {[{rate, Rate}], Count};
+
 format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
     RangePoint = Range#range.last - Interval,
     {Samples, Count} = extract_samples(
@@ -815,6 +823,12 @@ nth_largest(Tree, N) ->
                      _ -> {_, _, Tree2} = gb_trees:take_largest(Tree),
                           nth_largest(Tree2, N - 1)
                  end
+    end.
+
+sum_entire_tree(Iter, Acc) ->
+    case gb_trees:next(Iter) of
+        none            -> Acc;
+        {_TS, S, Iter2} -> sum_entire_tree(Iter2, Acc + S)
     end.
 
 %% What we want to do here is: given the #range{}, provide a set of
