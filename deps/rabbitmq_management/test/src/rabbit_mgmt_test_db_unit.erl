@@ -55,6 +55,7 @@ format_sample_details_test() ->
                                         stats(Stats),
                                Interval * 1000))
         end,
+
     %% Just three samples, all of which we format. Note the
     %% instantaneous rate is taken from the penultimate sample.
     T({10, 30, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
@@ -72,6 +73,14 @@ format_sample_details_test() ->
     %% And a case where the range starts after the samples
     T({20, 40, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
       {[{40, 61}, {30, 61}, {20, 31}], 0, 10, 1.5, 61}),
+
+    %% A single sample - which should lead to some bits not getting generated
+    T({10, 10, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
+      {[{10, 11}], 0, 10, 11}),
+
+    %% No samples - which should also lead to some bits not getting generated
+    T({10, 0, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
+      {[], 0, 10, 1}),
 
     %% TODO more?
     ok.
@@ -91,10 +100,18 @@ unstats(#stats{diffs = Diffs, base = Base}) ->
 secs_to_millis(L) -> [{TS * 1000, S} || {TS, S} <- L].
 millis_to_secs(L) -> [{TS div 1000, S} || {TS, S} <- L].
 
+format({Samples, Rate, Interval, Count}) ->
+    {[{rate,     Rate},
+      {interval, Interval * 1000},
+      {samples,  format_samples(Samples)}],
+     Count};
+
 format({Samples, Rate, Interval, AvgRate, Count}) ->
     {[{rate,     Rate},
       {interval, Interval * 1000},
-      {samples, [[{sample, S}, {timestamp, TS * 1000}] || {TS, S} <- Samples]},
+      {samples,  format_samples(Samples)},
       {avg_rate, AvgRate}],
      Count}.
 
+format_samples(Samples) ->
+    [[{sample, S}, {timestamp, TS * 1000}] || {TS, S} <- Samples].
