@@ -59,20 +59,20 @@ format_sample_details_test() ->
     %% Just three samples, all of which we format. Note the
     %% instantaneous rate is taken from the penultimate sample.
     T({10, 30, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{30, 61}, {20, 31}, {10, 11}], 2.0, 10, 2.5, 61}),
+      {[{30, 61}, {20, 31}, {10, 11}], 2.0, 10, 2.5, 103/3, 61}),
 
     %% Skip over the second (and ditto).
     T({10, 30, 20}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{30, 61}, {10, 11}], 2.0, 10, 2.5, 61}),
+      {[{30, 61}, {10, 11}], 2.0, 10, 2.5, 36.0, 61}),
 
     %% Skip over some and invent some. Note that the instantaneous
     %% rate drops to 0 since the last event is now in the past.
     T({0, 40, 20}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{40, 61}, {20, 31}, {0, 1}], 0, 10, 1.5, 61}),
+      {[{40, 61}, {20, 31}, {0, 1}], 0, 10, 1.5, 31.0, 61}),
 
     %% And a case where the range starts after the samples
     T({20, 40, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{40, 61}, {30, 61}, {20, 31}], 0, 10, 1.5, 61}),
+      {[{40, 61}, {30, 61}, {20, 31}], 0, 10, 1.5, 51.0, 61}),
 
     %% A single sample - which should lead to some bits not getting generated
     T({10, 10, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
@@ -106,11 +106,12 @@ format({Samples, Rate, Interval, Count}) ->
       {samples,  format_samples(Samples)}],
      Count};
 
-format({Samples, Rate, Interval, AvgRate, Count}) ->
+format({Samples, Rate, Interval, AvgRate, Avg, Count}) ->
     {[{rate,     Rate},
       {interval, Interval * 1000},
       {samples,  format_samples(Samples)},
-      {avg_rate, AvgRate}],
+      {avg_rate, AvgRate},
+      {avg,      Avg}],
      Count}.
 
 format_samples(Samples) ->

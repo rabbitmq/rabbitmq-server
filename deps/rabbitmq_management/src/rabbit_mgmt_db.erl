@@ -790,10 +790,13 @@ format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
     Part1 = [{rate,     Rate},
              {interval, Interval},
              {samples,  Samples}],
-    Part2 = case length(Samples) > 1 of
+    Length = length(Samples),
+    Part2 = case Length > 1 of
                 true  -> [{sample, S2}, {timestamp, T2}] = hd(Samples),
                          [{sample, S1}, {timestamp, T1}] = lists:last(Samples),
-                         [{avg_rate, (S2 - S1) * 1000 / (T2 - T1)}];
+                         Total = lists:sum([pget(sample, I) || I <- Samples]),
+                         [{avg_rate, (S2 - S1) * 1000 / (T2 - T1)},
+                          {avg,      Total / Length}];
                 false -> []
             end,
     {Part1 ++ Part2, Count}.

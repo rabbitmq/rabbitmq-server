@@ -216,15 +216,17 @@ get_ch(Name, Range) -> rabbit_mgmt_db:get_channel(a2b(Name), Range).
 get_overview(Range) -> rabbit_mgmt_db:get_overview(Range).
 get_overview_q(Range) -> pget(queue_totals, get_overview(Range)).
 
-details(R, AR, L) ->
+details(R, AR, A, L) ->
     [{rate,     R},
      {interval, 5000},
      {samples,  [[{sample, S}, {timestamp, T * 1000}] || {T, S} <- L]},
-     {avg_rate, AR}].
+     {avg_rate, AR},
+     {avg,      A}].
 
 simple_details(Thing, N) ->
     [{Thing, N},
-     {atom_suffix(Thing, "_details"), details(0, 0.0, [{1, N}, {0, N}])}].
+     {atom_suffix(Thing, "_details"),
+      details(0, 0.0, N * 1.0, [{1, N}, {0, N}])}].
 
 atom_suffix(Atom, Suffix) ->
     list_to_atom(atom_to_list(Atom) ++ Suffix).
