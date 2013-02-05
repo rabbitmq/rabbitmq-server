@@ -640,8 +640,8 @@ function prefix_title(mode, range) {
     if (mode == 'chart') {
         return 'chart: ' + desc.toLowerCase();
     }
-    else if (mode == 'inst') {
-        return 'instantaneous value';
+    else if (mode == 'curr') {
+        return 'current value';
     }
     else {
         return 'moving average: ' + desc.toLowerCase();
