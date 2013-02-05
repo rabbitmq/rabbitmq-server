@@ -34,6 +34,11 @@
                         credit_used = ?INCOMING_CREDIT div 2,
                         msg_acc = []}).
 
+attach(#'v1_0.attach'{snd_settle_mode = SndSettleMode,
+                      rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_SECOND},
+       _, _) when SndSettleMode =/= ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
+    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                   "rcv-settle-mode=second not supported", []);
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
                       source = Source,
