@@ -79,7 +79,7 @@ enum(OptionsA) ->
     fun (Name, Term) when is_binary(Term) ->
             case lists:member(Term, Options) of
                 true  -> ok;
-                false -> {error, "~s should be one of ~p, actuaklly was ~p",
+                false -> {error, "~s should be one of ~p, actually was ~p",
                           [Name, Options, Term]}
             end;
         (Name, Term) ->
