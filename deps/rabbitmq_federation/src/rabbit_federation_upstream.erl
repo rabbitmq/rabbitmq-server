@@ -106,6 +106,9 @@ from_props_connection(U, Name, C, X) ->
               expires         = bget(expires,           U, C, none),
               message_ttl     = bget('message-ttl',     U, C, none),
               trust_user_id   = bget('trust-user-id',   U, C, false),
+              ack_mode        = list_to_atom(
+                                  binary_to_list(
+                                    bget('ack-mode', U, C, <<"on-confirm">>))),
               ha_policy       = bget('ha-policy',       U, C, none),
               name            = Name}.
 

@@ -22,6 +22,7 @@
                    expires,
                    message_ttl,
                    trust_user_id,
+                   ack_mode,
                    ha_policy,
                    name}).
 

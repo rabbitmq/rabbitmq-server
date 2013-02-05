@@ -148,10 +148,12 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                               redelivered  = Redelivered}, Msg},
             State = #state{
               upstream            = #upstream{max_hops      = MaxHops,
+                                              ack_mode      = AckMode,
                                               trust_user_id = Trust},
               upstream_params     = UParams,
               downstream_exchange = #resource{name = XNameBin},
               downstream_channel  = DCh,
+              channel             = Ch,
               unacked             = Unacked}) ->
     Headers0 = extract_headers(Msg),
     %% TODO add user information here?
@@ -168,8 +170,19 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                                                          routing_key = Key},
                                    maybe_clear_user_id(
                                      Trust, update_headers(Headers, Msg))),
-                 {noreply, State#state{unacked = gb_trees:insert(Seq, DTag,
-                                                                 Unacked)}};
+                 State1 =
+                     case AckMode of
+                         'on-confirm' ->
+                             State#state{unacked = gb_trees:insert(
+                                                     Seq, DTag, Unacked)};
+                         'on-publish' ->
+                             amqp_channel:cast(
+                               Ch, #'basic.ack'{delivery_tag = DTag}),
+                             State;
+                         'no-ack' ->
+                             State
+                     end,
+                 {noreply, State1};
         false -> ack(DTag, false, State), %% Drop it, but acknowledge it!
                  {noreply, State}
     end;
@@ -442,9 +455,14 @@ go(S0 = {not_started, {Upstream, UParams, DownXName =
     case open_monitor(
            rabbit_federation_util:local_params(Upstream, DownVHost)) of
         {ok, DConn, DCh} ->
-            #'confirm.select_ok'{} =
-               amqp_channel:call(DCh, #'confirm.select'{}),
-            amqp_channel:register_confirm_handler(DCh, self()),
+            case Upstream#upstream.ack_mode of
+                'on-confirm' ->
+                    #'confirm.select_ok'{} =
+                        amqp_channel:call(DCh, #'confirm.select'{}),
+                    amqp_channel:register_confirm_handler(DCh, self());
+                _ ->
+                    ok
+            end,
             case open_monitor(UParams#upstream_params.params) of
                 {ok, Conn, Ch} ->
                     {Serial, Bindings} =
@@ -557,9 +575,10 @@ consume_from_upstream_queue(
                                            durable   = true,
                                            arguments = Args}),
     amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch}),
+    NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
-                                                    no_ack = false}, self()),
+                                                    no_ack = NoAck}, self()),
     State#state{consumer_tag = CTag,
                 queue        = Q}.
 
