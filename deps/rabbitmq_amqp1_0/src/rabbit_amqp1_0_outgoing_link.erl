@@ -25,10 +25,11 @@
 -import(rabbit_misc, [serial_add/2]).
 
 -define(INIT_TXFR_COUNT, 0).
+-define(DEFAULT_SEND_SETTLED, false).
 
 -record(outgoing_link, {queue,
                         delivery_count = 0,
-                        no_ack,
+                        send_settled,
                         default_outcome}).
 
 attach(#'v1_0.attach'{snd_settle_mode = SndSettleMode,
@@ -39,15 +40,20 @@ attach(#'v1_0.attach'{snd_settle_mode = SndSettleMode,
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
                       source = Source,
+                      snd_settle_mode = SndSettleMode,
                       rcv_settle_mode = RcvSettleMode}, BCh, DCh) ->
     {DefaultOutcome, Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
-    %% Default is first
-    NoAck = RcvSettleMode =/= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND,
+    SndSettled =
+        case SndSettleMode of
+            ?V_1_0_SENDER_SETTLE_MODE_SETTLED   -> true;
+            ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED -> false;
+            _                                   -> ?DEFAULT_SEND_SETTLED
+        end,
     DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
     case ensure_source(Source,
-                       #outgoing_link{ delivery_count = ?INIT_TXFR_COUNT,
-                                       no_ack = NoAck,
-                                       default_outcome = DOSym}, DCh) of
+                       #outgoing_link{delivery_count  = ?INIT_TXFR_COUNT,
+                                      send_settled    = SndSettled,
+                                      default_outcome = DOSym}, DCh) of
         {ok, Source1, OutgoingLink = #outgoing_link{queue = QueueName}} ->
             CTag = handle_to_ctag(Handle),
             case amqp_channel:subscribe(
@@ -71,6 +77,12 @@ attach(#'v1_0.attach'{name = Name,
                        name = Name,
                        handle = Handle,
                        initial_delivery_count = {uint, ?INIT_TXFR_COUNT},
+                       snd_settle_mode =
+                           case SndSettled of
+                               true  -> ?V_1_0_SENDER_SETTLE_MODE_SETTLED;
+                               false -> ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED
+                           end,
+                       rcv_settle_mode = RcvSettleMode,
                        source = Source1#'v1_0.source'{
                                   default_outcome = DefaultOutcome,
                                   outcomes        = Outcomes
@@ -186,17 +198,17 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
 delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
                                     routing_key  = RKey},
                 Msg, FrameMax, Handle, Session,
-                #outgoing_link{no_ack = NoAck,
+                #outgoing_link{send_settled = SendSettled,
                                default_outcome = DefaultOutcome}) ->
     DeliveryId = rabbit_amqp1_0_session:next_delivery_id(Session),
     Session1 = rabbit_amqp1_0_session:record_outgoing(
-                 DeliveryTag, NoAck, DefaultOutcome, Session),
+                 DeliveryTag, SendSettled, DefaultOutcome, Session),
     Txfr = #'v1_0.transfer'{handle = Handle,
                             delivery_tag = {binary, <<DeliveryTag:64>>},
                             delivery_id = {uint, DeliveryId},
                             %% The only one in AMQP 1-0
                             message_format = {uint, 0},
-                            settled = NoAck,
+                            settled = SendSettled,
                             resume = false,
                             more = false,
                             aborted = false,
@@ -233,8 +245,8 @@ encode_frames(T, Msg, MaxContentLen, Transfers) ->
 
 transfered(DeliveryTag, Channel,
            Link = #outgoing_link{ delivery_count = Count,
-                                  no_ack = NoAck }) ->
-    if NoAck ->
+                                  send_settled   = SendSettled }) ->
+    if SendSettled ->
             amqp_channel:cast(Channel,
                               #'basic.ack'{ delivery_tag = DeliveryTag });
        true ->

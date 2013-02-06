@@ -171,10 +171,10 @@ transfers_left(#session{remote_incoming_window = RemoteWindow,
                         outgoing_window = LocalWindow}) ->
     {LocalWindow, RemoteWindow}.
 
-record_outgoing(DeliveryTag, NoAck, DefaultOutcome,
+record_outgoing(DeliveryTag, SendSettled, DefaultOutcome,
                 Session = #session{next_delivery_id = DeliveryId,
                                    outgoing_unsettled_map = Unsettled}) ->
-    Unsettled1 = case NoAck of
+    Unsettled1 = case SendSettled of
                      true ->
                          Unsettled;
                      false ->

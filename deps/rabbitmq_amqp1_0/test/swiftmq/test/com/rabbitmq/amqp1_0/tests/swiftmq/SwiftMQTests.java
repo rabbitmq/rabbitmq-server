@@ -40,6 +40,7 @@ public class SwiftMQTests extends TestCase {
         p.close(); // Settlement happens here
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
         AMQPMessage m = c.receive();
+        m.accept();
         assertEquals(1, m.getData().size());
         assertEquals(data(), m.getData().get(0));
         conn.close();
@@ -69,6 +70,7 @@ public class SwiftMQTests extends TestCase {
 
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
         AMQPMessage m = c.receive();
+        m.accept();
         c.close();
         assertEquals(PayloadSize, m.getData().get(0).getValue().length);
         conn.close();
@@ -132,6 +134,7 @@ public class SwiftMQTests extends TestCase {
         p.close();
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
         AMQPMessage recvMsg = c.receive();
+        recvMsg.accept();
 
         assertEquals(val.getValue().getValueString(), recvMsg.getAmqpValue().getValue().getValueString());
         conn.close();
@@ -150,6 +153,7 @@ public class SwiftMQTests extends TestCase {
         p.close();
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
         AMQPMessage recvMsg = c.receive();
+        recvMsg.accept();
 
         compareMaps(map, d.getDecoration(recvMsg));
         conn.close();
