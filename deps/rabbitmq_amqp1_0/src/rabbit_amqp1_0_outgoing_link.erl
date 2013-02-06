@@ -16,7 +16,7 @@
 
 -module(rabbit_amqp1_0_outgoing_link).
 
--export([attach/3, delivery/6, transfered/3, credit_drained/4, flow/3]).
+-export([attach/3, delivery/6, transferred/3, credit_drained/4, flow/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -60,7 +60,7 @@ attach(#'v1_0.attach'{name = Name,
                    BCh, #'basic.consume'{
                      queue = QueueName,
                      consumer_tag = CTag,
-                     %% we will ack when we've transfered
+                     %% we will ack when we've transferred
                      %% a message, or when we get an ack
                      %% from the client.
                      no_ack = false,
@@ -102,7 +102,7 @@ credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
     Count = Count0 + CreditDrained,
     %% The transfer count that is given by the queue should be at
     %% least that we have locally, since we will either have received
-    %% all the deliveries and transfered them, or the queue will have
+    %% all the deliveries and transferred them, or the queue will have
     %% advanced it due to drain. So we adopt the queue's idea of the
     %% count.
     %% TODO account for it not being there any more
@@ -243,9 +243,9 @@ encode_frames(T, Msg, MaxContentLen, Transfers) ->
             lists:reverse([[T, Msg] | Transfers])
     end.
 
-transfered(DeliveryTag, Channel,
-           Link = #outgoing_link{ delivery_count = Count,
-                                  send_settled   = SendSettled }) ->
+transferred(DeliveryTag, Channel,
+            Link = #outgoing_link{ delivery_count = Count,
+                                   send_settled   = SendSettled }) ->
     if SendSettled ->
             amqp_channel:cast(Channel,
                               #'basic.ack'{ delivery_tag = DeliveryTag });

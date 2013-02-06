@@ -317,7 +317,7 @@ run_buffer1(WriterPid, BCh, Session, Buffer) ->
                     case send_frames(WriterPid, Frames, Space) of
                         {all, SpaceLeft} ->
                             NewLink =
-                                rabbit_amqp1_0_outgoing_link:transfered(
+                                rabbit_amqp1_0_outgoing_link:transferred(
                                   DeliveryTag, BCh, Link),
                             put({out, Handle}, NewLink),
                             Session1 = rabbit_amqp1_0_session:record_transfers(
