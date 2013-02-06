@@ -17,7 +17,7 @@
 -module(rabbit_amqqueue).
 
 -export([recover/0, stop/0, start/1, declare/5,
-         delete_immediately/1, delete/3, purge/1]).
+         delete_immediately/1, delete/3, purge/1, forget_all_durable/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
@@ -134,6 +134,7 @@
            rabbit_types:error('in_use') |
            rabbit_types:error('not_empty')).
 -spec(purge/1 :: (rabbit_types:amqqueue()) -> qlen()).
+-spec(forget_all_durable/1 :: (node()) -> 'ok').
 -spec(deliver/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
                         {routing_result(), qpids()}).
 -spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
@@ -584,6 +585,22 @@ internal_delete(QueueName, QPid) ->
                          end
               end
       end).
+
+forget_all_durable(Node) ->
+    %% Note rabbit is not running so we avoid e.g. the worker pool. Also why
+    %% we don't invoke the return from rabbit_binding:process_deletions/1.
+    {atomic, ok} =
+        mnesia:sync_transaction(
+          fun () ->
+                  Qs = mnesia:match_object(rabbit_durable_queue,
+                                           #amqqueue{_ = '_'}, write),
+                  [rabbit_binding:process_deletions(
+                     internal_delete1(Name)) ||
+                      #amqqueue{name = Name, pid = Pid} <- Qs,
+                      node(Pid) =:= Node],
+                  ok
+          end),
+    ok.
 
 run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
