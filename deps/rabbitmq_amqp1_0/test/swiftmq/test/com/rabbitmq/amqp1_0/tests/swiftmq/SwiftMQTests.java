@@ -7,6 +7,8 @@ import com.swiftmq.amqp.v100.messaging.AMQPMessage;
 import com.swiftmq.amqp.v100.types.*;
 import junit.framework.TestCase;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.*;
@@ -138,6 +140,81 @@ public class SwiftMQTests extends TestCase {
 
         assertEquals(val.getValue().getValueString(), recvMsg.getAmqpValue().getValue().getValueString());
         conn.close();
+    }
+
+    public void testAtMostOnce() throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        Producer p = s.createProducer(QUEUE, QoS.AT_MOST_ONCE);
+        p.send(msg());
+        p.close();
+
+        Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_MOST_ONCE, false, null);
+        AMQPMessage m = c.receive();
+        assertTrue(m.isSettled());
+
+        s.close();
+        s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_MOST_ONCE, false, null);
+        assertNull(c.receiveNoWait());
+        conn.close();
+    }
+
+    public void testReject() throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        Producer p = s.createProducer(QUEUE, QoS.AT_LEAST_ONCE);
+        p.send(msg());
+        p.close();
+
+        Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
+        AMQPMessage m = c.receive();
+        m.reject();
+        assertNull(c.receiveNoWait());
+        conn.close();
+    }
+
+    public void testRedelivery() throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        Producer p = s.createProducer(QUEUE, QoS.AT_MOST_ONCE);
+        p.send(msg());
+        p.close();
+
+        Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
+        AMQPMessage m1 = c.receive();
+        assertTrue(m1.getHeader().getFirstAcquirer().getValue());
+        assertFalse(m1.isSettled());
+
+        s.close();
+        s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
+        AMQPMessage m2 = c.receive();
+        m2.accept();
+
+        assertTrue(compareMessageData(m1, m2));
+        assertFalse(m2.getHeader().getFirstAcquirer().getValue());
+        assertNull(c.receiveNoWait());
+        conn.close();
+    }
+
+    // TODO: generalise to a comparison of all immutable parts of messages
+    private boolean compareMessageData(AMQPMessage m1, AMQPMessage m2) throws IOException {
+        ByteArrayOutputStream b1 = new ByteArrayOutputStream();
+        ByteArrayOutputStream b2 = new ByteArrayOutputStream();
+
+        m1.getData().get(0).writeContent(new DataOutputStream(b1));
+        m2.getData().get(0).writeContent(new DataOutputStream(b2));
+        return Arrays.equals(b1.toByteArray(), b2.toByteArray());
     }
 
     private void decorationTest(DecorationProtocol d, Map<AMQPString, AMQPType> map) throws Exception {
