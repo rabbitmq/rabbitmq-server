@@ -32,11 +32,6 @@
                         send_settled,
                         default_outcome}).
 
-attach(#'v1_0.attach'{snd_settle_mode = SndSettleMode,
-                      rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_SECOND},
-       _, _) when SndSettleMode =/= ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                   "rcv-settle-mode=second not supported", []);
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
                       source = Source,
@@ -89,7 +84,8 @@ attach(#'v1_0.attach'{name = Name,
                                  },
                        role = ?SEND_ROLE}], OutgoingLink};
                 Fail ->
-                    protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Consume failed: ~p", Fail)
+                    protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                   "Consume failed: ~p", [Fail])
             end;
         {error, _Reason} ->
             %% TODO Deal with this properly -- detach and what have you
@@ -231,6 +227,9 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
              end,
     {ok, Frames, Session1}.
 
+encode_frames(_T, _Msg, MaxContentLen, _Transfers) when MaxContentLen =< 0 ->
+    protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
+                   "Frame size is too small by ~p byes", [-MaxContentLen]);
 encode_frames(T, Msg, MaxContentLen, Transfers) ->
     case iolist_size(Msg) > MaxContentLen of
         true  ->
