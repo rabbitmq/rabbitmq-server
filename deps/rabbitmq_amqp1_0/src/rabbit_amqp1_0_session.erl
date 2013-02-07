@@ -122,6 +122,9 @@ begin_(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextOut},
        incoming_window_max = InWindow},
      OutWindow}.
 
+validate_attach(#'v1_0.attach'{target = #'v1_0.coordinator'{}}) ->
+    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                   "Transactions not supported", []);
 validate_attach(#'v1_0.attach'{unsettled = Unsettled,
                                incomplete_unsettled = IncompleteSettled})
   when Unsettled =/= undefined andalso Unsettled =/= {map, []} orelse
