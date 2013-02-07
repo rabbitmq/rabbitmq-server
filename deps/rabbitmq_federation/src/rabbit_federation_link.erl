@@ -34,6 +34,7 @@
 -import(rabbit_federation_util, [vhost/1]).
 
 -record(state, {upstream,
+                upstream_params,
                 connection,
                 channel,
                 consumer_tag,
@@ -72,18 +73,19 @@ list_routing_keys(XN) -> call(XN, list_routing_keys).
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-init(Args = {Upstream, XName}) ->
+init({Upstream, XName}) ->
     %% If we are starting up due to a policy change then it's possible
     %% for the exchange to have been deleted before we got here, in which
     %% case it's possible that delete callback would also have been called
     %% before we got here. So check if we still exist.
     case rabbit_exchange:lookup(XName) of
-	{ok, _} ->
-	    rabbit_federation_status:report(Upstream, XName, starting),
+	{ok, X} ->
+            UParams = rabbit_federation_upstream:to_params(Upstream, X),
+	    rabbit_federation_status:report(Upstream, UParams, XName, starting),
 	    join(rabbit_federation_exchanges),
 	    join({rabbit_federation_exchange, XName}),
 	    gen_server2:cast(self(), maybe_go),
-	    {ok, {not_started, Args}};
+	    {ok, {not_started, {Upstream, UParams, XName}}};
 	{error, not_found} ->
 	    {stop, gone}
     end.
@@ -147,7 +149,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
             State = #state{
               upstream            = #upstream{max_hops      = MaxHops,
                                               ack_mode      = AckMode,
-                                              trust_user_id = Trust} = Upstream,
+                                              trust_user_id = Trust},
+              upstream_params     = UParams,
               downstream_exchange = #resource{name = XNameBin},
               downstream_channel  = DCh,
               channel             = Ch,
@@ -157,7 +160,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
     %% We need to check should_forward/2 here in case the upstream
     %% does not have federation and thus is using a fanout exchange.
     case rabbit_federation_util:should_forward(Headers0, MaxHops) of
-        true  -> {table, Info0} = rabbit_federation_upstream:to_table(Upstream),
+        true  -> {table, Info0} = rabbit_federation_upstream:params_to_table(
+                                    UParams),
                  Info = Info0 ++ [{<<"redelivered">>, bool, Redelivered}],
                  Headers = rabbit_basic:prepend_table_header(
                              ?ROUTING_HEADER, Info, Headers0),
@@ -223,21 +227,24 @@ log_terminate({shutdown, restart}, _State) ->
     %% We've already logged this before munging the reason
     ok;
 log_terminate(shutdown, #state{downstream_exchange = XName,
-                               upstream            = Upstream}) ->
+                               upstream            = Upstream,
+                               upstream_params     = UParams}) ->
     %% The supervisor is shutting us down; we are probably restarting
     %% the link because configuration has changed. So try to shut down
     %% nicely so that we do not cause unacked messages to be
     %% redelivered.
     rabbit_log:info("Federation ~s disconnecting from ~s~n",
                     [rabbit_misc:rs(XName),
-                     rabbit_federation_upstream:to_string(Upstream)]),
+                     rabbit_federation_upstream:params_to_string(UParams)]),
     rabbit_federation_status:remove(Upstream, XName);
 
 log_terminate(Reason, #state{downstream_exchange = XName,
-                             upstream            = Upstream}) ->
+                             upstream            = Upstream,
+                             upstream_params     = UParams}) ->
     %% Unexpected death. sasl will log it, but we should update
     %% rabbit_federation_status.
-    rabbit_federation_status:report(Upstream, XName, clean_reason(Reason)).
+    rabbit_federation_status:report(Upstream, UParams, XName,
+                                    clean_reason(Reason)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -350,8 +357,8 @@ binding_op(UpdateFun, Cmd, B = #binding{args = Args},
 
 bind_cmd(Type, #binding{key = Key, args = Args},
          State = #state{internal_exchange = IntXNameBin,
-                        upstream          = Upstream}) ->
-    #upstream{exchange = X} = Upstream,
+                        upstream_params   = UpstreamParams}) ->
+    #upstream_params{exchange = X} = UpstreamParams,
     case update_binding(Args, State) of
         ignore  -> ignore;
         NewArgs -> bind_cmd0(Type, name(X), IntXNameBin, Key, NewArgs)
@@ -436,7 +443,7 @@ update_binding(Args, #state{downstream_exchange = X,
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
-go(S0 = {not_started, {Upstream, DownXName =
+go(S0 = {not_started, {Upstream, UParams, DownXName =
                            #resource{virtual_host = DownVHost}}}) ->
     %% We trap exits so terminate/2 gets called. Note that this is not
     %% in init() since we need to cope with the link getting restarted
@@ -456,7 +463,7 @@ go(S0 = {not_started, {Upstream, DownXName =
                 _ ->
                     ok
             end,
-            case open_monitor(Upstream#upstream.params) of
+            case open_monitor(UParams#upstream_params.params) of
                 {ok, Conn, Ch} ->
                     {Serial, Bindings} =
                         rabbit_misc:execute_mnesia_transaction(
@@ -476,6 +483,7 @@ go(S0 = {not_started, {Upstream, DownXName =
                         State = ensure_upstream_bindings(
                                   consume_from_upstream_queue(
                                     #state{upstream              = Upstream,
+                                           upstream_params       = UParams,
                                            connection            = Conn,
                                            channel               = Ch,
                                            next_serial           = Serial,
@@ -483,13 +491,14 @@ go(S0 = {not_started, {Upstream, DownXName =
                                            downstream_channel    = DCh,
                                        downstream_exchange   = DownXName}),
                                   Bindings),
-                        rabbit_log:info("Federation ~s connected to ~s~n",
-                                        [rabbit_misc:rs(DownXName),
-                                         rabbit_federation_upstream:to_string(
-                                           Upstream)]),
+                        rabbit_log:info(
+                          "Federation ~s connected to ~s~n",
+                          [rabbit_misc:rs(DownXName),
+                           rabbit_federation_upstream:params_to_string(
+                             UParams)]),
                         Name = pget(name, amqp_connection:info(DConn, [name])),
                         rabbit_federation_status:report(
-                          Upstream, DownXName, {running, Name}),
+                          Upstream, UParams, DownXName, {running, Name}),
                         {noreply, State}
                     catch exit:E ->
                             %% terminate/2 will not get this, as we
@@ -506,31 +515,34 @@ go(S0 = {not_started, {Upstream, DownXName =
             connection_error(local, E, S0)
     end.
 
-connection_error(remote, E, State = {not_started, {U, XName}}) ->
-    rabbit_federation_status:report(U, XName, clean_reason(E)),
+connection_error(remote, E, State = {not_started, {U, UParams, XName}}) ->
+    rabbit_federation_status:report(U, UParams, XName, clean_reason(E)),
     rabbit_log:warning("Federation ~s did not connect to ~s~n~p~n",
                        [rabbit_misc:rs(XName),
-                        rabbit_federation_upstream:to_string(U), E]),
+                        rabbit_federation_upstream:params_to_string(UParams),
+                        E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(remote, E, State = #state{upstream            = U,
+                                           upstream_params     = UParams,
                                            downstream_exchange = XName}) ->
-    rabbit_federation_status:report(U, XName, clean_reason(E)),
+    rabbit_federation_status:report(U, UParams, XName, clean_reason(E)),
     rabbit_log:info("Federation ~s disconnected from ~s~n~p~n",
                     [rabbit_misc:rs(XName),
-                     rabbit_federation_upstream:to_string(U), E]),
+                     rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(local, basic_cancel,
                  State = #state{upstream            = U,
+                                upstream_params     = UParams,
                                 downstream_exchange = XName}) ->
-    rabbit_federation_status:report(U, XName, {error, basic_cancel}),
+    rabbit_federation_status:report(U, UParams, XName, {error, basic_cancel}),
     rabbit_log:info("Federation ~s received 'basic.cancel'~n",
                     [rabbit_misc:rs(XName)]),
     {stop, {shutdown, restart}, State};
 
-connection_error(local, E, State = {not_started, {U, XName}}) ->
-    rabbit_federation_status:report(U, XName, clean_reason(E)),
+connection_error(local, E, State = {not_started, {U, UParams, XName}}) ->
+    rabbit_federation_status:report(U, UParams, XName, clean_reason(E)),
     rabbit_log:warning("Federation ~s did not connect locally~n~p~n",
                        [rabbit_misc:rs(XName), E]),
     {stop, {shutdown, restart}, State}.
@@ -545,15 +557,15 @@ clean_reason(E)                      -> E.
 
 consume_from_upstream_queue(
   State = #state{upstream            = Upstream,
+                 upstream_params     = UParams,
                  channel             = Ch,
                  downstream_exchange = DownXName}) ->
-    #upstream{exchange       = X,
-              prefetch_count = Prefetch,
+    #upstream{prefetch_count = Prefetch,
               expires        = Expiry,
               message_ttl    = TTL,
-              ha_policy      = HA,
-              params         = Params}
-        = Upstream,
+              ha_policy      = HA} = Upstream,
+    #upstream_params{exchange = X,
+                     params   = Params} = UParams,
     Q = upstream_queue_name(name(X), vhost(Params), DownXName),
     Args = [Arg || {_K, _T, V} = Arg <- [{<<"x-expires">>,     long,    Expiry},
                                          {<<"x-message-ttl">>, long,    TTL},
@@ -571,11 +583,12 @@ consume_from_upstream_queue(
                 queue        = Q}.
 
 ensure_upstream_bindings(State = #state{upstream            = Upstream,
+                                        upstream_params     = UParams,
                                         connection          = Conn,
                                         channel             = Ch,
                                         downstream_exchange = DownXName,
                                         queue               = Q}, Bindings) ->
-    #upstream{exchange = X, params = Params} = Upstream,
+    #upstream_params{exchange = X, params = Params} = UParams,
     OldSuffix = rabbit_federation_db:get_active_suffix(
                   DownXName, Upstream, <<"A">>),
     Suffix = case OldSuffix of
@@ -595,9 +608,10 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
     delete_upstream_exchange(Conn, OldIntXNameBin),
     State2.
 
-ensure_upstream_exchange(#state{upstream   = #upstream{exchange = X},
-                                connection = Conn,
-                                channel    = Ch}) ->
+ensure_upstream_exchange(#state{upstream_params = UParams,
+                                connection      = Conn,
+                                channel         = Ch}) ->
+    #upstream_params{exchange = X} = UParams,
     #exchange{type        = Type,
               durable     = Durable,
               auto_delete = AutoDelete,
@@ -615,10 +629,11 @@ ensure_upstream_exchange(#state{upstream   = #upstream{exchange = X},
                            end).
 
 ensure_internal_exchange(IntXNameBin,
-                         #state{upstream   = #upstream{max_hops = MaxHops,
-                                                       params   = Params},
-                                connection = Conn,
-                                channel    = Ch}) ->
+                         #state{upstream        = #upstream{max_hops = MaxHops},
+                                upstream_params = UParams,
+                                connection      = Conn,
+                                channel         = Ch}) ->
+    #upstream_params{params = Params} = UParams,
     delete_upstream_exchange(Conn, IntXNameBin),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                durable     = true,

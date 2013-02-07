@@ -87,5 +87,5 @@ scratch_space_test() ->
       end).
 
 upstream(UpstreamName) ->
-    #upstream{name     = atom_to_list(UpstreamName),
-              exchange = x(r(<<"upstream">>))}.
+    #upstream{name          = atom_to_list(UpstreamName),
+              exchange_name = <<"upstream">>}.

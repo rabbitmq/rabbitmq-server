@@ -26,6 +26,8 @@
 -export([start_link/1, adjust/3]).
 -export([init/1]).
 
+-import(rabbit_federation_util, [name/1]).
+
 start_link(X) ->
     supervisor2:start_link(?MODULE, X).
 
@@ -80,7 +82,6 @@ stop(Sup, Upstream, #exchange{name = XName}) ->
     %% come up, the possibility exists that there *is* no link
     %% process, but we still have a report in the status table. So
     %% remove it here too.
-    #upstream{name = UpstreamName, exchange = UX} = Upstream,
     rabbit_federation_status:remove(Upstream, XName).
 
 children(Sup, UpstreamName) ->
