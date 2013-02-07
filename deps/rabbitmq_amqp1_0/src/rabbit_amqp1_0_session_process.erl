@@ -177,6 +177,7 @@ handle_control(#'v1_0.attach'{handle = Handle,
                               role   = ?SEND_ROLE} = Attach,
                State = #state{backing_channel    = BCh,
                               backing_connection = Conn}) ->
+    ok = rabbit_amqp1_0_session:validate_attach(Attach),
     {ok, Reply, Link, Confirm} =
         with_disposable_channel(
           Conn, fun (DCh) ->
@@ -190,6 +191,7 @@ handle_control(#'v1_0.attach'{handle                 = Handle,
                               role                   = ?RECV_ROLE} = Attach,
                State = #state{backing_channel    = BCh,
                               backing_connection = Conn}) ->
+    ok = rabbit_amqp1_0_session:validate_attach(Attach),
     {ok, Reply, Link} =
         with_disposable_channel(
           Conn, fun (DCh) ->

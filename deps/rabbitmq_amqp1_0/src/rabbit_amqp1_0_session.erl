@@ -22,7 +22,7 @@
          incr_incoming_id/1, next_delivery_id/1, transfers_left/1,
          record_transfers/2, bump_outgoing_window/1,
          record_outgoing/4, settle/3, flow_fields/2, channel/1,
-         flow/2, ack/2]).
+         flow/2, ack/2, validate_attach/1]).
 
 -import(rabbit_misc, [serial_add/2, serial_diff/2, serial_compare/2]).
 -import(rabbit_amqp1_0_link_util, [protocol_error/3]).
@@ -121,6 +121,21 @@ begin_(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextOut},
        incoming_window  = InWindow,
        incoming_window_max = InWindow},
      OutWindow}.
+
+validate_attach(#'v1_0.attach'{unsettled = Unsettled,
+                               incomplete_unsettled = IncompleteSettled})
+  when Unsettled =/= undefined andalso Unsettled =/= {map, []} orelse
+       IncompleteSettled =:= true ->
+    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                   "Link recovery not supported", []);
+validate_attach(
+    #'v1_0.attach'{snd_settle_mode = SndSettleMode,
+                   rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_SECOND})
+  when SndSettleMode =/= ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
+    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                   "rcv-settle-mode second not supported", []);
+validate_attach(#'v1_0.attach'{}) ->
+    ok.
 
 maybe_init_publish_id(false, Session) ->
     Session;

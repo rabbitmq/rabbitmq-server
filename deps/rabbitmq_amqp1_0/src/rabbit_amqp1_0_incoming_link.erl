@@ -34,26 +34,14 @@
                         credit_used = ?INCOMING_CREDIT div 2,
                         msg_acc = []}).
 
-attach(#'v1_0.attach'{snd_settle_mode = SndSettleMode,
-                      rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_SECOND},
-       _, _) when SndSettleMode =/= ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                   "rcv-settle-mode=second not supported", []);
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
                       source = Source,
                       snd_settle_mode = SndSettleMode,
                       rcv_settle_mode = RcvSettleMode,
                       target = Target,
-                      unsettled = Unsettled,
                       initial_delivery_count = {uint, InitTransfer}},
        BCh, DCh) ->
-    case Unsettled of
-        undefined -> ok;
-        {map, []} -> ok;
-        _         -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                                    "Link recovery not supported", [])
-    end,
     %% TODO associate link name with target
     case ensure_target(Target, #incoming_link{ name = Name }, DCh) of
         {ok, ServerTarget,
