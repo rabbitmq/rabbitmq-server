@@ -35,8 +35,7 @@
 %%----------------------------------------------------------------------------
 
 description() ->
-    [{name, <<"x-federation-upstream">>},
-     {description, <<"Federation upstream helper exchange">>}].
+    [{description, <<"Federation upstream helper exchange">>}].
 
 serialise_events() -> false.
 
