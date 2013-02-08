@@ -38,8 +38,7 @@
 %% mean the peer certificate's subject's CN.
 
 description() ->
-    [{name, <<"EXTERNAL">>},
-     {description, <<"SSL authentication mechanism using SASL EXTERNAL">>}].
+    [{description, <<"SSL authentication mechanism using SASL EXTERNAL">>}].
 
 should_offer(Sock) ->
     case rabbit_net:peercert(Sock) of
