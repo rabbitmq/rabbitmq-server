@@ -45,8 +45,7 @@
 -define(PHASH2_RANGE, 134217728). %% 2^27
 
 description() ->
-    [{name, <<"x-consistent-hash">>},
-     {description, <<"Consistent Hashing Exchange">>}].
+    [{description, <<"Consistent Hashing Exchange">>}].
 
 serialise_events() -> false.
 
