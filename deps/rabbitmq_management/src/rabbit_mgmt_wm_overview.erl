@@ -50,7 +50,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          listeners()},
-                     {contexts,           rabbit_mochiweb_contexts()}];
+                     {contexts,           rabbit_web_dispatch_contexts()}];
             _ ->
                 Overview0 ++
                     rabbit_mgmt_db:get_overview(User)
@@ -80,11 +80,11 @@ listeners() ->
 
 %%--------------------------------------------------------------------
 
-rabbit_mochiweb_contexts() ->
+rabbit_web_dispatch_contexts() ->
     rabbit_mgmt_util:sort_list(
       lists:append(
-        [rabbit_mochiweb_contexts(N) || N <- rabbit_mgmt_wm_nodes:all_nodes()]),
+        [rabbit_web_dispatch_contexts(N) || N <- rabbit_mgmt_wm_nodes:all_nodes()]),
       ["description", "port", "node"]).
 
-rabbit_mochiweb_contexts(N) ->
+rabbit_web_dispatch_contexts(N) ->
     [[{node, pget(name, N)} | C] || C <- pget(contexts, N, [])].
