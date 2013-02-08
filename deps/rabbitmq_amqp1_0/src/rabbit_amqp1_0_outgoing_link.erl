@@ -229,7 +229,7 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
 
 encode_frames(_T, _Msg, MaxContentLen, _Transfers) when MaxContentLen =< 0 ->
     protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
-                   "Frame size is too small by ~p byes", [-MaxContentLen]);
+                   "Frame size is too small by ~p bytes", [-MaxContentLen]);
 encode_frames(T, Msg, MaxContentLen, Transfers) ->
     case iolist_size(Msg) > MaxContentLen of
         true  ->
