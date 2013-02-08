@@ -188,8 +188,8 @@ list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
 
 list_registry_plugins(Type, Fun) ->
-    [registry_plugin_enabled(Module:description(), Fun) ||
-        {_, Module} <- rabbit_registry:lookup_all(Type)].
+    [registry_plugin_enabled(set_plugin_name(Name, Module), Fun) ||
+        {Name, Module} <- rabbit_registry:lookup_all(Type)].
 
 registry_plugin_enabled(Desc, Fun) ->
     Desc ++ [{enabled, Fun(proplists:get_value(name, Desc))}].
@@ -198,6 +198,10 @@ format_application({Application, Description, Version}) ->
     [{name, Application},
      {description, list_to_binary(Description)},
      {version, list_to_binary(Version)}].
+
+set_plugin_name(Name, Module) ->
+    [{name, list_to_binary(atom_to_list(Name))} |
+     proplists:delete(name, Module:description())].
 
 %%--------------------------------------------------------------------
 
