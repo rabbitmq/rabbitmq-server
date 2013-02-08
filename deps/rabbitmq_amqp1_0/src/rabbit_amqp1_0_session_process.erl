@@ -187,8 +187,8 @@ handle_control(#'v1_0.attach'{handle = Handle,
     reply(Reply, state(rabbit_amqp1_0_session:maybe_init_publish_id(
                          Confirm, session(State)), State));
 
-handle_control(#'v1_0.attach'{handle                 = Handle,
-                              role                   = ?RECV_ROLE} = Attach,
+handle_control(#'v1_0.attach'{handle = Handle,
+                              role   = ?RECV_ROLE} = Attach,
                State = #state{backing_channel    = BCh,
                               backing_connection = Conn}) ->
     ok = rabbit_amqp1_0_session:validate_attach(Attach),
@@ -223,9 +223,9 @@ handle_control({Txfr = #'v1_0.transfer'{handle = Handle},
             end
     end;
 
-%% Disposition: a single extent is settled at a time.  This may
-%% involve more than one message. TODO: should we send a flow after
-%% this, to indicate the state of the session window?
+%% Disposition: multiple deliveries may be settled at a time.
+%% TODO: should we send a flow after this, to indicate the state
+%% of the session window?
 handle_control(#'v1_0.disposition'{state = Outcome,
                                    role = ?RECV_ROLE} = Disp,
                State = #state{backing_channel = Ch}) ->

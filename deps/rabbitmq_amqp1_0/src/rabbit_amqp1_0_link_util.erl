@@ -97,14 +97,14 @@ outcomes(Source) ->
                 {?DEFAULT_OUTCOME, ?OUTCOMES}
         end,
     case [O || O <- Outcomes, not lists:member(O, ?OUTCOMES)] of
-        []   -> {DefaultOutcome, {array, symbol, [X || {symbol, X} <- Outcomes]}};
-        Bad  -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                               "Outcomes not supported: ~p", [Bad])
+        []  -> {DefaultOutcome, {array, symbol, [X || {symbol, X} <- Outcomes]}};
+        Bad -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                              "Outcomes not supported: ~p", [Bad])
     end.
 
 protocol_error(Condition, Msg, Args) ->
     exit(#'v1_0.error'{
-        condition = Condition,
+        condition   = Condition,
         description = {utf8, list_to_binary(
                                lists:flatten(io_lib:format(Msg, Args)))}
        }).

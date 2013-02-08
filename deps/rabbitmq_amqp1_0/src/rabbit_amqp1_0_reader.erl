@@ -194,11 +194,11 @@ handle_other(Other, _Deb, _State) ->
 switch_callback(State, Callback, Length) ->
     State#v1{callback = Callback, recv_len = Length}.
 
-terminate(Explanation, State) when ?IS_RUNNING(State) ->
+terminate(Reason, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
-                              rabbit_misc:amqp_error(
-                                connection_forced, Explanation, [], none))};
-terminate(_Explanation, State) ->
+                              {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                               "Connection forced: ~p~n", [Reason]})};
+terminate(_Reason, State) ->
     {force, State}.
 
 control_throttle(State = #v1{connection_state = CS, throttle = Throttle}) ->
@@ -352,11 +352,11 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                          end,
     FrameMax = case ClientFrameMax of
                    undefined -> unlimited;
-                   {_, FM} -> FM
+                   {_, FM}   -> FM
                end,
     ChannelMax = case ClientChannelMax of
                      undefined -> unlimited;
-                     {_, CM} -> CM
+                     {_, CM}   -> CM
                  end,
     {ok, HeartbeatSec} = application:get_env(rabbit, heartbeat),
     State1 =
@@ -364,11 +364,6 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                 protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
                                "frame_max=~w < ~w min size",
                                [FrameMax, ?FRAME_1_0_MIN_SIZE]);
-           %% TODO Python client sets 2^32-1
-           %% (ServerFrameMax /= 0) and (FrameMax > ServerFrameMax) ->
-           %%      rabbit_misc:protocol_error(
-           %%        not_allowed, "frame_max=~w > ~w max size",
-           %%        [FrameMax, ServerFrameMax]);
            true ->
                 SendFun =
                     fun() ->
@@ -391,7 +386,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                 State#v1{connection_state = running,
                          connection = Connection#connection{
                                                    frame_max = FrameMax,
-                                                   hostname = Hostname},
+                                                   hostname  = Hostname},
                          heartbeater = Heartbeater}
         end,
     %% TODO enforce channel_max
