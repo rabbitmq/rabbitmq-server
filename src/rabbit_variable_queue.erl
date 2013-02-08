@@ -774,7 +774,7 @@ needs_timeout(State = #vqstate { index_state      = IndexState,
                                  target_ram_count = TargetRamCount }) ->
     case rabbit_queue_index:needs_sync(IndexState) of
         confirms                              -> timed;
-        true                                  -> idle;
+        other                                 -> idle;
         false when TargetRamCount == infinity -> false;
         false -> case reduce_memory_use(
                         fun (_Quota, State1) -> {0, State1} end,
