@@ -14,7 +14,7 @@
 %% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mochiweb_util).
+-module(rabbit_web_dispatch_util).
 
 -export([parse_auth_header/1]).
 -export([relativise/2]).

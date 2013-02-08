@@ -14,7 +14,7 @@
 %% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mochiweb_sup).
+-module(rabbit_web_dispatch_sup).
 
 -behaviour(supervisor).
 
@@ -36,7 +36,7 @@ ensure_listener(Listener) ->
         undefined ->
             {error, {no_port_given, Listener}};
         _ ->
-            Child = {{rabbit_mochiweb_web, name(Listener)},
+            Child = {{rabbit_web_dispatch_web, name(Listener)},
                      {mochiweb_http, start, [mochi_options(Listener)]},
                      transient, 5000, worker, dynamic},
             case supervisor:start_child(?SUP, Child) of
@@ -48,14 +48,14 @@ ensure_listener(Listener) ->
 
 stop_listener(Listener) ->
     Name = name(Listener),
-    ok = supervisor:terminate_child(?SUP, {rabbit_mochiweb_web, Name}),
-    ok = supervisor:delete_child(?SUP, {rabbit_mochiweb_web, Name}).
+    ok = supervisor:terminate_child(?SUP, {rabbit_web_dispatch_web, Name}),
+    ok = supervisor:delete_child(?SUP, {rabbit_web_dispatch_web, Name}).
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.
 init([]) ->
-    Registry = {rabbit_mochiweb_registry,
-                {rabbit_mochiweb_registry, start_link, []},
+    Registry = {rabbit_web_dispatch_registry,
+                {rabbit_web_dispatch_registry, start_link, []},
                 transient, 5000, worker, dynamic},
     {ok, {{one_for_one, 10, 10}, [Registry]}}.
 
@@ -69,7 +69,7 @@ mochi_options(Listener) ->
 
 loopfun(Listener) ->
     fun (Req) ->
-            case rabbit_mochiweb_registry:lookup(Listener, Req) of
+            case rabbit_web_dispatch_registry:lookup(Listener, Req) of
                 no_handler ->
                     Req:not_found();
                 {error, Reason} ->

@@ -1,8 +1,8 @@
-{application, rabbitmq_mochiweb,
- [{description, "RabbitMQ Mochiweb Embedding"},
+{application, rabbitmq_web_dispatch,
+ [{description, "RabbitMQ Web Dispatcher"},
   {vsn, "%%VSN%%"},
   {modules, []},
   {registered, []},
-  {mod, {rabbit_mochiweb_app, []}},
+  {mod, {rabbit_web_dispatch_app, []}},
   {env, []},
   {applications, [kernel, stdlib, mochiweb, webmachine]}]}.

@@ -14,20 +14,18 @@
 %% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mochiweb).
+-module(rabbit_web_dispatch).
 
 -export([register_context_handler/5, register_static_context/6]).
 -export([register_port_redirect/4]).
 -export([unregister_context/1]).
-
--define(APP, rabbitmq_mochiweb).
 
 %% Handler Registration
 
 %% Registers a dynamic selector and handler combination, with a link
 %% to display in lists.
 register_handler(Name, Listener, Selector, Handler, Link) ->
-    rabbit_mochiweb_registry:add(Name, Listener, Selector, Handler, Link).
+    rabbit_web_dispatch_registry:add(Name, Listener, Selector, Handler, Link).
 
 %% Methods for standard use cases
 
@@ -112,5 +110,5 @@ serve_file(Req, Path, LocalPath) ->
 
 %% The opposite of all those register_* functions.
 unregister_context(Name) ->
-    rabbit_mochiweb_registry:remove(Name).
+    rabbit_web_dispatch_registry:remove(Name).
 

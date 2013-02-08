@@ -14,19 +14,17 @@
 %% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mochiweb_app).
+-module(rabbit_web_dispatch_app).
 
 -behaviour(application).
 -export([start/2,stop/1]).
 
--define(APP, rabbitmq_mochiweb).
-
 %% @spec start(_Type, _StartArgs) -> ServerRet
-%% @doc application start callback for rabbit_mochiweb.
+%% @doc application start callback for rabbit_web_dispatch.
 start(_Type, _StartArgs) ->
-    rabbit_mochiweb_sup:start_link().
+    rabbit_web_dispatch_sup:start_link().
 
 %% @spec stop(_State) -> ServerRet
-%% @doc application stop callback for rabbit_mochiweb.
+%% @doc application stop callback for rabbit_web_dispatch.
 stop(_State) ->
     ok.

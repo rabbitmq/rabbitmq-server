@@ -14,7 +14,7 @@
 %% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mochiweb_registry).
+-module(rabbit_web_dispatch_registry).
 
 -behaviour(gen_server).
 
@@ -23,7 +23,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--define(ETS, rabbitmq_mochiweb).
+-define(ETS, rabbitmq_web_dispatch).
 
 %% This gen_server is merely to serialise modifications to the dispatch
 %% table for listeners.
@@ -55,7 +55,7 @@ lookup(Listener, Req) ->
     end.
 
 %% This is called in a somewhat obfuscated manner in
-%% rabbit_mgmt_external_stats:rabbit_mochiweb_registry_list_all()
+%% rabbit_mgmt_external_stats:rabbit_web_dispatch_registry_list_all()
 list_all() ->
     gen_server:call(?MODULE, list_all, infinity).
 
@@ -67,7 +67,7 @@ init([]) ->
 
 handle_call({add, Name, Listener, Selector, Handler, Link = {_, Desc}}, _From,
             undefined) ->
-    Continue = case rabbit_mochiweb_sup:ensure_listener(Listener) of
+    Continue = case rabbit_web_dispatch_sup:ensure_listener(Listener) of
                    new      -> set_dispatch(
                                  Listener, [],
                                  listing_fallback_handler(Listener)),
@@ -97,7 +97,7 @@ handle_call({remove, Name}, _From,
     Selectors1 = lists:keydelete(Name, 1, Selectors),
     set_dispatch(Listener, Selectors1, Fallback),
     case Selectors1 of
-        [] -> rabbit_mochiweb_sup:stop_listener(Listener);
+        [] -> rabbit_web_dispatch_sup:stop_listener(Listener);
         _  -> ok
     end,
     {reply, ok, undefined};
@@ -196,4 +196,4 @@ listing_fallback_handler(Listener) ->
 handler_listing(Path, ReqPath, Desc) ->
     io_lib:format(
       "<li><a href=\"~s\">~s</a></li>",
-      [rabbit_mochiweb_util:relativise(ReqPath, "/" ++ Path), Desc]).
+      [rabbit_web_dispatch_util:relativise(ReqPath, "/" ++ Path), Desc]).

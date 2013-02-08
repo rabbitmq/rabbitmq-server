@@ -8,13 +8,13 @@
 %% An alternative to webmachine_mochiweb, which places the dispatch
 %% table (among other things) into the application env, and thereby
 %% makes it impossible to run more than one instance of
-%% webmachine. Since rabbit_mochiweb is all about multi-tenanting
+%% webmachine. Since rabbit_web_dispatch is all about multi-tenanting
 %% webapps, clearly this won't do for us.
 
 %% Instead of using webmachine_mochiweb:start/1 or
 %% webmachine_mochiweb:loop/1, construct a loop procedure using
 %% makeloop/1 and supply it as the argument to
-%% rabbit_mochiweb:register_context_handler or to mochiweb_http:start.
+%% rabbit_web_dispatch:register_context_handler or to mochiweb_http:start.
 
 %% We hardwire the "error handler" and use a "logging module" if
 %% supplied.
