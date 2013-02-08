@@ -14,27 +14,27 @@
 %% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mochiweb_test_unit).
+-module(rabbit_web_dispatch_test_unit).
 
 -include_lib("eunit/include/eunit.hrl").
 
 relativise_test() ->
     ?assertEqual("baz",
-                 rabbit_mochiweb_util:relativise("/foo/bar/bash",
+                 rabbit_web_dispatch_util:relativise("/foo/bar/bash",
                                                  "/foo/bar/baz")),
     ?assertEqual("../bax/baz",
-                 rabbit_mochiweb_util:relativise("/foo/bar/bash",
+                 rabbit_web_dispatch_util:relativise("/foo/bar/bash",
                                                  "/foo/bax/baz")),
     ?assertEqual("../bax/baz",
-                 rabbit_mochiweb_util:relativise("/bar/bash",
+                 rabbit_web_dispatch_util:relativise("/bar/bash",
                                                  "/bax/baz")),
     ?assertEqual("..",
-                 rabbit_mochiweb_util:relativise("/foo/bar/bash",
+                 rabbit_web_dispatch_util:relativise("/foo/bar/bash",
                                                  "/foo/bar")),
     ?assertEqual("../..",
-                 rabbit_mochiweb_util:relativise("/foo/bar/bash",
+                 rabbit_web_dispatch_util:relativise("/foo/bar/bash",
                                                  "/foo")),
     ?assertEqual("bar/baz",
-                 rabbit_mochiweb_util:relativise("/foo/bar",
+                 rabbit_web_dispatch_util:relativise("/foo/bar",
                                                  "/foo/bar/baz")),
-    ?assertEqual("foo", rabbit_mochiweb_util:relativise("/", "/foo")).
+    ?assertEqual("foo", rabbit_web_dispatch_util:relativise("/", "/foo")).

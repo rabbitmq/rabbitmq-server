@@ -14,25 +14,25 @@
 %% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mochiweb_test).
+-module(rabbit_web_dispatch_test).
 
 -include_lib("eunit/include/eunit.hrl").
 
 query_static_resource_test() ->
     %% TODO this is a fairly rubbish test, but not as bad as it was
-    rabbit_mochiweb:register_static_context(test, [{port, 12345}],
-                                            "rabbit_mochiweb_test",
-                                            ?MODULE, "priv/www", "Test"),
+    rabbit_web_dispatch:register_static_context(test, [{port, 12345}],
+                                                "rabbit_web_dispatch_test",
+                                                ?MODULE, "priv/www", "Test"),
     {ok, {_Status, _Headers, Body}} =
-        httpc:request("http://localhost:12345/rabbit_mochiweb_test/index.html"),
+        httpc:request("http://localhost:12345/rabbit_web_dispatch_test/index.html"),
     ?assert(string:str(Body, "RabbitMQ HTTP Server Test Page") /= 0).
 
 add_idempotence_test() ->
     F = fun(_Req) -> ok end,
     L = {"/foo", "Foo"},
-    rabbit_mochiweb_registry:add(foo, [{port, 12345}], F, F, L),
-    rabbit_mochiweb_registry:add(foo, [{port, 12345}], F, F, L),
+    rabbit_web_dispatch_registry:add(foo, [{port, 12345}], F, F, L),
+    rabbit_web_dispatch_registry:add(foo, [{port, 12345}], F, F, L),
     ?assertEqual(
        1, length([ok || {"/foo", _, _} <-
-                            rabbit_mochiweb_registry:list_all()])),
+                            rabbit_web_dispatch_registry:list_all()])),
     passed.
