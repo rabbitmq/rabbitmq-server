@@ -82,7 +82,7 @@ is_authorized_user(ReqData, Context, Item) ->
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
-    case rabbit_mochiweb_util:parse_auth_header(
+    case rabbit_web_dispatch_util:parse_auth_header(
            wrq:get_req_header("authorization", ReqData)) of
         [Username, Password] ->
             case rabbit_access_control:check_user_pass_login(
