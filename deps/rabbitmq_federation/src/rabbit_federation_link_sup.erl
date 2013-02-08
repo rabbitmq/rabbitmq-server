@@ -26,8 +26,6 @@
 -export([start_link/1, adjust/3]).
 -export([init/1]).
 
--import(rabbit_federation_util, [name/1]).
-
 start_link(X) ->
     supervisor2:start_link(?MODULE, X).
 
