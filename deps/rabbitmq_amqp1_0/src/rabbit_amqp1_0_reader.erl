@@ -235,7 +235,7 @@ handle_dependent_exit(ChPid, Reason, State) ->
         {undefined, uncontrolled} ->
             exit({abnormal_dependent_exit, ChPid, Reason});
         {_Channel, controlled} ->
-            maybe_close(control_throttle(State));
+            maybe_close(control_throttle(State#v1{connection_state = closing}));
         {Channel, uncontrolled} ->
             {RealReason, Trace} = Reason,
             R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
@@ -271,14 +271,12 @@ handle_exception(State = #v1{connection_state = CS}, Channel,
                  {Condition, Reason, Args})
   when ?IS_RUNNING(State) orelse CS =:= closing ->
     Text = error_text(Reason, Args),
-    % TODO: send same message when fragmentation is implemented
-    NetText = "See broker logfile for error details.",
     log(error, "AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
         [self(), CS, Channel, Text]),
     State1 = close_connection(State),
     ok = send_on_channel0(
            State#v1.sock,
-           #'v1_0.close'{error = error_frame(Condition, NetText)}),
+           #'v1_0.close'{error = error_frame(Condition, Text)}),
     State1;
 handle_exception(State, Channel, Error) ->
     %% We don't trust the client at this point - force them to wait

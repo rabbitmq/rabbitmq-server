@@ -369,17 +369,6 @@ with_disposable_channel(Conn, Fun) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
         Fun(Ch)
-    catch exit:{{shutdown, {server_initiated_close, _, Reason}}, _} ->
-            protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                           "Internal channel error: ~p", [Reason]);
-          exit:{{shutdown, {connection_closing,
-                            {server_initiated_close, _, Reason}}}, _} ->
-            protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                           "Internal channel error: ~p", [Reason]);
-          _Class:Reason ->
-            protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                           "Internal error ~p ~p",
-                           [Reason, erlang:get_stacktrace()])
     after
-    catch amqp_channel:close(Ch)
+        catch amqp_channel:close(Ch)
     end.
