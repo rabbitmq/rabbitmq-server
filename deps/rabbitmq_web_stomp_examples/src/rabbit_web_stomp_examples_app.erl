@@ -26,13 +26,13 @@
 
 start(_Type, _StartArgs) ->
     {ok, Listener} = application:get_env(rabbitmq_web_stomp_examples, listener),
-    {ok, _} = rabbit_mochiweb:register_static_context(
+    {ok, _} = rabbit_web_dispatch:register_static_context(
                 web_stomp_examples, Listener, "web-stomp-examples", ?MODULE,
                 "priv", "WEB-STOMP: examples"),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
-    rabbit_mochiweb:unregister_context(web_stomp_examples),
+    rabbit_web_dispatch:unregister_context(web_stomp_examples),
     ok.
 
 init([]) -> {ok, {{one_for_one, 3, 10}, []}}.
