@@ -235,7 +235,7 @@ handle_dependent_exit(ChPid, Reason, State) ->
         {undefined, uncontrolled} ->
             exit({abnormal_dependent_exit, ChPid, Reason});
         {_Channel, controlled} ->
-            maybe_close(control_throttle(State#v1{connection_state = closing}));
+            maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
             {RealReason, Trace} = Reason,
             R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
@@ -273,6 +273,7 @@ handle_exception(State = #v1{connection_state = CS}, Channel,
     Text = error_text(Reason, Args),
     log(error, "AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
         [self(), CS, Channel, Text]),
+    %% TODO: session errors shouldn't force the connection to close
     State1 = close_connection(State),
     ok = send_on_channel0(
            State#v1.sock,
