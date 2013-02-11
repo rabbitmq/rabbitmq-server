@@ -48,7 +48,7 @@ convert_error(Fun) ->
             protocol_error(convert_code(Code), Msg, [])
     end.
 
-
+%% TODO this was completely off the top of my head. Check these make sense.
 convert_code(?CONTENT_TOO_LARGE)   -> ?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL;
 convert_code(?NO_ROUTE)            -> ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED;
 convert_code(?NO_CONSUMERS)        -> ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED;
