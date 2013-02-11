@@ -36,6 +36,8 @@ declare_queue(QueueName, DCh) ->
     #'queue.declare_ok'{} = amqp_channel:call(DCh, QDecl),
     {ok, QueueName}.
 
+check_exchange([], _DCh) ->
+    {ok, <<>>};
 check_exchange(ExchangeName, DCh) when is_list(ExchangeName) ->
     check_exchange(list_to_binary(ExchangeName), DCh);
 check_exchange(ExchangeName, DCh) when is_binary(ExchangeName) ->
@@ -53,12 +55,17 @@ create_queue(_Lifetime, DCh) ->
 
 create_bound_queue(ExchangeName, RoutingKey, DCh) ->
     {ok, QueueName} = create_queue(?EXCHANGE_SUB_LIFETIME, DCh),
+    create_binding(ExchangeName, RoutingKey, QueueName, DCh),
+    {ok, QueueName}.
+
+create_binding(<<>>, <<>>, _QueueName, _DCh) ->
+    ok;
+create_binding(ExchangeName, RoutingKey, QueueName, DCh) ->
     %% Don't both ensuring the channel, the previous should have done it
     #'queue.bind_ok'{} =
         amqp_channel:call(DCh, #'queue.bind'{exchange = ExchangeName,
                                              queue = QueueName,
-                                             routing_key = RoutingKey}),
-    {ok, QueueName}.
+                                             routing_key = RoutingKey}).
 
 parse_destination(Destination, Enc) when is_binary(Destination) ->
     parse_destination(unicode:characters_to_list(Destination, Enc)).
