@@ -193,14 +193,11 @@ decr_credit(CTag, Len, ChPid, Cred, Credits) ->
     write_credit(CTag, NewCredit, Drain, Credits).
 
 maybe_drain(0, true, CTag, ChPid, Credit) ->
-    send_drained(ChPid, CTag, Credit),
+    rabbit_channel:send_drained(ChPid, CTag, Credit),
     0; %% Magic reduction to 0
 
 maybe_drain(_, _, _, _, Credit) ->
     Credit.
-
-send_drained(ChPid, CTag, CreditDrained) ->
-    rabbit_channel:send_drained(ChPid, CTag, CreditDrained).
 
 update_credit(CTag, Len, ChPid, Credit, Drain, Credits) ->
     NewCredit = maybe_drain(Len, Drain, CTag, ChPid, Credit),
