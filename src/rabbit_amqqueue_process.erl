@@ -621,11 +621,12 @@ possibly_unblock(State, ChPid, Update) ->
         not_found ->
             State;
         C ->
-            C1 = #cr{blocked_ctags = BCTags1} = Update(C),
+            C1 = #cr{blocked_ctags = BCTags} = Update(C),
+            IsBlocked = is_ch_blocked(C1),
             {Blocked, Unblocked} =
                 lists:partition(
                   fun({_ChPid, #consumer{tag = CTag}}) ->
-                          is_ch_blocked(C1) orelse lists:member(CTag, BCTags1)
+                          IsBlocked orelse lists:member(CTag, BCTags)
                   end, queue:to_list(C1#cr.blocked_consumers)),
             case Unblocked of
                 [] -> update_ch_record(C1),
