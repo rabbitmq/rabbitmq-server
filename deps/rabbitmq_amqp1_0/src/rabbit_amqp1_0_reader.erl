@@ -104,6 +104,8 @@ recvloop(Deb, State) ->
     try
         recvloop1(Deb, State)
     catch
+        _:connection_closed_abruptly ->
+            throw(connection_closed_abruptly);
         _:Reason ->
             Trace = erlang:get_stacktrace(),
             handle_exception(State, 0, {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
