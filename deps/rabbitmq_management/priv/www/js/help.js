@@ -201,6 +201,10 @@ HELP = {
     if <code>ha-mode</code> is <code>exactly</code>, or an array\
     of strings if <code>ha-mode</code> is <code>nodes</code>.\
   </dd>\
+  <dt><code>ha-sync-mode</code></dt>\
+  <dd>\
+    One of <code>manual</code> or <code>automatic</code>.\
+  </dd>\
   <dt><code>federation-upstream-set</code></dt>\
   <dd>\
     A string; only if the federation plugin is enabled.\
