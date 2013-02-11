@@ -35,10 +35,8 @@ check_exchange(ExchangeName, DCh) when is_list(ExchangeName) ->
     check_exchange(list_to_binary(ExchangeName), DCh);
 check_exchange(ExchangeName, DCh) when is_binary(ExchangeName) ->
     XDecl = #'exchange.declare'{ exchange = ExchangeName, passive = true },
-    case catch amqp_channel:call(DCh, XDecl) of
-        {'EXIT', _Reason}        -> {error, not_found};
-        #'exchange.declare_ok'{} -> {ok, ExchangeName}
-    end.
+    #'exchange.declare_ok'{} = rabbit_amqp1_0_channel:call(DCh, XDecl),
+    {ok, ExchangeName}.
 
 create_queue(Lifetime, DCh, Durable) ->
     create_queue(<<>>, Lifetime, DCh, Durable).
@@ -48,10 +46,10 @@ create_queue(Name, Lifetime, DCh, Durable) when is_list(Name) ->
     create_queue(list_to_binary(Name), Lifetime, DCh, Durable);
 create_queue(Name, _Lifetime, DCh, Durable) ->
     #'queue.declare_ok'{queue = Name1} =
-        amqp_channel:call(DCh,
-                          #'queue.declare'{queue       = Name,
-                                           auto_delete = Name =:= <<>>,
-                                           durable     = durable(Durable)}),
+        rabbit_amqp1_0_channel:call(
+          DCh, #'queue.declare'{queue       = Name,
+                                auto_delete = Name =:= <<>>,
+                                durable     = durable(Durable)}),
     {ok, Name1}.
 
 create_bound_queue(ExchangeName, RoutingKey, DCh, Durable) ->
@@ -64,9 +62,10 @@ create_binding(<<>>, <<>>, _QueueName, _DCh) ->
 create_binding(ExchangeName, RoutingKey, QueueName, DCh) ->
     %% Don't both ensuring the channel, the previous should have done it
     #'queue.bind_ok'{} =
-        amqp_channel:call(DCh, #'queue.bind'{exchange = ExchangeName,
-                                             queue = QueueName,
-                                             routing_key = RoutingKey}).
+        rabbit_amqp1_0_channel:call(
+          DCh, #'queue.bind'{exchange = ExchangeName,
+                             queue = QueueName,
+                             routing_key = RoutingKey}).
 
 parse_destination(Destination, Enc) when is_binary(Destination) ->
     parse_destination(unicode:characters_to_list(Destination, Enc)).

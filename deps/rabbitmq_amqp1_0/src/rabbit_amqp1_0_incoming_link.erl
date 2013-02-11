@@ -56,7 +56,7 @@ attach(#'v1_0.attach'{name = Name,
                            SndSettleMode == ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED;
                            SndSettleMode == ?V_1_0_SENDER_SETTLE_MODE_MIXED ->
                         amqp_channel:register_confirm_handler(BCh, self()),
-                        amqp_channel:call(BCh, #'confirm.select'{}),
+                        rabbit_amqp1_0_channel:call(BCh, #'confirm.select'{}),
                         true
                 end,
             Flow = #'v1_0.flow'{ handle = Handle,
@@ -145,8 +145,9 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
                undefined -> MsgRKey;
                _         -> LinkRKey
            end,
-    amqp_channel:cast_flow(BCh, #'basic.publish'{exchange    = X,
-                                                 routing_key = RKey}, Msg),
+    rabbit_amqp1_0_channel:cast_flow(
+      BCh, #'basic.publish'{exchange    = X,
+                            routing_key = RKey}, Msg),
     {SendFlow, CreditUsed1} = case CreditUsed - 1 of
                                   C when C =< 0 ->
                                       {true,  ?INCOMING_CREDIT div 2};

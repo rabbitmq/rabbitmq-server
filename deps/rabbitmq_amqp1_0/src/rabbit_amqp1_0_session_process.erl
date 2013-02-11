@@ -165,12 +165,12 @@ noreply(State) ->
 %% ------
 
 handle_control(#'v1_0.begin'{} = Begin,
-               State = #state{backing_channel = AmqpChannel,
+               State = #state{backing_channel = Ch,
                               session         = Session}) ->
     {ok, Reply, Session1, Prefetch} =
         rabbit_amqp1_0_session:begin_(Begin, Session),
     %% Attempt to limit the number of "at risk" messages we can have.
-    amqp_channel:cast(AmqpChannel, #'basic.qos'{prefetch_count = Prefetch}),
+    rabbit_amqp1_0_channel:cast(Ch, #'basic.qos'{prefetch_count = Prefetch}),
     reply(Reply, state(Session1, State));
 
 handle_control(#'v1_0.attach'{handle = Handle,
@@ -231,7 +231,7 @@ handle_control(#'v1_0.disposition'{state = Outcome,
                State = #state{backing_channel = Ch}) ->
     AckFun =
         fun (DeliveryTag) ->
-                ok = amqp_channel:call(
+                ok = rabbit_amqp1_0_channel:call(
                        Ch, case Outcome of
                                #'v1_0.accepted'{} ->
                                    #'basic.ack'{delivery_tag = DeliveryTag,

@@ -51,7 +51,7 @@ attach(#'v1_0.attach'{name = Name,
                                       default_outcome = DOSym}, DCh) of
         {ok, Source1, OutgoingLink = #outgoing_link{queue = QueueName}} ->
             CTag = handle_to_ctag(Handle),
-            case amqp_channel:subscribe(
+            case rabbit_amqp1_0_channel:subscribe(
                    BCh, #'basic.consume'{
                      queue = QueueName,
                      consumer_tag = CTag,
@@ -123,9 +123,10 @@ flow(#outgoing_link{delivery_count = LocalCount},
     LocalCredit = RemoteCount + RemoteCredit - LocalCount,
     CTag = handle_to_ctag(Handle),
     #'basic.credit_ok'{available = Available} =
-        amqp_channel:call(BCh, #'basic.credit'{consumer_tag = CTag,
-                                               credit       = LocalCredit,
-                                               drain        = Drain}),
+        rabbit_amqp1_0_channel:call(
+          BCh, #'basic.credit'{consumer_tag = CTag,
+                               credit       = LocalCredit,
+                               drain        = Drain}),
     case Available of
         -1 ->
             {ok, []};
@@ -247,8 +248,8 @@ transferred(DeliveryTag, Channel,
             Link = #outgoing_link{ delivery_count = Count,
                                    send_settled   = SendSettled }) ->
     if SendSettled ->
-            amqp_channel:cast(Channel,
-                              #'basic.ack'{ delivery_tag = DeliveryTag });
+            rabbit_amqp1_0_channel:cast(
+              Channel, #'basic.ack'{ delivery_tag = DeliveryTag });
        true ->
             ok
     end,
