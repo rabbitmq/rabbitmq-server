@@ -221,6 +221,7 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
 %% TODO this looks to have a lot in common with ensure_source
 ensure_target(Target = #'v1_0.target'{address       = Address,
                                       dynamic       = Dynamic,
+                                      durable       = Durable,
                                       %% TODO expiry_policy = ExpiryPolicy,
                                       timeout       = Timeout},
               Link = #incoming_link{}, DCh) ->
@@ -228,7 +229,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
         true ->
             case Address of
                 undefined ->
-                    {ok, QueueName} = rabbit_amqp1_0_link_util:create_queue(Timeout, DCh),
+                    {ok, QueueName} = rabbit_amqp1_0_link_util:create_queue(Timeout, DCh, Durable),
                     {ok,
                      Target#'v1_0.target'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
                      Link#incoming_link{exchange = <<"">>,
@@ -243,7 +244,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                   when Enc =:= utf8 ->
                     case rabbit_amqp1_0_link_util:parse_destination(Destination, Enc) of
                         ["queue", Name] ->
-                            case rabbit_amqp1_0_link_util:declare_queue(Name, DCh) of
+                            case rabbit_amqp1_0_link_util:declare_queue(Name, DCh, Durable) of
                                 {ok, QueueName} ->
                                     {ok, Target,
                                      Link#incoming_link{exchange = <<"">>,

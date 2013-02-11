@@ -19,7 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([declare_queue/2, check_exchange/2, create_queue/2, create_bound_queue/3,
+-export([declare_queue/3, check_exchange/2, create_queue/3, create_bound_queue/4,
          parse_destination/2, parse_destination/1, queue_address/1, outcomes/1,
          protocol_error/3, ctag_to_handle/1, handle_to_ctag/1]).
 
@@ -29,10 +29,11 @@
                    ?V_1_0_SYMBOL_REJECTED,
                    ?V_1_0_SYMBOL_RELEASED]).
 
-declare_queue(QueueName, DCh) when is_list(QueueName) ->
-    declare_queue(list_to_binary(QueueName), DCh);
-declare_queue(QueueName, DCh) ->
-    QDecl = #'queue.declare'{queue = QueueName},
+declare_queue(QueueName, DCh, Durable) when is_list(QueueName) ->
+    declare_queue(list_to_binary(QueueName), DCh, Durable);
+declare_queue(QueueName, DCh, Durable) ->
+    QDecl = #'queue.declare'{queue   = QueueName,
+                             durable = durable(Durable)},
     #'queue.declare_ok'{} = amqp_channel:call(DCh, QDecl),
     {ok, QueueName}.
 
@@ -48,13 +49,15 @@ check_exchange(ExchangeName, DCh) when is_binary(ExchangeName) ->
     end.
 
 %% TODO Lifetimes: we approximate these with auto_delete.
-create_queue(_Lifetime, DCh) ->
+create_queue(_Lifetime, DCh, Durable) ->
     #'queue.declare_ok'{queue = QueueName} =
-        amqp_channel:call(DCh, #'queue.declare'{auto_delete = true}),
+        amqp_channel:call(DCh,
+                          #'queue.declare'{auto_delete = true,
+                                           durable     = durable(Durable)}),
     {ok, QueueName}.
 
-create_bound_queue(ExchangeName, RoutingKey, DCh) ->
-    {ok, QueueName} = create_queue(?EXCHANGE_SUB_LIFETIME, DCh),
+create_bound_queue(ExchangeName, RoutingKey, DCh, Durable) ->
+    {ok, QueueName} = create_queue(?EXCHANGE_SUB_LIFETIME, DCh, Durable),
     create_binding(ExchangeName, RoutingKey, QueueName, DCh),
     {ok, QueueName}.
 
@@ -121,3 +124,9 @@ handle_to_ctag({uint, H}) ->
 
 ctag_to_handle(<<"ctag-", H:32/integer>>) ->
     {uint, H}.
+
+durable(?V_1_0_TERMINUS_DURABILITY_NONE)            -> false;
+%% This one means "existence of the thing is durable, but unacked msgs
+%% aren't". We choose to upgrade that.
+durable(?V_1_0_TERMINUS_DURABILITY_CONFIGURATION)   -> true;
+durable(?V_1_0_TERMINUS_DURABILITY_UNSETTLED_STATE) -> true.

@@ -144,6 +144,7 @@ flow(#outgoing_link{delivery_count = LocalCount},
 %% TODO this looks to have a lot in common with ensure_target
 ensure_source(Source = #'v1_0.source'{address       = Address,
                                       dynamic       = Dynamic,
+                                      durable       = Durable,
                                       expiry_policy = _ExpiryPolicy, % TODO
                                       timeout       = Timeout},
               Link = #outgoing_link{}, DCh) ->
@@ -151,7 +152,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
         true ->
             case Address of
                 undefined ->
-                    {ok, QueueName} = rabbit_amqp1_0_link_util:create_queue(Timeout, DCh),
+                    {ok, QueueName} = rabbit_amqp1_0_link_util:create_queue(Timeout, DCh, Durable),
                     {ok,
                      Source#'v1_0.source'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
                      Link#outgoing_link{queue = QueueName}};
@@ -165,7 +166,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                   when Enc =:= utf8 ->
                     case rabbit_amqp1_0_link_util:parse_destination(Destination, Enc) of
                         ["queue", Name] ->
-                            case rabbit_amqp1_0_link_util:declare_queue(Name, DCh) of
+                            case rabbit_amqp1_0_link_util:declare_queue(Name, DCh, Durable) of
                                 {ok, QueueName} ->
                                     {ok, Source,
                                      Link#outgoing_link{queue = QueueName}};
@@ -178,7 +179,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                                     RoutingKey = list_to_binary(RK),
                                     {ok, QueueName} =
                                         rabbit_amqp1_0_link_util:create_bound_queue(
-                                          ExchangeName, RoutingKey, DCh),
+                                          ExchangeName, RoutingKey, DCh, Durable),
                                     {ok, Source, Link#outgoing_link{queue = QueueName}};
                                 {error, Reason} ->
                                     {error, Reason}
