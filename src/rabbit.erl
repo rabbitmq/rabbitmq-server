@@ -704,7 +704,7 @@ log_broker_started(Plugins) ->
               error_logger:info_msg(
                 "Server startup complete; ~b plugins started.~n~s~n",
                 [length(Plugins), PluginList]),
-              io:format("~n            Broker running with ~p plugins.~n",
+              io:format(" startup complete with ~p plugins.~n",
                         [length(Plugins)])
       end).
 
@@ -723,7 +723,9 @@ print_banner() ->
               "~n##  ##      ~s"
               "~n##########"
               "~n######  ##  Logs: ~s"
-              "~n##########        ~s~n",
+              "~n##########        ~s"
+              "~n"
+              "~n            Starting...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE,
                log_location(kernel), log_location(sasl)]).
 
