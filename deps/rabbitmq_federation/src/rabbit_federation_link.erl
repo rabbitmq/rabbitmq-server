@@ -79,15 +79,15 @@ init({Upstream, XName}) ->
     %% case it's possible that delete callback would also have been called
     %% before we got here. So check if we still exist.
     case rabbit_exchange:lookup(XName) of
-	{ok, X} ->
+        {ok, X} ->
             UParams = rabbit_federation_upstream:to_params(Upstream, X),
-	    rabbit_federation_status:report(Upstream, UParams, XName, starting),
-	    join(rabbit_federation_exchanges),
-	    join({rabbit_federation_exchange, XName}),
-	    gen_server2:cast(self(), maybe_go),
-	    {ok, {not_started, {Upstream, UParams, XName}}};
-	{error, not_found} ->
-	    {stop, gone}
+            rabbit_federation_status:report(Upstream, UParams, XName, starting),
+            join(rabbit_federation_exchanges),
+            join({rabbit_federation_exchange, XName}),
+            gen_server2:cast(self(), maybe_go),
+            {ok, {not_started, {Upstream, UParams, XName}}};
+        {error, not_found} ->
+            {stop, gone}
     end.
 
 handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
