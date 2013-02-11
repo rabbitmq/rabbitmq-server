@@ -181,23 +181,12 @@ copy_queue_state(#token{q_state = Credits}, Token) ->
 
 record_send_q(CTag, Len, ChPid, Credits) ->
     case dict:find(CTag, Credits) of
-        {ok, Cred} ->
-            decr_credit(CTag, Len, ChPid, Cred, Credits);
+        {ok, #credit{credit = Credit, drain = Drain}} ->
+            NewCredit = maybe_drain(Len - 1, Drain, CTag, ChPid, Credit - 1),
+            write_credit(CTag, NewCredit, Drain, Credits);
         error ->
             Credits
     end.
-
-decr_credit(CTag, Len, ChPid, Cred, Credits) ->
-    #credit{credit = Credit, drain = Drain} = Cred,
-    NewCredit = maybe_drain(Len - 1, Drain, CTag, ChPid, Credit - 1),
-    write_credit(CTag, NewCredit, Drain, Credits).
-
-maybe_drain(0, true, CTag, ChPid, Credit) ->
-    rabbit_channel:send_drained(ChPid, CTag, Credit),
-    0; %% Magic reduction to 0
-
-maybe_drain(_, _, _, _, Credit) ->
-    Credit.
 
 update_credit(CTag, Len, ChPid, Credit, Drain, Credits) ->
     NewCredit = maybe_drain(Len, Drain, CTag, ChPid, Credit),
@@ -208,8 +197,14 @@ update_credit(CTag, Len, ChPid, Credit, Drain, Credits) ->
     end.
 
 write_credit(CTag, Credit, Drain, Credits) ->
-    dict:store(CTag, #credit{credit = Credit,
-                             drain  = Drain}, Credits).
+    dict:store(CTag, #credit{credit = Credit, drain = Drain}, Credits).
+
+maybe_drain(0, true, CTag, ChPid, Credit) ->
+    rabbit_channel:send_drained(ChPid, CTag, Credit),
+    0; %% Magic reduction to 0
+
+maybe_drain(_, _, _, _, Credit) ->
+    Credit.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
