@@ -214,14 +214,12 @@ rabbit_web_dispatch_registry_list_all() ->
     case code:is_loaded(rabbit_web_dispatch_registry) of
         false -> [];
         _     -> try
-                     apply0(rabbit_web_dispatch_registry, list_all, [])
+                     M = rabbit_web_dispatch_registry, %% Fool xref
+                     M:list_all()
                  catch exit:{noproc, _} ->
                          []
                  end
     end.
-
-%% Fool xref. Simply using apply(M, F, A) with constants is not enough.
-apply0(M, F, A) -> apply(M, F, A).
 
 format_context({Path, Description, Rest}) ->
     [{description, list_to_binary(Description)},
