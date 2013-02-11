@@ -32,6 +32,8 @@
                            [policy_validator, <<"ha-mode">>, ?MODULE]}},
                     {mfa, {rabbit_registry, register,
                            [policy_validator, <<"ha-params">>, ?MODULE]}},
+                    {mfa, {rabbit_registry, register,
+                           [policy_validator, <<"ha-sync-mode">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
@@ -177,13 +179,19 @@ add_mirror(QName, MirrorNode) ->
               end
       end).
 
-start_child(Name, MirrorNode, Q) ->
+start_child(Name, MirrorNode, Q = #amqqueue{pid = QPid}) ->
     case rabbit_misc:with_exit_handler(
            rabbit_misc:const({ok, down}),
            fun () ->
                    rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
            end) of
         {ok, SPid} when is_pid(SPid)  ->
+            case rabbit_policy:get(<<"ha-sync-mode">>, Q) of
+                {ok,<<"automatic">>} ->
+                    spawn(fun() -> rabbit_amqqueue:sync_mirrors(QPid) end);
+                _ ->
+                    ok
+            end,
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                             [rabbit_misc:rs(Name), MirrorNode, SPid]),
             {ok, started};
@@ -323,9 +331,18 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
 %%----------------------------------------------------------------------------
 
 validate_policy(KeyList) ->
-    validate_policy(
-      proplists:get_value(<<"ha-mode">>,   KeyList),
-      proplists:get_value(<<"ha-params">>, KeyList, none)).
+    case validate_policy(
+           proplists:get_value(<<"ha-mode">>,   KeyList),
+           proplists:get_value(<<"ha-params">>, KeyList, none)) of
+        ok -> case proplists:get_value(
+                     <<"ha-sync-mode">>, KeyList, <<"manual">>) of
+                  <<"automatic">> -> ok;
+                  <<"manual">>    -> ok;
+                  Mode            -> {error, "ha-sync-mode must be \"manual\" "
+                                      "or \"automatic\", got ~p", [Mode]}
+              end;
+        E  -> E
+    end.
 
 validate_policy(<<"all">>, none) ->
     ok;
