@@ -3,6 +3,7 @@ package com.rabbitmq.amqp1_0.tests.swiftmq;
 import com.swiftmq.amqp.AMQPContext;
 import com.swiftmq.amqp.v100.client.*;
 import com.swiftmq.amqp.v100.generated.messaging.message_format.*;
+import com.swiftmq.amqp.v100.generated.messaging.message_format.Properties;
 import com.swiftmq.amqp.v100.messaging.AMQPMessage;
 import com.swiftmq.amqp.v100.types.*;
 import junit.framework.TestCase;
@@ -204,6 +205,57 @@ public class SwiftMQTests extends TestCase {
         assertTrue(compareMessageData(m1, m2));
         assertFalse(m2.getHeader().getFirstAcquirer().getValue());
         assertNull(c.receiveNoWait());
+        conn.close();
+    }
+
+    public void testRouting() throws Exception {
+        route("/exchange/amq.topic/#.c.*", "/exchange/amq.topic",   "a.b.c.d", true);
+        route("/exchange/amq.fanout/",     "/exchange/amq.fanout",  "",        true);
+        route("/exchange/amq.direct/",     "/exchange/amq.direct",  "",        true);
+        route("/exchange/amq.direct/a",    "/exchange/amq.direct",  "a",       true);
+        route(QUEUE,                       "/exchange/",            "test",    true);
+
+        route("/exchange/amq.direct/b",    "/exchange/amq.direct",  "a",       false);
+        route(QUEUE,                       "/exchange/amq.fanout",  "",        false);
+        route(QUEUE,                       "/exchange/amq.headers", "",        false);
+
+        route("/exchange//",               "/exchange/",            "test",    false);
+        emptyQueue(QUEUE);
+    }
+
+    private void emptyQueue(String q) throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        Consumer c = s.createConsumer(q, CONSUMER_LINK_CREDIT, QoS.AT_MOST_ONCE, false, null);
+        AMQPMessage m;
+        while ((m = c.receiveNoWait()) != null);
+        conn.close();
+    }
+
+    private void route(String consumerSource, String producerTarget, String routingKey, boolean succeed) throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+
+        Consumer c = s.createConsumer(consumerSource, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
+        Producer p = s.createProducer(producerTarget, QoS.AT_LEAST_ONCE);
+        AMQPMessage msg = msg();
+        Properties props = new Properties();
+        props.setSubject(new AMQPString(routingKey));
+        msg.setProperties(props);
+        p.send(msg);
+        p.close();
+
+        AMQPMessage m = c.receiveNoWait();
+        if (succeed) {
+            assertNotNull(m);
+            m.accept();
+        } else {
+            assertNull(m);
+        }
         conn.close();
     }
 
