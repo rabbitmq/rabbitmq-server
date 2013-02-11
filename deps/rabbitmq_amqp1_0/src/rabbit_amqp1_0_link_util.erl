@@ -19,7 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([declare_queue/3, check_exchange/2, create_queue/3, create_bound_queue/4,
+-export([check_exchange/2, create_queue/3, create_queue/4, create_bound_queue/4,
          parse_destination/2, parse_destination/1, queue_address/1, outcomes/1,
          protocol_error/3, ctag_to_handle/1, handle_to_ctag/1]).
 
@@ -28,14 +28,6 @@
 -define(OUTCOMES, [?V_1_0_SYMBOL_ACCEPTED,
                    ?V_1_0_SYMBOL_REJECTED,
                    ?V_1_0_SYMBOL_RELEASED]).
-
-declare_queue(QueueName, DCh, Durable) when is_list(QueueName) ->
-    declare_queue(list_to_binary(QueueName), DCh, Durable);
-declare_queue(QueueName, DCh, Durable) ->
-    QDecl = #'queue.declare'{queue   = QueueName,
-                             durable = durable(Durable)},
-    #'queue.declare_ok'{} = amqp_channel:call(DCh, QDecl),
-    {ok, QueueName}.
 
 check_exchange([], _DCh) ->
     {ok, <<>>};
@@ -48,13 +40,19 @@ check_exchange(ExchangeName, DCh) when is_binary(ExchangeName) ->
         #'exchange.declare_ok'{} -> {ok, ExchangeName}
     end.
 
+create_queue(Lifetime, DCh, Durable) ->
+    create_queue(<<>>, Lifetime, DCh, Durable).
+
 %% TODO Lifetimes: we approximate these with auto_delete.
-create_queue(_Lifetime, DCh, Durable) ->
-    #'queue.declare_ok'{queue = QueueName} =
+create_queue(Name, Lifetime, DCh, Durable) when is_list(Name) ->
+    create_queue(list_to_binary(Name), Lifetime, DCh, Durable);
+create_queue(Name, _Lifetime, DCh, Durable) ->
+    #'queue.declare_ok'{queue = Name1} =
         amqp_channel:call(DCh,
-                          #'queue.declare'{auto_delete = true,
+                          #'queue.declare'{queue       = Name,
+                                           auto_delete = Name =:= <<>>,
                                            durable     = durable(Durable)}),
-    {ok, QueueName}.
+    {ok, Name1}.
 
 create_bound_queue(ExchangeName, RoutingKey, DCh, Durable) ->
     {ok, QueueName} = create_queue(?EXCHANGE_SUB_LIFETIME, DCh, Durable),

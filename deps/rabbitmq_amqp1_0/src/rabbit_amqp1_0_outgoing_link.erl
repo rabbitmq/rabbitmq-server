@@ -166,7 +166,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                   when Enc =:= utf8 ->
                     case rabbit_amqp1_0_link_util:parse_destination(Destination, Enc) of
                         ["queue", Name] ->
-                            case rabbit_amqp1_0_link_util:declare_queue(Name, DCh, Durable) of
+                            case rabbit_amqp1_0_link_util:create_queue(Name, Timeout, DCh, Durable) of
                                 {ok, QueueName} ->
                                     {ok, Source,
                                      Link#outgoing_link{queue = QueueName}};
