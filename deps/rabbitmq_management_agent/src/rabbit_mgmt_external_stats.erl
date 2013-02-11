@@ -162,7 +162,7 @@ i(processors,      _State) -> erlang:system_info(logical_processors);
 i(disk_free_limit, _State) -> get_disk_free_limit();
 i(disk_free,       _State) -> get_disk_free();
 i(disk_free_alarm, _State) -> resource_alarm_set(disk);
-i(contexts,        _State) -> rabbit_mochiweb_contexts();
+i(contexts,        _State) -> rabbit_web_dispatch_contexts();
 i(uptime, _State) ->
     {Total, _} = erlang:statistics(wall_clock),
     Total;
@@ -202,19 +202,19 @@ format_application({Application, Description, Version}) ->
 %%--------------------------------------------------------------------
 
 %% This is slightly icky in that we introduce knowledge of
-%% rabbit_mochiweb, which is not a dependency. But the last thing I
+%% rabbit_web_dispatch, which is not a dependency. But the last thing I
 %% want to do is create a rabbitmq_mochiweb_management_agent plugin.
-rabbit_mochiweb_contexts() ->
-    [format_context(C) || C <- rabbit_mochiweb_registry_list_all()].
+rabbit_web_dispatch_contexts() ->
+    [format_context(C) || C <- rabbit_web_dispatch_registry_list_all()].
 
 %% For similar reasons we don't declare a dependency on
 %% rabbitmq_mochiweb - so at startup there's no guarantee it will be
 %% running. So we have to catch this noproc.
-rabbit_mochiweb_registry_list_all() ->
-    case code:is_loaded(rabbit_mochiweb_registry) of
+rabbit_web_dispatch_registry_list_all() ->
+    case code:is_loaded(rabbit_web_dispatch_registry) of
         false -> [];
         _     -> try
-                     apply0(rabbit_mochiweb_registry, list_all, [])
+                     apply0(rabbit_web_dispatch_registry, list_all, [])
                  catch exit:{noproc, _} ->
                          []
                  end
