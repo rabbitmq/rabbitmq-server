@@ -544,13 +544,16 @@ check_name(_Kind, NameBin) ->
 queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     case sets:is_element(QPid, Blocking) of
         false -> State;
-        true  -> Blocking1 = sets:del_element(QPid, Blocking),
-                 case sets:size(Blocking1) of
-                     0 -> ok = send(#'channel.flow_ok'{active = false}, State);
-                     _ -> ok
-                 end,
-                 State#ch{blocking = Blocking1}
+        true  -> maybe_send_flow_ok(
+                   State#ch{blocking = sets:del_element(QPid, Blocking)})
     end.
+
+maybe_send_flow_ok(State = #ch{blocking = Blocking}) ->
+    case sets:size(Blocking) of
+        0 -> ok = send(#'channel.flow_ok'{active = false}, State);
+        _ -> ok
+    end,
+    State.
 
 record_confirms([], State) ->
     State;
@@ -1082,12 +1085,9 @@ handle_method(#'channel.flow'{active = false}, _,
                end,
     State1 = State#ch{limiter = Limiter1},
     ok = rabbit_limiter:block(Limiter1),
-    case consumer_queues(Consumers) of
-        []    -> {reply, #'channel.flow_ok'{active = false}, State1};
-        QPids -> State2 = State1#ch{blocking = sets:from_list(QPids)},
-                 ok = rabbit_amqqueue:flush_all(QPids, self()),
-                 {noreply, State2}
-    end;
+    QPids = consumer_queues(Consumers),
+    ok = rabbit_amqqueue:flush_all(QPids, self()),
+    {noreply, maybe_send_flow_ok(State1#ch{blocking = sets:from_list(QPids)})};
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
