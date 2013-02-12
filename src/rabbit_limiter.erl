@@ -22,12 +22,15 @@
          handle_info/2, prioritise_call/3]).
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
--export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
+-export([limit/2, can_send/6, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
+-export([initial_credit/6, credit/6, forget_consumer/2, copy_queue_state/2]).
+
+-import(rabbit_misc, [serial_add/2, serial_diff/2]).
 
 %%----------------------------------------------------------------------------
 
--record(token, {pid, enabled}).
+-record(token, {pid, enabled, q_state}).
 
 -ifdef(use_specs).
 
@@ -42,7 +45,9 @@
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
--spec(can_send/3 :: (token(), pid(), boolean()) -> boolean()).
+-spec(can_send/6 :: (token(), pid(), boolean(), pid(), rabbit_types:ctag(),
+                     non_neg_integer())
+                    -> token() | 'consumer_blocked' | 'channel_blocked').
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
 -spec(unregister/2 :: (token(), pid()) -> 'ok').
@@ -50,6 +55,14 @@
 -spec(block/1 :: (token()) -> 'ok').
 -spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (token()) -> boolean()).
+-spec(initial_credit/6 :: (token(), pid(), rabbit_types:ctag(),
+                           non_neg_integer(), boolean(), non_neg_integer())
+                          -> token()).
+-spec(credit/6 :: (token(), pid(), rabbit_types:ctag(),
+                   non_neg_integer(), boolean(), non_neg_integer())
+                  -> {[rabbit_types:ctag()], token()}).
+-spec(forget_consumer/2 :: (token(), rabbit_types:ctag()) -> token()).
+-spec(copy_queue_state/2 :: (token(), token()) -> token()).
 
 -endif.
 
@@ -64,6 +77,8 @@
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
 
+-record(credit, {credit = 0, drain = false}).
+
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
@@ -71,7 +86,8 @@
 start_link() -> gen_server2:start_link(?MODULE, [], []).
 
 make_token() -> make_token(undefined).
-make_token(Pid) -> #token{pid = Pid, enabled = false}.
+make_token(Pid) -> #token{pid = Pid, enabled = false,
+                          q_state = dict:new()}.
 
 is_enabled(#token{enabled = Enabled}) -> Enabled.
 
@@ -88,14 +104,29 @@ limit(Limiter, PrefetchCount) ->
 %% breaching a limit. Note that we don't use maybe_call here in order
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
-can_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
+can_send(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
+         QPid, AckReq, ChPid, CTag, Len) ->
+    ConsAllows = case dict:find(CTag, Credits) of
+                     {ok, #credit{credit = C}} when C > 0 -> true;
+                     {ok, #credit{}}                      -> false;
+                     error                                -> true
+                 end,
+    case ConsAllows of
+        true  -> case not Enabled orelse call_can_send(Pid, QPid, AckReq) of
+                     true  -> Credits2 = record_send_q(
+                                           CTag, Len, ChPid, Credits),
+                              Token#token{q_state = Credits2};
+                     false -> channel_blocked
+                 end;
+        false -> consumer_blocked
+    end.
+
+call_can_send(Pid, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
       fun () ->
               gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
-      end);
-can_send(_, _, _) ->
-    true.
+      end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
@@ -118,6 +149,62 @@ unblock(Limiter) ->
 
 is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
+
+initial_credit(Limiter = #token{q_state = Credits},
+               ChPid, CTag, Credit, Drain, Len) ->
+    {[], Credits2} = update_credit(
+                            CTag, Len, ChPid, Credit, Drain, Credits),
+    Limiter#token{q_state = Credits2}.
+
+credit(Limiter = #token{q_state = Credits},
+       ChPid, CTag, Credit, Drain, Len) ->
+    {Unblock, Credits2} = update_credit(
+                            CTag, Len, ChPid, Credit, Drain, Credits),
+    rabbit_channel:send_credit_reply(ChPid, Len),
+    {Unblock, Limiter#token{q_state = Credits2}}.
+
+forget_consumer(Limiter = #token{q_state = Credits}, CTag) ->
+    Limiter#token{q_state = dict:erase(CTag, Credits)}.
+
+copy_queue_state(#token{q_state = Credits}, Token) ->
+    Token#token{q_state = Credits}.
+
+%%----------------------------------------------------------------------------
+%% Queue-local code
+%%----------------------------------------------------------------------------
+
+%% We want to do all the AMQP 1.0-ish link level credit calculations in the
+%% queue (to do them elsewhere introduces a ton of races). However, it's a big
+%% chunk of code that is conceptually very linked to the limiter concept. So
+%% we get the queue to hold a bit of state for us (#token.q_state), and
+%% maintain a fiction that the limiter is making the decisions...
+
+record_send_q(CTag, Len, ChPid, Credits) ->
+    case dict:find(CTag, Credits) of
+        {ok, #credit{credit = Credit, drain = Drain}} ->
+            NewCredit = maybe_drain(Len - 1, Drain, CTag, ChPid, Credit - 1),
+            write_credit(CTag, NewCredit, Drain, Credits);
+        error ->
+            Credits
+    end.
+
+update_credit(CTag, Len, ChPid, Credit, Drain, Credits) ->
+    NewCredit = maybe_drain(Len, Drain, CTag, ChPid, Credit),
+    NewCredits = write_credit(CTag, NewCredit, Drain, Credits),
+    case NewCredit > 0 of
+        true  -> {[CTag], NewCredits};
+        false -> {[],     NewCredits}
+    end.
+
+write_credit(CTag, Credit, Drain, Credits) ->
+    dict:store(CTag, #credit{credit = Credit, drain = Drain}, Credits).
+
+maybe_drain(0, true, CTag, ChPid, Credit) ->
+    rabbit_channel:send_drained(ChPid, CTag, Credit),
+    0; %% Magic reduction to 0
+
+maybe_drain(_, _, _, _, Credit) ->
+    Credit.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
