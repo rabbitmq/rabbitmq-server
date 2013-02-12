@@ -35,9 +35,6 @@
 -define(CLOSING_TIMEOUT, 30).
 -define(SILENT_CLOSE_DELAY, 3).
 
-%% TODO there are still a number of cases (essentially errors) where
-%% we stray into 0-9-1 land from here.
-
 %%--------------------------------------------------------------------------
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
