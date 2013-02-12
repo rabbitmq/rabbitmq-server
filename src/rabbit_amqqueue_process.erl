@@ -478,11 +478,10 @@ deliver_msg_to_consumer(DeliverFun,
     {Stop, State1}.
 
 deliver_from_queue_deliver(AckRequired, State) ->
-    {{Message, IsDelivered, AckTag, _Remaining}, State1} =
+    {{Message, IsDelivered, AckTag, _Remaining},
+     State1 = #q{backing_queue = BQ, backing_queue_state = BQS}} =
         fetch(AckRequired, State),
-    State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        drop_expired_messages(State1),
-    {{Message, IsDelivered, AckTag}, BQ:is_empty(BQS), State2}.
+    {{Message, IsDelivered, AckTag}, BQ:is_empty(BQS), State1}.
 
 confirm_messages([], State) ->
     State;
@@ -579,7 +578,7 @@ requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
 fetch(AckRequired, State = #q{backing_queue       = BQ,
                               backing_queue_state = BQS}) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
-    {Result, State#q{backing_queue_state = BQS1}}.
+    {Result, drop_expired_messages(State#q{backing_queue_state = BQS1})}.
 
 ack(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
