@@ -176,8 +176,10 @@ drained(Limiter = #token{credits = Credits}) ->
           end, {[], Credits}, Credits),
     {CTagCredits, Limiter#token{credits = Credits2}}.
 
-forget_consumer(Limiter = #token{credits = Credits}, CTag) ->
-    Limiter#token{credits = dict:erase(CTag, Credits)}.
+forget_consumer(Limiter = #token{credits       = Credits,
+                                 blocked_ctags = BCTags}, CTag) ->
+    Limiter#token{credits       = dict:erase(CTag, Credits),
+                  blocked_ctags = BCTags -- [CTag]}.
 
 copy_queue_state(#token{credits = Credits, blocked_ctags = BCTags}, Token) ->
     Token#token{credits = Credits, blocked_ctags = BCTags}.
