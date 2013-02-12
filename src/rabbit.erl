@@ -435,8 +435,9 @@ start(normal, []) ->
     case erts_version_check() of
         ok ->
             {ok, Vsn} = application:get_key(rabbit, vsn),
-            error_logger:info_msg("Starting RabbitMQ ~s on Erlang ~s~n",
-                                  [Vsn, erlang:system_info(otp_release)]),
+            error_logger:info_msg("Starting RabbitMQ ~s on Erlang ~s~n~s~n~s~n",
+                                  [Vsn, erlang:system_info(otp_release),
+                                   ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
             print_banner(),
@@ -704,8 +705,7 @@ log_broker_started(Plugins) ->
               error_logger:info_msg(
                 "Server startup complete; ~b plugins started.~n~s~n",
                 [length(Plugins), PluginList]),
-              io:format(" startup complete with ~p plugins.~n",
-                        [length(Plugins)])
+              io:format(" completed with ~p plugins.~n", [length(Plugins)])
       end).
 
 erts_version_check() ->
@@ -725,13 +725,11 @@ print_banner() ->
               "~n######  ##  Logs: ~s"
               "~n##########        ~s"
               "~n"
-              "~n            Starting...",
+              "~n            Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE,
                log_location(kernel), log_location(sasl)]).
 
 log_banner() ->
-    error_logger:info_msg("~s ~s~n",
-                          [?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
