@@ -714,7 +714,13 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
 
 drop_expired_msgs(State = #q{backing_queue_state = BQS,
                              backing_queue       = BQ }) ->
-    Now = now_micros(),
+    case BQ:is_empty(BQS) of
+        true  -> State;
+        false -> drop_expired_msgs(now_micros(), State)
+    end.
+
+drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
+                                  backing_queue       = BQ }) ->
     ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
     {Props, State1} =
         with_dlx(
