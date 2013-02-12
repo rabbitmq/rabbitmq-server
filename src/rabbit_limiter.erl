@@ -209,8 +209,11 @@ update_credit(CTag, Credit, Drain, Credits) ->
         false -> {[],     NewCredits}
     end.
 
-write_credit(CTag, Credit, Drain, Credits) ->
-    dict:store(CTag, #credit{credit = Credit, drain = Drain}, Credits).
+write_credit(CTag, Credit, Drain, Credits) when Credit > 0 ->
+    dict:store(CTag, #credit{credit = Credit, drain = Drain}, Credits);
+%% Using up all credit means we do not need to send a drained event
+write_credit(CTag, Credit, _Drain, Credits) ->
+    dict:store(CTag, #credit{credit = Credit, drain = false}, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
