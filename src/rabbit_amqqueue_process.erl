@@ -405,6 +405,21 @@ erase_ch_record(#cr{ch_pid      = ChPid,
     erase({ch, ChPid}),
     ok.
 
+maybe_send_drained(#q{backing_queue       = BQ,
+                      backing_queue_state = BQS}) ->
+    case BQ:len(BQS) of
+        0 -> [maybe_send_drained(C) || C <- all_ch_record()];
+        _ -> ok
+    end;
+maybe_send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
+    case rabbit_limiter:drained(Limiter) of
+        {[], Limiter} ->
+            ok;
+        {CTagCredit, Limiter2} ->
+            rabbit_channel:send_drained(ChPid, CTagCredit),
+            update_ch_record(C#cr{limiter = Limiter2})
+    end.
+
 update_consumer_count(C = #cr{consumer_count = 0, limiter = Limiter}, +1) ->
     ok = rabbit_limiter:register(Limiter, self()),
     update_ch_record(C#cr{consumer_count = 1});
@@ -437,9 +452,7 @@ deliver_msgs_to_consumers(DeliverFun, false,
             deliver_msgs_to_consumers(DeliverFun, Stop, State1)
     end.
 
-deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer},
-                        State = #q{backing_queue       = BQ,
-                                   backing_queue_state = BQS}) ->
+deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
     C = ch_record(ChPid),
     case is_ch_blocked(C) of
         true ->
@@ -449,8 +462,7 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer},
             #cr{limiter = Limiter, ch_pid = ChPid, blocked_ctags = BCTags} = C,
             #consumer{tag = CTag} = Consumer,
             case rabbit_limiter:can_send(
-                   Limiter, self(), Consumer#consumer.ack_required,
-                   ChPid, CTag, BQ:len(BQS)) of
+                   Limiter, self(), Consumer#consumer.ack_required, CTag) of
                 consumer_blocked ->
                     block_consumer(C#cr{blocked_ctags = [CTag | BCTags]}, E),
                     {false, State};
@@ -483,6 +495,7 @@ deliver_msg_to_consumer(DeliverFun, NewLimiter,
     update_ch_record(C#cr{acktags              = ChAckTags1,
                           limiter              = NewLimiter,
                           unsent_message_count = Count + 1}),
+    maybe_send_drained(State1),
     {Stop, State1}.
 
 deliver_from_queue_deliver(AckRequired, State) ->
@@ -1098,9 +1111,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
 
 handle_call({basic_consume, NoAck, ChPid, Limiter,
              ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg},
-            _From, State = #q{exclusive_consumer  = Holder,
-                              backing_queue       = BQ,
-                              backing_queue_state = BQS}) ->
+            _From, State = #q{exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
         in_use ->
             reply({error, exclusive_consume_unavailable}, State);
@@ -1111,8 +1122,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
                                Limiter;
                            {Credit, Drain} ->
                                rabbit_limiter:initial_credit(
-                                 Limiter, ChPid, ConsumerTag, Credit, Drain,
-                                 BQ:len(BQS))
+                                 Limiter, ConsumerTag, Credit, Drain)
                        end,
             C1 = update_consumer_count(C#cr{limiter = Limiter2}, +1),
             Consumer = #consumer{tag = ConsumerTag,
@@ -1132,6 +1142,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
                              AC1 = queue:in(E, State1#q.active_consumers),
                              run_message_queue(State1#q{active_consumers = AC1})
                 end,
+            maybe_send_drained(State2),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                   not NoAck, qname(State2)),
             reply(ok, State2)
@@ -1342,11 +1353,13 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
                        backing_queue_state = BQS}) ->
     #cr{limiter       = Lim,
         blocked_ctags = BCTags} = ch_record(ChPid),
-    {Unblock, Lim2} = rabbit_limiter:credit(
-                        Lim, ChPid, CTag, Credit, Drain, BQ:len(BQS)),
-    noreply(possibly_unblock(
-              State, ChPid, fun(C) -> C#cr{blocked_ctags = BCTags -- Unblock,
-                                           limiter       = Lim2} end));
+    {Unblock, Lim2} = rabbit_limiter:credit(Lim, CTag, Credit, Drain),
+    rabbit_channel:send_credit_reply(ChPid, BQ:len(BQS)),
+    State1 = possibly_unblock(
+               State, ChPid, fun(C) -> C#cr{blocked_ctags = BCTags -- Unblock,
+                                            limiter       = Lim2} end),
+    maybe_send_drained(State1),
+    noreply(State1);
 
 handle_cast(wake_up, State) ->
     noreply(State).

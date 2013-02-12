@@ -22,9 +22,10 @@
          handle_info/2, prioritise_call/3]).
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
--export([limit/2, can_send/6, ack/2, register/2, unregister/2]).
+-export([limit/2, can_send/4, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
--export([initial_credit/6, credit/6, forget_consumer/2, copy_queue_state/2]).
+-export([initial_credit/4, credit/4, drained/1, forget_consumer/2,
+         copy_queue_state/2]).
 
 -import(rabbit_misc, [serial_add/2, serial_diff/2]).
 
@@ -45,8 +46,7 @@
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
--spec(can_send/6 :: (token(), pid(), boolean(), pid(), rabbit_types:ctag(),
-                     non_neg_integer())
+-spec(can_send/4 :: (token(), pid(), boolean(), rabbit_types:ctag())
                     -> token() | 'consumer_blocked' | 'channel_blocked').
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
@@ -55,12 +55,12 @@
 -spec(block/1 :: (token()) -> 'ok').
 -spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (token()) -> boolean()).
--spec(initial_credit/6 :: (token(), pid(), rabbit_types:ctag(),
-                           non_neg_integer(), boolean(), non_neg_integer())
-                          -> token()).
--spec(credit/6 :: (token(), pid(), rabbit_types:ctag(),
-                   non_neg_integer(), boolean(), non_neg_integer())
+-spec(initial_credit/4 :: (token(), rabbit_types:ctag(),
+                           non_neg_integer(), boolean()) -> token()).
+-spec(credit/4 :: (token(), rabbit_types:ctag(), non_neg_integer(), boolean())
                   -> {[rabbit_types:ctag()], token()}).
+-spec(drained/1 :: (token())
+                   -> {[{rabbit_types:ctag(), non_neg_integer()}], token()}).
 -spec(forget_consumer/2 :: (token(), rabbit_types:ctag()) -> token()).
 -spec(copy_queue_state/2 :: (token(), token()) -> token()).
 
@@ -105,7 +105,7 @@ limit(Limiter, PrefetchCount) ->
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
 can_send(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
-         QPid, AckReq, ChPid, CTag, Len) ->
+         QPid, AckReq, CTag) ->
     ConsAllows = case dict:find(CTag, Credits) of
                      {ok, #credit{credit = C}} when C > 0 -> true;
                      {ok, #credit{}}                      -> false;
@@ -113,8 +113,7 @@ can_send(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
                  end,
     case ConsAllows of
         true  -> case not Enabled orelse call_can_send(Pid, QPid, AckReq) of
-                     true  -> Credits2 = record_send_q(
-                                           CTag, Len, ChPid, Credits),
+                     true  -> Credits2 = record_send_q(CTag, Credits),
                               Token#token{q_state = Credits2};
                      false -> channel_blocked
                  end;
@@ -150,18 +149,23 @@ unblock(Limiter) ->
 is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
 
-initial_credit(Limiter = #token{q_state = Credits},
-               ChPid, CTag, Credit, Drain, Len) ->
-    {[], Credits2} = update_credit(
-                            CTag, Len, ChPid, Credit, Drain, Credits),
+initial_credit(Limiter = #token{q_state = Credits}, CTag, Credit, Drain) ->
+    {[], Credits2} = update_credit(CTag, Credit, Drain, Credits),
     Limiter#token{q_state = Credits2}.
 
-credit(Limiter = #token{q_state = Credits},
-       ChPid, CTag, Credit, Drain, Len) ->
-    {Unblock, Credits2} = update_credit(
-                            CTag, Len, ChPid, Credit, Drain, Credits),
-    rabbit_channel:send_credit_reply(ChPid, Len),
+credit(Limiter = #token{q_state = Credits}, CTag, Credit, Drain) ->
+    {Unblock, Credits2} = update_credit(CTag, Credit, Drain, Credits),
     {Unblock, Limiter#token{q_state = Credits2}}.
+
+drained(Limiter = #token{q_state = Credits}) ->
+    {CTagCredits, Credits2} =
+        dict:fold(
+          fun (CTag,  #credit{credit = C,  drain = true},  {Acc, Creds0}) ->
+                  {[{CTag, C} | Acc], write_credit(CTag, 0, false, Creds0)};
+              (_CTag, #credit{credit = _C, drain = false}, {Acc, Creds0}) ->
+                  {Acc, Creds0}
+          end, {[], Credits}, Credits),
+    {CTagCredits, Limiter#token{q_state = Credits2}}.
 
 forget_consumer(Limiter = #token{q_state = Credits}, CTag) ->
     Limiter#token{q_state = dict:erase(CTag, Credits)}.
@@ -179,32 +183,23 @@ copy_queue_state(#token{q_state = Credits}, Token) ->
 %% we get the queue to hold a bit of state for us (#token.q_state), and
 %% maintain a fiction that the limiter is making the decisions...
 
-record_send_q(CTag, Len, ChPid, Credits) ->
+record_send_q(CTag, Credits) ->
     case dict:find(CTag, Credits) of
         {ok, #credit{credit = Credit, drain = Drain}} ->
-            NewCredit = maybe_drain(Len - 1, Drain, CTag, ChPid, Credit - 1),
-            write_credit(CTag, NewCredit, Drain, Credits);
+            write_credit(CTag, Credit, Drain, Credits);
         error ->
             Credits
     end.
 
-update_credit(CTag, Len, ChPid, Credit, Drain, Credits) ->
-    NewCredit = maybe_drain(Len, Drain, CTag, ChPid, Credit),
-    NewCredits = write_credit(CTag, NewCredit, Drain, Credits),
-    case NewCredit > 0 of
+update_credit(CTag, Credit, Drain, Credits) ->
+    NewCredits = write_credit(CTag, Credit, Drain, Credits),
+    case Credit > 0 of
         true  -> {[CTag], NewCredits};
         false -> {[],     NewCredits}
     end.
 
 write_credit(CTag, Credit, Drain, Credits) ->
     dict:store(CTag, #credit{credit = Credit, drain = Drain}, Credits).
-
-maybe_drain(0, true, CTag, ChPid, Credit) ->
-    rabbit_channel:send_drained(ChPid, CTag, Credit),
-    0; %% Magic reduction to 0
-
-maybe_drain(_, _, _, _, Credit) ->
-    Credit.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

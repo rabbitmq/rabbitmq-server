@@ -21,7 +21,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, send_credit_reply/2, send_drained/3,
+-export([send_command/2, deliver/4, send_credit_reply/2, send_drained/2,
          flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -96,7 +96,7 @@
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
 -spec(send_credit_reply/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(send_drained/3 :: (pid(), rabbit_types:ctag(), non_neg_integer())
+-spec(send_drained/2 :: (pid(), [{rabbit_types:ctag(), non_neg_integer()}])
                         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
@@ -145,8 +145,8 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 send_credit_reply(Pid, Len) ->
     gen_server2:cast(Pid, {send_credit_reply, Len}).
 
-send_drained(Pid, ConsumerTag, CreditDrained) ->
-    gen_server2:cast(Pid, {send_drained, ConsumerTag, CreditDrained}).
+send_drained(Pid, CTagCredit) ->
+    gen_server2:cast(Pid, {send_drained, CTagCredit}).
 
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
@@ -330,11 +330,12 @@ handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
            WriterPid, #'basic.credit_ok'{available = Len}),
     noreply(State);
 
-handle_cast({send_drained, ConsumerTag, CreditDrained},
+handle_cast({send_drained, CTagCredit},
             State = #ch{writer_pid = WriterPid}) ->
-    ok = rabbit_writer:send_command(
-           WriterPid, #'basic.credit_drained'{consumer_tag   = ConsumerTag,
-                                              credit_drained = CreditDrained}),
+    [ok = rabbit_writer:send_command(
+            WriterPid, #'basic.credit_drained'{consumer_tag   = ConsumerTag,
+                                               credit_drained = CreditDrained})
+     || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
 
 handle_cast(force_event_refresh, State) ->
