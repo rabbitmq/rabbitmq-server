@@ -18,6 +18,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("kernel/include/inet.hrl").
 -include("rabbit_amqp1_0.hrl").
 
 -export([init/2]).
@@ -93,6 +94,20 @@ system_code_change(Misc, _Module, _OldVsn, _Extra) ->
 conserve_resources(Pid, _Source, Conserve) ->
     Pid ! {conserve_resources, Conserve},
     ok.
+
+server_properties() ->
+    %% The atom doesn't match anything, it's just "not 0-9-1".
+    Raw = lists:keydelete(
+          <<"capabilities">>, 1, rabbit_reader:server_properties(amqp_1_0)),
+    {map, [{{symbol, binary_to_list(K)}, {utf8, V}}
+           || {K, longstr, V}  <- Raw]}.
+
+%% TODO copypasta from rabbit_federation_util:local_nodename_implicit/0. Unify.
+container_id() ->
+    {ID, _} = rabbit_nodes:parts(node()),
+    {ok, Host} = inet:gethostname(),
+    {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
+    {utf8, list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN})))}.
 
 %%--------------------------------------------------------------------------
 
@@ -395,10 +410,11 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
     %% TODO enforce channel_max
     ok = send_on_channel0(
            Sock,
-           #'v1_0.open'{channel_max = ClientChannelMax,
+           #'v1_0.open'{channel_max    = ClientChannelMax,
                         max_frame_size = ClientFrameMax,
-                        idle_time_out = {uint, HeartbeatSec * 1000},
-                        container_id = {utf8, list_to_binary(atom_to_list(node()))}}),
+                        idle_time_out  = {uint, HeartbeatSec * 1000},
+                        container_id   = container_id(),
+                        properties     = server_properties()}),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     control_throttle(
       State1#v1{throttle = Throttle#throttle{
