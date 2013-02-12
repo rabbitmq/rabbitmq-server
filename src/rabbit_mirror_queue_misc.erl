@@ -324,10 +324,11 @@ update_mirrors(OldQ = #amqqueue{pid = QPid},
 
 update_mirrors0(OldQ = #amqqueue{name = QName},
                 NewQ = #amqqueue{name = QName}) ->
-    All = fun (Tuple) -> [element(1, Tuple) | element(2, Tuple)] end,
-    OldNodes = All(actual_queue_nodes(OldQ)),
-    NewNodes = All(suggested_queue_nodes(NewQ)),
-    add_mirrors(QName, NewNodes -- OldNodes),
+    {OldMNode, OldSNodes, _} = actual_queue_nodes(OldQ),
+    {NewMNode, NewSNodes}    = suggested_queue_nodes(NewQ),
+    OldNodes = [OldMNode | OldSNodes],
+    NewNodes = [NewMNode | NewSNodes],
+    add_mirrors (QName, NewNodes -- OldNodes),
     drop_mirrors(QName, OldNodes -- NewNodes),
     ok.
 
