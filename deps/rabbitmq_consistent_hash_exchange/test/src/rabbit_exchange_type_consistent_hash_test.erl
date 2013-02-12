@@ -23,21 +23,46 @@
 
 test() ->
     %% Run the test twice to test we clean up correctly
-    t(<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>),
-    t(<<"q4">>, <<"q5">>, <<"q6">>, <<"q7">>).
+    t([<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]),
+    t([<<"q4">>, <<"q5">>, <<"q6">>, <<"q7">>]).
 
-t(Q1, Q2, Q3, Q4) ->
+t(Qs) ->
+    ok = test_with_rk(Qs),
+    ok = test_with_header(Qs),
+    ok.
+
+test_with_rk(Qs) ->
+    test0(fun () ->
+                  #'basic.publish'{exchange = <<"e">>, routing_key = rnd()}
+          end,
+          fun() ->
+                  #amqp_msg{props = #'P_basic'{}, payload = <<>>}
+          end, [], Qs).
+
+test_with_header(Qs) ->
+    test0(fun () ->
+                  #'basic.publish'{exchange = <<"e">>}
+          end,
+          fun() ->
+                  H = [{<<"hashme">>, longstr, rnd()}],
+                  #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
+          end, [{<<"hash-header">>, longstr, <<"hashme">>}], Qs).
+
+rnd() ->
+    list_to_binary(integer_to_list(random:uniform(1000000))).
+
+test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     Count = 10000,
 
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
-    Queues = [Q1, Q2, Q3, Q4],
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
                             exchange = <<"e">>,
                             type = <<"x-consistent-hash">>,
-                            auto_delete = true
+                            auto_delete = true,
+                            arguments = DeclareArgs
                            }),
     [#'queue.declare_ok'{} =
          amqp_channel:call(Chan, #'queue.declare' {
@@ -53,20 +78,19 @@ t(Q1, Q2, Q3, Q4) ->
                                                  routing_key = <<"20">> })
      || Q <- [Q3, Q4]],
     #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
-    Msg = #amqp_msg { props = #'P_basic'{}, payload = <<>> },
     [amqp_channel:call(Chan,
-                       #'basic.publish'{
-                         exchange = <<"e">>,
-                         routing_key = list_to_binary(
-                                         integer_to_list(
-                                           random:uniform(1000000)))
-                       }, Msg) || _ <- lists:duplicate(Count, const)],
+                       MakeMethod(),
+                       MakeMsg()) || _ <- lists:duplicate(Count, const)],
     amqp_channel:call(Chan, #'tx.commit'{}),
-    Decls =
-        [amqp_channel:call(Chan, #'queue.declare' {
-                             queue = Q, exclusive = true }) || Q <- Queues],
-    Count = lists:sum([Len || #'queue.declare_ok' { message_count = Len } <-
-                                  Decls]), %% ASSERTION
+    Counts =
+        [begin
+            #'queue.declare_ok'{message_count = M} =
+                 amqp_channel:call(Chan, #'queue.declare' {queue     = Q,
+                                                           exclusive = true }),
+             M
+         end || Q <- Queues],
+    Count = lists:sum(Counts), %% All messages got routed
+    [true = C > 0.01 * Count || C <- Counts], %% We are not *grossly* unfair
     amqp_channel:call(Chan, #'exchange.delete' { exchange = <<"e">> }),
     [amqp_channel:call(Chan, #'queue.delete' { queue = Q }) || Q <- Queues],
     amqp_channel:close(Chan),
