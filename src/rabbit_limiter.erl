@@ -31,7 +31,7 @@
 
 %%----------------------------------------------------------------------------
 
--record(token, {pid, enabled, q_state}).
+-record(token, {pid, enabled, credits}).
 
 -ifdef(use_specs).
 
@@ -87,7 +87,7 @@ start_link() -> gen_server2:start_link(?MODULE, [], []).
 
 make_token() -> make_token(undefined).
 make_token(Pid) -> #token{pid = Pid, enabled = false,
-                          q_state = dict:new()}.
+                          credits = dict:new()}.
 
 is_enabled(#token{enabled = Enabled}) -> Enabled.
 
@@ -104,7 +104,7 @@ limit(Limiter, PrefetchCount) ->
 %% breaching a limit. Note that we don't use maybe_call here in order
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
-can_send(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
+can_send(Token = #token{pid = Pid, enabled = Enabled, credits = Credits},
          QPid, AckReq, CTag) ->
     ConsAllows = case dict:find(CTag, Credits) of
                      {ok, #credit{credit = C}} when C > 0 -> true;
@@ -114,7 +114,7 @@ can_send(Token = #token{pid = Pid, enabled = Enabled, q_state = Credits},
     case ConsAllows of
         true  -> case not Enabled orelse call_can_send(Pid, QPid, AckReq) of
                      true  -> Credits2 = record_send_q(CTag, Credits),
-                              Token#token{q_state = Credits2};
+                              Token#token{credits = Credits2};
                      false -> channel_blocked
                  end;
         false -> consumer_blocked
@@ -149,15 +149,15 @@ unblock(Limiter) ->
 is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
 
-initial_credit(Limiter = #token{q_state = Credits}, CTag, Credit, Drain) ->
+initial_credit(Limiter = #token{credits = Credits}, CTag, Credit, Drain) ->
     {[], Credits2} = update_credit(CTag, Credit, Drain, Credits),
-    Limiter#token{q_state = Credits2}.
+    Limiter#token{credits = Credits2}.
 
-credit(Limiter = #token{q_state = Credits}, CTag, Credit, Drain) ->
+credit(Limiter = #token{credits = Credits}, CTag, Credit, Drain) ->
     {Unblock, Credits2} = update_credit(CTag, Credit, Drain, Credits),
-    {Unblock, Limiter#token{q_state = Credits2}}.
+    {Unblock, Limiter#token{credits = Credits2}}.
 
-drained(Limiter = #token{q_state = Credits}) ->
+drained(Limiter = #token{credits = Credits}) ->
     {CTagCredits, Credits2} =
         dict:fold(
           fun (CTag,  #credit{credit = C,  drain = true},  {Acc, Creds0}) ->
@@ -165,13 +165,13 @@ drained(Limiter = #token{q_state = Credits}) ->
               (_CTag, #credit{credit = _C, drain = false}, {Acc, Creds0}) ->
                   {Acc, Creds0}
           end, {[], Credits}, Credits),
-    {CTagCredits, Limiter#token{q_state = Credits2}}.
+    {CTagCredits, Limiter#token{credits = Credits2}}.
 
-forget_consumer(Limiter = #token{q_state = Credits}, CTag) ->
-    Limiter#token{q_state = dict:erase(CTag, Credits)}.
+forget_consumer(Limiter = #token{credits = Credits}, CTag) ->
+    Limiter#token{credits = dict:erase(CTag, Credits)}.
 
-copy_queue_state(#token{q_state = Credits}, Token) ->
-    Token#token{q_state = Credits}.
+copy_queue_state(#token{credits = Credits}, Token) ->
+    Token#token{credits = Credits}.
 
 %%----------------------------------------------------------------------------
 %% Queue-local code
@@ -180,7 +180,7 @@ copy_queue_state(#token{q_state = Credits}, Token) ->
 %% We want to do all the AMQP 1.0-ish link level credit calculations in the
 %% queue (to do them elsewhere introduces a ton of races). However, it's a big
 %% chunk of code that is conceptually very linked to the limiter concept. So
-%% we get the queue to hold a bit of state for us (#token.q_state), and
+%% we get the queue to hold a bit of state for us (#token.credits), and
 %% maintain a fiction that the limiter is making the decisions...
 
 record_send_q(CTag, Credits) ->
