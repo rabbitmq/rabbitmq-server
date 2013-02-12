@@ -68,9 +68,6 @@
              %% Queue of {ChPid, #consumer{}} for consumers which have
              %% been blocked for any reason
              blocked_consumers,
-             %% List of consumer tags which have individually been
-             %% blocked by the limiter.
-             blocked_ctags,
              %% The limiter itself
              limiter,
              %% Has the limiter imposed a channel-wide block, either
@@ -375,7 +372,6 @@ ch_record(ChPid) ->
                              acktags              = queue:new(),
                              consumer_count       = 0,
                              blocked_consumers    = queue:new(),
-                             blocked_ctags        = [],
                              is_limit_active      = false,
                              limiter              = rabbit_limiter:make_token(),
                              unsent_message_count = 0},
@@ -459,12 +455,12 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
             block_consumer(C, E),
             {false, State};
         false ->
-            #cr{limiter = Limiter, ch_pid = ChPid, blocked_ctags = BCTags} = C,
+            #cr{limiter = Limiter, ch_pid = ChPid} = C,
             #consumer{tag = CTag} = Consumer,
             case rabbit_limiter:can_send(
                    Limiter, self(), Consumer#consumer.ack_required, CTag) of
-                consumer_blocked ->
-                    block_consumer(C#cr{blocked_ctags = [CTag | BCTags]}, E),
+                {consumer_blocked, Limiter2} ->
+                    block_consumer(C#cr{limiter = Limiter2}, E),
                     {false, State};
                 channel_blocked ->
                     block_consumer(C#cr{is_limit_active = true}, E),
@@ -634,12 +630,12 @@ possibly_unblock(State, ChPid, Update) ->
         not_found ->
             State;
         C ->
-            C1 = #cr{blocked_ctags = BCTags} = Update(C),
-            IsBlocked = is_ch_blocked(C1),
+            C1 = #cr{limiter = Limiter} = Update(C),
             {Blocked, Unblocked} =
                 lists:partition(
                   fun({_ChPid, #consumer{tag = CTag}}) ->
-                          IsBlocked orelse lists:member(CTag, BCTags)
+                         is_ch_blocked(C1) orelse
+                              rabbit_limiter:is_consumer_blocked(Limiter, CTag)
                   end, queue:to_list(C1#cr.blocked_consumers)),
             case Unblocked of
                 [] -> update_ch_record(C1),
@@ -1351,13 +1347,11 @@ handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
 handle_cast({credit, ChPid, CTag, Credit, Drain},
             State = #q{backing_queue       = BQ,
                        backing_queue_state = BQS}) ->
-    #cr{limiter       = Lim,
-        blocked_ctags = BCTags} = ch_record(ChPid),
-    {Unblock, Lim2} = rabbit_limiter:credit(Lim, CTag, Credit, Drain),
+    #cr{limiter = Lim} = ch_record(ChPid),
+    Lim2 = rabbit_limiter:credit(Lim, CTag, Credit, Drain),
     rabbit_channel:send_credit_reply(ChPid, BQ:len(BQS)),
     State1 = possibly_unblock(
-               State, ChPid, fun(C) -> C#cr{blocked_ctags = BCTags -- Unblock,
-                                            limiter       = Lim2} end),
+               State, ChPid, fun(C) -> C#cr{limiter = Lim2} end),
     maybe_send_drained(State1),
     noreply(State1);
 
