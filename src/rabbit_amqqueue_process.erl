@@ -1216,8 +1216,7 @@ handle_cast(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
 
 handle_cast({run_backing_queue, Mod, Fun},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
-    noreply(run_message_queue(
-              State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)}));
+    noreply(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)});
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
             State = #q{senders = Senders}) ->
