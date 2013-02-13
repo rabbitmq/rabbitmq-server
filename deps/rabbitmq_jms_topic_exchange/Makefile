@@ -6,7 +6,8 @@ HG_BASE:=http://hg.rabbitmq.com
 
 RABBIT_DEPS:=rabbitmq-server rabbitmq-erlang-client rabbitmq-codegen
 UMBRELLA:=rabbitmq-public-umbrella
-RABBIT_VERSION:=rabbitmq_v3_0_1
+RMQ_VERSION:=3.0.1
+RMQ_VERSION_TAG:=rabbitmq_v3_0_1
 
 # command targets ##################################
 .PHONY: all clean package dist init cleandist run-in-broker
@@ -18,7 +19,7 @@ clean:
 	rm -rf target*
 
 dist: init
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) dist
+	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=${RMQ_VERSION} dist
 
 package: dist
 	mkdir -p target/plugins
@@ -27,15 +28,15 @@ package: dist
 init: $(addprefix $(UMBRELLA)/,$(EXCHANGE) $(RABBIT_DEPS))
 
 cleandist: init
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) clean
+	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=${RMQ_VERSION} clean
 
 run-in-broker: dist
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) run-in-broker
+	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=${RMQ_VERSION} run-in-broker
 
 # artefact targets #################################
 $(UMBRELLA).co:
 	hg clone $(HG_BASE)/$(UMBRELLA)
-	cd $(UMBRELLA); hg up $(RABBIT_VERSION)
+	cd $(UMBRELLA); hg up $(RMQ_VERSION_TAG)
 	touch $@
 
 $(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/*
@@ -45,4 +46,4 @@ $(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/*
 $(addprefix $(UMBRELLA)/,$(RABBIT_DEPS)): $(UMBRELLA).co
 	rm -rf $@
 	cd $(UMBRELLA);hg clone $(HG_BASE)/$(notdir $@)
-	cd $@; hg up $(RABBIT_VERSION)
+	cd $@; hg up $(RMQ_VERSION_TAG)
