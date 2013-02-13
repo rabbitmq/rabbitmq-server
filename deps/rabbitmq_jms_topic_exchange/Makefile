@@ -1,6 +1,7 @@
 # Make this RabbitMQ plugin
 EXCHANGE:=rabbitmq-jms-topic-exchange
 ARTEFACT:=rabbitmq_jms_topic_exchange
+MAVEN_ARTEFACT:=$(ARTEFACT).ez
 
 # Version of RabbitMQ to build against: overridable on commandline
 RMQ_VERSION=3.0.1
@@ -25,7 +26,7 @@ dist: init
 
 package: dist
 	mkdir -p target/plugins
-	cp $(UMBRELLA)/$(EXCHANGE)/dist/$(ARTEFACT)* target/plugins/.
+	cp $(UMBRELLA)/$(EXCHANGE)/dist/$(ARTEFACT)* target/plugins/$(MAVEN_ARTEFACT)
 
 init: $(addprefix $(UMBRELLA)/,$(EXCHANGE) $(RABBIT_DEPS))
 
