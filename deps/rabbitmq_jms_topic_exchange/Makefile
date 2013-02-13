@@ -2,12 +2,14 @@
 EXCHANGE:=rabbitmq-jms-topic-exchange
 ARTEFACT:=rabbitmq_jms_topic_exchange
 
+# Version of RabbitMQ to build against: overridable on commandline
+RMQ_VERSION=3.0.1
+
 HG_BASE:=http://hg.rabbitmq.com
 
 RABBIT_DEPS:=rabbitmq-server rabbitmq-erlang-client rabbitmq-codegen
 UMBRELLA:=rabbitmq-public-umbrella
-RMQ_VERSION:=3.0.1
-RMQ_VERSION_TAG:=rabbitmq_v3_0_1
+RMQ_VERSION_TAG:=rabbitmq_v$(subst .,_,$(RMQ_VERSION))
 
 # command targets ##################################
 .PHONY: all clean package dist init cleandist run-in-broker
@@ -19,7 +21,7 @@ clean:
 	rm -rf target*
 
 dist: init
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=${RMQ_VERSION} dist
+	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) dist
 
 package: dist
 	mkdir -p target/plugins
@@ -28,10 +30,10 @@ package: dist
 init: $(addprefix $(UMBRELLA)/,$(EXCHANGE) $(RABBIT_DEPS))
 
 cleandist: init
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=${RMQ_VERSION} clean
+	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) clean
 
 run-in-broker: dist
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=${RMQ_VERSION} run-in-broker
+	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) run-in-broker
 
 # artefact targets #################################
 $(UMBRELLA).co:
