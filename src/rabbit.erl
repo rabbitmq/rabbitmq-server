@@ -342,7 +342,7 @@ handle_app_error(App, Reason) ->
     throw({could_not_start, App, Reason}).
 
 start_it(StartFun) ->
-    Marker = spawn_link(fun() -> receive finished -> ok end end),
+    Marker = spawn_link(fun() -> receive stop -> ok end end),
     register(rabbit_boot, Marker),
     try
         StartFun()
@@ -353,7 +353,7 @@ start_it(StartFun) ->
             boot_error(Reason, erlang:get_stacktrace())
     after
         unlink(Marker),
-        Marker ! finished,
+        Marker ! stop,
         %% give the error loggers some time to catch up
         timer:sleep(100)
     end.
