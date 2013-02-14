@@ -342,6 +342,7 @@ handle_app_error(App, Reason) ->
     throw({could_not_start, App, Reason}).
 
 start_it(StartFun) ->
+    register(rabbit_boot, self()),
     try
         StartFun()
     catch
@@ -350,11 +351,18 @@ start_it(StartFun) ->
          _:Reason ->
             boot_error(Reason, erlang:get_stacktrace())
     after
+        %% In the boot/0 case the process exits - but in the start/0
+        %% case it is some random RPC server and does not.
+        unregister(rabbit_boot),
         %% give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
+    case whereis(rabbit_boot) of
+        undefined -> ok;
+        _         -> await_startup()
+    end,
     rabbit_log:info("Stopping RabbitMQ~n"),
     ok = app_utils:stop_applications(app_shutdown_order()).
 
