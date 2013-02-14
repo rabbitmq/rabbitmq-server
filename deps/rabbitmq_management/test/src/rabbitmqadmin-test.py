@@ -49,16 +49,16 @@ tracing: False
 
 --------------------------------------------------------------------------------
 
-""", ['--format', 'long', 'list', 'vhosts'])
+""", ['--format', 'long', 'list', 'vhosts', 'name', 'tracing'])
 
     def test_fmt_kvp(self):
         self.assert_output("""name="/" tracing="False"
-""", ['--format', 'kvp', 'list', 'vhosts'])
+""", ['--format', 'kvp', 'list', 'vhosts', 'name', 'tracing'])
 
     def test_fmt_tsv(self):
         self.assert_output("""name	tracing
 /	False
-""", ['--format', 'tsv', 'list', 'vhosts'])
+""", ['--format', 'tsv', 'list', 'vhosts', 'name', 'tracing'])
 
     def test_fmt_table(self):
         out = """+------+---------+
@@ -67,12 +67,12 @@ tracing: False
 | /    | False   |
 +------+---------+
 """
-        self.assert_output(out, ['list', 'vhosts'])
-        self.assert_output(out, ['--format', 'table', 'list', 'vhosts'])
+        self.assert_output(out, ['list', 'vhosts', 'name', 'tracing'])
+        self.assert_output(out, ['--format', 'table', 'list', 'vhosts', 'name', 'tracing'])
 
     def test_fmt_bash(self):
         self.assert_output("""/
-""", ['--format', 'bash', 'list', 'vhosts'])
+""", ['--format', 'bash', 'list', 'vhosts', 'name', 'tracing'])
 
     def test_vhosts(self):
         self.assert_list(['/'], l('vhosts'))

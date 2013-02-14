@@ -20,6 +20,9 @@
 
 -export([http_get/1, http_put/3, http_delete/2]).
 
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2]).
+-import(rabbit_misc, [pget/2]).
+
 overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
@@ -186,7 +189,7 @@ permissions_test() ->
 
 connections_test() ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    LocalPort = rabbit_mgmt_test_db:local_port(Conn),
+    LocalPort = local_port(Conn),
     Path = binary_to_list(
              rabbit_mgmt_format:print(
                "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
@@ -214,14 +217,14 @@ exchanges_test() ->
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_get("/exchanges/%2f/foo", ?NOT_FOUND),
-    [{name,<<"foo">>},
-     {vhost,<<"myvhost">>},
-     {type,<<"direct">>},
-     {durable,true},
-     {auto_delete,false},
-     {internal,false},
-     {arguments,[]}] =
-        http_get("/exchanges/myvhost/foo"),
+    assert_item([{name,<<"foo">>},
+                 {vhost,<<"myvhost">>},
+                 {type,<<"direct">>},
+                 {durable,true},
+                 {auto_delete,false},
+                 {internal,false},
+                 {arguments,[]}],
+                http_get("/exchanges/myvhost/foo")),
 
     http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/exchanges/myvhost/bar", [{type, <<"bad_exchange_type">>}],
@@ -483,7 +486,7 @@ get_conn(Username, Password) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{
                                         username = list_to_binary(Username),
                                         password = list_to_binary(Password)}),
-    LocalPort = rabbit_mgmt_test_db:local_port(Conn),
+    LocalPort = local_port(Conn),
     ConnPath = rabbit_misc:format(
                  "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
                  [LocalPort]),
@@ -1024,6 +1027,11 @@ msg(Key, Headers, Body, Enc) ->
      {payload,          Body},
      {payload_encoding, Enc}].
 
+local_port(Conn) ->
+    [{sock, Sock}] = amqp_connection:info(Conn, [sock]),
+    {ok, Port} = inet:port(Sock),
+    Port.
+
 %%---------------------------------------------------------------------------
 http_get(Path) ->
     http_get(Path, ?OK).
@@ -1109,35 +1117,3 @@ auth_header(Username, Password) ->
     {"Authorization",
      "Basic " ++ binary_to_list(base64:encode(Username ++ ":" ++ Password))}.
 
-%%---------------------------------------------------------------------------
-
-assert_list(Exp, Act) ->
-    case length(Exp) == length(Act) of
-        true  -> ok;
-        false -> throw({expected, Exp, actual, Act})
-    end,
-    [case length(lists:filter(fun(ActI) -> test_item(ExpI, ActI) end, Act)) of
-         1 -> ok;
-         N -> throw({found, N, ExpI, in, Act})
-     end || ExpI <- Exp].
-
-assert_item(Exp, Act) ->
-    case test_item0(Exp, Act) of
-        [] -> ok;
-        Or -> throw(Or)
-    end.
-
-test_item(Exp, Act) ->
-    case test_item0(Exp, Act) of
-        [] -> true;
-        _  -> false
-    end.
-
-test_item0(Exp, Act) ->
-    [{did_not_find, ExpI, in, Act} || ExpI <- Exp,
-                                      not lists:member(ExpI, Act)].
-
-%%---------------------------------------------------------------------------
-
-pget(K, L) ->
-     proplists:get_value(K, L).

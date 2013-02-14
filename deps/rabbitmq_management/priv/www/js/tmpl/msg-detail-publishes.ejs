@@ -1,9 +1,10 @@
 <h3><%= label %></h3>
-<%
-     var col_return_unroutable = !is_stat_empty(totals, 'return_unroutable');
-%>
 <% if (object && object.length > 0) { %>
-<table class="list list-with-total">
+<%
+     var col_return_unroutable = !is_col_empty(object, 'return_unroutable', function(o) {return o.stats;});
+     var col_confirm = mode != 'exchange-outgoing';
+%>
+<table class="list">
   <tr>
 <% if (mode == 'channel') { %>
     <th>Exchange</th>
@@ -15,7 +16,9 @@
     <th>Exchange</th>
 <% } %>
     <th>publish</th>
+<% if (col_confirm) { %>
     <th>confirm</th>
+<% } %>
 <% if (col_return_unroutable) { %>
     <th>return (mandatory)</th>
 <% } %>
@@ -36,20 +39,14 @@
       <td><%= link_exchange(pub.exchange.vhost, pub.exchange.name) %></td>
 <% } %>
       <td class="r"><%= fmt_rate(pub.stats, 'publish') %></td>
+<% if (col_confirm) { %>
       <td class="r"><%= fmt_rate(pub.stats, 'confirm') %></td>
+<% } %>
 <% if (col_return_unroutable) { %>
       <td class="r"><%= fmt_rate(pub.stats, 'return_unroutable') %></td>
 <% } %>
     </tr>
 <% } %>
-  <tr class="total">
-    <th>Total:</th>
-    <td class="r"><%= fmt_rate(totals, 'publish', false, 'mini-highlight') %></td>
-    <td class="r"><%= fmt_rate(totals, 'confirm', false, 'mini-highlight') %></td>
-<% if (col_return_unroutable) { %>
-    <td class="r"><%= fmt_rate(totals, 'return_unroutable', false, 'mini-highlight') %></td>
-<% } %>
-  </tr>
 </table>
 <% } else { %>
 <p> ... no publishes ...</p>

@@ -147,8 +147,7 @@ HELP = {
       </p>',
 
     'queued-messages':
-    'Total messages in all queues:\
-      <dl>\
+      '<dl>                          \
         <dt>Ready</dt>\
         <dd>Number of messages that are available to be delivered now.</dd>\
         <dt>Unacknowledged</dt>\
@@ -160,7 +159,7 @@ HELP = {
     <b>not</b> include messages removed due to queue deletion.',
 
     'message-rates':
-    'Total rates for all queues. Only rates for which some activity is taking place will be shown.\
+    'Only rates for which some activity is taking place will be shown.\
       <dl>\
         <dt>Publish</dt>\
         <dd>Rate at which messages are entering the server.</dd>\

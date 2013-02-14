@@ -38,7 +38,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Name = proplists:get_value(name, rabbit_mgmt_wm_connection:conn(ReqData)),
-    Chs = rabbit_mgmt_db:get_all_channels(basic),
+    Chs = rabbit_mgmt_db:get_all_channels(rabbit_mgmt_util:range(ReqData)),
     rabbit_mgmt_util:reply_list(
       [Ch || Ch <- rabbit_mgmt_util:filter_conn_ch_list(Chs, ReqData, Context),
              conn_name(Ch) =:= Name],

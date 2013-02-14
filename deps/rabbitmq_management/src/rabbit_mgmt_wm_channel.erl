@@ -32,8 +32,8 @@ content_types_provided(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     case channel(ReqData) of
-        error -> {false, ReqData, Context};
-        _Conn -> {true, ReqData, Context}
+        not_found -> {false, ReqData, Context};
+        _Conn     -> {true, ReqData, Context}
     end.
 
 to_json(ReqData, Context) ->
@@ -47,5 +47,5 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 channel(ReqData) ->
-    hd(rabbit_mgmt_db:get_channels(
-         [rabbit_mgmt_util:id(channel, ReqData)], full)).
+    rabbit_mgmt_db:get_channel(rabbit_mgmt_util:id(channel, ReqData),
+                               rabbit_mgmt_util:range(ReqData)).

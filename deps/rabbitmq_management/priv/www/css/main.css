@@ -39,8 +39,8 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .right { float: right; }
 .clear { clear: both; }
 
-.help { color: #888; cursor: pointer; }
-.help:hover { color: #444; }
+.help, .rate-options { color: #888; cursor: pointer; }
+.help:hover, .rate-options:hover { color: #444; }
 
 .tag-link { color: #444; cursor: pointer; }
 .tag-link:hover { color: #888; }
@@ -59,15 +59,11 @@ table.list th a.sort .arrow { color: #888; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }
 table.list td p.warning { margin: 0; padding: 5px; }
 
-table.list-with-total { border-bottom: none; }
-table.list tr.total td { border: none; border-top: 1px solid #bbb; }
-table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: right; vertical-align: middle; }
-
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
 div.memory-bar { margin: 10px 0 5px 0; border-radius: 5px; border: 1px solid #ddd; float: left; }
 div.memory-section { float: left; height: 30px; }
-div.memory-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
+div.colour-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 div.memory-info { float: left; padding: 10px 10px 0 0; }
 button.memory-button { margin-top: 10px; }
 
@@ -97,6 +93,8 @@ table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px;
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
+table.facts-fixed-width th, table.facts-fixed-width td { width: 100px; }
+
 table.mini th { border: none; padding: 0 2px 2px 2px; text-align: right; }
 table.mini td { border: none; padding: 0 2px 2px 2px; }
 
@@ -125,7 +123,12 @@ p.status-error th { background: white; }
 p.warning, div.form-popup-warn { background: #ff8; border: 1px solid #bb8; }
 div.form-popup-info { background: #8f8; border: 1px solid #4b4; }
 div.form-popup-help { text-align: left !important; background: #f8f8f8; border: 1px solid #ccc; }
-div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; }
+div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; z-index: 1; display: none; position: fixed; min-width: 500px; }
+div.form-popup-warn span, div.form-popup-info span, div.form-popup-help span, div.form-popup-rate-options span { color: black; font-weight: bold; cursor: pointer; }
+
+div.form-popup-rate-options {
+    z-index: 1; position: absolute; right: 35px; padding: 15px; background: white; border-left: 1px solid #ccc; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; border-radius: 10px 0 0 10px; -moz-border-radius: 10px 0 0 10px;
+}
 
 p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; font-weight: bold; }
 
@@ -133,7 +136,12 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
 .highlight, .micro-highlight { float: left; }
 
-.mini-highlight { font-size: 150%; padding:10px; background-color: #ddd; color: #888; border-radius: 10px; -moz-border-radius: 10px; line-height: 300%; }
+.chart { margin: 0 20px 20px 0; float: left; }
+.chart-small  { width: 400px; height: 100px; }
+.chart-medium { width: 600px; height: 200px; }
+.chart-large  { width: 800px; height: 300px; }
+
+.chart-legend { float: left; }
 
 .micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .micro-highlight a { font-weight: normal !important; color: #888 !important; }
@@ -166,6 +174,8 @@ table.form .multifield p { margin: 0; padding: 0; }
 table.form .multifield p select { width: 70px; }
 table.form label { margin-top: 5px; display: block; }
 
+label.radio { padding: 5px; border: 1px solid #eee; cursor: pointer; border-radius: 5px; -moz-border-radius: 5px; }
+
 table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }
 
@@ -186,9 +196,6 @@ input[type=submit]:hover, button:hover {
 
 input[type=submit][disabled], button[disabled] { background: #aac; cursor: default; }
 input[type=submit][disabled]:hover, button[disabled]:hover { background: #aac; }
-
-.form-popup-warn, .form-popup-info, .form-popup-help { display: none; position: fixed; min-width: 500px; }
-.form-popup-warn span, .form-popup-info span, .form-popup-help span { color: black; font-weight: bold; cursor: pointer; }
 
 h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; font-weight: normal; }
 

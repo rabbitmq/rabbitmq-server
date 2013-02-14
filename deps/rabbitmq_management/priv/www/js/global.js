@@ -13,15 +13,6 @@ function map(list) {
     return res;
 }
 
-// Which queries need to have the current vhost appended (if there is one)?
-var VHOST_QUERIES = [new RegExp('^/queues$'),
-                     new RegExp('^/exchanges$'),
-                     new RegExp('^/parameters/[^/]*$')];
-
-// Which queries need to have the current sort appended (if there is one)?
-var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
-                         '/queues', '/exchanges']);
-
 // Extension arguments that we know about and present specially in the UI.
 var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'},
                   'x-message-ttl':             {'short': 'TTL', 'type': 'int'},
@@ -48,6 +39,12 @@ var NAVIGATION = {'Overview':    ['#/',                            false],
                                    'Virtual Hosts': ['#/vhosts',   true],
                                    'Policies':      ['#/policies', true]}, true]
                  };
+
+var CHART_PERIODS = {'60|5':       'Last minute',
+                     '1200|60':    'Last twenty minutes',
+                     '3600|60':    'Last hour',
+                     '21600|1200': 'Last six hours',
+                     '86400|1200': 'Last day'};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
@@ -142,3 +139,6 @@ var last_successful_connect;
 // TODO: maybe we don't need this any more?
 var update_counter = 0;
 
+// Used to hold chart data in between writing the div in an ejs and
+// rendering the chart.
+var chart_data = {};

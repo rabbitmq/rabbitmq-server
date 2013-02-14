@@ -16,76 +16,135 @@
 
 -module(rabbit_mgmt_db).
 
+-include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(gen_server2).
 
 -export([start_link/0]).
 
--export([augment_exchanges/2, augment_queues/2, augment_nodes/1,
-         get_channels/2, get_connections/1,
-         get_all_channels/1, get_all_connections/0,
-         get_overview/1, get_overview/0]).
+-export([augment_exchanges/3, augment_queues/3,
+         augment_nodes/1, augment_vhosts/2,
+         get_channel/2, get_connection/2,
+         get_all_channels/1, get_all_connections/1,
+         get_overview/2, get_overview/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
 
+%% For testing
+-export([remove_old_samples/2, format_sample_details/3]).
+
 -import(rabbit_misc, [pget/3, pset/3]).
 
--record(state, {tables, interval}).
+%% The management database listens to events broadcast via the
+%% rabbit_event mechanism, and responds to queries from the various
+%% rabbit_mgmt_wm_* modules. It handles several kinds of events, and
+%% slices and dices them in various ways.
+%%
+%% There are three types of events coming in: created (when an object
+%% is created, containing immutable facts about it), stats (emitted on
+%% a timer, with mutable facts about the object), and deleted (just
+%% containing the object's ID). In this context "objects" means
+%% connections, channels, exchanges, queues, consumers, vhosts and
+%% nodes. Note that we do not care about users, permissions, bindings,
+%% parameters or policies.
+%%
+%% Connections and channels are identified by pids. Queues and
+%% exchanges are identified by names (which are #resource{}s). VHosts
+%% and nodes are identified by names which are binaries. And consumers
+%% are identified by {ChPid, QName}.
+%%
+%% The management database records the "created" events for
+%% connections, channels and consumers, and can thus be authoritative
+%% about those objects. For queues, exchanges and nodes we go to
+%% Mnesia to find out the immutable details of the objects.
+%%
+%% For everything other than consumers, the database can then augment
+%% these immutable details with stats, as the object changes. (We
+%% never emit anything very interesting about consumers).
+%%
+%% Stats on the inbound side are refered to as coarse- and
+%% fine-grained. Fine grained statistics are the message rates
+%% maintained by channels and associated with tuples: {publishing
+%% channel, exchange}, {publishing channel, exchange, queue} and
+%% {queue, consuming channel}. Coarse grained stats are everything
+%% else and are associated with only one object, not a tuple.
+%%
+%% Within the management database though we rearrange things a bit: we
+%% refer to basic stats, simple stats and detail stats.
+%%
+%% Basic stats are those coarse grained stats for which we do not
+%% retain a history and do not perform any calculations -
+%% e.g. connection.state or channel.prefetch_count.
+%%
+%% Simple stats are those for which we do history / calculations which
+%% are associated with one object *after aggregation* - so these might
+%% originate with coarse grained stats - e.g. connection.send_oct or
+%% queue.messages_ready. But they might also originate from fine
+%% grained stats which have been aggregated - e.g. the message rates
+%% for a vhost or queue.
+%%
+%% Finally, detailed stats are those for which we do history /
+%% calculations which are associated with more than one object. These
+%% have to have originated as fine grained stats, but can still have
+%% been aggregated.
+%%
+%% Created events and basic stats are stored in ETS tables by object,
+%% looked up in an orddict in #state.tables. Simple and detailed stats
+%% (which only differ depending on how they're keyed) are stored in
+%% #state.aggregated_stats.
+%%
+%% For each key for simple and detailed stats we maintain a #stats{}
+%% record, essentially a base counter for everything that happened
+%% before the samples we have kept, and a gb_tree of {timestamp,
+%% sample} values.
+%%
+%% We also have #state.old_stats to let us calculate instantaneous
+%% rates, in order to apportion simple / detailed stats into time
+%% slices as they come in. These instantaneous rates are not returned
+%% in response to any query, the rates shown in the API are calculated
+%% at query time.
+%%
+%% We also keep a timer going, in order to prune old samples from
+%% #state.aggregated_stats.
+%%
+%% Overall the object is to do all the aggregation when events come
+%% in, and make queries be simple lookups as much as possible. One
+%% area where this does not happen is the global overview - which is
+%% aggregated from vhost stats at query time since we do not want to
+%% reveal anything about other vhosts to unprivileged users.
+
+-record(state, {
+          %% "stats" for which no calculations are required
+          tables,
+          %% database of aggregated samples
+          aggregated_stats,
+          %% What the previous info item was for any given
+          %% {queue/channel/connection}
+          old_stats,
+          remove_old_samples_timer,
+          interval}).
+
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
--define(TABLES, [queue_stats, connection_stats, channel_stats,
-                 consumers, node_stats] ++
-            ?FINE_STATS_TYPES).
+-define(TABLES, [queue_stats, connection_stats, channel_stats, consumers,
+                 node_stats]).
 
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
--define(FINE_STATS, [publish, ack, deliver_get, confirm,
-                     return_unroutable, redeliver] ++
+-define(FINE_STATS, [publish, publish_in, publish_out,
+                     ack, deliver_get, confirm, return_unroutable, redeliver] ++
             ?DELIVER_GET).
 
--define(
-   FINE_STATS_CHANNEL_LIST,
-   [{channel_queue_stats,   [channel], message_stats, channel},
-    {channel_exchange_stats,[channel], message_stats, channel}]).
+-define(COARSE_QUEUE_STATS,
+        [messages, messages_ready, messages_unacknowledged]).
 
--define(
-   FINE_STATS_CHANNEL_DETAIL,
-   [{channel_queue_stats,    [channel],           message_stats, channel},
-    {channel_exchange_stats, [channel],           message_stats, channel},
-    {channel_exchange_stats, [channel, exchange], publishes,     channel},
-    {channel_queue_stats,    [channel, queue],    deliveries,    channel}]).
+-define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
--define(
-   FINE_STATS_QUEUE_LIST,
-   [{channel_queue_stats,          [queue], message_stats, queue},
-    {channel_queue_exchange_stats, [queue], message_stats, queue}]).
+-define(REMOVE_OLD_SAMPLES_INTERVAL, 5 * 60 * 1000).
 
--define(
-   FINE_STATS_QUEUE_DETAIL,
-   [{channel_queue_stats,          [queue],           message_stats, queue},
-    {channel_queue_exchange_stats, [queue],           message_stats, queue},
-    {channel_queue_stats,          [queue, channel],  deliveries, queue},
-    {channel_queue_exchange_stats, [queue, exchange], incoming, queue}]).
-
--define(
-   FINE_STATS_EXCHANGE_LIST,
-   [{channel_exchange_stats,       [exchange], message_stats_in,  exchange},
-    {channel_queue_exchange_stats, [exchange], message_stats_out, exchange}]).
-
--define(
-   FINE_STATS_EXCHANGE_DETAIL,
-   [{channel_exchange_stats,       [exchange], message_stats_in,   exchange},
-    {channel_queue_exchange_stats, [exchange], message_stats_out,  exchange},
-    {channel_exchange_stats,       [exchange, channel],  incoming, exchange},
-    {channel_queue_exchange_stats, [exchange, queue],    outgoing, exchange}]).
-
--define(FINE_STATS_NONE, []).
-
--define(OVERVIEW_QUEUE_STATS,
-        [messages, messages_ready, messages_unacknowledged, messages_details,
-         messages_ready_details, messages_unacknowledged_details]).
-
+%%----------------------------------------------------------------------------
+%% API
 %%----------------------------------------------------------------------------
 
 start_link() ->
@@ -103,18 +162,20 @@ start_link() ->
         Else      -> Else
     end.
 
-augment_exchanges(Xs, Mode) -> safe_call({augment_exchanges, Xs, Mode}, Xs).
-augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
+%% R = Ranges, M = Mode
+augment_exchanges(Xs, R, M) -> safe_call({augment_exchanges, Xs, R, M}, Xs).
+augment_queues(Qs, R, M)    -> safe_call({augment_queues, Qs, R, M}, Qs).
+augment_vhosts(VHosts, R)   -> safe_call({augment_vhosts, VHosts, R}, VHosts).
 augment_nodes(Nodes)        -> safe_call({augment_nodes, Nodes}, Nodes).
 
-get_channels(Cs, Mode)      -> safe_call({get_channels, Cs, Mode}, Cs).
-get_connections(Cs)         -> safe_call({get_connections, Cs}, Cs).
+get_channel(Name, R)        -> safe_call({get_channel, Name, R}, not_found).
+get_connection(Name, R)     -> safe_call({get_connection, Name, R}, not_found).
 
-get_all_channels(Mode)      -> safe_call({get_all_channels, Mode}).
-get_all_connections()       -> safe_call(get_all_connections).
+get_all_channels(R)         -> safe_call({get_all_channels, R}).
+get_all_connections(R)      -> safe_call({get_all_connections, R}).
 
-get_overview(User)          -> safe_call({get_overview, User}).
-get_overview()              -> safe_call({get_overview, all}).
+get_overview(User, R)       -> safe_call({get_overview, User, R}).
+get_overview(R)             -> safe_call({get_overview, all, R}).
 
 safe_call(Term) -> safe_call(Term, []).
 
@@ -125,102 +186,7 @@ safe_call(Term, Item) ->
     end.
 
 %%----------------------------------------------------------------------------
-pget(Key, List) -> pget(Key, List, unknown).
-
-%% id_name() and id() are for use when handling events, id_lookup()
-%% for when augmenting. The difference is that when handling events a
-%% queue name will be a resource, but when augmenting we will be
-%% passed a queue proplist that will already have been formatted -
-%% i.e. it will have name and vhost keys.
-id_name(node_stats)       -> name;
-id_name(queue_stats)      -> name;
-id_name(channel_stats)    -> pid;
-id_name(connection_stats) -> pid.
-
-id(Type, List) -> pget(id_name(Type), List).
-
-id_lookup(queue_stats, List) -> rabbit_misc:r(
-                                  pget(vhost, List), queue, pget(name, List));
-id_lookup(Type,        List) -> id(Type, List).
-
-lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
-
-lookup_element(Table, Key, Pos) ->
-    try ets:lookup_element(Table, Key, Pos)
-    catch error:badarg -> []
-    end.
-
-result_or_error([]) -> error;
-result_or_error(S)  -> S.
-
-rates(Stats, Timestamp, OldStats, OldTimestamp, Keys) ->
-    Stats ++ [R || Key <- Keys,
-                   R   <- [rate(Stats, Timestamp, OldStats, OldTimestamp, Key)],
-                   R =/= unknown].
-
-rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
-    case OldTimestamp == [] orelse not proplists:is_defined(Key, OldStats) of
-        true  -> unknown;
-        false -> Diff = pget(Key, Stats) - pget(Key, OldStats),
-                 Name = details_key(Key),
-                 Interval = timer:now_diff(Timestamp, OldTimestamp),
-                 Rate = Diff / (Interval / 1000000),
-                 {Name, [{rate, Rate},
-                         {interval, Interval},
-                         {last_event,
-                          rabbit_mgmt_format:timestamp_ms(Timestamp)}]}
-    end.
-
-sum(List, Keys) ->
-    lists:foldl(fun (I0, I1) -> gs_update(I0, I1, Keys) end,
-                gs_update([], [], Keys), List).
-
-%% List = [{ [{channel, Pid}, ...], [{deliver, 123}, ...] } ...]
-group_sum([], List) ->
-    lists:foldl(fun ({_, Item1}, Item0) ->
-                        gs_update(Item0, Item1)
-                end, [], List);
-
-group_sum([Group | Groups], List) ->
-    D = lists:foldl(
-          fun (Next = {Ids, _}, Dict) ->
-                  Id = {Group, pget(Group, Ids)},
-                  dict:update(Id, fun(Cur) -> [Next | Cur] end, [Next], Dict)
-          end, dict:new(), List),
-    dict:map(fun(_, SubList) ->
-                     group_sum(Groups, SubList)
-             end, D).
-
-gs_update(Item0, Item1) ->
-    Keys = lists:usort([K || {K, _} <- Item0 ++ Item1]),
-    gs_update(Item0, Item1, Keys).
-
-gs_update(Item0, Item1, Keys) ->
-    [{Key, gs_update_add(Key, pget(Key, Item0), pget(Key, Item1))} ||
-        Key <- Keys].
-
-gs_update_add(Key, Item0, Item1) ->
-    case is_details(Key) of
-        true  ->
-            I0 = if_unknown(Item0, []),
-            I1 = if_unknown(Item1, []),
-            %% TODO if I0 and I1 are from different channels then should we not
-            %% just throw away interval / last_event?
-            [{rate,       pget(rate, I0, 0) + pget(rate, I1, 0)},
-             {interval,   gs_max(interval, I0, I1)},
-             {last_event, gs_max(last_event, I0, I1)}];
-        false ->
-            I0 = if_unknown(Item0, 0),
-            I1 = if_unknown(Item1, 0),
-            I0 + I1
-    end.
-
-gs_max(Key, I0, I1) ->
-    erlang:max(pget(Key, I0, 0), pget(Key, I1, 0)).
-
-if_unknown(unknown, Def) -> Def;
-if_unknown(Val,    _Def) -> Val.
-
+%% Internal, gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
 init([]) ->
@@ -229,81 +195,74 @@ init([]) ->
     process_flag(priority, high),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
-    {ok, #state{interval = Interval,
-                tables = orddict:from_list(
-                           [{Key, ets:new(rabbit_mgmt_db,
-                                          [private, ordered_set])} ||
-                               Key <- ?TABLES])}, hibernate,
+    Table = fun () -> ets:new(rabbit_mgmt_db, [ordered_set]) end,
+    Tables = orddict:from_list([{Key, Table()} || Key <- ?TABLES]),
+    {ok, set_remove_timer(#state{interval         = Interval,
+                                 tables           = Tables,
+                                 old_stats        = Table(),
+                                 aggregated_stats = Table()}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({augment_exchanges, Xs, basic}, _From, State) ->
-    reply(exchange_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, State), State);
+handle_call({augment_exchanges, Xs, Ranges, basic}, _From, State) ->
+    reply(list_exchange_stats(Ranges, Xs, State), State);
 
-handle_call({augment_exchanges, Xs, full}, _From, State) ->
-    reply(exchange_stats(Xs, ?FINE_STATS_EXCHANGE_DETAIL, State), State);
+handle_call({augment_exchanges, Xs, Ranges, full}, _From, State) ->
+    reply(detail_exchange_stats(Ranges, Xs, State), State);
 
-handle_call({augment_queues, Qs, basic}, _From, State) ->
-    reply(list_queue_stats(Qs, State), State);
+handle_call({augment_queues, Qs, Ranges, basic}, _From, State) ->
+    reply(list_queue_stats(Ranges, Qs, State), State);
 
-handle_call({augment_queues, Qs, full}, _From, State) ->
-    reply(detail_queue_stats(Qs, State), State);
+handle_call({augment_queues, Qs, Ranges, full}, _From, State) ->
+    reply(detail_queue_stats(Ranges, Qs, State), State);
+
+handle_call({augment_vhosts, VHosts, Ranges}, _From, State) ->
+    reply(vhost_stats(Ranges, VHosts, State), State);
 
 handle_call({augment_nodes, Nodes}, _From, State) ->
     {reply, node_stats(Nodes, State), State};
 
-handle_call({get_channels, Names, Mode}, _From,
+handle_call({get_channel, Name, Ranges}, _From,
             State = #state{tables = Tables}) ->
-    Chans = created_event(Names, channel_stats, Tables),
-    Result = case Mode of
-                 basic -> list_channel_stats(Chans, State);
-                 full  -> detail_channel_stats(Chans, State)
-             end,
-    reply(lists:map(fun result_or_error/1, Result), State);
+    case created_event(Name, channel_stats, Tables) of
+        not_found -> reply(not_found, State);
+        Ch        -> [Result] = detail_channel_stats(Ranges, [Ch], State),
+                     reply(Result, State)
+    end;
 
-handle_call({get_connections, Names}, _From,
+handle_call({get_connection, Name, Ranges}, _From,
             State = #state{tables = Tables}) ->
-    Conns = created_event(Names, connection_stats, Tables),
-    Result = connection_stats(Conns, State),
-    reply(lists:map(fun result_or_error/1, Result), State);
+    case created_event(Name, connection_stats, Tables) of
+        not_found -> reply(not_found, State);
+        Conn      -> [Result] = connection_stats(Ranges, [Conn], State),
+                     reply(Result, State)
+    end;
 
-handle_call({get_all_channels, Mode}, _From, State = #state{tables = Tables}) ->
+handle_call({get_all_channels, Ranges}, _From,
+            State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
-    Result = case Mode of
-                 basic -> list_channel_stats(Chans, State);
-                 full  -> detail_channel_stats(Chans, State)
-             end,
-    reply(Result, State);
+    reply(list_channel_stats(Ranges, Chans, State), State);
 
-handle_call(get_all_connections, _From, State = #state{tables = Tables}) ->
+handle_call({get_all_connections, Ranges}, _From,
+            State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
-    reply(connection_stats(Conns, State), State);
+    reply(connection_stats(Ranges, Conns, State), State);
 
-handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
+handle_call({get_overview, User, Ranges}, _From,
+            State = #state{tables = Tables}) ->
     VHosts = case User of
                  all -> rabbit_vhost:list();
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
              end,
-    Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
-                                          Q <- rabbit_amqqueue:list(V)],
-    Qs1 = basic_queue_stats(Qs0, State),
-    QueueTotals = sum(Qs1, ?OVERVIEW_QUEUE_STATS),
-
-    Filter = fun(Id, Name) ->
-                     lists:member(pget(vhost, pget(Name, Id)), VHosts)
-             end,
-    F = fun(Type, Name) ->
-                get_fine_stats_from_list(
-                  [], [R || R = {Id, _, _}
-                                <- ets:tab2list(orddict:fetch(Type, Tables)),
-                            Filter(format_id(Id), Name)], State)
+    %% TODO: there's no reason we can't do an overview of send_oct and
+    %% recv_oct now!
+    VStats = [read_simple_stats(vhost_stats, VHost, State) ||
+                 VHost <- rabbit_vhost:list()],
+    MessageStats = [overview_sum(Type, VStats) || Type <- ?FINE_STATS],
+    QueueStats = [overview_sum(Type, VStats) || Type <- ?COARSE_QUEUE_STATS],
+    F = case User of
+            all -> fun (L) -> length(L) end;
+            _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
         end,
-    Publish = F(channel_exchange_stats, exchange),
-    Consume = F(channel_queue_stats, queue),
-
-    F2 = case User of
-             all -> fun (L) -> length(L) end;
-             _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
-         end,
     %% Filtering out the user's consumers would be rather expensive so let's
     %% just not show it
     Consumers = case User of
@@ -312,13 +271,14 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
                     _   -> []
                 end,
     ObjectTotals = Consumers ++
-        [{queues,      length(Qs0)},
+        [{queues,      length([Q || V <- VHosts,
+                                    Q <- rabbit_amqqueue:list(V)])},
          {exchanges,   length([X || V <- VHosts,
                                     X <- rabbit_exchange:list(V)])},
-         {connections, F2(created_events(connection_stats, Tables))},
-         {channels,    F2(created_events(channel_stats, Tables))}],
-    reply([{message_stats, Publish ++ Consume},
-           {queue_totals,  QueueTotals},
+         {connections, F(created_events(connection_stats, Tables))},
+         {channels,    F(created_events(channel_stats, Tables))}],
+    reply([{message_stats, format_samples(Ranges, MessageStats, State)},
+           {queue_totals,  format_samples(Ranges, QueueStats, State)},
            {object_totals, ObjectTotals}], State);
 
 handle_call(_Request, _From, State) ->
@@ -331,6 +291,10 @@ handle_cast({event, Event}, State) ->
 handle_cast(_Request, State) ->
     noreply(State).
 
+handle_info(remove_old_samples, State) ->
+    remove_old_samples_all(State),
+    noreply(set_remove_timer(State));
+
 handle_info(_Info, State) ->
     noreply(State).
 
@@ -342,6 +306,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 noreply(NewState) -> {noreply, NewState, hibernate}.
+
+set_remove_timer(State) ->
+    TRef = erlang:send_after(
+             ?REMOVE_OLD_SAMPLES_INTERVAL, self(), remove_old_samples),
+    State#state{remove_old_samples_timer = TRef}.
 
 handle_pre_hibernate(State) ->
     %% rabbit_event can end up holding on to some memory after a busy
@@ -356,6 +325,59 @@ handle_pre_hibernate(State) ->
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%----------------------------------------------------------------------------
+%% Internal, utilities
+%%----------------------------------------------------------------------------
+
+pget(Key, List) -> pget(Key, List, unknown).
+
+%% id_name() and id() are for use when handling events, id_lookup()
+%% for when augmenting. The difference is that when handling events a
+%% queue name will be a resource, but when augmenting we will be
+%% passed a queue proplist that will already have been formatted -
+%% i.e. it will have name and vhost keys.
+id_name(node_stats)       -> name;
+id_name(vhost_stats)      -> name;
+id_name(queue_stats)      -> name;
+id_name(exchange_stats)   -> name;
+id_name(channel_stats)    -> pid;
+id_name(connection_stats) -> pid.
+
+id(Type, List) -> pget(id_name(Type), List).
+
+id_lookup(queue_stats, List) ->
+    rabbit_misc:r(pget(vhost, List), queue, pget(name, List));
+id_lookup(exchange_stats, List) ->
+    rabbit_misc:r(pget(vhost, List), exchange, pget(name, List));
+id_lookup(Type, List) ->
+    id(Type, List).
+
+lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
+
+lookup_element(Table, Key, Pos) ->
+    try ets:lookup_element(Table, Key, Pos)
+    catch error:badarg -> []
+    end.
+
+fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
+fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
+
+floor(TS, State) -> floor0(rabbit_mgmt_format:timestamp_ms(TS), State).
+ceil (TS, State) -> ceil0 (rabbit_mgmt_format:timestamp_ms(TS), State).
+
+floor0(MS, #state{interval = Interval})        -> (MS div Interval) * Interval.
+ceil0(MS, State = #state{interval = Interval}) -> case floor0(MS, State) of
+                                                      MS    -> MS;
+                                                      Floor -> Floor + Interval
+                                                  end.
+
+blank_stats() -> #stats{diffs = gb_trees:empty(), base = 0}.
+is_blank_stats(S) -> S =:= blank_stats().
+
+details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
+
+%%----------------------------------------------------------------------------
+%% Internal, event-receiving side
+%%----------------------------------------------------------------------------
 
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
@@ -365,8 +387,35 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
                   {fun rabbit_mgmt_format:queue_status/1, [status]}],
                  [messages, messages_ready, messages_unacknowledged], State);
 
-handle_event(Event = #event{type = queue_deleted}, State) ->
+handle_event(Event = #event{type = queue_deleted,
+                            props = [{name, Name}],
+                            timestamp = Timestamp},
+             State = #state{old_stats = OldTable}) ->
+    %% This is fiddly. Unlike for connections and channels, we need to
+    %% decrease any amalgamated coarse stats for [messages,
+    %% messages_ready, messages_unacknowledged] for this queue - since
+    %% the queue's deletion means we have really got rid of messages!
+    Id = {coarse, {queue_stats, Name}},
+    TS = floor(Timestamp, State),
+    OldStats = lookup_element(OldTable, Id),
+    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
+     || Key <- ?COARSE_QUEUE_STATS],
+    delete_samples(channel_queue_stats,  {'_', Name}, State),
+    delete_samples(queue_exchange_stats, {Name, '_'}, State),
+    delete_samples(queue_stats,          Name,        State),
     handle_deleted(queue_stats, Event, State);
+
+handle_event(Event = #event{type = exchange_deleted,
+                            props = [{name, Name}]}, State) ->
+    delete_samples(channel_exchange_stats,  {'_', Name}, State),
+    delete_samples(queue_exchange_stats,    {'_', Name}, State),
+    delete_samples(exchange_stats,          Name,        State),
+    handle_deleted(exchange_stats, Event, State);
+
+handle_event(#event{type = vhost_deleted,
+                    props = [{name, Name}]}, State) ->
+    delete_samples(vhost_stats, Name, State),
+    {ok, State};
 
 handle_event(#event{type = connection_created, props = Stats}, State) ->
     handle_created(
@@ -379,10 +428,12 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
              State) ->
-    handle_stats(connection_stats, Stats, Timestamp, [], [recv_oct, send_oct],
+    handle_stats(connection_stats, Stats, Timestamp, [], ?COARSE_CONN_STATS,
                  State);
 
-handle_event(Event = #event{type = connection_closed}, State) ->
+handle_event(Event = #event{type  = connection_closed,
+                            props = [{pid, Pid}]}, State) ->
+    delete_samples(connection_stats, Pid, State),
     handle_deleted(connection_stats, Event, State);
 
 handle_event(#event{type = channel_created, props = Stats}, State) ->
@@ -399,10 +450,10 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
 
 handle_event(Event = #event{type = channel_closed,
                             props = [{pid, Pid}]}, State) ->
-    handle_deleted(channel_stats, Event, State),
-    [delete_fine_stats(Type, Pid, State) ||
-        Type <- ?FINE_STATS_TYPES],
-    {ok, State};
+    delete_samples(channel_queue_stats,    {Pid, '_'}, State),
+    delete_samples(channel_exchange_stats, {Pid, '_'}, State),
+    delete_samples(channel_stats,          Pid,        State),
+    handle_deleted(channel_stats, Event, State);
 
 handle_event(#event{type = consumer_created, props = Props}, State) ->
     handle_consumer(fun(Table, Id, P) -> ets:insert(Table, {Id, P}) end,
@@ -433,8 +484,6 @@ handle_event(#event{type = node_stats, props = Stats, timestamp = Timestamp},
 handle_event(_Event, State) ->
     {ok, State}.
 
-%%----------------------------------------------------------------------------
-
 handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
     Formatted = rabbit_mgmt_format:format(Stats, Funs),
     ets:insert(orddict:fetch(TName, Tables), {{id(TName, Stats), create},
@@ -442,25 +491,27 @@ handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
                                               pget(name, Stats)}),
     {ok, State}.
 
-handle_stats(TName, Stats0, Timestamp, Funs, RatesKeys,
+handle_stats(TName, Stats, Timestamp, Funs, RatesKeys,
              State = #state{tables = Tables}) ->
-    Stats = lists:foldl(
-              fun (K, StatsAcc) -> proplists:delete(K, StatsAcc) end,
-              Stats0, ?FINE_STATS_TYPES),
-    Table = orddict:fetch(TName, Tables),
-    Id = {id(TName, Stats), stats},
-    OldStats = lookup_element(Table, Id),
-    OldTimestamp = lookup_element(Table, Id, 3),
-    Stats1 = rates(Stats, Timestamp, OldStats, OldTimestamp, RatesKeys),
-    Stats2 = proplists:delete(
-               id_name(TName), rabbit_mgmt_format:format(Stats1, Funs)),
-    ets:insert(Table, {Id, Stats2, Timestamp}),
+    Id = id(TName, Stats),
+    append_samples(Stats, Timestamp, {coarse, {TName, Id}}, RatesKeys, State),
+    StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
+    Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
+    Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
+    ets:insert(orddict:fetch(TName, Tables), {{Id, stats}, Stats2, Timestamp}),
     {ok, State}.
 
-handle_deleted(TName, #event{props = Props}, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(TName, Tables),
-    ets:delete(Table, {id(TName, Props), create}),
-    ets:delete(Table, {id(TName, Props), stats}),
+handle_deleted(TName, #event{props = Props}, State = #state{tables    = Tables,
+                                                            old_stats = Old}) ->
+    Id = id(TName, Props),
+    case orddict:find(TName, Tables) of
+        {ok, Table} -> ets:delete(Table, {Id, create}),
+                       ets:delete(Table, {Id, stats});
+        error       -> ok
+    end,
+    ets:delete(Old, {coarse, {TName, Id}}),
+    ets:match_delete(Old, {{fine, {Id, '_'}},      '_'}),
+    ets:match_delete(Old, {{fine, {Id, '_', '_'}}, '_'}),
     {ok, State}.
 
 handle_consumer(Fun, Props,
@@ -470,120 +521,375 @@ handle_consumer(Fun, Props,
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
     {ok, State}.
 
-handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
+handle_fine_stats(Type, Props, Timestamp, State) ->
     case pget(Type, Props) of
         unknown ->
             ok;
         AllFineStats ->
             ChPid = id(channel_stats, Props),
-            Table = orddict:fetch(Type, Tables),
-            IdsStatsTS =
-                [{Ids,
-                  Stats,
-                  lookup_element(Table, fine_stats_key(ChPid, Ids)),
-                  lookup_element(Table, fine_stats_key(ChPid, Ids), 3)} ||
-                    {Ids, Stats} <- AllFineStats],
-            delete_fine_stats(Type, ChPid, State),
-            [handle_fine_stat(ChPid, Ids, Stats, Timestamp,
-                              OldStats, OldTimestamp, Table) ||
-                {Ids, Stats, OldStats, OldTimestamp} <- IdsStatsTS]
+            [handle_fine_stat(
+               fine_stats_id(ChPid, Ids), Stats, Timestamp, State) ||
+                {Ids, Stats} <- AllFineStats]
     end.
 
-
-handle_fine_stat(ChPid, Ids, Stats, Timestamp,
-                 OldStats, OldTimestamp,
-                 Table) ->
-    Id = fine_stats_key(ChPid, Ids),
+handle_fine_stat(Id, Stats, Timestamp, State) ->
     Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
     Stats1 = case Total of
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    Res = rates(Stats1, Timestamp, OldStats, OldTimestamp, ?FINE_STATS),
-    ets:insert(Table, {Id, Res, Timestamp}).
+    append_samples(Stats1, Timestamp, {fine, Id}, all, State).
 
-delete_fine_stats(Type, ChPid, #state{tables = Tables}) ->
-    Table = orddict:fetch(Type, Tables),
-    ets:match_delete(Table, {{ChPid, '_'}, '_', '_'}),
-    ets:match_delete(Table, {{ChPid, '_', '_'}, '_', '_'}).
+delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
+    ets:match_delete(ETS, {{{Type, Id}, '_'}, '_'}).
 
-fine_stats_key(ChPid, {Q, X}) -> {ChPid, Q, X};
-fine_stats_key(ChPid, QorX)   -> {ChPid, QorX}.
+append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
+    OldStats = lookup_element(OldTable, Id),
+    NewMS = ceil(TS, State),
+    case Keys of
+        all -> [append_sample(Key, Value, NewMS, OldStats, Id, State)
+                || {Key, Value} <- Stats];
+        _   -> [append_sample(Key, pget(Key, Stats), NewMS, OldStats, Id, State)
+                || Key <- Keys]
+    end,
+    ets:insert(OldTable, {Id, Stats}).
 
-created_event(Names, Type, Tables) ->
-    Table = orddict:fetch(Type, Tables),
-    [lookup_element(
-       Table, {case ets:match(Table, {{'$1', create}, '_', Name}) of
-                   []    -> none;
-                   [[I]] -> I
-               end, create}) || Name <- Names].
+append_sample(_Key, unknown, _NewMS, _OldStats, _Id, _State) ->
+    ok;
 
-created_events(Type, Tables) ->
-    [Facts || {{_, create}, Facts, _Name}
-                  <- ets:tab2list(orddict:fetch(Type, Tables))].
+append_sample(Key, Value, NewMS, OldStats, Id, State) ->
+    record_sample(
+      Id, {Key, Value - pget(Key, OldStats, 0), NewMS, State}, State).
 
-get_fine_stats(Type, GroupBy, State = #state{tables = Tables}) ->
-    get_fine_stats_from_list(
-      GroupBy, ets:tab2list(orddict:fetch(Type, Tables)), State).
+record_sample({coarse, Id}, Args, State) ->
+    record_sample0(Id, Args),
+    record_sample0({vhost_stats, vhost(Id, State)}, Args);
 
-get_fine_stats_from_list(GroupBy, List, State) ->
-    All = [{format_id(Id), zero_old_rates(Stats, State)} ||
-              {Id, Stats, _Timestamp} <- List],
-    group_sum(GroupBy, All).
+%% Deliveries / acks (Q -> Ch)
+record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, _State) ->
+    record_sample0({channel_queue_stats, {Ch, Q}},  Args),
+    record_sample0({channel_stats,       Ch},       Args),
+    record_sample0({queue_stats,         Q},        Args),
+    record_sample0({vhost_stats,         vhost(Q)}, Args);
 
-format_id({ChPid, #resource{name = Name, virtual_host = Vhost, kind = Kind}}) ->
-    [{channel, ChPid}, {Kind, [{name, Name}, {vhost, Vhost}]}];
-format_id({ChPid,
-           #resource{name = QName, virtual_host = QVhost, kind = queue},
-           #resource{name = XName, virtual_host = XVhost, kind = exchange}}) ->
-    [{channel,  ChPid},
-     {queue,    [{name, QName}, {vhost, QVhost}]},
-     {exchange, [{name, XName}, {vhost, XVhost}]}].
+%% Publishes / confirms (Ch -> X)
+record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, _State) ->
+    record_sample0({channel_exchange_stats, {Ch, X}},  Args),
+    record_sample0({channel_stats,          Ch},       Args),
+    record_sampleX(publish_in,              X,         Args),
+    record_sample0({vhost_stats,            vhost(X)}, Args);
+
+%% Publishes (but not confirms) (Ch -> X -> Q)
+record_sample({fine, {_Ch,
+                      Q = #resource{kind = queue},
+                      X = #resource{kind = exchange}}}, Args, _State) ->
+    %% TODO This one logically feels like it should be here. It would
+    %% correspond to "publishing channel message rates to queue" -
+    %% which would be nice to handle - except we don't. And just
+    %% uncommenting this means it gets merged in with "consuming
+    %% channel delivery from queue" - which is not very helpful.
+    %% record_sample0({channel_queue_stats, {Ch, Q}}, Args),
+    record_sample0({queue_exchange_stats,   {Q,  X}},  Args),
+    record_sample0({queue_stats,            Q},        Args),
+    record_sampleX(publish_out,             X,         Args).
+
+vhost(#resource{virtual_host = VHost}) -> VHost.
+
+vhost({queue_stats, #resource{virtual_host = VHost}}, _State) ->
+    VHost;
+vhost({TName, Pid}, #state{tables = Tables}) ->
+    Table = orddict:fetch(TName, Tables),
+    pget(vhost, lookup_element(Table, {Pid, create})).
+
+%% exchanges have two sets of "publish" stats, so rearrange things a touch
+record_sampleX(RenamePublishTo, X, {publish, Diff, TS, State}) ->
+    record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, TS, State});
+record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
+    record_sample0({exchange_stats, X}, {Type, Diff, TS, State}).
+
+record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats = ETS}}) ->
+    Id = {Id0, Key},
+    Old = case lookup_element(ETS, Id) of
+              [] -> blank_stats();
+              E  -> E
+          end,
+    ets:insert(ETS, {Id, add(TS, Diff, Old)}).
+
+add(TS, Diff, Stats = #stats{diffs = Diffs}) ->
+    Diffs2 = case gb_trees:lookup(TS, Diffs) of
+                 {value, Total} -> gb_trees:update(TS, Diff + Total, Diffs);
+                 none           -> gb_trees:insert(TS, Diff, Diffs)
+             end,
+    Stats#stats{diffs = Diffs2}.
 
 %%----------------------------------------------------------------------------
+%% Internal, querying side
+%%----------------------------------------------------------------------------
+
+-define(QUEUE_DETAILS,
+        {queue_stats, [{incoming,   queue_exchange_stats, fun first/1},
+                       {deliveries, channel_queue_stats,  fun second/1}]}).
+
+-define(EXCHANGE_DETAILS,
+        {exchange_stats, [{incoming, channel_exchange_stats, fun second/1},
+                          {outgoing, queue_exchange_stats,   fun second/1}]}).
+
+-define(CHANNEL_DETAILS,
+        {channel_stats, [{publishes,  channel_exchange_stats, fun first/1},
+                         {deliveries, channel_queue_stats,    fun first/1}]}).
+
+first(Id)  -> {Id, '$1'}.
+second(Id) -> {'$1', Id}.
+
+list_queue_stats(Ranges, Objs, State) ->
+    adjust_hibernated_memory_use(
+      merge_stats(Objs, queue_funs(Ranges, State))).
+
+detail_queue_stats(Ranges, Objs, State) ->
+    adjust_hibernated_memory_use(
+      merge_stats(Objs, [consumer_details_fun(
+                           fun (Props) ->
+                                   {id_lookup(queue_stats, Props), '_'}
+                           end, State),
+                         detail_stats_fun(Ranges, ?QUEUE_DETAILS, State)
+                         | queue_funs(Ranges, State)])).
+
+queue_funs(Ranges, State) ->
+    [basic_stats_fun(queue_stats, State),
+     simple_stats_fun(Ranges, queue_stats, State),
+     augment_msg_stats_fun(State)].
+
+list_exchange_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, State),
+                       augment_msg_stats_fun(State)]).
+
+detail_exchange_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, State),
+                       detail_stats_fun(Ranges, ?EXCHANGE_DETAILS, State),
+                       augment_msg_stats_fun(State)]).
+
+connection_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(connection_stats, State),
+                       simple_stats_fun(Ranges, connection_stats, State),
+                       augment_msg_stats_fun(State)]).
+
+list_channel_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
+                       simple_stats_fun(Ranges, channel_stats, State),
+                       augment_msg_stats_fun(State)]).
+
+detail_channel_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
+                       simple_stats_fun(Ranges, channel_stats, State),
+                       consumer_details_fun(
+                         fun (Props) -> {'_', pget(pid, Props)} end, State),
+                       detail_stats_fun(Ranges, ?CHANNEL_DETAILS, State),
+                       augment_msg_stats_fun(State)]).
+
+vhost_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [simple_stats_fun(Ranges, vhost_stats, State)]).
+
+node_stats(Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(node_stats, State)]).
 
 merge_stats(Objs, Funs) ->
     [lists:foldl(fun (Fun, Props) -> Fun(Props) ++ Props end, Obj, Funs)
      || Obj <- Objs].
 
-basic_stats_fun(Type, State = #state{tables = Tables}) ->
+%% i.e. the non-calculated stats
+basic_stats_fun(Type, #state{tables = Tables}) ->
     Table = orddict:fetch(Type, Tables),
     fun (Props) ->
             Id = id_lookup(Type, Props),
-            zero_old_rates(lookup_element(Table, {Id, stats}), State)
+            lookup_element(Table, {Id, stats})
     end.
 
-fine_stats_fun(FineSpecs, State) ->
-    FineStats = [{AttachName, AttachBy,
-                  get_fine_stats(FineStatsType, GroupBy, State)}
-                 || {FineStatsType, GroupBy, AttachName, AttachBy}
-                        <- FineSpecs],
+%% i.e. coarse stats, and fine stats aggregated up to a single number per thing
+simple_stats_fun(Ranges, Type, State) ->
     fun (Props) ->
-            lists:foldl(fun (FineStat, StatProps) ->
-                                fine_stat(Props, StatProps, FineStat, State)
-                        end, [], FineStats)
+            Id = id_lookup(Type, Props),
+            extract_msg_stats(
+              format_samples(Ranges, read_simple_stats(Type, Id, State), State))
     end.
 
-fine_stat(Props, StatProps, {AttachName, AttachBy, Dict}, State) ->
-    Id = case AttachBy of
-             channel ->
-                 pget(pid, Props);
-             _ ->
-                 [{name, pget(name, Props)}, {vhost, pget(vhost, Props)}]
-         end,
-    case dict:find({AttachBy, Id}, Dict) of
-        {ok, Stats} -> [{AttachName, pget(AttachName, StatProps, []) ++
-                             augment_fine_stats(Stats, State)} |
-                        proplists:delete(AttachName, StatProps)];
-        error       -> StatProps
+%% i.e. fine stats that are broken out per sub-thing
+detail_stats_fun(Ranges, {IdType, FineSpecs}, State) ->
+    fun (Props) ->
+            Id = id_lookup(IdType, Props),
+            [detail_stats(Ranges, Name, AggregatedStatsType, IdFun(Id), State)
+             || {Name, AggregatedStatsType, IdFun} <- FineSpecs]
     end.
 
-augment_fine_stats(Dict, State) when element(1, Dict) == dict ->
-    [[{stats, augment_fine_stats(Stats, State)} |
-      augment_msg_stats([IdTuple], State)]
-     || {IdTuple, Stats} <- dict:to_list(Dict)];
-augment_fine_stats(Stats, _State) ->
-    Stats.
+read_simple_stats(Type, Id, #state{aggregated_stats = ETS}) ->
+    FromETS = ets:match(ETS, {{{Type, Id}, '$1'}, '$2'}),
+    [{K, V} || [K, V] <- FromETS].
+
+read_detail_stats(Type, Id, #state{aggregated_stats = ETS}) ->
+    %% Id must contain '$1'
+    FromETS = ets:match(ETS, {{{Type, Id}, '$2'}, '$3'}),
+    %% [[G, K, V]] -> [{G, [{K, V}]}] where G is Q/X/Ch, K is from
+    %% ?FINE_STATS and V is a stats tree
+    %% TODO does this need to be optimised?
+    lists:foldl(
+      fun ([G, K, V], L) ->
+              case lists:keyfind(G, 1, L) of
+                  false    -> [{G, [{K, V}]} | L];
+                  {G, KVs} -> lists:keyreplace(G, 1, L, {G, [{K, V} | KVs]})
+              end
+      end, [], FromETS).
+
+extract_msg_stats(Stats) ->
+    FineStats = lists:append([[K, details_key(K)] || K <- ?FINE_STATS]),
+    {MsgStats, Other} =
+        lists:partition(fun({K, _}) -> lists:member(K, FineStats) end, Stats),
+    [{message_stats, MsgStats} | Other].
+
+detail_stats(Ranges, Name, AggregatedStatsType, Id, State) ->
+    {Name,
+     [[{stats, format_samples(Ranges, KVs, State)} | format_detail_id(G, State)]
+      || {G, KVs} <- read_detail_stats(AggregatedStatsType, Id, State)]}.
+
+format_detail_id(ChPid, State) when is_pid(ChPid) ->
+    augment_msg_stats([{channel, ChPid}], State);
+format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
+                 _State) ->
+    [{Kind, [{name, Name}, {vhost, Vhost}]}].
+
+format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
+    lists:append(
+      [case is_blank_stats(Stats) of
+           true  -> [];
+           false -> {Details, Counter} = format_sample_details(
+                                           pick_range(K, Ranges),
+                                           Stats, Interval),
+                    [{K,              Counter},
+                     {details_key(K), Details}]
+       end || {K, Stats} <- ManyStats]).
+
+pick_range(K, {RangeL, RangeM, RangeD}) ->
+    case {lists:member(K, ?COARSE_QUEUE_STATS),
+          lists:member(K, ?FINE_STATS),
+          lists:member(K, ?COARSE_CONN_STATS)} of
+        {true, false, false} -> RangeL;
+        {false, true, false} -> RangeM;
+        {false, false, true} -> RangeD
+    end.
+
+format_sample_details(no_range, #stats{diffs = Diffs, base = Base}, Interval) ->
+    Rate = case nth_largest(Diffs, 2) of
+               false    -> 0;
+               {_TS, S} -> S * 1000 / Interval
+           end,
+    Count = sum_entire_tree(gb_trees:iterator(Diffs), Base),
+    {[{rate, Rate}], Count};
+
+format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
+    RangePoint = Range#range.last - Interval,
+    {Samples, Count} = extract_samples(
+                         Range, Base, gb_trees:iterator(Diffs), []),
+    Rate = case nth_largest(Diffs, 2) of
+               false   -> 0;
+               {TS, S} -> case TS - RangePoint of %% [0]
+                              D when D =< Range#range.incr andalso
+                                     D >= 0 -> S * 1000 / Interval;
+                              _             -> 0
+                          end
+           end,
+    Part1 = [{rate,     Rate},
+             {samples,  Samples}],
+    Length = length(Samples),
+    Part2 = case Length > 1 of
+                true  -> [{sample, S2}, {timestamp, T2}] = hd(Samples),
+                         [{sample, S1}, {timestamp, T1}] = lists:last(Samples),
+                         Total = lists:sum([pget(sample, I) || I <- Samples]),
+                         [{avg_rate, (S2 - S1) * 1000 / (T2 - T1)},
+                          {avg,      Total / Length}];
+                false -> []
+            end,
+    {Part1 ++ Part2, Count}.
+%% [0] Only display the rate if it's live - i.e. ((the end of the
+%% range) - interval) corresponds to the second to last data point we
+%% have. If the end of the range is earlier we have gone silent, if
+%% it's later we have been asked for a range back in time (in which
+%% case showing the correct instantaneous rate would be quite a faff,
+%% and probably unwanted). Why the second to last? Because data is
+%% still arriving for the last...
+
+nth_largest(Tree, N) ->
+    case gb_trees:is_empty(Tree) of
+        true  -> false;
+        false -> case N of
+                     1 -> gb_trees:largest(Tree);
+                     _ -> {_, _, Tree2} = gb_trees:take_largest(Tree),
+                          nth_largest(Tree2, N - 1)
+                 end
+    end.
+
+sum_entire_tree(Iter, Acc) ->
+    case gb_trees:next(Iter) of
+        none            -> Acc;
+        {_TS, S, Iter2} -> sum_entire_tree(Iter2, Acc + S)
+    end.
+
+%% What we want to do here is: given the #range{}, provide a set of
+%% samples such that we definitely provide a set of samples which
+%% covers the exact range requested, despite the fact that we might
+%% not have it. We need to spin up over the entire range of the
+%% samples we *do* have since they are diff-based (and we convert to
+%% absolute values here).
+extract_samples(Range = #range{first = Next}, Base, It, Samples) ->
+    case gb_trees:next(It) of
+        {TS, S, It2} -> extract_samples1(Range, Base, TS,   S, It2, Samples);
+        none         -> extract_samples1(Range, Base, Next, 0, It,  Samples)
+    end.
+
+extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
+                 Base, TS, S, It, Samples) ->
+    if
+        %% We've gone over the range. Terminate.
+        Next > Last ->
+            {Samples, Base};
+        %% We've hit bang on a sample. Record it and move to the next.
+        Next =:= TS ->
+            extract_samples(Range#range{first = Next + Incr}, Base + S, It,
+                            append(Base + S, Next, Samples));
+        %% We haven't yet hit the beginning of our range.
+        Next > TS ->
+            extract_samples(Range, Base + S, It, Samples);
+        %% We have a valid sample, but we haven't used it up
+        %% yet. Append it and loop around.
+        Next < TS ->
+            extract_samples1(Range#range{first = Next + Incr}, Base, TS, S, It,
+                             append(Base, Next, Samples))
+    end.
+
+append(S, TS, Samples) -> [[{sample, S}, {timestamp, TS}] | Samples].
+
+%% We do this when retrieving the queue record rather than when
+%% storing it since the memory use will drop *after* we find out about
+%% hibernation, so to do it when we receive a queue stats event would
+%% be fiddly and racy. This should be quite cheap though.
+adjust_hibernated_memory_use(Qs) ->
+    Pids = [pget(pid, Q) ||
+               Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
+    {Mem, _BadNodes} = delegate:invoke(
+                         Pids, fun (Pid) -> process_info(Pid, memory) end),
+    MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
+    [case dict:find(pget(pid, Q), MemDict) of
+         error        -> Q;
+         {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
+     end || Q <- Qs].
+
+created_event(Name, Type, Tables) ->
+    Table = orddict:fetch(Type, Tables),
+    case ets:match(Table, {{'$1', create}, '_', Name}) of
+        []     -> not_found;
+        [[Id]] -> lookup_element(Table, {Id, create})
+    end.
+
+created_events(Type, Tables) ->
+    [Facts || {{_, create}, Facts, _Name}
+                  <- ets:tab2list(orddict:fetch(Type, Tables))].
 
 consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
     Table = orddict:fetch(consumers, Tables),
@@ -599,22 +905,36 @@ augment_consumer(Obj) ->
     [{queue, rabbit_mgmt_format:resource(pget(queue, Obj))} |
      proplists:delete(queue, Obj)].
 
-zero_old_rates(Stats, State) -> [maybe_zero_rate(S, State) || S <- Stats].
+%%----------------------------------------------------------------------------
+%% Internal, query-time summing for overview
+%%----------------------------------------------------------------------------
 
-maybe_zero_rate({Key, Val}, #state{interval = Interval}) ->
-    case is_details(Key) of
-        true  -> Age = rabbit_misc:now_ms() - pget(last_event, Val),
-                 {Key, case Age > Interval * 1.5 of
-                           true  -> pset(rate, 0, Val);
-                           false -> Val
-                       end};
-        false -> {Key, Val}
+overview_sum(Type, VHostStats) ->
+    Stats = [pget(Type, VHost, blank_stats()) || VHost <- VHostStats],
+    {Type, sum_trees(Stats)}.
+
+sum_trees([]) -> blank_stats();
+
+sum_trees([Stats | StatsN]) ->
+    lists:foldl(
+      fun (#stats{diffs = D1, base = B1}, #stats{diffs = D2, base = B2}) ->
+              #stats{diffs = add_trees(D1, gb_trees:iterator(D2)),
+                     base  = B1 + B2}
+      end,
+      Stats, StatsN).
+
+add_trees(Tree, It) ->
+    case gb_trees:next(It) of
+        none        -> Tree;
+        {K, V, It2} -> add_trees(
+                         case gb_trees:lookup(K, Tree) of
+                             {value, V2} -> gb_trees:update(K, V + V2, Tree);
+                             none        -> gb_trees:insert(K, V, Tree)
+                         end, It2)
     end.
 
-is_details(Key) -> lists:suffix("_details", atom_to_list(Key)).
-
-details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
-
+%%----------------------------------------------------------------------------
+%% Internal, query-time augmentation
 %%----------------------------------------------------------------------------
 
 augment_msg_stats(Props, State) ->
@@ -658,63 +978,80 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
      {peer_host,    pget(peer_host,    Conn)}].
 
 %%----------------------------------------------------------------------------
-
-basic_queue_stats(Objs, State) ->
-    merge_stats(Objs, queue_funs(State)).
-
-list_queue_stats(Objs, State) ->
-    adjust_hibernated_memory_use(
-      merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, State)] ++
-                      queue_funs(State))).
-
-detail_queue_stats(Objs, State) ->
-    adjust_hibernated_memory_use(
-      merge_stats(Objs, [consumer_details_fun(
-                           fun (Props) ->
-                                   {id_lookup(queue_stats, Props), '_'}
-                           end, State),
-                         fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, State)] ++
-                      queue_funs(State))).
-
-queue_funs(State) ->
-    [basic_stats_fun(queue_stats, State), augment_msg_stats_fun(State)].
-
-exchange_stats(Objs, FineSpecs, State) ->
-    merge_stats(Objs, [fine_stats_fun(FineSpecs, State),
-                       augment_msg_stats_fun(State)]).
-
-connection_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(connection_stats, State),
-                       augment_msg_stats_fun(State)]).
-
-list_channel_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
-                       fine_stats_fun(?FINE_STATS_CHANNEL_LIST, State),
-                       augment_msg_stats_fun(State)]).
-
-detail_channel_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
-                       consumer_details_fun(
-                         fun (Props) -> {'_', pget(pid, Props)} end, State),
-                       fine_stats_fun(?FINE_STATS_CHANNEL_DETAIL, State),
-                       augment_msg_stats_fun(State)]).
-
-node_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(node_stats, State)]).
-
+%% Internal, event-GCing
 %%----------------------------------------------------------------------------
 
-%% We do this when retrieving the queue record rather than when
-%% storing it since the memory use will drop *after* we find out about
-%% hibernation, so to do it when we receive a queue stats event would
-%% be fiddly and racy. This should be quite cheap though.
-adjust_hibernated_memory_use(Qs) ->
-    Pids = [pget(pid, Q) ||
-               Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
-    {Mem, _BadNodes} = delegate:invoke(
-                         Pids, fun (Pid) -> process_info(Pid, memory) end),
-    MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
-    [case dict:find(pget(pid, Q), MemDict) of
-         error        -> Q;
-         {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
-     end || Q <- Qs].
+remove_old_samples_all(State = #state{aggregated_stats = ETS}) ->
+    {ok, Policies} = application:get_env(
+                       rabbitmq_management, sample_retention_policies),
+    Now = floor(erlang:now(), State),
+    remove_old_samples_it(ets:match(ETS, '$1', 1000), Policies, Now, ETS).
+
+remove_old_samples_it('$end_of_table', _, _, _) ->
+    ok;
+remove_old_samples_it({Matches, Continuation}, Policies, Now, ETS) ->
+    [remove_old_samples_single(Key, Stats, Policies, Now, ETS)
+     || [{Key, Stats}] <- Matches],
+    remove_old_samples_it(ets:match(Continuation), Policies, Now, ETS).
+
+remove_old_samples_single({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
+    Policy = pget(retention_policy(Type), Policies),
+    Stats2 = remove_old_samples({Policy, Now}, Stats),
+    case Stats2 of
+        Stats -> ok;
+        _     -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
+    end.
+
+remove_old_samples(Cutoff, #stats{diffs = Diffs,
+                                  base  = Base}) ->
+    List = lists:reverse(gb_trees:to_list(Diffs)),
+    remove_old_samples(Cutoff, List, [], Base).
+
+%% Go through the list, amalgamating all too-old samples with the next
+%% newest keepable one [0] (we move samples forward in time since the
+%% semantics of a sample is "we had this many x by this time"). If the
+%% sample is too old, but would not be too old if moved to a rounder
+%% timestamp which does not exist then invent one and move it there
+%% [1]. But if it's just outright too old, move it to the base [2].
+remove_old_samples(_Cutoff, [], Keep, Base) ->
+    #stats{diffs = gb_trees:from_orddict(Keep), base = Base};
+remove_old_samples(Cutoff, [H = {TS, S} | T], Keep, Base) ->
+    case {keep(Cutoff, TS), Keep} of
+        {keep,       _} -> remove_old_samples(Cutoff, T, [H | Keep], Base);
+        {drop,       _} -> remove_old_samples(Cutoff, T, Keep, Base + S); %% [2]
+        {{move, D}, []} -> remove_old_samples(
+                             Cutoff, T, [{TS + D, S}], Base); %% [1]
+        {{move, _},  _} -> [{KTS, KS} | KT] = Keep,
+                           remove_old_samples(
+                             Cutoff, T, [{KTS, KS + S} | KT], Base) %% [0]
+    end.
+
+keep({Policy, Now}, TS) ->
+    lists:foldl(fun ({AgeSec, DivisorSec}, Action) ->
+                        prefer_action(
+                          Action,
+                          case (Now - TS) =< (AgeSec * 1000) of
+                              true  -> DivisorMillis = DivisorSec * 1000,
+                                       case TS rem DivisorMillis of
+                                           0   -> keep;
+                                           Rem -> {move, DivisorMillis - Rem}
+                                       end;
+                              false -> drop
+                          end)
+                end, drop, Policy).
+
+prefer_action(keep,      _)         -> keep;
+prefer_action(_,         keep)      -> keep;
+prefer_action({move, A}, {move, B}) -> {move, lists:min([A, B])};
+prefer_action({move, A}, drop)      -> {move, A};
+prefer_action(drop,      {move, A}) -> {move, A};
+prefer_action(drop,      drop)      -> drop.
+
+retention_policy(vhost_stats)            -> global;
+retention_policy(queue_stats)            -> basic;
+retention_policy(exchange_stats)         -> basic;
+retention_policy(connection_stats)       -> basic;
+retention_policy(channel_stats)          -> basic;
+retention_policy(queue_exchange_stats)   -> detailed;
+retention_policy(channel_exchange_stats) -> detailed;
+retention_policy(channel_queue_stats)    -> detailed.
