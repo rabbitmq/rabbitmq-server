@@ -352,6 +352,7 @@ start_it(StartFun) ->
          _:Reason ->
             boot_error(Reason, erlang:get_stacktrace())
     after
+        unlink(Marker),
         Marker ! finished,
         %% give the error loggers some time to catch up
         timer:sleep(100)
