@@ -1,0 +1,174 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.rabbitmq.jms</groupId>
+  <artifactId>rjms-topic-selector</artifactId>
+
+  <name>rjms-topic</name>
+  <description>RabbitMQ JMS Topic Selector Plug-in</description>
+
+  <packaging>pom</packaging>
+
+  <version>1.0-SNAPSHOT</version>
+
+  <properties>
+
+    <maven.artefact>${project.artifactId}-${project.version}.ez</maven.artefact>
+    <!-- plugin versions -->
+    <build-helper-maven-plugin.version>1.7</build-helper-maven-plugin.version>
+    <exec-maven-plugin.version>1.2.1</exec-maven-plugin.version>
+
+  </properties>
+
+  <build>
+    <extensions>
+      <extension>
+        <groupId>org.springframework.build</groupId>
+        <artifactId>aws-maven</artifactId>
+        <version>4.4.0.RELEASE</version>
+      </extension>
+    </extensions>
+
+    <plugins>
+
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>clean-jms-topic-plugin</id>
+            <phase>clean</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <commandlineArgs>clean</commandlineArgs>
+            </configuration>
+          </execution>
+          <execution>
+            <id>compile-jms-topic-plugin</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} dist</commandlineArgs>
+            </configuration>
+          </execution>
+          <execution>
+            <id>test-jms-topic-plugin</id>
+            <phase>test</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} test</commandlineArgs>
+            </configuration>
+          </execution>
+          <execution>
+            <id>package-jms-topic-plugin</id>
+            <phase>package</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} package</commandlineArgs>
+            </configuration>
+          </execution>
+        </executions>
+        <configuration>
+          <executable>make</executable>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-rabbitmq-plugin</id>
+            <phase>package</phase>
+            <goals>
+              <goal>attach-artifact</goal>
+            </goals>
+            <configuration>
+              <artifacts>
+                <artifact>
+                  <file>target/plugins/${maven.artefact}</file>
+                  <type>ez</type>
+                </artifact>
+              </artifacts>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+    </plugins>
+
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>${exec-maven-plugin.version}</version>
+        </plugin>
+
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>${build-helper-maven-plugin.version}</version>
+        </plugin>
+
+      </plugins>
+    </pluginManagement>
+
+  </build>
+
+  <pluginRepositories>
+    <pluginRepository>
+      <id>unto.net</id>
+      <url>http://repository.unto.net/maven/</url>
+      <releases>
+        <updatePolicy>daily</updatePolicy>
+        <checksumPolicy>warn</checksumPolicy>
+      </releases>
+      <snapshots>
+        <updatePolicy>daily</updatePolicy>
+        <checksumPolicy>warn</checksumPolicy>
+      </snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+
+  <repositories>
+    <repository>
+      <id>jboss.org</id>
+      <name>Jboss Maven 2 Repository</name>
+      <url>http://repository.jboss.org/nexus/content/groups/public-jboss/</url>
+    </repository>
+<!--     <repository>
+      <id>vmware-release</id>
+      <name>VMware Release repository</name>
+      <url>http://s3.amazonaws.com/private.maven.vmware.com/release</url>
+    </repository>
+    <repository>
+      <id>vmware-snapshot</id>
+      <name>VMware Snapshot repository</name>
+      <url>http://s3.amazonaws.com/private.maven.vmware.com/snapshot</url>
+    </repository>
+ -->  </repositories>
+
+  <distributionManagement>
+    <repository>
+      <id>vmware-release</id>
+      <name>VMware Release Repository</name>
+      <url>s3://private.maven.vmware.com/release</url>
+    </repository>
+    <snapshotRepository>
+      <id>vmware-snapshot</id>
+      <name>VMware Snapshot Repository</name>
+      <url>s3://private.maven.vmware.com/snapshot</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+</project>

@@ -13,7 +13,7 @@ UMBRELLA:=rabbitmq-public-umbrella
 RMQ_VERSION_TAG:=rabbitmq_v$(subst .,_,$(RMQ_VERSION))
 
 # command targets ##################################
-.PHONY: all clean package dist init cleandist run-in-broker
+.PHONY: all clean package dist init cleandist test run-in-broker
 
 all: dist
 
@@ -29,6 +29,9 @@ package: dist
 	cp $(UMBRELLA)/$(EXCHANGE)/dist/$(ARTEFACT)* target/plugins/$(MAVEN_ARTEFACT)
 
 init: $(addprefix $(UMBRELLA)/,$(EXCHANGE) $(RABBIT_DEPS))
+
+test: dist
+	# unit tests here
 
 cleandist: init
 	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) clean
