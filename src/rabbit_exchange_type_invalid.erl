@@ -24,8 +24,7 @@
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
 description() ->
-    [{name, <<"invalid">>},
-     {description,
+    [{description,
       <<"Dummy exchange type, to be used when the intended one is not found.">>
      }].
 
