@@ -441,9 +441,9 @@ handle_dependent_exit(ChPid, Reason, State) ->
         {undefined, uncontrolled} -> exit({abnormal_dependent_exit,
                                            ChPid, Reason});
         {_Channel,    controlled} -> maybe_close(control_throttle(State));
-        {Channel,   uncontrolled} -> maybe_close(
-                                       handle_exception(control_throttle(State),
-                                                        Channel, Reason))
+        {Channel,   uncontrolled} -> State1 = handle_exception(
+                                                State, Channel, Reason),
+                                     maybe_close(control_throttle(State1))
     end.
 
 terminate_channels() ->
