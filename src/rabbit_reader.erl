@@ -636,7 +636,8 @@ process_frame(Frame, Channel, State) ->
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     channel_cleanup(ChPid),
-    State;
+    %% this is not strictly necessary, but more obviously correct
+    control_throttle(State);
 post_process_frame({content_header, _, _, _, _}, _ChPid, State) ->
     maybe_block(State);
 post_process_frame({content_body, _}, _ChPid, State) ->
