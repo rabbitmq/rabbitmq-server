@@ -807,6 +807,7 @@ format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
                 false -> []
             end,
     {Part1 ++ Part2, Count}.
+
 %% [0] Only display the rate if it's live - i.e. ((the end of the
 %% range) - interval) corresponds to the second to last data point we
 %% have. If the end of the range is earlier we have gone silent, if
@@ -814,15 +815,12 @@ format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
 %% case showing the correct instantaneous rate would be quite a faff,
 %% and probably unwanted). Why the second to last? Because data is
 %% still arriving for the last...
-
 nth_largest(Tree, N) ->
     case gb_trees:is_empty(Tree) of
-        true  -> false;
-        false -> case N of
-                     1 -> gb_trees:largest(Tree);
-                     _ -> {_, _, Tree2} = gb_trees:take_largest(Tree),
-                          nth_largest(Tree2, N - 1)
-                 end
+        true              -> false;
+        false when N == 1 -> gb_trees:largest(Tree);
+        false             -> {_, _, Tree2} = gb_trees:take_largest(Tree),
+                             nth_largest(Tree2, N - 1)
     end.
 
 sum_entire_tree(Iter, Acc) ->
@@ -920,8 +918,7 @@ sum_trees([Stats | StatsN]) ->
       fun (#stats{diffs = D1, base = B1}, #stats{diffs = D2, base = B2}) ->
               #stats{diffs = add_trees(D1, gb_trees:iterator(D2)),
                      base  = B1 + B2}
-      end,
-      Stats, StatsN).
+      end, Stats, StatsN).
 
 add_trees(Tree, It) ->
     case gb_trees:next(It) of
