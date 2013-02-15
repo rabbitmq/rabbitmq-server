@@ -16,19 +16,17 @@
 
 -module(rabbit_stomp_util).
 
--export([parse_destination/1, parse_routing_information/1,
-         parse_message_id/1, durable_subscription_queue/2]).
+-export([parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/1,
          headers_post_process/1, headers/5, message_properties/1, tag_to_id/1,
          msg_header_name/1, ack_header_name/1]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
--export([valid_dest_prefixes/0]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("amqp_client/include/routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
--include("rabbit_stomp_prefixes.hrl").
 -include("rabbit_stomp_headers.hrl").
 
 -define(INTERNAL_TAG_PREFIX, "T_").
@@ -141,7 +139,7 @@ headers_extra(SessionId, AckMode, Version,
     end.
 
 headers_post_process(Headers) ->
-    Prefixes = ?VALID_DEST_PREFIXES -- [?TEMP_QUEUE_PREFIX],
+    Prefixes = routing_util:dest_prefixes(),
     [case Header of
          {?HEADER_REPLY_TO, V} ->
              case lists:any(fun (P) -> lists:prefix(P, V) end, Prefixes) of
@@ -279,64 +277,16 @@ format_destination(Exchange, RoutingKey) ->
 %% Destination Parsing
 %%--------------------------------------------------------------------
 
-parse_destination(?QUEUE_PREFIX ++ Rest) ->
-    parse_simple_destination(queue, Rest);
-parse_destination(?TOPIC_PREFIX ++ Rest) ->
-    parse_simple_destination(topic, Rest);
-parse_destination(?AMQQUEUE_PREFIX ++ Rest) ->
-    parse_simple_destination(amqqueue, Rest);
-parse_destination(?TEMP_QUEUE_PREFIX ++ Rest) ->
-    parse_simple_destination(temp_queue, Rest);
-parse_destination(?REPLY_QUEUE_PREFIX ++ Rest) ->
-    %% reply queue names might have slashes
-    {ok, {reply_queue, Rest}};
-parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
-    case parse_content(Rest) of
-        %% One cannot refer to the default exchange this way; it has
-        %% different semantics for subscribe and send
-        ["" | _]        -> {error, {invalid_destination, exchange, Rest}};
-        [Name]          -> {ok, {exchange, {Name, undefined}}};
-        [Name, Pattern] -> {ok, {exchange, {Name, Pattern}}};
-        _               -> {error, {invalid_destination, exchange, Rest}}
-    end;
-parse_destination(Destination) ->
-    {error, {unknown_destination, Destination}}.
-
-parse_routing_information({exchange, {Name, undefined}}) ->
-    {Name, ""};
-parse_routing_information({exchange, {Name, Pattern}}) ->
-    {Name, Pattern};
-parse_routing_information({topic, Name}) ->
-    {"amq.topic", Name};
-parse_routing_information({Type, Name})
-  when Type =:= queue orelse Type =:= reply_queue orelse Type =:= amqqueue ->
-    {"", Name}.
-
-valid_dest_prefixes() -> ?VALID_DEST_PREFIXES.
-
 durable_subscription_queue(Destination, SubscriptionId) ->
     %% We need a queue name that a) can be derived from the
     %% Destination and SubscriptionId, and b) meets the constraints on
     %% AMQP queue names. It doesn't need to be secure; we use md5 here
     %% simply as a convenient means to bound the length.
-    rabbit_guid:binary(
+    rabbit_guid:string(
       erlang:md5(term_to_binary({Destination, SubscriptionId})),
       "stomp.dsub").
 
-%% ---- Destination parsing helpers ----
-
-parse_simple_destination(Type, Content) ->
-    case parse_content(Content) of
-        [Name = [_|_]] -> {ok, {Type, Name}};
-        _              -> {error, {invalid_destination, Type, Content}}
-    end.
-
-parse_content(Content)->
-    Content2 = case take_prefix("/", Content) of
-                  {ok, Rest} -> Rest;
-                  not_found  -> Content
-               end,
-    [unescape(X) || X <- split(Content2, "/")].
+%% ---- Helpers ----
 
 split([],      _Splitter) -> [];
 split(Content, [])        -> Content;
@@ -355,12 +305,6 @@ split(Content = [Elem | Rest1], RPart, RParts, Splitter) ->
 take_prefix([Char | Prefix], [Char | List]) -> take_prefix(Prefix, List);
 take_prefix([],              List)          -> {ok, List};
 take_prefix(_Prefix,         _List)         -> not_found.
-
-unescape(Str) -> unescape(Str, []).
-
-unescape("%2F" ++ Str, Acc) -> unescape(Str, [$/ | Acc]);
-unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
-unescape([],           Acc) -> lists:reverse(Acc).
 
 escape(Str) -> escape(Str, []).
 

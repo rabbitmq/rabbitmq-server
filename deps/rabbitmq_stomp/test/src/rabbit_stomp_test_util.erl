@@ -18,8 +18,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("amqp_client/include/routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
--include("rabbit_stomp_prefixes.hrl").
 
 %%--------------------------------------------------------------------
 %% Header Processing Tests
@@ -134,7 +134,7 @@ headers_post_process_noop_replyto_test() ->
     [begin
          Headers = [{"reply-to", Prefix ++ "/something"}],
          Headers = rabbit_stomp_util:headers_post_process(Headers)
-     end || Prefix <- ?VALID_DEST_PREFIXES, Prefix /= ?TEMP_QUEUE_PREFIX].
+     end || Prefix <- routing_util:dest_prefixes()].
 
 headers_post_process_noop2_test() ->
     Headers  = [{"header1", "1"},
@@ -213,81 +213,8 @@ consumer_tag_invalid_test() ->
     {error, missing_destination_header} = rabbit_stomp_util:consumer_tag(Frame).
 
 %%--------------------------------------------------------------------
-%% Destination Parsing Tests
+%% Message ID Parsing Tests
 %%--------------------------------------------------------------------
-
-valid_queue_test() ->
-    {ok, {queue, "test"}} = parse_destination("/queue/test").
-
-valid_topic_test() ->
-    {ok, {topic, "test"}} = parse_destination("/topic/test").
-
-valid_exchange_test() ->
-    {ok, {exchange, {"test", undefined}}} = parse_destination("/exchange/test").
-
-valid_temp_queue_test() ->
-    {ok, {temp_queue, "test"}} = parse_destination("/temp-queue/test").
-
-valid_reply_queue_test() ->
-    {ok, {reply_queue, "test"}} = parse_destination("/reply-queue/test").
-
-valid_exchange_with_pattern_test() ->
-    {ok, {exchange, {"test", "pattern"}}} =
-        parse_destination("/exchange/test/pattern").
-
-valid_amqqueue_test() ->
-    {ok, {amqqueue, "test"}} = parse_destination("/amq/queue/test").
-
-queue_with_no_name_test() ->
-    {error, {invalid_destination, queue, ""}} = parse_destination("/queue").
-
-topic_with_no_name_test() ->
-    {error, {invalid_destination, topic, ""}} = parse_destination("/topic").
-
-exchange_with_no_name_test() ->
-    {error, {invalid_destination, exchange, ""}} =
-        parse_destination("/exchange").
-
-exchange_default_name_test() ->
-    {error, {invalid_destination, exchange, "//foo"}} =
-        parse_destination("/exchange//foo").
-
-amqqueue_with_no_name_test() ->
-    {error, {invalid_destination, amqqueue, ""}} =
-        parse_destination("/amq/queue").
-
-queue_with_no_name_slash_test() ->
-    {error, {invalid_destination, queue, "/"}} = parse_destination("/queue/").
-
-topic_with_no_name_slash_test() ->
-    {error, {invalid_destination, topic, "/"}} = parse_destination("/topic/").
-
-exchange_with_no_name_slash_test() ->
-    {error, {invalid_destination, exchange, "/"}} =
-        parse_destination("/exchange/").
-
-queue_with_invalid_name_test() ->
-    {error, {invalid_destination, queue, "/foo/bar"}} =
-        parse_destination("/queue/foo/bar").
-
-topic_with_invalid_name_test() ->
-    {error, {invalid_destination, topic, "/foo/bar"}} =
-        parse_destination("/topic/foo/bar").
-
-exchange_with_invalid_name_test() ->
-    {error, {invalid_destination, exchange, "/foo/bar/baz"}} =
-        parse_destination("/exchange/foo/bar/baz").
-
-unknown_destination_test() ->
-    {error, {unknown_destination, "/blah/boo"}} =
-        parse_destination("/blah/boo").
-
-queue_with_escaped_name_test() ->
-    {ok, {queue, "te/st"}} = parse_destination("/queue/te%2Fst").
-
-valid_exchange_with_escaped_name_and_pattern_test() ->
-    {ok, {exchange, {"te/st", "pa/tt/ern"}}} =
-        parse_destination("/exchange/te%2Fst/pa%2Ftt%2Fern").
 
 parse_valid_message_id_test() ->
     {ok, {<<"bar">>, "abc", 123}} =
@@ -296,10 +223,4 @@ parse_valid_message_id_test() ->
 parse_invalid_message_id_test() ->
     {error, invalid_message_id} =
         rabbit_stomp_util:parse_message_id("blah").
-
-%%--------------------------------------------------------------------
-%% Test Helpers
-%%--------------------------------------------------------------------
-parse_destination(Destination) ->
-    rabbit_stomp_util:parse_destination(Destination).
 

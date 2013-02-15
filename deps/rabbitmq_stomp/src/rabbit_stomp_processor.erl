@@ -22,14 +22,14 @@
          code_change/3, terminate/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("amqp_client/include/routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
--include("rabbit_stomp_prefixes.hrl").
 -include("rabbit_stomp_headers.hrl").
 
 -record(state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
-                config, dest_queues, reply_queues, frame_transformer,
+                config, route_state, reply_queues, frame_transformer,
                 adapter_info, send_fun, ssl_login_name}).
 
 -record(subscription, {dest_hdr, channel, ack_mode, multi_ack, description}).
@@ -67,7 +67,7 @@ init([SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, Configuration]) ->
        start_heartbeat_fun = StartHeartbeatFun,
        pending_receipts    = undefined,
        config              = Configuration,
-       dest_queues         = sets:new(),
+       route_state          = routing_util:init_state(),
        reply_queues        = dict:new(),
        frame_transformer   = undefined,
        adapter_info        = AdapterInfo,
@@ -410,7 +410,7 @@ tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr,
                                                  subscriptions = Subs}) ->
     ok = ensure_subchannel_closed(SubChannel, MainChannel),
     Subs1 = dict:erase(ConsumerTag, Subs),
-    {ok, Dest} = rabbit_stomp_util:parse_destination(DestHdr),
+    {ok, Dest} = routing_util:parse_endpoint(DestHdr),
     maybe_delete_durable_sub(Dest, Frame, State#state{subscriptions = Subs1}).
 
 maybe_delete_durable_sub({topic, Name}, Frame,
@@ -420,7 +420,7 @@ maybe_delete_durable_sub({topic, Name}, Frame,
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
             QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
-            amqp_channel:call(Channel, #'queue.delete'{queue  = QName,
+            amqp_channel:call(Channel, #'queue.delete'{queue  = list_to_binary(QName),
                                                        nowait = false}),
             ok(State);
         false ->
@@ -440,7 +440,7 @@ ensure_subchannel_closed(SubChannel, _MainChannel) ->
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
         {ok, DestHdr} ->
-            case rabbit_stomp_util:parse_destination(DestHdr) of
+            case routing_util:parse_endpoint(DestHdr) of
                 {ok, Destination} ->
                     Fun(Destination, DestHdr, Frame, State);
                 {error, {invalid_destination, Type, Content}} ->
@@ -453,7 +453,7 @@ with_destination(Command, Frame, State, Fun) ->
                           "'~s' is not a valid destination.~n"
                           "Valid destination types are: ~s.~n",
                           [Content,
-                           string:join(rabbit_stomp_util:valid_dest_prefixes(),
+                           string:join(routing_util:all_dest_prefixes(),
                                        ", ")], State)
             end;
         not_found ->
@@ -522,7 +522,7 @@ server_header() ->
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
-                            dest_queues   = DestQs,
+                            route_state   = RouteState,
                             connection    = Connection,
                             channel       = MainChannel}) ->
     Prefetch =
@@ -542,8 +542,8 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
 
-    {ok, Queue, DestQs1} = ensure_queue(subscribe, Destination, Frame, Channel,
-                                        DestQs),
+    {ok, Queue, RouteState1} =
+      ensure_endpoint(source, Destination, Frame, Channel, RouteState),
 
     {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
 
@@ -555,8 +555,8 @@ do_subscribe(Destination, DestHdr, Frame,
                              no_ack       = (AckMode == auto),
                              exclusive    = false},
                            self()),
-    ExchangeAndKey = rabbit_stomp_util:parse_routing_information(Destination),
-    ok = ensure_queue_binding(Queue, ExchangeAndKey, Channel),
+    ExchangeAndKey = routing_util:parse_routing(Destination),
+    ok = routing_util:ensure_binding(Queue, ExchangeAndKey, Channel),
 
     ok(State#state{subscriptions =
                        dict:store(ConsumerTag,
@@ -566,20 +566,20 @@ do_subscribe(Destination, DestHdr, Frame,
                                                 multi_ack   = IsMulti,
                                                 description = Description},
                                   Subs),
-                   dest_queues = DestQs1}).
+                   route_state = RouteState1}).
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
-        State = #state{channel = Channel, dest_queues = DestQs}) ->
-    {ok, _Q, DestQs1} = ensure_queue(send, Destination, Frame, Channel, DestQs),
+        State = #state{channel = Channel, route_state = RouteState}) ->
+    {ok, _Q, RouteState1} = ensure_endpoint(dest, Destination, Frame, Channel, RouteState),
 
     {Frame1, State1} =
-        ensure_reply_to(Frame, State#state{dest_queues = DestQs1}),
+        ensure_reply_to(Frame, State#state{route_state = RouteState1}),
 
     Props = rabbit_stomp_util:message_properties(Frame1),
 
     {Exchange, RoutingKey} =
-        rabbit_stomp_util:parse_routing_information(Destination),
+        routing_util:parse_routing(Destination),
 
     Method = #'basic.publish'{
       exchange = list_to_binary(Exchange),
@@ -668,7 +668,7 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
         not_found ->
             {Frame, State};
         {ok, ReplyTo} ->
-            {ok, Destination} = rabbit_stomp_util:parse_destination(ReplyTo),
+            {ok, Destination} = routing_util:parse_endpoint(ReplyTo),
             case Destination of
                 {temp_queue, TempQueueId} ->
                     {ReplyQueue, State1} =
@@ -889,68 +889,24 @@ millis_to_seconds(M) when M < 1000 -> 1;
 millis_to_seconds(M)               -> M div 1000.
 
 %%----------------------------------------------------------------------------
-%% Queue and Binding Setup
+%% Queue Setup
 %%----------------------------------------------------------------------------
 
-ensure_queue(subscribe, {exchange, _}, _Frame, Channel, DestQs) ->
-    %% Create anonymous, exclusive queue for SUBSCRIBE on /exchange destinations
-    #'queue.declare_ok'{queue = Queue} =
-        amqp_channel:call(Channel, #'queue.declare'{auto_delete = true,
-                                                    exclusive = true}),
-    {ok, Queue, DestQs};
-ensure_queue(send, {exchange, _}, _Frame, _Channel, DestQs) ->
-    %% Don't create queues on SEND for /exchange destinations
-    {ok, undefined, DestQs};
-ensure_queue(_, {queue, Name}, _Frame, Channel, DestQs) ->
-    %% Always create named queue for /queue destinations the first
-    %% time we encounter it
-    Queue = list_to_binary(Name),
-    DestQs1 = case sets:is_element(Queue, DestQs) of
-                  true  -> DestQs;
-                  false -> amqp_channel:cast(Channel,
-                                             #'queue.declare'{durable = true,
-                                                              queue   = Queue,
-                                                              nowait  = true}),
-                           sets:add_element(Queue, DestQs)
-              end,
-    {ok, Queue, DestQs1};
-ensure_queue(subscribe, {topic, Name}, Frame, Channel, DestQs) ->
-    %% Create queue for SUBSCRIBE on /topic destinations. Queues are
-    %% anonymous, auto_delete and exclusive for transient
-    %% subscriptions. Durable subscriptions get shared, named, durable
-    %% queues.
-    Method =
-        case rabbit_stomp_frame:boolean_header(Frame,
-                                               ?HEADER_PERSISTENT, false) of
-            true  ->
-                {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-                QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
-                #'queue.declare'{durable = true, queue = QName};
-            false ->
-                #'queue.declare'{auto_delete = true, exclusive = true}
-        end,
-    #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
-    {ok, Queue, DestQs};
-ensure_queue(send, {topic, _}, _Frame, _Channel, DestQs) ->
-    %% Don't create queues on SEND for /topic destinations
-    {ok, undefined, DestQs};
-ensure_queue(_, {Type, Name}, _Frame, _Channel, DestQs)
-  when Type =:= reply_queue orelse Type =:= amqqueue ->
-    {ok, list_to_binary(Name), DestQs}.
+ensure_endpoint(source, {topic, Name}, Frame, Channel, State) ->
+    case rabbit_stomp_frame:boolean_header(Frame, ?HEADER_PERSISTENT, false) of
+        true -> 
+            {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
+            SubsQueue = rabbit_stomp_util:durable_subscription_queue(Name, Id),
+            routing_util:ensure_endpoint(
+              source, Channel, {topic, SubsQueue}, State);
+        false ->
+            routing_util:ensure_endpoint(
+              source, Channel, {topic, Name, false}, State)
+    end;
 
-ensure_queue_binding(QueueBin, {"", Queue}, _Channel) ->
-    %% i.e., we should only be asked to bind to the default exchange a
-    %% queue with its own name
-    QueueBin = list_to_binary(Queue),
-    ok;
-ensure_queue_binding(Queue, {Exchange, RoutingKey}, Channel) ->
-    #'queue.bind_ok'{} =
-        amqp_channel:call(Channel,
-                          #'queue.bind'{
-                            queue       = Queue,
-                            exchange    = list_to_binary(Exchange),
-                            routing_key = list_to_binary(RoutingKey)}),
-    ok.
+ensure_endpoint(Direction, Endpoint, _Frame, Channel, State) ->
+    routing_util:ensure_endpoint(Direction, Channel, Endpoint, State).
+
 %%----------------------------------------------------------------------------
 %% Success/error handling
 %%----------------------------------------------------------------------------
