@@ -437,13 +437,13 @@ close_connection(State = #v1{queue_collector = Collector,
 
 handle_dependent_exit(ChPid, Reason, State) ->
     case {channel_cleanup(ChPid), termination_kind(Reason)} of
-        {undefined, uncontrolled} ->
-            exit({abnormal_dependent_exit, ChPid, Reason});
-        {_Channel, controlled} ->
-            maybe_close(control_throttle(State));
-        {Channel, uncontrolled} ->
-            maybe_close(handle_exception(control_throttle(State),
-                                         Channel, Reason))
+        {undefined,   controlled} -> State;
+        {undefined, uncontrolled} -> exit({abnormal_dependent_exit,
+                                           ChPid, Reason});
+        {_Channel,    controlled} -> maybe_close(control_throttle(State));
+        {Channel,   uncontrolled} -> maybe_close(
+                                       handle_exception(control_throttle(State),
+                                                        Channel, Reason))
     end.
 
 terminate_channels() ->
