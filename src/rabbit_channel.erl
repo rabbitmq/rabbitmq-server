@@ -589,6 +589,16 @@ handle_method(_Method, _, State = #ch{state = closing}) ->
 
 handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid}) ->
     {ok, State1} = notify_queues(State),
+    %% We issue the channel.close_ok response after a handshake with
+    %% the reader, the other half of which is the
+    %% ready_for_close. That way the reader forgets about the channel
+    %% before we send the response (and this channel process
+    %% terminates). If we didn't do that, a channel.open for the same
+    %% channel number, which a client is entitled to send as soon as
+    %% it has received the close_ok, might be received by the reader
+    %% before it has seen the termination and hence be sent to the
+    %% old, now dead/dying channel process, instead of a new process,
+    %% and thus lost.
     ReaderPid ! {channel_closing, self()},
     {noreply, State1};
 
