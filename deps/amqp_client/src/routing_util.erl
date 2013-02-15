@@ -41,6 +41,7 @@ ensure_endpoint(source, Channel, {exchange, _}, State) ->
 
 ensure_endpoint(source, Channel, {topic, Name}, State) ->
     ensure_endpoint(source, Channel, {topic, Name, true}, State);
+
 ensure_endpoint(source, Channel, {topic, Name, Durable}, State) ->
     Method =
         case Durable of
@@ -51,6 +52,11 @@ ensure_endpoint(source, Channel, {topic, Name, Durable}, State) ->
                 #'queue.declare'{auto_delete = true, exclusive = true}
         end,
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
+    {ok, Queue, State};
+
+ensure_endpoint(_, Channel, {queue, undefined}, State) ->
+    #'queue.declare_ok'{queue = Queue} =
+      amqp_channel:call(Channel, #'queue.declare'{durable = true}),
     {ok, Queue, State};
 
 ensure_endpoint(_, Channel, {queue, Name}, State) ->
@@ -93,32 +99,43 @@ ensure_binding(Queue, {Exchange, RoutingKey}, Channel) ->
 
 %% --------------------------------------------------------------------------
 
-parse_endpoint(Destination, Enc) when is_binary(Destination) ->
-    parse_endpoint(unicode:characters_to_list(Destination, Enc)).
+parse_endpoint(Destination) ->
+    parse_endpoint(Destination, []).
 
-parse_endpoint(Destination) when is_list(Destination) ->
+parse_endpoint(Destination, Params) when is_binary(Destination) ->
+    parse_endpoint(
+      unicode:characters_to_list(
+        Destination, proplists:get_value(encoding, Params)), Params);
+
+parse_endpoint(Destination, Params) when is_list(Destination) ->
     case re:split(Destination, "/", [{return, list}]) of
         [Name] ->
             {ok, {queue, unescape(Name)}};
         ["", Type | Rest]
             when Type =:= "exchange";   Type =:= "queue"; Type =:= "topic";
                  Type =:= "temp-queue"; Type =:= "reply-queue" ->
-            parse_endpoint0(atomise(Type), Rest);
+            parse_endpoint0(atomise(Type), Rest, Params);
         ["", "amq", "queue" | Rest] ->
-            parse_endpoint0(amqqueue, Rest);
+            parse_endpoint0(amqqueue, Rest, Params);
         _ ->
             {error, {unknown_destination, Destination}}
     end.
 
-parse_endpoint0(exchange, ["" | _] = Rest) ->
+parse_endpoint0(exchange, ["" | _] = Rest, _Params) ->
     {error, {invalid_destination, exchange, to_url(Rest)}};
-parse_endpoint0(exchange, [Name]) ->
+parse_endpoint0(exchange, [Name], Params) ->
     {ok, {exchange, {unescape(Name), undefined}}};
-parse_endpoint0(exchange, [Name, Pattern]) ->
+parse_endpoint0(exchange, [Name, Pattern], _Params) ->
     {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
-parse_endpoint0(Type, [[_|_]] = [Name]) ->
+parse_endpoint0(queue, [], Params) ->
+    case {proplists:get_value(direction, Params),
+          proplists:get_value(dynamic,   Params)} of
+        {dest, true} -> {ok, {queue, undefined}};
+        _            -> {error, {invalid_destination, queue, []}}
+    end;
+parse_endpoint0(Type, [[_|_]] = [Name], _Params) ->
     {ok, {Type, unescape(Name)}};
-parse_endpoint0(Type, Rest) ->
+parse_endpoint0(Type, Rest, _Params) ->
     {error, {invalid_destination, Type, to_url(Rest)}}.
 
 %% --------------------------------------------------------------------------
