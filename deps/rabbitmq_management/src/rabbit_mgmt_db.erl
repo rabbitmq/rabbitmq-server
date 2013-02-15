@@ -996,14 +996,12 @@ remove_old_samples_it({Matches, Continuation}, Policies, Now, ETS) ->
 
 remove_old_samples_single({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
     Policy = pget(retention_policy(Type), Policies),
-    Stats2 = remove_old_samples({Policy, Now}, Stats),
-    case Stats2 of
-        Stats -> ok;
-        _     -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
+    case remove_old_samples({Policy, Now}, Stats) of
+        Stats  -> ok;
+        Stats2 -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
     end.
 
-remove_old_samples(Cutoff, #stats{diffs = Diffs,
-                                  base  = Base}) ->
+remove_old_samples(Cutoff, #stats{diffs = Diffs, base = Base}) ->
     List = lists:reverse(gb_trees:to_list(Diffs)),
     remove_old_samples(Cutoff, List, [], Base).
 
@@ -1016,15 +1014,15 @@ remove_old_samples(Cutoff, #stats{diffs = Diffs,
 remove_old_samples(_Cutoff, [], Keep, Base) ->
     #stats{diffs = gb_trees:from_orddict(Keep), base = Base};
 remove_old_samples(Cutoff, [H = {TS, S} | T], Keep, Base) ->
-    case {keep(Cutoff, TS), Keep} of
-        {keep,       _} -> remove_old_samples(Cutoff, T, [H | Keep], Base);
-        {drop,       _} -> remove_old_samples(Cutoff, T, Keep, Base + S); %% [2]
-        {{move, D}, []} -> remove_old_samples(
-                             Cutoff, T, [{TS + D, S}], Base); %% [1]
-        {{move, _},  _} -> [{KTS, KS} | KT] = Keep,
-                           remove_old_samples(
-                             Cutoff, T, [{KTS, KS + S} | KT], Base) %% [0]
-    end.
+    {NewKeep, NewBase} =
+        case keep(Cutoff, TS) of
+            keep                       -> {[H | Keep],           Base};
+            drop                       -> {Keep,             S + Base}; %% [2]
+            {move, D} when Keep =:= [] -> {[{TS + D, S}],        Base}; %% [1]
+            {move, _}                  -> [{KTS, KS} | KT] = Keep,
+                                          {[{KTS, KS + S} | KT], Base}  %% [0]
+        end,
+    remove_old_samples(Cutoff, T, NewKeep, NewBase).
 
 keep({Policy, Now}, TS) ->
     lists:foldl(fun ({AgeSec, DivisorSec}, Action) ->
@@ -1040,12 +1038,12 @@ keep({Policy, Now}, TS) ->
                           end)
                 end, drop, Policy).
 
-prefer_action(keep,      _)         -> keep;
-prefer_action(_,         keep)      -> keep;
+prefer_action(keep,              _) -> keep;
+prefer_action(_,              keep) -> keep;
 prefer_action({move, A}, {move, B}) -> {move, lists:min([A, B])};
-prefer_action({move, A}, drop)      -> {move, A};
+prefer_action({move, A},      drop) -> {move, A};
 prefer_action(drop,      {move, A}) -> {move, A};
-prefer_action(drop,      drop)      -> drop.
+prefer_action(drop,           drop) -> drop.
 
 retention_policy(vhost_stats)            -> global;
 retention_policy(queue_stats)            -> basic;
