@@ -18,8 +18,6 @@
 
 -ifdef(use_specs).
 
--export_type([async_callback/0]).
-
 %% We can't specify a per-queue ack/state with callback signatures
 -type(ack()   :: any()).
 -type(state() :: any()).

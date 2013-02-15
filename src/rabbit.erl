@@ -355,6 +355,8 @@ handle_app_error(App, Reason) ->
     throw({could_not_start, App, Reason}).
 
 start_it(StartFun) ->
+    Marker = spawn_link(fun() -> receive stop -> ok end end),
+    register(rabbit_boot, Marker),
     try
         StartFun()
     catch
@@ -363,11 +365,17 @@ start_it(StartFun) ->
          _:Reason ->
             boot_error(Reason, erlang:get_stacktrace())
     after
+        unlink(Marker),
+        Marker ! stop,
         %% give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
+    case whereis(rabbit_boot) of
+        undefined -> ok;
+        _         -> await_startup()
+    end,
     rabbit_log:info("Stopping RabbitMQ~n"),
     ok = app_utils:stop_applications(app_shutdown_order()).
 
@@ -719,13 +727,13 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
-    io:format("~n##  ##      ~s ~s. ~s"
-              "~n##  ##      ~s"
-              "~n##########"
-              "~n######  ##  Logs: ~s"
-              "~n##########        ~s"
-              "~n"
-              "~n            Starting broker...",
+    io:format("~n              ~s ~s. ~s"
+              "~n  ##  ##      ~s"
+              "~n  ##  ##"
+              "~n  ##########  Logs: ~s"
+              "~n  ######  ##        ~s"
+              "~n  ##########"
+              "~n              Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE,
                log_location(kernel), log_location(sasl)]).
 

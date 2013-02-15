@@ -262,8 +262,6 @@
           durable,
           transient_threshold,
 
-          async_callback,
-
           len,
           persistent_count,
 
@@ -356,8 +354,6 @@
              durable               :: boolean(),
              transient_threshold   :: non_neg_integer(),
 
-             async_callback        :: rabbit_backing_queue:async_callback(),
-
              len                   :: non_neg_integer(),
              persistent_count      :: non_neg_integer(),
 
@@ -426,7 +422,7 @@ init(Queue, Recover, AsyncCallback) ->
 init(#amqqueue { name = QueueName, durable = IsDurable }, false,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
-    init(IsDurable, IndexState, 0, [], AsyncCallback,
+    init(IsDurable, IndexState, 0, [],
          case IsDurable of
              true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
                                             MsgOnDiskFun, AsyncCallback);
@@ -454,7 +450,7 @@ init(#amqqueue { name = QueueName, durable = true }, true,
                   rabbit_msg_store:contains(MsgId, PersistentClient)
           end,
           MsgIdxOnDiskFun),
-    init(true, IndexState, DeltaCount, Terms1, AsyncCallback,
+    init(true, IndexState, DeltaCount, Terms1,
          PersistentClient, TransientClient).
 
 terminate(_Reason, State) ->
@@ -1004,7 +1000,7 @@ update_rate(Now, Then, Count, {OThen, OCount}) ->
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-init(IsDurable, IndexState, DeltaCount, Terms, AsyncCallback,
+init(IsDurable, IndexState, DeltaCount, Terms,
      PersistentClient, TransientClient) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
@@ -1029,8 +1025,6 @@ init(IsDurable, IndexState, DeltaCount, Terms, AsyncCallback,
       msg_store_clients   = {PersistentClient, TransientClient},
       durable             = IsDurable,
       transient_threshold = NextSeqId,
-
-      async_callback      = AsyncCallback,
 
       len                 = DeltaCount1,
       persistent_count    = DeltaCount1,
