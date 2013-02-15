@@ -218,6 +218,7 @@ public class SwiftMQTests extends TestCase {
         route("/exchange/amq.direct/",     "/exchange/amq.direct",  "",        true);
         route("/exchange/amq.direct/a",    "/exchange/amq.direct",  "a",       true);
 
+        route(QUEUE,                       "/queue",                "",        false);
         route("/exchange/amq.direct/b",    "/exchange/amq.direct",  "a",       false);
         route(QUEUE,                       "/exchange/amq.fanout",  "",        false);
         route(QUEUE,                       "/exchange/amq.headers", "",        false);

@@ -246,7 +246,10 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
         _ ->
             case Address of
                 {utf8, Destination} ->
-                    case routing_util:parse_endpoint(Destination, utf8) of
+                    ParseParams = [{encoding,  utf8},
+                                   {direction, dest},
+                                   {dynamic,   true}],
+                    case routing_util:parse_endpoint(Destination, ParseParams) of
                         {ok, Dest} ->
                             {ok, Queue, State} =
                                 routing_util:ensure_endpoint(
@@ -259,8 +262,9 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                exchange    = list_to_binary(ExchangeName),
                                routing_key =
                                  case RoutingKey of
-                                     [] -> undefined;
-                                     _  -> list_to_binary(RoutingKey)
+                                     undefined -> undefined;
+                                     []        -> undefined;
+                                     _         -> list_to_binary(RoutingKey)
                                  end}};
                         {error, Err} = E -> E
                     end;
