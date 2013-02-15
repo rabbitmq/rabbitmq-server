@@ -270,7 +270,7 @@ suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes, SSNodes}, Poss) ->
               {MNode, []};
         _  -> case lists:member(MNode, Available) of
                   true  -> {MNode, Available -- [MNode]};
-                  false -> %% Make the sure new master is synced! In order to
+                  false -> %% Make sure the new master is synced! In order to
                            %% get here SSNodes must not be empty.
                            [NewMNode | _] = SSNodes,
                            {NewMNode, Available -- [NewMNode]}
