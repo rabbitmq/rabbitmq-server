@@ -19,67 +19,14 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([check_exchange/2, create_queue/3, create_queue/4, create_bound_queue/4,
-         parse_destination/2, parse_destination/1, queue_address/1, outcomes/1,
-         protocol_error/3, ctag_to_handle/1, handle_to_ctag/1]).
+-export([queue_address/1, outcomes/1, protocol_error/3, ctag_to_handle/1,
+         handle_to_ctag/1]).
 
 -define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
 -define(DEFAULT_OUTCOME, #'v1_0.released'{}).
 -define(OUTCOMES, [?V_1_0_SYMBOL_ACCEPTED,
                    ?V_1_0_SYMBOL_REJECTED,
                    ?V_1_0_SYMBOL_RELEASED]).
-
-check_exchange([], _DCh) ->
-    {ok, <<>>};
-check_exchange(ExchangeName, DCh) when is_list(ExchangeName) ->
-    check_exchange(list_to_binary(ExchangeName), DCh);
-check_exchange(ExchangeName, DCh) when is_binary(ExchangeName) ->
-    XDecl = #'exchange.declare'{ exchange = ExchangeName, passive = true },
-    #'exchange.declare_ok'{} = rabbit_amqp1_0_channel:call(DCh, XDecl),
-    {ok, ExchangeName}.
-
-create_queue(Lifetime, DCh, Durable) ->
-    create_queue(<<>>, Lifetime, DCh, Durable).
-
-%% TODO Lifetimes: we approximate these with auto_delete.
-create_queue(Name, Lifetime, DCh, Durable) when is_list(Name) ->
-    create_queue(list_to_binary(Name), Lifetime, DCh, Durable);
-create_queue(Name, _Lifetime, DCh, Durable) ->
-    #'queue.declare_ok'{queue = Name1} =
-        rabbit_amqp1_0_channel:call(
-          DCh, #'queue.declare'{queue       = Name,
-                                auto_delete = Name =:= <<>>,
-                                durable     = durable(Durable)}),
-    {ok, Name1}.
-
-create_bound_queue(ExchangeName, RoutingKey, DCh, Durable) ->
-    {ok, QueueName} = create_queue(?EXCHANGE_SUB_LIFETIME, DCh, Durable),
-    create_binding(ExchangeName, RoutingKey, QueueName, DCh),
-    {ok, QueueName}.
-
-create_binding(<<>>, <<>>, _QueueName, _DCh) ->
-    ok;
-create_binding(ExchangeName, RoutingKey, QueueName, DCh) ->
-    %% Don't both ensuring the channel, the previous should have done it
-    #'queue.bind_ok'{} =
-        rabbit_amqp1_0_channel:call(
-          DCh, #'queue.bind'{exchange = ExchangeName,
-                             queue = QueueName,
-                             routing_key = RoutingKey}).
-
-parse_destination(Destination, Enc) when is_binary(Destination) ->
-    parse_destination(unicode:characters_to_list(Destination, Enc)).
-
-parse_destination(Destination) when is_list(Destination) ->
-    case re:split(Destination, "/", [{return, list}]) of
-        [Name] ->
-            ["queue", Name];
-        ["", Type | Tail] when
-              Type =:= "queue" orelse Type =:= "exchange" ->
-            [Type | Tail];
-        _Else ->
-            {error, {malformed_address, Destination}}
-    end.
 
 queue_address(QueueName) when is_binary(QueueName) ->
     <<"/queue/", QueueName/binary>>.

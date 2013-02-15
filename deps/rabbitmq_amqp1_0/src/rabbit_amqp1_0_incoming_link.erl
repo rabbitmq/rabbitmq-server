@@ -32,7 +32,8 @@
                         send_settle_mode = undefined,
                         recv_settle_mode = undefined,
                         credit_used = ?INCOMING_CREDIT div 2,
-                        msg_acc = []}).
+                        msg_acc = [],
+                        route_state}).
 
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
@@ -43,7 +44,10 @@ attach(#'v1_0.attach'{name = Name,
                       initial_delivery_count = {uint, InitTransfer}},
        BCh, DCh) ->
     %% TODO associate link name with target
-    case ensure_target(Target, #incoming_link{ name = Name }, DCh) of
+    case ensure_target(Target,
+                       #incoming_link{
+                         name        = Name,
+                         route_state = routing_util:init_state() }, DCh) of
         {ok, ServerTarget,
          IncomingLink = #incoming_link{ delivery_count = InitTransfer }} ->
             {_, _Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
@@ -225,7 +229,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                       durable       = Durable,
                                       %% TODO expiry_policy = ExpiryPolicy,
                                       timeout       = Timeout},
-              Link = #incoming_link{}, DCh) ->
+              Link = #incoming_link{ route_state = RouteState }, DCh) ->
     case Dynamic of
         true ->
             case Address of
@@ -241,40 +245,24 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
             end;
         _ ->
             case Address of
-                {Enc, Destination}
-                  when Enc =:= utf8 ->
-                    case rabbit_amqp1_0_link_util:parse_destination(Destination, Enc) of
-                        ["queue", Name] ->
-                            case rabbit_amqp1_0_link_util:create_queue(Name, Timeout, DCh, Durable) of
-                                {ok, QueueName} ->
-                                    {ok, Target,
-                                     Link#incoming_link{exchange = <<"">>,
-                                                        routing_key = QueueName}};
-                                _ ->
-                                    {error, "Declaring queue " ++ Name ++ " failed."}
-                            end;
-                        ["queue"] ->
-                            %% Rely on the Subject being set
-                            {ok, Target, Link#incoming_link{exchange = <<"">>}};
-                        ["exchange", Name] ->
-                            case rabbit_amqp1_0_link_util:check_exchange(Name, DCh) of
-                                {ok, ExchangeName} ->
-                                    {ok, Target,
-                                     Link#incoming_link{exchange = ExchangeName}};
-                                {error, Reason} ->
-                                    {error, Reason}
-                            end;
-                        ["exchange", Name, RKey] ->
-                            case rabbit_amqp1_0_link_util:check_exchange(Name, DCh) of
-                                {ok, ExchangeName} ->
-                                    {ok, Target,
-                                     Link#incoming_link{exchange = ExchangeName,
-                                                        routing_key = list_to_binary(RKey)}};
-                                {error, Reason} ->
-                                    {error, Reason}
-                            end;
-                        _Otherwise ->
-                            {error, {unknown_address, Address}}
+                {utf8, Destination} ->
+                    case routing_util:parse_endpoint(Destination, utf8) of
+                        {ok, Dest} ->
+                            {ok, Queue, State} =
+                                routing_util:ensure_endpoint(
+                                  dest, DCh, Dest, RouteState),
+                            {ExchangeName, RoutingKey} =
+                                routing_util:parse_routing(Dest),
+                            {ok, Target,
+                             Link#incoming_link{
+                               route_state = State,
+                               exchange    = list_to_binary(ExchangeName),
+                               routing_key =
+                                 case RoutingKey of
+                                     [] -> undefined;
+                                     _  -> list_to_binary(RoutingKey)
+                                 end}};
+                        {error, Err} = E -> E
                     end;
                 _Else ->
                     {error, {unknown_address, Address}}

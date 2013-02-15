@@ -30,7 +30,8 @@
 -record(outgoing_link, {queue,
                         delivery_count = 0,
                         send_settled,
-                        default_outcome}).
+                        default_outcome,
+                        route_state}).
 
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
@@ -48,7 +49,8 @@ attach(#'v1_0.attach'{name = Name,
     case ensure_source(Source,
                        #outgoing_link{delivery_count  = ?INIT_TXFR_COUNT,
                                       send_settled    = SndSettled,
-                                      default_outcome = DOSym}, DCh) of
+                                      default_outcome = DOSym,
+                                      route_state     = routing_util:init_state()}, DCh) of
         {ok, Source1, OutgoingLink = #outgoing_link{queue = QueueName}} ->
             CTag = handle_to_ctag(Handle),
             case rabbit_amqp1_0_channel:subscribe(
@@ -148,7 +150,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                                       durable       = Durable,
                                       expiry_policy = _ExpiryPolicy, % TODO
                                       timeout       = Timeout},
-              Link = #outgoing_link{}, DCh) ->
+              Link = #outgoing_link{ route_state = RouteState }, DCh) ->
     case Dynamic of
         true ->
             case Address of
@@ -163,30 +165,17 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
             end;
         _ ->
             case Address of
-                {Enc, Destination}
-                  when Enc =:= utf8 ->
-                    case rabbit_amqp1_0_link_util:parse_destination(Destination, Enc) of
-                        ["queue", Name] ->
-                            case rabbit_amqp1_0_link_util:create_queue(Name, Timeout, DCh, Durable) of
-                                {ok, QueueName} ->
-                                    {ok, Source,
-                                     Link#outgoing_link{queue = QueueName}};
-                                {error, Reason} ->
-                                    {error, Reason}
-                            end;
-                        ["exchange", Name, RK] ->
-                            case rabbit_amqp1_0_link_util:check_exchange(Name, DCh) of
-                                {ok, ExchangeName} ->
-                                    RoutingKey = list_to_binary(RK),
-                                    {ok, QueueName} =
-                                        rabbit_amqp1_0_link_util:create_bound_queue(
-                                          ExchangeName, RoutingKey, DCh, Durable),
-                                    {ok, Source, Link#outgoing_link{queue = QueueName}};
-                                {error, Reason} ->
-                                    {error, Reason}
-                            end;
-                        _Otherwise ->
-                            {error, {unknown_address, Address}}
+                {utf8, Destination} ->
+                    case routing_util:parse_endpoint(Destination, utf8) of
+                        {ok, Dest} ->
+                            {ok, Queue, State} =
+                              routing_util:ensure_endpoint(
+                                source, DCh, Dest, RouteState),
+                            ER = routing_util:parse_routing(Dest),
+                            ok = routing_util:ensure_binding(Queue, ER, DCh),
+                            {ok, Source,
+                             Link#outgoing_link{ route_state = State,
+                                                 queue       = Queue }}
                     end;
                 _ ->
                     {error, {unknown_address, Address}}

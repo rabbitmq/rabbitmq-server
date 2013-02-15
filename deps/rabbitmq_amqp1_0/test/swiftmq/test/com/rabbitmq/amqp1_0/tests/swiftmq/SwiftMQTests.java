@@ -209,17 +209,18 @@ public class SwiftMQTests extends TestCase {
     }
 
     public void testRouting() throws Exception {
+        route("/topic/#.c.*",              "/topic/a.b.c.d",        "",        true);
+        route("/topic/#.c.*",              "/exchange/amq.topic",   "a.b.c.d", true);
+        route("/exchange/amq.topic/#.c.*", "/topic/a.b.c.d",        "",        true);
         route("/exchange/amq.topic/#.c.*", "/exchange/amq.topic",   "a.b.c.d", true);
+
         route("/exchange/amq.fanout/",     "/exchange/amq.fanout",  "",        true);
         route("/exchange/amq.direct/",     "/exchange/amq.direct",  "",        true);
         route("/exchange/amq.direct/a",    "/exchange/amq.direct",  "a",       true);
-        route(QUEUE,                       "/exchange/",            "test",    true);
 
         route("/exchange/amq.direct/b",    "/exchange/amq.direct",  "a",       false);
         route(QUEUE,                       "/exchange/amq.fanout",  "",        false);
         route(QUEUE,                       "/exchange/amq.headers", "",        false);
-
-        route("/exchange//",               "/exchange/",            "test",    false);
         emptyQueue(QUEUE);
     }
 
