@@ -209,6 +209,16 @@ public class SwiftMQTests extends TestCase {
     }
 
     public void testRouting() throws Exception {
+        try {
+            route(QUEUE,                   "/exchange/missing",    "",        false);
+            fail("Missing exchange should fail");
+        } catch (Exception e) { }
+
+        try {
+            route("/exchange/missing/",    QUEUE,                  "",        false);
+            fail("Missing exchange should fail");
+        } catch (Exception e) { }
+
         route("/topic/#.c.*",              "/topic/a.b.c.d",        "",        true);
         route("/topic/#.c.*",              "/exchange/amq.topic",   "a.b.c.d", true);
         route("/exchange/amq.topic/#.c.*", "/topic/a.b.c.d",        "",        true);

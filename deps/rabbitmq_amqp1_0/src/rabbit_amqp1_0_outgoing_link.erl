@@ -170,8 +170,11 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                     case routing_util:parse_endpoint(Destination, ParseParams) of
                         {ok, Dest} ->
                             {ok, Queue, State} =
-                              routing_util:ensure_endpoint(
-                                source, DCh, Dest, RouteState),
+                              rabbit_amqp1_0_channel:convert_error(
+                                fun() ->
+                                        routing_util:ensure_endpoint(
+                                          source, DCh, Dest, RouteState)
+                                end),
                             ER = routing_util:parse_routing(Dest),
                             ok = routing_util:ensure_binding(Queue, ER, DCh),
                             {ok, Source,
