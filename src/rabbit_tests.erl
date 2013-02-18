@@ -1061,7 +1061,11 @@ test_runtime_parameters() ->
     ok = control_action(clear_parameter, ["test", "maybe"]),
     {error_string, _} =
         control_action(clear_parameter, ["test", "neverexisted"]),
+
+    %% We can delete for a component that no longer exists
+    Good(["test", "good", "\"ignore\""]),
     rabbit_runtime_parameters_test:unregister(),
+    ok = control_action(clear_parameter, ["test", "good"]),
     passed.
 
 test_policy_validation() ->
