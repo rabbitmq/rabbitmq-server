@@ -169,6 +169,8 @@ route_destination_test() ->
 
     %% queue without name
     ?assertMatch({error, {invalid_destination, queue, ""}}, parse_dest("/queue")),
+    ?assertMatch({ok, {queue, undefined}},
+                 parse_dest("/queue", [{direction, dest}, {dynamic, true}])),
 
     %% topic without name
     ?assertMatch({error, {invalid_destination, topic, ""}}, parse_dest("/topic")),
@@ -220,6 +222,8 @@ route_destination_test() ->
 
     ok.
 
+parse_dest(Destination, Params) ->
+    routing_util:parse_endpoint(Destination, Params).
 parse_dest(Destination) ->
     routing_util:parse_endpoint(Destination).
 
