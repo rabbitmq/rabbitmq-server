@@ -33,7 +33,8 @@ dest_prefixes() -> [?EXCHANGE_PREFIX, ?TOPIC_PREFIX, ?QUEUE_PREFIX,
 all_dest_prefixes() -> [?TEMP_QUEUE_PREFIX | dest_prefixes()].
 
 
-ensure_endpoint(source, Channel, {exchange, _}, State) ->
+ensure_endpoint(source, Channel, {exchange, {Name, _}}, State) ->
+    check_exchange(Name, Channel),
     #'queue.declare_ok'{queue = Queue} =
         amqp_channel:call(Channel, #'queue.declare'{auto_delete = true,
                                                     exclusive   = true}),
@@ -71,7 +72,8 @@ ensure_endpoint(_, Channel, {queue, Name}, State) ->
               end,
     {ok, Queue, State1};
 
-ensure_endpoint(dest, _Channel, {exchange, _}, State) ->
+ensure_endpoint(dest, Channel, {exchange, {Name, _}}, State) ->
+    check_exchange(Name, Channel),
     {ok, undefined, State};
 
 ensure_endpoint(dest, _Ch, {topic, _}, State) ->
@@ -149,6 +151,20 @@ parse_routing({topic, Name}) ->
 parse_routing({Type, Name})
   when Type =:= queue orelse Type =:= reply_queue orelse Type =:= amqqueue ->
     {"", Name}.
+
+%%----------------------------------------------------------------------------
+
+check_exchange(ExchangeName, Channel) ->
+    #'queue.declare_ok'{queue = Queue} =
+      amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Channel,
+                          #'queue.bind'{
+                            queue    = Queue,
+                            exchange = list_to_binary(ExchangeName)}),
+    #'queue.delete_ok'{} =
+      amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
+    ok.
 
 %%----------------------------------------------------------------------------
 
