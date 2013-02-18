@@ -20,7 +20,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
+-export([validate/4, notify/4, notify_clear/3]).
 -export([register/0, validate_policy/1]).
 
 -rabbit_boot_step({?MODULE,
@@ -56,21 +56,6 @@ validate(_VHost, <<"federation">>, <<"local-username">>, Term) ->
     rabbit_parameter_validation:binary(<<"local-username">>, Term);
 
 validate(_VHost, _Component, Name, _Term) ->
-    {error, "name not recognised: ~p", [Name]}.
-
-validate_clear(_VHost, <<"federation-upstream-set">>, _Name) ->
-    ok;
-
-validate_clear(_VHost, <<"federation-upstream">>, _Name) ->
-    ok;
-
-validate_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
-    ok;
-
-validate_clear(_VHost, <<"federation">>, <<"local-username">>) ->
-    ok;
-
-validate_clear(_VHost, _Component, Name) ->
     {error, "name not recognised: ~p", [Name]}.
 
 notify(_VHost, <<"federation-upstream-set">>, Name, _Term) ->
