@@ -250,6 +250,10 @@ handle_info({mnesia_system_event,
                     ordsets:add_element(Node, ordsets:from_list(Partitions))),
     {noreply, State#state{partitions = Partitions1}};
 
+handle_info({mnesia_system_event, {mnesia_down, _Node}}, State) ->
+    handle_dead_according_to_mnesia_rabbit(),
+    {noreply, State};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -271,6 +275,28 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
     ok = rabbit_mnesia:on_node_down(Node).
+
+%% Since we will be introspecting the cluster in response to this, we
+%% must only do so based on Mnesia having noticed the other node being
+%% down - otherwise we have a race.
+handle_dead_according_to_mnesia_rabbit() ->
+    case application:get_env(rabbit, cluster_cp_mode) of
+        {ok, true}  -> case rabbit_mnesia:majority() of
+                           true  -> ok;
+                           false -> stop_and_halt()
+                       end;
+        {ok, false} -> ok
+    end,
+    ok.
+
+stop_and_halt() ->
+    rabbit_log:warning("Cluster minority status detected - stopping~n", []),
+    spawn(fun () ->
+                  %% If our group leader is inside an application we are about
+                  %% to stop, application:stop/1 does not return.
+                  group_leader(whereis(init), self()),
+                  rabbit:stop_and_halt()
+          end).
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),

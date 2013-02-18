@@ -26,6 +26,7 @@
 
          status/0,
          is_clustered/0,
+         majority/0,
          cluster_nodes/1,
          node_type/0,
          dir/0,
@@ -67,6 +68,7 @@
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
                          {'running_nodes', [node()]} |
                          {'partitions', [{node(), [node()]}]}]).
+-spec(majority/0 :: () -> boolean()).
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(cluster_nodes/1 :: ('all' | 'disc' | 'ram' | 'running') -> [node()]).
 -spec(node_type/0 :: () -> node_type()).
@@ -337,6 +339,10 @@ status() ->
                       {partitions,    mnesia_partitions(RunningNodes)}];
             false -> []
         end.
+
+majority() ->
+    ensure_mnesia_running(),
+    (length(cluster_nodes(running)) / length(cluster_nodes(all))) > 0.5.
 
 mnesia_partitions(Nodes) ->
     {Replies, _BadNodes} = rpc:multicall(
