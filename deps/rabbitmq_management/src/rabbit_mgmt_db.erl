@@ -776,27 +776,19 @@ pick_range(K, {RangeL, RangeM, RangeD}) ->
     end.
 
 format_sample_details(no_range, #stats{diffs = Diffs, base = Base}, Interval) ->
-    Rate = case nth_largest(Diffs, 2) of
-               false    -> 0;
-               {_TS, S} -> S * 1000 / Interval
-           end,
+    Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
+    RangePoint = ((Now div Interval) * Interval) - Interval,
     Count = sum_entire_tree(gb_trees:iterator(Diffs), Base),
-    {[{rate, Rate}], Count};
+    {[{rate, format_sample_details_rate(
+               Diffs, RangePoint, Interval, Interval)}], Count};
 
 format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
     RangePoint = Range#range.last - Interval,
     {Samples, Count} = extract_samples(
                          Range, Base, gb_trees:iterator(Diffs), []),
-    Rate = case nth_largest(Diffs, 2) of
-               false   -> 0;
-               {TS, S} -> case TS - RangePoint of %% [0]
-                              D when D =< Range#range.incr andalso
-                                     D >= 0 -> S * 1000 / Interval;
-                              _             -> 0
-                          end
-           end,
-    Part1 = [{rate,     Rate},
-             {samples,  Samples}],
+    Part1 = [{rate,    format_sample_details_rate(
+                         Diffs, RangePoint, Range#range.incr, Interval)},
+             {samples, Samples}],
     Length = length(Samples),
     Part2 = case Length > 1 of
                 true  -> [{sample, S2}, {timestamp, T2}] = hd(Samples),
@@ -807,6 +799,15 @@ format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
                 false -> []
             end,
     {Part1 ++ Part2, Count}.
+
+format_sample_details_rate(Diffs, RangePoint, Incr, Interval) ->
+    case nth_largest(Diffs, 2) of
+        false   -> 0.0;
+        {TS, S} -> case TS - RangePoint of %% [0]
+                       D when D =< Incr andalso D >= 0 -> S * 1000 / Interval;
+                       _                               -> 0.0
+                   end
+    end.
 
 %% [0] Only display the rate if it's live - i.e. ((the end of the
 %% range) - interval) corresponds to the second to last data point we

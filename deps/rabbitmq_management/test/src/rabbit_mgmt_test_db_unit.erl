@@ -68,19 +68,19 @@ format_sample_details_test() ->
     %% Skip over some and invent some. Note that the instantaneous
     %% rate drops to 0 since the last event is now in the past.
     T({0, 40, 20}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{40, 61}, {20, 31}, {0, 1}], 0, 1.5, 31.0, 61}),
+      {[{40, 61}, {20, 31}, {0, 1}], 0.0, 1.5, 31.0, 61}),
 
     %% And a case where the range starts after the samples
     T({20, 40, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{40, 61}, {30, 61}, {20, 31}], 0, 1.5, 51.0, 61}),
+      {[{40, 61}, {30, 61}, {20, 31}], 0.0, 1.5, 51.0, 61}),
 
     %% A single sample - which should lead to some bits not getting generated
     T({10, 10, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[{10, 11}], 0, 11}),
+      {[{10, 11}], 0.0, 11}),
 
     %% No samples - which should also lead to some bits not getting generated
     T({10, 0, 10}, {[{10, 10}, {20, 20}, {30, 30}], 1},
-      {[], 0, 1}),
+      {[], 0.0, 1}),
 
     %% TODO more?
     ok.
@@ -95,7 +95,7 @@ format_sample_details_no_range_test() ->
 
     %% Just three samples
     T({[{10, 10}, {20, 20}, {30, 30}], 1},
-      {2.0, 61}),
+      {0.0, 61}),
     ok.
 
 

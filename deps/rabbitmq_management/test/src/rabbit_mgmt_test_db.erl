@@ -225,7 +225,7 @@ details(R, AR, A, L) ->
 simple_details(Thing, N) ->
     [{Thing, N},
      {atom_suffix(Thing, "_details"),
-      details(0, 0.0, N * 1.0, [{1, N}, {0, N}])}].
+      details(0.0, 0.0, N * 1.0, [{1, N}, {0, N}])}].
 
 atom_suffix(Atom, Suffix) ->
     list_to_atom(atom_to_list(Atom) ++ Suffix).
