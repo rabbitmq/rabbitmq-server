@@ -191,14 +191,18 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
 %% involve an anonymous queue.
 %%
 %% For targets, addresses are
-%% Address = "/exchange/" Name "/" RoutingKey
-%%         | "/exchange/" Name
+%% Address = "/exchange/"  Name "/" RoutingKey
+%%         | "/exchange/"  Name
+%%         | "/topic/"     Name
+%%         | "/amq/queue/" Name
+%%         | "/queue/"     Name
 %%         | "/queue"
-%%         | "/queue/" Name
 %%
 %% For sources, addresses are
-%% Address = "/exchange/" Name "/" RoutingKey
-%%         | "/queue/" Name
+%% Address = "/exchange/"  Name "/" RoutingKey
+%%         | "/topic/"     Name "/" RoutingKey
+%%         | "/amq/queue/" Name
+%%         | "/queue/"     Name
 %%
 %% We use the message property "Subject" as the equivalent of the
 %% routing key.  In AMQP 0-9-1 terms, a target of /queue is equivalent
@@ -248,7 +252,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                 {utf8, Destination} ->
                     ParseParams = [{encoding,  utf8},
                                    {direction, dest},
-                                   {dynamic,   true}],
+                                   {anonymous, true}],
                     case routing_util:parse_endpoint(Destination, ParseParams) of
                         {ok, Dest} ->
                             {ok, Queue, State} =

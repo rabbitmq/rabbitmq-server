@@ -221,12 +221,16 @@ public class SwiftMQTests extends TestCase {
 
         route("/topic/#.c.*",              "/topic/a.b.c.d",        "",        true);
         route("/topic/#.c.*",              "/exchange/amq.topic",   "a.b.c.d", true);
-        route("/exchange/amq.topic/#.c.*", "/topic/a.b.c.d",        "",        true);
-        route("/exchange/amq.topic/#.c.*", "/exchange/amq.topic",   "a.b.c.d", true);
+        route("/exchange/amq.topic/#.y.*", "/topic/w.x.y.z",        "",        true);
+        route("/exchange/amq.topic/#.y.*", "/exchange/amq.topic",   "w.x.y.z", true);
 
         route("/exchange/amq.fanout/",     "/exchange/amq.fanout",  "",        true);
         route("/exchange/amq.direct/",     "/exchange/amq.direct",  "",        true);
         route("/exchange/amq.direct/a",    "/exchange/amq.direct",  "a",       true);
+
+        route("/amq/queue/test",           QUEUE,                   "",        true);
+        route(QUEUE,                       "/amq/queue/test",       "",        true);
+        route("/amq/queue/test",           "/amq/queue/test",       "",        true);
 
         route(QUEUE,                       "/queue",                "",        false);
         route("/exchange/amq.direct/b",    "/exchange/amq.direct",  "a",       false);
@@ -255,6 +259,8 @@ public class SwiftMQTests extends TestCase {
         Consumer c = s.createConsumer(consumerSource, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
         Producer p = s.createProducer(producerTarget, QoS.AT_LEAST_ONCE);
         AMQPMessage msg = msg();
+        AmqpValue sentinel = new AmqpValue(new AMQPDouble(Math.random()));
+        msg.setAmqpValue(sentinel);
         Properties props = new Properties();
         props.setSubject(new AMQPString(routingKey));
         msg.setProperties(props);
@@ -264,6 +270,7 @@ public class SwiftMQTests extends TestCase {
         AMQPMessage m = c.receiveNoWait();
         if (succeed) {
             assertNotNull(m);
+            assertEquals(sentinel.getValue().getValueString(), m.getAmqpValue().getValue().getValueString());
             m.accept();
         } else {
             assertNull(m);
