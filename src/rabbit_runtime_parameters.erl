@@ -120,21 +120,13 @@ clear(VHost, Component, Name) ->
     clear_any(VHost, Component, Name).
 
 clear_any(VHost, Component, Name) ->
-    case clear_any0(VHost, Component, Name) of
-        ok          -> ok;
-        {errors, L} -> format_error(L)
-    end.
-
-clear_any0(VHost, Component, Name) ->
-    case lookup_component(Component) of
-        {ok, Mod} -> case flatten_errors(
-                            Mod:validate_clear(VHost, Component, Name)) of
-                         ok -> mnesia_clear(VHost, Component, Name),
-                               Mod:notify_clear(VHost, Component, Name),
-                               ok;
-                         E  -> E
-                     end;
-        E         -> E
+    case lookup(VHost, Component, Name) of
+        not_found -> {error_string, "Parameter does not exist"};
+        _         -> mnesia_clear(VHost, Component, Name),
+                     case lookup_component(Component) of
+                         {ok, Mod} -> Mod:notify_clear(VHost, Component, Name);
+                         _         -> ok
+                     end
     end.
 
 mnesia_clear(VHost, Component, Name) ->
