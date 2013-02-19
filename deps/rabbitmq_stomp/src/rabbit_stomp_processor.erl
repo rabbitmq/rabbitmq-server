@@ -893,16 +893,20 @@ millis_to_seconds(M)               -> M div 1000.
 %%----------------------------------------------------------------------------
 
 ensure_endpoint(source, {topic, Name}, Frame, Channel, State) ->
-    case rabbit_stomp_frame:boolean_header(Frame, ?HEADER_PERSISTENT, false) of
-        true -> 
-            {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-            SubsQueue = rabbit_stomp_util:durable_subscription_queue(Name, Id),
-            routing_util:ensure_endpoint(
-              source, Channel, {topic, SubsQueue}, State);
-        false ->
-            routing_util:ensure_endpoint(
-              source, Channel, {topic, Name, false}, State)
-    end;
+    Params =
+        case rabbit_stomp_frame:boolean_header(
+               Frame, ?HEADER_PERSISTENT, false) of
+            true ->
+                [{queue_name_gen,
+                    fun () ->
+                        {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
+                        list_to_binary(rabbit_stomp_util:durable_subscription_queue(Name, Id))
+                    end},
+                 {durable, true}];
+            false ->
+                [{durable, false}];
+        end,
+    routing_util:ensure_endpoint(source, Channel, {topic, Name}, Params, State);
 
 ensure_endpoint(Direction, Endpoint, _Frame, Channel, State) ->
     routing_util:ensure_endpoint(Direction, Channel, Endpoint, State).
