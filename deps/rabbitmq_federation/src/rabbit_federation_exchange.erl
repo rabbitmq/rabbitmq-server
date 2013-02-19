@@ -35,8 +35,7 @@
 %%----------------------------------------------------------------------------
 
 description() ->
-    [{name, <<"federation">>},
-     {description, <<"Federation exchange decorator">>}].
+    [{description, <<"Federation exchange decorator">>}].
 
 serialise_events(X) -> federate(X).
 

@@ -56,6 +56,44 @@ multiple_upstreams_test() ->
             x(<<"upstream2">>),
             x(<<"fed12.downstream">>)]).
 
+multiple_uris_test() ->
+    %% We can't use a direct connection for Kill() to work.
+    set_param("federation-upstream", "localhost",
+              "{\"uri\": [\"amqp://localhost\", \"amqp://localhost:5672\"]}"),
+    WithCh = fun(F) ->
+                     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+                     {ok, Ch} = amqp_connection:open_channel(Conn),
+                     F(Ch),
+                     amqp_connection:close(Conn)
+             end,
+    WithCh(fun (Ch) -> declare_all(Ch, ?UPSTREAM_DOWNSTREAM) end),
+    expect_uris([<<"amqp://localhost">>, <<"amqp://localhost:5672">>]),
+    WithCh(fun (Ch) -> delete_all(Ch, ?UPSTREAM_DOWNSTREAM) end),
+    %% Put back how it was
+    set_param("federation-upstream", "localhost", "{\"uri\": \"amqp://\"}").
+
+expect_uris([])   -> ok;
+expect_uris(URIs) -> [Link] = rabbit_federation_status:status(),
+                     URI = pget(uri, Link),
+                     kill_only_connection(n("rabbit-test")),
+                     expect_uris(URIs -- [URI]).
+
+kill_only_connection(Node) ->
+    case connection_pids(Node) of
+        [Pid] -> rabbit_networking:close_connection(Pid, "why not?"),
+                 wait_for_pid_to_die(Node, Pid);
+        _     -> timer:sleep(1000),
+                 kill_only_connection(Node)
+    end.
+
+wait_for_pid_to_die(Node, Pid) ->
+    case connection_pids(Node) of
+        [Pid] -> timer:sleep(1000),
+                 wait_for_pid_to_die(Node, Pid);
+        _     -> ok
+    end.
+
+
 multiple_downstreams_test() ->
     with_ch(
       fun (Ch) ->
@@ -216,11 +254,10 @@ binding_recovery_test() ->
     ok.
 
 suffix({Nodename, _}, XName) ->
-    X = #exchange{name = r(list_to_binary(XName))},
     rpc:call(n(Nodename), rabbit_federation_db, get_active_suffix,
              [r(<<"fed.downstream">>),
-              #upstream{name     = list_to_binary(Nodename),
-                        exchange = X}, none]).
+              #upstream{name          = list_to_binary(Nodename),
+                        exchange_name = list_to_binary(XName)}, none]).
 
 n(Nodename) ->
     {_, NodeHost} = rabbit_nodes:parts(node()),
@@ -643,7 +680,7 @@ links(#'exchange.declare'{exchange = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, r(Name)) of
         {ok, Set} ->
             X = #exchange{name = r(Name)},
-            [{Name, U#upstream.name, name(U#upstream.exchange)} ||
+            [{Name, U#upstream.name, U#upstream.exchange_name} ||
                 U <- rabbit_federation_upstream:from_set(Set, X)];
         {error, not_found} ->
             []
@@ -657,3 +694,7 @@ assert_connections(Xs, Conns) ->
                             rabbit_federation_status:status(), Links),
     ?assertEqual([], Remaining),
     ok.
+
+connection_pids(Node) ->
+    [P || [{pid, P}] <-
+              rpc:call(Node, rabbit_networking, connection_info_all, [[pid]])].

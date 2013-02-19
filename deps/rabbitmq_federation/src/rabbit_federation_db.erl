@@ -21,8 +21,6 @@
 
 -define(DICT, orddict).
 
--import(rabbit_federation_util, [name/1]).
-
 -export([get_active_suffix/3, set_active_suffix/3, prune_scratch/2]).
 
 %%----------------------------------------------------------------------------
@@ -51,8 +49,8 @@ prune_scratch(XName, Upstreams) ->
                         fun(K, _V) -> lists:member(K, Keys) end, ensure(D))
            end).
 
-key(#upstream{name = UpstreamName, exchange = X}) ->
-    {UpstreamName, name(X)}.
+key(#upstream{name = UpstreamName, exchange_name = XNameBin}) ->
+    {UpstreamName, XNameBin}.
 
 ensure(undefined) -> ?DICT:new();
 ensure(D)         -> D.
