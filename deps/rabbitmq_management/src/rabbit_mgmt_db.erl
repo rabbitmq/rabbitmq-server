@@ -86,7 +86,7 @@
 %% for a vhost or queue.
 %%
 %% Finally, detailed stats are those for which we do history /
-%% calculations which are associated with more than one object. These
+%% calculations which are associated with two objects. These
 %% have to have originated as fine grained stats, but can still have
 %% been aggregated.
 %%
@@ -94,6 +94,11 @@
 %% looked up in an orddict in #state.tables. Simple and detailed stats
 %% (which only differ depending on how they're keyed) are stored in
 %% #state.aggregated_stats.
+%%
+%% For detailed stats we also store an index for each object referencing
+%% all the other objects that form a detailed stats key with it. This is
+%% so that we can always avoid table scanning while deleting stats and
+%% thus make sure that handling deleted events is O(n)-ish.
 %%
 %% For each key for simple and detailed stats we maintain a #stats{}
 %% record, essentially a base counter for everything that happened
@@ -120,6 +125,8 @@
           tables,
           %% database of aggregated samples
           aggregated_stats,
+          %% index for detailed aggregated_stats that have 2-tuple keys
+          aggregated_stats_index,
           %% What the previous info item was for any given
           %% {queue/channel/connection}
           old_stats,
@@ -197,10 +204,11 @@ init([]) ->
     rabbit_log:info("Statistics database started.~n"),
     Table = fun () -> ets:new(rabbit_mgmt_db, [ordered_set]) end,
     Tables = orddict:from_list([{Key, Table()} || Key <- ?TABLES]),
-    {ok, set_remove_timer(#state{interval         = Interval,
-                                 tables           = Tables,
-                                 old_stats        = Table(),
-                                 aggregated_stats = Table()}), hibernate,
+    {ok, set_remove_timer(#state{interval               = Interval,
+                                 tables                 = Tables,
+                                 old_stats              = Table(),
+                                 aggregated_stats       = Table(),
+                                 aggregated_stats_index = Table()}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({augment_exchanges, Xs, Ranges, basic}, _From, State) ->
@@ -540,8 +548,27 @@ handle_fine_stat(Id, Stats, Timestamp, State) ->
              end,
     append_samples(Stats1, Timestamp, {fine, Id}, all, State).
 
+delete_samples(Type, {Id, '_'}, State) ->
+    delete_samples_with_index(Type, Id, fun forward/2, State);
+delete_samples(Type, {'_', Id}, State) ->
+    delete_samples_with_index(Type, Id, fun reverse/2, State);
 delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
-    ets:match_delete(ETS, {{{Type, Id}, '_'}, '_'}).
+    ets:match_delete(ETS, delete_match(Type, Id)).
+
+delete_samples_with_index(Type, Id, Order,
+                          #state{aggregated_stats       = ETS,
+                                 aggregated_stats_index = ETSi}) ->
+    Ids2 = lists:append(ets:match(ETSi, {{Type, Id}, '$1'})),
+    ets:match_delete(ETSi, {{Type, Id}, '_'}),
+    [begin
+         ets:match_delete(ETS, delete_match(Type, Order(Id, Id2))),
+         ets:match_delete(ETSi, {{Type, Id2}, Id})
+     end || Id2 <- Ids2].
+
+forward(A, B) -> {A, B}.
+reverse(A, B) -> {B, A}.
+
+delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
 append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
     OldStats = lookup_element(OldTable, Id),
@@ -607,10 +634,18 @@ record_sampleX(RenamePublishTo, X, {publish, Diff, TS, State}) ->
 record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
     record_sample0({exchange_stats, X}, {Type, Diff, TS, State}).
 
-record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats = ETS}}) ->
+record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
+                                           aggregated_stats_index = ETSi}}) ->
     Id = {Id0, Key},
     Old = case lookup_element(ETS, Id) of
-              [] -> blank_stats();
+              [] -> case Id0 of
+                        {Type, {Id1, Id2}} ->
+                            ets:insert(ETSi, {{Type, Id2}, Id1}),
+                            ets:insert(ETSi, {{Type, Id1}, Id2});
+                        _ ->
+                            ok
+                    end,
+                    blank_stats();
               E  -> E
           end,
     ets:insert(ETS, {Id, add(TS, Diff, Old)}).
