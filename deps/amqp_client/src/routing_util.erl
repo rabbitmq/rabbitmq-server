@@ -17,7 +17,7 @@
 -module(routing_util).
 
 -export([init_state/0, dest_prefixes/0, all_dest_prefixes/0]).
--export([ensure_endpoint/4, ensure_binding/3]).
+-export([ensure_endpoint/4, ensure_endpoint/5, ensure_binding/3]).
 -export([parse_endpoint/1, parse_endpoint/2, parse_routing/1]).
 
 -include("amqp_client.hrl").
@@ -32,35 +32,26 @@ dest_prefixes() -> [?EXCHANGE_PREFIX, ?TOPIC_PREFIX, ?QUEUE_PREFIX,
 
 all_dest_prefixes() -> [?TEMP_QUEUE_PREFIX | dest_prefixes()].
 
+ensure_endpoint(Dir, Channel, EndPoint, State) ->
+    ensure_endpoint(Dir, Channel, EndPoint, [], State).
 
-ensure_endpoint(source, Channel, {exchange, {Name, _}}, State) ->
+ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
     check_exchange(Name, Channel),
-    #'queue.declare_ok'{queue = Queue} =
-        amqp_channel:call(Channel, #'queue.declare'{auto_delete = true,
-                                                    exclusive   = true}),
-    {ok, Queue, State};
-
-ensure_endpoint(source, Channel, {topic, Name}, State) ->
-    ensure_endpoint(source, Channel, {topic, Name, true}, State);
-
-ensure_endpoint(source, Channel, {topic, Name, Durable}, State) ->
-    Method =
-        case Durable of
-            true ->
-                Q = list_to_binary(Name),
-                #'queue.declare'{durable = true, queue = Q};
-            false ->
-                #'queue.declare'{auto_delete = true, exclusive = true}
-        end,
+    Method = queue_declare_method(#'queue.declare'{}, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
-ensure_endpoint(_, Channel, {queue, undefined}, State) ->
+ensure_endpoint(source, Channel, {topic, Name}, Params, State) ->
+    Method = queue_declare_method(#'queue.declare'{}, Params),
+    #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
+    {ok, Queue, State};
+
+ensure_endpoint(_, Channel, {queue, undefined}, _Params, State) ->
     #'queue.declare_ok'{queue = Queue} =
       amqp_channel:call(Channel, #'queue.declare'{durable = true}),
     {ok, Queue, State};
 
-ensure_endpoint(_, Channel, {queue, Name}, State) ->
+ensure_endpoint(_, Channel, {queue, Name}, _Params, State) ->
      Queue = list_to_binary(Name),
      State1 = case sets:is_element(Queue, State) of
                   true -> State;
@@ -72,14 +63,15 @@ ensure_endpoint(_, Channel, {queue, Name}, State) ->
               end,
     {ok, Queue, State1};
 
-ensure_endpoint(dest, Channel, {exchange, {Name, _}}, State) ->
+ensure_endpoint(dest, Channel, {exchange, {Name, _}}, _Params, State) ->
     check_exchange(Name, Channel),
     {ok, undefined, State};
 
-ensure_endpoint(dest, _Ch, {topic, _}, State) ->
+ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
     {ok, undefined, State};
 
-ensure_endpoint(_, _Ch, {Type, Name}, State)
+%TODO: restrict direction
+ensure_endpoint(_, _Ch, {Type, Name}, _Params, State)
   when Type =:= reply_queue orelse Type =:= amqqueue ->
     {ok, list_to_binary(Name), State}.
 
@@ -131,7 +123,7 @@ parse_endpoint0(exchange, [Name, Pattern], _Params) ->
     {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
 parse_endpoint0(queue, [], Params) ->
     case {proplists:get_value(direction, Params),
-          proplists:get_value(dynamic,   Params)} of
+          proplists:get_value(anonymous, Params)} of
         {dest, true} -> {ok, {queue, undefined}};
         _            -> {error, {invalid_destination, queue, []}}
     end;
@@ -154,17 +146,36 @@ parse_routing({Type, Name})
 
 %%----------------------------------------------------------------------------
 
+check_exchange("amq." ++ _, Channel) ->
+    ok;
 check_exchange(ExchangeName, Channel) ->
     #'queue.declare_ok'{queue = Queue} =
       amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
+    #'basic.consume_ok'{consumer_tag = Tag} =
+      amqp_channel:call(Channel, #'basic.consume'{queue = Queue}),
     #'queue.bind_ok'{} =
-        amqp_channel:call(Channel,
-                          #'queue.bind'{
-                            queue    = Queue,
-                            exchange = list_to_binary(ExchangeName)}),
+      amqp_channel:call(Channel,
+                        #'queue.bind'{
+                          queue    = Queue,
+                          exchange = list_to_binary(ExchangeName)}),
+    #'basic.cancel_ok'{} = amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
     #'queue.delete_ok'{} =
       amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
     ok.
+
+
+queue_declare_method(#'queue.declare'{} = Method, Params) ->
+    Durable = proplists:get_value(durable, Params, false),
+    Method1 = Method#'queue.declare'{durable     = Durable,
+                                     auto_delete = not Durable,
+                                     exclusive   = not Durable},
+    queue_declare_name(Method1, Params).
+
+queue_declare_name(#'queue.declare'{} = Method, Params) ->
+    case proplists:get_value(queue_name_gen, Params) of
+        undefined -> Method;
+        QG        -> Method#'queue.declare'{queue = QG()}
+    end.
 
 %%----------------------------------------------------------------------------
 
