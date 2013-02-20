@@ -421,7 +421,7 @@ is_ch_blocked(#cr{unsent_message_count = Count, is_limit_active = Limited}) ->
     Limited orelse Count >= ?UNSENT_MESSAGE_LIMIT.
 
 maybe_send_drained(WasEmpty, State) ->
-    case WasEmpty andalso is_empty(State) of
+    case (not WasEmpty) andalso is_empty(State) of
         true  -> [send_drained(C) || C <- all_ch_record()];
         false -> ok
     end.
