@@ -160,7 +160,7 @@ public class SwiftMQTests extends TestCase {
         s.close();
         s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
         c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_MOST_ONCE, false, null);
-        assertNull(c.receiveNoWait());
+        assertNull(get(c));
         conn.close();
     }
 
@@ -177,7 +177,7 @@ public class SwiftMQTests extends TestCase {
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
         AMQPMessage m = c.receive();
         m.reject();
-        assertNull(c.receiveNoWait());
+        assertNull(get(c));
         conn.close();
     }
 
@@ -204,7 +204,7 @@ public class SwiftMQTests extends TestCase {
 
         assertTrue(compareMessageData(m1, m2));
         assertFalse(m2.getHeader().getFirstAcquirer().getValue());
-        assertNull(c.receiveNoWait());
+        assertNull(get(c));
         conn.close();
     }
 
@@ -258,8 +258,17 @@ public class SwiftMQTests extends TestCase {
         Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
         Consumer c = s.createConsumer(q, CONSUMER_LINK_CREDIT, QoS.AT_MOST_ONCE, false, null);
         AMQPMessage m;
-        while ((m = c.receiveNoWait()) != null);
+        while ((m = get(c)) != null);
         conn.close();
+    }
+
+    // Whatever Consumer.receiveNoWait() does, it does not involve the drain
+    // flag, so it's clearly more a case of "have any messages arrived?" rather
+    // than "has the queue got any messages?" Therefore we have an icky timeout
+    // to give the server time to deliver messages. Really we want a way to use
+    // drain...
+    private AMQPMessage get(Consumer c) {
+        return c.receive(100);
     }
 
     private void route(String consumerSource, String producerTarget, String routingKey, boolean succeed) throws Exception {
@@ -284,7 +293,7 @@ public class SwiftMQTests extends TestCase {
             assertEquals(sentinel.getValue().getValueString(), m.getAmqpValue().getValue().getValueString());
             m.accept();
         } else {
-            assertNull(c.receiveNoWait());
+            assertNull(get(c));
         }
         c.close();
         p.close();
