@@ -53,7 +53,7 @@ def print_erl(types):
 """
     for t in types:
         print """fields(#'v1_0.%s'{}) -> record_info(fields, 'v1_0.%s');""" % (t.name, t.name)
-    print """fields(Other) -> unknown.
+    print """fields(_Other) -> unknown.
 
 """
     for t in types:

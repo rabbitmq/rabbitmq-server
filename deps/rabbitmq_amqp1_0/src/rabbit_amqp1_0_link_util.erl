@@ -19,7 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([queue_address/1, outcomes/1, protocol_error/3, ctag_to_handle/1,
+-export([outcomes/1, protocol_error/3, ctag_to_handle/1,
          handle_to_ctag/1, durable/1]).
 
 -define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
@@ -27,9 +27,6 @@
 -define(OUTCOMES, [?V_1_0_SYMBOL_ACCEPTED,
                    ?V_1_0_SYMBOL_REJECTED,
                    ?V_1_0_SYMBOL_RELEASED]).
-
-queue_address(QueueName) when is_binary(QueueName) ->
-    <<"/queue/", QueueName/binary>>.
 
 outcomes(Source) ->
     {DefaultOutcome, Outcomes} =

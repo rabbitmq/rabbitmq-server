@@ -104,36 +104,23 @@ when the sending and receiving clients are using the same protocol.
 ## Routing and Addressing
 
 In AMQP 1.0 source and destination addresses are opaque values, and
-each message may have a `subject` field value. In AMQP
-0-9-1 each message is published to an exchange and accompanied by a
-routing key.
+each message may have a `subject` field value.
 
-For interoperability with AMQP 0-9-1, we adopt the following
-addressing scheme:
+For targets, addresses are:
 
-    Link target    Subject    AMQP 0-9-1 equivalent
+    = "/exchange/"  X "/" RK  Publish to exchange X with routing key RK
+    | "/exchange/"  X         Publish to exchange X with message subject as routing key
+    | "/topic/"     RK        Publish to amq.topic with routing key RK
+    | "/amq/queue/" Q         Publish to default exchange with routing key Q
+    | "/queue/"     Q         Publish to default exchange with routing key Q
+    | "/queue"                Publish to default exchange with message subj as routing key
 
-    /exchange/X    RK         Publish to exchange X with routing key RK
-    /queue         Q          Publish to default exchange with routing key Q
-    /queue/Q       ignore[9]  Publish to default exchange with routing key Q
+For sources, addresses are:
 
-
-    Link source               AMQP 0-9-1 equivalent
-
-    /queue/Q                  Consume from queue Q
-    /exchange/X               Declare a private queue, bind it to
-                              exchange X, and consume from it.
-
-[9] Properties are immutable, so a 1.0 client receiving this message
-will get exactly the value given; however it is not used for routing,
-and a 0-9-1 client will see the queue name (Q) as the routing key.
-
-Note that addresses used in `reply-to` are assumed to refer to
-queues. As such, they are translated between AMQP 0-9-1 and AMQP 1.0
-thus:
-
-    AMQP 1.0             AMQP 0-9-1
-    /queue/ReplyTo <---> ReplyTo
+    = "/exchange/"  X "/" RK  Consume from temp queue bound to X with routing key RK
+    | "/topic/"     RK        Consume from temp queue bound to amq.topic with routing key RK
+    | "/amq/queue/" Q         Consume from Q
+    | "/queue/"     Q         Consume from Q
 
 ## Virtual Hosts
 
@@ -148,12 +135,12 @@ setting will be consulted.
 
 At the minute, the RabbitMQ AMQP 1.0 adapter does not support:
 
- - "Exactly once" delivery [10]
- - Link recovery [10]
- - Full message fragmentation [11]
+ - "Exactly once" delivery [9]
+ - Link recovery [9]
+ - Full message fragmentation [10]
  - Resuming messages
  - "Modified" outcome
- - Filters [12]
+ - Filters [11]
  - Transactions
  - Source/target expiry-policy other than link-detach and timeout
    other than 0
@@ -165,14 +152,14 @@ At the minute, the RabbitMQ AMQP 1.0 adapter does not support:
    amqp-sequence messages, delivery-annotations, message-annotations and
    application-properties
 
-[10] We do not deduplicate as a target, though we may resend as a
+[9] We do not deduplicate as a target, though we may resend as a
 source (messages that have no settled outcome when an outgoing link is
 detached will be requeued).
 
-[11] We do fragment messages over multiple frames; however, if this
+[10] We do fragment messages over multiple frames; however, if this
 would overflow the session window we may discard or requeue messages.
 
-[12] In principle, filters for consuming from an exchange could
+[11] In principle, filters for consuming from an exchange could
 translate to AMQP 0-9-1 bindings. This is not implemented, so
 effectively only consuming from fanout exchanges and queues is useful
 currently.

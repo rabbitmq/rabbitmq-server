@@ -148,8 +148,10 @@ flow(#outgoing_link{delivery_count = LocalCount},
 ensure_source(Source = #'v1_0.source'{address       = Address,
                                       dynamic       = Dynamic,
                                       durable       = Durable,
-                                      expiry_policy = _ExpiryPolicy, % TODO
-                                      timeout       = Timeout},
+                                      %% TODO
+                                      expiry_policy = _ExpiryPolicy,
+                                      %% TODO
+                                      timeout       = _Timeout},
               Link = #outgoing_link{ route_state = RouteState }, DCh) ->
     DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)}],
     case Dynamic of
@@ -160,7 +162,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                       routing_util:ensure_endpoint(
                         source, DCh, {queue, undefined}, DeclareParams, RouteState),
                     {ok,
-                     Source#'v1_0.source'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
+                     Source#'v1_0.source'{address = {utf8, QueueName}},
                      Link#outgoing_link{route_state = RouteState1,
                                         queue = QueueName}};
                 _Else ->

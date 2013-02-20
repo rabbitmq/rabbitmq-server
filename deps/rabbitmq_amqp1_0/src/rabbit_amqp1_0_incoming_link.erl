@@ -182,57 +182,16 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
     {message, Reply, NewLink, DeliveryId,
      EffectiveSendSettleMode}.
 
-%% There are a few things that influence what source and target
-%% definitions mean for our purposes.
-%%
-%% Addresses: we artificially segregate exchanges and queues, since
-%% they have different namespaces. However, we allow both incoming and
-%% outgoing links to exchanges: outgoing links from an exchange
-%% involve an anonymous queue.
-%%
-%% For targets, addresses are
-%% Address = "/exchange/"  Name "/" RoutingKey
-%%         | "/exchange/"  Name
-%%         | "/topic/"     Name
-%%         | "/amq/queue/" Name
-%%         | "/queue/"     Name
-%%         | "/queue"
-%%
-%% For sources, addresses are
-%% Address = "/exchange/"  Name "/" RoutingKey
-%%         | "/topic/"     Name "/" RoutingKey
-%%         | "/amq/queue/" Name
-%%         | "/queue/"     Name
-%%
-%% We use the message property "Subject" as the equivalent of the
-%% routing key.  In AMQP 0-9-1 terms, a target of /queue is equivalent
-%% to the default exchange; that is, the message is routed to the
-%% queue named by the subject.  A target of "/queue/Name" ignores the
-%% subject.  The reason for both varieties is that a
-%% dynamically-created queue must be fully addressable as a target,
-%% while a service may wish to use /queue and route each message to
-%% its reply-to queue name (as it is done in 0-9-1).
-%%
-%% A dynamic source or target only ever creates a queue, and the
-%% address is returned in full; e.g., "/queue/amq.gen.123456".
-%% However, that cannot be used as a reply-to, since a 0-9-1 client
-%% will use it unaltered as the routing key naming the queue.
-%% Therefore, we rewrite reply-to from 1.0 clients to be just the
-%% queue name, and expect replying clients to use /queue and the
-%% subject field.
-%%
-%% For a source queue, the distribution-mode is always move.  For a
-%% source exchange, it is always copy. Anything else should be
-%% refused.
-%%
 %% TODO default-outcome and outcomes, dynamic lifetimes
 
 %% TODO this looks to have a lot in common with ensure_source
 ensure_target(Target = #'v1_0.target'{address       = Address,
                                       dynamic       = Dynamic,
                                       durable       = Durable,
-                                      %% TODO expiry_policy = ExpiryPolicy,
-                                      timeout       = Timeout},
+                                      %% TODO
+                                      expiry_policy = _ExpiryPolicy,
+                                      %% TODO
+                                      timeout       = _Timeout},
               Link = #incoming_link{ route_state = RouteState }, DCh) ->
     DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)}],
     case Dynamic of
@@ -243,7 +202,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                       routing_util:ensure_endpoint(
                         source, DCh, {queue, undefined}, DeclareParams, RouteState),
                     {ok,
-                     Target#'v1_0.target'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
+                     Target#'v1_0.target'{address = {utf8, QueueName}},
                      Link#incoming_link{route_state = RouteState1,
                                         exchange    = <<"">>,
                                         routing_key = QueueName}};
@@ -259,7 +218,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                    {anonymous, true}],
                     case routing_util:parse_endpoint(Destination, ParseParams) of
                         {ok, Dest} ->
-                            {ok, Queue, State} =
+                            {ok, _Queue, RouteState1} =
                                 rabbit_amqp1_0_channel:convert_error(
                                   fun () ->
                                           routing_util:ensure_endpoint(
@@ -269,7 +228,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                 routing_util:parse_routing(Dest),
                             {ok, Target,
                              Link#incoming_link{
-                               route_state = State,
+                               route_state = RouteState1,
                                exchange    = list_to_binary(ExchangeName),
                                routing_key =
                                  case RoutingKey of
@@ -277,7 +236,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                      []        -> undefined;
                                      _         -> list_to_binary(RoutingKey)
                                  end}};
-                        {error, Err} = E -> E
+                        {error, _} = E -> E
                     end;
                 _Else ->
                     {error, {unknown_address, Address}}
