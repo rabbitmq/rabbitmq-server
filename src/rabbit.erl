@@ -355,6 +355,8 @@ handle_app_error(App, Reason) ->
     throw({could_not_start, App, Reason}).
 
 start_it(StartFun) ->
+    Marker = spawn_link(fun() -> receive stop -> ok end end),
+    register(rabbit_boot, Marker),
     try
         StartFun()
     catch
@@ -363,11 +365,17 @@ start_it(StartFun) ->
          _:Reason ->
             boot_error(Reason, erlang:get_stacktrace())
     after
+        unlink(Marker),
+        Marker ! stop,
         %% give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
+    case whereis(rabbit_boot) of
+        undefined -> ok;
+        _         -> await_startup()
+    end,
     rabbit_log:info("Stopping RabbitMQ~n"),
     ok = app_utils:stop_applications(app_shutdown_order()).
 
@@ -703,7 +711,7 @@ log_broker_started(Plugins) ->
               PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
                                              || P <- Plugins]),
               error_logger:info_msg(
-                "Server startup complete; ~b plugins started.~n~s~n",
+                "Server startup complete; ~b plugins started.~n~s",
                 [length(Plugins), PluginList]),
               io:format(" completed with ~p plugins.~n", [length(Plugins)])
       end).
