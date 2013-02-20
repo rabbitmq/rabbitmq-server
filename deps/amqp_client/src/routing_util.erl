@@ -72,7 +72,6 @@ ensure_endpoint(dest, Channel, {exchange, {Name, _}}, _Params, State) ->
 ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
     {ok, undefined, State};
 
-%TODO: restrict direction
 ensure_endpoint(_, _Ch, {Type, Name}, _Params, State)
   when Type =:= reply_queue orelse Type =:= amqqueue ->
     {ok, list_to_binary(Name), State}.
