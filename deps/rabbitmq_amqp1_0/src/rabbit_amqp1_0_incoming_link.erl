@@ -256,10 +256,13 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                     case routing_util:parse_endpoint(Destination, ParseParams) of
                         {ok, Dest} ->
                             {ok, Queue, State} =
+                                Params =
+                                  [{durable,
+                                    rabbit_amqp1_0_link_util:durable(Durable)}],
                                 rabbit_amqp1_0_channel:convert_error(
                                   fun () ->
                                           routing_util:ensure_endpoint(
-                                            dest, DCh, Dest, RouteState)
+                                            dest, DCh, Dest, Params, RouteState)
                                   end),
                             {ExchangeName, RoutingKey} =
                                 routing_util:parse_routing(Dest),

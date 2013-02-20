@@ -20,7 +20,7 @@
 -include("rabbit_amqp1_0.hrl").
 
 -export([queue_address/1, outcomes/1, protocol_error/3, ctag_to_handle/1,
-         handle_to_ctag/1]).
+         handle_to_ctag/1, durable/1]).
 
 -define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
 -define(DEFAULT_OUTCOME, #'v1_0.released'{}).

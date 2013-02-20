@@ -209,6 +209,10 @@ public class SwiftMQTests extends TestCase {
     }
 
     public void testRouting() throws Exception {
+        route("test",                      QUEUE,                  "",         true);
+        route(QUEUE,                      "test",                  "",         true);
+        route("test",                     "test",                  "",         true);
+
         try {
             route(QUEUE,                   "/exchange/missing",    "",        false);
             fail("Missing exchange should fail");
@@ -265,16 +269,17 @@ public class SwiftMQTests extends TestCase {
         props.setSubject(new AMQPString(routingKey));
         msg.setProperties(props);
         p.send(msg);
-        p.close();
 
-        AMQPMessage m = c.receiveNoWait();
         if (succeed) {
+            AMQPMessage m = c.receive();
             assertNotNull(m);
             assertEquals(sentinel.getValue().getValueString(), m.getAmqpValue().getValue().getValueString());
             m.accept();
         } else {
-            assertNull(m);
+            assertNull(c.receiveNoWait());
         }
+        c.close();
+        p.close();
         conn.close();
     }
 
