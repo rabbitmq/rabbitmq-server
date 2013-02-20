@@ -402,20 +402,6 @@ erase_ch_record(#cr{ch_pid      = ChPid,
     erase({ch, ChPid}),
     ok.
 
-maybe_send_drained(WasEmpty, State) ->
-    case WasEmpty andalso is_empty(State) of
-        true  -> [send_drained(C) || C <- all_ch_record()];
-        false -> ok
-    end.
-
-send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
-    case rabbit_limiter:drained(Limiter) of
-        {[], Limiter}          -> ok;
-        {CTagCredit, Limiter2} -> rabbit_channel:send_drained(
-                                    ChPid, CTagCredit),
-                                  update_ch_record(C#cr{limiter = Limiter2})
-    end.
-
 update_consumer_count(C = #cr{consumer_count = 0, limiter = Limiter}, +1) ->
     ok = rabbit_limiter:register(Limiter, self()),
     update_ch_record(C#cr{consumer_count = 1});
@@ -433,6 +419,20 @@ block_consumer(C = #cr{blocked_consumers = Blocked}, QEntry) ->
 
 is_ch_blocked(#cr{unsent_message_count = Count, is_limit_active = Limited}) ->
     Limited orelse Count >= ?UNSENT_MESSAGE_LIMIT.
+
+maybe_send_drained(WasEmpty, State) ->
+    case WasEmpty andalso is_empty(State) of
+        true  -> [send_drained(C) || C <- all_ch_record()];
+        false -> ok
+    end.
+
+send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
+    case rabbit_limiter:drained(Limiter) of
+        {[], Limiter}          -> ok;
+        {CTagCredit, Limiter2} -> rabbit_channel:send_drained(
+                                    ChPid, CTagCredit),
+                                  update_ch_record(C#cr{limiter = Limiter2})
+    end.
 
 deliver_msgs_to_consumers(_DeliverFun, true, State) ->
     {true, State};
