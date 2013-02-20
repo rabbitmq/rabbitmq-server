@@ -151,14 +151,18 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                                       expiry_policy = _ExpiryPolicy, % TODO
                                       timeout       = Timeout},
               Link = #outgoing_link{ route_state = RouteState }, DCh) ->
+    DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)}],
     case Dynamic of
         true ->
             case Address of
                 undefined ->
-                    {ok, QueueName} = rabbit_amqp1_0_link_util:create_queue(Timeout, DCh, Durable),
+                    {ok, QueueName, RouteState1} =
+                      routing_util:ensure_endpoint(
+                        source, DCh, {queue, undefined}, DeclareParams, RouteState),
                     {ok,
                      Source#'v1_0.source'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
-                     Link#outgoing_link{queue = QueueName}};
+                     Link#outgoing_link{route_state = RouteState1,
+                                        queue = QueueName}};
                 _Else ->
                     {error, {both_dynamic_and_address_supplied,
                              Dynamic, Address}}
@@ -169,19 +173,17 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                     ParseParams = [{encoding,  utf8}, {direction, source}],
                     case routing_util:parse_endpoint(Destination, ParseParams) of
                         {ok, Dest} ->
-                            {ok, Queue, State} =
-                              Params =
-                                [{durable,
-                                  rabbit_amqp1_0_link_util:durable(Durable)}],
+                            {ok, Queue, RouteState1} =
                               rabbit_amqp1_0_channel:convert_error(
                                 fun() ->
                                         routing_util:ensure_endpoint(
-                                          source, DCh, Dest, Params, RouteState)
+                                          source, DCh, Dest, DeclareParams,
+                                          RouteState)
                                 end),
                             ER = routing_util:parse_routing(Dest),
                             ok = routing_util:ensure_binding(Queue, ER, DCh),
                             {ok, Source,
-                             Link#outgoing_link{ route_state = State,
+                             Link#outgoing_link{ route_state = RouteState1,
                                                  queue       = Queue }}
                     end;
                 _ ->

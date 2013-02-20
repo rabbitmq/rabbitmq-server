@@ -243,6 +243,14 @@ public class SwiftMQTests extends TestCase {
         emptyQueue(QUEUE);
     }
 
+    public void testDynamicAddressing() throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        Consumer c = s.createConsumer(INBOUND_WINDOW, QoS.AT_LEAST_ONCE);
+    }
+
     private void emptyQueue(String q) throws Exception {
         AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
         Connection conn = new Connection(ctx, host, port, false);

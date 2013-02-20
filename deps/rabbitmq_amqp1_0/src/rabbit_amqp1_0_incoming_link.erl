@@ -234,14 +234,18 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                       %% TODO expiry_policy = ExpiryPolicy,
                                       timeout       = Timeout},
               Link = #incoming_link{ route_state = RouteState }, DCh) ->
+    DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)}],
     case Dynamic of
         true ->
             case Address of
                 undefined ->
-                    {ok, QueueName} = rabbit_amqp1_0_link_util:create_queue(Timeout, DCh, Durable),
+                    {ok, QueueName, RouteState1} =
+                      routing_util:ensure_endpoint(
+                        source, DCh, {queue, undefined}, DeclareParams, RouteState),
                     {ok,
                      Target#'v1_0.target'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
-                     Link#incoming_link{exchange = <<"">>,
+                     Link#incoming_link{route_state = RouteState1,
+                                        exchange    = <<"">>,
                                         routing_key = QueueName}};
                 _Else ->
                     {error, {both_dynamic_and_address_supplied,
@@ -256,13 +260,10 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                     case routing_util:parse_endpoint(Destination, ParseParams) of
                         {ok, Dest} ->
                             {ok, Queue, State} =
-                                Params =
-                                  [{durable,
-                                    rabbit_amqp1_0_link_util:durable(Durable)}],
                                 rabbit_amqp1_0_channel:convert_error(
                                   fun () ->
                                           routing_util:ensure_endpoint(
-                                            dest, DCh, Dest, Params, RouteState)
+                                            dest, DCh, Dest, DeclareParams, RouteState)
                                   end),
                             {ExchangeName, RoutingKey} =
                                 routing_util:parse_routing(Dest),
