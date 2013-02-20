@@ -350,7 +350,7 @@ ensure_stats_timer(State) ->
 assert_invariant(State = #q{active_consumers = AC}) ->
     true = (queue:is_empty(AC) orelse is_empty(State)).
 
-is_empty({backing_queue = BQ, backing_queue_state = BQS}) -> BQ:is_empty(BQS).
+is_empty(#q{backing_queue = BQ, backing_queue_state = BQS}) -> BQ:is_empty(BQS).
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
