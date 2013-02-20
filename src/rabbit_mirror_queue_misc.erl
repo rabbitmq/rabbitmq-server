@@ -32,6 +32,8 @@
                            [policy_validator, <<"ha-mode">>, ?MODULE]}},
                     {mfa, {rabbit_registry, register,
                            [policy_validator, <<"ha-params">>, ?MODULE]}},
+                    {mfa, {rabbit_registry, register,
+                           [policy_validator, <<"ha-sync-mode">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
@@ -184,6 +186,7 @@ start_child(Name, MirrorNode, Q) ->
                    rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
            end) of
         {ok, SPid} when is_pid(SPid)  ->
+            maybe_auto_sync(Q),
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                             [rabbit_misc:rs(Name), MirrorNode, SPid]),
             {ok, started};
@@ -313,6 +316,14 @@ is_mirrored(Q) ->
         _             -> false
     end.
 
+maybe_auto_sync(Q = #amqqueue{pid = QPid}) ->
+    case policy(<<"ha-sync-mode">>, Q) of
+        <<"automatic">> ->
+            spawn(fun() -> rabbit_amqqueue:sync_mirrors(QPid) end);
+        _ ->
+            ok
+    end.
+
 update_mirrors(OldQ = #amqqueue{pid = QPid},
                NewQ = #amqqueue{pid = QPid}) ->
     case {is_mirrored(OldQ), is_mirrored(NewQ)} of
@@ -330,14 +341,24 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     NewNodes = [NewMNode | NewSNodes],
     add_mirrors (QName, NewNodes -- OldNodes),
     drop_mirrors(QName, OldNodes -- NewNodes),
+    maybe_auto_sync(NewQ),
     ok.
 
 %%----------------------------------------------------------------------------
 
 validate_policy(KeyList) ->
-    validate_policy(
-      proplists:get_value(<<"ha-mode">>,   KeyList),
-      proplists:get_value(<<"ha-params">>, KeyList, none)).
+    case validate_policy(
+           proplists:get_value(<<"ha-mode">>,   KeyList),
+           proplists:get_value(<<"ha-params">>, KeyList, none)) of
+        ok -> case proplists:get_value(
+                     <<"ha-sync-mode">>, KeyList, <<"manual">>) of
+                  <<"automatic">> -> ok;
+                  <<"manual">>    -> ok;
+                  Mode            -> {error, "ha-sync-mode must be \"manual\" "
+                                      "or \"automatic\", got ~p", [Mode]}
+              end;
+        E  -> E
+    end.
 
 validate_policy(<<"all">>, none) ->
     ok;
