@@ -711,7 +711,7 @@ log_broker_started(Plugins) ->
               PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
                                              || P <- Plugins]),
               error_logger:info_msg(
-                "Server startup complete; ~b plugins started.~n~s~n",
+                "Server startup complete; ~b plugins started.~n~s",
                 [length(Plugins), PluginList]),
               io:format(" completed with ~p plugins.~n", [length(Plugins)])
       end).
