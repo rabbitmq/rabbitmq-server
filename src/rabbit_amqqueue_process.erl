@@ -761,11 +761,11 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
         T         -> now_micros() + T * 1000
     end.
 
-%% Logically this function should invoke maybe_send_drained/1. However, that's
-%% expensive, and some frequent callers of drop_expired_msgs/1 (in particular
-%% deliver_or_enqueue/3) cannot possibly cause the queue to become empty, so
-%% instead we push the responsibility to the call sites. So be cautious when
-%% adding new ones.
+%% Logically this function should invoke maybe_send_drained/2.
+%% However, that is expensive. Since some frequent callers of
+%% drop_expired_msgs/1, in particular deliver_or_enqueue/3, cannot
+%% possibly cause the queue to become empty, we push the
+%% responsibility to the callers. So be cautious when adding new ones.
 drop_expired_msgs(State = #q{backing_queue_state = BQS,
                              backing_queue       = BQ }) ->
     case BQ:is_empty(BQS) of
