@@ -1,4 +1,3 @@
-ERLC_OPTS=-Ddebug
 RELEASABLE:=true
 APP_NAME=rabbitmq_amqp1_0
 DEPS:=rabbitmq-server rabbitmq-erlang-client
