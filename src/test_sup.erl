@@ -50,7 +50,7 @@ test_supervisor_delayed_restart(SupPid) ->
     ok = exit_child(SupPid),
     timer:sleep(100),
     timeout = ping_child(SupPid),
-    timer:sleep(1000),
+    timer:sleep(1010),
     ok = ping_child(SupPid),
     passed.
 
