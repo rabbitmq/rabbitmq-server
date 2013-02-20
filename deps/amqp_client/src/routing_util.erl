@@ -53,16 +53,16 @@ ensure_endpoint(_, Channel, {queue, undefined}, Params, State) ->
     {ok, Queue, State};
 
 ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
-     Params1 = rabbit_misc:pset(durable, true, Params),
-     Queue = list_to_binary(Name),
-     State1 = case sets:is_element(Queue, State) of
-                  true -> State;
-                  _    -> Method = queue_declare_method(
-                                     #'queue.declare'{queue  = Queue,
-                                                      nowait = true}, Params1),
-                          amqp_channel:cast(Channel, Method),
-                          sets:add_element(Queue, State)
-              end,
+    Params1 = rabbit_misc:pset(durable, true, Params),
+    Queue = list_to_binary(Name),
+    State1 = case sets:is_element(Queue, State) of
+                 true -> State;
+                 _    -> Method = queue_declare_method(
+                                    #'queue.declare'{queue  = Queue,
+                                                     nowait = true}, Params1),
+                         amqp_channel:cast(Channel, Method),
+                         sets:add_element(Queue, State)
+             end,
     {ok, Queue, State1};
 
 ensure_endpoint(dest, Channel, {exchange, {Name, _}}, _Params, State) ->
