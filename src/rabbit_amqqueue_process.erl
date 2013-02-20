@@ -606,9 +606,10 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
                                     backing_queue_state = BQS}) ->
+    WasEmpty = BQ:is_empty(BQS),
     {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
     State1 = drop_expired_msgs(State#q{backing_queue_state = BQS1}),
-    maybe_send_drained(BQ:is_empty(BQS), State1),
+    maybe_send_drained(WasEmpty, State1),
     run_message_queue(State1).
 
 fetch(AckRequired, State = #q{backing_queue       = BQ,
