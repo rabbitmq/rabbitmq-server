@@ -471,12 +471,12 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
                 Limiter2 ->
                     AC1 = queue:in(E, State#q.active_consumers),
                     deliver_msg_to_consumer(
-                      DeliverFun, Limiter2, Consumer, C,
+                      DeliverFun, Consumer, C#cr{limiter = Limiter2},
                       State#q{active_consumers = AC1})
             end
     end.
 
-deliver_msg_to_consumer(DeliverFun, NewLimiter,
+deliver_msg_to_consumer(DeliverFun,
                         #consumer{tag          = ConsumerTag,
                                   ack_required = AckRequired},
                         C = #cr{ch_pid               = ChPid,
@@ -492,7 +492,6 @@ deliver_msg_to_consumer(DeliverFun, NewLimiter,
                      false -> ChAckTags
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
-                          limiter              = NewLimiter,
                           unsent_message_count = Count + 1}),
     {Stop, State1}.
 
