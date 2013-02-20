@@ -46,19 +46,21 @@ ensure_endpoint(source, Channel, {topic, Name}, Params, State) ->
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
-ensure_endpoint(_, Channel, {queue, undefined}, _Params, State) ->
+ensure_endpoint(_, Channel, {queue, undefined}, Params, State) ->
+    Method = queue_declare_method(#'queue.declare'{}, Params),
     #'queue.declare_ok'{queue = Queue} =
-      amqp_channel:call(Channel, #'queue.declare'{durable = true}),
+      amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
-ensure_endpoint(_, Channel, {queue, Name}, _Params, State) ->
+ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
+     Params1 = rabbit_misc:pset(durable, true, Params),
      Queue = list_to_binary(Name),
      State1 = case sets:is_element(Queue, State) of
                   true -> State;
-                  _    -> amqp_channel:cast(Channel,
-                                            #'queue.declare'{durable = true,
-                                                             queue   = Queue,
-                                                             nowait  = true}),
+                  _    -> Method = queue_declare_method(
+                                     #'queue.declare'{queue  = Queue,
+                                                      nowait = true}, Params1),
+                          amqp_channel:cast(Channel, Method),
                           sets:add_element(Queue, State)
               end,
     {ok, Queue, State1};
@@ -158,23 +160,21 @@ check_exchange(ExchangeName, Channel) ->
                         #'queue.bind'{
                           queue    = Queue,
                           exchange = list_to_binary(ExchangeName)}),
-    #'basic.cancel_ok'{} = amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
+    #'basic.cancel_ok'{} =
+      amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
     #'queue.delete_ok'{} =
       amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
     ok.
 
-
 queue_declare_method(#'queue.declare'{} = Method, Params) ->
-    Durable = proplists:get_value(durable, Params, false),
-    Method1 = Method#'queue.declare'{durable     = Durable,
-                                     auto_delete = not Durable,
-                                     exclusive   = not Durable},
-    queue_declare_name(Method1, Params).
-
-queue_declare_name(#'queue.declare'{} = Method, Params) ->
+    Method1 = case proplists:get_value(durable, Params, false) of
+                  true  -> Method#'queue.declare'{durable     = true};
+                  false -> Method#'queue.declare'{auto_delete = true,
+                                                  exclusive   = true}
+              end,
     case proplists:get_value(queue_name_gen, Params) of
-        undefined -> Method;
-        QG        -> Method#'queue.declare'{queue = QG()}
+        undefined -> Method1;
+        QG        -> Method1#'queue.declare'{queue = QG()}
     end.
 
 %%----------------------------------------------------------------------------
