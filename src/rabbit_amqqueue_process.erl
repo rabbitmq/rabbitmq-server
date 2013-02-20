@@ -1168,7 +1168,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
                              AC1 = queue:in(E, State1#q.active_consumers),
                              run_message_queue(State1#q{active_consumers = AC1})
                 end,
-            maybe_send_drained(C1, State),
+            maybe_send_drained(C1, State2),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                   not NoAck, qname(State2)),
             reply(ok, State2)
@@ -1383,7 +1383,7 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
     rabbit_channel:send_credit_reply(ChPid, BQ:len(BQS)),
     State1 = possibly_unblock(
                State, ChPid, fun(C) -> C#cr{limiter = Lim2} end),
-    maybe_send_drained(lookup_ch(ChPid), State),
+    maybe_send_drained(lookup_ch(ChPid), State1),
     noreply(State1);
 
 handle_cast(wake_up, State) ->
