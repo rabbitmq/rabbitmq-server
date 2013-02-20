@@ -904,7 +904,7 @@ ensure_endpoint(source, {topic, Name}, Frame, Channel, State) ->
                     end},
                  {durable, true}];
             false ->
-                [{durable, false}];
+                [{durable, false}]
         end,
     routing_util:ensure_endpoint(source, Channel, {topic, Name}, Params, State);
 
