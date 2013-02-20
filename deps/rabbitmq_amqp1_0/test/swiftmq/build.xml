@@ -15,7 +15,7 @@
     <target name="test" depends="test-build">
         <mkdir dir="build/test-output"/>
 
-        <junit printSummary="withOutAndErr" fork="yes">
+        <junit printSummary="withOutAndErr" fork="yes" failureproperty="test.failed">
             <classpath>
                 <fileset dir="build/lib">
                     <include name="**/*.jar"/>
@@ -25,5 +25,6 @@
             <formatter type="plain"/>
             <test todir="build/test-output" name="com.rabbitmq.amqp1_0.tests.swiftmq.SwiftMQTests"/>
         </junit>
+        <fail message="Tests failed" if="test.failed" />
     </target>
 </project>
