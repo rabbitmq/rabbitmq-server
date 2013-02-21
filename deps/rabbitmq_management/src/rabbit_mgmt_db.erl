@@ -612,7 +612,7 @@ record_sample({coarse, Id}, Args, State) ->
 
 %% Deliveries / acks (Q -> Ch)
 record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, State) ->
-    case queue_exists(Q, State) of
+    case object_exists(Q, State) of
         true  -> record_sample0({channel_queue_stats, {Ch, Q}}, Args),
                  record_sample0({queue_stats,         Q},       Args);
         false -> ok
@@ -622,7 +622,7 @@ record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, State) ->
 
 %% Publishes / confirms (Ch -> X)
 record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, State) ->
-    case exchange_exists(X, State) of
+    case object_exists(X, State) of
         true  -> record_sample0({channel_exchange_stats, {Ch, X}}, Args),
                  record_sampleX(publish_in,              X,        Args);
         false -> ok
@@ -640,8 +640,8 @@ record_sample({fine, {_Ch,
     %% uncommenting this means it gets merged in with "consuming
     %% channel delivery from queue" - which is not very helpful.
     %% record_sample0({channel_queue_stats, {Ch, Q}}, Args),
-    QExists = queue_exists(Q, State),
-    XExists = exchange_exists(X, State),
+    QExists = object_exists(Q, State),
+    XExists = object_exists(X, State),
     case QExists of
         true  -> record_sample0({queue_stats,          Q},       Args);
         false -> ok
@@ -665,13 +665,8 @@ record_sample({fine, {_Ch,
 %% the event (even though we dirty read) since the deletions are
 %% synchronous and we do not emit the deleted event until after the
 %% deletion has occurred.
-queue_exists(Q, #state{lookups = Lookups}) ->
-    case (pget(queue, Lookups))(Q) of
-        {ok, _} -> true;
-        _       -> false
-    end.
-exchange_exists(X, #state{lookups = Lookups}) ->
-    case (pget(exchange, Lookups))(X) of
+object_exists(Name = #resource{kind = Kind}, #state{lookups = Lookups}) ->
+    case (pget(Kind, Lookups))(Name) of
         {ok, _} -> true;
         _       -> false
     end.
