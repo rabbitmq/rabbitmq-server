@@ -157,7 +157,7 @@ drained(Limiter = #token{credits = Credits}) ->
     {CTagCredits, Credits2} =
         lists:foldl(
           fun ({CTag,  #credit{credit = C,  drain = true}},  {Acc, Creds0}) ->
-                  {[{CTag, C} | Acc], write_credit(CTag, 0, false, Creds0)};
+                  {[{CTag, C} | Acc], update_credit(CTag, 0, false, Creds0)};
               ({_CTag, #credit{credit = _C, drain = false}}, {Acc, Creds0}) ->
                   {Acc, Creds0}
           end, {[], Credits}, gb_trees:to_list(Credits)),
@@ -182,25 +182,18 @@ copy_queue_state(#token{credits = Credits}, Token) ->
 record_send_q(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
         {value, #credit{credit = Credit, drain = Drain}} ->
-            write_credit(CTag, Credit, Drain, Credits);
+            update_credit(CTag, Credit, Drain, Credits);
         none ->
             Credits
     end.
 
-update_credit(CTag, Credit, Drain, Credits) ->
-    NewCredits = write_credit(CTag, Credit, Drain, Credits),
-    case Credit > 0 of
-        true  -> {[CTag], NewCredits};
-        false -> {[],     NewCredits}
-    end.
-
-write_credit(CTag, Credit, Drain, Credits) when Credit > 0 ->
-    write_credit0(CTag, #credit{credit = Credit, drain = Drain}, Credits);
+update_credit(CTag, Credit, Drain, Credits) when Credit > 0 ->
+    update_credit0(CTag, #credit{credit = Credit, drain = Drain}, Credits);
 %% Using up all credit means we do not need to send a drained event
-write_credit(CTag, Credit, _Drain, Credits) ->
-    write_credit0(CTag, #credit{credit = Credit, drain = false}, Credits).
+update_credit(CTag, Credit, _Drain, Credits) ->
+    update_credit0(CTag, #credit{credit = Credit, drain = false}, Credits).
 
-write_credit0(CTag, Credit, Credits) ->
+update_credit0(CTag, Credit, Credits) ->
     case gb_trees:is_defined(CTag, Credits) of
         true  -> gb_trees:update(CTag, Credit, Credits);
         false -> gb_trees:insert(CTag, Credit, Credits)
