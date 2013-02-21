@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_channel).
@@ -262,7 +262,7 @@ handle_cast({method, Method, Content, Flow},
     end,
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
-            ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
+            ok = send(Reply, NewState),
             noreply(NewState);
         {noreply, NewState} ->
             noreply(NewState);
@@ -284,18 +284,20 @@ handle_cast(ready_for_close, State = #ch{state      = closing,
     ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
     {stop, normal, State};
 
-handle_cast(terminate, State) ->
+handle_cast(terminate, State = #ch{writer_pid = WriterPid}) ->
+    ok = rabbit_writer:flush(WriterPid),
     {stop, normal, State};
 
-handle_cast({command, #'basic.consume_ok'{consumer_tag = ConsumerTag} = Msg},
-            State = #ch{writer_pid = WriterPid}) ->
-    ok = rabbit_writer:send_command(WriterPid, Msg),
-    noreply(consumer_monitor(ConsumerTag, State));
+handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg}, State) ->
+    ok = send(Msg, State),
+    noreply(consumer_monitor(CTag, State));
 
-handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
-    ok = rabbit_writer:send_command(WriterPid, Msg),
+handle_cast({command, Msg}, State) ->
+    ok = send(Msg, State),
     noreply(State);
 
+handle_cast({deliver, _CTag, _AckReq, _Msg}, State = #ch{state = closing}) ->
+    noreply(State);
 handle_cast({deliver, ConsumerTag, AckRequired,
              Msg = {_QName, QPid, _MsgId, Redelivered,
                     #basic_message{exchange_name = ExchangeName,
@@ -394,6 +396,11 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
+send(_Command, #ch{state = closing}) ->
+    ok;
+send(Command, #ch{writer_pid = WriterPid}) ->
+    ok = rabbit_writer:send_command(WriterPid, Command).
+
 handle_exception(Reason, State = #ch{protocol   = Protocol,
                                      channel    = Channel,
                                      writer_pid = WriterPid,
@@ -412,8 +419,14 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
             {stop, normal, State1}
     end.
 
+-ifdef(use_specs).
+-spec(precondition_failed/1 :: (string()) -> no_return()).
+-endif.
 precondition_failed(Format) -> precondition_failed(Format, []).
 
+-ifdef(use_specs).
+-spec(precondition_failed/2 :: (string(), [any()]) -> no_return()).
+-endif.
 precondition_failed(Format, Params) ->
     rabbit_misc:protocol_error(precondition_failed, Format, Params).
 
@@ -531,15 +544,16 @@ check_name(_Kind, NameBin) ->
 queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     case sets:is_element(QPid, Blocking) of
         false -> State;
-        true  -> Blocking1 = sets:del_element(QPid, Blocking),
-                 ok = case sets:size(Blocking1) of
-                          0 -> rabbit_writer:send_command(
-                                 State#ch.writer_pid,
-                                 #'channel.flow_ok'{active = false});
-                          _ -> ok
-                      end,
-                 State#ch{blocking = Blocking1}
+        true  -> maybe_send_flow_ok(
+                   State#ch{blocking = sets:del_element(QPid, Blocking)})
     end.
+
+maybe_send_flow_ok(State = #ch{blocking = Blocking}) ->
+    case sets:size(Blocking) of
+        0 -> ok = send(#'channel.flow_ok'{active = false}, State);
+        _ -> ok
+    end,
+    State.
 
 record_confirms([], State) ->
     State;
@@ -565,14 +579,25 @@ handle_method(_Method, _, #ch{state = starting}) ->
 handle_method(#'channel.close_ok'{}, _, #ch{state = closing}) ->
     stop;
 
-handle_method(#'channel.close'{}, _, State = #ch{state = closing}) ->
-    {reply, #'channel.close_ok'{}, State};
+handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid,
+                                                 state      = closing}) ->
+    ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
+    {noreply, State};
 
 handle_method(_Method, _, State = #ch{state = closing}) ->
     {noreply, State};
 
 handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid}) ->
     {ok, State1} = notify_queues(State),
+    %% We issue the channel.close_ok response after a handshake with
+    %% the reader, the other half of which is ready_for_close. That
+    %% way the reader forgets about the channel before we send the
+    %% response (and this channel process terminates). If we didn't do
+    %% that, a channel.open for the same channel number, which a
+    %% client is entitled to send as soon as it has received the
+    %% close_ok, might be received by the reader before it has seen
+    %% the termination and hence be sent to the old, now dead/dying
+    %% channel process, instead of a new process, and thus lost.
     ReaderPid ! {channel_closing, self()},
     {noreply, State1};
 
@@ -812,12 +837,9 @@ handle_method(#'basic.recover_async'{requeue = false}, _, _State) ->
     rabbit_misc:protocol_error(not_implemented, "requeue=false", []);
 
 handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
-    {noreply, State2 = #ch{writer_pid = WriterPid}} =
-        handle_method(#'basic.recover_async'{requeue = Requeue},
-                      Content,
-                      State),
-    ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
-    {noreply, State2};
+    {noreply, State1} = handle_method(#'basic.recover_async'{requeue = Requeue},
+                                      Content, State),
+    {reply, #'basic.recover_ok'{}, State1};
 
 handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
                               requeue = Requeue},
@@ -1072,12 +1094,9 @@ handle_method(#'channel.flow'{active = false}, _,
                end,
     State1 = State#ch{limiter = Limiter1},
     ok = rabbit_limiter:block(Limiter1),
-    case consumer_queues(Consumers) of
-        []    -> {reply, #'channel.flow_ok'{active = false}, State1};
-        QPids -> State2 = State1#ch{blocking = sets:from_list(QPids)},
-                 ok = rabbit_amqqueue:flush_all(QPids, self()),
-                 {noreply, State2}
-    end;
+    QPids = consumer_queues(Consumers),
+    ok = rabbit_amqqueue:flush_all(QPids, self()),
+    {noreply, maybe_send_flow_ok(State1#ch{blocking = sets:from_list(QPids)})};
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
@@ -1127,17 +1146,16 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
 
 handle_consuming_queue_down(QPid,
                             State = #ch{consumer_mapping = ConsumerMapping,
-                                        queue_consumers  = QCons,
-                                        writer_pid       = WriterPid}) ->
+                                        queue_consumers  = QCons}) ->
     ConsumerTags = case dict:find(QPid, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
     ConsumerMapping1 =
         gb_sets:fold(fun (CTag, CMap) ->
-                             Cancel = #'basic.cancel'{consumer_tag = CTag,
-                                                      nowait       = true},
-                             ok = rabbit_writer:send_command(WriterPid, Cancel),
+                             ok = send(#'basic.cancel'{consumer_tag = CTag,
+                                                       nowait       = true},
+                                       State),
                              dict:erase(CTag, CMap)
                      end, ConsumerMapping, ConsumerTags),
     State#ch{consumer_mapping = ConsumerMapping1,
@@ -1399,12 +1417,17 @@ process_routing_result(unroutable, _, XName,  MsgSeqNo, Msg, State) ->
 
 send_nacks([], State) ->
     State;
+send_nacks(_MXs, State = #ch{state = closing,
+                             tx    = none}) -> %% optimisation
+    State;
 send_nacks(MXs, State = #ch{tx = none}) ->
     coalesce_and_send([MsgSeqNo || {MsgSeqNo, _} <- MXs],
                       fun(MsgSeqNo, Multiple) ->
                               #'basic.nack'{delivery_tag = MsgSeqNo,
                                             multiple     = Multiple}
                       end, State);
+send_nacks(_MXs, State = #ch{state = closing}) -> %% optimisation
+    State#ch{tx = failed};
 send_nacks(_, State) ->
     maybe_complete_tx(State#ch{tx = failed}).
 
@@ -1423,9 +1446,10 @@ send_confirms(State) ->
 
 send_confirms([], State) ->
     State;
-send_confirms([MsgSeqNo], State = #ch{writer_pid = WriterPid}) ->
-    ok = rabbit_writer:send_command(WriterPid,
-                                    #'basic.ack'{delivery_tag = MsgSeqNo}),
+send_confirms(_Cs, State = #ch{state = closing}) -> %% optimisation
+    State;
+send_confirms([MsgSeqNo], State) ->
+    ok = send(#'basic.ack'{delivery_tag = MsgSeqNo}, State),
     State;
 send_confirms(Cs, State) ->
     coalesce_and_send(Cs, fun(MsgSeqNo, Multiple) ->
@@ -1433,8 +1457,7 @@ send_confirms(Cs, State) ->
                                                multiple     = Multiple}
                           end, State).
 
-coalesce_and_send(MsgSeqNos, MkMsgFun,
-                  State = #ch{writer_pid = WriterPid, unconfirmed = UC}) ->
+coalesce_and_send(MsgSeqNos, MkMsgFun, State = #ch{unconfirmed = UC}) ->
     SMsgSeqNos = lists:usort(MsgSeqNos),
     CutOff = case dtree:is_empty(UC) of
                  true  -> lists:last(SMsgSeqNos) + 1;
@@ -1443,11 +1466,9 @@ coalesce_and_send(MsgSeqNos, MkMsgFun,
     {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, SMsgSeqNos),
     case Ms of
         [] -> ok;
-        _  -> ok = rabbit_writer:send_command(
-                     WriterPid, MkMsgFun(lists:last(Ms), true))
+        _  -> ok = send(MkMsgFun(lists:last(Ms), true), State)
     end,
-    [ok = rabbit_writer:send_command(
-            WriterPid, MkMsgFun(SeqNo, false)) || SeqNo <- Ss],
+    [ok = send(MkMsgFun(SeqNo, false), State) || SeqNo <- Ss],
     State.
 
 ack_cons(Tag, Acked, [{Tag, Acks} | L]) -> [{Tag, Acked ++ Acks} | L];
@@ -1464,7 +1485,7 @@ maybe_complete_tx(State = #ch{unconfirmed = UC}) ->
     end.
 
 complete_tx(State = #ch{tx = committing}) ->
-    ok = rabbit_writer:send_command(State#ch.writer_pid, #'tx.commit_ok'{}),
+    ok = send(#'tx.commit_ok'{}, State),
     State#ch{tx = new_tx()};
 complete_tx(State = #ch{tx = failed}) ->
     {noreply, State1} = handle_exception(

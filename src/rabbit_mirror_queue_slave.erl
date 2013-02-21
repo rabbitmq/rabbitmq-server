@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_slave).
@@ -37,17 +37,9 @@
 
 -include("rabbit.hrl").
 
-%%----------------------------------------------------------------------------
-
 -include("gm_specs.hrl").
 
--ifdef(use_specs).
-%% Shut dialyzer up
--spec(promote_me/2 :: (_, _) -> no_return()).
--endif.
-
 %%----------------------------------------------------------------------------
-
 
 -define(CREATION_EVENT_KEYS,
         [pid,
@@ -78,6 +70,8 @@
                  %% Master depth - local depth
                  depth_delta
                }).
+
+%%----------------------------------------------------------------------------
 
 start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
@@ -227,10 +221,12 @@ handle_cast({sync_start, Ref, Syncer},
                              backing_queue       = BQ,
                              backing_queue_state = BQS }) ->
     State1 = #state{rate_timer_ref = TRef} = ensure_rate_timer(State),
-    S = fun({TRefN, BQSN}) -> State1#state{depth_delta         = undefined,
-                                           rate_timer_ref      = TRefN,
-                                           backing_queue_state = BQSN} end,
-    %% [0] We can only sync when there are no pending acks
+    S = fun({MA, TRefN, BQSN}) ->
+                State1#state{depth_delta         = undefined,
+                             msg_id_ack          = dict:from_list(MA),
+                             rate_timer_ref      = TRefN,
+                             backing_queue_state = BQSN}
+        end,
     case rabbit_mirror_queue_sync:slave(
            DD, Ref, TRef, Syncer, BQ, BQS,
            fun (BQN, BQSN) ->
@@ -240,7 +236,7 @@ handle_cast({sync_start, Ref, Syncer},
                    {TRefN, BQSN1}
            end) of
         denied              -> noreply(State1);
-        {ok,           Res} -> noreply(set_delta(0, S(Res))); %% [0]
+        {ok,           Res} -> noreply(set_delta(0, S(Res)));
         {failed,       Res} -> noreply(S(Res));
         {stop, Reason, Res} -> {stop, Reason, S(Res)}
     end;
@@ -469,6 +465,9 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
 handle_process_result({ok,   State}) -> noreply(State);
 handle_process_result({stop, State}) -> {stop, normal, State}.
 
+-ifdef(use_specs).
+-spec(promote_me/2 :: ({pid(), term()}, #state{}) -> no_return()).
+-endif.
 promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           gm                  = GM,
                           backing_queue       = BQ,
@@ -589,30 +588,18 @@ next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
 backing_queue_timeout(State = #state { backing_queue = BQ }) ->
     run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
 
-ensure_sync_timer(State = #state { sync_timer_ref = undefined }) ->
-    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync_timeout),
-    State #state { sync_timer_ref = TRef };
 ensure_sync_timer(State) ->
-    State.
+    rabbit_misc:ensure_timer(State, #state.sync_timer_ref,
+                             ?SYNC_INTERVAL, sync_timeout).
 
-stop_sync_timer(State = #state { sync_timer_ref = undefined }) ->
-    State;
-stop_sync_timer(State = #state { sync_timer_ref = TRef }) ->
-    erlang:cancel_timer(TRef),
-    State #state { sync_timer_ref = undefined }.
+stop_sync_timer(State) -> rabbit_misc:stop_timer(State, #state.sync_timer_ref).
 
-ensure_rate_timer(State = #state { rate_timer_ref = undefined }) ->
-    TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
-                             self(), update_ram_duration),
-    State #state { rate_timer_ref = TRef };
 ensure_rate_timer(State) ->
-    State.
+    rabbit_misc:ensure_timer(State, #state.rate_timer_ref,
+                             ?RAM_DURATION_UPDATE_INTERVAL,
+                             update_ram_duration).
 
-stop_rate_timer(State = #state { rate_timer_ref = undefined }) ->
-    State;
-stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
-    erlang:cancel_timer(TRef),
-    State #state { rate_timer_ref = undefined }.
+stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #state.rate_timer_ref).
 
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
     State #state { known_senders = pmon:monitor(ChPid, KS) }.
@@ -843,16 +830,21 @@ update_ram_duration(BQ, BQS) ->
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQ:set_ram_duration_target(DesiredDuration, BQS1).
 
+%% [1] - the arrival of this newly synced slave may cause the master to die if
+%% the admin has requested a migration-type change to policy.
 record_synchronised(#amqqueue { name = QName }) ->
     Self = self(),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:read({rabbit_queue, QName}) of
-                  [] ->
-                      ok;
-                  [Q = #amqqueue { sync_slave_pids = SSPids }] ->
-                      rabbit_mirror_queue_misc:store_updated_slaves(
-                        Q #amqqueue { sync_slave_pids = [Self | SSPids] }),
-                      ok
-              end
-      end).
+    case rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   case mnesia:read({rabbit_queue, QName}) of
+                       [] ->
+                           ok;
+                       [Q1 = #amqqueue { sync_slave_pids = SSPids }] ->
+                           Q2 = Q1#amqqueue{sync_slave_pids = [Self | SSPids]},
+                           rabbit_mirror_queue_misc:store_updated_slaves(Q2),
+                           {ok, Q1, Q2}
+                   end
+           end) of
+        ok           -> ok;
+        {ok, Q1, Q2} -> rabbit_mirror_queue_misc:update_mirrors(Q1, Q2) %% [1]
+    end.

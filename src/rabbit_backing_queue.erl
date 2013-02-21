@@ -11,14 +11,12 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_backing_queue).
 
 -ifdef(use_specs).
-
--export_type([async_callback/0]).
 
 %% We can't specify a per-queue ack/state with callback signatures
 -type(ack()   :: any()).
@@ -71,9 +69,13 @@
 %% content.
 -callback delete_and_terminate(any(), state()) -> state().
 
-%% Remove all messages in the queue, but not messages which have been
-%% fetched and are pending acks.
+%% Remove all 'fetchable' messages from the queue, i.e. all messages
+%% except those that have been fetched already and are pending acks.
 -callback purge(state()) -> {purged_msg_count(), state()}.
+
+%% Remove all messages in the queue which have been fetched and are
+%% pending acks.
+-callback purge_acks(state()) -> state().
 
 %% Publish a message.
 -callback publish(rabbit_types:basic_message(),
@@ -164,7 +166,7 @@
 %% results, leaving the queue undisturbed.
 -callback fold(fun((rabbit_types:basic_message(),
                     rabbit_types:message_properties(),
-                    A) -> {('stop' | 'cont'), A}),
+                    boolean(), A) -> {('stop' | 'cont'), A}),
                A, state()) -> {A, state()}.
 
 %% How long is my queue?
@@ -226,7 +228,7 @@
 
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
-     {delete_and_terminate, 2}, {purge, 1}, {publish, 5},
+     {delete_and_terminate, 2}, {purge, 1}, {purge_acks, 1}, {publish, 5},
      {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1},
      {dropwhile, 2}, {fetchwhile, 4},
      {fetch, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},

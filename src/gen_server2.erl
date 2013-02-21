@@ -73,7 +73,7 @@
 %% but where the second argument is specifically the priority_queue
 %% which contains the prioritised message_queue.
 
-%% All modifications are (C) 2009-2012 VMware, Inc.
+%% All modifications are (C) 2009-2013 VMware, Inc.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -863,7 +863,7 @@ dispatch(Info, Mod, State) ->
 common_reply(_Name, From, Reply, _NState, [] = _Debug) ->
     reply(From, Reply),
     [];
-common_reply(Name, {To, Tag} = From, Reply, NState, Debug) ->
+common_reply(Name, {To, _Tag} = From, Reply, NState, Debug) ->
     reply(From, Reply),
     sys:handle_debug(Debug, fun print_event/3, Name, {out, Reply, To, NState}).
 

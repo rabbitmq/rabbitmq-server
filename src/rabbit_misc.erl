@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -67,6 +67,7 @@
 -export([check_expiry/1]).
 -export([base64url/1]).
 -export([interval_operation/4]).
+-export([ensure_timer/4, stop_timer/2]).
 -export([get_parent/0]).
 
 %% Horrible macro to use in guards
@@ -242,6 +243,8 @@
 -spec(interval_operation/4 ::
         ({atom(), atom(), any()}, float(), non_neg_integer(), non_neg_integer())
         -> {any(), non_neg_integer()}).
+-spec(ensure_timer/4 :: (A, non_neg_integer(), non_neg_integer(), any()) -> A).
+-spec(stop_timer/2 :: (A, non_neg_integer()) -> A).
 -spec(get_parent/0 :: () -> pid()).
 -endif.
 
@@ -1046,6 +1049,22 @@ interval_operation({M, F, A}, MaxRatio, IdealInterval, LastInterval) ->
               {false, false} -> lists:max([IdealInterval,
                                            round(LastInterval / 1.5)])
           end}.
+
+ensure_timer(State, Idx, After, Msg) ->
+    case element(Idx, State) of
+        undefined -> TRef = erlang:send_after(After, self(), Msg),
+                     setelement(Idx, State, TRef);
+        _         -> State
+    end.
+
+stop_timer(State, Idx) ->
+    case element(Idx, State) of
+        undefined -> State;
+        TRef      -> case erlang:cancel_timer(TRef) of
+                         false -> State;
+                         _     -> setelement(Idx, State, undefined)
+                     end
+    end.
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_connection_sup).
@@ -42,16 +42,11 @@ start_link() ->
           SupPid,
           {collector, {rabbit_queue_collector, start_link, []},
            intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
-    {ok, ChannelSupSupPid} =
-        supervisor2:start_child(
-          SupPid,
-          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
           {reader, {rabbit_reader, start_link,
-                    [ChannelSupSupPid, Collector,
+                    [SupPid, Collector,
                      rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.

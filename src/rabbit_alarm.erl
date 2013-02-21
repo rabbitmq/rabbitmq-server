@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_alarm).
@@ -67,9 +67,8 @@ start() ->
 
 stop() -> ok.
 
-register(Pid, HighMemMFA) ->
-    gen_event:call(?SERVER, ?MODULE, {register, Pid, HighMemMFA},
-                   infinity).
+register(Pid, AlertMFA) ->
+    gen_event:call(?SERVER, ?MODULE, {register, Pid, AlertMFA}, infinity).
 
 set_alarm(Alarm)   -> gen_event:notify(?SERVER, {set_alarm,   Alarm}).
 clear_alarm(Alarm) -> gen_event:notify(?SERVER, {clear_alarm, Alarm}).
@@ -94,9 +93,9 @@ init([]) ->
                  alarmed_nodes = dict:new(),
                  alarms        = []}}.
 
-handle_call({register, Pid, HighMemMFA}, State) ->
+handle_call({register, Pid, AlertMFA}, State) ->
     {ok, 0 < dict:size(State#alarms.alarmed_nodes),
-     internal_register(Pid, HighMemMFA, State)};
+     internal_register(Pid, AlertMFA, State)};
 
 handle_call(get_alarms, State = #alarms{alarms = Alarms}) ->
     {ok, Alarms, State};
@@ -121,8 +120,8 @@ handle_event({node_up, Node}, State) ->
 handle_event({node_down, Node}, State) ->
     {ok, maybe_alert(fun dict_unappend_all/3, Node, [], State)};
 
-handle_event({register, Pid, HighMemMFA}, State) ->
-    {ok, internal_register(Pid, HighMemMFA, State)};
+handle_event({register, Pid, AlertMFA}, State) ->
+    {ok, internal_register(Pid, AlertMFA, State)};
 
 handle_event(_Event, State) ->
     {ok, State}.
@@ -198,14 +197,14 @@ alert(Alertees, Source, Alert, NodeComparator) ->
                       end
               end, ok, Alertees).
 
-internal_register(Pid, {M, F, A} = HighMemMFA,
+internal_register(Pid, {M, F, A} = AlertMFA,
                   State = #alarms{alertees = Alertees}) ->
     _MRef = erlang:monitor(process, Pid),
     case dict:find(node(), State#alarms.alarmed_nodes) of
         {ok, Sources} -> [apply(M, F, A ++ [Pid, R, true]) || R <- Sources];
         error          -> ok
     end,
-    NewAlertees = dict:store(Pid, HighMemMFA, Alertees),
+    NewAlertees = dict:store(Pid, AlertMFA, Alertees),
     State#alarms{alertees = NewAlertees}.
 
 handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
