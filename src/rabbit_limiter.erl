@@ -107,8 +107,8 @@ can_send(Token = #token{pid = Pid, enabled = Enabled, credits = Credits},
          QPid, AckReq, CTag) ->
     case is_consumer_blocked(Token, CTag) of
         false -> case not Enabled orelse call_can_send(Pid, QPid, AckReq) of
-                     true  -> Credits2 = record_send_q(CTag, Credits),
-                              Token#token{credits = Credits2};
+                     true  -> Token#token{
+                                credits = record_send_q(CTag, Credits)};
                      false -> channel_blocked
                  end;
         true  -> consumer_blocked
@@ -173,11 +173,12 @@ copy_queue_state(#token{credits = Credits}, Token) ->
 %% Queue-local code
 %%----------------------------------------------------------------------------
 
-%% We want to do all the AMQP 1.0-ish link level credit calculations in the
-%% queue (to do them elsewhere introduces a ton of races). However, it's a big
-%% chunk of code that is conceptually very linked to the limiter concept. So
-%% we get the queue to hold a bit of state for us (#token.credits), and
-%% maintain a fiction that the limiter is making the decisions...
+%% We want to do all the AMQP 1.0-ish link level credit calculations
+%% in the queue (to do them elsewhere introduces a ton of
+%% races). However, it's a big chunk of code that is conceptually very
+%% linked to the limiter concept. So we get the queue to hold a bit of
+%% state for us (#token.credits), and maintain a fiction that the
+%% limiter is making the decisions...
 
 record_send_q(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
@@ -187,11 +188,10 @@ record_send_q(CTag, Credits) ->
             Credits
     end.
 
-update_credit(CTag, Credit, Drain, Credits) when Credit > 0 ->
-    gb_trees:enter(CTag, #credit{credit = Credit, drain = Drain}, Credits);
-%% Using up all credit means we do not need to send a drained event
-update_credit(CTag, Credit, _Drain, Credits) ->
-    gb_trees:enter(CTag, #credit{credit = Credit, drain = false}, Credits).
+update_credit(CTag, Credit, Drain, Credits) ->
+    %% Using up all credit implies no need to send a 'drained' event
+    Drain1 = Drain andalso Credit > 0,
+    gb_trees:enter(CTag, #credit{credit = Credit, drain = Drain1}, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
