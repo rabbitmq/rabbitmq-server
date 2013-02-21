@@ -34,6 +34,7 @@
 
 %% For testing
 -export([remove_old_samples/2, format_sample_details/3]).
+-export([override_lookups/1, reset_lookups/0]).
 
 -import(rabbit_misc, [pget/3, pset/3]).
 
@@ -131,6 +132,7 @@
           %% {queue/channel/connection}
           old_stats,
           remove_old_samples_timer,
+          lookups,
           interval}).
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
@@ -184,6 +186,10 @@ get_all_connections(R)      -> safe_call({get_all_connections, R}).
 get_overview(User, R)       -> safe_call({get_overview, User, R}).
 get_overview(R)             -> safe_call({get_overview, all, R}).
 
+override_lookups(Lookups)   -> safe_call({override_lookups, Lookups}).
+reset_lookups()             -> safe_call(reset_lookups).
+
+
 safe_call(Term) -> safe_call(Term, []).
 
 safe_call(Term, Item) ->
@@ -204,11 +210,13 @@ init([]) ->
     rabbit_log:info("Statistics database started.~n"),
     Table = fun () -> ets:new(rabbit_mgmt_db, [ordered_set]) end,
     Tables = orddict:from_list([{Key, Table()} || Key <- ?TABLES]),
-    {ok, set_remove_timer(#state{interval               = Interval,
-                                 tables                 = Tables,
-                                 old_stats              = Table(),
-                                 aggregated_stats       = Table(),
-                                 aggregated_stats_index = Table()}), hibernate,
+    {ok, set_remove_timer(
+           reset_lookups(
+             #state{interval               = Interval,
+                    tables                 = Tables,
+                    old_stats              = Table(),
+                    aggregated_stats       = Table(),
+                    aggregated_stats_index = Table()})), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({augment_exchanges, Xs, Ranges, basic}, _From, State) ->
@@ -289,6 +297,12 @@ handle_call({get_overview, User, Ranges}, _From,
            {queue_totals,  format_samples(Ranges, QueueStats, State)},
            {object_totals, ObjectTotals}], State);
 
+handle_call({override_lookups, Lookups}, _From, State) ->
+    reply(ok, State#state{lookups = Lookups});
+
+handle_call(reset_lookups, _From, State) ->
+    reply(ok, reset_lookups(State));
+
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
 
@@ -319,6 +333,10 @@ set_remove_timer(State) ->
     TRef = erlang:send_after(
              ?REMOVE_OLD_SAMPLES_INTERVAL, self(), remove_old_samples),
     State#state{remove_old_samples_timer = TRef}.
+
+reset_lookups(State) ->
+    State#state{lookups = [{exchange, fun rabbit_exchange:lookup/1},
+                           {queue,    fun rabbit_amqqueue:lookup/1}]}.
 
 handle_pre_hibernate(State) ->
     %% rabbit_event can end up holding on to some memory after a busy
@@ -593,32 +611,70 @@ record_sample({coarse, Id}, Args, State) ->
     record_sample0({vhost_stats, vhost(Id, State)}, Args);
 
 %% Deliveries / acks (Q -> Ch)
-record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, _State) ->
-    record_sample0({channel_queue_stats, {Ch, Q}},  Args),
-    record_sample0({channel_stats,       Ch},       Args),
-    record_sample0({queue_stats,         Q},        Args),
-    record_sample0({vhost_stats,         vhost(Q)}, Args);
+record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, State) ->
+    case queue_exists(Q, State) of
+        true  -> record_sample0({channel_queue_stats, {Ch, Q}}, Args),
+                 record_sample0({queue_stats,         Q},       Args);
+        false -> ok
+    end,
+    record_sample0({channel_stats, Ch},       Args),
+    record_sample0({vhost_stats,   vhost(Q)}, Args);
 
 %% Publishes / confirms (Ch -> X)
-record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, _State) ->
-    record_sample0({channel_exchange_stats, {Ch, X}},  Args),
-    record_sample0({channel_stats,          Ch},       Args),
-    record_sampleX(publish_in,              X,         Args),
-    record_sample0({vhost_stats,            vhost(X)}, Args);
+record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, State) ->
+    case exchange_exists(X, State) of
+        true  -> record_sample0({channel_exchange_stats, {Ch, X}}, Args),
+                 record_sampleX(publish_in,              X,        Args);
+        false -> ok
+    end,
+    record_sample0({channel_stats, Ch},       Args),
+    record_sample0({vhost_stats,   vhost(X)}, Args);
 
 %% Publishes (but not confirms) (Ch -> X -> Q)
 record_sample({fine, {_Ch,
                       Q = #resource{kind = queue},
-                      X = #resource{kind = exchange}}}, Args, _State) ->
+                      X = #resource{kind = exchange}}}, Args, State) ->
     %% TODO This one logically feels like it should be here. It would
     %% correspond to "publishing channel message rates to queue" -
     %% which would be nice to handle - except we don't. And just
     %% uncommenting this means it gets merged in with "consuming
     %% channel delivery from queue" - which is not very helpful.
     %% record_sample0({channel_queue_stats, {Ch, Q}}, Args),
-    record_sample0({queue_exchange_stats,   {Q,  X}},  Args),
-    record_sample0({queue_stats,            Q},        Args),
-    record_sampleX(publish_out,             X,         Args).
+    QExists = queue_exists(Q, State),
+    XExists = exchange_exists(X, State),
+    case QExists of
+        true  -> record_sample0({queue_stats,          Q},       Args);
+        false -> ok
+    end,
+    case QExists andalso XExists of
+        true  -> record_sample0({queue_exchange_stats, {Q,  X}}, Args);
+        false -> ok
+    end,
+    case XExists of
+        true  -> record_sampleX(publish_out,           X,        Args);
+        false -> ok
+    end.
+
+%% We have to check the queue and exchange objects still exist for fine
+%% stats since their deleted event could be overtaken by a channel stats
+%% event which contains fine stats referencing them. That's also why we
+%% don't need to check the channels exist - their deleted event can't be
+%% overtaken by their own last stats event.
+%%
+%% We can be sure that mnesia will be up to date by the time we receive
+%% the event (even though we dirty read) since the deletions are
+%% synchronous and we do not emit the deleted event until after the
+%% deletion has occurred.
+queue_exists(Q, #state{lookups = Lookups}) ->
+    case (pget(queue, Lookups))(Q) of
+        {ok, _} -> true;
+        _       -> false
+    end.
+exchange_exists(X, #state{lookups = Lookups}) ->
+    case (pget(exchange, Lookups))(X) of
+        {ok, _} -> true;
+        _       -> false
+    end.
 
 vhost(#resource{virtual_host = VHost}) -> VHost.
 

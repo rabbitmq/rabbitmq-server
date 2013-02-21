@@ -64,6 +64,8 @@ connection_coarse_test() ->
     ok.
 
 fine_stats_aggregation_test() ->
+    rabbit_mgmt_db:override_lookups([{exchange, fun dummy_lookup/1},
+                                     {queue,    fun dummy_lookup/1}]),
     create_ch(ch1, 0),
     create_ch(ch2, 0),
     stats_ch_x  (ch1, 0, [{x, 100}]),
@@ -79,6 +81,7 @@ fine_stats_aggregation_test() ->
     fine_stats_aggregation_test0(false),
     delete_ch(ch1, 1),
     delete_ch(ch2, 1),
+    rabbit_mgmt_db:reset_lookups(),
     ok.
 
 fine_stats_aggregation_test0(Q2Exists) ->
@@ -270,3 +273,5 @@ pid_del(Name) ->
     Pid.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
+
+dummy_lookup(_Thing) -> {ok, ignore_this}.
