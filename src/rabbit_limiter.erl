@@ -155,12 +155,12 @@ credit(Limiter = #token{credits = Credits}, CTag, Credit, Drain) ->
 
 drained(Limiter = #token{credits = Credits}) ->
     {CTagCredits, Credits2} =
-        lists:foldl(
-          fun ({CTag,  #credit{credit = C,  drain = true}},  {Acc, Creds0}) ->
+        rabbit_misc:gb_trees_fold(
+          fun (CTag,  #credit{credit = C,  drain = true},  {Acc, Creds0}) ->
                   {[{CTag, C} | Acc], update_credit(CTag, 0, false, Creds0)};
-              ({_CTag, #credit{credit = _C, drain = false}}, {Acc, Creds0}) ->
+              (_CTag, #credit{credit = _C, drain = false}, {Acc, Creds0}) ->
                   {Acc, Creds0}
-          end, {[], Credits}, gb_trees:to_list(Credits)),
+          end, {[], Credits}, Credits),
     {CTagCredits, Limiter#token{credits = Credits2}}.
 
 forget_consumer(Limiter = #token{credits = Credits}, CTag) ->
@@ -188,16 +188,10 @@ record_send_q(CTag, Credits) ->
     end.
 
 update_credit(CTag, Credit, Drain, Credits) when Credit > 0 ->
-    update_credit0(CTag, #credit{credit = Credit, drain = Drain}, Credits);
+    gb_trees:enter(CTag, #credit{credit = Credit, drain = Drain}, Credits);
 %% Using up all credit means we do not need to send a drained event
 update_credit(CTag, Credit, _Drain, Credits) ->
-    update_credit0(CTag, #credit{credit = Credit, drain = false}, Credits).
-
-update_credit0(CTag, Credit, Credits) ->
-    case gb_trees:is_defined(CTag, Credits) of
-        true  -> gb_trees:update(CTag, Credit, Credits);
-        false -> gb_trees:insert(CTag, Credit, Credits)
-    end.
+    gb_trees:enter(CTag, #credit{credit = Credit, drain = false}, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
