@@ -183,7 +183,7 @@ copy_queue_state(#token{credits = Credits}, Token) ->
 record_send_q(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
         {value, #credit{credit = Credit, drain = Drain}} ->
-            update_credit(CTag, Credit, Drain, Credits);
+            update_credit(CTag, Credit - 1, Drain, Credits);
         none ->
             Credits
     end.
