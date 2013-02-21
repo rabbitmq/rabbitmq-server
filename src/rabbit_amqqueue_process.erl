@@ -457,8 +457,8 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
         false -> case rabbit_limiter:can_send(C#cr.limiter, self(),
                                               Consumer#consumer.ack_required,
                                               Consumer#consumer.tag) of
-                     {consumer_blocked, Limiter2} ->
-                         block_consumer(C#cr{limiter = Limiter2}, E),
+                     consumer_blocked ->
+                         block_consumer(C, E),
                          {false, State};
                      channel_blocked ->
                          block_consumer(C#cr{is_limit_active = true}, E),
@@ -1138,7 +1138,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
                            none ->
                                Limiter;
                            {Credit, Drain} ->
-                               rabbit_limiter:initial_credit(
+                               rabbit_limiter:credit(
                                  Limiter, ConsumerTag, Credit, Drain)
                        end,
             C1 = update_consumer_count(C#cr{limiter = Limiter2}, +1),
