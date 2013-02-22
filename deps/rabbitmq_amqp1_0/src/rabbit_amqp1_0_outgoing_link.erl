@@ -163,7 +163,8 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                 undefined ->
                     {ok, QueueName, RouteState1} =
                       rabbit_routing_util:ensure_endpoint(
-                        source, DCh, {queue, undefined}, DeclareParams, RouteState),
+                        source, DCh, rabbit_routing_util:parse_endpoint(),
+                        DeclareParams, RouteState),
                     {ok,
                      Source#'v1_0.source'{address = {utf8, QueueName}},
                      Link#outgoing_link{route_state = RouteState1,

@@ -202,7 +202,8 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                 undefined ->
                     {ok, QueueName, RouteState1} =
                       rabbit_routing_util:ensure_endpoint(
-                        source, DCh, {queue, undefined}, DeclareParams, RouteState),
+                        source, DCh, rabbit_routing_util:parse_endpoint(),
+                        DeclareParams, RouteState),
                     {ok,
                      Target#'v1_0.target'{address = {utf8, QueueName}},
                      Link#incoming_link{route_state = RouteState1,
