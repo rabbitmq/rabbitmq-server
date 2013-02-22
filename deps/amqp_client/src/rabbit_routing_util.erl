@@ -33,6 +33,47 @@ dest_prefixes() -> [?EXCHANGE_PREFIX, ?TOPIC_PREFIX, ?QUEUE_PREFIX,
 
 all_dest_prefixes() -> [?TEMP_QUEUE_PREFIX | dest_prefixes()].
 
+%% --------------------------------------------------------------------------
+
+parse_endpoint() -> {queue, undefined}.
+
+parse_endpoint(Destination) ->
+    parse_endpoint(Destination, false).
+
+parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
+    parse_endpoint(unicode:characters_to_list(Destination),
+                                              AllowAnonymousQueue);
+parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
+    case re:split(Destination, "/", [{return, list}]) of
+        [Name] ->
+            {ok, {queue, unescape(Name)}};
+        ["", Type | Rest]
+            when Type =:= "exchange";   Type =:= "queue"; Type =:= "topic";
+                 Type =:= "temp-queue"; Type =:= "reply-queue" ->
+            parse_endpoint0(atomise(Type), Rest, AllowAnonymousQueue);
+        ["", "amq", "queue" | Rest] ->
+            parse_endpoint0(amqqueue, Rest, AllowAnonymousQueue);
+        _ ->
+            {error, {unknown_destination, Destination}}
+    end.
+
+parse_endpoint0(exchange, ["" | _] = Rest, _) ->
+    {error, {invalid_destination, exchange, to_url(Rest)}};
+parse_endpoint0(exchange, [Name], _) ->
+    {ok, {exchange, {unescape(Name), undefined}}};
+parse_endpoint0(exchange, [Name, Pattern], _) ->
+    {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
+parse_endpoint0(queue, [], false) ->
+    {error, {invalid_destination, queue, []}};
+parse_endpoint0(queue, [], true) ->
+    {ok, {queue, undefined}};
+parse_endpoint0(Type, [[_|_]] = [Name], _) ->
+    {ok, {Type, unescape(Name)}};
+parse_endpoint0(Type, Rest, _) ->
+    {error, {invalid_destination, Type, to_url(Rest)}}.
+
+%% --------------------------------------------------------------------------
+
 ensure_endpoint(Dir, Channel, EndPoint, State) ->
     ensure_endpoint(Dir, Channel, EndPoint, [], State).
 
@@ -96,45 +137,6 @@ ensure_binding(Queue, {Exchange, RoutingKey}, Channel) ->
 
 %% --------------------------------------------------------------------------
 
-parse_endpoint() -> {queue, undefined}.
-
-parse_endpoint(Destination) ->
-    parse_endpoint(Destination, false).
-
-parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
-    parse_endpoint(unicode:characters_to_list(Destination),
-                                              AllowAnonymousQueue);
-parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
-    case re:split(Destination, "/", [{return, list}]) of
-        [Name] ->
-            {ok, {queue, unescape(Name)}};
-        ["", Type | Rest]
-            when Type =:= "exchange";   Type =:= "queue"; Type =:= "topic";
-                 Type =:= "temp-queue"; Type =:= "reply-queue" ->
-            parse_endpoint0(atomise(Type), Rest, AllowAnonymousQueue);
-        ["", "amq", "queue" | Rest] ->
-            parse_endpoint0(amqqueue, Rest, AllowAnonymousQueue);
-        _ ->
-            {error, {unknown_destination, Destination}}
-    end.
-
-parse_endpoint0(exchange, ["" | _] = Rest, _) ->
-    {error, {invalid_destination, exchange, to_url(Rest)}};
-parse_endpoint0(exchange, [Name], _) ->
-    {ok, {exchange, {unescape(Name), undefined}}};
-parse_endpoint0(exchange, [Name, Pattern], _) ->
-    {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
-parse_endpoint0(queue, [], false) ->
-    {error, {invalid_destination, queue, []}};
-parse_endpoint0(queue, [], true) ->
-    {ok, {queue, undefined}};
-parse_endpoint0(Type, [[_|_]] = [Name], _) ->
-    {ok, {Type, unescape(Name)}};
-parse_endpoint0(Type, Rest, _) ->
-    {error, {invalid_destination, Type, to_url(Rest)}}.
-
-%% --------------------------------------------------------------------------
-
 parse_routing({exchange, {Name, undefined}}) ->
     {Name, ""};
 parse_routing({exchange, {Name, Pattern}}) ->
@@ -148,7 +150,7 @@ parse_routing({Type, Name})
 dest_temp_queue({temp_queue, Name}) -> Name;
 dest_temp_queue(_)                  -> none.
 
-%%----------------------------------------------------------------------------
+%% --------------------------------------------------------------------------
 
 check_exchange(_, _, Validation)
   when Validation == false orelse Validation == undefined ->
@@ -176,7 +178,7 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
             end
     end.
 
-%%----------------------------------------------------------------------------
+%% --------------------------------------------------------------------------
 
 to_url([])  -> [];
 to_url(Lol) -> "/" ++ string:join(Lol, "/").
