@@ -420,8 +420,9 @@ maybe_delete_durable_sub({topic, Name}, Frame,
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
             QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
-            amqp_channel:call(Channel, #'queue.delete'{queue  = list_to_binary(QName),
-                                                       nowait = false}),
+            amqp_channel:call(Channel,
+                              #'queue.delete'{queue  = list_to_binary(QName),
+                                              nowait = false}),
             ok(State);
         false ->
             ok(State)
@@ -571,7 +572,8 @@ do_subscribe(Destination, DestHdr, Frame,
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
         State = #state{channel = Channel, route_state = RouteState}) ->
-    {ok, _Q, RouteState1} = ensure_endpoint(dest, Destination, Frame, Channel, RouteState),
+    {ok, _Q, RouteState1} = ensure_endpoint(dest, Destination, Frame, Channel,
+                                            RouteState),
 
     {Frame1, State1} =
         ensure_reply_to(Frame, State#state{route_state = RouteState1}),
