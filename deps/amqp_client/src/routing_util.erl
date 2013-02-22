@@ -36,12 +36,12 @@ ensure_endpoint(Dir, Channel, EndPoint, State) ->
     ensure_endpoint(Dir, Channel, EndPoint, [], State).
 
 ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
-    check_exchange(Name, Channel),
+    check_exchange(Name, Channel, proplists:get_value(validate, Params)),
     Method = queue_declare_method(#'queue.declare'{}, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
-ensure_endpoint(source, Channel, {topic, Name}, Params, State) ->
+ensure_endpoint(source, Channel, {topic, _}, Params, State) ->
     Method = queue_declare_method(#'queue.declare'{}, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
@@ -65,8 +65,8 @@ ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
              end,
     {ok, Queue, State1};
 
-ensure_endpoint(dest, Channel, {exchange, {Name, _}}, _Params, State) ->
-    check_exchange(Name, Channel),
+ensure_endpoint(dest, Channel, {exchange, {Name, _}}, Params, State) ->
+    check_exchange(Name, Channel, proplists:get_value(validate, Params)),
     {ok, undefined, State};
 
 ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
@@ -118,7 +118,7 @@ parse_endpoint(Destination, Params) when is_list(Destination) ->
 
 parse_endpoint0(exchange, ["" | _] = Rest, _Params) ->
     {error, {invalid_destination, exchange, to_url(Rest)}};
-parse_endpoint0(exchange, [Name], Params) ->
+parse_endpoint0(exchange, [Name], _Params) ->
     {ok, {exchange, {unescape(Name), undefined}}};
 parse_endpoint0(exchange, [Name, Pattern], _Params) ->
     {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
@@ -147,9 +147,12 @@ parse_routing({Type, Name})
 
 %%----------------------------------------------------------------------------
 
-check_exchange("amq." ++ _, Channel) ->
+check_exchange(_, _, Validation)
+  when Validation == false orelse Validation == undefined ->
     ok;
-check_exchange(ExchangeName, Channel) ->
+check_exchange("amq." ++ _, _Channel, _Validation) ->
+    ok;
+check_exchange(ExchangeName, Channel, true) ->
     #'queue.declare_ok'{queue = Queue} =
       amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
     #'basic.consume_ok'{consumer_tag = Tag} =
@@ -184,7 +187,6 @@ to_url(Lol) -> "/" ++ string:join(Lol, "/").
 atomise(Name) when is_list(Name) ->
     list_to_atom(re:replace(Name, "-", "_", [{return,list}, global])).
 
-unescape_all(Lol) -> [unescape(L) || L <- Lol].
 unescape(Str) -> unescape(Str, []).
 
 unescape("%2F" ++ Str, Acc) -> unescape(Str, [$/ | Acc]);
