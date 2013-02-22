@@ -903,7 +903,9 @@ ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
                     fun () ->
                         {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
                         {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
-                        list_to_binary(rabbit_stomp_util:durable_subscription_queue(Name, Id))
+                        list_to_binary(
+                          rabbit_stomp_util:durable_subscription_queue(Name,
+                                                                       Id))
                     end},
                  {durable, true}];
             false ->
