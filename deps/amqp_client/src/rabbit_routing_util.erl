@@ -78,7 +78,7 @@ ensure_endpoint(Dir, Channel, EndPoint, State) ->
     ensure_endpoint(Dir, Channel, EndPoint, [], State).
 
 ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
-    check_exchange(Name, Channel, proplists:get_value(validate, Params)),
+    check_exchange(Name, Channel, proplists:get_value(validate, Params, false)),
     Method = queue_declare_method(#'queue.declare'{}, exchange, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
@@ -109,7 +109,7 @@ ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
     {ok, Queue, State1};
 
 ensure_endpoint(dest, Channel, {exchange, {Name, _}}, Params, State) ->
-    check_exchange(Name, Channel, proplists:get_value(validate, Params)),
+    check_exchange(Name, Channel, proplists:get_value(validate, Params, false)),
     {ok, undefined, State};
 
 ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
@@ -152,8 +152,7 @@ dest_temp_queue(_)                  -> none.
 
 %% --------------------------------------------------------------------------
 
-check_exchange(_, _, Validation)
-  when Validation == false orelse Validation == undefined ->
+check_exchange(_,            _,       false) ->
     ok;
 check_exchange("amq." ++ _, _Channel, _Validation) ->
     ok;
