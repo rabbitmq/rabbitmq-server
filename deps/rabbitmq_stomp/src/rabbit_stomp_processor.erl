@@ -22,7 +22,7 @@
          code_change/3, terminate/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("amqp_client/include/routing_prefixes.hrl").
+-include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_headers.hrl").
@@ -67,7 +67,7 @@ init([SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, Configuration]) ->
        start_heartbeat_fun = StartHeartbeatFun,
        pending_receipts    = undefined,
        config              = Configuration,
-       route_state          = routing_util:init_state(),
+       route_state         = rabbit_routing_util:init_state(),
        reply_queues        = dict:new(),
        frame_transformer   = undefined,
        adapter_info        = AdapterInfo,
@@ -410,7 +410,7 @@ tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr,
                                                  subscriptions = Subs}) ->
     ok = ensure_subchannel_closed(SubChannel, MainChannel),
     Subs1 = dict:erase(ConsumerTag, Subs),
-    {ok, Dest} = routing_util:parse_endpoint(DestHdr),
+    {ok, Dest} = rabbit_routing_util:parse_endpoint(DestHdr),
     maybe_delete_durable_sub(Dest, Frame, State#state{subscriptions = Subs1}).
 
 maybe_delete_durable_sub({topic, Name}, Frame,
@@ -440,7 +440,7 @@ ensure_subchannel_closed(SubChannel, _MainChannel) ->
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
         {ok, DestHdr} ->
-            case routing_util:parse_endpoint(DestHdr) of
+            case rabbit_routing_util:parse_endpoint(DestHdr) of
                 {ok, Destination} ->
                     Fun(Destination, DestHdr, Frame, State);
                 {error, {invalid_destination, Type, Content}} ->
@@ -453,7 +453,7 @@ with_destination(Command, Frame, State, Fun) ->
                           "'~s' is not a valid destination.~n"
                           "Valid destination types are: ~s.~n",
                           [Content,
-                           string:join(routing_util:all_dest_prefixes(),
+                           string:join(rabbit_routing_util:all_dest_prefixes(),
                                        ", ")], State)
             end;
         not_found ->
@@ -555,8 +555,8 @@ do_subscribe(Destination, DestHdr, Frame,
                              no_ack       = (AckMode == auto),
                              exclusive    = false},
                            self()),
-    ExchangeAndKey = routing_util:parse_routing(Destination),
-    ok = routing_util:ensure_binding(Queue, ExchangeAndKey, Channel),
+    ExchangeAndKey = rabbit_routing_util:parse_routing(Destination),
+    ok = rabbit_routing_util:ensure_binding(Queue, ExchangeAndKey, Channel),
 
     ok(State#state{subscriptions =
                        dict:store(ConsumerTag,
@@ -579,7 +579,7 @@ do_send(Destination, _DestHdr,
     Props = rabbit_stomp_util:message_properties(Frame1),
 
     {Exchange, RoutingKey} =
-        routing_util:parse_routing(Destination),
+        rabbit_routing_util:parse_routing(Destination),
 
     Method = #'basic.publish'{
       exchange = list_to_binary(Exchange),
@@ -668,7 +668,7 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
         not_found ->
             {Frame, State};
         {ok, ReplyTo} ->
-            {ok, Destination} = routing_util:parse_endpoint(ReplyTo),
+            {ok, Destination} = rabbit_routing_util:parse_endpoint(ReplyTo),
             case Destination of
                 {temp_queue, TempQueueId} ->
                     {ReplyQueue, State1} =
@@ -906,10 +906,10 @@ ensure_endpoint(source, {topic, Name}, Frame, Channel, State) ->
             false ->
                 [{durable, false}]
         end,
-    routing_util:ensure_endpoint(source, Channel, {topic, Name}, Params, State);
+    rabbit_routing_util:ensure_endpoint(source, Channel, {topic, Name}, Params, State);
 
 ensure_endpoint(Direction, Endpoint, _Frame, Channel, State) ->
-    routing_util:ensure_endpoint(Direction, Channel, Endpoint, State).
+    rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, State).
 
 %%----------------------------------------------------------------------------
 %% Success/error handling
