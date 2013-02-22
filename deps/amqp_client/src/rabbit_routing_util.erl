@@ -57,19 +57,19 @@ parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
             {error, {unknown_destination, Destination}}
     end.
 
-parse_endpoint0(exchange, ["" | _] = Rest, _) ->
+parse_endpoint0(exchange, ["" | _] = Rest,    _) ->
     {error, {invalid_destination, exchange, to_url(Rest)}};
-parse_endpoint0(exchange, [Name], _) ->
+parse_endpoint0(exchange, [Name],             _) ->
     {ok, {exchange, {unescape(Name), undefined}}};
-parse_endpoint0(exchange, [Name, Pattern], _) ->
+parse_endpoint0(exchange, [Name, Pattern],    _) ->
     {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
-parse_endpoint0(queue, [], false) ->
+parse_endpoint0(queue,    [],                 false) ->
     {error, {invalid_destination, queue, []}};
-parse_endpoint0(queue, [], true) ->
+parse_endpoint0(queue,    [],                 true) ->
     {ok, {queue, undefined}};
-parse_endpoint0(Type, [[_|_]] = [Name], _) ->
+parse_endpoint0(Type,     [[_|_]] = [Name],   _) ->
     {ok, {Type, unescape(Name)}};
-parse_endpoint0(Type, Rest, _) ->
+parse_endpoint0(Type,     Rest,               _) ->
     {error, {invalid_destination, Type, to_url(Rest)}}.
 
 %% --------------------------------------------------------------------------
