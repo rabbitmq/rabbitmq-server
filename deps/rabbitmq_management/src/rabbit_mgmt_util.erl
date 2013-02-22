@@ -492,18 +492,20 @@ range(ReqData) -> {range("lengths",    ReqData),
                    range("data_rates", ReqData)}.
 
 range(Prefix, ReqData) ->
-    Age = int(Prefix ++ "_age", ReqData),
-    Incr = int(Prefix ++ "_incr", ReqData),
+    Age0 = int(Prefix ++ "_age", ReqData),
+    Incr0 = int(Prefix ++ "_incr", ReqData),
     if
-        is_integer(Age) andalso is_integer(Incr) ->
+        is_integer(Age0) andalso is_integer(Incr0) ->
+            Age = Age0 * 1000,
+            Incr = Incr0 * 1000,
             %% Take floor on queries so we make sure we only return samples
             %% for which we've finished receiving events. Fixes the "drop at
             %% the end" problem.
             Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
             Last = (Now div Incr) * Incr,
-            #range{first = (Last - Age) * 1000,
-                   last  = Last * 1000,
-                   incr  = Incr * 1000};
+            #range{first = (Last - Age),
+                   last  = Last,
+                   incr  = Incr};
         true ->
             no_range
     end.
