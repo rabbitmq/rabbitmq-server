@@ -380,7 +380,6 @@ function apply_state(reqs) {
                 else if (type.substring(0, 11) == 'data-rates-') {
                     prefix = 'data_rates';
                 }
-                else debug("type: " + type);
                 qs.push(prefix + '_age=' + parseInt(range[0]));
                 qs.push(prefix + '_incr=' + parseInt(range[1]));
             }
