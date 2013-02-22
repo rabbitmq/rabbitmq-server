@@ -153,19 +153,8 @@ check_exchange(_, _, Validation)
 check_exchange("amq." ++ _, _Channel, _Validation) ->
     ok;
 check_exchange(ExchangeName, Channel, true) ->
-    #'queue.declare_ok'{queue = Queue} =
-      amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
-    #'basic.consume_ok'{consumer_tag = Tag} =
-      amqp_channel:call(Channel, #'basic.consume'{queue = Queue}),
-    #'queue.bind_ok'{} =
-      amqp_channel:call(Channel,
-                        #'queue.bind'{
-                          queue    = Queue,
-                          exchange = list_to_binary(ExchangeName)}),
-    #'basic.cancel_ok'{} =
-      amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
-    #'queue.delete_ok'{} =
-      amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
+    XDecl = #'exchange.declare'{ exchange = ExchangeName, passive = true },
+    #'exchange.declare_ok'{} = rabbit_amqp1_0_channel:call(Channel, XDecl),
     ok.
 
 queue_declare_method(#'queue.declare'{} = Method, Params) ->
