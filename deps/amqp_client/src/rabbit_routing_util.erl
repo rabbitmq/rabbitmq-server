@@ -18,7 +18,8 @@
 
 -export([init_state/0, dest_prefixes/0, all_dest_prefixes/0]).
 -export([ensure_endpoint/4, ensure_endpoint/5, ensure_binding/3]).
--export([parse_endpoint/1, parse_endpoint/2, parse_routing/1]).
+-export([parse_endpoint/0, parse_endpoint/1, parse_endpoint/2]).
+-export([parse_routing/1, dest_temp_queue/1]).
 
 -include("amqp_client.hrl").
 -include("rabbit_routing_prefixes.hrl").
@@ -95,6 +96,8 @@ ensure_binding(Queue, {Exchange, RoutingKey}, Channel) ->
 
 %% --------------------------------------------------------------------------
 
+parse_endpoint() -> {queue, undefined}.
+
 parse_endpoint(Destination) ->
     parse_endpoint(Destination, false).
 
@@ -141,6 +144,9 @@ parse_routing({topic, Name}) ->
 parse_routing({Type, Name})
   when Type =:= queue orelse Type =:= reply_queue orelse Type =:= amqqueue ->
     {"", Name}.
+
+dest_temp_queue({temp_queue, Name}) -> Name;
+dest_temp_queue(_)                  -> none.
 
 %%----------------------------------------------------------------------------
 
