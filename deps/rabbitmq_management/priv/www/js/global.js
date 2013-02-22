@@ -41,10 +41,10 @@ var NAVIGATION = {'Overview':    ['#/',                            false],
                  };
 
 var CHART_PERIODS = {'60|5':       'Last minute',
-                     '1200|60':    'Last twenty minutes',
+                     '600|5':      'Last ten minutes',
                      '3600|60':    'Last hour',
-                     '21600|1200': 'Last six hours',
-                     '86400|1200': 'Last day'};
+                     '28800|600':  'Last eight hours',
+                     '86400|1800': 'Last day'};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //

@@ -11,8 +11,8 @@
          {db_module,         rabbit_mgmt_db},
          {sample_retention_policies,
           %% List of {MaxAgeSecs, IfTimestampDivisibleBySecs}
-          [{global,   [{60, 5}, {3600, 60}, {86400, 1200}]},
-           {basic,    [{60, 5}, {3600, 60}]},
+          [{global,   [{600, 5}, {3600, 60}, {28800, 600}, {86400, 1800}]},
+           {basic,    [{600, 5}, {3600, 60}]},
            {detailed, [{10, 5}]}]}
         ]},
   {applications, [kernel, stdlib, rabbit, xmerl, rabbitmq_web_dispatch,
