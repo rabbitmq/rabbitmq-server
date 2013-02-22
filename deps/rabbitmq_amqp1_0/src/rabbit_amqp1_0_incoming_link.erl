@@ -215,9 +215,8 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
         _ ->
             case Address of
                 {utf8, Destination} ->
-                    ParseParams = [{direction, dest}, {anonymous, true}],
                     case rabbit_routing_util:parse_endpoint(
-                           Destination, ParseParams) of
+                           Destination, true) of
                         {ok, Dest} ->
                             {ok, _Queue, RouteState1} =
                                 rabbit_amqp1_0_channel:convert_error(

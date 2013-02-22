@@ -175,9 +175,8 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
         _ ->
             case Address of
                 {utf8, Destination} ->
-                    ParseParams = [{direction, source}],
                     case rabbit_routing_util:parse_endpoint(
-                           Destination, ParseParams) of
+                           Destination, false) of
                         {ok, Dest} ->
                             {ok, Queue, RouteState1} =
                               rabbit_amqp1_0_channel:convert_error(
