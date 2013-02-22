@@ -50,7 +50,9 @@ attach(#'v1_0.attach'{name = Name,
                        #outgoing_link{delivery_count  = ?INIT_TXFR_COUNT,
                                       send_settled    = SndSettled,
                                       default_outcome = DOSym,
-                                      route_state     = routing_util:init_state()}, DCh) of
+                                      route_state     =
+                                        rabbit_routing_util:init_state()},
+                       DCh) of
         {ok, Source1, OutgoingLink = #outgoing_link{queue = QueueName}} ->
             CTag = handle_to_ctag(Handle),
             case rabbit_amqp1_0_channel:subscribe(
@@ -160,7 +162,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
             case Address of
                 undefined ->
                     {ok, QueueName, RouteState1} =
-                      routing_util:ensure_endpoint(
+                      rabbit_routing_util:ensure_endpoint(
                         source, DCh, {queue, undefined}, DeclareParams, RouteState),
                     {ok,
                      Source#'v1_0.source'{address = {utf8, QueueName}},
@@ -174,17 +176,18 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
             case Address of
                 {utf8, Destination} ->
                     ParseParams = [{encoding,  utf8}, {direction, source}],
-                    case routing_util:parse_endpoint(Destination, ParseParams) of
+                    case rabbit_routing_util:parse_endpoint(
+                           Destination, ParseParams) of
                         {ok, Dest} ->
                             {ok, Queue, RouteState1} =
                               rabbit_amqp1_0_channel:convert_error(
                                 fun() ->
-                                        routing_util:ensure_endpoint(
+                                        rabbit_routing_util:ensure_endpoint(
                                           source, DCh, Dest, DeclareParams,
                                           RouteState)
                                 end),
-                            ER = routing_util:parse_routing(Dest),
-                            ok = routing_util:ensure_binding(Queue, ER, DCh),
+                            ER = rabbit_routing_util:parse_routing(Dest),
+                            ok = rabbit_routing_util:ensure_binding(Queue, ER, DCh),
                             {ok, Source,
                              Link#outgoing_link{ route_state = RouteState1,
                                                  queue       = Queue }}

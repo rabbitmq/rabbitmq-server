@@ -47,7 +47,8 @@ attach(#'v1_0.attach'{name = Name,
     case ensure_target(Target,
                        #incoming_link{
                          name        = Name,
-                         route_state = routing_util:init_state() }, DCh) of
+                         route_state = rabbit_routing_util:init_state() },
+                       DCh) of
         {ok, ServerTarget,
          IncomingLink = #incoming_link{ delivery_count = InitTransfer }} ->
             {_, _Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
@@ -200,7 +201,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
             case Address of
                 undefined ->
                     {ok, QueueName, RouteState1} =
-                      routing_util:ensure_endpoint(
+                      rabbit_routing_util:ensure_endpoint(
                         source, DCh, {queue, undefined}, DeclareParams, RouteState),
                     {ok,
                      Target#'v1_0.target'{address = {utf8, QueueName}},
@@ -217,16 +218,18 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                     ParseParams = [{encoding,  utf8},
                                    {direction, dest},
                                    {anonymous, true}],
-                    case routing_util:parse_endpoint(Destination, ParseParams) of
+                    case rabbit_routing_util:parse_endpoint(
+                           Destination, ParseParams) of
                         {ok, Dest} ->
                             {ok, _Queue, RouteState1} =
                                 rabbit_amqp1_0_channel:convert_error(
                                   fun () ->
-                                          routing_util:ensure_endpoint(
-                                            dest, DCh, Dest, DeclareParams, RouteState)
+                                          rabbit_routing_util:ensure_endpoint(
+                                            dest, DCh, Dest, DeclareParams,
+                                            RouteState)
                                   end),
                             {ExchangeName, RoutingKey} =
-                                routing_util:parse_routing(Dest),
+                                rabbit_routing_util:parse_routing(Dest),
                             {ok, Target,
                              Link#incoming_link{
                                route_state = RouteState1,
