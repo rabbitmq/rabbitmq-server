@@ -14,14 +14,14 @@
 %% Copyright (c) 2013-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(routing_util).
+-module(rabbit_routing_util).
 
 -export([init_state/0, dest_prefixes/0, all_dest_prefixes/0]).
 -export([ensure_endpoint/4, ensure_endpoint/5, ensure_binding/3]).
 -export([parse_endpoint/1, parse_endpoint/2, parse_routing/1]).
 
 -include("amqp_client.hrl").
--include("routing_prefixes.hrl").
+-include("rabbit_routing_prefixes.hrl").
 
 %%----------------------------------------------------------------------------
 
