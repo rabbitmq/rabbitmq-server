@@ -215,9 +215,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
         _ ->
             case Address of
                 {utf8, Destination} ->
-                    ParseParams = [{encoding,  utf8},
-                                   {direction, dest},
-                                   {anonymous, true}],
+                    ParseParams = [{direction, dest}, {anonymous, true}],
                     case rabbit_routing_util:parse_endpoint(
                            Destination, ParseParams) of
                         {ok, Dest} ->

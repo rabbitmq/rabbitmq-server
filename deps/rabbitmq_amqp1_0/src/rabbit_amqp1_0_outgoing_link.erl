@@ -175,7 +175,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
         _ ->
             case Address of
                 {utf8, Destination} ->
-                    ParseParams = [{encoding,  utf8}, {direction, source}],
+                    ParseParams = [{direction, source}],
                     case rabbit_routing_util:parse_endpoint(
                            Destination, ParseParams) of
                         {ok, Dest} ->
