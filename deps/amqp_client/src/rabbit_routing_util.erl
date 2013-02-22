@@ -95,40 +95,38 @@ ensure_binding(Queue, {Exchange, RoutingKey}, Channel) ->
 %% --------------------------------------------------------------------------
 
 parse_endpoint(Destination) ->
-    parse_endpoint(Destination, []).
+    parse_endpoint(Destination, false).
 
-parse_endpoint(Destination, Params) when is_binary(Destination) ->
-    parse_endpoint(unicode:characters_to_list(Destination), Params);
-
-parse_endpoint(Destination, Params) when is_list(Destination) ->
+parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
+    parse_endpoint(unicode:characters_to_list(Destination),
+                                              AllowAnonymousQueue);
+parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
     case re:split(Destination, "/", [{return, list}]) of
         [Name] ->
             {ok, {queue, unescape(Name)}};
         ["", Type | Rest]
             when Type =:= "exchange";   Type =:= "queue"; Type =:= "topic";
                  Type =:= "temp-queue"; Type =:= "reply-queue" ->
-            parse_endpoint0(atomise(Type), Rest, Params);
+            parse_endpoint0(atomise(Type), Rest, AllowAnonymousQueue);
         ["", "amq", "queue" | Rest] ->
-            parse_endpoint0(amqqueue, Rest, Params);
+            parse_endpoint0(amqqueue, Rest, AllowAnonymousQueue);
         _ ->
             {error, {unknown_destination, Destination}}
     end.
 
-parse_endpoint0(exchange, ["" | _] = Rest, _Params) ->
+parse_endpoint0(exchange, ["" | _] = Rest, _) ->
     {error, {invalid_destination, exchange, to_url(Rest)}};
-parse_endpoint0(exchange, [Name], _Params) ->
+parse_endpoint0(exchange, [Name], _) ->
     {ok, {exchange, {unescape(Name), undefined}}};
-parse_endpoint0(exchange, [Name, Pattern], _Params) ->
+parse_endpoint0(exchange, [Name, Pattern], _) ->
     {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
-parse_endpoint0(queue, [], Params) ->
-    case {proplists:get_value(direction, Params),
-          proplists:get_value(anonymous, Params)} of
-        {dest, true} -> {ok, {queue, undefined}};
-        _            -> {error, {invalid_destination, queue, []}}
-    end;
-parse_endpoint0(Type, [[_|_]] = [Name], _Params) ->
+parse_endpoint0(queue, [], false) ->
+    {error, {invalid_destination, queue, []}};
+parse_endpoint0(queue, [], true) ->
+    {ok, {queue, undefined}};
+parse_endpoint0(Type, [[_|_]] = [Name], _) ->
     {ok, {Type, unescape(Name)}};
-parse_endpoint0(Type, Rest, _Params) ->
+parse_endpoint0(Type, Rest, _) ->
     {error, {invalid_destination, Type, to_url(Rest)}}.
 
 %% --------------------------------------------------------------------------
