@@ -669,8 +669,8 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
             {Frame, State};
         {ok, ReplyTo} ->
             {ok, Destination} = rabbit_routing_util:parse_endpoint(ReplyTo),
-            case Destination of
-                {temp_queue, TempQueueId} ->
+            case rabbit_routing_util:dest_temp_queue(Destination) of
+                TempQueueId ->
                     {ReplyQueue, State1} =
                         ensure_reply_queue(TempQueueId, State),
                     {Frame#stomp_frame{
@@ -678,7 +678,7 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
                                    ?HEADER_REPLY_TO, 1, Headers,
                                    {?HEADER_REPLY_TO, ReplyQueue})},
                      State1};
-                _ ->
+                none ->
                     {Frame, State}
             end
     end.
