@@ -37,17 +37,17 @@ ensure_endpoint(Dir, Channel, EndPoint, State) ->
 
 ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
     check_exchange(Name, Channel, proplists:get_value(validate, Params)),
-    Method = queue_declare_method(#'queue.declare'{}, Params),
+    Method = queue_declare_method(#'queue.declare'{}, exchange, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
 ensure_endpoint(source, Channel, {topic, _}, Params, State) ->
-    Method = queue_declare_method(#'queue.declare'{}, Params),
+    Method = queue_declare_method(#'queue.declare'{}, topic, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
 ensure_endpoint(_, Channel, {queue, undefined}, Params, State) ->
-    Method = queue_declare_method(#'queue.declare'{}, Params),
+    Method = queue_declare_method(#'queue.declare'{}, queue, Params),
     #'queue.declare_ok'{queue = Queue} =
       amqp_channel:call(Channel, Method),
     {ok, Queue, State};
@@ -59,7 +59,8 @@ ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
                  true -> State;
                  _    -> Method = queue_declare_method(
                                     #'queue.declare'{queue  = Queue,
-                                                     nowait = true}, Params1),
+                                                     nowait = true},
+                                    queue, Params1),
                          amqp_channel:cast(Channel, Method),
                          sets:add_element(Queue, State)
              end,
@@ -153,15 +154,20 @@ check_exchange(ExchangeName, Channel, true) ->
     #'exchange.declare_ok'{} = rabbit_amqp1_0_channel:call(Channel, XDecl),
     ok.
 
-queue_declare_method(#'queue.declare'{} = Method, Params) ->
+queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
     Method1 = case proplists:get_value(durable, Params, false) of
                   true  -> Method#'queue.declare'{durable     = true};
                   false -> Method#'queue.declare'{auto_delete = true,
                                                   exclusive   = true}
               end,
-    case proplists:get_value(queue_name_gen, Params) of
-        undefined -> Method1;
-        QG        -> Method1#'queue.declare'{queue = QG()}
+    case  {Type, proplists:get_value(topic_queue_name_gen, Params)} of
+        {topic, DTQNG} when is_function(DTQNG) ->
+            Method1#'queue.declare'{queue = DTQNG()};
+        _ ->
+            case proplists:get_value(queue_name_gen, Params) of
+                undefined -> Method1;
+                QG        -> Method1#'queue.declare'{queue = QG()}
+            end
     end.
 
 %%----------------------------------------------------------------------------
