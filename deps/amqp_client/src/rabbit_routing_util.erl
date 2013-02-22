@@ -98,9 +98,7 @@ parse_endpoint(Destination) ->
     parse_endpoint(Destination, []).
 
 parse_endpoint(Destination, Params) when is_binary(Destination) ->
-    parse_endpoint(
-      unicode:characters_to_list(
-        Destination, proplists:get_value(encoding, Params)), Params);
+    parse_endpoint(unicode:characters_to_list(Destination), Params);
 
 parse_endpoint(Destination, Params) when is_list(Destination) ->
     case re:split(Destination, "/", [{return, list}]) of
