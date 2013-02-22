@@ -159,7 +159,7 @@ check_exchange("amq." ++ _, _Channel, _Validation) ->
     ok;
 check_exchange(ExchangeName, Channel, true) ->
     XDecl = #'exchange.declare'{ exchange = ExchangeName, passive = true },
-    #'exchange.declare_ok'{} = rabbit_amqp1_0_channel:call(Channel, XDecl),
+    #'exchange.declare_ok'{} = rabbit_channel:call(Channel, XDecl),
     ok.
 
 queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
