@@ -193,7 +193,8 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                       %% TODO
                                       timeout       = _Timeout},
               Link = #incoming_link{ route_state = RouteState }, DCh) ->
-    DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)}],
+    DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)},
+                     {validate, true}],
     case Dynamic of
         true ->
             case Address of
