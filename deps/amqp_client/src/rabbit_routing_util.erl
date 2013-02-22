@@ -18,7 +18,7 @@
 
 -export([init_state/0, dest_prefixes/0, all_dest_prefixes/0]).
 -export([ensure_endpoint/4, ensure_endpoint/5, ensure_binding/3]).
--export([parse_endpoint/0, parse_endpoint/1, parse_endpoint/2]).
+-export([parse_endpoint/1, parse_endpoint/2]).
 -export([parse_routing/1, dest_temp_queue/1]).
 
 -include("amqp_client.hrl").
@@ -35,10 +35,11 @@ all_dest_prefixes() -> [?TEMP_QUEUE_PREFIX | dest_prefixes()].
 
 %% --------------------------------------------------------------------------
 
-parse_endpoint() -> {queue, undefined}.
-
 parse_endpoint(Destination) ->
     parse_endpoint(Destination, false).
+
+parse_endpoint(undefined, AllowAnonymousQueue) ->
+    parse_endpoint("/queue", AllowAnonymousQueue);
 
 parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
     parse_endpoint(unicode:characters_to_list(Destination),
