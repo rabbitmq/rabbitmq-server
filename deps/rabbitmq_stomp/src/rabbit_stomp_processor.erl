@@ -899,7 +899,7 @@ ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
         case rabbit_stomp_frame:boolean_header(
                Frame, ?HEADER_PERSISTENT, false) of
             true ->
-                [{topic_queue_name_gen,
+                [{subscription_queue_name_gen,
                     fun () ->
                         {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
                         {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
