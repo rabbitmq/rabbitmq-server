@@ -139,7 +139,7 @@ headers_extra(SessionId, AckMode, Version,
     end.
 
 headers_post_process(Headers) ->
-    Prefixes = routing_util:dest_prefixes(),
+    Prefixes = rabbit_routing_util:dest_prefixes(),
     [case Header of
          {?HEADER_REPLY_TO, V} ->
              case lists:any(fun (P) -> lists:prefix(P, V) end, Prefixes) of

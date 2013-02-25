@@ -134,7 +134,7 @@ headers_post_process_noop_replyto_test() ->
     [begin
          Headers = [{"reply-to", Prefix ++ "/something"}],
          Headers = rabbit_stomp_util:headers_post_process(Headers)
-     end || Prefix <- routing_util:dest_prefixes()].
+     end || Prefix <- rabbit_routing_util:dest_prefixes()].
 
 headers_post_process_noop2_test() ->
     Headers  = [{"header1", "1"},
