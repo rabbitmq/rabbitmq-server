@@ -481,7 +481,7 @@ handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism        = {symbol, Mechanism},
     AuthMechanism = auth_mechanism_to_module(list_to_binary(Mechanism), Sock),
     State = State0#v1{connection       =
                           Connection#connection{
-                            auth_mechanism    = AuthMechanism,
+                            auth_mechanism    = {Mechanism, AuthMechanism},
                             auth_state        = AuthMechanism:init(Sock)},
                       connection_state = securing},
     auth_phase_1_0(Response, State);
@@ -624,15 +624,14 @@ auth_mechanisms(Sock) ->
 
 auth_phase_1_0(Response,
                State = #v1{connection = Connection =
-                               #connection{auth_mechanism = AuthMechanism,
+                               #connection{auth_mechanism = {Name, AuthMechanism},
                                            auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Msg, Args} ->
             protocol_error(
               ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~s login refused: ~s",
-              [proplists:get_value(name, AuthMechanism:description()),
-               io_lib:format(Msg, Args)]);
+              [Name, io_lib:format(Msg, Args)]);
         {protocol_error, Msg, Args} ->
             protocol_error(?V_1_0_AMQP_ERROR_DECODE_ERROR, Msg, Args);
         {challenge, Challenge, AuthState1} ->
