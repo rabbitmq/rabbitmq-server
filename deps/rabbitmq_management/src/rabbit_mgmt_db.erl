@@ -709,7 +709,7 @@ record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
                     rabbit_mgmt_stats:blank();
               E  -> E
           end,
-    ets:insert(ETS, {Id, rabbit_mgmt_stats:add(TS, Diff, Old)}).
+    ets:insert(ETS, {Id, rabbit_mgmt_stats:record(TS, Diff, Old)}).
 
 %%----------------------------------------------------------------------------
 %% Internal, querying side

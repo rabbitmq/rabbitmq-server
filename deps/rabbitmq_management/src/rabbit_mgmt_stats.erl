@@ -18,7 +18,7 @@
 
 -include("rabbit_mgmt.hrl").
 
--export([blank/0, is_blank/1, add/3, format/3, sum/1, remove_old_samples/2]).
+-export([blank/0, is_blank/1, record/3, format/3, sum/1, remove_old_samples/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -32,7 +32,7 @@ is_blank(S) -> S =:= blank().
 %% Event-time
 %%----------------------------------------------------------------------------
 
-add(TS, Diff, Stats = #stats{diffs = Diffs}) ->
+record(TS, Diff, Stats = #stats{diffs = Diffs}) ->
     Diffs2 = case gb_trees:lookup(TS, Diffs) of
                  {value, Total} -> gb_trees:update(TS, Diff + Total, Diffs);
                  none           -> gb_trees:insert(TS, Diff, Diffs)
