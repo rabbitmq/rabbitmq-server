@@ -33,7 +33,6 @@
          code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
 
 %% For testing
--export([remove_old_samples/2, format_sample_details/3]).
 -export([override_lookups/1, reset_lookups/0]).
 
 -import(rabbit_misc, [pget/3, pset/3]).
@@ -188,7 +187,6 @@ get_overview(R)             -> safe_call({get_overview, all, R}).
 
 override_lookups(Lookups)   -> safe_call({override_lookups, Lookups}).
 reset_lookups()             -> safe_call(reset_lookups).
-
 
 safe_call(Term) -> safe_call(Term, []).
 
@@ -395,9 +393,6 @@ ceil0(MS, State = #state{interval = Interval}) -> case floor0(MS, State) of
                                                       MS    -> MS;
                                                       Floor -> Floor + Interval
                                                   end.
-
-blank_stats() -> #stats{diffs = gb_trees:empty(), base = 0}.
-is_blank_stats(S) -> S =:= blank_stats().
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
@@ -711,17 +706,10 @@ record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
                         _ ->
                             ok
                     end,
-                    blank_stats();
+                    rabbit_mgmt_stats:blank();
               E  -> E
           end,
-    ets:insert(ETS, {Id, add(TS, Diff, Old)}).
-
-add(TS, Diff, Stats = #stats{diffs = Diffs}) ->
-    Diffs2 = case gb_trees:lookup(TS, Diffs) of
-                 {value, Total} -> gb_trees:update(TS, Diff + Total, Diffs);
-                 none           -> gb_trees:insert(TS, Diff, Diffs)
-             end,
-    Stats#stats{diffs = Diffs2}.
+    ets:insert(ETS, {Id, rabbit_mgmt_stats:add(TS, Diff, Old)}).
 
 %%----------------------------------------------------------------------------
 %% Internal, querying side
@@ -858,9 +846,9 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
 
 format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
     lists:append(
-      [case is_blank_stats(Stats) of
+      [case rabbit_mgmt_stats:is_blank(Stats) of
            true  -> [];
-           false -> {Details, Counter} = format_sample_details(
+           false -> {Details, Counter} = rabbit_mgmt_stats:format(
                                            pick_range(K, Ranges),
                                            Stats, Interval),
                     [{K,              Counter},
@@ -875,95 +863,6 @@ pick_range(K, {RangeL, RangeM, RangeD}) ->
         {false, true, false} -> RangeM;
         {false, false, true} -> RangeD
     end.
-
-format_sample_details(no_range, #stats{diffs = Diffs, base = Base}, Interval) ->
-    Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
-    RangePoint = ((Now div Interval) * Interval) - Interval,
-    Count = sum_entire_tree(gb_trees:iterator(Diffs), Base),
-    {[{rate, format_sample_details_rate(
-               Diffs, RangePoint, Interval, Interval)}], Count};
-
-format_sample_details(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
-    RangePoint = Range#range.last - Interval,
-    {Samples, Count} = extract_samples(
-                         Range, Base, gb_trees:iterator(Diffs), []),
-    Part1 = [{rate,    format_sample_details_rate(
-                         Diffs, RangePoint, Range#range.incr, Interval)},
-             {samples, Samples}],
-    Length = length(Samples),
-    Part2 = case Length > 1 of
-                true  -> [{sample, S2}, {timestamp, T2}] = hd(Samples),
-                         [{sample, S1}, {timestamp, T1}] = lists:last(Samples),
-                         Total = lists:sum([pget(sample, I) || I <- Samples]),
-                         [{avg_rate, (S2 - S1) * 1000 / (T2 - T1)},
-                          {avg,      Total / Length}];
-                false -> []
-            end,
-    {Part1 ++ Part2, Count}.
-
-format_sample_details_rate(Diffs, RangePoint, Incr, Interval) ->
-    case nth_largest(Diffs, 2) of
-        false   -> 0.0;
-        {TS, S} -> case TS - RangePoint of %% [0]
-                       D when D =< Incr andalso D >= 0 -> S * 1000 / Interval;
-                       _                               -> 0.0
-                   end
-    end.
-
-%% [0] Only display the rate if it's live - i.e. ((the end of the
-%% range) - interval) corresponds to the second to last data point we
-%% have. If the end of the range is earlier we have gone silent, if
-%% it's later we have been asked for a range back in time (in which
-%% case showing the correct instantaneous rate would be quite a faff,
-%% and probably unwanted). Why the second to last? Because data is
-%% still arriving for the last...
-nth_largest(Tree, N) ->
-    case gb_trees:is_empty(Tree) of
-        true              -> false;
-        false when N == 1 -> gb_trees:largest(Tree);
-        false             -> {_, _, Tree2} = gb_trees:take_largest(Tree),
-                             nth_largest(Tree2, N - 1)
-    end.
-
-sum_entire_tree(Iter, Acc) ->
-    case gb_trees:next(Iter) of
-        none            -> Acc;
-        {_TS, S, Iter2} -> sum_entire_tree(Iter2, Acc + S)
-    end.
-
-%% What we want to do here is: given the #range{}, provide a set of
-%% samples such that we definitely provide a set of samples which
-%% covers the exact range requested, despite the fact that we might
-%% not have it. We need to spin up over the entire range of the
-%% samples we *do* have since they are diff-based (and we convert to
-%% absolute values here).
-extract_samples(Range = #range{first = Next}, Base, It, Samples) ->
-    case gb_trees:next(It) of
-        {TS, S, It2} -> extract_samples1(Range, Base, TS,   S, It2, Samples);
-        none         -> extract_samples1(Range, Base, Next, 0, It,  Samples)
-    end.
-
-extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
-                 Base, TS, S, It, Samples) ->
-    if
-        %% We've gone over the range. Terminate.
-        Next > Last ->
-            {Samples, Base};
-        %% We've hit bang on a sample. Record it and move to the next.
-        Next =:= TS ->
-            extract_samples(Range#range{first = Next + Incr}, Base + S, It,
-                            append(Base + S, Next, Samples));
-        %% We haven't yet hit the beginning of our range.
-        Next > TS ->
-            extract_samples(Range, Base + S, It, Samples);
-        %% We have a valid sample, but we haven't used it up
-        %% yet. Append it and loop around.
-        Next < TS ->
-            extract_samples1(Range#range{first = Next + Incr}, Base, TS, S, It,
-                             append(Base, Next, Samples))
-    end.
-
-append(S, TS, Samples) -> [[{sample, S}, {timestamp, TS}] | Samples].
 
 %% We do this when retrieving the queue record rather than when
 %% storing it since the memory use will drop *after* we find out about
@@ -1010,27 +909,9 @@ augment_consumer(Obj) ->
 %%----------------------------------------------------------------------------
 
 overview_sum(Type, VHostStats) ->
-    Stats = [pget(Type, VHost, blank_stats()) || VHost <- VHostStats],
-    {Type, sum_trees(Stats)}.
-
-sum_trees([]) -> blank_stats();
-
-sum_trees([Stats | StatsN]) ->
-    lists:foldl(
-      fun (#stats{diffs = D1, base = B1}, #stats{diffs = D2, base = B2}) ->
-              #stats{diffs = add_trees(D1, gb_trees:iterator(D2)),
-                     base  = B1 + B2}
-      end, Stats, StatsN).
-
-add_trees(Tree, It) ->
-    case gb_trees:next(It) of
-        none        -> Tree;
-        {K, V, It2} -> add_trees(
-                         case gb_trees:lookup(K, Tree) of
-                             {value, V2} -> gb_trees:update(K, V + V2, Tree);
-                             none        -> gb_trees:insert(K, V, Tree)
-                         end, It2)
-    end.
+    Stats = [pget(Type, VHost, rabbit_mgmt_stats:blank())
+             || VHost <- VHostStats],
+    {Type, rabbit_mgmt_stats:sum(Stats)}.
 
 %%----------------------------------------------------------------------------
 %% Internal, query-time augmentation
@@ -1089,60 +970,16 @@ remove_old_samples_all(State = #state{aggregated_stats = ETS}) ->
 remove_old_samples_it('$end_of_table', _, _, _) ->
     ok;
 remove_old_samples_it({Matches, Continuation}, Policies, Now, ETS) ->
-    [remove_old_samples_single(Key, Stats, Policies, Now, ETS)
+    [remove_old_samples(Key, Stats, Policies, Now, ETS)
      || [{Key, Stats}] <- Matches],
     remove_old_samples_it(ets:match(Continuation), Policies, Now, ETS).
 
-remove_old_samples_single({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
+remove_old_samples({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
     Policy = pget(retention_policy(Type), Policies),
-    case remove_old_samples({Policy, Now}, Stats) of
+    case rabbit_mgmt_stats:remove_old_samples({Policy, Now}, Stats) of
         Stats  -> ok;
         Stats2 -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
     end.
-
-remove_old_samples(Cutoff, #stats{diffs = Diffs, base = Base}) ->
-    List = lists:reverse(gb_trees:to_list(Diffs)),
-    remove_old_samples(Cutoff, List, [], Base).
-
-%% Go through the list, amalgamating all too-old samples with the next
-%% newest keepable one [0] (we move samples forward in time since the
-%% semantics of a sample is "we had this many x by this time"). If the
-%% sample is too old, but would not be too old if moved to a rounder
-%% timestamp which does not exist then invent one and move it there
-%% [1]. But if it's just outright too old, move it to the base [2].
-remove_old_samples(_Cutoff, [], Keep, Base) ->
-    #stats{diffs = gb_trees:from_orddict(Keep), base = Base};
-remove_old_samples(Cutoff, [H = {TS, S} | T], Keep, Base) ->
-    {NewKeep, NewBase} =
-        case keep(Cutoff, TS) of
-            keep                       -> {[H | Keep],           Base};
-            drop                       -> {Keep,             S + Base}; %% [2]
-            {move, D} when Keep =:= [] -> {[{TS + D, S}],        Base}; %% [1]
-            {move, _}                  -> [{KTS, KS} | KT] = Keep,
-                                          {[{KTS, KS + S} | KT], Base}  %% [0]
-        end,
-    remove_old_samples(Cutoff, T, NewKeep, NewBase).
-
-keep({Policy, Now}, TS) ->
-    lists:foldl(fun ({AgeSec, DivisorSec}, Action) ->
-                        prefer_action(
-                          Action,
-                          case (Now - TS) =< (AgeSec * 1000) of
-                              true  -> DivisorMillis = DivisorSec * 1000,
-                                       case TS rem DivisorMillis of
-                                           0   -> keep;
-                                           Rem -> {move, DivisorMillis - Rem}
-                                       end;
-                              false -> drop
-                          end)
-                end, drop, Policy).
-
-prefer_action(keep,              _) -> keep;
-prefer_action(_,              keep) -> keep;
-prefer_action({move, A}, {move, B}) -> {move, lists:min([A, B])};
-prefer_action({move, A},      drop) -> {move, A};
-prefer_action(drop,      {move, A}) -> {move, A};
-prefer_action(drop,           drop) -> drop.
 
 retention_policy(vhost_stats)            -> global;
 retention_policy(queue_stats)            -> basic;

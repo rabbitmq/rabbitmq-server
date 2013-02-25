@@ -21,8 +21,9 @@
 
 remove_old_samples_test() ->
     T = fun (Before, After) ->
-                ?assertEqual(After, unstats(rabbit_mgmt_db:remove_old_samples(
-                                              cutoff(), stats(Before))))
+                ?assertEqual(After, unstats(
+                                      rabbit_mgmt_stats:remove_old_samples(
+                                        cutoff(), stats(Before))))
         end,
     %% Cut off old sample, move to base
     T({[{8999, 123}, {9000, 456}], 0},
@@ -48,7 +49,7 @@ format_sample_details_test() ->
     Interval = 10,
     T = fun ({First, Last, Incr}, Stats, Results) ->
                 ?assertEqual(format(Results),
-                             rabbit_mgmt_db:format_sample_details(
+                             rabbit_mgmt_stats:format(
                                #range{first = First * 1000,
                                       last  = Last * 1000,
                                       incr  = Incr * 1000},
@@ -89,7 +90,7 @@ format_sample_details_no_range_test() ->
     Interval = 10,
     T = fun (Stats, Results) ->
                 ?assertEqual(format(Results),
-                             rabbit_mgmt_db:format_sample_details(
+                             rabbit_mgmt_stats:format(
                                no_range, stats(Stats), Interval * 1000))
         end,
 
