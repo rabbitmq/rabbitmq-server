@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_headers).
@@ -37,8 +37,7 @@
 -endif.
 
 description() ->
-    [{name, <<"headers">>},
-     {description, <<"AMQP headers exchange, as per the AMQP specification">>}].
+    [{description, <<"AMQP headers exchange, as per the AMQP specification">>}].
 
 serialise_events() -> false.
 

@@ -11,14 +11,12 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_backing_queue).
 
 -ifdef(use_specs).
-
--export_type([async_callback/0]).
 
 %% We can't specify a per-queue ack/state with callback signatures
 -type(ack()   :: any()).

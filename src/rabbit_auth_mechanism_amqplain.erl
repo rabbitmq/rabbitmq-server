@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_mechanism_amqplain).
@@ -33,8 +33,7 @@
 %% referring generically to "SASL security mechanism", i.e. the above.
 
 description() ->
-    [{name, <<"AMQPLAIN">>},
-     {description, <<"QPid AMQPLAIN mechanism">>}].
+    [{description, <<"QPid AMQPLAIN mechanism">>}].
 
 should_offer(_Sock) ->
     true.

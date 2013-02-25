@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -355,6 +355,8 @@ handle_app_error(App, Reason) ->
     throw({could_not_start, App, Reason}).
 
 start_it(StartFun) ->
+    Marker = spawn_link(fun() -> receive stop -> ok end end),
+    register(rabbit_boot, Marker),
     try
         StartFun()
     catch
@@ -363,11 +365,17 @@ start_it(StartFun) ->
          _:Reason ->
             boot_error(Reason, erlang:get_stacktrace())
     after
+        unlink(Marker),
+        Marker ! stop,
         %% give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
+    case whereis(rabbit_boot) of
+        undefined -> ok;
+        _         -> await_startup()
+    end,
     rabbit_log:info("Stopping RabbitMQ~n"),
     ok = app_utils:stop_applications(app_shutdown_order()).
 
@@ -435,8 +443,9 @@ start(normal, []) ->
     case erts_version_check() of
         ok ->
             {ok, Vsn} = application:get_key(rabbit, vsn),
-            error_logger:info_msg("Starting RabbitMQ ~s on Erlang ~s~n",
-                                  [Vsn, erlang:system_info(otp_release)]),
+            error_logger:info_msg("Starting RabbitMQ ~s on Erlang ~s~n~s~n~s~n",
+                                  [Vsn, erlang:system_info(otp_release),
+                                   ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
             print_banner(),
@@ -699,10 +708,12 @@ force_event_refresh() ->
 log_broker_started(Plugins) ->
     rabbit_misc:with_local_io(
       fun() ->
+              PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
+                                             || P <- Plugins]),
               error_logger:info_msg(
-                "Server startup complete; plugins are: ~p~n", [Plugins]),
-              io:format("~n            Broker running with ~p plugins.~n",
-                        [length(Plugins)])
+                "Server startup complete; ~b plugins started.~n~s",
+                [length(Plugins), PluginList]),
+              io:format(" completed with ~p plugins.~n", [length(Plugins)])
       end).
 
 erts_version_check() ->
@@ -716,40 +727,38 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
-    io:format("~n##  ##      ~s ~s. ~s~n##  ##      ~s~n##########  ~n",
-              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
-    io:format("######  ##  Logs: ~s~n##########        ~s~n",
-              [log_location(kernel), log_location(sasl)]).
+    io:format("~n              ~s ~s. ~s"
+              "~n  ##  ##      ~s"
+              "~n  ##  ##"
+              "~n  ##########  Logs: ~s"
+              "~n  ######  ##        ~s"
+              "~n  ##########"
+              "~n              Starting broker...",
+              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE,
+               log_location(kernel), log_location(sasl)]).
 
 log_banner() ->
-    {ok, Product} = application:get_key(id),
-    {ok, Version} = application:get_key(vsn),
     Settings = [{"node",           node()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
                 {"cookie hash",    rabbit_nodes:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
-                {"database dir",   rabbit_mnesia:dir()},
-                {"erlang version", erlang:system_info(otp_release)}],
+                {"database dir",   rabbit_mnesia:dir()}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = fun (K, V) ->
                      rabbit_misc:format(
                        "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n", [K, V])
              end,
     Banner = iolist_to_binary(
-               rabbit_misc:format(
-                 "~s ~s~n~s~n~s~n",
-                 [Product, Version, ?COPYRIGHT_MESSAGE,
-                  ?INFORMATION_MESSAGE]) ++
-                   [case S of
-                        {"config file(s)" = K, []} ->
-                            Format(K, "(none)");
-                        {"config file(s)" = K, [V0 | Vs]} ->
-                            Format(K, V0), [Format("", V) || V <- Vs];
-                        {K, V} ->
-                            Format(K, V)
-                    end || S <- Settings]),
+               [case S of
+                    {"config file(s)" = K, []} ->
+                        Format(K, "(none)");
+                    {"config file(s)" = K, [V0 | Vs]} ->
+                        Format(K, V0), [Format("", V) || V <- Vs];
+                    {K, V} ->
+                        Format(K, V)
+                end || S <- Settings]),
     error_logger:info_msg("~s", [Banner]).
 
 home_dir() ->

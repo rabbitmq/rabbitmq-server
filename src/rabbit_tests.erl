@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_tests).
@@ -61,6 +61,7 @@ all_tests() ->
     passed = test_runtime_parameters(),
     passed = test_policy_validation(),
     passed = test_server_status(),
+    passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed =
         do_if_secondary_node(
@@ -911,10 +912,10 @@ test_arguments_parser() ->
 test_dynamic_mirroring() ->
     %% Just unit tests of the node selection logic, see multi node
     %% tests for the rest...
-    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, {OldM, OldSs}, All) ->
+    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, CurrentState, All) ->
                    {NewM, NewSs0} =
                        rabbit_mirror_queue_misc:suggested_queue_nodes(
-                         Policy, Params, {OldM, OldSs}, All),
+                         Policy, Params, CurrentState, All),
                    NewSs1 = lists:sort(NewSs0),
                    case dm_list_match(NewSs, NewSs1, ExtraSs) of
                        ok    -> ok;
@@ -922,28 +923,36 @@ test_dynamic_mirroring() ->
                    end
            end,
 
-    Test({a,[b,c],0},<<"all">>,'_',{a,[]},   [a,b,c]),
-    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c]},[a,b,c]),
-    Test({a,[b,c],0},<<"all">>,'_',{a,[d]},  [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[],   []},   [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c],[b,c]},[a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[d],  [d]},  [a,b,c]),
+
+    N = fun (Atoms) -> [list_to_binary(atom_to_list(A)) || A <- Atoms] end,
 
     %% Add a node
-    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
-    Test({b,[a,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([a,b,c]),{a,[b],[b]},[a,b,c,d]),
+    Test({b,[a,c],0},<<"nodes">>,N([a,b,c]),{b,[a],[a]},[a,b,c,d]),
     %% Add two nodes and drop one
-    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([a,b,c]),{a,[d],[d]},[a,b,c,d]),
     %% Don't try to include nodes that are not running
-    Test({a,[b],  0},<<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
+    Test({a,[b],  0},<<"nodes">>,N([a,b,f]),{a,[b],[b]},[a,b,c,d]),
     %% If we can't find any of the nodes listed then just keep the master
-    Test({a,[],   0},<<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
-    %% And once that's happened, still keep the master even when not listed
-    Test({a,[b,c],0},<<"nodes">>,[<<"b">>,<<"c">>],        {a,[]}, [a,b,c,d]),
+    Test({a,[],   0},<<"nodes">>,N([f,g,h]),{a,[b],[b]},[a,b,c,d]),
+    %% And once that's happened, still keep the master even when not listed,
+    %% if nothing is synced
+    Test({a,[b,c],0},<<"nodes">>,N([b,c]),  {a,[], []}, [a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([b,c]),  {a,[b],[]}, [a,b,c,d]),
+    %% But if something is synced we can lose the master - but make
+    %% sure we pick the new master from the nodes which are synced!
+    Test({b,[c],  0},<<"nodes">>,N([b,c]),  {a,[b],[b]},[a,b,c,d]),
+    Test({b,[c],  0},<<"nodes">>,N([c,b]),  {a,[b],[b]},[a,b,c,d]),
 
-    Test({a,[],   1},<<"exactly">>,2,{a,[]},   [a,b,c,d]),
-    Test({a,[],   2},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
-    Test({a,[c],  0},<<"exactly">>,2,{a,[c]},  [a,b,c,d]),
-    Test({a,[c],  1},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
-    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
-    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
+    Test({a,[],   1},<<"exactly">>,2,{a,[],   []},   [a,b,c,d]),
+    Test({a,[],   2},<<"exactly">>,3,{a,[],   []},   [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c],  [c]},  [a,b,c,d]),
+    Test({a,[c],  1},<<"exactly">>,3,{a,[c],  [c]},  [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d],[c,d]},[a,b,c,d]),
+    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d],[c,d]},[a,b,c,d]),
 
     passed.
 
@@ -1061,7 +1070,11 @@ test_runtime_parameters() ->
     ok = control_action(clear_parameter, ["test", "maybe"]),
     {error_string, _} =
         control_action(clear_parameter, ["test", "neverexisted"]),
+
+    %% We can delete for a component that no longer exists
+    Good(["test", "good", "\"ignore\""]),
     rabbit_runtime_parameters_test:unregister(),
+    ok = control_action(clear_parameter, ["test", "good"]),
     passed.
 
 test_policy_validation() ->
@@ -1119,10 +1132,7 @@ test_server_status() ->
             rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 
     %% list connections
-    [#listener{host = H, port = P} | _] =
-        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
-              N =:= node()],
-
+    {H, P} = find_listener(),
     {ok, C} = gen_tcp:connect(H, P, []),
     gen_tcp:send(C, <<"AMQP", 0, 0, 9, 1>>),
     timer:sleep(100),
@@ -1160,6 +1170,25 @@ test_server_status() ->
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
+
+test_amqp_connection_refusal() ->
+    [passed = test_amqp_connection_refusal(V) ||
+        V <- [<<"AMQP",9,9,9,9>>, <<"AMQP",0,1,0,0>>, <<"XXXX",0,0,9,1>>]],
+    passed.
+
+test_amqp_connection_refusal(Header) ->
+    {H, P} = find_listener(),
+    {ok, C} = gen_tcp:connect(H, P, [binary, {active, false}]),
+    ok = gen_tcp:send(C, Header),
+    {ok, <<"AMQP",0,0,9,1>>} = gen_tcp:recv(C, 8, 100),
+    ok = gen_tcp:close(C),
+    passed.
+
+find_listener() ->
+    [#listener{host = H, port = P} | _] =
+        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
+              N =:= node()],
+    {H, P}.
 
 test_writer() -> test_writer(none).
 

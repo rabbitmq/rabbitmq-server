@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_reader).
@@ -295,28 +295,37 @@ recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
 
 mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
     case rabbit_net:recv(Sock) of
-        {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
-                                                  buf_len = BufLen + size(Data),
-                                                  pending_recv = false});
-        closed          -> maybe_emit_stats(State),
-                           case State#v1.connection_state of
-                               closed -> State;
-                               _      -> throw(connection_closed_abruptly)
-                           end;
-        {error, Reason} -> maybe_emit_stats(State),
-                           throw({inet_error, Reason});
-        {other, Other}  -> handle_other(Other, Deb, State)
+        {data, Data} ->
+            recvloop(Deb, State#v1{buf = [Data | Buf],
+                                   buf_len = BufLen + size(Data),
+                                   pending_recv = false});
+        closed when State#v1.connection_state =:= closed ->
+            ok;
+        closed ->
+            maybe_emit_stats(State),
+            throw(connection_closed_abruptly);
+        {error, Reason} ->
+            maybe_emit_stats(State),
+            throw({inet_error, Reason});
+        {other, {system, From, Request}} ->
+            sys:handle_system_msg(Request, From, State#v1.parent,
+                                  ?MODULE, Deb, State);
+        {other, Other}  ->
+            case handle_other(Other, State) of
+                stop     -> ok;
+                NewState -> recvloop(Deb, NewState)
+            end
     end.
 
-handle_other({conserve_resources, Conserve}, Deb,
+handle_other({conserve_resources, Conserve},
              State = #v1{throttle = Throttle}) ->
     Throttle1 = Throttle#throttle{conserve_resources = Conserve},
-    recvloop(Deb, control_throttle(State#v1{throttle = Throttle1}));
-handle_other({channel_closing, ChPid}, Deb, State) ->
+    control_throttle(State#v1{throttle = Throttle1});
+handle_other({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     channel_cleanup(ChPid),
-    mainloop(Deb, maybe_close(control_throttle(State)));
-handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
+    maybe_close(control_throttle(State));
+handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     terminate(io_lib:format("broker forced connection closure "
                             "with reason '~w'", [Reason]), State),
     %% this is what we are expected to do according to
@@ -329,59 +338,58 @@ handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
     %% quickly.
     maybe_emit_stats(State),
     exit(Reason);
-handle_other({channel_exit, _Channel, E = {writer, send_failed, _Error}},
-             _Deb, State) ->
+handle_other({channel_exit, _Channel, E = {writer, send_failed, _E}}, State) ->
     maybe_emit_stats(State),
     throw(E);
-handle_other({channel_exit, Channel, Reason}, Deb, State) ->
-    mainloop(Deb, handle_exception(State, Channel, Reason));
-handle_other({'DOWN', _MRef, process, ChPid, Reason}, Deb, State) ->
-    mainloop(Deb, handle_dependent_exit(ChPid, Reason, State));
-handle_other(terminate_connection, _Deb, State) ->
-    State;
-handle_other(handshake_timeout, Deb, State)
+handle_other({channel_exit, Channel, Reason}, State) ->
+    handle_exception(State, Channel, Reason);
+handle_other({'DOWN', _MRef, process, ChPid, Reason}, State) ->
+    handle_dependent_exit(ChPid, Reason, State);
+handle_other(terminate_connection, State) ->
+    maybe_emit_stats(State),
+    stop;
+handle_other(handshake_timeout, State)
   when ?IS_RUNNING(State) orelse ?IS_STOPPING(State) ->
-    mainloop(Deb, State);
-handle_other(handshake_timeout, _Deb, State) ->
+    State;
+handle_other(handshake_timeout, State) ->
+    maybe_emit_stats(State),
     throw({handshake_timeout, State#v1.callback});
-handle_other(heartbeat_timeout, Deb, State = #v1{connection_state = closed}) ->
-    mainloop(Deb, State);
-handle_other(heartbeat_timeout, _Deb, State = #v1{connection_state = S}) ->
+handle_other(heartbeat_timeout, State = #v1{connection_state = closed}) ->
+    State;
+handle_other(heartbeat_timeout, State = #v1{connection_state = S}) ->
     maybe_emit_stats(State),
     throw({heartbeat_timeout, S});
-handle_other({'$gen_call', From, {shutdown, Explanation}}, Deb, State) ->
+handle_other({'$gen_call', From, {shutdown, Explanation}}, State) ->
     {ForceTermination, NewState} = terminate(Explanation, State),
     gen_server:reply(From, ok),
     case ForceTermination of
-        force  -> ok;
-        normal -> mainloop(Deb, NewState)
+        force  -> stop;
+        normal -> NewState
     end;
-handle_other({'$gen_call', From, info}, Deb, State) ->
+handle_other({'$gen_call', From, info}, State) ->
     gen_server:reply(From, infos(?INFO_KEYS, State)),
-    mainloop(Deb, State);
-handle_other({'$gen_call', From, {info, Items}}, Deb, State) ->
+    State;
+handle_other({'$gen_call', From, {info, Items}}, State) ->
     gen_server:reply(From, try {ok, infos(Items, State)}
                            catch Error -> {error, Error}
                            end),
-    mainloop(Deb, State);
-handle_other({'$gen_cast', force_event_refresh}, Deb, State)
+    State;
+handle_other({'$gen_cast', force_event_refresh}, State)
   when ?IS_RUNNING(State) ->
     rabbit_event:notify(connection_created,
                         [{type, network} | infos(?CREATION_EVENT_KEYS, State)]),
-    mainloop(Deb, State);
-handle_other({'$gen_cast', force_event_refresh}, Deb, State) ->
+    State;
+handle_other({'$gen_cast', force_event_refresh}, State) ->
     %% Ignore, we will emit a created event once we start running.
-    mainloop(Deb, State);
-handle_other(ensure_stats, Deb, State) ->
-    mainloop(Deb, ensure_stats_timer(State));
-handle_other(emit_stats, Deb, State) ->
-    mainloop(Deb, emit_stats(State));
-handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
-    sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
-handle_other({bump_credit, Msg}, Deb, State) ->
+    State;
+handle_other(ensure_stats, State) ->
+    ensure_stats_timer(State);
+handle_other(emit_stats, State) ->
+    emit_stats(State);
+handle_other({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
-    recvloop(Deb, control_throttle(State));
-handle_other(Other, _Deb, State) ->
+    control_throttle(State);
+handle_other(Other, State) ->
     %% internal error -> something worth dying for
     maybe_emit_stats(State),
     exit({unexpected_message, Other}).
@@ -443,13 +451,13 @@ close_connection(State = #v1{queue_collector = Collector,
 
 handle_dependent_exit(ChPid, Reason, State) ->
     case {channel_cleanup(ChPid), termination_kind(Reason)} of
-        {undefined, uncontrolled} ->
-            exit({abnormal_dependent_exit, ChPid, Reason});
-        {_Channel, controlled} ->
-            maybe_close(control_throttle(State));
-        {Channel, uncontrolled} ->
-            maybe_close(handle_exception(control_throttle(State),
-                                         Channel, Reason))
+        {undefined,   controlled} -> State;
+        {undefined, uncontrolled} -> exit({abnormal_dependent_exit,
+                                           ChPid, Reason});
+        {_Channel,    controlled} -> maybe_close(control_throttle(State));
+        {Channel,   uncontrolled} -> State1 = handle_exception(
+                                                State, Channel, Reason),
+                                     maybe_close(control_throttle(State1))
     end.
 
 terminate_channels() ->
@@ -642,7 +650,10 @@ process_frame(Frame, Channel, State) ->
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     channel_cleanup(ChPid),
-    State;
+    %% This is not strictly necessary, but more obviously
+    %% correct. Also note that we do not need to call maybe_close/1
+    %% since we cannot possibly be in the 'closing' state.
+    control_throttle(State);
 post_process_frame({content_header, _, _, _, _}, _ChPid, State) ->
     maybe_block(State);
 post_process_frame({content_body, _}, _ChPid, State) ->
@@ -705,13 +716,8 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 %% ... and finally, the 1.0 spec is crystal clear!  Note that the
-%% TLS uses a different protocol number, and would go here.
-handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
-    become_1_0(amqp, {0, 1, 0, 0}, State);
-
-%% 3 stands for "SASL"
-handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
-    become_1_0(sasl, {3, 1, 0, 0}, State);
+handle_input(handshake, <<"AMQP", Id, 1, 0, 0>>, State) ->
+    become_1_0(Id, State);
 
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_version, {A, B, C, D}});
@@ -742,9 +748,12 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                              connection_state = starting},
                     frame_header, 7).
 
-refuse_connection(Sock, Exception) ->
-    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
+refuse_connection(Sock, Exception, {A, B, C, D}) ->
+    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",A,B,C,D>>) end),
     throw(Exception).
+
+refuse_connection(Sock, Exception) ->
+    refuse_connection(Sock, Exception, {0, 0, 9, 1}).
 
 ensure_stats_timer(State = #v1{connection_state = running}) ->
     rabbit_event:ensure_stats_timer(State, #v1.stats_timer, emit_stats);
@@ -1017,15 +1026,19 @@ emit_stats(State) ->
 
 %% 1.0 stub
 -ifdef(use_specs).
--spec(become_1_0/3 :: ('amqp' | 'sasl',
-                       {non_neg_integer(), non_neg_integer(),
-                        non_neg_integer(), non_neg_integer()},
-                       #v1{}) -> no_return()).
+-spec(become_1_0/2 :: (non_neg_integer(), #v1{}) -> no_return()).
 -endif.
-become_1_0(Mode, Version, State = #v1{sock = Sock}) ->
+become_1_0(Id, State = #v1{sock = Sock}) ->
     case code:is_loaded(rabbit_amqp1_0_reader) of
-        false -> refuse_connection(Sock, {bad_version, Version});
-        _     -> throw({become, {rabbit_amqp1_0_reader, become,
+        false -> refuse_connection(Sock, amqp1_0_plugin_not_enabled);
+        _     -> Mode = case Id of
+                            0 -> amqp;
+                            3 -> sasl;
+                            _ -> refuse_connection(
+                                   Sock, {unsupported_amqp1_0_protocol_id, Id},
+                                   {3, 1, 0, 0})
+                        end,
+                 throw({become, {rabbit_amqp1_0_reader, init,
                                  [Mode, pack_for_1_0(State)]}})
     end.
 

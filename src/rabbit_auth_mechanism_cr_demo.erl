@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_mechanism_cr_demo).
@@ -37,8 +37,7 @@
 %% SECURE-OK: "My password is ~s", [Password]
 
 description() ->
-    [{name, <<"RABBIT-CR-DEMO">>},
-     {description, <<"RabbitMQ Demo challenge-response authentication "
+    [{description, <<"RabbitMQ Demo challenge-response authentication "
                      "mechanism">>}].
 
 should_offer(_Sock) ->
