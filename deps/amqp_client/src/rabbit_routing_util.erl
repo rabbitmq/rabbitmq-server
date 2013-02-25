@@ -160,8 +160,6 @@ dest_temp_queue(_)                  -> none.
 
 check_exchange(_,            _,       false) ->
     ok;
-check_exchange("amq." ++ _, _Channel, _Validation) ->
-    ok;
 check_exchange(ExchangeName, Channel, true) ->
     XDecl = #'exchange.declare'{ exchange = list_to_binary(ExchangeName),
                                  passive = true },
