@@ -112,28 +112,15 @@ log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
-recvloop(Deb, State) ->
-    try
-        recvloop1(Deb, State)
-    catch
-        _:connection_closed_abruptly ->
-            throw(connection_closed_abruptly);
-        _:Reason ->
-            Trace = erlang:get_stacktrace(),
-            handle_exception(State, 0, {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                       "Reader error: ~p~n~p~n",
-                                       [Reason, Trace]})
-    end.
-
-recvloop1(Deb, State = #v1{pending_recv = true}) ->
+recvloop(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
-recvloop1(Deb, State = #v1{connection_state = blocked}) ->
+recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
-recvloop1(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
+recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
     ok = rabbit_net:setopts(Sock, [{active, once}]),
     mainloop(Deb, State#v1{pending_recv = true});
-recvloop1(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
+recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of
                                     [B] -> B;
                                     _   -> list_to_binary(lists:reverse(Buf))
@@ -268,30 +255,24 @@ maybe_close(State = #v1{connection_state = closing,
 maybe_close(State) ->
     State.
 
-error_frame(Condition, Text) ->
+error_frame(Condition, Fmt, Args) ->
     #'v1_0.error'{condition = Condition,
-                  description = {utf8, list_to_binary(Text)}}.
-
-error_text(Reason, Args) ->
-    rabbit_misc:format(Reason, Args).
+                  description = {utf8, list_to_binary(
+                                         rabbit_misc:format(Fmt, Args))}}.
 
 handle_exception(State = #v1{connection_state = closed}, Channel,
-                 {_Condition, Reason, Args}) ->
-    Text = error_text(Reason, Args),
+                 #'v1_0.error'{description = {utf8, Desc}}) ->
     log(error, "AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
-        [self(), closed, Channel, Text]),
+        [self(), closed, Channel, Desc]),
     State;
 handle_exception(State = #v1{connection_state = CS}, Channel,
-                 {Condition, Reason, Args})
+                 ErrorFrame = #'v1_0.error'{description = {utf8, Desc}})
   when ?IS_RUNNING(State) orelse CS =:= closing ->
-    Text = error_text(Reason, Args),
     log(error, "AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
-        [self(), CS, Channel, Text]),
+        [self(), CS, Channel, Desc]),
     %% TODO: session errors shouldn't force the connection to close
     State1 = close_connection(State),
-    ok = send_on_channel0(
-           State#v1.sock,
-           #'v1_0.close'{error = error_frame(Condition, Text)}),
+    ok = send_on_channel0(State#v1.sock, #'v1_0.close'{error = ErrorFrame}),
     State1;
 handle_exception(State, Channel, Error) ->
     %% We don't trust the client at this point - force them to wait
@@ -313,9 +294,23 @@ is_connection_frame(_)               -> false.
 %% TODO Handle depending on connection state
 %% TODO It'd be nice to only decode up to the descriptor
 
+handle_1_0_frame(Mode, Channel, Payload, State) ->
+    try
+        handle_1_0_frame0(Mode, Channel, Payload, State)
+    catch
+        _:#'v1_0.error'{} = Reason ->
+            handle_exception(State, 0, Reason);
+        _:Reason ->
+            Trace = erlang:get_stacktrace(),
+            handle_exception(State, 0, error_frame(
+                                         ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                         "Reader error: ~p~n~p~n",
+                                         [Reason, Trace]))
+    end.
+
 %% Nothing specifies that connection methods have to be on a
 %% particular channel.
-handle_1_0_frame(_Mode, Channel, Payload,
+handle_1_0_frame0(_Mode, Channel, Payload,
                  State = #v1{ connection_state = CS}) when
       CS =:= closing; CS =:= closed ->
     Sections = parse_1_0_frame(Payload, Channel),
@@ -323,7 +318,7 @@ handle_1_0_frame(_Mode, Channel, Payload,
         true  -> handle_1_0_connection_frame(Sections, State);
         false -> State
     end;
-handle_1_0_frame(Mode, Channel, Payload, State) ->
+handle_1_0_frame0(Mode, Channel, Payload, State) ->
     Sections = parse_1_0_frame(Payload, Channel),
     case {Mode, is_connection_frame(Sections)} of
         {amqp, true}  -> handle_1_0_connection_frame(Sections, State);
