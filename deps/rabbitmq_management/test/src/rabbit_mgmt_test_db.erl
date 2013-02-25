@@ -34,6 +34,8 @@
 %%----------------------------------------------------------------------------
 
 queue_coarse_test() ->
+    rabbit_mgmt_db:override_lookups([{exchange, fun dummy_lookup/1},
+                                     {queue,    fun dummy_lookup/1}]),
     create_q(test, 0),
     create_q(test2, 0),
     stats_q(test, 0, 10),
@@ -48,6 +50,7 @@ queue_coarse_test() ->
     delete_q(test2, 1),
     assert_item(Exp(0), get_vhost(range(0, 1, 1))),
     assert_item(Exp(0), get_overview_q(range(0, 1, 1))),
+    rabbit_mgmt_db:reset_lookups(),
     ok.
 
 connection_coarse_test() ->
