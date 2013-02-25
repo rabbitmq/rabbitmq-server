@@ -783,7 +783,7 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                           Connection#connection{
                             client_properties = ClientProperties,
                             capabilities      = Capabilities,
-                            auth_mechanism    = AuthMechanism,
+                            auth_mechanism    = {Mechanism, AuthMechanism},
                             auth_state        = AuthMechanism:init(Sock)}},
     auth_phase(Response, State);
 
@@ -911,15 +911,14 @@ auth_mechanisms_binary(Sock) ->
 auth_phase(Response,
            State = #v1{connection = Connection =
                            #connection{protocol       = Protocol,
-                                       auth_mechanism = AuthMechanism,
+                                       auth_mechanism = {Name, AuthMechanism},
                                        auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Msg, Args} ->
             rabbit_misc:protocol_error(
               access_refused, "~s login refused: ~s",
-              [proplists:get_value(name, AuthMechanism:description()),
-               io_lib:format(Msg, Args)]);
+              [Name, io_lib:format(Msg, Args)]);
         {protocol_error, Msg, Args} ->
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
@@ -979,10 +978,8 @@ ic(vhost,             #connection{vhost       = VHost})    -> VHost;
 ic(timeout,           #connection{timeout_sec = Timeout})  -> Timeout;
 ic(frame_max,         #connection{frame_max   = FrameMax}) -> FrameMax;
 ic(client_properties, #connection{client_properties = CP}) -> CP;
-ic(auth_mechanism,    #connection{auth_mechanism = none}) ->
-    none;
-ic(auth_mechanism,    #connection{auth_mechanism = Mechanism}) ->
-    proplists:get_value(name, Mechanism:description());
+ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
+ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
