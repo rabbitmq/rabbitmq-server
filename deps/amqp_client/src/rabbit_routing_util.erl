@@ -79,7 +79,8 @@ ensure_endpoint(Dir, Channel, EndPoint, State) ->
     ensure_endpoint(Dir, Channel, EndPoint, [], State).
 
 ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
-    check_exchange(Name, Channel, proplists:get_value(validate, Params, false)),
+    check_exchange(Name, Channel,
+                   proplists:get_value(check_exchange, Params, false)),
     Method = queue_declare_method(#'queue.declare'{}, exchange, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
@@ -110,7 +111,8 @@ ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
     {ok, Queue, State1};
 
 ensure_endpoint(dest, Channel, {exchange, {Name, _}}, Params, State) ->
-    check_exchange(Name, Channel, proplists:get_value(validate, Params, false)),
+    check_exchange(Name, Channel,
+                   proplists:get_value(check_exchange, Params, false)),
     {ok, undefined, State};
 
 ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
@@ -118,7 +120,10 @@ ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
 
 ensure_endpoint(_, _Ch, {Type, Name}, _Params, State)
   when Type =:= reply_queue orelse Type =:= amqqueue ->
-    {ok, list_to_binary(Name), State}.
+    {ok, list_to_binary(Name), State};
+
+ensure_endpoint(_Direction, _Ch, Endpoint, _Params, State) ->
+    throw(invalid_endpoint).
 
 %% --------------------------------------------------------------------------
 
@@ -158,8 +163,9 @@ check_exchange(_,            _,       false) ->
 check_exchange("amq." ++ _, _Channel, _Validation) ->
     ok;
 check_exchange(ExchangeName, Channel, true) ->
-    XDecl = #'exchange.declare'{ exchange = ExchangeName, passive = true },
-    #'exchange.declare_ok'{} = rabbit_channel:call(Channel, XDecl),
+    XDecl = #'exchange.declare'{ exchange = list_to_binary(ExchangeName),
+                                 passive = true },
+    #'exchange.declare_ok'{} = amqp_channel:call(Channel, XDecl),
     ok.
 
 queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
@@ -168,14 +174,11 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
                   false -> Method#'queue.declare'{auto_delete = true,
                                                   exclusive   = true}
               end,
-    case  {Type, proplists:get_value(topic_queue_name_gen, Params)} of
-        {topic, DTQNG} when is_function(DTQNG) ->
-            Method1#'queue.declare'{queue = DTQNG()};
+    case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
+        {topic, SQNG} when is_function(SQNG) ->
+            Method1#'queue.declare'{queue = SQNG()};
         _ ->
-            case proplists:get_value(queue_name_gen, Params) of
-                undefined -> Method1;
-                QG        -> Method1#'queue.declare'{queue = QG()}
-            end
+            Method1
     end.
 
 %% --------------------------------------------------------------------------
