@@ -61,15 +61,13 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
     %% accept more
     accept(State);
 
-handle_info({inet_async, LSock, Ref, {error, closed}},
-            State=#state{sock=LSock, ref=Ref}) ->
-    %% It would be wrong to attempt to restart the acceptor when we
-    %% know this will fail.
-    {stop, normal, State};
-
 handle_info({inet_async, LSock, Ref, {error, Reason}},
             State=#state{sock=LSock, ref=Ref}) ->
-    {stop, {accept_failed, Reason}, State};
+    case Reason of
+        closed       -> {stop, normal, State}; %% listening socket closed
+        econnaborted -> accept(State); %% client sent RST before we accepted
+        _            -> {stop, {accept_failed, Reason}, State}
+    end;
 
 handle_info(_Info, State) ->
     {noreply, State}.
