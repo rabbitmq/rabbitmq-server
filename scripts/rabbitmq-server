@@ -83,6 +83,7 @@ esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 if ! ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+            -boot "${CLEAN_BOOT_FILE}" \
 	    -noinput \
 	    -hidden \
 	    -s rabbit_prelaunch \
