@@ -214,7 +214,7 @@ public class SwiftMQTests extends TestCase {
         route("test",                     "test",                  "",         true);
 
         try {
-            route(QUEUE,                   "/exchange/missing",    "",        false);
+            route(QUEUE,                  "/exchange/missing",    "",        false);
             fail("Missing exchange should fail");
         } catch (Exception e) { }
 
@@ -236,19 +236,10 @@ public class SwiftMQTests extends TestCase {
         route(QUEUE,                       "/amq/queue/test",       "",        true);
         route("/amq/queue/test",           "/amq/queue/test",       "",        true);
 
-        route(QUEUE,                       "/queue",                "",        false);
         route("/exchange/amq.direct/b",    "/exchange/amq.direct",  "a",       false);
         route(QUEUE,                       "/exchange/amq.fanout",  "",        false);
         route(QUEUE,                       "/exchange/amq.headers", "",        false);
         emptyQueue(QUEUE);
-    }
-
-    public void testDynamicAddressing() throws Exception {
-        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
-        Connection conn = new Connection(ctx, host, port, false);
-        conn.connect();
-        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
-        Consumer c = s.createConsumer(INBOUND_WINDOW, QoS.AT_LEAST_ONCE);
     }
 
     private void emptyQueue(String q) throws Exception {

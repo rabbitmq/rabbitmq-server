@@ -162,7 +162,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
             case Address of
                 undefined ->
                     {ok, Dest} = rabbit_routing_util:parse_endpoint(
-                                   Address, true),
+                                   Address, false),
                     {ok, QueueName, RouteState1} =
                       rabbit_routing_util:ensure_endpoint(
                         source, DCh, Dest,
