@@ -39,8 +39,6 @@ init([]) ->
 handle_call({go, Sock0, SockTransform}, _From, undefined) ->
     process_flag(trap_exit, true),
     {ok, Sock} = SockTransform(Sock0),
-    ok = rabbit_misc:throw_on_error(
-           inet_error, fun () -> rabbit_net:tune_buffer_size(Sock) end),
     {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
     log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
     rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
