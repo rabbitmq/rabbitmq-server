@@ -34,8 +34,7 @@
 %%----------------------------------------------------------------------------
 
 description() ->
-    [{name, <<"topic">>},
-     {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
+    [{description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
 serialise_events() -> false.
 

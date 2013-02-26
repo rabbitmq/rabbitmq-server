@@ -31,8 +31,7 @@
                     {enables,     kernel_ready}]}).
 
 description() ->
-    [{name, <<"fanout">>},
-     {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
+    [{description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
 
 serialise_events() -> false.
 
