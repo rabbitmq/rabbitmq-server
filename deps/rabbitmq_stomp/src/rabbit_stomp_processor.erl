@@ -443,7 +443,15 @@ with_destination(Command, Frame, State, Fun) ->
         {ok, DestHdr} ->
             case rabbit_routing_util:parse_endpoint(DestHdr) of
                 {ok, Destination} ->
-                    Fun(Destination, DestHdr, Frame, State);
+                    try
+                        Fun(Destination, DestHdr, Frame, State)
+                    catch
+                        invalid_endpoint ->
+                            error("Invalid destination",
+                                  "'~s' is not a valid destination for '~s'~n",
+                                  [DestHdr, Command],
+                                  State)
+                    end;
                 {error, {invalid_destination, Type, Content}} ->
                     error("Invalid destination",
                           "'~s' is not a valid ~p destination~n",
