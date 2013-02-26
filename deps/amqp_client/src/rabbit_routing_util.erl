@@ -94,13 +94,7 @@ ensure_endpoint(source, Channel, {topic, _}, Params, State) ->
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
-ensure_endpoint(source, Channel, {queue, undefined}, Params, State) ->
-    Method = queue_declare_method(#'queue.declare'{}, queue, Params),
-    #'queue.declare_ok'{queue = Queue} =
-      amqp_channel:call(Channel, Method),
-    {ok, Queue, State};
-
-ensure_endpoint(dest, Channel, {queue, undefined}, Params, State) ->
+ensure_endpoint(_Dir, Channel, {queue, undefined}, _Params, State) ->
     {ok, undefined, State};
 
 ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
