@@ -130,7 +130,7 @@
           %% What the previous info item was for any given
           %% {queue/channel/connection}
           old_stats,
-          remove_old_samples_timer,
+          gc_timer,
           lookups,
           interval}).
 
@@ -149,7 +149,7 @@
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
--define(REMOVE_OLD_SAMPLES_INTERVAL, 5 * 60 * 1000).
+-define(GC_INTERVAL, 5 * 60 * 1000).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -208,7 +208,7 @@ init([]) ->
     rabbit_log:info("Statistics database started.~n"),
     Table = fun () -> ets:new(rabbit_mgmt_db, [ordered_set]) end,
     Tables = orddict:from_list([{Key, Table()} || Key <- ?TABLES]),
-    {ok, set_remove_timer(
+    {ok, set_gc_timer(
            reset_lookups(
              #state{interval               = Interval,
                     tables                 = Tables,
@@ -311,9 +311,9 @@ handle_cast({event, Event}, State) ->
 handle_cast(_Request, State) ->
     noreply(State).
 
-handle_info(remove_old_samples, State) ->
-    remove_old_samples_all(State),
-    noreply(set_remove_timer(State));
+handle_info(gc, State) ->
+    gc_all(State),
+    noreply(set_gc_timer(State));
 
 handle_info(_Info, State) ->
     noreply(State).
@@ -327,10 +327,9 @@ code_change(_OldVsn, State, _Extra) ->
 reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 noreply(NewState) -> {noreply, NewState, hibernate}.
 
-set_remove_timer(State) ->
-    TRef = erlang:send_after(
-             ?REMOVE_OLD_SAMPLES_INTERVAL, self(), remove_old_samples),
-    State#state{remove_old_samples_timer = TRef}.
+set_gc_timer(State) ->
+    TRef = erlang:send_after(?GC_INTERVAL, self(), gc),
+    State#state{gc_timer = TRef}.
 
 reset_lookups(State) ->
     State#state{lookups = [{exchange, fun rabbit_exchange:lookup/1},
@@ -961,22 +960,22 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 %% Internal, event-GCing
 %%----------------------------------------------------------------------------
 
-remove_old_samples_all(State = #state{aggregated_stats = ETS}) ->
+gc_all(State = #state{aggregated_stats = ETS}) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
     Now = floor(erlang:now(), State),
-    remove_old_samples_it(ets:match(ETS, '$1', 1000), Policies, Now, ETS).
+    gc_it(ets:match(ETS, '$1', 1000), Policies, Now, ETS).
 
-remove_old_samples_it('$end_of_table', _, _, _) ->
+gc_it('$end_of_table', _, _, _) ->
     ok;
-remove_old_samples_it({Matches, Continuation}, Policies, Now, ETS) ->
-    [remove_old_samples(Key, Stats, Policies, Now, ETS)
+gc_it({Matches, Continuation}, Policies, Now, ETS) ->
+    [gc(Key, Stats, Policies, Now, ETS)
      || [{Key, Stats}] <- Matches],
-    remove_old_samples_it(ets:match(Continuation), Policies, Now, ETS).
+    gc_it(ets:match(Continuation), Policies, Now, ETS).
 
-remove_old_samples({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
+gc({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
     Policy = pget(retention_policy(Type), Policies),
-    case rabbit_mgmt_stats:remove_old_samples({Policy, Now}, Stats) of
+    case rabbit_mgmt_stats:gc({Policy, Now}, Stats) of
         Stats  -> ok;
         Stats2 -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
     end.

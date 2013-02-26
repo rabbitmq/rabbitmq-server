@@ -19,10 +19,10 @@
 -include("rabbit_mgmt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-remove_old_samples_test() ->
+gc_test() ->
     T = fun (Before, After) ->
                 ?assertEqual(After, unstats(
-                                      rabbit_mgmt_stats:remove_old_samples(
+                                      rabbit_mgmt_stats:gc(
                                         cutoff(), stats(Before))))
         end,
     %% Cut off old sample, move to base
@@ -45,7 +45,7 @@ remove_old_samples_test() ->
       {[], 12}),
     ok.
 
-format_sample_details_test() ->
+format_test() ->
     Interval = 10,
     T = fun ({First, Last, Incr}, Stats, Results) ->
                 ?assertEqual(format(Results),
@@ -86,7 +86,7 @@ format_sample_details_test() ->
     %% TODO more?
     ok.
 
-format_sample_details_no_range_test() ->
+format_no_range_test() ->
     Interval = 10,
     T = fun (Stats, Results) ->
                 ?assertEqual(format(Results),

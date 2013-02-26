@@ -18,7 +18,7 @@
 
 -include("rabbit_mgmt.hrl").
 
--export([blank/0, is_blank/1, record/3, format/3, sum/1, remove_old_samples/2]).
+-export([blank/0, is_blank/1, record/3, format/3, sum/1, gc/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -48,14 +48,14 @@ format(no_range, #stats{diffs = Diffs, base = Base}, Interval) ->
     Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
     RangePoint = ((Now div Interval) * Interval) - Interval,
     Count = sum_entire_tree(gb_trees:iterator(Diffs), Base),
-    {[{rate, format_sample_details_rate(
+    {[{rate, format_rate(
                Diffs, RangePoint, Interval, Interval)}], Count};
 
 format(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
     RangePoint = Range#range.last - Interval,
     {Samples, Count} = extract_samples(
                          Range, Base, gb_trees:iterator(Diffs), []),
-    Part1 = [{rate,    format_sample_details_rate(
+    Part1 = [{rate,    format_rate(
                          Diffs, RangePoint, Range#range.incr, Interval)},
              {samples, Samples}],
     Length = length(Samples),
@@ -69,7 +69,7 @@ format(Range, #stats{diffs = Diffs, base = Base}, Interval) ->
             end,
     {Part1 ++ Part2, Count}.
 
-format_sample_details_rate(Diffs, RangePoint, Incr, Interval) ->
+format_rate(Diffs, RangePoint, Incr, Interval) ->
     case nth_largest(Diffs, 2) of
         false   -> 0.0;
         {TS, S} -> case TS - RangePoint of %% [0]
@@ -156,9 +156,9 @@ add_trees(Tree, It) ->
 %% Event-GCing
 %%----------------------------------------------------------------------------
 
-remove_old_samples(Cutoff, #stats{diffs = Diffs, base = Base}) ->
+gc(Cutoff, #stats{diffs = Diffs, base = Base}) ->
     List = lists:reverse(gb_trees:to_list(Diffs)),
-    remove_old_samples(Cutoff, List, [], Base).
+    gc(Cutoff, List, [], Base).
 
 %% Go through the list, amalgamating all too-old samples with the next
 %% newest keepable one [0] (we move samples forward in time since the
@@ -166,9 +166,9 @@ remove_old_samples(Cutoff, #stats{diffs = Diffs, base = Base}) ->
 %% sample is too old, but would not be too old if moved to a rounder
 %% timestamp which does not exist then invent one and move it there
 %% [1]. But if it's just outright too old, move it to the base [2].
-remove_old_samples(_Cutoff, [], Keep, Base) ->
+gc(_Cutoff, [], Keep, Base) ->
     #stats{diffs = gb_trees:from_orddict(Keep), base = Base};
-remove_old_samples(Cutoff, [H = {TS, S} | T], Keep, Base) ->
+gc(Cutoff, [H = {TS, S} | T], Keep, Base) ->
     {NewKeep, NewBase} =
         case keep(Cutoff, TS) of
             keep                       -> {[H | Keep],           Base};
@@ -177,7 +177,7 @@ remove_old_samples(Cutoff, [H = {TS, S} | T], Keep, Base) ->
             {move, _}                  -> [{KTS, KS} | KT] = Keep,
                                           {[{KTS, KS + S} | KT], Base}  %% [0]
         end,
-    remove_old_samples(Cutoff, T, NewKeep, NewBase).
+    gc(Cutoff, T, NewKeep, NewBase).
 
 keep({Policy, Now}, TS) ->
     lists:foldl(fun ({AgeSec, DivisorSec}, Action) ->
