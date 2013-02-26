@@ -26,7 +26,8 @@
 
 blank() -> #stats{diffs = gb_trees:empty(), base = 0}.
 
-is_blank(S) -> S =:= blank().
+is_blank(#stats{diffs = Diffs, base = 0}) -> gb_trees:is_empty(Diffs);
+is_blank(#stats{}) ->                        false.
 
 %%----------------------------------------------------------------------------
 %% Event-time
