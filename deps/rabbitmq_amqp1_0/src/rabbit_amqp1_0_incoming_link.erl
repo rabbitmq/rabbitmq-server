@@ -185,7 +185,6 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
 
 %% TODO default-outcome and outcomes, dynamic lifetimes
 
-%% TODO this looks to have a lot in common with ensure_source
 ensure_target(Target = #'v1_0.target'{address       = Address,
                                       dynamic       = Dynamic,
                                       durable       = Durable,
@@ -198,57 +197,37 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                      {check_exchange, true}],
     case Dynamic of
         true ->
-            case Address of
-                undefined ->
-                    {ok, Dest} = rabbit_routing_util:parse_endpoint(
-                                   Address, true),
-                    {ok, QueueName, RouteState1} =
-                      rabbit_routing_util:ensure_endpoint(
-                        source, DCh, Dest,
-                        DeclareParams, RouteState),
-                    {ok,
-                     case QueueName of
-                         undefined -> Target;
-                         _         -> Target#'v1_0.target'{address =
-                                                             {utf8, QueueName}}
-                     end,
-                     Link#incoming_link{route_state = RouteState1,
-                                        exchange    = <<"">>,
-                                        routing_key = QueueName}};
-                _Else ->
-                    {error, {both_dynamic_and_address_supplied,
-                             Dynamic, Address}}
-            end;
+            rabbit_amqp1_0_link_util:protocol_error(
+              ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+              "Dynamic targets not supported", []);
         _ ->
-            case Address of
-                {utf8, Destination} ->
-                    case rabbit_routing_util:parse_endpoint(
-                           Destination, true) of
-                        {ok, Dest} ->
-                            {ok, _Queue, RouteState1} =
-                                rabbit_amqp1_0_channel:convert_error(
-                                  fun () ->
-                                          rabbit_routing_util:ensure_endpoint(
-                                            dest, DCh, Dest, DeclareParams,
-                                            RouteState)
-                                  end),
-                            {ExchangeName, RoutingKey} =
-                                rabbit_routing_util:parse_routing(Dest),
-                            {ok, Target,
-                             Link#incoming_link{
-                               route_state = RouteState1,
-                               exchange    = list_to_binary(ExchangeName),
-                               routing_key =
-                                 case RoutingKey of
-                                     undefined -> undefined;
-                                     []        -> undefined;
-                                     _         -> list_to_binary(RoutingKey)
-                                 end}};
-                        {error, _} = E -> E
-                    end;
-                _Else ->
-                    {error, {unknown_address, Address}}
-            end
+            ok
+    end,
+    case Address of
+        {utf8, Destination} ->
+            case rabbit_routing_util:parse_endpoint(Destination, true) of
+                {ok, Dest} ->
+                    {ok, _Queue, RouteState1} =
+                        rabbit_amqp1_0_channel:convert_error(
+                          fun () ->
+                                  rabbit_routing_util:ensure_endpoint(
+                                    dest, DCh, Dest, DeclareParams,
+                                    RouteState)
+                          end),
+                    {XName, RK} = rabbit_routing_util:parse_routing(Dest),
+                    {ok, Target, Link#incoming_link{
+                                   route_state = RouteState1,
+                                   exchange    = list_to_binary(XName),
+                                   routing_key = case RK of
+                                                     undefined -> undefined;
+                                                     []        -> undefined;
+                                                     _         -> list_to_binary(RK)
+                                                 end}};
+                {error, _} = E ->
+                    E
+            end;
+        _Else ->
+            {error, {unknown_address, Address}}
     end.
 
 incoming_flow(#incoming_link{ delivery_count = Count }, Handle) ->

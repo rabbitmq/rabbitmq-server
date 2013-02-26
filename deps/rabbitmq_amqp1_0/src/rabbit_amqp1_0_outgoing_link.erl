@@ -146,7 +146,6 @@ flow(#outgoing_link{delivery_count = LocalCount},
                     drain          = Drain}]}
     end.
 
-%% TODO this looks to have a lot in common with ensure_target
 ensure_source(Source = #'v1_0.source'{address       = Address,
                                       dynamic       = Dynamic,
                                       durable       = Durable,
@@ -158,45 +157,29 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
     DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)},
                      {check_exchange, true}],
     case Dynamic of
-        true ->
-            case Address of
-                undefined ->
-                    {ok, Dest} = rabbit_routing_util:parse_endpoint(
-                                   Address, false),
-                    {ok, QueueName, RouteState1} =
-                      rabbit_routing_util:ensure_endpoint(
-                        source, DCh, Dest,
-                        DeclareParams, RouteState),
-                    {ok,
-                     Source#'v1_0.source'{address = {utf8, QueueName}},
-                     Link#outgoing_link{route_state = RouteState1,
-                                        queue = QueueName}};
-                _Else ->
-                    {error, {both_dynamic_and_address_supplied,
-                             Dynamic, Address}}
+        true -> rabbit_amqp1_0_link_util:protocol_error(
+                   ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                   "Dynamic sources not supported", []);
+        _    -> ok
+    end,
+    case Address of
+        {utf8, Destination} ->
+            case rabbit_routing_util:parse_endpoint(Destination, false) of
+                {ok, Dest} ->
+                    {ok, Queue, RouteState1} =
+                        rabbit_amqp1_0_channel:convert_error(
+                          fun() ->
+                                  rabbit_routing_util:ensure_endpoint(
+                                    source, DCh, Dest, DeclareParams,
+                                    RouteState)
+                          end),
+                    ER = rabbit_routing_util:parse_routing(Dest),
+                    ok = rabbit_routing_util:ensure_binding(Queue, ER, DCh),
+                    {ok, Source, Link#outgoing_link{route_state = RouteState1,
+                                                    queue       = Queue}}
             end;
         _ ->
-            case Address of
-                {utf8, Destination} ->
-                    case rabbit_routing_util:parse_endpoint(
-                           Destination, false) of
-                        {ok, Dest} ->
-                            {ok, Queue, RouteState1} =
-                              rabbit_amqp1_0_channel:convert_error(
-                                fun() ->
-                                        rabbit_routing_util:ensure_endpoint(
-                                          source, DCh, Dest, DeclareParams,
-                                          RouteState)
-                                end),
-                            ER = rabbit_routing_util:parse_routing(Dest),
-                            ok = rabbit_routing_util:ensure_binding(Queue, ER, DCh),
-                            {ok, Source,
-                             Link#outgoing_link{ route_state = RouteState1,
-                                                 queue       = Queue }}
-                    end;
-                _ ->
-                    {error, {unknown_address, Address}}
-            end
+            {error, {unknown_address, Address}}
     end.
 
 delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
