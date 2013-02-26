@@ -55,8 +55,19 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
     inet_db:register_socket(Sock, Mod),
 
     %% handle
-    file_handle_cache:transfer(apply(M, F, A ++ [Sock])),
-    ok = file_handle_cache:obtain(),
+    case tune_buffer_size(Sock) of
+        ok                -> file_handle_cache:transfer(
+                               apply(M, F, A ++ [Sock])),
+                             ok = file_handle_cache:obtain();
+        {error, enotconn} -> catch port_close(Sock);
+        {error, Err}      -> {ok, {IPAddress, Port}} = inet:sockname(LSock),
+                             error_logger:error_msg(
+                               "failed to tune buffer size of "
+                               "connection accepted on ~s:~p - ~p (~s)~n",
+                               [rabbit_misc:ntoab(IPAddress), Port,
+                                Err, rabbit_misc:format_inet_error(Err)]),
+                             catch port_close(Sock)
+    end,
 
     %% accept more
     accept(State);
@@ -84,4 +95,11 @@ accept(State = #state{sock=LSock}) ->
     case prim_inet:async_accept(LSock, -1) of
         {ok, Ref} -> {noreply, State#state{ref=Ref}};
         Error     -> {stop, {cannot_accept, Error}, State}
+    end.
+
+tune_buffer_size(Sock) ->
+    case inet:getopts(Sock, [sndbuf, recbuf, buffer]) of
+        {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
+                          inet:setopts(Sock, [{buffer, BufSz}]);
+        Error          -> Error
     end.

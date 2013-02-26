@@ -250,7 +250,6 @@ start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
                   last_blocked_by    = none,
                   last_blocked_at    = never}},
     try
-        ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         run({?MODULE, recvloop,
              [Deb, switch_callback(rabbit_event:init_stats_timer(
                                      State, #v1.stats_timer),
