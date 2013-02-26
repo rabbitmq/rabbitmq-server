@@ -2,7 +2,6 @@ dispatcher_add(function(sammy) {
     sammy.get('#/federation', function() {
             render({'links':     '/federation-links',
                     'vhosts':    '/vhosts',
-                    'upstreams': '/parameters/federation-upstream',
                     'globals':   '/parameters/federation'},
                 'federation', '#/federation');
         });
