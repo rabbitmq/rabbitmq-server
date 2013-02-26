@@ -951,7 +951,7 @@ parameters_test() ->
     assert_list(List, http_get("/parameters")),
     assert_list(List, http_get("/parameters/test")),
     assert_list(List, http_get("/parameters/test/%2f")),
-    http_get("/parameters/oops", ?NOT_FOUND),
+    assert_list([],   http_get("/parameters/oops")),
     http_get("/parameters/test/oops", ?NOT_FOUND),
 
     assert_item(Good,  http_get("/parameters/test/%2f/good", ?OK)),
