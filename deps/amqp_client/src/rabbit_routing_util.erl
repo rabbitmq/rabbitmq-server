@@ -94,7 +94,7 @@ ensure_endpoint(source, Channel, {topic, _}, Params, State) ->
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
-ensure_endpoint(_Dir, Channel, {queue, undefined}, _Params, State) ->
+ensure_endpoint(_Dir, _Channel, {queue, undefined}, _Params, State) ->
     {ok, undefined, State};
 
 ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
@@ -123,7 +123,7 @@ ensure_endpoint(_, _Ch, {Type, Name}, _Params, State)
   when Type =:= reply_queue orelse Type =:= amqqueue ->
     {ok, list_to_binary(Name), State};
 
-ensure_endpoint(_Direction, _Ch, Endpoint, _Params, State) ->
+ensure_endpoint(_Direction, _Ch, _Endpoint, _Params, _State) ->
     throw(invalid_endpoint).
 
 %% --------------------------------------------------------------------------
