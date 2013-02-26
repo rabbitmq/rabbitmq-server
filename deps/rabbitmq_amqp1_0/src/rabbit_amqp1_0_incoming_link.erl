@@ -207,7 +207,11 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                         source, DCh, Dest,
                         DeclareParams, RouteState),
                     {ok,
-                     Target#'v1_0.target'{address = {utf8, QueueName}},
+                     case QueueName of
+                         undefined -> Target;
+                         _         -> Target#'v1_0.target'{address =
+                                                             {utf8, QueueName}}
+                     end,
                      Link#incoming_link{route_state = RouteState1,
                                         exchange    = <<"">>,
                                         routing_key = QueueName}};
