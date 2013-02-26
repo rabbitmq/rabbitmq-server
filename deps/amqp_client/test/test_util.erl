@@ -159,6 +159,7 @@ route_destination_test() ->
 
     %% valid reply queue
     ?assertMatch({ok, {reply_queue, "test"}}, parse_dest("/reply-queue/test")),
+    ?assertMatch({ok, {reply_queue, "test/2"}}, parse_dest("/reply-queue/test/2")),
 
     %% valid exchange with pattern
     ?assertMatch({ok, {exchange, {"test", "pattern"}}},

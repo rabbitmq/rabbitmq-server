@@ -49,11 +49,15 @@ parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
         [Name] ->
             {ok, {queue, unescape(Name)}};
         ["", Type | Rest]
-            when Type =:= "exchange";   Type =:= "queue"; Type =:= "topic";
-                 Type =:= "temp-queue"; Type =:= "reply-queue" ->
+            when Type =:= "exchange" orelse Type =:= "queue" orelse
+                 Type =:= "topic"    orelse Type =:= "temp-queue" ->
             parse_endpoint0(atomise(Type), Rest, AllowAnonymousQueue);
         ["", "amq", "queue" | Rest] ->
             parse_endpoint0(amqqueue, Rest, AllowAnonymousQueue);
+        ["", "reply-queue" = Prefix | [_|_]] ->
+            parse_endpoint0(reply_queue,
+                            [lists:nthtail(2 + length(Prefix), Destination)],
+                            AllowAnonymousQueue);
         _ ->
             {error, {unknown_destination, Destination}}
     end.
@@ -90,11 +94,14 @@ ensure_endpoint(source, Channel, {topic, _}, Params, State) ->
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
-ensure_endpoint(_, Channel, {queue, undefined}, Params, State) ->
+ensure_endpoint(source, Channel, {queue, undefined}, Params, State) ->
     Method = queue_declare_method(#'queue.declare'{}, queue, Params),
     #'queue.declare_ok'{queue = Queue} =
       amqp_channel:call(Channel, Method),
     {ok, Queue, State};
+
+ensure_endpoint(dest, Channel, {queue, undefined}, Params, State) ->
+    {ok, undefined, State};
 
 ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
     Params1 = rabbit_misc:pset(durable, true, Params),
