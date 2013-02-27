@@ -31,8 +31,7 @@
                     {enables,     kernel_ready}]}).
 
 description() ->
-    [{name, <<"direct">>},
-     {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
+    [{description, <<"AMQP direct exchange, as per the AMQP specification">>}].
 
 serialise_events() -> false.
 
