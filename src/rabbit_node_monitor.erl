@@ -283,20 +283,33 @@ handle_dead_according_to_mnesia_rabbit() ->
     case application:get_env(rabbit, cluster_cp_mode) of
         {ok, true}  -> case rabbit_mnesia:majority() of
                            true  -> ok;
-                           false -> stop_and_halt()
+                           false -> await_cluster_recovery()
                        end;
         {ok, false} -> ok
     end,
     ok.
 
-stop_and_halt() ->
-    rabbit_log:warning("Cluster minority status detected - stopping~n", []),
+await_cluster_recovery() ->
+    rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
+                       []),
+    Nodes = rabbit_mnesia:cluster_nodes(all),
     spawn(fun () ->
                   %% If our group leader is inside an application we are about
                   %% to stop, application:stop/1 does not return.
                   group_leader(whereis(init), self()),
-                  rabbit:stop_and_halt()
+                  rabbit:stop(),
+                  wait_for_cluster_recovery(Nodes)
           end).
+
+wait_for_cluster_recovery(Nodes) ->
+    [erlang:disconnect_node(Node) || Node <- Nodes],
+    mnesia:start(),
+    case rabbit_mnesia:majority() of
+        true  -> rabbit:start();
+        false -> mnesia:stop(),
+                 timer:sleep(1000),
+                 wait_for_cluster_recovery(Nodes)
+    end.
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),
