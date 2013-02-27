@@ -159,13 +159,10 @@ pstate(State = #state {}, PState = #proc_state{}) ->
 network_error(Reason,
               State = #state{ conn_name  = ConnStr,
                               proc_state = PState }) ->
-    log(info, "MQTT detected network error for ~p~n", [ConnStr]),
+    log(info, "MQTT detected network error for ~p: ~p~n", [ConnStr, Reason]),
     rabbit_mqtt_processor:send_will(PState),
     % todo: flush channel after publish
     stop({shutdown, conn_closed}, State).
-
-stop(Reason, State = #state{}) ->
-    {stop, Reason, close_connection(State)};
 
 stop(Reason, State = #state{ proc_state = PState }) ->
     % todo: maybe clean session

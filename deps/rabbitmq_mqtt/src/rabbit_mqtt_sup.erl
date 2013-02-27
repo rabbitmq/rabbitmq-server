@@ -26,7 +26,7 @@
 start_link(Listeners, []) ->
     {ok, SupPid} = supervisor:start_link({local, ?MODULE}, ?MODULE,
                                          [Listeners]),
-    {ok, Collector} =
+    {ok, _Collector} =
         supervisor2:start_child(
           SupPid,
           {collector, {rabbit_mqtt_collector, start_link, []},

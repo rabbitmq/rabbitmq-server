@@ -48,7 +48,7 @@ env(Key) ->
         undefined -> undefined
     end.
 
-table_lookup(undefined, Key) ->
+table_lookup(undefined, _Key) ->
     undefined;
 table_lookup(Table, Key) ->
     rabbit_misc:table_lookup(Table, Key).
