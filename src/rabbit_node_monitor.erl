@@ -281,13 +281,20 @@ handle_dead_rabbit(Node) ->
 %% down - otherwise we have a race.
 handle_dead_according_to_mnesia_rabbit() ->
     case application:get_env(rabbit, cluster_cp_mode) of
-        {ok, true}  -> case rabbit_mnesia:majority() of
+        {ok, true}  -> case majority() of
                            true  -> ok;
                            false -> await_cluster_recovery()
                        end;
         {ok, false} -> ok
     end,
     ok.
+
+majority() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Alive = [Status || N      <- Nodes,
+                       Status <- [net_adm:ping(N)],
+                       Status =:= pong],
+    length(Alive) / length(Nodes) > 0.5.
 
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
@@ -303,11 +310,9 @@ await_cluster_recovery() ->
 
 wait_for_cluster_recovery(Nodes) ->
     [erlang:disconnect_node(Node) || Node <- Nodes],
-    mnesia:start(),
-    case rabbit_mnesia:majority() of
+    case majority() of
         true  -> rabbit:start();
-        false -> mnesia:stop(),
-                 timer:sleep(1000),
+        false -> timer:sleep(1000),
                  wait_for_cluster_recovery(Nodes)
     end.
 
