@@ -291,9 +291,7 @@ handle_dead_according_to_mnesia_rabbit() ->
 
 majority() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
-    Alive = [Status || N      <- Nodes,
-                       Status <- [net_adm:ping(N)],
-                       Status =:= pong],
+    Alive = [N || N <- Nodes, pong =:= net_adm:ping(N)],
     length(Alive) / length(Nodes) > 0.5.
 
 await_cluster_recovery() ->
