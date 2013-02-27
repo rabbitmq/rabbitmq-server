@@ -54,8 +54,12 @@ dist:
 	rm -rf $(RLS_DIR)/lib/rabbit-$(VERSION)
 
 # fix Erlang ROOTDIR
-	sed -e 's:%FINAL_ROOTDIR%:\$$(dirname \$$0)/../..:' $(RLS_DIR)/erts-5.9.3/bin/erl.src \
-		> $(RLS_DIR)/erts-5.9.3/bin/erl
+	sed -e 's:%FINAL_ROOTDIR%:\$$(dirname `realpath \$$0`)/../..:' $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.src \
+		> $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.tmp
+	sed -e '/^ROOTDIR.*/i \
+	        realpath() { [[ \$$1 = /* ]] && echo "\$$1" || echo "\$$PWD/\$${1#./}" ; }' \
+		$(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.tmp > $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl
+	rm $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.tmp
 
 	tar -zcf $(TARGET_TARBALL).tar.gz -C $(TARGET_DIR)/release $(TARGET_DIR)
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
