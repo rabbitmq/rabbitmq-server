@@ -31,7 +31,7 @@
 <% } else if (mode == 'exchange-incoming') { %>
       <td><%= link_channel(pub.channel_details.name) %></td>
 <% } else if (mode == 'exchange-outgoing') { %>
-      <td><%= link_queue(pub.queue_details.vhost, pub.queue_details.name) %></td>
+      <td><%= link_queue(pub.queue.vhost, pub.queue.name) %></td>
 <% } else { %>
       <td><%= link_exchange(pub.exchange.vhost, pub.exchange.name) %></td>
 <% } %>

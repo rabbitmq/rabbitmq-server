@@ -212,8 +212,11 @@ Content-Length: 0</pre>
         <td>X</td>
         <td></td>
         <td class="path">/api/connections/<i>name</i></td>
-        <td>An individual connection. DELETEing it will close the
-        connection.</td>
+        <td>
+          An individual connection. DELETEing it will close the
+          connection. Optionally set the "X-Reason" header when
+          DELETEing to provide a reason.
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -330,7 +333,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/api/queues/<i>vhost</i>/<i>queue</i>/bindings</td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/bindings</td>
         <td>A list of all bindings on a given queue.</td>
       </tr>
       <tr>
@@ -341,6 +344,20 @@ Content-Length: 0</pre>
         <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/contents</td>
         <td>Contents of a queue. DELETE to purge. Note you can't GET this.</td>
       </tr>
+
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/actions</td>
+        <td>
+          Actions that can be taken on a queue. POST a body like:
+          <pre>{"action":"sync"}</pre> Currently the actions which are
+          supported are <code>sync</code> and <code>cancel_sync</code>.
+        </td>
+      </tr>
+
       <tr>
         <td></td>
         <td></td>
@@ -352,13 +369,12 @@ Content-Length: 0</pre>
           will alter the state of the queue.) You should post a body looking like:
           <pre>{"count":5,"requeue":true,"encoding":"auto","truncate":50000}</pre>
           <ul>
-            <li><code>count</code> controls the number of messages to get. You
-            may get fewer messages than this if the queue cannot immediately
-            provide them.</li>
+            <li><code>count</code> controls the maximum number of
+            messages to get. You may get fewer messages than this if
+            the queue cannot immediately provide them.</li>
             <li><code>requeue</code> determines whether the messages will be
             removed from the queue. If requeue is true they will be requeued -
-            but their position in the queue may change and
-            their <code>redelivered</code> flag will be set.</li>
+            but their <code>redelivered</code> flag will be set.</li>
             <li><code>encoding</code> must be either "auto" (in which case the
             payload will be returned as a string if it is valid UTF-8, and
             base64 encoded otherwise), or "base64" (in which case the payload
