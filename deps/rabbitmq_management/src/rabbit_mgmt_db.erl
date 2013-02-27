@@ -131,6 +131,7 @@
           %% {queue/channel/connection}
           old_stats,
           gc_timer,
+          gc_continuation,
           lookups,
           interval}).
 
@@ -149,7 +150,8 @@
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
--define(GC_INTERVAL, 5 * 60 * 1000).
+-define(GC_INTERVAL, 5000).
+-define(GC_ROWS, 100).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -312,8 +314,7 @@ handle_cast(_Request, State) ->
     noreply(State).
 
 handle_info(gc, State) ->
-    gc_all(State),
-    noreply(set_gc_timer(State));
+    noreply(set_gc_timer(gc_batch(State)));
 
 handle_info(_Info, State) ->
     noreply(State).
@@ -960,18 +961,22 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 %% Internal, event-GCing
 %%----------------------------------------------------------------------------
 
-gc_all(State = #state{aggregated_stats = ETS}) ->
-    {ok, Policies} = application:get_env(
-                       rabbitmq_management, sample_retention_policies),
-    Now = floor(erlang:now(), State),
-    gc_it(ets:match(ETS, '$1', 1000), Policies, Now, ETS).
-
-gc_it('$end_of_table', _, _, _) ->
-    ok;
-gc_it({Matches, Continuation}, Policies, Now, ETS) ->
-    [gc(Key, Stats, Policies, Now, ETS)
-     || [{Key, Stats}] <- Matches],
-    gc_it(ets:match(Continuation), Policies, Now, ETS).
+gc_batch(State = #state{aggregated_stats = ETS,
+                        gc_continuation = Continuation}) ->
+    Match = case Continuation of
+                undefined -> ets:match(ETS, '$1', ?GC_ROWS);
+                _         -> ets:match(Continuation)
+            end,
+    case Match of
+        {Matches, Continuation1} ->
+            {ok, Policies} = application:get_env(
+                               rabbitmq_management, sample_retention_policies),
+            Now = floor(erlang:now(), State),
+            [gc(Key, Stats, Policies, Now, ETS) || [{Key, Stats}] <- Matches],
+            State#state{gc_continuation = Continuation1};
+        '$end_of_table' ->
+            gc_batch(State#state{gc_continuation = undefined})
+    end.
 
 gc({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
     Policy = pget(retention_policy(Type), Policies),
