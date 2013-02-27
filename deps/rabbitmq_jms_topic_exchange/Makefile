@@ -31,7 +31,7 @@ package: dist
 init: $(addprefix $(UMBRELLA)/,$(EXCHANGE) $(RABBIT_DEPS))
 
 test: dist
-	# unit tests here
+	#	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) test
 
 cleandist: init
 	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) clean

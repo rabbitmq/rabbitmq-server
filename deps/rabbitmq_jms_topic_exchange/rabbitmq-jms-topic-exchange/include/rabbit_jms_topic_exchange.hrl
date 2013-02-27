@@ -14,10 +14,12 @@
 %% Copyright (c) 2012, 2013 VMware, Inc.  All rights reserved.
 %%
 
-%% JMS on Rabbit Topic Exchange plugin definitions
+%% JMS on Rabbit Topic Selector Exchange plugin definitions
 
 -define(X_TYPE_NAME, <<"x-jms-topic">>).
 
 %% mnesia stuff
--define(JMS_TOPIC_TABLE, jms_topic_table).
--record(jms_topic_xs, {key, x_state}).
+-define(JMS_TOPIC_TABLE, x_jms_topic_table).
+-define(JMS_TOPIC_RECORD, x_jms_topic_xs).
+
+-record(?JMS_TOPIC_RECORD, {key, x_state}).
