@@ -250,10 +250,6 @@ handle_info({mnesia_system_event,
                     ordsets:add_element(Node, ordsets:from_list(Partitions))),
     {noreply, State#state{partitions = Partitions1}};
 
-handle_info({mnesia_system_event, {mnesia_down, _Node}}, State) ->
-    handle_dead_according_to_mnesia_rabbit(),
-    {noreply, State};
-
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -274,12 +270,7 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
-    ok = rabbit_mnesia:on_node_down(Node).
-
-%% Since we will be introspecting the cluster in response to this, we
-%% must only do so based on Mnesia having noticed the other node being
-%% down - otherwise we have a race.
-handle_dead_according_to_mnesia_rabbit() ->
+    ok = rabbit_mnesia:on_node_down(Node),
     case application:get_env(rabbit, cluster_cp_mode) of
         {ok, true}  -> case majority() of
                            true  -> ok;
