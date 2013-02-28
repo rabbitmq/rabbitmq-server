@@ -31,7 +31,11 @@
 start_link() ->
     gen_server2:start_link(?MODULE, [], []).
 
-log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
+conserve_resources(Pid, _, Conserve) ->
+    Pid ! {conserve_resources, Conserve},
+    ok.
+
+%%----------------------------------------------------------------------------
 
 init([]) ->
     {ok, undefined, hibernate, {backoff, 1000, 1000, 10000}}.
@@ -39,8 +43,6 @@ init([]) ->
 handle_call({go, Sock0, SockTransform}, _From, undefined) ->
     process_flag(trap_exit, true),
     {ok, Sock} = SockTransform(Sock0),
-    ok = rabbit_misc:throw_on_error(
-           inet_error, fun () -> rabbit_net:tune_buffer_size(Sock) end),
     {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
     log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
     rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
@@ -122,31 +124,30 @@ process_received_bytes(Bytes,
                        State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
                                        conn_name   = ConnStr }) ->
-    case
-        rabbit_mqtt_frame:parse(Bytes, ParseState) of
-            {more, ParseState1} ->
-                {noreply,
-                 control_throttle( State #state{ parse_state = ParseState1 }),
-                 hibernate};
-            {ok, Frame, Rest} ->
-                case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
-                    {ok, ProcState1} ->
-                        PS = rabbit_mqtt_frame:initial_state(),
-                        process_received_bytes(
-                          Rest,
-                          State #state{ parse_state = PS,
-                                        proc_state = ProcState1 });
-                    {err, Reason, ProcState1} ->
-                        log(info, "MQTT protocol error ~p for connection ~p~n",
-                                  [Reason, ConnStr]),
-                        stop({shutdown, Reason}, pstate(State, ProcState1));
-                    {stop, ProcState1} ->
-                        stop(normal, pstate(State, ProcState1))
-                end;
-            {error, Error} ->
-                log(error, "MQTT detected framing error ~p for connection ~p~n",
-                           [ConnStr, Error]),
-                stop({shutdown, Error}, State)
+    case rabbit_mqtt_frame:parse(Bytes, ParseState) of
+        {more, ParseState1} ->
+            {noreply,
+             control_throttle( State #state{ parse_state = ParseState1 }),
+             hibernate};
+        {ok, Frame, Rest} ->
+            case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
+                {ok, ProcState1} ->
+                    PS = rabbit_mqtt_frame:initial_state(),
+                    process_received_bytes(
+                      Rest,
+                      State #state{ parse_state = PS,
+                                    proc_state = ProcState1 });
+                {err, Reason, ProcState1} ->
+                    log(info, "MQTT protocol error ~p for connection ~p~n",
+                        [Reason, ConnStr]),
+                    stop({shutdown, Reason}, pstate(State, ProcState1));
+                {stop, ProcState1} ->
+                    stop(normal, pstate(State, ProcState1))
+            end;
+        {error, Error} ->
+            log(error, "MQTT detected framing error ~p for connection ~p~n",
+                [ConnStr, Error]),
+            stop({shutdown, Error}, State)
     end.
 
 callback_reply(State, {ok, ProcState}) ->
@@ -159,16 +160,15 @@ pstate(State = #state {}, PState = #proc_state{}) ->
 
 %%----------------------------------------------------------------------------
 
+log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
+
 network_error(Reason,
               State = #state{ conn_name  = ConnStr,
                               proc_state = PState }) ->
-    log(info, "MQTT detected network error for ~p~n", [ConnStr]),
+    log(info, "MQTT detected network error for ~p: ~p~n", [ConnStr, Reason]),
     rabbit_mqtt_processor:send_will(PState),
     % todo: flush channel after publish
     stop({shutdown, conn_closed}, State).
-
-stop(Reason, State = #state{}) ->
-    {stop, Reason, close_connection(State)};
 
 stop(Reason, State = #state{ proc_state = PState }) ->
     % todo: maybe clean session
@@ -186,10 +186,6 @@ run_socket(State = #state{ await_recv = true }) ->
 run_socket(State = #state{ socket = Sock }) ->
     rabbit_net:async_recv(Sock, 0, infinity),
     State#state{ await_recv = true }.
-
-conserve_resources(Pid, _, Conserve) ->
-    Pid ! {conserve_resources, Conserve},
-    ok.
 
 control_throttle(State = #state{ connection_state = Flow,
                                  conserve         = Conserve }) ->
