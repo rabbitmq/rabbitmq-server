@@ -15,7 +15,9 @@
 %% All rights reserved.
 %%
 
--module(rjms_topic_selector_tests).
+-module(rjms_topic_selector_unit_tests).
+
+-include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_jms_topic_exchange, [ description/0
                                    , serialise_events/0
@@ -27,11 +29,6 @@
                                    , remove_bindings/3
                                    , assert_args_equivalence/2]).
 
--compile(export_all).
-
-test_dummy() ->
-    io:format("~n~ntest_dummy run~n~n").
-
-test() ->
-    test:test([{?MODULE, [test_dummy]}],
-              [report, {name, ?MODULE}]).
+dummy_test() ->
+    io:format("~n~ntest_dummy run~n~n"),
+    ?assertEqual(ok,ok).
