@@ -52,7 +52,8 @@ handle_call({go, Sock0, SockTransform}, _From, undefined) ->
                connection_state = running,
                conserve         = false,
                parse_state      = rabbit_mqtt_frame:initial_state(),
-               proc_state       = rabbit_mqtt_processor:initial_state(Sock) })};
+               proc_state       = rabbit_mqtt_processor:initial_state(Sock) }),
+     hibernate};
 
 handle_call(duplicate_id, _From,
             State = #state{ proc_state = PState,
@@ -116,7 +117,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 process_received_bytes(<<>>, State) ->
-    {noreply, State};
+    {noreply, State, hibernate};
 process_received_bytes(Bytes,
                        State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
