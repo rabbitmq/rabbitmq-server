@@ -69,7 +69,7 @@ stats_db_node() ->
     end.
 
 version(App) ->
-    {_, _, V} = lists:keyfind(App, 1, application:which_applications()),
+    {_, _, V} = lists:keyfind(App, 1, application:which_applications(infinity)),
     list_to_binary(V).
 
 listeners() ->
