@@ -151,7 +151,8 @@
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
 -define(GC_INTERVAL, 5000).
--define(GC_ROWS, 100).
+-define(GC_MIN_ROWS, 100).
+-define(GC_MIN_RATIO, 0.01).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -964,7 +965,10 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 gc_batch(State = #state{aggregated_stats = ETS,
                         gc_continuation = Continuation}) ->
     Match = case Continuation of
-                undefined -> ets:match(ETS, '$1', ?GC_ROWS);
+                undefined -> Size = ets:info(ETS, size),
+                             Rows = lists:max([?GC_MIN_ROWS,
+                                               round(?GC_MIN_RATIO * Size)]),
+                             ets:match(ETS, '$1', Rows);
                 _         -> ets:match(Continuation)
             end,
     case Match of
