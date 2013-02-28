@@ -22,4 +22,9 @@
 -define(JMS_TOPIC_TABLE, x_jms_topic_table).
 -define(JMS_TOPIC_RECORD, x_jms_topic_xs).
 
--record(?JMS_TOPIC_RECORD, {key, x_state}).
+%% Key is x_name -- the exchange name
+-record(?JMS_TOPIC_RECORD, {x_name, x_state}).
+
+%% x_state field consists of an `orddict` dictionary of binding functions:
+%%         [{RoutingKey, BindingSelectorFun}, ...]
+%% there is no default

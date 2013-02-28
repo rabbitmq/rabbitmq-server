@@ -68,7 +68,23 @@ setup_db_schema() ->
   end.
 
 %%----------------------------------------------------------------------------
-%% E X P O R T E D   E X C H A N G E   F U N C T I O N S
+%% R E F E R E N C E   T Y P E   I N F O R M A T I O N
+
+%% -type(binding() ::
+%%         #binding{source      :: rabbit_exchange:name(),
+%%                  destination :: binding_destination(),
+%%                  key         :: rabbit_binding:key(),
+%%                  args        :: rabbit_framing:amqp_table()}).
+%%
+%% -type(exchange() ::
+%%         #exchange{name        :: rabbit_exchange:name(),
+%%                   type        :: rabbit_exchange:type(),
+%%                   durable     :: boolean(),
+%%                   auto_delete :: boolean(),
+%%                   arguments   :: rabbit_framing:amqp_table()}).
+
+%%----------------------------------------------------------------------------
+%% E X P O R T E D   E X C H A N G E   B E H A V I O U R
 
 % Exchange description
 description() -> [ {name, <<"jms-topic-selector">>}
@@ -97,23 +113,24 @@ delete(_Tx, #exchange{name = XName}, _Bs) ->
 % Add a new binding
 add_binding( _Tx
            , #exchange{name = XName}
-           , #binding{destination = QName}
+           , #binding{key = BindingKey, destination = QName, args = Args}
            ) ->
   case rabbit_amqqueue:lookup(QName)
   of
     {error, not_found} ->
       queue_not_found_error(QName);
     {ok, #amqqueue{pid = QPid}} ->
-      case get_state(XName)
-      of
-        []    -> save_state(XName, {XName});
-        State -> io:format("~n~nState already exists~n~n")
-      end
+      add_binding_fun(XName, {BindingKey, generate_binding_fun(BindingKey, Args)})
   end,
   ok.
 
 % Binding removal
-remove_bindings(_Tx, _X, _Bs) -> ok.
+remove_bindings( _Tx
+               , #exchange{name = XName}
+               , Bindings
+               ) ->
+  remove_binding_funs(XName, Bindings),
+  ok.
 
 % Exchange argument equivalence
 assert_args_equivalence(X, Args) ->
@@ -123,31 +140,42 @@ assert_args_equivalence(X, Args) ->
 policy_changed(_Tx, _X1, _X2) -> ok.
 
 %%----------------------------------------------------------------------------
-%% P R I V A T E   W O R K   F U N C T I O N S
+%% P R I V A T E   F U N C T I O N S
 
-% save the exchange state
-save_state(XName, State) ->
+% generate the function that checks the message against the SQL expression
+generate_binding_fun(BindingKey, Args) ->
+  % SQLExp = getSQLFromArgs(Args)
+  fun(_Headers) ->
+    true
+  end.
+
+% add binding fun to binding fun dictionary
+add_binding_fun(XName, BindingKeyAndFun) ->
   rabbit_misc:execute_mnesia_transaction(
     fun() ->
-      mnesia:write( ?JMS_TOPIC_TABLE
-                  , #?JMS_TOPIC_RECORD{key = XName, x_state = State}
-                  , write
-                  )
+      #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_fun(XName),
+      write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun))
     end
   ).
 
-% extract exchange state from db
-get_state(XName) ->
+% remove binding funs from binding fun dictionary
+remove_binding_funs(XName, Bindings) ->
+  BindingKeys = [ BindingKey || #binding{key = BindingKey} <- Bindings ],
   rabbit_misc:execute_mnesia_transaction(
     fun() ->
-      case mnesia:read(?JMS_TOPIC_TABLE, XName)
-      of
-        [] -> [];
-        [#?JMS_TOPIC_RECORD{key = XName, x_state = State}] -> State
-      end
+      #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_fun(XName),
+      write_state_fun(XName, remove_items(BindingFuns, BindingKeys))
     end
   ).
 
+% add an item to the dictionary of binding functions
+put_item(Dict, {Key, Item}) -> orddict:store(Key, Item, Dict).
+
+% remove a list of keys from the dictionary
+remove_items(Dict, []) -> Dict;
+remove_items(Dict, [Key | Keys]) -> remove_items(orddict:erase(Key, Dict), Keys).
+
+% delete all the state saved for this exchange
 delete_state(XName) ->
   rabbit_misc:execute_mnesia_transaction(
     fun() ->
@@ -155,23 +183,28 @@ delete_state(XName) ->
     end
   ).
 
-% Deliver a message
-deliver_message(QPid, XName, MsgContent) ->
-  {Props, Payload} = rabbit_basic:from_content(MsgContent),
-  rabbit_amqqueue:deliver
-    ( QPid
-    , rabbit_basic:delivery
-      ( false
-      , false
-      , rabbit_basic:message(XName, <<"">>, Props, Payload)
-      , undefined
-      )
-    ).
+% Basic read for update
+read_state_fun(XName) ->
+  case mnesia:read(?JMS_TOPIC_TABLE, XName, write)
+  of
+    []    -> #?JMS_TOPIC_RECORD{x_name = XName, x_state = orddict:new()};
+    [Rec] -> Rec;
+    _     -> exchange_state_corrupt_error(XName)
+  end.
+
+% Basic write after read for update
+write_state_fun(XName, State) ->
+  mnesia:write(?JMS_TOPIC_TABLE, #?JMS_TOPIC_RECORD{x_name = XName, x_state = State}, write).
 
 % protocol error
 queue_not_found_error(QName) ->
   rabbit_misc:protocol_error( internal_error
                             , "could not find queue '~s'"
                             , [QName] ).
+% state error
+exchange_state_corrupt_error(XName) ->
+  rabbit_misc:protocol_error( internal_error
+                            , "exchange named '~s' has incorrect saved state"
+                            , [XName] ).
 
 %%----------------------------------------------------------------------------
