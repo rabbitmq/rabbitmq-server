@@ -2,9 +2,10 @@
 
 <div class="section">
 <h2>Overview</h2>
-<div class="hider updatable">
+<div class="hider">
   <%= data_rates('data-rates-conn', connection, 'Data rates') %>
 
+<div class="updatable">
 <h3>Details</h3>
 <table class="facts">
 <% if (nodes_interesting) { %>
@@ -59,6 +60,7 @@
 </tr>
 </table>
 <% } %>
+</div>
 
 </div>
 </div>

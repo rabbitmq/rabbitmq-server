@@ -415,7 +415,10 @@ function show_popup(type, text, mode) {
     else {
         $(cssClass).center().slideDown(200);
     }
-    $(cssClass + ' span').click(hide);
+    $(cssClass + ' span').click(function () {
+        $('.popup-owner').removeClass('popup-owner');
+        hide();
+    });
 }
 
 function postprocess() {
@@ -465,8 +468,19 @@ function postprocess() {
         help($(this).attr('id'))
     });
     $('.rate-options').die().live('click', function() {
-        show_popup('rate-options', format('rate-options', {span: $(this)}),
-                   'fade');
+        var remove = $('.popup-owner').length == 1 &&
+                     $('.popup-owner').get(0) == $(this).get(0);
+        $('.popup-owner').removeClass('popup-owner');
+        if (remove) {
+            $('.form-popup-rate-options').fadeOut(200, function() {
+                $(this).remove();
+            });
+        }
+        else {
+            $(this).addClass('popup-owner');
+            show_popup('rate-options', format('rate-options', {span: $(this)}),
+                       'fade');
+        }
     });
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.

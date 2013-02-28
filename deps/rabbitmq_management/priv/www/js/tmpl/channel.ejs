@@ -2,11 +2,12 @@
 
 <div class="section">
 <h2>Overview</h2>
-<div class="hider updatable">
+<div class="hider">
 <% if (statistics_level == 'fine') { %>
     <%= message_rates('msg-rates-ch', channel.message_stats) %>
 <% } %>
 
+<div class="updatable">
 <h3>Details</h3>
 <table class="facts">
   <tr>
@@ -68,6 +69,8 @@
     <td><%= fmt_idle_long(channel) %></td>
   </tr>
 </table>
+</div>
+
 </div>
 </div>
 

@@ -130,6 +130,8 @@ div.form-popup-rate-options {
     z-index: 1; position: absolute; right: 35px; padding: 15px; background: white; border-left: 1px solid #ccc; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; border-radius: 10px 0 0 10px; -moz-border-radius: 10px 0 0 10px;
 }
 
+.popup-owner { background: #eee; padding: 5px; border-radius: 3px; -moz-border-radius: 3px; }
+
 p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; font-weight: bold; }
 
 .highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }

@@ -4,7 +4,7 @@
 <% } %>
 <div class="section">
 <h2>Totals</h2>
-<div class="hider updatable">
+<div class="hider">
 <% if (overview.statistics_db_node != 'not_running') { %>
   <%= queue_lengths('lengths-over', overview.queue_totals) %>
 <% if (statistics_level == 'fine') { %>
@@ -14,6 +14,7 @@
     Totals not available
 <% } %>
 
+<div class="updatable">
   <h3>Global counts <span class="help" id="resource-counts"></span></h3>
 
   <div class="box">
@@ -43,6 +44,7 @@
     </div>
 <% } %>
   </div>
+ </div>
 
 </div>
 </div>

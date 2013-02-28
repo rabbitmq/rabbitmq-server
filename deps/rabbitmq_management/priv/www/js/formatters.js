@@ -613,7 +613,7 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, chart_rates,
     var mode = get_pref('rate-mode-' + id);
     var range = get_pref('chart-range-' + id);
     var prefix = '<h3>' + heading +
-        ' <span class="rate-options" for="'
+        ' <span class="rate-options" title="Click to change" for="'
         + id + '">(' + prefix_title(mode, range) + ')</span>' +
         (heading_help == undefined ? '' :
          ' <span class="help" id="' + heading_help + '"></span>') +
@@ -632,7 +632,7 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, chart_rates,
     else {
         res = '<p>Currently idle</p>';
     }
-    return prefix + res;
+    return prefix + '<div class="updatable">' + res + '</div>';
 }
 
 function prefix_title(mode, range) {
