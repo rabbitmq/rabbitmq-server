@@ -420,7 +420,7 @@ handle_event(Event = #event{type = queue_deleted,
     Id = {coarse, {queue_stats, Name}},
     TS = floor(Timestamp, State),
     OldStats = lookup_element(OldTable, Id),
-    [record_sample_coarse(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
+    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
      || Key <- ?COARSE_QUEUE_STATS],
     delete_samples(channel_queue_stats,  {'_', Name}, State),
     delete_samples(queue_exchange_stats, {Name, '_'}, State),
@@ -585,15 +585,21 @@ reverse(A, B) -> {B, A}.
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
 append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
-    OldStats = lookup_element(OldTable, Id),
-    NewMS = ceil(TS, State),
-    case Keys of
-        all -> [append_sample(Key, Value, NewMS, OldStats, Id, State)
-                || {Key, Value} <- Stats];
-        _   -> [append_sample(Key, pget(Key, Stats), NewMS, OldStats, Id, State)
-                || Key <- Keys]
-    end,
-    ets:insert(OldTable, {Id, Stats}).
+    case ignore_coarse_sample(Id, State) of
+        false ->
+            OldStats = lookup_element(OldTable, Id),
+            NewMS = ceil(TS, State),
+            case Keys of
+                all -> [append_sample(Key, Value, NewMS, OldStats, Id, State)
+                        || {Key, Value} <- Stats];
+                _   -> [append_sample(
+                          Key, pget(Key, Stats), NewMS, OldStats, Id, State)
+                        || Key <- Keys]
+            end,
+            ets:insert(OldTable, {Id, Stats});
+        true ->
+            ok
+    end.
 
 append_sample(_Key, unknown, _NewMS, _OldStats, _Id, _State) ->
     ok;
@@ -602,15 +608,14 @@ append_sample(Key, Value, NewMS, OldStats, Id, State) ->
     record_sample(
       Id, {Key, Value - pget(Key, OldStats, 0), NewMS, State}, State).
 
-record_sample({coarse, {queue_stats, Q} = Id}, Args, State) ->
-    case object_exists(Q, State) of
-        true  -> record_sample_coarse({coarse, Id}, Args, State);
-        false -> io:format("Ignoring: ~p~n", [{Q, Args}]),
-                 ok
-    end;
+ignore_coarse_sample({coarse, {queue_stats, Q}}, State) ->
+    not object_exists(Q, State);
+ignore_coarse_sample(_, _) ->
+    false.
 
 record_sample({coarse, Id}, Args, State) ->
-    record_sample_coarse({coarse, Id}, Args, State);
+    record_sample0(Id, Args),
+    record_sample0({vhost_stats, vhost(Id, State)}, Args);
 
 %% Deliveries / acks (Q -> Ch)
 record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, State) ->
@@ -691,10 +696,6 @@ record_sampleX(RenamePublishTo, X, {publish, Diff, TS, State}) ->
     record_sample0({exchange_stats, X}, {RenamePublishTo, Diff, TS, State});
 record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
     record_sample0({exchange_stats, X}, {Type, Diff, TS, State}).
-
-record_sample_coarse({coarse, Id}, Args, State) ->
-    record_sample0(Id, Args),
-    record_sample0({vhost_stats, vhost(Id, State)}, Args).
 
 record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
                                            aggregated_stats_index = ETSi}}) ->
