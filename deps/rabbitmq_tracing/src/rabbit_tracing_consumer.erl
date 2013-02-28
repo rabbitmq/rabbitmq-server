@@ -89,7 +89,8 @@ init(Args) ->
 
 handle_call(info_all, _From, State = #state{vhost = V, queue = Q}) ->
     [QInfo] = rabbit_mgmt_db:augment_queues(
-                [rabbit_mgmt_wm_queue:queue(V, Q)], basic),
+                [rabbit_mgmt_wm_queue:queue(V, Q)],
+                rabbit_mgmt_util:no_range(), basic),
     {reply, [{queue, rabbit_mgmt_format:strip_pids(QInfo)}], State};
 
 handle_call(_Req, _From, State) ->
