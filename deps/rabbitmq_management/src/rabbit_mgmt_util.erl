@@ -31,7 +31,7 @@
 -export([with_decode/5, decode/1, decode/2, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, is_monitor/1]).
--export([list_visible_vhosts/1, b64decode_or_throw/1, range/1]).
+-export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -486,6 +486,8 @@ b64decode_or_throw(B64) ->
     catch error:_ ->
             throw({error, {not_base64, B64}})
     end.
+
+no_range() -> {no_range, no_range, no_range}.
 
 range(ReqData) -> {range("lengths",    ReqData),
                    range("msg_rates",  ReqData),
