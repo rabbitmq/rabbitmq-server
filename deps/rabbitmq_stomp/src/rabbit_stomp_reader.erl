@@ -46,14 +46,13 @@ init(SupPid, Configuration) ->
             ParseState = rabbit_stomp_frame:initial_state(),
             try
                 mainloop(
-                  control_throttle(
-                    register_resource_alarm(
-                      #reader_state{socket             = Sock,
-                                    parse_state        = ParseState,
-                                    processor          = ProcessorPid,
-                                    state              = running,
-                                    conserve_resources = false,
-                                    recv_outstanding   = false}))),
+                  register_resource_alarm(
+                    #reader_state{socket             = Sock,
+                                  parse_state        = ParseState,
+                                  processor          = ProcessorPid,
+                                  state              = running,
+                                  conserve_resources = false,
+                                  recv_outstanding   = false})),
                 log(info, "closing STOMP connection ~p (~s)~n",
                     [self(), ConnStr])
             catch
@@ -67,7 +66,7 @@ init(SupPid, Configuration) ->
     end.
 
 mainloop(State0 = #reader_state{socket = Sock}) ->
-    State = run_socket(State0),
+    State = run_socket(control_throttle(State0)),
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
             mainloop(process_received_bytes(
@@ -77,11 +76,10 @@ mainloop(State0 = #reader_state{socket = Sock}) ->
         {inet_async, _Sock, _Ref, {error, Reason}} ->
             throw({inet_error, Reason});
         {conserve_resources, Conserve} ->
-            mainloop(control_throttle(
-                       State#reader_state{conserve_resources = Conserve}));
+            mainloop(State#reader_state{conserve_resources = Conserve});
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
-            mainloop(control_throttle(State))
+            mainloop(State)
     end.
 
 process_received_bytes([], State) ->
@@ -97,11 +95,9 @@ process_received_bytes(Bytes,
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
-            process_received_bytes(Rest,
-                                   control_throttle(
-                                     State#reader_state{
-                                       parse_state = PS,
-                                       state       = next_state(S, Frame)}))
+            process_received_bytes(Rest, State#reader_state{
+                                           parse_state = PS,
+                                           state       = next_state(S, Frame)})
     end.
 
 conserve_resources(Pid, _Source, Conserve) ->
