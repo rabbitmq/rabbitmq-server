@@ -32,7 +32,8 @@
         , delete/3
         , add_binding/3
         , remove_bindings/3
-        , assert_args_equivalence/2 ]).
+        , assert_args_equivalence/2
+        , policy_changed/3 ]).
 
 %% Initialisation of database function:
 -export([setup_db_schema/0]).
@@ -117,6 +118,9 @@ remove_bindings(_Tx, _X, _Bs) -> ok.
 % Exchange argument equivalence
 assert_args_equivalence(X, Args) ->
   rabbit_exchange:assert_args_equivalence(X, Args).
+
+% Policy change notifications ignored
+policy_changed(_Tx, _X1, _X2) -> ok.
 
 %%----------------------------------------------------------------------------
 %% P R I V A T E   W O R K   F U N C T I O N S
