@@ -217,7 +217,8 @@ function partial_update() {
                 throw("before/after mismatch");
             }
             for (var i = 0; i < befores.length; i++) {
-                $(befores[i]).replaceWith(afters[i]);
+                $(befores[i]).empty();
+                $(befores[i]).append($(afters[i]).contents());
             }
             replace_content('scratch', '');
             postprocess_partial();
