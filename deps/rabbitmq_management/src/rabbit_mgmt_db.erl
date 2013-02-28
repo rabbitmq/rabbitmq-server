@@ -975,7 +975,7 @@ gc_batch(State = #state{aggregated_stats = ETS,
             [gc(Key, Stats, Policies, Now, ETS) || [{Key, Stats}] <- Matches],
             State#state{gc_continuation = Continuation1};
         '$end_of_table' ->
-            gc_batch(State#state{gc_continuation = undefined})
+            State#state{gc_continuation = undefined}
     end.
 
 gc({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
