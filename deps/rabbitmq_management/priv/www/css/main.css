@@ -120,7 +120,7 @@ div.status-bar .red *, div.status-bar .red-dark *, div.status-red * { color: whi
 .t { vertical-align: top !important; }
 
 p.status-ok { color: #888; text-align: right; }
-p.status-error { background: #f44; border: 1px solid #800; color: white; margin-top: 50px !important; }
+p.status-error { background: #ff7a7a; color: white; margin-top: 50px !important; }
 p.status-error th { background: white; }
 p.warning, div.form-popup-warn { background: #ff8; border: 1px solid #bb8; }
 div.form-popup-info { background: #8f8; border: 1px solid #4b4; }
