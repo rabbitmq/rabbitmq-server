@@ -38,31 +38,40 @@ init(SupPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
             {ok, Sock} = SockTransform(Sock0),
-            {ok, ProcessorPid} = start_processor(SupPid, Configuration, Sock),
-            {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
-            log(info, "accepting STOMP connection ~p (~s)~n",
-                [self(), ConnStr]),
+            case rabbit_net:connection_string(Sock, inbound) of
+                {ok, ConnStr} ->
+                    {ok, ProcessorPid} =
+                        start_processor(SupPid, Configuration, Sock),
+                    log(info, "accepting STOMP connection ~p (~s)~n",
+                        [self(), ConnStr]),
 
-            ParseState = rabbit_stomp_frame:initial_state(),
-            try
-                mainloop(
-                  register_resource_alarm(
-                    #reader_state{socket             = Sock,
-                                  parse_state        = ParseState,
-                                  processor          = ProcessorPid,
-                                  state              = running,
-                                  conserve_resources = false,
-                                  recv_outstanding   = false})),
-                log(info, "closing STOMP connection ~p (~s)~n",
-                    [self(), ConnStr])
-            catch
-                _:Ex -> log(error, "closing STOMP connection ~p (~s):~n~p~n",
-                          [self(), ConnStr, Ex])
-            after
-                rabbit_stomp_processor:flush_and_die(ProcessorPid)
-            end,
-
-            done
+                    ParseState = rabbit_stomp_frame:initial_state(),
+                    try
+                        mainloop(
+                          register_resource_alarm(
+                            #reader_state{socket             = Sock,
+                                          parse_state        = ParseState,
+                                          processor          = ProcessorPid,
+                                          state              = running,
+                                          conserve_resources = false,
+                                          recv_outstanding   = false})),
+                        log(info, "closing STOMP connection ~p (~s)~n",
+                            [self(), ConnStr])
+                    catch
+                        _:Ex -> log(error, "closing STOMP connection "
+                                    "~p (~s):~n~p~n", [self(), ConnStr, Ex])
+                    after
+                        rabbit_stomp_processor:flush_and_die(ProcessorPid)
+                    end,
+                    done;
+                {error, enotconn} ->
+                    rabbit_net:fast_close(Sock),
+                    done;
+                {error, Reason} ->
+                    log(warning, "STOMP network error while starting up: ~p~n",
+                        [Reason]),
+                    rabbit_net:fast_close(Sock)
+            end
     end.
 
 mainloop(State0 = #reader_state{socket = Sock}) ->
