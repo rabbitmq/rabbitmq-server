@@ -562,9 +562,9 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
             discard(Delivery, State2);
         {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             BQS1 = BQ:publish(Message, Props, Delivered, SenderPid, BQS),
-            {Dropped, State3} =
+            {Dropped, State3 = #q{backing_queue_state = BQS2}} =
               maybe_drop_head(State2#q{backing_queue_state = BQS1}),
-            QLen = BQ:len(BQS1),
+            QLen = BQ:len(BQS2),
             %% optimisation: it would be perfectly safe to always
             %% invoke drop_expired_msgs here, but that is expensive so
             %% we only do that if a new message that might have an
