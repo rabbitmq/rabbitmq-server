@@ -131,22 +131,31 @@ recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
 
 mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
     case rabbit_net:recv(Sock) of
-        {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
-                                                  buf_len = BufLen + size(Data),
-                                                  pending_recv = false});
-        closed          -> case State#v1.connection_state of
-                               closed -> State;
-                               _      -> throw(connection_closed_abruptly)
-                           end;
-        {error, Reason} -> throw({inet_error, Reason});
-        {other, Other}  -> handle_other(Other, Deb, State)
+        {data, Data} ->
+            recvloop(Deb, State#v1{buf = [Data | Buf],
+                                   buf_len = BufLen + size(Data),
+                                   pending_recv = false});
+        closed when State#v1.connection_state =:= closed ->
+            ok;
+        closed ->
+            throw(connection_closed_abruptly);
+        {error, Reason} ->
+            throw({inet_error, Reason});
+        {other, {system, From, Request}} ->
+            sys:handle_system_msg(Request, From, State#v1.parent,
+                                  ?MODULE, Deb, State);
+        {other, Other} ->
+            case handle_other(Other, State) of
+                stop     -> ok;
+                NewState -> recvloop(Deb, NewState)
+            end
     end.
 
-handle_other({conserve_resources, Conserve}, Deb,
+handle_other({conserve_resources, Conserve},
              State = #v1{throttle = Throttle}) ->
     Throttle1 = Throttle#throttle{conserve_resources = Conserve},
-    recvloop(Deb, control_throttle(State#v1{throttle = Throttle1}));
-handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
+    control_throttle(State#v1{throttle = Throttle1});
+handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     terminate(io_lib:format("broker forced connection closure "
                             "with reason '~w'", [Reason]), State),
     %% this is what we are expected to do according to
@@ -158,37 +167,35 @@ handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
     %% initiated by our parent it is probably more important to exit
     %% quickly.
     exit(Reason);
-handle_other({'DOWN', _MRef, process, ChPid, Reason}, Deb, State) ->
-    mainloop(Deb, handle_dependent_exit(ChPid, Reason, State));
-handle_other(handshake_timeout, Deb, State)
+handle_other({'DOWN', _MRef, process, ChPid, Reason}, State) ->
+    handle_dependent_exit(ChPid, Reason, State);
+handle_other(handshake_timeout, State)
   when ?IS_RUNNING(State) orelse
        State#v1.connection_state =:= closing orelse
        State#v1.connection_state =:= closed ->
-    mainloop(Deb, State);
-handle_other(handshake_timeout, _Deb, State) ->
+    State;
+handle_other(handshake_timeout, State) ->
     throw({handshake_timeout, State#v1.callback});
-handle_other(heartbeat_timeout, Deb, State = #v1{connection_state = closed}) ->
-    mainloop(Deb, State);
-handle_other(heartbeat_timeout, _Deb, #v1{connection_state = S}) ->
+handle_other(heartbeat_timeout, State = #v1{connection_state = closed}) ->
+    State;
+handle_other(heartbeat_timeout, #v1{connection_state = S}) ->
     throw({heartbeat_timeout, S});
-handle_other({'$gen_call', From, {shutdown, Explanation}}, Deb, State) ->
+handle_other({'$gen_call', From, {shutdown, Explanation}}, State) ->
     {ForceTermination, NewState} = terminate(Explanation, State),
     gen_server:reply(From, ok),
     case ForceTermination of
-        force  -> ok;
-        normal -> mainloop(Deb, NewState)
+        force  -> stop;
+        normal -> NewState
     end;
-handle_other({'$gen_cast', force_event_refresh}, Deb, State) ->
+handle_other({'$gen_cast', force_event_refresh}, State) ->
     %% Ignore, the broker sent us this as it thinks we are a 0-9-1 connection
-    mainloop(Deb, State);
-handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
-    sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
-handle_other({bump_credit, Msg}, Deb, State) ->
-    credit_flow:handle_bump_msg(Msg),
-    recvloop(Deb, control_throttle(State));
-handle_other(terminate_connection, _Deb, State) ->
     State;
-handle_other(Other, _Deb, _State) ->
+handle_other({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    control_throttle(State);
+handle_other(terminate_connection, State) ->
+    State;
+handle_other(Other, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
 
