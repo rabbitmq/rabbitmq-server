@@ -82,7 +82,9 @@ function setup_global_vars(user) {
     replace_content('login-details',
                     '<p>User: <b>' + user.name + '</b></p>' +
                     '<p>RabbitMQ ' + overview.rabbitmq_version +
-                    ', Erlang ' + overview.erlang_version + '</p>');
+                    ', <acronym class="normal" title="' +
+                    overview.erlang_full_version + '">Erlang ' +
+                    overview.erlang_version + '</acronym></p>');
     var tags = user.tags.split(",");
     user_administrator = jQuery.inArray("administrator", tags) != -1;
     user_monitor = user_administrator ||
