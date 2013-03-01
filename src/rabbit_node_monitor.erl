@@ -271,12 +271,18 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
     ok = rabbit_mnesia:on_node_down(Node),
-    case application:get_env(rabbit, cluster_cp_mode) of
-        {ok, true}  -> case majority() of
-                           true  -> ok;
-                           false -> await_cluster_recovery()
-                       end;
-        {ok, false} -> ok
+    case application:get_env(rabbit, cluster_partition_handling) of
+        {ok, pause_minority} ->
+            case majority() of
+                true  -> ok;
+                false -> await_cluster_recovery()
+            end;
+        {ok, ignore} ->
+            ok;
+        {ok, Term} ->
+            rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
+                               "assuming 'ignore'~n", [Term]),
+            ok
     end,
     ok.
 
