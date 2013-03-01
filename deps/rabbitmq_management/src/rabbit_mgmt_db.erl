@@ -418,7 +418,8 @@ handle_event(Event = #event{type = queue_deleted,
     %% messages_ready, messages_unacknowledged] for this queue - since
     %% the queue's deletion means we have really got rid of messages!
     Id = {coarse, {queue_stats, Name}},
-    TS = floor(Timestamp, State),
+    %% This ceil must correspond to the ceil in append_samples/5
+    TS = ceil(Timestamp, State),
     OldStats = lookup_element(OldTable, Id),
     [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
      || Key <- ?COARSE_QUEUE_STATS],
@@ -588,6 +589,8 @@ append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
     case ignore_coarse_sample(Id, State) of
         false ->
             OldStats = lookup_element(OldTable, Id),
+            %% This ceil must correspond to the ceil in handle_event
+            %% queue_deleted
             NewMS = ceil(TS, State),
             case Keys of
                 all -> [append_sample(Key, Value, NewMS, OldStats, Id, State)
