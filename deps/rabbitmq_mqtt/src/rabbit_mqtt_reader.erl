@@ -43,19 +43,28 @@ init([]) ->
 handle_call({go, Sock0, SockTransform}, _From, undefined) ->
     process_flag(trap_exit, true),
     {ok, Sock} = SockTransform(Sock0),
-    {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
-    log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
-    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-    {reply, ok,
-     control_throttle(
-       #state{ socket           = Sock,
-               conn_name        = ConnStr,
-               await_recv       = false,
-               connection_state = running,
-               conserve         = false,
-               parse_state      = rabbit_mqtt_frame:initial_state(),
-               proc_state       = rabbit_mqtt_processor:initial_state(Sock) }),
-     hibernate};
+    case rabbit_net:connection_string(Sock, inbound) of
+        {ok, ConnStr} ->
+            log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
+            rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+            ProcessorState = rabbit_mqtt_processor:initial_state(Sock),
+            {reply, ok,
+             control_throttle(
+               #state{ socket           = Sock,
+                       conn_name        = ConnStr,
+                       await_recv       = false,
+                       connection_state = running,
+                       conserve         = false,
+                       parse_state      = rabbit_mqtt_frame:initial_state(),
+                       proc_state       = ProcessorState }),
+             hibernate};
+        {error, enotconn} ->
+            rabbit_net:fast_close(Sock),
+            {stop, shutdown, undefined};
+        {error, Reason} ->
+            rabbit_net:fast_close(Sock),
+            {stop, {network_error, Reason}, undefined}
+    end;
 
 handle_call(duplicate_id, _From,
             State = #state{ proc_state = PState,
