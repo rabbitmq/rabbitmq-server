@@ -159,7 +159,7 @@ get_headers(Content) ->
   case (Content#content.properties)#'P_basic'.headers of
     undefined -> [];
     H         -> rabbit_misc:sort_field_table(H)
-  end
+  end.
 
 % generate the function that checks the message against the SQL expression
 generate_binding_fun(XName, BindingKey, Args) ->
