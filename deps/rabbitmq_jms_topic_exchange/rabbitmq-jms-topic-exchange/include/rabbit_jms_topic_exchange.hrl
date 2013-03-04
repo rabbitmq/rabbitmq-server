@@ -28,3 +28,8 @@
 %% x_state field consists of an `orddict` dictionary of binding functions:
 %%         [{RoutingKey, BindingSelectorFun}, ...]
 %% there is no default
+
+%% Name of arg on binding used to specify selector -- string type
+%%      private static final RJMS_SELECTOR_ARG = "rjms_selector";
+%% in JMS Client.
+-define(RJMS_SELECTOR_ARG, <<"rjms_selector">>).
