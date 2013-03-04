@@ -235,7 +235,7 @@ delete_state(XName) ->
 read_state_for_update(XName) -> read_state(XName, write).
 
 % Basic read
-read_state(XName) -> read_state(XName, read);
+read_state(XName) -> read_state(XName, read).
 
 % Lockable read
 read_state(XName, Lock) ->
