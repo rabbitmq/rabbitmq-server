@@ -556,7 +556,21 @@ function link_policy(vhost, name) {
 }
 
 function _link_to(name, url) {
-    return '<a href="' + url + '">' + name + '</a>';
+    // TODO order of escaping HTML
+    return '<a href="' + url + '">' + fmt_highlight_filter(name) + '</a>';
+}
+
+function fmt_highlight_filter(text) {
+    if (current_filter == '') return text;
+    var ix = text.toLowerCase().indexOf(current_filter.toLowerCase());
+    var l = current_filter.length;
+    if (ix == -1) {
+        return text;
+    }
+    else {
+        return text.substring(0, ix) + '<span class="filter-highlight">' +
+            text.substring(ix, ix + l) + '</span>' + text.substring(ix + l);
+    }
 }
 
 function message_rates(stats) {
@@ -605,10 +619,25 @@ function queue_length(stats, name, key) {
 
 function maybe_truncate(items) {
     var maximum = 500;
-    var str = '';
+    var str = '<div class="filter' +
+        (current_filter == '' ? '' : ' filter-active') +
+        '">Filter: <input id="filter" value="' +
+        fmt_escape_html(current_filter) + '"/></div>';
+
+    if (current_filter != '') {
+        var items2 = [];
+        for (var i in items) {
+            var item = items[i];
+            if (item.name.toLowerCase().indexOf(current_filter.toLowerCase()) != -1) {
+                items2.push(item);
+            }
+        }
+        items.length = items2.length;
+        for (var i in items2) items[i] = items2[i];
+    }
 
     if (items.length > maximum) {
-        str = '<p class="warning">Only ' + maximum + ' of ' +
+        str += '<p class="warning">Only ' + maximum + ' of ' +
             items.length + ' items are shown.</p>';
         items.length = maximum;
     }

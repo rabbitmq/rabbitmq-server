@@ -439,6 +439,14 @@ function postprocess() {
     $('.tag-link').click(function() {
         $('#tags').val($(this).attr('tag'));
     });
+    $('#filter').die().live('keyup', function() {
+        current_filter = $(this).val();
+        $(this).parent().removeClass('filter-active');
+        if ($(this).val() != '') {
+            $(this).parent().addClass('filter-active');
+        }
+        partial_update();
+    });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
