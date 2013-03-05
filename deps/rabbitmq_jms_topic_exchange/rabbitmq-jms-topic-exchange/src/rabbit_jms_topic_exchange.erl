@@ -180,7 +180,7 @@ compile_sql(SQL) ->
     {ok, Tokens, _} -> case sjx_parser:parse(Tokens) of
                          {ok, CompSQL} -> CompSQL;
                          _ -> {'false'}
-                       end
+                       end;
     _ -> {'false'}
   end.
 
