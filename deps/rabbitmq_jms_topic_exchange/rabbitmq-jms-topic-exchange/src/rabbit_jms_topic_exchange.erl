@@ -20,8 +20,8 @@
 
 -behaviour(rabbit_exchange_type).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_jms_topic_exchange.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Rabbit exchange type functions:
 -export([ description/0
@@ -185,7 +185,8 @@ sql_match(XName, SQL, Headers) ->
   case sjx_evaluator:evaluate(SQL, Headers) of
     true -> true;
     false -> false;
-    error -> evaluation_error(XName, SQL)
+    error -> evaluation_error(XName, SQL),
+             false
   end.
 
 % get binding funs from state
@@ -193,7 +194,7 @@ get_binding_funs(XName) ->
   rabbit_misc:execute_mnesia_transaction(
     fun() ->
       #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state(XName),
-      write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun))
+      BindingFuns
     end
   ).
 
