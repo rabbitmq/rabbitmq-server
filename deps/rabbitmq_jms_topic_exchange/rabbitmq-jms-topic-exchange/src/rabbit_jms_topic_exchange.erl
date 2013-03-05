@@ -124,7 +124,7 @@ add_binding( _Tx
   case rabbit_amqqueue:lookup(QName) of
     {error, not_found} ->
       queue_not_found_error(QName);
-    {ok, #amqqueue{pid = QPid}} ->
+    {ok, #amqqueue{}} ->
       add_binding_fun(XName, {BindingKey, generate_binding_fun(XName, BindingKey, Args)})
   end,
   ok.
@@ -162,7 +162,7 @@ get_headers(Content) ->
   end.
 
 % generate the function that checks the message against the SQL expression
-generate_binding_fun(XName, BindingKey, Args) ->
+generate_binding_fun(XName, _BindingKey, Args) ->
   CompiledSQLExp = compile_sql(get_sql_from_args(Args)),
   fun(Headers) ->
     sql_match(XName, CompiledSQLExp, Headers)
