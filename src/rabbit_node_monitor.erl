@@ -53,7 +53,7 @@
 -spec(notify_joined_cluster/0 :: () -> 'ok').
 -spec(notify_left_cluster/1 :: (node()) -> 'ok').
 
--spec(partitions/0 :: () -> {node(), [{atom(), node()}]}).
+-spec(partitions/0 :: () -> {node(), [node()]}).
 -spec(subscribe/1 :: (pid()) -> 'ok').
 
 -endif.

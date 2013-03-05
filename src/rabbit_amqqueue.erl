@@ -31,10 +31,11 @@
 -export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
--export([start_mirroring/1, stop_mirroring/1]).
+-export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
+         cancel_sync_mirrors/1]).
 
 %% internal
--export([internal_declare/2, internal_delete/2, run_backing_queue/3,
+-export([internal_declare/2, internal_delete/1, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
@@ -157,11 +158,11 @@
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: (qpids(), pid()) -> 'ok').
--spec(internal_delete/2 ::
-        (name(), pid()) -> rabbit_types:ok_or_error('not_found') |
-                           rabbit_types:connection_exit() |
-                           fun (() -> rabbit_types:ok_or_error('not_found') |
-                                      rabbit_types:connection_exit())).
+-spec(internal_delete/1 ::
+        (name()) -> rabbit_types:ok_or_error('not_found') |
+                    rabbit_types:connection_exit() |
+                    fun (() -> rabbit_types:ok_or_error('not_found') |
+                               rabbit_types:connection_exit())).
 -spec(run_backing_queue/3 ::
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
@@ -174,6 +175,8 @@
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 -spec(start_mirroring/1 :: (pid()) -> 'ok').
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
+-spec(sync_mirrors/1 :: (pid()) -> 'ok' | rabbit_types:error('not_mirrored')).
+-spec(cancel_sync_mirrors/1 :: (pid()) -> 'ok' | {'ok', 'not_syncing'}).
 
 -endif.
 
@@ -258,7 +261,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
                           true  -> rabbit_misc:const(ExistingQ);
-                          false -> TailFun = internal_delete(QueueName, QPid),
+                          false -> TailFun = internal_delete(QueueName),
                                    fun () -> TailFun(), ExistingQ end
                       end
               end
@@ -303,6 +306,8 @@ add_default_binding(#amqqueue{name = QueueName}) ->
                                 key         = RoutingKey,
                                 args        = []}).
 
+lookup([])     -> [];                             %% optimisation
+lookup([Name]) -> ets:lookup(rabbit_queue, Name); %% optimisation
 lookup(Names) when is_list(Names) ->
     %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
     %% expensive for reasons explained in rabbit_misc:dirty_read/1.
@@ -381,14 +386,10 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
-    rabbit_misc:assert_args_equivalence(
-      Args, RequiredArgs, QueueName, [<<"x-expires">>, <<"x-message-ttl">>]).
+    rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
+                                        [Key || {Key, _Fun} <- args()]).
 
 check_declare_arguments(QueueName, Args) ->
-    Checks = [{<<"x-expires">>,                 fun check_expires_arg/2},
-              {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
-              {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
-              {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}],
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;
          TypeVal   -> case Fun(TypeVal, Args) of
@@ -399,8 +400,14 @@ check_declare_arguments(QueueName, Args) ->
                                               [Key, rabbit_misc:rs(QueueName),
                                                Error])
                       end
-     end || {Key, Fun} <- Checks],
+     end || {Key, Fun} <- args()],
     ok.
+
+args() ->
+    [{<<"x-expires">>,                 fun check_expires_arg/2},
+     {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
+     {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
+     {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}].
 
 check_string_arg({longstr, _}, _Args) -> ok;
 check_string_arg({Type,    _}, _Args) -> {error, {unacceptable_type, Type}}.
@@ -570,7 +577,7 @@ internal_delete1(QueueName) ->
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName).
 
-internal_delete(QueueName, QPid) ->
+internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
@@ -580,8 +587,7 @@ internal_delete(QueueName, QPid) ->
                          fun() ->
                                  ok = T(),
                                  ok = rabbit_event:notify(queue_deleted,
-                                                          [{pid,  QPid},
-                                                           {name, QueueName}])
+                                                          [{name, QueueName}])
                          end
               end
       end).
@@ -616,10 +622,13 @@ set_maximum_since_use(QPid, Age) ->
 start_mirroring(QPid) -> ok = delegate:cast(QPid, start_mirroring).
 stop_mirroring(QPid)  -> ok = delegate:cast(QPid, stop_mirroring).
 
+sync_mirrors(QPid)        -> delegate:call(QPid, sync_mirrors).
+cancel_sync_mirrors(QPid) -> delegate:call(QPid, cancel_sync_mirrors).
+
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> QsDels =
-                    qlc:e(qlc:q([{{QName, Pid}, delete_queue(QName)} ||
+                    qlc:e(qlc:q([{QName, delete_queue(QName)} ||
                                     #amqqueue{name = QName, pid = Pid,
                                               slave_pids = []}
                                         <- mnesia:table(rabbit_queue),
@@ -632,10 +641,9 @@ on_node_down(Node) ->
                 fun () ->
                         T(),
                         lists:foreach(
-                          fun({QName, QPid}) ->
+                          fun(QName) ->
                                   ok = rabbit_event:notify(queue_deleted,
-                                                           [{pid,  QPid},
-                                                            {name, QName}])
+                                                           [{name, QName}])
                           end, Qs)
                 end
       end).
@@ -693,6 +701,8 @@ deliver(Qs, Delivery, _Flow) ->
         R  -> {routed,     [QPid || {QPid, ok} <- R]}
     end.
 
+qpids([]) -> {[], []}; %% optimisation
+qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[QPid], SPids}; %% opt
 qpids(Qs) ->
     {MPids, SPids} = lists:foldl(fun (#amqqueue{pid = QPid, slave_pids = SPids},
                                       {MPidAcc, SPidAcc}) ->

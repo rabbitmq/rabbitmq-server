@@ -37,8 +37,7 @@
 -endif.
 
 description() ->
-    [{name, <<"headers">>},
-     {description, <<"AMQP headers exchange, as per the AMQP specification">>}].
+    [{description, <<"AMQP headers exchange, as per the AMQP specification">>}].
 
 serialise_events() -> false.
 

@@ -24,13 +24,16 @@
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
 description() ->
-    [{name, <<"invalid">>},
-     {description,
+    [{description,
       <<"Dummy exchange type, to be used when the intended one is not found.">>
      }].
 
 serialise_events() -> false.
 
+-ifdef(use_specs).
+-spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                 -> no_return()).
+-endif.
 route(#exchange{name = Name, type = Type}, _) ->
     rabbit_misc:protocol_error(
       precondition_failed,

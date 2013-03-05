@@ -16,7 +16,7 @@
 
 -module(rabbit_parameter_validation).
 
--export([number/2, binary/2, boolean/2, list/2, regex/2, proplist/3]).
+-export([number/2, binary/2, boolean/2, list/2, regex/2, proplist/3, enum/1]).
 
 number(_Name, Term) when is_number(Term) ->
     ok;
@@ -73,3 +73,15 @@ proplist(Name, Constraints, Term) when is_list(Term) ->
 
 proplist(Name, _Constraints, Term) ->
     {error, "~s not a list ~p", [Name, Term]}.
+
+enum(OptionsA) ->
+    Options = [list_to_binary(atom_to_list(O)) || O <- OptionsA],
+    fun (Name, Term) when is_binary(Term) ->
+            case lists:member(Term, Options) of
+                true  -> ok;
+                false -> {error, "~s should be one of ~p, actually was ~p",
+                          [Name, Options, Term]}
+            end;
+        (Name, Term) ->
+            {error, "~s should be binary, actually was ~p", [Name, Term]}
+    end.

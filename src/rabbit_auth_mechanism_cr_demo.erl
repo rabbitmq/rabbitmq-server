@@ -37,8 +37,7 @@
 %% SECURE-OK: "My password is ~s", [Password]
 
 description() ->
-    [{name, <<"RABBIT-CR-DEMO">>},
-     {description, <<"RabbitMQ Demo challenge-response authentication "
+    [{description, <<"RabbitMQ Demo challenge-response authentication "
                      "mechanism">>}].
 
 should_offer(_Sock) ->
