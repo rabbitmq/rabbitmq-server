@@ -176,12 +176,13 @@ get_sql_from_args(Args) ->
 
 % scan and parse SQL expression
 compile_sql(SQL) ->
-case sjx_scanner:string(SQL) of
-  {ok, Tokens, _} -> case sjx_parser:parse(Tokens) of
-                       {ok, CompSQL} -> CompSQL;
-                       _ -> {'false'}
-                     end
-  CompSQL.
+  case sjx_scanner:string(SQL) of
+    {ok, Tokens, _} -> case sjx_parser:parse(Tokens) of
+                         {ok, CompSQL} -> CompSQL;
+                         _ -> {'false'}
+                       end
+    _ -> {'false'}
+  end.
 
 % Evaluate the SQL parsed tree and check against the Headers
 sql_match(XName, SQL, Headers) ->
