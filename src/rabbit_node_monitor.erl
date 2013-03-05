@@ -270,7 +270,46 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
-    ok = rabbit_mnesia:on_node_down(Node).
+    ok = rabbit_mnesia:on_node_down(Node),
+    case application:get_env(rabbit, cluster_partition_handling) of
+        {ok, pause_minority} ->
+            case majority() of
+                true  -> ok;
+                false -> await_cluster_recovery()
+            end;
+        {ok, ignore} ->
+            ok;
+        {ok, Term} ->
+            rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
+                               "assuming 'ignore'~n", [Term]),
+            ok
+    end,
+    ok.
+
+majority() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Alive = [N || N <- Nodes, pong =:= net_adm:ping(N)],
+    length(Alive) / length(Nodes) > 0.5.
+
+await_cluster_recovery() ->
+    rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
+                       []),
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    spawn(fun () ->
+                  %% If our group leader is inside an application we are about
+                  %% to stop, application:stop/1 does not return.
+                  group_leader(whereis(init), self()),
+                  rabbit:stop(),
+                  wait_for_cluster_recovery(Nodes)
+          end).
+
+wait_for_cluster_recovery(Nodes) ->
+    [erlang:disconnect_node(Node) || Node <- Nodes],
+    case majority() of
+        true  -> rabbit:start();
+        false -> timer:sleep(1000),
+                 wait_for_cluster_recovery(Nodes)
+    end.
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),
