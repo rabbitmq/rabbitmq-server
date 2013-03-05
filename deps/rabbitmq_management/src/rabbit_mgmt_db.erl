@@ -228,6 +228,7 @@ init([]) ->
     %% that the management plugin work.
     process_flag(priority, high),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    rabbit_node_monitor:subscribe(self()),
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval,
                 tables = orddict:from_list(
@@ -331,6 +332,13 @@ handle_cast({event, Event}, State) ->
 handle_cast(_Request, State) ->
     noreply(State).
 
+handle_info({node_down, Node}, State = #state{tables = Tables}) ->
+    Conns = created_events(connection_stats, Tables),
+    Chs = created_events(channel_stats, Tables),
+    delete_all_from_node(connection_closed, Node, Conns, State),
+    delete_all_from_node(channel_closed, Node, Chs, State),
+    noreply(State);
+
 handle_info(_Info, State) ->
     noreply(State).
 
@@ -356,6 +364,12 @@ handle_pre_hibernate(State) ->
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%----------------------------------------------------------------------------
+
+delete_all_from_node(Type, Node, Items, State) ->
+    [case node(Pid) of
+         Node -> handle_event(#event{type = Type, props = [{pid, Pid}]}, State);
+         _    -> ok
+     end || Item <- Items, Pid <- [pget(pid, Item)]].
 
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
