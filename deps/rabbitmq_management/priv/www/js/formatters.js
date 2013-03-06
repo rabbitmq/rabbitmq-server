@@ -231,7 +231,11 @@ function is_col_empty(objects, name, accessor) {
 }
 
 function fmt_exchange(name) {
-    return name == '' ? '(AMQP default)' : fmt_escape_html(name);
+    return fmt_escape_html(fmt_exchange0(name));
+}
+
+function fmt_exchange0(name) {
+    return name == '' ? '(AMQP default)' : name;
 }
 
 function fmt_exchange_type(type) {
@@ -522,54 +526,62 @@ function esc(str) {
 }
 
 function link_conn(name, desc) {
-    if (desc == undefined) desc = short_conn(name);
-    return _link_to(fmt_escape_html(desc), '#/connections/' + esc(name))
+    if (desc == undefined) {
+        return _link_to(short_conn(name), '#/connections/' + esc(name));
+    }
+    else {
+        return _link_to(desc, '#/connections/' + esc(name), false);
+    }
 }
 
 function link_channel(name) {
-    return _link_to(fmt_escape_html(short_chan(name)), '#/channels/' + esc(name))
+    return _link_to(short_chan(name), '#/channels/' + esc(name))
 }
 
 function link_exchange(vhost, name) {
     var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
-    return _link_to(fmt_exchange(name), '#/exchanges/' + url)
+    return _link_to(fmt_exchange0(name), '#/exchanges/' + url)
 }
 
 function link_queue(vhost, name) {
-    return _link_to(fmt_escape_html(name), '#/queues/' + esc(vhost) + '/' + esc(name))
+    return _link_to(name, '#/queues/' + esc(vhost) + '/' + esc(name))
 }
 
 function link_vhost(name) {
-    return _link_to(fmt_escape_html(name), '#/vhosts/' + esc(name))
+    return _link_to(name, '#/vhosts/' + esc(name))
 }
 
 function link_user(name) {
-    return _link_to(fmt_escape_html(name), '#/users/' + esc(name))
+    return _link_to(name, '#/users/' + esc(name))
 }
 
 function link_node(name) {
-    return _link_to(fmt_escape_html(name), '#/nodes/' + esc(name))
+    return _link_to(name, '#/nodes/' + esc(name))
 }
 
 function link_policy(vhost, name) {
-    return _link_to(fmt_escape_html(name), '#/policies/' + esc(vhost) + '/' + esc(name))
+    return _link_to(name, '#/policies/' + esc(vhost) + '/' + esc(name))
 }
 
-function _link_to(name, url) {
-    // TODO order of escaping HTML
-    return '<a href="' + url + '">' + fmt_highlight_filter(name) + '</a>';
+function _link_to(name, url, highlight) {
+    if (highlight == undefined) highlight = true;
+    return '<a href="' + url + '">' +
+        (highlight ? fmt_highlight_filter(name) : fmt_escape_html(name)) +
+        '</a>';
 }
 
 function fmt_highlight_filter(text) {
-    if (current_filter == '') return text;
+    if (current_filter == '') return fmt_escape_html(text);
     var ix = text.toLowerCase().indexOf(current_filter.toLowerCase());
     var l = current_filter.length;
     if (ix == -1) {
-        return text;
+        return fmt_escape_html(text);
     }
     else {
-        return text.substring(0, ix) + '<span class="filter-highlight">' +
-            text.substring(ix, ix + l) + '</span>' + text.substring(ix + l);
+        return fmt_escape_html(text.substring(0, ix)) +
+            '<span class="filter-highlight">' +
+            fmt_escape_html(text.substring(ix, ix + l)) + '</span>' +
+            fmt_escape_html(text.substring(ix + l));
     }
 }
 
@@ -617,13 +629,7 @@ function queue_length(stats, name, key) {
         '<strong>' + stats[key] + '</strong>' + rateMsg + '</div>';
 }
 
-function maybe_truncate(items) {
-    var maximum = 500;
-    var str = '<div class="filter' +
-        (current_filter == '' ? '' : ' filter-active') +
-        '">Filter: <input id="filter" value="' +
-        fmt_escape_html(current_filter) + '"/></div>';
-
+function filter_ui(items) {
     if (current_filter != '') {
         var items2 = [];
         for (var i in items) {
@@ -636,8 +642,18 @@ function maybe_truncate(items) {
         for (var i in items2) items[i] = items2[i];
     }
 
+    return '<div class="filter' +
+        (current_filter == '' ? '' : ' filter-active') +
+        '">Filter: <input id="filter" value="' +
+        fmt_escape_html(current_filter) + '"/></div>';
+}
+
+function maybe_truncate(items) {
+    var maximum = 500;
+    var str = '';
+
     if (items.length > maximum) {
-        str += '<p class="warning">Only ' + maximum + ' of ' +
+        str = '<p class="warning">Only ' + maximum + ' of ' +
             items.length + ' items are shown.</p>';
         items.length = maximum;
     }
