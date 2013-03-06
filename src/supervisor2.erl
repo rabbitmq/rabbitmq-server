@@ -703,8 +703,8 @@ handle_info(Msg, State) ->
 
 delayed_restart(RestartType, Reason, Child, State) ->
     case do_restart(RestartType, Reason, Child, State) of
-        {ok, NState}           -> {noreply, NState};
-        {try_again, _, NState} -> {noreply, NState}
+        {ok, NState} -> {noreply, NState};
+        Other        -> Other
     end.
 
 %%
@@ -879,14 +879,7 @@ do_restart(temporary, Reason, Child, State) ->
 do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
     case add_restart(State) of
         {ok, NState} ->
-            restart(NState#state.strategy, Child, NState);
-        {try_again, Reason, NState} ->
-            %% See restart/2 for an explanation of try_again_restart
-            Id = if ?is_simple(State) -> Child#child.pid;
-                    true -> Child#child.name
-                 end,
-            timer:apply_after(0,?MODULE,try_again_restart,[self(),Id,Reason]),
-            {ok, NState};
+            maybe_restart(NState#state.strategy, Child, NState);
         {terminate, _NState} ->
             %% we've reached the max restart intensity, but the
             %% add_restart will have added to the restarts
@@ -910,25 +903,28 @@ del_child_and_maybe_shutdown(_, Child, State) ->
 restart(Child, State) ->
     case add_restart(State) of
 	{ok, NState} ->
-	    case restart(NState#state.strategy, Child, NState) of
-		{try_again, Reason, NState2} ->
-		    %% Leaving control back to gen_server before
-		    %% trying again. This way other incoming requsts
-		    %% for the supervisor can be handled - e.g. a
-		    %% shutdown request for the supervisor or the
-		    %% child.
-		    Id = if ?is_simple(State) -> Child#child.pid;
-			    true -> Child#child.name
-			 end,
-		    timer:apply_after(0,?MODULE,try_again_restart,[self(),Id,Reason]),
-		    {ok,NState2};
-		Other ->
-		    Other
-	    end;
+	    maybe_restart(NState#state.strategy, Child, NState);
 	{terminate, NState} ->
 	    report_error(shutdown, reached_max_restart_intensity,
 			 Child, State#state.name),
 	    {shutdown, remove_child(Child, NState)}
+    end.
+
+maybe_restart(Strategy, Child, State) ->
+    case restart(Strategy, Child, State) of
+        {try_again, Reason, NState2} ->
+            %% Leaving control back to gen_server before
+            %% trying again. This way other incoming requsts
+            %% for the supervisor can be handled - e.g. a
+            %% shutdown request for the supervisor or the
+            %% child.
+            Id = if ?is_simple(State) -> Child#child.pid;
+                    true -> Child#child.name
+                 end,
+            timer:apply_after(0,?MODULE,try_again_restart,[self(),Id,Reason]),
+            {ok,NState2};
+        Other ->
+            Other
     end.
 
 restart(simple_one_for_one, Child, State) ->
