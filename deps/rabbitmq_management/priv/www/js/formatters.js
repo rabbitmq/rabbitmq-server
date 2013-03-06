@@ -630,6 +630,9 @@ function queue_length(stats, name, key) {
 }
 
 function filter_ui(items) {
+    var maximum = 500;
+    var total = items.length;
+
     if (current_filter != '') {
         var items2 = [];
         for (var i in items) {
@@ -642,23 +645,28 @@ function filter_ui(items) {
         for (var i in items2) items[i] = items2[i];
     }
 
-    return '<div class="filter' +
+    var res = '<div class="filter' +
         (current_filter == '' ? '' : ' filter-active') +
-        '">Filter: <input id="filter" value="' +
-        fmt_escape_html(current_filter) + '"/></div>';
-}
+        '"><table><tr><th>Filter:</th>' +
+        '<td><input id="filter" type="text" value="' +
+        fmt_escape_html(current_filter) + '"/></td></tr></table>' +
+        '<div class="updatable">';
 
-function maybe_truncate(items) {
-    var maximum = 500;
-    var str = '';
+    var selected = current_filter == '' ? (items.length + ' items') :
+        (items.length + ' of ' + total + ' items selected');
 
     if (items.length > maximum) {
-        str = '<p class="warning">Only ' + maximum + ' of ' +
-            items.length + ' items are shown.</p>';
+        res += '<p class="filter-warning">' + selected +
+            ' (only showing first ' + maximum + ').</p>';
         items.length = maximum;
     }
+    else {
+        res += '<p>' + selected + '</p>';
+    }
 
-    return str;
+    res += '</div></div>';
+
+    return res;
 }
 
 function fmt_sort(display, sort) {

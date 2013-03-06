@@ -441,9 +441,9 @@ function postprocess() {
     });
     $('#filter').die().live('keyup', function() {
         current_filter = $(this).val();
-        $(this).parent().removeClass('filter-active');
+        $(this).parents('table').first().removeClass('filter-active');
         if ($(this).val() != '') {
-            $(this).parent().addClass('filter-active');
+            $(this).parents('table').first().addClass('filter-active');
         }
         partial_update();
     });

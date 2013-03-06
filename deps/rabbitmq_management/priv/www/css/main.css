@@ -45,8 +45,13 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .tag-link { color: #444; cursor: pointer; }
 .tag-link:hover { color: #888; }
 
-.filter-active { background: yellow; }
-.filter-highlight { background: yellow; }
+.filter { overflow: auto; width: 100%; margin-bottom: 10px; }
+.filter table { float: left; }
+.filter div { float: right; }
+.filter p { padding: 8px; margin: 0; }
+.filter p.filter-warning { border-radius: 5px; background: #ff8; }
+.filter-active { background: #99ebff; border-radius: 5px; }
+.filter-highlight { background: #99ebff; }
 
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
