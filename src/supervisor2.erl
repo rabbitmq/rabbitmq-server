@@ -1,4 +1,4 @@
-%% This file is a copy of supervisor.erl from the R15B-3 Erlang/OTP
+%% This file is a copy of supervisor.erl from the R16B Erlang/OTP
 %% distribution, with the following modifications:
 %%
 %% 1) the module name is supervisor2
