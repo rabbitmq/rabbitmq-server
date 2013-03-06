@@ -312,6 +312,9 @@ await_cluster_recovery() ->
                   %% If our group leader is inside an application we are about
                   %% to stop, application:stop/1 does not return.
                   group_leader(whereis(init), self()),
+                  %% Ensure only one restarting process at a time, will
+                  %% exit(badarg) (harmlessly) if one is already running
+                  register(rabbit_restarting_process, self()),
                   rabbit:stop(),
                   wait_for_cluster_recovery(Nodes)
           end).
