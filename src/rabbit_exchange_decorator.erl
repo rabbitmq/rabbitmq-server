@@ -58,13 +58,17 @@
 -callback policy_changed (
             serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
 
+-callback route ( rabbit_types:exchange(), rabbit_types:delivery(),
+                  [rabbit_amqqueue:name()]) ->
+    {[rabbit_amqqueue:name()], [rabbit_amqqueue:name()]}.
+
 -else.
 
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
     [{description, 0}, {serialise_events, 1}, {create, 2}, {delete, 3},
-     {add_binding, 3}, {remove_bindings, 3}, {policy_changed, 3}];
+     {add_binding, 3}, {remove_bindings, 3}, {policy_changed, 3}, {route, 3}];
 behaviour_info(_Other) ->
     undefined.
 
