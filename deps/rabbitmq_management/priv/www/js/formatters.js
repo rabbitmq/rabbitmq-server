@@ -630,7 +630,7 @@ function queue_length(stats, name, key) {
 }
 
 function filter_ui(items) {
-    var maximum = 500;
+    var maximum = 100;
     var total = items.length;
 
     if (current_filter != '') {
