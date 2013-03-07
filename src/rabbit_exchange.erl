@@ -314,11 +314,16 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
 route(#exchange{name = #resource{name = RName, virtual_host = VHost} = XName} = X,
       #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
-    case registry_lookup(exchange_decorator_route) == [] andalso
-         RName == <<"">> of
-        true  -> [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
-        false -> QNames = route1(Delivery, {[X], XName, []}),
-                 lists:usort(decorate_route(X, Delivery, QNames))
+    case {registry_lookup(exchange_decorator_route) == [], RName == <<"">>} of
+        {true, true} ->
+            [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
+        {NoDecor, _} ->
+            QNames = route1(Delivery, {[X], XName, []}),
+            lists:usort(
+              case NoDecor of
+                  true  -> QNames;
+                  false -> decorate_route(X, Delivery, QNames)
+              end)
     end.
 
 decorate_route(X, Delivery, QNames) ->
