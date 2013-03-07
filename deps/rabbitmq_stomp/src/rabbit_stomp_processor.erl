@@ -443,14 +443,14 @@ with_destination(Command, Frame, State, Fun) ->
         {ok, DestHdr} ->
             case rabbit_routing_util:parse_endpoint(DestHdr) of
                 {ok, Destination} ->
-                    try
-                        Fun(Destination, DestHdr, Frame, State)
-                    catch
-                        invalid_endpoint ->
+                    case Fun(Destination, DestHdr, Frame, State) of
+                        {error, invalid_endpoint} ->
                             error("Invalid destination",
                                   "'~s' is not a valid destination for '~s'~n",
                                   [DestHdr, Command],
-                                  State)
+                                  State);
+                        {ok, _} = Result ->
+                            Result
                     end;
                 {error, {invalid_destination, Type, Content}} ->
                     error("Invalid destination",
@@ -580,34 +580,38 @@ do_subscribe(Destination, DestHdr, Frame,
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
         State = #state{channel = Channel, route_state = RouteState}) ->
-    {ok, _Q, RouteState1} = ensure_endpoint(dest, Destination, Frame, Channel,
-                                            RouteState),
 
-    {Frame1, State1} =
-        ensure_reply_to(Frame, State#state{route_state = RouteState1}),
+    case ensure_endpoint(dest, Destination, Frame, Channel, RouteState) of
+        {ok, _Q, RouteState1} ->
 
-    Props = rabbit_stomp_util:message_properties(Frame1),
+            {Frame1, State1} =
+                ensure_reply_to(Frame, State#state{route_state = RouteState1}),
 
-    {Exchange, RoutingKey} =
-        rabbit_routing_util:parse_routing(Destination),
+            Props = rabbit_stomp_util:message_properties(Frame1),
 
-    Method = #'basic.publish'{
-      exchange = list_to_binary(Exchange),
-      routing_key = list_to_binary(RoutingKey),
-      mandatory = false,
-      immediate = false},
+            {Exchange, RoutingKey} =
+                rabbit_routing_util:parse_routing(Destination),
 
-    case transactional(Frame1) of
-        {yes, Transaction} ->
-            extend_transaction(Transaction,
-                               fun(StateN) ->
-                                       maybe_record_receipt(Frame1, StateN)
-                               end,
-                               {Method, Props, BodyFragments},
-                               State1);
-        no ->
-            ok(send_method(Method, Props, BodyFragments,
-                           maybe_record_receipt(Frame1, State1)))
+            Method = #'basic.publish'{
+              exchange = list_to_binary(Exchange),
+              routing_key = list_to_binary(RoutingKey),
+              mandatory = false,
+              immediate = false},
+
+            case transactional(Frame1) of
+                {yes, Transaction} ->
+                    extend_transaction(Transaction,
+                                       fun(StateN) ->
+                                               maybe_record_receipt(Frame1, StateN)
+                                       end,
+                                       {Method, Props, BodyFragments},
+                                       State1);
+                no ->
+                    ok(send_method(Method, Props, BodyFragments,
+                                   maybe_record_receipt(Frame1, State1)))
+            end;
+        {error, invalid_endpoint} = Err ->
+            Err
     end.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
