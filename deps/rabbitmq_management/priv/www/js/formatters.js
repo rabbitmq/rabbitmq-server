@@ -657,7 +657,7 @@ function filter_ui(items) {
 
     if (items.length > maximum) {
         res += '<p class="filter-warning">' + selected +
-            ' (only showing first ' + maximum + ').</p>';
+            ' (only showing first ' + maximum + ')</p>';
         items.length = maximum;
     }
     else {
