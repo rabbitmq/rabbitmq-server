@@ -35,7 +35,8 @@ all_tests() ->
                      fun test_subscribe_ack/3,
                      fun test_send/3,
                      fun test_delete_queue_subscribe/3,
-                     fun test_temp_destination_queue/3]]
+                     fun test_temp_destination_queue/3,
+                     fun test_temp_destination_in_send/3]]
      || Version <- ?SUPPORTED_VERSIONS],
     ok.
 
@@ -198,6 +199,13 @@ test_temp_destination_queue(Channel, Client, _Version) ->
                            #'basic.publish'{routing_key = ReplyTo},
                            #amqp_msg{payload = <<"pong">>}),
     {ok, _Client1, _, [<<"pong">>]} = stomp_receive(Client, "MESSAGE"),
+    ok.
+
+test_temp_destination_in_send(Channel, Client, _Version) ->
+    rabbit_stomp_client:send( Client, "SEND", [{"destination", "/temp-queue/foo"}],
+                                              ["poing"]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+    "Invalid destination" = proplists:get_value("message", Hdrs),
     ok.
 
 stomp_receive(Client, Command) ->

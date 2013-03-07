@@ -443,7 +443,17 @@ with_destination(Command, Frame, State, Fun) ->
         {ok, DestHdr} ->
             case rabbit_routing_util:parse_endpoint(DestHdr) of
                 {ok, Destination} ->
-                    Fun(Destination, DestHdr, Frame, State);
+                    case Fun(Destination, DestHdr, Frame, State) of
+                        {error, invalid_endpoint} ->
+                            error("Invalid destination",
+                                  "'~s' is not a valid destination for '~s'~n",
+                                  [DestHdr, Command],
+                                  State);
+                        {error, Reason} ->
+                            throw(Reason);
+                        Result ->
+                            Result
+                    end;
                 {error, {invalid_destination, Type, Content}} ->
                     error("Invalid destination",
                           "'~s' is not a valid ~p destination~n",
@@ -540,66 +550,75 @@ do_subscribe(Destination, DestHdr, Frame,
                                                      global         = false}),
                       Channel1
               end,
-
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
-
-    {ok, Queue, RouteState1} =
-      ensure_endpoint(source, Destination, Frame, Channel, RouteState),
-
-    {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
-
-    amqp_channel:subscribe(Channel,
-                           #'basic.consume'{
-                             queue        = Queue,
-                             consumer_tag = ConsumerTag,
-                             no_local     = false,
-                             no_ack       = (AckMode == auto),
-                             exclusive    = false},
-                           self()),
-    ExchangeAndKey = rabbit_routing_util:parse_routing(Destination),
-    ok = rabbit_routing_util:ensure_binding(Queue, ExchangeAndKey, Channel),
-
-    ok(State#state{subscriptions =
-                       dict:store(ConsumerTag,
-                                  #subscription{dest_hdr    = DestHdr,
-                                                channel     = Channel,
-                                                ack_mode    = AckMode,
-                                                multi_ack   = IsMulti,
-                                                description = Description},
-                                  Subs),
-                   route_state = RouteState1}).
+    case ensure_endpoint(source, Destination, Frame, Channel, RouteState) of
+        {ok, Queue, RouteState1} ->
+            {ok, ConsumerTag, Description} =
+                rabbit_stomp_util:consumer_tag(Frame),
+            amqp_channel:subscribe(Channel,
+                                   #'basic.consume'{
+                                     queue        = Queue,
+                                     consumer_tag = ConsumerTag,
+                                     no_local     = false,
+                                     no_ack       = (AckMode == auto),
+                                     exclusive    = false},
+                                   self()),
+            ExchangeAndKey = rabbit_routing_util:parse_routing(Destination),
+            ok = rabbit_routing_util:ensure_binding(
+                   Queue, ExchangeAndKey, Channel),
+            ok(State#state{subscriptions =
+                               dict:store(
+                                 ConsumerTag,
+                                 #subscription{dest_hdr    = DestHdr,
+                                               channel     = Channel,
+                                               ack_mode    = AckMode,
+                                               multi_ack   = IsMulti,
+                                               description = Description},
+                                 Subs),
+                           route_state = RouteState1});
+        {error, _} = Err ->
+            Err
+    end.
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
         State = #state{channel = Channel, route_state = RouteState}) ->
-    {ok, _Q, RouteState1} = ensure_endpoint(dest, Destination, Frame, Channel,
-                                            RouteState),
 
-    {Frame1, State1} =
-        ensure_reply_to(Frame, State#state{route_state = RouteState1}),
+    case ensure_endpoint(dest, Destination, Frame, Channel, RouteState) of
 
-    Props = rabbit_stomp_util:message_properties(Frame1),
+        {ok, _Q, RouteState1} ->
 
-    {Exchange, RoutingKey} =
-        rabbit_routing_util:parse_routing(Destination),
+            {Frame1, State1} =
+                ensure_reply_to(Frame, State#state{route_state = RouteState1}),
 
-    Method = #'basic.publish'{
-      exchange = list_to_binary(Exchange),
-      routing_key = list_to_binary(RoutingKey),
-      mandatory = false,
-      immediate = false},
+            Props = rabbit_stomp_util:message_properties(Frame1),
 
-    case transactional(Frame1) of
-        {yes, Transaction} ->
-            extend_transaction(Transaction,
-                               fun(StateN) ->
-                                       maybe_record_receipt(Frame1, StateN)
-                               end,
-                               {Method, Props, BodyFragments},
-                               State1);
-        no ->
-            ok(send_method(Method, Props, BodyFragments,
-                           maybe_record_receipt(Frame1, State1)))
+            {Exchange, RoutingKey} =
+                rabbit_routing_util:parse_routing(Destination),
+
+            Method = #'basic.publish'{
+              exchange = list_to_binary(Exchange),
+              routing_key = list_to_binary(RoutingKey),
+              mandatory = false,
+              immediate = false},
+
+            case transactional(Frame1) of
+                {yes, Transaction} ->
+                    extend_transaction(
+                      Transaction,
+                      fun(StateN) ->
+                              maybe_record_receipt(Frame1, StateN)
+                      end,
+                      {Method, Props, BodyFragments},
+                      State1);
+                no ->
+                    ok(send_method(Method, Props, BodyFragments,
+                                   maybe_record_receipt(Frame1, State1)))
+            end;
+
+        {error, _} = Err ->
+
+            Err
     end.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
