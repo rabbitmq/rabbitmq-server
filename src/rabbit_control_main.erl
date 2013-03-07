@@ -11,13 +11,13 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_control_main).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5]).
+-export([start/0, stop/0, action/5, sync_queue/1, cancel_sync_queue/1]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -50,6 +50,8 @@
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
          cluster_status,
+         {sync_queue, [?VHOST_DEF]},
+         {cancel_sync_queue, [?VHOST_DEF]},
 
          add_user,
          delete_user,
@@ -159,6 +161,12 @@ start() ->
                 false -> io:format("...done.~n")
             end,
             rabbit_misc:quit(0);
+        {ok, Info} ->
+            case Quiet of
+                true  -> ok;
+                false -> io:format("...done (~p).~n", [Info])
+            end,
+            rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
             PrintInvalidCommandError(),
             usage();
@@ -168,7 +176,7 @@ start() ->
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
             usage();
-        {error, {Problem, Reason}} when is_atom(Problem); is_binary(Reason) ->
+        {error, {Problem, Reason}} when is_atom(Problem), is_binary(Reason) ->
             %% We handle this common case specially to avoid ~p since
             %% that has i18n issues
             print_error("~s: ~s", [Problem, Reason]),
@@ -279,6 +287,18 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     Inform("Removing node ~p from cluster", [ClusterNode]),
     rpc_call(Node, rabbit_mnesia, forget_cluster_node,
              [ClusterNode, RemoveWhenOffline]);
+
+action(sync_queue, Node, [Q], Opts, Inform) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    QName = rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
+    Inform("Synchronising ~s", [rabbit_misc:rs(QName)]),
+    rpc_call(Node, rabbit_control_main, sync_queue, [QName]);
+
+action(cancel_sync_queue, Node, [Q], Opts, Inform) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    QName = rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
+    Inform("Stopping synchronising ~s", [rabbit_misc:rs(QName)]),
+    rpc_call(Node, rabbit_control_main, cancel_sync_queue, [QName]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
@@ -512,6 +532,16 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
     end.
 
 format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
+
+sync_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(#amqqueue{pid = QPid}) -> rabbit_amqqueue:sync_mirrors(QPid) end).
+
+cancel_sync_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(#amqqueue{pid = QPid}) ->
+                 rabbit_amqqueue:cancel_sync_mirrors(QPid)
+         end).
 
 %%----------------------------------------------------------------------------
 

@@ -11,14 +11,12 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_backing_queue).
 
 -ifdef(use_specs).
-
--export_type([async_callback/0]).
 
 %% We can't specify a per-queue ack/state with callback signatures
 -type(ack()   :: any()).
@@ -35,8 +33,7 @@
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(duration() :: ('undefined' | 'infinity' | number())).
 
--type(msg_fun() :: fun((rabbit_types:basic_message(), ack()) -> 'ok') |
-                   'undefined').
+-type(msg_fun(A) :: fun ((rabbit_types:basic_message(), ack(), A) -> A)).
 -type(msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean())).
 
 %% Called on startup with a list of durable queue names. The queues
@@ -72,9 +69,13 @@
 %% content.
 -callback delete_and_terminate(any(), state()) -> state().
 
-%% Remove all messages in the queue, but not messages which have been
-%% fetched and are pending acks.
+%% Remove all 'fetchable' messages from the queue, i.e. all messages
+%% except those that have been fetched already and are pending acks.
 -callback purge(state()) -> {purged_msg_count(), state()}.
+
+%% Remove all messages in the queue which have been fetched and are
+%% pending acks.
+-callback purge_acks(state()) -> state().
 
 %% Publish a message.
 -callback publish(rabbit_types:basic_message(),
@@ -124,16 +125,22 @@
 %% be ignored.
 -callback drain_confirmed(state()) -> {msg_ids(), state()}.
 
-%% Drop messages from the head of the queue while the supplied predicate returns
-%% true. Also accepts a boolean parameter that determines whether the messages
-%% necessitate an ack or not. If they do, the function returns a list of
-%% messages with the respective acktags.
--callback dropwhile(msg_pred(), true, state())
-                   -> {rabbit_types:message_properties() | undefined,
-                       [{rabbit_types:basic_message(), ack()}], state()};
-                   (msg_pred(), false, state())
-                   -> {rabbit_types:message_properties() | undefined,
-                       undefined, state()}.
+%% Drop messages from the head of the queue while the supplied
+%% predicate on message properties returns true. Returns the first
+%% message properties for which the predictate returned false, or
+%% 'undefined' if the whole backing queue was traversed w/o the
+%% predicate ever returning false.
+-callback dropwhile(msg_pred(), state())
+                   -> {rabbit_types:message_properties() | undefined, state()}.
+
+%% Like dropwhile, except messages are fetched in "require
+%% acknowledgement" mode and are passed, together with their ack tag,
+%% to the supplied function. The function is also fed an
+%% accumulator. The result of fetchwhile is as for dropwhile plus the
+%% accumulator.
+-callback fetchwhile(msg_pred(), msg_fun(A), A, state())
+                     -> {rabbit_types:message_properties() | undefined,
+                         A, state()}.
 
 %% Produce the next message.
 -callback fetch(true,  state()) -> {fetch_result(ack()), state()};
@@ -147,18 +154,19 @@
 %% about. Must return 1 msg_id per Ack, in the same order as Acks.
 -callback ack([ack()], state()) -> {msg_ids(), state()}.
 
-%% Acktags supplied are for messages which should be processed. The
-%% provided callback function is called with each message.
--callback foreach_ack(msg_fun(), state(), [ack()]) -> state().
-
 %% Reinsert messages into the queue which have already been delivered
 %% and were pending acknowledgement.
 -callback requeue([ack()], state()) -> {msg_ids(), state()}.
 
+%% Fold over messages by ack tag. The supplied function is called with
+%% each message, its ack tag, and an accumulator.
+-callback ackfold(msg_fun(A), A, state(), [ack()]) -> {A, state()}.
+
 %% Fold over all the messages in a queue and return the accumulated
 %% results, leaving the queue undisturbed.
 -callback fold(fun((rabbit_types:basic_message(),
-                    rabbit_types:message_properties(), A) -> A),
+                    rabbit_types:message_properties(),
+                    boolean(), A) -> {('stop' | 'cont'), A}),
                A, state()) -> {A, state()}.
 
 %% How long is my queue?
@@ -220,9 +228,10 @@
 
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
-     {delete_and_terminate, 2}, {purge, 1}, {publish, 5},
-     {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1}, {dropwhile, 3},
-     {fetch, 2}, {ack, 2}, {foreach_ack, 3}, {requeue, 2}, {fold, 3}, {len, 1},
+     {delete_and_terminate, 2}, {purge, 1}, {purge_acks, 1}, {publish, 5},
+     {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1},
+     {dropwhile, 2}, {fetchwhile, 4},
+     {fetch, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
      {handle_pre_hibernate, 1}, {status, 1}, {invoke, 3}, {is_duplicate, 2}] ;

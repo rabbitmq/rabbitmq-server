@@ -12,7 +12,7 @@ REM
 REM  The Original Code is RabbitMQ.
 REM
 REM  The Initial Developer of the Original Code is VMware, Inc.
-REM  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+REM  Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 REM
 
 setlocal
@@ -23,8 +23,12 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
+if "!RABBITMQ_SERVICENAME!"=="" (
+    set RABBITMQ_SERVICENAME=RabbitMQ
+)
+
 if "!RABBITMQ_BASE!"=="" (
-    set RABBITMQ_BASE=!APPDATA!\RabbitMQ
+    set RABBITMQ_BASE=!APPDATA!\!RABBITMQ_SERVICENAME!
 )
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (

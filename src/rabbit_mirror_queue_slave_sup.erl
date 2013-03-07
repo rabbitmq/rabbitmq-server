@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_slave_sup).

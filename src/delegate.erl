@@ -11,14 +11,14 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(delegate).
 
 -behaviour(gen_server2).
 
--export([start_link/1, invoke_no_result/2, invoke/2]).
+-export([start_link/1, invoke_no_result/2, invoke/2, call/2, cast/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -35,6 +35,10 @@
                                           [{pid(), term()}]}).
 -spec(invoke_no_result/2 ::
         (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
+-spec(call/2 ::
+        ( pid(),  any()) -> any();
+        ([pid()], any()) -> {[{pid(), any()}], [{pid(), term()}]}).
+-spec(cast/2 :: (pid() | [pid()], any()) -> 'ok').
 
 -endif.
 
@@ -58,6 +62,13 @@ invoke(Pid, Fun) when is_pid(Pid) ->
             erlang:raise(Class, Reason, StackTrace)
     end;
 
+invoke([], _Fun) -> %% optimisation
+    {[], []};
+invoke([Pid], Fun) when node(Pid) =:= node() -> %% optimisation
+    case safe_invoke(Pid, Fun) of
+        {ok,    _, Result} -> {[{Pid, Result}], []};
+        {error, _, Error}  -> {[], [{Pid, Error}]}
+    end;
 invoke(Pids, Fun) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
     %% The use of multi_call is only safe because the timeout is
@@ -86,6 +97,11 @@ invoke_no_result(Pid, Fun) when is_pid(Pid) andalso node(Pid) =:= node() ->
 invoke_no_result(Pid, Fun) when is_pid(Pid) ->
     invoke_no_result([Pid], Fun);
 
+invoke_no_result([], _Fun) -> %% optimisation
+    ok;
+invoke_no_result([Pid], Fun) when node(Pid) =:= node() -> %% optimisation
+    safe_invoke(Pid, Fun), %% must not die
+    ok;
 invoke_no_result(Pids, Fun) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
     case orddict:fetch_keys(Grouped) of
@@ -95,6 +111,12 @@ invoke_no_result(Pids, Fun) when is_list(Pids) ->
     end,
     safe_invoke(LocalPids, Fun), %% must not die
     ok.
+
+call(PidOrPids, Msg) ->
+    invoke(PidOrPids, fun (P) -> gen_server2:call(P, Msg, infinity) end).
+
+cast(PidOrPids, Msg) ->
+    invoke_no_result(PidOrPids, fun (P) -> gen_server2:cast(P, Msg) end).
 
 %%----------------------------------------------------------------------------
 

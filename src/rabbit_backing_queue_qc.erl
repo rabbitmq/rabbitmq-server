@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2011-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_backing_queue_qc).
@@ -115,7 +115,7 @@ qc_publish(#state{bqstate = BQ}) ->
       #message_properties{needs_confirming = frequency([{1,  true},
                                                         {20, false}]),
                           expiry = oneof([undefined | lists:seq(1, 10)])},
-      self(), BQ]}.
+      false, self(), BQ]}.
 
 qc_publish_multiple(#state{}) ->
     {call, ?MODULE, publish_multiple, [resize(?QUEUE_MAXLEN, pos_integer())]}.
@@ -147,7 +147,7 @@ qc_drain_confirmed(#state{bqstate = BQ}) ->
     {call, ?BQMOD, drain_confirmed, [BQ]}.
 
 qc_dropwhile(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, dropwhile, [fun dropfun/1, false, BQ]}.
+    {call, ?BQMOD, dropwhile, [fun dropfun/1, BQ]}.
 
 qc_is_empty(#state{bqstate = BQ}) ->
     {call, ?BQMOD, is_empty, [BQ]}.
@@ -159,7 +159,7 @@ qc_purge(#state{bqstate = BQ}) ->
     {call, ?BQMOD, purge, [BQ]}.
 
 qc_fold(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, fold, [fun foldfun/2, foldacc(), BQ]}.
+    {call, ?BQMOD, fold, [makefoldfun(pos_integer()), foldacc(), BQ]}.
 
 %% Preconditions
 
@@ -182,7 +182,7 @@ precondition(#state{len = Len}, {call, ?MODULE, publish_multiple, _Arg}) ->
 
 %% Model updates
 
-next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Pid, _BQ]}) ->
+next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Del, _Pid, _BQ]}) ->
     #state{len         = Len,
            messages    = Messages,
            confirms    = Confirms,
@@ -262,7 +262,7 @@ next_state(S, Res, {call, ?BQMOD, drain_confirmed, _Args}) ->
     S#state{bqstate = BQ1};
 
 next_state(S, Res, {call, ?BQMOD, dropwhile, _Args}) ->
-    BQ = {call, erlang, element, [3, Res]},
+    BQ = {call, erlang, element, [2, Res]},
     #state{messages = Messages} = S,
     Msgs1 = drop_messages(Messages),
     S#state{bqstate = BQ, len = gb_trees:size(Msgs1), messages = Msgs1};
@@ -329,11 +329,14 @@ postcondition(S, {call, ?BQMOD, drain_confirmed, _Args}, Res) ->
     lists:all(fun (M) -> gb_sets:is_element(M, Confirms) end,
               ReportedConfirmed);
 
-postcondition(S, {call, ?BQMOD, fold, _Args}, {Res, _BQ}) ->
+postcondition(S, {call, ?BQMOD, fold, [FoldFun, Acc0, _BQ0]}, {Res, _BQ1}) ->
     #state{messages = Messages} = S,
-    lists:foldl(fun ({_SeqId, {MsgProps, Msg}}, Acc) ->
-                        foldfun(Msg, MsgProps, Acc)
-                end, foldacc(), gb_trees:to_list(Messages)) =:= Res;
+    {_, Model} = lists:foldl(fun ({_SeqId, {_MsgProps, _Msg}}, {stop, Acc}) ->
+                                     {stop, Acc};
+                                 ({_SeqId, {MsgProps, Msg}}, {cont, Acc}) ->
+                                     FoldFun(Msg, MsgProps, false, Acc)
+                             end, {cont, Acc0}, gb_trees:to_list(Messages)),
+    true = Model =:= Res;
 
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
     ?BQMOD:len(BQ) =:= Len.
@@ -393,7 +396,14 @@ rand_choice(List, Selection, N)  ->
                        rand_choice(List -- [Picked], [Picked | Selection],
                        N - 1).
 
-foldfun(Msg, Acc) -> [Msg | Acc].
+makefoldfun(Size) ->
+    fun (Msg, _MsgProps, Unacked, Acc) ->
+            case {length(Acc) > Size, Unacked} of
+                {false, false} -> {cont, [Msg | Acc]};
+                {false, true}  -> {cont, Acc};
+                {true, _}      -> {stop, Acc}
+            end
+    end.
 foldacc() -> [].
 
 dropfun(Props) ->

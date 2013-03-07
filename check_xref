@@ -15,7 +15,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2013 VMware, Inc.  All rights reserved.
 %%
 
 main(["-h"]) ->
@@ -50,6 +50,7 @@ shutdown(Rc, LibDir) ->
 check(Cwd, PluginsDir, LibDir, Checks) ->
     {ok, Plugins} = file:list_dir(PluginsDir),
     ok = file:make_dir(LibDir),
+    put({?MODULE, third_party}, []),
     [begin
         Source = filename:join(PluginsDir, Plugin),
         Target = filename:join(LibDir, Plugin),
@@ -162,7 +163,8 @@ filters() ->
 
 filter_chain(FnChain) ->
     fun(AnalysisResult) ->
-        lists:foldl(fun(F, false) -> F(cleanup(AnalysisResult));
+        Result = cleanup(AnalysisResult),
+        lists:foldl(fun(F, false) -> F(Result);
                        (_F, true) -> true
                     end, false, FnChain)
     end.
@@ -267,14 +269,8 @@ source_file(M) ->
 
 store_third_party(App) ->
     {ok, AppConfig} = application:get_all_key(App),
-    case get({?MODULE, third_party}) of
-        undefined ->
-            put({?MODULE, third_party},
-                proplists:get_value(modules, AppConfig));
-        Modules ->
-            put({?MODULE, third_party},
-                proplists:get_value(modules, AppConfig) ++ Modules)
-    end.
+    AppModules = proplists:get_value(modules, AppConfig),
+    put({?MODULE, third_party}, AppModules ++ get({?MODULE, third_party})).
 
 %% TODO: this ought not to be maintained in such a fashion
 external_dependency(Path) ->

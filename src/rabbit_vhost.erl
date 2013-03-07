@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_vhost).
@@ -95,9 +95,9 @@ internal_delete(VHostPath) ->
      || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHostPath)],
     [ok = rabbit_runtime_parameters:clear(VHostPath,
                                           proplists:get_value(component, Info),
-                                          proplists:get_value(key, Info))
+                                          proplists:get_value(name, Info))
      || Info <- rabbit_runtime_parameters:list(VHostPath)],
-    [ok = rabbit_policy:delete(VHostPath, proplists:get_value(key, Info))
+    [ok = rabbit_policy:delete(VHostPath, proplists:get_value(name, Info))
      || Info <- rabbit_policy:list(VHostPath)],
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
     ok.
@@ -123,7 +123,7 @@ with(VHostPath, Thunk) ->
 infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,    VHost) -> VHost;
-i(tracing, VHost) -> rabbit_trace:tracing(VHost);
+i(tracing, VHost) -> rabbit_trace:enabled(VHost);
 i(Item, _)        -> throw({bad_argument, Item}).
 
 info(VHost)        -> infos(?INFO_KEYS, VHost).

@@ -11,14 +11,14 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_runtime_parameters_test).
 -behaviour(rabbit_runtime_parameter).
 -behaviour(rabbit_policy_validator).
 
--export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
+-export([validate/4, notify/4, notify_clear/3]).
 -export([register/0, unregister/0]).
 -export([validate_policy/1]).
 -export([register_policy_validator/0, unregister_policy_validator/0]).
@@ -34,10 +34,6 @@ unregister() ->
 validate(_, <<"test">>, <<"good">>,  _Term)      -> ok;
 validate(_, <<"test">>, <<"maybe">>, <<"good">>) -> ok;
 validate(_, <<"test">>, _, _)                    -> {error, "meh", []}.
-
-validate_clear(_, <<"test">>, <<"good">>)  -> ok;
-validate_clear(_, <<"test">>, <<"maybe">>) -> ok;
-validate_clear(_, <<"test">>, _)           -> {error, "meh", []}.
 
 notify(_, _, _, _) -> ok.
 notify_clear(_, _, _) -> ok.

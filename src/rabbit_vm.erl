@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_vm).
@@ -84,7 +84,15 @@ sup_memory(Sup) ->
 
 sup_children(Sup) ->
     rabbit_misc:with_exit_handler(
-      rabbit_misc:const([]), fun () -> supervisor:which_children(Sup) end).
+      rabbit_misc:const([]),
+      fun () ->
+              %% Just in case we end up talking to something that is
+              %% not a supervisor by mistake.
+              case supervisor:which_children(Sup) of
+                  L when is_list(L) -> L;
+                  _                 -> []
+              end
+      end).
 
 pid_memory(Pid)  when is_pid(Pid)   -> case process_info(Pid, memory) of
                                            {memory, M} -> M;
@@ -119,10 +127,13 @@ plugin_memory() ->
                   is_plugin(atom_to_list(App))]).
 
 plugin_memory(App) ->
-    case catch application_master:get_child(
-                 application_controller:get_master(App)) of
-        {Pid, _} -> sup_memory(Pid);
-        _        -> 0
+    case application_controller:get_master(App) of
+        undefined -> 0;
+        Master    -> case application_master:get_child(Master) of
+                         {Pid, _} when is_pid(Pid) -> sup_memory(Pid);
+                         Pid      when is_pid(Pid) -> sup_memory(Pid);
+                         _                         -> 0
+                     end
     end.
 
 is_plugin("rabbitmq_" ++ _) -> true;

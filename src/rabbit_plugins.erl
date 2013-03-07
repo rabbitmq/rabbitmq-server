@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2011-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_plugins).
@@ -64,8 +64,8 @@ list(PluginsDir) ->
                     [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
     case Problems of
         [] -> ok;
-        _  -> io:format("Warning: Problem reading some plugins: ~p~n",
-                        [Problems])
+        _  -> error_logger:warning_msg(
+                "Problem reading some plugins: ~p~n", [Problems])
     end,
     Plugins.
 
@@ -112,8 +112,9 @@ prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
 
     case Enabled -- plugin_names(ToUnpackPlugins) of
         []      -> ok;
-        Missing -> io:format("Warning: the following enabled plugins were "
-                             "not found: ~p~n", [Missing])
+        Missing -> error_logger:warning_msg(
+                     "The following enabled plugins were not found: ~p~n",
+                     [Missing])
     end,
 
     %% Eliminate the contents of the destination directory

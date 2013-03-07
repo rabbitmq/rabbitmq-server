@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -46,6 +46,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
+-export([version_minor_equivalent/2]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([parse_arguments/3]).
@@ -66,6 +67,8 @@
 -export([check_expiry/1]).
 -export([base64url/1]).
 -export([interval_operation/4]).
+-export([ensure_timer/4, stop_timer/2]).
+-export([get_parent/0]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -191,6 +194,7 @@
 -spec(version_compare/3 ::
         (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
         -> boolean()).
+-spec(version_minor_equivalent/2 :: (string(), string()) -> boolean()).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(gb_trees_cons/3 :: (any(), any(), gb_tree()) -> gb_tree()).
@@ -239,7 +243,9 @@
 -spec(interval_operation/4 ::
         ({atom(), atom(), any()}, float(), non_neg_integer(), non_neg_integer())
         -> {any(), non_neg_integer()}).
-
+-spec(ensure_timer/4 :: (A, non_neg_integer(), non_neg_integer(), any()) -> A).
+-spec(stop_timer/2 :: (A, non_neg_integer()) -> A).
+-spec(get_parent/0 :: () -> pid()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -350,13 +356,12 @@ set_table_value(Table, Key, Type, Value) ->
     sort_field_table(
       lists:keystore(Key, 1, Table, {Key, Type, Value})).
 
-r(#resource{virtual_host = VHostPath}, Kind, Name)
-  when is_binary(Name) ->
+r(#resource{virtual_host = VHostPath}, Kind, Name) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = Name};
-r(VHostPath, Kind, Name) when is_binary(Name) andalso is_binary(VHostPath) ->
+r(VHostPath, Kind, Name) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = Name}.
 
-r(VHostPath, Kind) when is_binary(VHostPath) ->
+r(VHostPath, Kind) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = '_'}.
 
 r_arg(#resource{virtual_host = VHostPath}, Kind, Table, Key) ->
@@ -734,6 +739,16 @@ version_compare(A,  B) ->
        ANum > BNum   -> gt
     end.
 
+%% a.b.c and a.b.d match, but a.b.c and a.d.e don't. If
+%% versions do not match that pattern, just compare them.
+version_minor_equivalent(A, B) ->
+    {ok, RE} = re:compile("^(\\d+\\.\\d+)(\\.\\d+)\$"),
+    Opts = [{capture, all_but_first, list}],
+    case {re:run(A, RE, Opts), re:run(B, RE, Opts)} of
+        {{match, [A1|_]}, {match, [B1|_]}} -> A1 =:= B1;
+        _                                  -> A =:= B
+    end.
+
 dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
 dict_cons(Key, Value, Dict) ->
@@ -1034,3 +1049,53 @@ interval_operation({M, F, A}, MaxRatio, IdealInterval, LastInterval) ->
               {false, false} -> lists:max([IdealInterval,
                                            round(LastInterval / 1.5)])
           end}.
+
+ensure_timer(State, Idx, After, Msg) ->
+    case element(Idx, State) of
+        undefined -> TRef = erlang:send_after(After, self(), Msg),
+                     setelement(Idx, State, TRef);
+        _         -> State
+    end.
+
+stop_timer(State, Idx) ->
+    case element(Idx, State) of
+        undefined -> State;
+        TRef      -> case erlang:cancel_timer(TRef) of
+                         false -> State;
+                         _     -> setelement(Idx, State, undefined)
+                     end
+    end.
+
+%% -------------------------------------------------------------------------
+%% Begin copypasta from gen_server2.erl
+
+get_parent() ->
+    case get('$ancestors') of
+        [Parent | _] when is_pid (Parent) -> Parent;
+        [Parent | _] when is_atom(Parent) -> name_to_pid(Parent);
+        _ -> exit(process_was_not_started_by_proc_lib)
+    end.
+
+name_to_pid(Name) ->
+    case whereis(Name) of
+        undefined -> case whereis_name(Name) of
+                         undefined -> exit(could_not_find_registerd_name);
+                         Pid       -> Pid
+                     end;
+        Pid       -> Pid
+    end.
+
+whereis_name(Name) ->
+    case ets:lookup(global_names, Name) of
+        [{_Name, Pid, _Method, _RPid, _Ref}] ->
+            if node(Pid) == node() -> case erlang:is_process_alive(Pid) of
+                                          true  -> Pid;
+                                          false -> undefined
+                                      end;
+               true                -> Pid
+            end;
+        [] -> undefined
+    end.
+
+%% End copypasta from gen_server2.erl
+%% -------------------------------------------------------------------------

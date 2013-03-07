@@ -11,12 +11,12 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_trace).
 
--export([init/1, tracing/1, tap_trace_in/2, tap_trace_out/2, start/1, stop/1]).
+-export([init/1, enabled/1, tap_in/2, tap_out/2, start/1, stop/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -31,9 +31,9 @@
 -type(state() :: rabbit_types:exchange() | 'none').
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
--spec(tracing/1 :: (rabbit_types:vhost()) -> boolean()).
--spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
--spec(tap_trace_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
+-spec(enabled/1 :: (rabbit_types:vhost()) -> boolean()).
+-spec(tap_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
+-spec(tap_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
 
 -spec(start/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(stop/1 :: (rabbit_types:vhost()) -> 'ok').
@@ -43,26 +43,26 @@
 %%----------------------------------------------------------------------------
 
 init(VHost) ->
-    case tracing(VHost) of
+    case enabled(VHost) of
         false -> none;
         true  -> {ok, X} = rabbit_exchange:lookup(
                              rabbit_misc:r(VHost, exchange, ?XNAME)),
                  X
     end.
 
-tracing(VHost) ->
+enabled(VHost) ->
     {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
     lists:member(VHost, VHosts).
 
-tap_trace_in(Msg = #basic_message{exchange_name = #resource{name = XName}},
-             TraceX) ->
-    maybe_trace(TraceX, Msg, <<"publish">>, XName, []).
+tap_in(_Msg, none) -> ok;
+tap_in(Msg = #basic_message{exchange_name = #resource{name = XName}}, TraceX) ->
+    trace(TraceX, Msg, <<"publish">>, XName, []).
 
-tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
-              TraceX) ->
+tap_out(_Msg, none) -> ok;
+tap_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg}, TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-    maybe_trace(TraceX, Msg, <<"deliver">>, QName,
-                [{<<"redelivered">>, signedint, RedeliveredNum}]).
+    trace(TraceX, Msg, <<"deliver">>, QName,
+          [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 %%----------------------------------------------------------------------------
 
@@ -83,14 +83,11 @@ update_config(Fun) ->
 
 %%----------------------------------------------------------------------------
 
-maybe_trace(none, _Msg, _RKPrefix, _RKSuffix, _Extra) ->
+trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
+      _RKPrefix, _RKSuffix, _Extra) ->
     ok;
-maybe_trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
-            _RKPrefix, _RKSuffix, _Extra) ->
-    ok;
-maybe_trace(X, Msg = #basic_message{content = #content{
-                                      payload_fragments_rev = PFR}},
-            RKPrefix, RKSuffix, Extra) ->
+trace(X, Msg = #basic_message{content = #content{payload_fragments_rev = PFR}},
+      RKPrefix, RKSuffix, Extra) ->
     {ok, _, _} = rabbit_basic:publish(
                    X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
                    #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
