@@ -550,16 +550,11 @@ do_subscribe(Destination, DestHdr, Frame,
                                                      global         = false}),
                       Channel1
               end,
-
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
-
     case ensure_endpoint(source, Destination, Frame, Channel, RouteState) of
-
         {ok, Queue, RouteState1} ->
-
             {ok, ConsumerTag, Description} =
                 rabbit_stomp_util:consumer_tag(Frame),
-
             amqp_channel:subscribe(Channel,
                                    #'basic.consume'{
                                      queue        = Queue,
@@ -571,7 +566,6 @@ do_subscribe(Destination, DestHdr, Frame,
             ExchangeAndKey = rabbit_routing_util:parse_routing(Destination),
             ok = rabbit_routing_util:ensure_binding(
                    Queue, ExchangeAndKey, Channel),
-
             ok(State#state{subscriptions =
                                dict:store(
                                  ConsumerTag,
@@ -582,9 +576,7 @@ do_subscribe(Destination, DestHdr, Frame,
                                                description = Description},
                                  Subs),
                            route_state = RouteState1});
-
         {error, _} = Err ->
-
             Err
     end.
 
