@@ -122,12 +122,12 @@ div.status-bar .red *, div.status-bar .red-dark *, div.status-red * { color: whi
 p.status-ok { color: #888; text-align: right; }
 p.status-error { background: #ff7a7a; color: white; margin-top: 50px !important; }
 p.status-error th { background: white; }
-p.warning, div.form-popup-warn { background: #ff8; border: 1px solid #bb8; }
-div.form-popup-info { background: #8f8; border: 1px solid #4b4; }
+p.warning, div.form-popup-warn { background: #ff8; }
+div.form-popup-info { background: #8f8; }
 div.form-popup-help { text-align: left !important; background: #f8f8f8; border: 1px solid #ccc; }
 div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; }
 
-p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; font-weight: bold; }
+p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; }
 
 .highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
