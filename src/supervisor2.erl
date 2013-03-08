@@ -706,8 +706,8 @@ handle_info(Msg, State) ->
 
 delayed_restart(RestartType, Reason, Child, State) ->
     case do_restart(RestartType, Reason, Child, State) of
-        {ok, NState} -> {noreply, NState};
-        Other        -> Other
+        {ok, NState}       -> {noreply, NState};
+        {shutdown, State2} -> {stop, shutdown, State2}
     end.
 
 %%
