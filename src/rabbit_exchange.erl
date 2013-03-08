@@ -317,13 +317,12 @@ route(#exchange{name = #resource{name = RName, virtual_host = VHost} = XName} = 
     case {registry_lookup(exchange_decorator_route) == [], RName == <<"">>} of
         {true, true} ->
             [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
-        {NoDecor, _} ->
+        {NoDecorator, _} ->
             QNames = route1(Delivery, {[X], XName, []}),
-            lists:usort(
-              case NoDecor of
-                  true  -> QNames;
-                  false -> decorate_route(X, Delivery, QNames)
-              end)
+            lists:usort(case NoDecorator of
+                            true  -> QNames;
+                            false -> decorate_route(X, Delivery, QNames)
+                        end)
     end.
 
 decorate_route(X, Delivery, QNames) ->

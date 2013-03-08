@@ -21,9 +21,8 @@
 %% 1) It applies to all exchanges as soon as it is installed, therefore
 %% 2) It is not allowed to affect validation, so no validate/1 or
 %%    assert_args_equivalence/2
-%% 3) It also can't affect routing
 %%
-%% It's possible in the future we might relax 3), or even make these
+%% It's possible in the future we might make decorators
 %% able to manipulate messages as they are published.
 
 -ifdef(use_specs).
@@ -58,6 +57,11 @@
 -callback policy_changed (
             serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
 
+%% called after exchange routing
+%% return value is a tuple of two lists: queues to be added
+%% and queues to be removed from the list of destination queues.
+%% decorators must register separately for this callback using
+%% exchange_decorator_route.
 -callback route ( rabbit_types:exchange(), rabbit_types:delivery(),
                   [rabbit_amqqueue:name()]) ->
     {[rabbit_amqqueue:name()], [rabbit_amqqueue:name()]}.
