@@ -141,6 +141,9 @@
 -define(SETS, sets).
 -define(SET, set).
 
+-define(is_explicit_restart(R),
+        R == {shutdown, restart}).
+
 -ifdef(use_specs).
 -record(state, {name,
 		strategy               :: strategy(),
@@ -850,31 +853,79 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
-do_restart({permanent = RestartType, Delay}, Reason, Child, State) ->
-    do_restart_delay({RestartType, Delay}, Reason, Child, State);
-do_restart(permanent, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State#state.name),
+do_restart(RestartType, Reason, Child, State) ->
+    maybe_report_error(RestartType, Reason, Child, State),
+    handle_restart(RestartType, Reason, Child, State).
+
+maybe_report_error(permanent, Reason, Child, State) ->
+    report_child_termination(Reason, Child, State);
+maybe_report_error({permanent, _}, Reason, Child, State) ->
+    report_child_termination(Reason, Child, State);
+maybe_report_error(_Type, Reason, Child, State) ->
+    case is_abnormal_termination(Reason) of
+        true  -> report_child_termination(Reason, Child, State);
+        false -> ok
+    end.
+
+report_child_termination(Reason, Child, State) ->
+    report_error(child_terminated, Reason, Child, State#state.name).
+
+handle_restart(permanent, _Reason, Child, State) ->
     restart(Child, State);
-do_restart(Type, normal, Child, State) ->
-    del_child_and_maybe_shutdown(Type, Child, State);
-do_restart({RestartType, Delay}, {shutdown, restart} = Reason, Child, State)
-  when RestartType =:= transient orelse RestartType =:= intrinsic ->
-    do_restart_delay({RestartType, Delay}, Reason, Child, State);
-do_restart(Type, {shutdown, _}, Child, State) ->
-    del_child_and_maybe_shutdown(Type, Child, State);
-do_restart(Type, shutdown, Child = #child{child_type = supervisor}, State) ->
-    del_child_and_maybe_shutdown(Type, Child, State);
-do_restart({RestartType, Delay}, Reason, Child, State)
-  when RestartType =:= transient orelse RestartType =:= intrinsic ->
-    do_restart_delay({RestartType, Delay}, Reason, Child, State);
-do_restart(Type, Reason, Child, State) when Type =:= transient orelse
-                                            Type =:= intrinsic ->
-    report_error(child_terminated, Reason, Child, State#state.name),
-    restart(Child, State);
-do_restart(temporary, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State#state.name),
-    NState = state_del_child(Child, State),
-    {ok, NState}.
+handle_restart(transient, Reason, Child, State) ->
+    restart_if_explicit_or_abnormal(fun restart/2,
+                                    fun delete_child_and_continue/2,
+                                    Reason, Child, State);
+handle_restart(intrinsic, Reason, Child, State) ->
+    restart_if_explicit_or_abnormal(fun restart/2,
+                                    fun delete_child_and_stop/2,
+                                    Reason, Child, State);
+handle_restart(temporary, _Reason, Child, State) ->
+    delete_child_and_continue(Child, State);
+handle_restart({_RestartType, _Delay}=Restart, Reason, Child, State) ->
+    handle_delayed_restart(Restart, Reason, Child, State).
+
+handle_delayed_restart({permanent, _Delay}=Restart, Reason, Child, State) ->
+    do_restart_delay(Restart, Reason, Child, State);
+handle_delayed_restart({RestartType, _Delay}=Restart, Reason, Child, State)
+  when ?is_explicit_restart(Reason) andalso
+       (RestartType =:= transient orelse
+        RestartType =:= intrinsic) ->
+    do_restart_delay(Restart, Reason, Child, State);
+handle_delayed_restart({transient, _Delay}=Restart, Reason, Child, State) ->
+    restart_if_explicit_or_abnormal(defer_to_restart_delay(Restart, Reason),
+                                    fun delete_child_and_continue/2,
+                                    Reason, Child, State);
+handle_delayed_restart({intrinsic, _Delay}=Restart, Reason, Child, State) ->
+    restart_if_explicit_or_abnormal(defer_to_restart_delay(Restart, Reason),
+                                    fun delete_child_and_stop/2,
+                                    Reason, Child, State).
+
+restart_if_explicit_or_abnormal(RestartHow, _Otherwise, Reason, Child, State)
+  when is_function(RestartHow, 2) andalso
+       ?is_explicit_restart(Reason) ->
+    RestartHow(Child, State);
+restart_if_explicit_or_abnormal(RestartHow, Otherwise, Reason, Child, State)
+  when is_function(RestartHow, 2) andalso
+       is_function(Otherwise, 2) ->
+    case is_abnormal_termination(Reason) of
+        true  -> RestartHow(Child, State);
+        false -> Otherwise(Child, State)
+    end.
+
+defer_to_restart_delay(Restart, Reason) ->
+    fun(Child, State) -> do_restart_delay(Restart, Reason, Child, State) end.
+
+delete_child_and_continue(Child, State) ->
+    {ok, state_del_child(Child, State)}.
+
+delete_child_and_stop(Child, State) ->
+    {shutdown, state_del_child(Child, State)}.
+
+is_abnormal_termination(normal)        -> false;
+is_abnormal_termination(shutdown)      -> false;
+is_abnormal_termination({shutdown, _}) -> false;
+is_abnormal_termination(_Other)        -> true.
 
 do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
     case add_restart(State) of
@@ -892,13 +943,6 @@ do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
                                        {{RestartType, Delay}, Reason, Child}}),
             {ok, state_del_child(Child, State)}
     end.
-
-del_child_and_maybe_shutdown(intrinsic, Child, State) ->
-    {shutdown, state_del_child(Child, State)};
-del_child_and_maybe_shutdown({intrinsic, _Delay}, Child, State) ->
-    {shutdown, state_del_child(Child, State)};
-del_child_and_maybe_shutdown(_, Child, State) ->
-    {ok, state_del_child(Child, State)}.
 
 restart(Child, State) ->
     case add_restart(State) of
