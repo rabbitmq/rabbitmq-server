@@ -327,9 +327,8 @@ route(#exchange{name = #resource{virtual_host = VHost,
 decorate_route([], _X, _Delivery, QNames) ->
     QNames;
 decorate_route(Decorators, X, Delivery, QNames) ->
-    lists:foldl(fun (Decorator, QNamesAcc) ->
-                        Decorator:route(X, Delivery) ++ QNamesAcc
-                end, QNames, Decorators).
+    QNames ++
+        lists:append([Decorator:route(X, Delivery) || Decorator <- Decorators]).
 
 route1(_, {[], _, QNames}) ->
     QNames;
