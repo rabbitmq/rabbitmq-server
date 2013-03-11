@@ -650,25 +650,15 @@ handle_cast({try_again_restart,Pid,Reason}, #state{children=[Child]}=State)
 	{ok, Args} ->
 	    {M, F, _} = Child#child.mfargs,
 	    NChild = Child#child{pid = RPid, mfargs = {M, F, Args}},
-	    case restart_child(NChild,Reason,State) of
-		{ok, State1} ->
-		    {noreply, State1};
-		{shutdown, State1} ->
-		    {stop, shutdown, State1}
-	    end;
+            try_restart(Child#child.restart_type, Reason, NChild, State);
 	error ->
             {noreply, State}
     end;
 
 handle_cast({try_again_restart,Name,Reason}, State) ->
     case lists:keyfind(Name,#child.name,State#state.children) of
-	Child = #child{pid=?restarting(_)} ->
-	    case restart_child(Child,Reason,State) of
-		{ok, State1} ->
-		    {noreply, State1};
-		{shutdown, State1} ->
-		    {stop, shutdown, State1}
-	    end;
+	Child = #child{pid=?restarting(_), restart_type=RestartType} ->
+            try_restart(RestartType, Reason, Child, State);
 	_ ->
 	    {noreply,State}
     end.
@@ -690,11 +680,11 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State)
   when ?is_simple(State) ->
-    delayed_restart(RestartType, Reason, Child, State);
+    try_restart(RestartType, Reason, Child, State);
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State) ->
     case get_child(Child#child.name, State) of
         {value, Child1} ->
-            delayed_restart(RestartType, Reason, Child1, State);
+            try_restart(RestartType, Reason, Child1, State);
         _What ->
             {noreply, State}
     end;
@@ -703,12 +693,6 @@ handle_info(Msg, State) ->
     error_logger:error_msg("Supervisor received unexpected message: ~p~n", 
 			   [Msg]),
     {noreply, State}.
-
-delayed_restart(RestartType, Reason, Child, State) ->
-    case do_restart(RestartType, Reason, Child, State) of
-        {ok, NState}       -> {noreply, NState};
-        {shutdown, State2} -> {stop, shutdown, State2}
-    end.
 
 %%
 %% Terminate this server.
@@ -851,6 +835,12 @@ restart_child(Pid, Reason, State) ->
 	    do_restart(RestartType, Reason, Child, State);
 	false ->
 	    {ok, State}
+    end.
+
+try_restart(RestartType, Reason, Child, State) ->
+    case do_restart(RestartType, Reason, Child, State) of
+        {ok, NState}       -> {noreply, NState};
+        {shutdown, State2} -> {stop, shutdown, State2}
     end.
 
 do_restart(RestartType, Reason, Child, State) ->
