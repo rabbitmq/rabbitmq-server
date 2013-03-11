@@ -208,9 +208,10 @@ handle_call(_Request, _From, State) ->
 %% mnesia information since the message can (and will) overtake the
 %% mnesia propagation.
 handle_cast({node_up, Node, NodeType},
-            State = #state{monitors = Monitors}) ->
+            State = #state{monitors = Monitors, partitions = Partitions}) ->
+    State1 = State#state{partitions = Partitions -- [Node]},
     case pmon:is_monitored({rabbit, Node}, Monitors) of
-        true  -> {noreply, State};
+        true  -> {noreply, State1};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
                  write_cluster_status({add_node(Node, AllNodes),
@@ -220,7 +221,7 @@ handle_cast({node_up, Node, NodeType},
                                        end,
                                        add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
-                 {noreply, State#state{
+                 {noreply, State1#state{
                              monitors = pmon:monitor({rabbit, Node}, Monitors)}}
     end;
 handle_cast({joined_cluster, Node, NodeType}, State) ->
@@ -282,7 +283,48 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
-    ok = rabbit_mnesia:on_node_down(Node).
+    ok = rabbit_mnesia:on_node_down(Node),
+    case application:get_env(rabbit, cluster_partition_handling) of
+        {ok, pause_minority} ->
+            case majority() of
+                true  -> ok;
+                false -> await_cluster_recovery()
+            end;
+        {ok, ignore} ->
+            ok;
+        {ok, Term} ->
+            rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
+                               "assuming 'ignore'~n", [Term]),
+            ok
+    end,
+    ok.
+
+majority() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Alive = [N || N <- Nodes, pong =:= net_adm:ping(N)],
+    length(Alive) / length(Nodes) > 0.5.
+
+await_cluster_recovery() ->
+    rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
+                       []),
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    spawn(fun () ->
+                  %% If our group leader is inside an application we are about
+                  %% to stop, application:stop/1 does not return.
+                  group_leader(whereis(init), self()),
+                  %% Ensure only one restarting process at a time, will
+                  %% exit(badarg) (harmlessly) if one is already running
+                  register(rabbit_restarting_process, self()),
+                  rabbit:stop(),
+                  wait_for_cluster_recovery(Nodes)
+          end).
+
+wait_for_cluster_recovery(Nodes) ->
+    case majority() of
+        true  -> rabbit:start();
+        false -> timer:sleep(1000),
+                 wait_for_cluster_recovery(Nodes)
+    end.
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),
