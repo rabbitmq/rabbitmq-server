@@ -45,13 +45,32 @@ for(X, UpstreamName) ->
 to_table(#upstream{original_uri = URI,
                    params       = Params,
                    exchange = X}) ->
-    {table, [{<<"uri">>,          longstr, URI},
+    {table, [{<<"uri">>,          longstr, remove_credentials(URI)},
              {<<"virtual_host">>, longstr, vhost(Params)},
              {<<"exchange">>,     longstr, name(X)}]}.
 
 to_string(#upstream{original_uri = URI,
                     exchange     = #exchange{name = XName}}) ->
-    print("~s on ~s", [rabbit_misc:rs(XName), URI]).
+    print("~s on ~s", [rabbit_misc:rs(XName), remove_credentials(URI)]).
+
+remove_credentials(URI) ->
+    {ok, Params} = amqp_uri:parse(binary_to_list(URI)),
+    list_to_binary(
+      case Params of
+          #amqp_params_network{ssl_options  = SSL,
+                               host         = Host,
+                               port         = Port,
+                               virtual_host = VHost} ->
+              Scheme = case SSL of
+                           none -> "amqp";
+                           _    -> "amqps"
+                       end,
+              rabbit_misc:format("~s://~s:~B/~s",
+                                 [Scheme, Host, Port,
+                                  edoc_lib:escape_uri(binary_to_list(VHost))]);
+          #amqp_params_direct{} ->
+              "amqps://" %% Only one that works right now anyway
+      end).
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 

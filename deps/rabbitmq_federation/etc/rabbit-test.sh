@@ -1,8 +1,10 @@
 #!/bin/sh
 CTL=$1
 
-$CTL set_parameter federation-upstream localhost '{"uri": "amqp://"}' # Test direct connections
-$CTL set_parameter federation-upstream local5673 '{"uri": "amqp://localhost:5673"}'
+# Test direct connections
+$CTL set_parameter federation-upstream localhost '{"uri": "amqp://"}'
+# We will test the guest:guest gets stripped out in user_id_test
+$CTL set_parameter federation-upstream local5673 '{"uri": "amqp://guest:guest@localhost:5673"}'
 
 $CTL set_parameter federation-upstream-set upstream     '[{"upstream": "localhost", "exchange": "upstream"}]'
 $CTL set_parameter federation-upstream-set upstream12   '[{"upstream": "localhost", "exchange": "upstream"},

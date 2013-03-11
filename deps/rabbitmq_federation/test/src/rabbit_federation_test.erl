@@ -124,6 +124,15 @@ user_id_test() ->
 
               Msg = #amqp_msg{props   = #'P_basic'{user_id = <<"hare-user">>},
                               payload = <<"HELLO">>},
+
+              SafeUri = fun (H) ->
+                                {array, [{table, Recv}]} =
+                                    rabbit_misc:table_lookup(
+                                      H, <<"x-received-from">>),
+                                ?assertEqual(
+                                   {longstr, <<"amqp://localhost:5673/%2f">>},
+                                   rabbit_misc:table_lookup(Recv, <<"uri">>))
+                        end,
               ExpectUser =
                   fun (ExpUser) ->
                           fun () ->
@@ -131,7 +140,9 @@ user_id_test() ->
                                       {#'basic.deliver'{},
                                        #amqp_msg{props   = Props,
                                                  payload = Payload}} ->
-                                          #'P_basic'{user_id = ActUser} = Props,
+                                          #'P_basic'{user_id = ActUser,
+                                                     headers = Headers} = Props,
+                                          SafeUri(Headers),
                                           ?assertEqual(<<"HELLO">>, Payload),
                                           ?assertEqual(ExpUser, ActUser)
                                   end
