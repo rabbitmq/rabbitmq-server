@@ -54,14 +54,14 @@
                           [rabbit_types:binding()]) -> 'ok'.
 
 %% called when the policy attached to this exchange changes.
--callback policy_changed (
+-callback policy_changed(
             serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
 
 %% called after exchange routing
 %% return value is a list of queues to be added to the list of
 %% destination queues. decorators must register separately for
 %% this callback using exchange_decorator_route.
--callback route ( rabbit_types:exchange(), rabbit_types:delivery()) ->
+-callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
     [rabbit_amqqueue:name()].
 
 -else.
