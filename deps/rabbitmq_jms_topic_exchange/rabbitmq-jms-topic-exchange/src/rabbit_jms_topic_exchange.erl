@@ -125,9 +125,12 @@ add_binding( _Tx
     {error, not_found} ->
       queue_not_found_error(QName);
     {ok, #amqqueue{}} ->
-      add_binding_fun(XName, {BindingKey, generate_binding_fun(XName, BindingKey, Args)})
-  end,
-  ok.
+      SQL = get_sql_from_args(Args),
+      case generate_binding_fun(XName, BindingKey, SQL) of
+        {ok, BindFun} -> add_binding_fun(XName, {BindingKey, BindFun});
+        _             -> parsing_error(XName, SQL)
+      end
+  end.
 
 % Binding removal
 remove_bindings( _Tx
@@ -162,10 +165,14 @@ get_headers(Content) ->
   end.
 
 % generate the function that checks the message against the SQL expression
-generate_binding_fun(XName, _BindingKey, Args) ->
-  CompiledSQLExp = compile_sql(get_sql_from_args(Args)),
-  fun(Headers) ->
-    sql_match(XName, CompiledSQLExp, Headers)
+generate_binding_fun(XName, _BindingKey, SQL) ->
+  case compile_sql(SQL) of
+    error          -> error;
+    CompiledSQLExp -> {ok,
+                        fun(Headers) ->
+                          sql_match(XName, CompiledSQLExp, Headers)
+                        end
+                      }
   end.
 
 get_sql_from_args(Args) ->
@@ -176,12 +183,9 @@ get_sql_from_args(Args) ->
 
 % scan and parse SQL expression
 compile_sql(SQL) ->
-  case sjx_scanner:string(SQL) of
-    {ok, Tokens, _} -> case sjx_parser:parse(Tokens) of
-                         {ok, CompSQL} -> CompSQL;
-                         _ -> {'false'}
-                       end;
-    _ -> {'false'}
+  case sjx_dialect:analyze(SQL) of
+    error    -> error;
+    Compiled -> Compiled
   end.
 
 % Evaluate the SQL parsed tree and check against the Headers
@@ -266,10 +270,16 @@ exchange_state_corrupt_error(XName) ->
   rabbit_misc:protocol_error( internal_error
                             , "exchange named '~s' has incorrect saved state"
                             , [XName] ).
-% state error
+% matching error
 evaluation_error(XName, SQL) ->
   rabbit_misc:protocol_error( internal_error
                             , "exchange named '~s' could not evaluate SQL(~p)"
                             , [XName, SQL] ).
+
+% parsing error
+parsing_error(XName, S) ->
+  rabbit_misc:protocol_error( internal_error
+                            , "cannot parse expression '~s'"
+                            , [XName, S] ).
 
 %%----------------------------------------------------------------------------
