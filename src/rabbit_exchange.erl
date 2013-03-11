@@ -312,26 +312,24 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-route(#exchange{name = #resource{name = RName, virtual_host = VHost} = XName} = X,
+route(#exchange{name = #resource{virtual_host = VHost,
+                                 name         = RName} = XName} = X,
       #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
-    case {registry_lookup(exchange_decorator_route) == [], RName == <<"">>} of
-        {true, true} ->
+    case {registry_lookup(exchange_decorator_route), RName == <<"">>} of
+        {[], true} ->
+            %% Optimisation
             [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
-        {NoDecorator, _} ->
+        {Decorators, _} ->
             QNames = route1(Delivery, {[X], XName, []}),
-            lists:usort(case NoDecorator of
-                            true  -> QNames;
-                            false -> decorate_route(X, Delivery, QNames)
-                        end)
+            lists:usort(decorate_route(Decorators, X, Delivery, QNames))
     end.
 
-decorate_route(X, Delivery, QNames) ->
-    {Add, Remove} =
-        lists:foldl(fun (Decorator, {Add, Remove}) ->
-                            {A1, R1} = Decorator:route(X, Delivery, QNames),
-                            {A1 ++ Add, R1 ++ Remove}
-                    end, {[], []}, registry_lookup(exchange_decorator_route)),
-    QNames ++ Add -- Remove.
+decorate_route([], _X, _Delivery, QNames) ->
+    QNames;
+decorate_route(Decorators, X, Delivery, QNames) ->
+    lists:foldl(fun (Decorator, QNamesAcc) ->
+                        Decorator:route(X, Delivery) ++ QNamesAcc
+                end, QNames, Decorators).
 
 route1(_, {[], _, QNames}) ->
     QNames;
