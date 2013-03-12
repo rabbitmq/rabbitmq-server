@@ -89,3 +89,25 @@ scratch_space_test() ->
 upstream(UpstreamName) ->
     #upstream{name     = atom_to_list(UpstreamName),
               exchange = x(r(<<"upstream">>))}.
+
+remove_credentials_test() ->
+    Test0 = fun (In, Exp) ->
+                    Act = rabbit_federation_upstream:remove_credentials(In),
+                    ?assertEqual(Exp, Act)
+            end,
+    Cat = fun (Bs) ->
+                  list_to_binary(lists:append([binary_to_list(B) || B <- Bs]))
+          end,
+    Test = fun (Scheme, Rest) ->
+                   Exp = Cat([Scheme, Rest]),
+                   Test0(Exp,                                   Exp),
+                   Test0(Cat([Scheme, <<"user@">>, Rest]),      Exp),
+                   Test0(Cat([Scheme, <<"user:pass@">>, Rest]), Exp)
+           end,
+    Test(<<"amqp://">>,  <<"">>),
+    Test(<<"amqp://">>,  <<"localhost">>),
+    Test(<<"amqp://">>,  <<"localhost/">>),
+    Test(<<"amqp://">>,  <<"localhost/foo">>),
+    Test(<<"amqp://">>,  <<"localhost:5672">>),
+    Test(<<"amqps://">>, <<"localhost:5672/foo">>),
+    ok.

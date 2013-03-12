@@ -21,7 +21,7 @@
 
 -export([set_for/1, for/1, for/2, to_table/1, to_string/1]).
 %% For testing
--export([from_set/2]).
+-export([from_set/2, remove_credentials/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_federation_util, [name/1, vhost/1]).
@@ -54,23 +54,18 @@ to_string(#upstream{original_uri = URI,
     print("~s on ~s", [rabbit_misc:rs(XName), remove_credentials(URI)]).
 
 remove_credentials(URI) ->
-    {ok, Params} = amqp_uri:parse(binary_to_list(URI)),
+    Props = uri_parser:parse(binary_to_list(URI),
+                             [{host, undefined}, {path, undefined},
+                              {port, undefined}, {'query', []}]),
+    PortPart = case pget(port, Props) of
+                   undefined -> "";
+                   Port      -> rabbit_misc:format(":~B", [Port])
+               end,
+    PGet = fun(K, P) -> case pget(K, P) of undefined -> ""; R -> R end end,
     list_to_binary(
-      case Params of
-          #amqp_params_network{ssl_options  = SSL,
-                               host         = Host,
-                               port         = Port,
-                               virtual_host = VHost} ->
-              Scheme = case SSL of
-                           none -> "amqp";
-                           _    -> "amqps"
-                       end,
-              rabbit_misc:format("~s://~s:~B/~s",
-                                 [Scheme, Host, Port,
-                                  edoc_lib:escape_uri(binary_to_list(VHost))]);
-          #amqp_params_direct{} ->
-              "amqps://" %% Only one that works right now anyway
-      end).
+      rabbit_misc:format(
+        "~s://~s~s~s", [pget(scheme, Props), PGet(host, Props),
+                        PortPart,            PGet(path, Props)])).
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
