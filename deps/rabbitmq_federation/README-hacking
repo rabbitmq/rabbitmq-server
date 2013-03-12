@@ -85,8 +85,7 @@ down.
 
 This means that the downstream only needs to keep track of whether the
 upstream is currently going via internal exchange A or B. This is
-currently held in a DETS table (see rabbit_federation_db) but will be
-moved into mnesia at some point.
+held in the exchange scratch space in Mnesia.
 
 
 Wrinkle: We need to amalgamate bindings

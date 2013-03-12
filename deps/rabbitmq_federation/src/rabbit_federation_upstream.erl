@@ -19,7 +19,8 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([set_for/1, for/1, for/2, to_table/1, to_string/1]).
+-export([set_for/1, for/1, for/2, params_to_table/1, params_to_string/1,
+         to_params/2]).
 %% For testing
 -export([from_set/2, remove_credentials/1]).
 
@@ -42,15 +43,15 @@ for(X, UpstreamName) ->
         {error, not_found} -> []
     end.
 
-to_table(#upstream{original_uri = URI,
-                   params       = Params,
-                   exchange = X}) ->
+params_to_table(#upstream_params{uri          = URI,
+                                 params       = Params,
+                                 exchange     = X}) ->
     {table, [{<<"uri">>,          longstr, remove_credentials(URI)},
              {<<"virtual_host">>, longstr, vhost(Params)},
              {<<"exchange">>,     longstr, name(X)}]}.
 
-to_string(#upstream{original_uri = URI,
-                    exchange     = #exchange{name = XName}}) ->
+params_to_string(#upstream_params{uri      = URI,
+                                  exchange = #exchange{name = XName}}) ->
     print("~s on ~s", [rabbit_misc:rs(XName), remove_credentials(URI)]).
 
 remove_credentials(URI) ->
@@ -66,6 +67,14 @@ remove_credentials(URI) ->
       rabbit_misc:format(
         "~s://~s~s~s", [pget(scheme, Props), PGet(host, Props),
                         PortPart,            PGet(path, Props)])).
+
+to_params(#upstream{uris = URIs, exchange_name = XNameBin}, X) ->
+    random:seed(now()),
+    URI = lists:nth(random:uniform(length(URIs)), URIs),
+    {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(X)),
+    #upstream_params{params   = Params,
+                     uri      = URI,
+                     exchange = with_name(XNameBin, vhost(Params), X)}.
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
@@ -98,18 +107,22 @@ from_set_element(UpstreamSetElem, X) ->
     end.
 
 from_props_connection(U, Name, C, X) ->
-    URI = bget(uri, U, C),
-    {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(X)),
-    XNameBin = bget(exchange, U, C, name(X)),
-    #upstream{params          = Params,
-              original_uri    = URI,
-              exchange        = with_name(XNameBin, vhost(Params), X),
+    URIParam = bget(uri, U, C),
+    URIs = case URIParam of
+               B when is_binary(B) -> [B];
+               L when is_list(L)   -> L
+           end,
+    #upstream{uris            = URIs,
+              exchange_name   = bget(exchange,          U, C, name(X)),
               prefetch_count  = bget('prefetch-count',  U, C, ?DEFAULT_PREFETCH),
               reconnect_delay = bget('reconnect-delay', U, C, 1),
               max_hops        = bget('max-hops',        U, C, 1),
               expires         = bget(expires,           U, C, none),
               message_ttl     = bget('message-ttl',     U, C, none),
               trust_user_id   = bget('trust-user-id',   U, C, false),
+              ack_mode        = list_to_atom(
+                                  binary_to_list(
+                                    bget('ack-mode', U, C, <<"on-confirm">>))),
               ha_policy       = bget('ha-policy',       U, C, none),
               name            = Name}.
 
