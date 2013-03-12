@@ -109,5 +109,6 @@ remove_credentials_test() ->
     Test(<<"amqp://">>,  <<"localhost/">>),
     Test(<<"amqp://">>,  <<"localhost/foo">>),
     Test(<<"amqp://">>,  <<"localhost:5672">>),
-    Test(<<"amqps://">>, <<"localhost:5672/foo">>),
+    Test(<<"amqp://">>,  <<"localhost:5672/foo">>),
+    Test(<<"amqps://">>, <<"localhost:5672/%2f">>),
     ok.
