@@ -128,7 +128,7 @@ add_binding( _Tx
       SQL = get_sql_from_args(Args),
       case generate_binding_fun(XName, BindingKey, SQL) of
         {ok, BindFun} -> add_binding_fun(XName, {BindingKey, BindFun});
-        _             -> parsing_error(XName, SQL)
+        _             -> parsing_error(XName, SQL, QName)
       end
   end.
 
@@ -168,7 +168,7 @@ get_headers(Content) ->
 generate_binding_fun(XName, _BindingKey, SQL) ->
   case compile_sql(SQL) of
     error          -> error;
-    CompiledSQLExp -> {ok,
+    CompiledSQLExp -> { ok,
                         fun(Headers) ->
                           sql_match(XName, CompiledSQLExp, Headers)
                         end
@@ -277,9 +277,9 @@ evaluation_error(XName, SQL) ->
                             , [XName, SQL] ).
 
 % parsing error
-parsing_error(XName, S) ->
+parsing_error(XName, S, QName) ->
   rabbit_misc:protocol_error( internal_error
-                            , "cannot parse expression '~s'"
-                            , [XName, S] ).
+                            , "cannot parse selector '~s' binding to queue ~s"
+                            , [XName, S, QName] ).
 
 %%----------------------------------------------------------------------------
