@@ -208,10 +208,9 @@ handle_call(_Request, _From, State) ->
 %% mnesia information since the message can (and will) overtake the
 %% mnesia propagation.
 handle_cast({node_up, Node, NodeType},
-            State = #state{monitors = Monitors, partitions = Partitions}) ->
-    State1 = State#state{partitions = Partitions -- [Node]},
+            State = #state{monitors = Monitors}) ->
     case pmon:is_monitored({rabbit, Node}, Monitors) of
-        true  -> {noreply, State1};
+        true  -> {noreply, State};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
                  write_cluster_status({add_node(Node, AllNodes),
@@ -221,7 +220,7 @@ handle_cast({node_up, Node, NodeType},
                                        end,
                                        add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
-                 {noreply, State1#state{
+                 {noreply, State#state{
                              monitors = pmon:monitor({rabbit, Node}, Monitors)}}
     end;
 handle_cast({joined_cluster, Node, NodeType}, State) ->
