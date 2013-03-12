@@ -93,7 +93,8 @@ publish(Payload, From,
                        routing_key = RoutingKey,
                        correlation_id = CorrelationId,
                        continuations = Continuations}) ->
-    Props = #'P_basic'{correlation_id = <<CorrelationId:64>>,
+    EncodedCorrelationId = base64:encode(<<CorrelationId:64>>),
+    Props = #'P_basic'{correlation_id = EncodedCorrelationId,
                        content_type = <<"application/octet-stream">>,
                        reply_to = Q},
     Publish = #'basic.publish'{exchange = X,
@@ -102,7 +103,7 @@ publish(Payload, From,
     amqp_channel:call(Channel, Publish, #amqp_msg{props = Props,
                                                   payload = Payload}),
     State#state{correlation_id = CorrelationId + 1,
-                continuations = dict:store(CorrelationId, From, Continuations)}.
+                continuations = dict:store(EncodedCorrelationId, From, Continuations)}.
 
 %%--------------------------------------------------------------------------
 %% gen_server callbacks
@@ -158,7 +159,7 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 
 %% @private
 handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
-             #amqp_msg{props = #'P_basic'{correlation_id = <<Id:64>>},
+             #amqp_msg{props = #'P_basic'{correlation_id = Id},
                        payload = Payload}},
             State = #state{continuations = Conts, channel = Channel}) ->
     From = dict:fetch(Id, Conts),
