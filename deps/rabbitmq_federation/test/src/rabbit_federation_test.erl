@@ -130,7 +130,7 @@ user_id_test() ->
                                     rabbit_misc:table_lookup(
                                       H, <<"x-received-from">>),
                                 ?assertEqual(
-                                   {longstr, <<"amqp://localhost:5673/%2f">>},
+                                   {longstr, <<"amqp://localhost:5673">>},
                                    rabbit_misc:table_lookup(Recv, <<"uri">>))
                         end,
               ExpectUser =
