@@ -68,8 +68,9 @@ handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
     {reply, [format(Entry) || Entry <- Entries], State}.
 
-handle_cast({report, Upstream, #upstream_params{uri = URI},
+handle_cast({report, Upstream, #upstream_params{uri = URI0},
              XName, Status, Timestamp}, State) ->
+    URI = rabbit_federation_upstream:remove_credentials(URI0),
     true = ets:insert(?ETS_NAME,
                       #entry{key        = key(XName, Upstream),
                              status     = Status,
