@@ -249,7 +249,8 @@ handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
     write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
     ok = handle_dead_rabbit(Node),
     [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
-    {noreply, State#state{monitors = pmon:erase({rabbit, Node}, Monitors)}};
+    {noreply, handle_dead_rabbit_state(
+                State#state{monitors = pmon:erase({rabbit, Node}, Monitors)})};
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
@@ -308,9 +309,14 @@ handle_dead_rabbit(Node) ->
     ok.
 
 majority() ->
+    length(alive_nodes()) / length(rabbit_mnesia:cluster_nodes(all)) > 0.5.
+
+%% mnesia:system_info(db_nodes) (and hence
+%% rabbit_mnesia:cluster_nodes(running)) does not give reliable results
+%% when partitioned.
+alive_nodes() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
-    Alive = [N || N <- Nodes, pong =:= net_adm:ping(N)],
-    length(Alive) / length(Nodes) > 0.5.
+    [N || N <- Nodes, pong =:= net_adm:ping(N)].
 
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
@@ -333,6 +339,18 @@ wait_for_cluster_recovery(Nodes) ->
         false -> timer:sleep(1000),
                  wait_for_cluster_recovery(Nodes)
     end.
+
+handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
+    %% If we have been partitioned, and we are now in the only remaining
+    %% partition, we no longer care about partitions - forget them. Note
+    %% that we do not attempt to deal with individual (other) partitions
+    %% going away, it's only safe to forget *any* of them when we have seen
+    %% the back of *all* of them.
+    Partitions1 = case Partitions -- (Partitions -- alive_nodes()) of
+                      [] -> [];
+                      _  -> Partitions
+                  end,
+    State#state{partitions = Partitions1}.
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),
