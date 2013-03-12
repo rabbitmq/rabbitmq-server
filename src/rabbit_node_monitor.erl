@@ -257,10 +257,19 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
 
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
-            State = #state{partitions = Partitions}) ->
+            State = #state{partitions = Partitions,
+                           monitors   = Monitors}) ->
+    %% We will not get a node_up from this node - yet we should treat it as
+    %% up (mostly).
+    State1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
+                 true  -> State;
+                 false -> State#state{
+                            monitors = pmon:monitor({rabbit, Node}, Monitors)}
+             end,
+    ok = handle_live_rabbit(Node),
     Partitions1 = ordsets:to_list(
                     ordsets:add_element(Node, ordsets:from_list(Partitions))),
-    {noreply, State#state{partitions = Partitions1}};
+    {noreply, State1#state{partitions = Partitions1}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
