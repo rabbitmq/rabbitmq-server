@@ -37,6 +37,10 @@
 %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
 -callback validate(rabbit_types:exchange()) -> 'ok'.
 
+%% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
+-callback validate_binding(
+            rabbit_types:exchange(), rabbit_types:binding()) -> 'ok'.
+
 %% called after declaration and recovery
 -callback create(tx(), rabbit_types:exchange()) -> 'ok'.
 
@@ -67,7 +71,8 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {serialise_events, 0}, {route, 2}, {validate, 1},
+    [{description, 0}, {serialise_events, 0}, {route, 2},
+     {validate, 1}, {validate_binding, 2},
      {create, 2}, {delete, 3}, {add_binding, 3}, {remove_bindings, 3},
      {assert_args_equivalence, 2}, {policy_changed, 3}];
 behaviour_info(_Other) ->

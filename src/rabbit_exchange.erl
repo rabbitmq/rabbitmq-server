@@ -22,7 +22,7 @@
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/1, lookup_scratch/2, update_scratch/3,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         route/2, delete/2]).
+         route/2, delete/2, type_to_module/1]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/1, serial/1, peek_serial/1, update/2]).
 
@@ -83,6 +83,7 @@
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
                               rabbit_types:error('in_use')).
+-spec(type_to_module/1 :: (type()) -> atom()).
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).

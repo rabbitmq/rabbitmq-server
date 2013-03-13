@@ -20,7 +20,8 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, serialise_events/0, route/2]).
--export([validate/1, create/2, delete/3, policy_changed/3, add_binding/3,
+-export([validate/1, validate_binding/2,
+         create/2, delete/3, policy_changed/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 
 -rabbit_boot_step({?MODULE,
@@ -39,6 +40,7 @@ route(#exchange{name = Name}, _Delivery) ->
     rabbit_router:match_routing_key(Name, ['_']).
 
 validate(_X) -> ok.
+validate_binding(_X, _B) -> ok.
 create(_Tx, _X) -> ok.
 delete(_Tx, _X, _Bs) -> ok.
 policy_changed(_Tx, _X1, _X2) -> ok.

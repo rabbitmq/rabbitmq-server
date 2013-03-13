@@ -153,7 +153,10 @@ exists(Binding) ->
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
-add(Binding, InnerFun) ->
+add(Binding = #binding{source = XName}, InnerFun) ->
+    {ok, X = #exchange{type = XType}} = rabbit_exchange:lookup(XName),
+    Module = rabbit_exchange:type_to_module(XType),
+    Module:validate_binding(X, Binding),
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
