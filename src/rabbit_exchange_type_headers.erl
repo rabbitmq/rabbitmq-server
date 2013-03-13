@@ -51,14 +51,25 @@ route(#exchange{name = Name},
     rabbit_router:match_bindings(
       Name, fun (#binding{args = Spec}) -> headers_match(Spec, Headers) end).
 
-default_headers_match_kind() -> all.
+validate_binding(_X, #binding{args = Args}) ->
+    case rabbit_misc:table_lookup(Args, <<"x-match">>) of
+        {longstr, <<"all">>} -> ok;
+        {longstr, <<"any">>} -> ok;
+        {longstr, Other}     -> rabbit_misc:protocol_error(
+                                  precondition_failed,
+                                  "Invalid x-match field value ~p; "
+                                  "expected all or any", [Other]);
+        {Type,    Other}     -> rabbit_misc:protocol_error(
+                                  precondition_failed,
+                                  "Invalid x-match field type ~p (value ~p); "
+                                  "expected longstr", [Type, Other]);
+        undefined            -> rabbit_misc:protocol_error(
+                                  precondition_failed,
+                                  "x-match field missing", [])
+    end.
 
 parse_x_match(<<"all">>) -> all;
-parse_x_match(<<"any">>) -> any;
-parse_x_match(Other) ->
-    rabbit_log:warning("Invalid x-match field value ~p; expected all or any",
-                       [Other]),
-    default_headers_match_kind().
+parse_x_match(<<"any">>) -> any.
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort
@@ -69,17 +80,9 @@ parse_x_match(Other) ->
 %% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %%
-headers_match(Pattern, Data) ->
-    MatchKind = case lists:keysearch(<<"x-match">>, 1, Pattern) of
-                    {value, {_, longstr, MK}} -> parse_x_match(MK);
-                    {value, {_, Type, MK}} ->
-                        rabbit_log:warning("Invalid x-match field type ~p "
-                                           "(value ~p); expected longstr",
-                                           [Type, MK]),
-                        default_headers_match_kind();
-                    _ -> default_headers_match_kind()
-                end,
-    headers_match(Pattern, Data, true, false, MatchKind).
+headers_match(Args, Data) ->
+    {longstr, MK} = rabbit_misc:table_lookup(Args, <<"x-match">>),
+    headers_match(Args, Data, true, false, parse_x_match(MK)).
 
 headers_match([], _Data, AllMatch, _AnyMatch, all) ->
     AllMatch;
@@ -114,7 +117,6 @@ headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
     headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
 
 validate(_X) -> ok.
-validate_binding(_X, _B) -> ok.
 create(_Tx, _X) -> ok.
 delete(_Tx, _X, _Bs) -> ok.
 policy_changed(_Tx, _X1, _X2) -> ok.
