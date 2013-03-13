@@ -130,7 +130,8 @@ add_binding( _Tx
         {ok, BindFun} -> add_binding_fun(XName, {BindingKey, BindFun});
         _             -> parsing_error(XName, SQL, QName)
       end
-  end.
+  end,
+  ok.
 
 % Binding removal
 remove_bindings( _Tx
@@ -261,25 +262,25 @@ write_state_fun(XName, State) ->
               , write ).
 
 % protocol error
-queue_not_found_error(QName) ->
+queue_not_found_error(#resource{name = QName}) ->
   rabbit_misc:protocol_error( internal_error
                             , "could not find queue '~s'"
                             , [QName] ).
 % state error
-exchange_state_corrupt_error(XName) ->
+exchange_state_corrupt_error(#resource{name = XName}) ->
   rabbit_misc:protocol_error( internal_error
                             , "exchange named '~s' has incorrect saved state"
                             , [XName] ).
 % matching error
-evaluation_error(XName, SQL) ->
+evaluation_error(#resource{name = XName}, SQL) ->
   rabbit_misc:protocol_error( internal_error
-                            , "exchange named '~s' could not evaluate SQL(~p)"
+                            , "exchange named '~s' could not evaluate SQL '~p'"
                             , [XName, SQL] ).
 
 % parsing error
-parsing_error(XName, S, QName) ->
-  rabbit_misc:protocol_error( internal_error
-                            , "cannot parse selector '~s' binding to queue ~s"
-                            , [XName, S, QName] ).
+parsing_error(#resource{name = XName}, S, #resource{name = QName}) ->
+  rabbit_misc:protocol_error( precondition_failed
+                            , "cannot parse selector '~s' binding queue '~s' to exchange '~s'"
+                            , [S, QName, XName] ).
 
 %%----------------------------------------------------------------------------
