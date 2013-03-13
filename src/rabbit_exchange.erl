@@ -440,8 +440,7 @@ peek_serial(XName, LockType) ->
     end.
 
 invalid_module(T) ->
-    rabbit_log:warning(
-      "Could not find exchange type ~s.~n", [T]),
+    rabbit_log:warning("Could not find exchange type ~s.~n", [T]),
     put({xtype_to_module, T}, rabbit_exchange_type_invalid),
     rabbit_exchange_type_invalid.
 
