@@ -55,6 +55,7 @@
             queue_monitors,
             dlx,
             dlx_routing_key,
+            max_length,
             status
            }).
 
@@ -242,7 +243,8 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
       [{<<"x-expires">>,                 fun init_expires/2},
        {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
        {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
-       {<<"x-message-ttl">>,             fun init_ttl/2}]).
+       {<<"x-message-ttl">>,             fun init_ttl/2},
+       {<<"x-max-length">>,              fun init_max_length/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
@@ -253,6 +255,8 @@ init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
 
 init_dlx_routing_key(RoutingKey, State) ->
     State#q{dlx_routing_key = RoutingKey}.
+
+init_max_length(MaxLen, State) -> State#q{max_length = MaxLen}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue_state = BQS} =
@@ -557,27 +561,50 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
         {false, State2 = #q{ttl = 0, dlx = undefined}} ->
             discard(Delivery, State2);
         {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
-            IsEmpty = BQ:is_empty(BQS),
             BQS1 = BQ:publish(Message, Props, Delivered, SenderPid, BQS),
-            State3 = State2#q{backing_queue_state = BQS1},
+            {Dropped, State3 = #q{backing_queue_state = BQS2}} =
+              maybe_drop_head(State2#q{backing_queue_state = BQS1}),
+            QLen = BQ:len(BQS2),
             %% optimisation: it would be perfectly safe to always
             %% invoke drop_expired_msgs here, but that is expensive so
-            %% we only do that IFF the new message ends up at the head
-            %% of the queue (because the queue was empty) and has an
-            %% expiry. Only then may it need expiring straight away,
-            %% or, if expiry is not due yet, the expiry timer may need
-            %% (re)scheduling.
-            case {IsEmpty, Props#message_properties.expiry} of
-                {false,         _} -> State3;
-                {true,  undefined} -> State3;
-                {true,          _} -> drop_expired_msgs(State3)
+            %% we only do that if a new message that might have an
+            %% expiry ends up at the head of the queue. If the head
+            %% remains unchanged, or if the newly published message
+            %% has no expiry and becomes the head of the queue then
+            %% the call is unnecessary.
+            case {Dropped > 0, QLen =:= 1, Props#message_properties.expiry} of
+                {false, false,         _} -> State3;
+                {true,  true,  undefined} -> State3;
+                {_,     _,             _} -> drop_expired_msgs(State3)
             end
+    end.
+
+maybe_drop_head(State = #q{max_length = undefined}) ->
+    {0, State};
+maybe_drop_head(State = #q{max_length          = MaxLen,
+                           backing_queue       = BQ,
+                           backing_queue_state = BQS}) ->
+    case BQ:len(BQS) - MaxLen of
+        Excess when Excess > 0 ->
+            {Excess,
+             with_dlx(
+               State#q.dlx,
+               fun (X) -> dead_letter_maxlen_msgs(X, Excess, State) end,
+               fun () ->
+                       {_, BQS1} = lists:foldl(fun (_, {_, BQS0}) ->
+                                                       BQ:drop(false, BQS0)
+                                               end, {ok, BQS},
+                                               lists:seq(1, Excess)),
+                       State#q{backing_queue_state = BQS1}
+               end)};
+        _ -> {0, State}
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
                                     backing_queue_state = BQS}) ->
     {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
-    run_message_queue(drop_expired_msgs(State#q{backing_queue_state = BQS1})).
+    {_Dropped, State1} = maybe_drop_head(State#q{backing_queue_state = BQS1}),
+    run_message_queue(drop_expired_msgs(State1)).
 
 fetch(AckRequired, State = #q{backing_queue       = BQ,
                               backing_queue_state = BQS}) ->
@@ -759,6 +786,18 @@ dead_letter_rejected_msgs(AckTags, X,  State = #q{backing_queue = BQ}) ->
                   {Acc1, BQS1} = BQ:ackfold(DLFun, Acc, BQS, AckTags),
                   {ok, Acc1, BQS1}
           end, rejected, X, State),
+    State1.
+
+dead_letter_maxlen_msgs(X, Excess, State = #q{backing_queue = BQ}) ->
+    {ok, State1} =
+        dead_letter_msgs(
+          fun (DLFun, Acc, BQS) ->
+                  lists:foldl(fun (_, {ok, Acc0, BQS0}) ->
+                                      {{Msg, _, AckTag}, BQS1} =
+                                        BQ:fetch(true, BQS0),
+                                      {ok, DLFun(Msg, AckTag, Acc0), BQS1}
+                              end, {ok, Acc, BQS}, lists:seq(1, Excess))
+          end, maxlen, X, State),
     State1.
 
 dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
