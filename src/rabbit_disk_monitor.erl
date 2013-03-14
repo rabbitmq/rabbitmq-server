@@ -31,6 +31,7 @@
 
 -record(state, {dir,
                 limit,
+                actual,
                 timeout,
                 timer,
                 alarmed
@@ -106,8 +107,8 @@ handle_call({set_check_interval, Timeout}, _From, State) ->
     {ok, cancel} = timer:cancel(State#state.timer),
     {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
 
-handle_call(get_disk_free, _From, State = #state { dir = Dir }) ->
-    {reply, get_disk_free(Dir), State};
+handle_call(get_disk_free, _From, State = #state { actual = Actual }) ->
+    {reply, Actual, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -156,7 +157,7 @@ internal_update(State = #state { limit   = Limit,
         _ ->
             ok
     end,
-    State #state {alarmed = NewAlarmed}.
+    State #state {alarmed = NewAlarmed, actual = CurrentFreeBytes}.
 
 get_disk_free(Dir) ->
     get_disk_free(Dir, os:type()).
