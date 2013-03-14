@@ -118,11 +118,9 @@ flow(#outgoing_link{delivery_count = LocalCount},
      #'v1_0.flow'{handle         = Handle,
                   delivery_count = Count0,
                   link_credit    = {uint, RemoteCredit},
-                  drain          = Drain}, BCh) ->
-    RemoteCount = case Count0 of
-                      undefined     -> LocalCount;
-                      {uint, Count} -> Count
-                  end,
+                  drain          = Drain0}, BCh) ->
+    {uint, RemoteCount} = default(Count0, {uint, LocalCount}),
+    Drain = default(Drain0, false),
     %% See section 2.6.7
     LocalCredit = RemoteCount + RemoteCredit - LocalCount,
     CTag = handle_to_ctag(Handle),
@@ -145,6 +143,9 @@ flow(#outgoing_link{delivery_count = LocalCount},
                     available      = {uint, Available},
                     drain          = Drain}]}
     end.
+
+default(undefined, Default) -> Default;
+default(Thing,    _Default) -> Thing.
 
 ensure_source(Source = #'v1_0.source'{address       = Address,
                                       dynamic       = Dynamic,
