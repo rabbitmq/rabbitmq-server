@@ -153,22 +153,26 @@ exists(Binding) ->
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
-add(Binding = #binding{source = XName}, InnerFun) ->
-    {ok, X = #exchange{type = XType}} = rabbit_exchange:lookup(XName),
-    Module = rabbit_exchange:type_to_module(XType),
-    Module:validate_binding(X, Binding),
+add(Binding, InnerFun) ->
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
-              %% this argument is used to check queue exclusivity;
-              %% in general, we want to fail on that in preference to
-              %% anything else
-              case InnerFun(Src, Dst) of
-                  ok               -> case mnesia:read({rabbit_route, B}) of
-                                          []  -> add(Src, Dst, B);
-                                          [_] -> fun rabbit_misc:const_ok/0
-                                      end;
-                  {error, _} = Err -> rabbit_misc:const(Err)
+              case rabbit_exchange:validate_binding(Src, B) of
+                  ok ->
+                      %% this argument is used to check queue exclusivity;
+                      %% in general, we want to fail on that in preference to
+                      %% anything else
+                      case InnerFun(Src, Dst) of
+                          ok ->
+                              case mnesia:read({rabbit_route, B}) of
+                                  []  -> add(Src, Dst, B);
+                                  [_] -> fun rabbit_misc:const_ok/0
+                              end;
+                          {error, _} = Err ->
+                              rabbit_misc:const(Err)
+                      end;
+                  {error, _} = Err ->
+                      rabbit_misc:const(Err)
               end
       end).
 
