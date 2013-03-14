@@ -66,6 +66,7 @@ handle_to_ctag({uint, H}) ->
 ctag_to_handle(<<"ctag-", H:32/integer>>) ->
     {uint, H}.
 
+durable(undefined)                                  -> false; %% default: none
 durable(?V_1_0_TERMINUS_DURABILITY_NONE)            -> false;
 %% This one means "existence of the thing is durable, but unacked msgs
 %% aren't". We choose to upgrade that.
