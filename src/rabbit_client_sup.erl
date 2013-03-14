@@ -37,12 +37,16 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Callback) ->
-    supervisor2:start_link(?MODULE, Callback).
+start_link(CallbackOpts) ->
+    supervisor2:start_link(?MODULE, CallbackOpts).
 
-start_link(SupName, Callback) ->
-    supervisor2:start_link(SupName, ?MODULE, Callback).
+start_link(SupName, CallbackOpts) ->
+    supervisor2:start_link(SupName, ?MODULE, CallbackOpts).
 
-init({M,F,A}) ->
+init({{M,F,A},Opts}) ->
+    {Shutdown, Type} = case rabbit_misc:pget(worker_type, Opts, supervisor) of
+                           supervisor -> {infinity, supervisor};
+                           worker     -> {?MAX_WAIT, worker}
+                       end,
     {ok, {{simple_one_for_one_terminate, 0, 1},
-          [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}}.
+          [{client, {M,F,A}, temporary, Shutdown, Type, [M]}]}}.

@@ -139,7 +139,7 @@ boot_ssl() ->
 start() -> rabbit_sup:start_supervisor_child(
              rabbit_tcp_client_sup, rabbit_client_sup,
              [{local, rabbit_tcp_client_sup},
-              {rabbit_connection_sup,start_link,[]}]).
+              {{rabbit_connection_sup,start_link,[]}, []}]).
 
 ensure_ssl() ->
     ok = app_utils:start_applications([crypto, public_key, ssl]),
