@@ -98,47 +98,50 @@ route( #exchange{name = XName}
      , #delivery{message = #basic_message{content = Content}}
      ) ->
   Headers = get_headers(Content),
-  BindingFuns = get_binding_funs(XName),
+  BindingFuns = get_binding_funs_x(XName),
   rabbit_router:match_bindings( XName
                               , fun(#binding{key = Key}) ->
                                   binding_fun_match(Key, Headers, BindingFuns)
                                 end
                               ).
 
-% Validate
+% Before exchange declaration
 validate(_X) -> ok.
 
-% Create binding
+% After exchange declaration and recovery
 create(_Tx, _X) -> ok.
 
 % Delete an exchange
-delete(_Tx, #exchange{name = XName}, _Bs) ->
+delete(transaction, #exchange{name = XName}, _Bs) ->
   delete_state(XName),
+  ok;
+delete(_Tx, _X, _Bs) ->
   ok.
 
-% Add a new binding
-add_binding( _Tx
+% A new binding has ben added or recovered
+add_binding( Tx
            , #exchange{name = XName}
            , #binding{key = BindingKey, destination = QName, args = Args}
            ) ->
-  case rabbit_amqqueue:lookup(QName) of
-    {error, not_found} ->
-      queue_not_found_error(QName);
-    {ok, #amqqueue{}} ->
-      SQL = get_sql_from_args(Args),
-      case generate_binding_fun(XName, BindingKey, SQL) of
-        {ok, BindFun} -> add_binding_fun(XName, {BindingKey, BindFun});
-        _             -> parsing_error(XName, SQL, QName)
-      end
+  SQL = get_sql_from_args(Args),
+  case {Tx, generate_binding_fun(SQL)} of
+    {transaction, {ok, BindFun}} ->
+      add_binding_fun(XName, {BindingKey, BindFun});
+    {none, error} ->
+      parsing_error(XName, SQL, QName);
+    _ ->
+      ok
   end,
   ok.
 
 % Binding removal
-remove_bindings( _Tx
+remove_bindings( transaction
                , #exchange{name = XName}
                , Bindings
                ) ->
   remove_binding_funs(XName, Bindings),
+  ok;
+remove_bindings(_Tx, _X, _Bs) ->
   ok.
 
 % Exchange argument equivalence
@@ -166,12 +169,12 @@ get_headers(Content) ->
   end.
 
 % generate the function that checks the message against the SQL expression
-generate_binding_fun(XName, _BindingKey, SQL) ->
+generate_binding_fun(SQL) ->
   case compile_sql(SQL) of
     error          -> error;
     CompiledSQLExp -> { ok,
                         fun(Headers) ->
-                          sql_match(XName, CompiledSQLExp, Headers)
+                          sql_match(CompiledSQLExp, Headers)
                         end
                       }
   end.
@@ -190,41 +193,32 @@ compile_sql(SQL) ->
   end.
 
 % Evaluate the SQL parsed tree and check against the Headers
-sql_match(XName, SQL, Headers) ->
+sql_match(SQL, Headers) ->
   case sjx_evaluator:evaluate(SQL, Headers) of
     true -> true;
-    false -> false;
-    error -> evaluation_error(XName, SQL),
-             false
+    _    -> false
   end.
 
-% get binding funs from state
-get_binding_funs(XName) ->
-  rabbit_misc:execute_mnesia_transaction(
+% get binding funs from state (using dirty_reads)
+get_binding_funs_x(XName) ->
+  mnesia:async_dirty(
     fun() ->
       #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state(XName),
       BindingFuns
-    end
+    end,
+    []
   ).
 
 % add binding fun to binding fun dictionary
 add_binding_fun(XName, BindingKeyAndFun) ->
-  rabbit_misc:execute_mnesia_transaction(
-    fun() ->
-      #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_for_update(XName),
-      write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun))
-    end
-  ).
+  #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_for_update(XName),
+  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun)).
 
 % remove binding funs from binding fun dictionary
 remove_binding_funs(XName, Bindings) ->
   BindingKeys = [ BindingKey || #binding{key = BindingKey} <- Bindings ],
-  rabbit_misc:execute_mnesia_transaction(
-    fun() ->
-      #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_for_update(XName),
-      write_state_fun(XName, remove_items(BindingFuns, BindingKeys))
-    end
-  ).
+  #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_for_update(XName),
+  write_state_fun(XName, remove_items(BindingFuns, BindingKeys)).
 
 % add an item to the dictionary of binding functions
 put_item(Dict, {Key, Item}) -> orddict:store(Key, Item, Dict).
@@ -235,11 +229,7 @@ remove_items(Dict, [Key | Keys]) -> remove_items(orddict:erase(Key, Dict), Keys)
 
 % delete all the state saved for this exchange
 delete_state(XName) ->
-  rabbit_misc:execute_mnesia_transaction(
-    fun() ->
-      mnesia:delete(?JMS_TOPIC_TABLE, XName, write)
-    end
-  ).
+  mnesia:delete(?JMS_TOPIC_TABLE, XName, write).
 
 % Basic read for update
 read_state_for_update(XName) -> read_state(XName, write).
@@ -261,16 +251,15 @@ write_state_fun(XName, State) ->
               , #?JMS_TOPIC_RECORD{x_name = XName, x_state = State}
               , write ).
 
-% protocol error
-queue_not_found_error(#resource{name = QName}) ->
-  rabbit_misc:protocol_error( internal_error
-                            , "could not find queue '~s'"
-                            , [QName] ).
+%%----------------------------------------------------------------------------
+%% E R R O R S
+
 % state error
 exchange_state_corrupt_error(#resource{name = XName}) ->
   rabbit_misc:protocol_error( internal_error
                             , "exchange named '~s' has incorrect saved state"
                             , [XName] ).
+
 % matching error
 evaluation_error(#resource{name = XName}, SQL) ->
   rabbit_misc:protocol_error( internal_error
