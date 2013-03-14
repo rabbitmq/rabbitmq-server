@@ -43,8 +43,8 @@ init([{Listeners, SslListeners}]) ->
           [{rabbit_mqtt_client_sup,
             {rabbit_client_sup, start_link,
              [{local, rabbit_mqtt_client_sup},
-              {rabbit_mqtt_reader, start_link, []}]},
-            transient, infinity, worker, [rabbit_client_sup]} |
+              {{rabbit_mqtt_reader, start_link, []}, [{worker_type, worker}]}]},
+            transient, infinity, supervisor, [rabbit_client_sup]} |
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
