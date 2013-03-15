@@ -63,7 +63,7 @@ setup_db_schema() ->
                             , {record_name, ?JMS_TOPIC_RECORD}
                             , {type, set} ]
                           ) of
-    {atomic, ok} ->ok;
+    {atomic, ok} -> ok;
     {aborted, {already_exists, ?JMS_TOPIC_TABLE}} -> ok
   end.
 
@@ -82,6 +82,11 @@ setup_db_schema() ->
 %%                   durable     :: boolean(),
 %%                   auto_delete :: boolean(),
 %%                   arguments   :: rabbit_framing:amqp_table()}).
+%%
+%% -type(amqp_field_type() ::
+%%       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
+%%       'table' | 'byte' | 'double' | 'float' | 'long' |
+%%       'short' | 'bool' | 'binary' | 'void' | 'array').
 
 %%----------------------------------------------------------------------------
 %% E X P O R T E D   E X C H A N G E   B E H A V I O U R
@@ -259,12 +264,6 @@ exchange_state_corrupt_error(#resource{name = XName}) ->
   rabbit_misc:protocol_error( internal_error
                             , "exchange named '~s' has incorrect saved state"
                             , [XName] ).
-
-% matching error
-evaluation_error(#resource{name = XName}, SQL) ->
-  rabbit_misc:protocol_error( internal_error
-                            , "exchange named '~s' could not evaluate SQL '~p'"
-                            , [XName, SQL] ).
 
 % parsing error
 parsing_error(#resource{name = XName}, S, #resource{name = QName}) ->
