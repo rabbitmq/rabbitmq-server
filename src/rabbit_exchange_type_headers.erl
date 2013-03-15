@@ -55,17 +55,16 @@ validate_binding(_X, #binding{args = Args}) ->
     case rabbit_misc:table_lookup(Args, <<"x-match">>) of
         {longstr, <<"all">>} -> ok;
         {longstr, <<"any">>} -> ok;
-        {longstr, Other}     -> rabbit_misc:protocol_error(
-                                  precondition_failed,
+        {longstr, Other}     -> {error,
+                                 {binding_invalid,
                                   "Invalid x-match field value ~p; "
-                                  "expected all or any", [Other]);
-        {Type,    Other}     -> rabbit_misc:protocol_error(
-                                  precondition_failed,
+                                  "expected all or any", [Other]}};
+        {Type,    Other}     -> {error,
+                                 {binding_invalid,
                                   "Invalid x-match field type ~p (value ~p); "
-                                  "expected longstr", [Type, Other]);
-        undefined            -> rabbit_misc:protocol_error(
-                                  precondition_failed,
-                                  "x-match field missing", [])
+                                  "expected longstr", [Type, Other]}};
+        undefined            -> {error,
+                                 {binding_invalid, "x-match field missing", []}}
     end.
 
 parse_x_match(<<"all">>) -> all;

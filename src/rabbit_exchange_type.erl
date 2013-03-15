@@ -37,9 +37,9 @@
 %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
 -callback validate(rabbit_types:exchange()) -> 'ok'.
 
-%% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
--callback validate_binding(
-            rabbit_types:exchange(), rabbit_types:binding()) -> 'ok'.
+%% called BEFORE declaration, to check args etc
+-callback validate_binding(rabbit_types:exchange(), rabbit_types:binding()) ->
+    rabbit_types:ok_or_error({'binding_invalid', string(), [any()]}).
 
 %% called after declaration and recovery
 -callback create(tx(), rabbit_types:exchange()) -> 'ok'.

@@ -85,7 +85,7 @@
                               rabbit_types:error('in_use')).
 -spec(validate_binding/2 ::
         (rabbit_types:exchange(), rabbit_types:binding())
-        -> rabbit_types:ok_or_error(rabbit_types:amqp_error())).
+        -> rabbit_types:ok_or_error({'binding_invalid', string(), [any()]})).
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
@@ -404,12 +404,7 @@ delete(XName, IfUnused) ->
 
 validate_binding(X = #exchange{type = XType}, Binding) ->
     Module = type_to_module(XType),
-    try
-        Module:validate_binding(X, Binding)
-    catch
-        exit:Error ->
-            {error, Error}
-    end.
+    Module:validate_binding(X, Binding).
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
