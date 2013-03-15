@@ -647,7 +647,7 @@ function filter_ui(items) {
 
     var res = '<div class="filter"><table' +
         (current_filter == '' ? '' : ' class="filter-active"') +
-        '"><tr><th>Filter:</th>' +
+        '><tr><th>Filter:</th>' +
         '<td><input id="filter" type="text" value="' +
         fmt_escape_html(current_filter) + '"/></td></tr></table>' +
         '<div class="updatable">';
