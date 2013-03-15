@@ -441,9 +441,10 @@ function postprocess() {
     });
     $('#filter').die().live('keyup', function() {
         current_filter = $(this).val();
-        $(this).parents('table').first().removeClass('filter-active');
+        var table = $(this).parents('table').first();
+        table.removeClass('filter-active');
         if ($(this).val() != '') {
-            $(this).parents('table').first().addClass('filter-active');
+            table.addClass('filter-active');
         }
         partial_update();
     });
