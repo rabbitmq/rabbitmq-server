@@ -20,7 +20,8 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, serialise_events/0, route/2]).
--export([validate/1, create/2, delete/3, policy_changed/3, add_binding/3,
+-export([validate/1, validate_binding/2,
+         create/2, delete/3, policy_changed/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -export([init/0]).
 
@@ -82,6 +83,7 @@ route(#exchange { name      = Name,
     end.
 
 validate(_X) -> ok.
+validate_binding(_X, _B) -> ok.
 create(_Tx, _X) -> ok.
 delete(transaction, #exchange { name = Name }, _Bs) ->
     ok = mnesia:write_lock_table(?TABLE),
