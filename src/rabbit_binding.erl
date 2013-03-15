@@ -39,11 +39,12 @@
                          {'resources_missing',
                           [{'not_found', (rabbit_types:binding_source() |
                                           rabbit_types:binding_destination())} |
-                           {'absent', rabbit_types:amqqueue()}]} |
-                         {'binding_invalid', string(), [any()]})).
+                           {'absent', rabbit_types:amqqueue()}]})).
 
 -type(bind_ok_or_error() :: 'ok' | bind_errors() |
-                            rabbit_types:error('binding_not_found')).
+                            rabbit_types:error(
+                              'binding_not_found' |
+                              {'binding_invalid', string(), [any()]})).
 -type(bind_res() :: bind_ok_or_error() | rabbit_misc:thunk(bind_ok_or_error())).
 -type(inner_fun() ::
         fun((rabbit_types:exchange(),
