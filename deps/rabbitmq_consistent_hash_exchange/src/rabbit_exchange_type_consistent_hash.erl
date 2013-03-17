@@ -21,8 +21,8 @@
 
 -export([description/0, serialise_events/0, route/2]).
 -export([validate/1, validate_binding/2,
-         create/2, delete/3, policy_changed/3, add_binding/3,
-         remove_bindings/3, assert_args_equivalence/2]).
+         create/2, delete/3, policy_changed/2,
+         add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 -export([init/0]).
 
 -record(bucket, {source_number, destination, binding}).
@@ -83,17 +83,20 @@ route(#exchange { name      = Name,
     end.
 
 validate(_X) -> ok.
+
 validate_binding(_X, _B) -> ok.
+
 create(_Tx, _X) -> ok.
+
 delete(transaction, #exchange { name = Name }, _Bs) ->
     ok = mnesia:write_lock_table(?TABLE),
     [ok = mnesia:delete_object(?TABLE, R, write) ||
         R <- mnesia:match_object(
                ?TABLE, #bucket{source_number = {Name, '_'}, _ = '_'}, write)],
     ok;
-
 delete(_Tx, _X, _Bs) -> ok.
-policy_changed(_Tx, _X1, _X2) -> ok.
+
+policy_changed(_X1, _X2) -> ok.
 
 add_binding(transaction, _X,
             #binding { source = S, destination = D, key = K } = B) ->
