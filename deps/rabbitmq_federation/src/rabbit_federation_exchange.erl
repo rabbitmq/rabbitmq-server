@@ -29,8 +29,8 @@
 -behaviour(rabbit_exchange_decorator).
 
 -export([description/0, serialise_events/1]).
--export([create/2, delete/3, add_binding/3, remove_bindings/3,
-         policy_changed/3]).
+-export([create/2, delete/3, policy_changed/2,
+         add_binding/3, remove_bindings/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -49,6 +49,10 @@ delete(transaction, _X, _Bs) ->
 delete(none, X, _Bs) ->
     maybe_stop(X).
 
+policy_changed(OldX, NewX) ->
+    maybe_stop(OldX),
+    maybe_start(NewX).
+
 add_binding(transaction, _X, _B) ->
     ok;
 add_binding(Serial, X = #exchange{name = XName}, B) ->
@@ -66,10 +70,6 @@ remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
                  ok;
         false -> ok
     end.
-
-policy_changed(none, OldX, NewX) ->
-    maybe_stop(OldX),
-    maybe_start(NewX).
 
 %%----------------------------------------------------------------------------
 
