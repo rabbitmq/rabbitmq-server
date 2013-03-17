@@ -22,7 +22,7 @@
 
 -export([description/0, serialise_events/0, route/2]).
 -export([validate/1, validate_binding/2,
-         create/2, delete/3, policy_changed/3, add_binding/3,
+         create/2, delete/3, policy_changed/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 
 -rabbit_boot_step({?MODULE,
@@ -59,7 +59,7 @@ delete(transaction, #exchange{name = X}, _Bs) ->
 delete(none, _Exchange, _Bs) ->
     ok.
 
-policy_changed(_Tx, _X1, _X2) -> ok.
+policy_changed(_X1, _X2) -> ok.
 
 add_binding(transaction, _Exchange, Binding) ->
     internal_add_binding(Binding);

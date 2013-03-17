@@ -54,8 +54,8 @@
                           [rabbit_types:binding()]) -> 'ok'.
 
 %% called when the policy attached to this exchange changes.
--callback policy_changed(
-            serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
+-callback policy_changed(rabbit_types:exchange(), rabbit_types:exchange()) ->
+    'ok'.
 
 %% called after exchange routing
 %% return value is a list of queues to be added to the list of
@@ -70,7 +70,7 @@
 
 behaviour_info(callbacks) ->
     [{description, 0}, {serialise_events, 1}, {create, 2}, {delete, 3},
-     {add_binding, 3}, {remove_bindings, 3}, {policy_changed, 3}, {route, 2}];
+     {add_binding, 3}, {remove_bindings, 3}, {policy_changed, 2}, {route, 2}];
 behaviour_info(_Other) ->
     undefined.
 
