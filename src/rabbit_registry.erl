@@ -84,12 +84,44 @@ internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
 internal_register(Class, TypeName, ModuleName)
   when is_atom(Class), is_binary(TypeName), is_atom(ModuleName) ->
     ok = sanity_check_module(class_module(Class), ModuleName),
-    true = ets:insert(?ETS_NAME,
-                      {{Class, internal_binary_to_type(TypeName)}, ModuleName}),
+    RegArg = {{Class, internal_binary_to_type(TypeName)}, ModuleName},
+    true = ets:insert(?ETS_NAME, RegArg),
+    conditional_register(RegArg),
     ok.
 
 internal_unregister(Class, TypeName) ->
-    true = ets:delete(?ETS_NAME, {Class, internal_binary_to_type(TypeName)}),
+    UnregArg = {Class, internal_binary_to_type(TypeName)},
+    conditional_unregister(UnregArg),
+    true = ets:delete(?ETS_NAME, UnregArg),
+    ok.
+
+conditional_register({{exchange_decorator, Type}, ModuleName}) ->
+    case erlang:function_exported(ModuleName, route, 2) of
+        true  ->
+            true = ets:insert(?ETS_NAME, {{exchange_decorator_route, Type},
+                                          ModuleName}),
+            ok;
+        false ->
+            ok
+    end;
+conditional_register(_) ->
+    ok.
+
+conditional_unregister({exchange_decorator, Type}) ->
+    case lookup_module(exchange_decorator, Type) of
+        {ok, ModuleName} ->
+            case erlang:function_exported(ModuleName, route, 2) of
+                true  ->
+                    true = ets:delete(?ETS_NAME, {exchange_decorator_route,
+                                                  Type}),
+                    ok;
+                false ->
+                    ok
+            end;
+        {error, not_found} ->
+            ok
+    end;
+conditional_unregister(_) ->
     ok.
 
 sanity_check_module(ClassModule, Module) ->
@@ -104,12 +136,11 @@ sanity_check_module(ClassModule, Module) ->
         true                  -> ok
     end.
 
-class_module(exchange)                 -> rabbit_exchange_type;
-class_module(auth_mechanism)           -> rabbit_auth_mechanism;
-class_module(runtime_parameter)        -> rabbit_runtime_parameter;
-class_module(exchange_decorator)       -> rabbit_exchange_decorator;
-class_module(exchange_decorator_route) -> rabbit_exchange_decorator;
-class_module(policy_validator)         -> rabbit_policy_validator.
+class_module(exchange)           -> rabbit_exchange_type;
+class_module(auth_mechanism)     -> rabbit_auth_mechanism;
+class_module(runtime_parameter)  -> rabbit_runtime_parameter;
+class_module(exchange_decorator) -> rabbit_exchange_decorator;
+class_module(policy_validator)   -> rabbit_policy_validator.
 
 %%---------------------------------------------------------------------------
 
