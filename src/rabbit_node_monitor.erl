@@ -344,8 +344,8 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
     %% that we do not attempt to deal with individual (other) partitions
-    %% going away, it's only safe to forget *any* of them when we have seen
-    %% the back of *all* of them.
+    %% going away. It's only safe to forget anything about partitions when
+    %% there are no partitions.
     Partitions1 = case Partitions -- (Partitions -- alive_nodes()) of
                       [] -> [];
                       _  -> Partitions
