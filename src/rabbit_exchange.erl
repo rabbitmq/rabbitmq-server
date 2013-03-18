@@ -124,7 +124,10 @@ callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
-policy_changed(X1, X2) -> callback(X1, policy_changed, none, [X1, X2]).
+policy_changed(X = #exchange{type = XType}, X1) ->
+    [ok = M:policy_changed(X, X1) ||
+        M <- [type_to_module(XType) | registry_lookup(exchange_decorator)]],
+    ok.
 
 serialise_events(X = #exchange{type = Type}) ->
     lists:any(fun (M) -> M:serialise_events(X) end,
