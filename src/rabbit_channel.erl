@@ -1089,6 +1089,17 @@ handle_method(#'channel.flow'{active = false}, _,
         false -> Limiter1 = rabbit_limiter:block(Limiter),
                  State1 = maybe_limit_queues(Limiter, Limiter1,
                                              State#ch{limiter = Limiter1}),
+                 %% The semantics of channel.flow{active=false}
+                 %% require that no messages are delivered after the
+                 %% channel.flow_ok has been sent. We accomplish that
+                 %% by "flushing" all messages in flight from the
+                 %% consumer queues to us. To do this we tell all the
+                 %% queues to invoke rabbit_channel:flushed/2, which
+                 %% will send us a {flushed, ...} message that appears
+                 %% *after* all the {deliver, ...} messages. We keep
+                 %% track of all the QPids thus asked, and once all of
+                 %% them have responded (or died) we send the
+                 %% channel.flow_ok.
                  QPids = consumer_queues(Consumers),
                  ok = rabbit_amqqueue:flush_all(QPids, self()),
                  {noreply, maybe_send_flow_ok(
@@ -1347,7 +1358,9 @@ consumer_queues(Consumers) ->
 %% messages sent in a response to a basic.get (identified by their
 %% 'none' consumer tag)
 notify_limiter(Limiter, Acked) ->
-    case rabbit_limiter:is_limited(Limiter) of
+    %% optimisation: avoid the potentially expensive 'foldl' in the
+    %% common case.
+     case rabbit_limiter:is_limited(Limiter) of
         false -> ok;
         true  -> case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
                                       ({_,    _, _}, Acc) -> Acc + 1

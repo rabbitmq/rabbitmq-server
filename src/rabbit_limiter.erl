@@ -14,6 +14,85 @@
 %% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
+%% The purpose of the limiter is to stem the flow of messages from
+%% queues to channels, in order to act upon various protocol-level
+%% flow control mechanisms, specifically AMQP's basic.qos
+%% prefetch_count and channel.flow.
+%%
+%% Each channel has an associated limiter process, created with
+%% start_link/1, which it passes to queues on consumer creation with
+%% rabbit_amqqueue:basic_consume/8. This process holds state that is,
+%% in effect, shared between the channel and all queues from which the
+%% channel is consuming. Essentially all these queues are competing
+%% for access to a single, limited resource - the ability to deliver
+%% messages via the channel - and it is the job of the limiter process
+%% to mediate that access.
+%%
+%% The limiter process is separate from the channel process for two
+%% reasons: separation of concerns, and efficiency. Channels can get
+%% very busy, particularly if they are also dealing with publishes.
+%% With a separate limiter process all the aforementioned access
+%% mediation can take place without touching the channel.
+%%
+%% For efficiency, both the channel and the queues keep some local
+%% state, initialised from the limiter pid with new/1 and client/1,
+%% respectively. In particular this allows them to avoid any
+%% interaction with the limiter process when it is 'inactive', i.e. no
+%% protocol-level flow control is taking place.
+%%
+%% This optimisation does come at the cost of some complexity though:
+%% when a limiter becomes active, the channel needs to inform all its
+%% consumer queues of this change in status. It does this by invoking
+%% rabbit_amqqueue:activate_limit_all/2. Note that there is no inverse
+%% transition, i.e. once a queue has been told about an active
+%% limiter, it is not subsequently told when that limiter becomes
+%% inactive. In practice it is rare for that to happen, though we
+%% could optimise this case in the future.
+%%
+%% The interactions with the limiter are as follows:
+%%
+%% 1. Channels tell the limiter about basic.qos prefetch counts -
+%%    that's what the limit/3, unlimit/1, is_limited/1, get_limit/1
+%%    API functions are about - and channel.flow blocking - that's
+%%    what block/1, unblock/1 and is_blocked/1 are for.
+%%
+%% 2. Queues register with the limiter - this happens as part of
+%%    activate/1.
+%%
+%% 4. The limiter process maintains an internal counter of 'messages
+%%    sent but not yet acknowledged', called the 'volume'.
+%%
+%% 5. Queues ask the limiter for permission (with can_send/2) whenever
+%%    they want to deliver a message to a channel. The limiter checks
+%%    whether a) the channel isn't blocked by channel.flow, and b) the
+%%    volume has not yet reached the prefetch limit. If so it
+%%    increments the volume and tells the queue to proceed. Otherwise
+%%    it marks the queue as requiring notification (see below) and
+%%    tells the queue not to proceed.
+%%
+%% 6. A queue that has told to proceed (by the return value of
+%%    can_send/2) sends the message to the channel. Conversely, a
+%%    queue that has been told not to proceed, will not attempt to
+%%    deliver that message, or any future messages, to the
+%%    channel. This is accomplished by can_send/2 capturing the
+%%    outcome in the local state, where it can be accessed with
+%%    is_suspended/1.
+%%
+%% 7. When a channel receives an ack it tells the limiter (via ack/2)
+%%    how many messages were ack'ed. The limiter process decrements
+%%    the volume and if it falls below the prefetch_count then it
+%%    notifies (through rabbit_amqqueue:resume/2) all the queues
+%%    requiring notification, i.e. all those that had a can_send/2
+%%    request denied.
+%%
+%% 8. Upon receipt of such a notification, queues resume delivery to
+%%    the channel, i.e. they will once again start asking limiter, as
+%%    described in (5).
+%%
+%% 9. When a queues has no more consumers associated with a particular
+%%    channel, it unregisters with the limiter and forgets about it -
+%%    all via forget/1.
+
 -module(rabbit_limiter).
 
 -behaviour(gen_server2).
