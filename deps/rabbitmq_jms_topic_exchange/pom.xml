@@ -20,7 +20,7 @@
     <exec-maven-plugin.version>1.2.1</exec-maven-plugin.version>
 
     <!-- overridable parameter -->
-    <rabbitmq.version>3.0.2</rabbitmq.version>
+    <rabbitmq.version>3.0.4</rabbitmq.version>
   </properties>
 
   <build>
