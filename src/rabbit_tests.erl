@@ -1200,8 +1200,7 @@ test_channel() ->
     {ok, Limiter} = rabbit_limiter:start_link(),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], Me,
-                  rabbit_limiter:make_token(self())),
+                 user(<<"guest">>), <<"/">>, [], Me, Limiter),
     {Writer, Limiter, Ch}.
 
 test_spawn() ->
