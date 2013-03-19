@@ -19,24 +19,27 @@
 -behaviour(gen_server2).
 
 -export([start_link/0]).
+%% channel API
 -export([new/1, limit/3, unlimit/1, block/1, unblock/1,
-         is_limited/1, is_blocked/1, is_active/1, get_limit/1, ack/2]).
--export([can_send/2, register/1, unregister/1]).
-
+         is_limited/1, is_blocked/1, is_active/1, get_limit/1, ack/2, pid/1]).
+%% queue API
+-export([client/1, activate/1, can_send/2, resume/1, forget/1, is_suspended/1]).
+%% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
 
 %%----------------------------------------------------------------------------
 
 -record(lstate, {pid, limited, blocked}).
+-record(qstate, {pid, state}).
 
 -ifdef(use_specs).
 
--export_type([lstate/0]).
-
--opaque(lstate() :: #lstate {pid     :: pid(),
-                             limited :: boolean(),
-                             blocked :: boolean()}).
+-type(lstate() :: #lstate{pid     :: pid(),
+                          limited :: boolean(),
+                          blocked :: boolean()}).
+-type(qstate() :: #qstate{pid :: pid(),
+                          state :: 'dormant' | 'active' | 'suspended'}).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(new/1 :: (pid()) -> lstate()).
@@ -51,10 +54,15 @@
 -spec(is_active/1  :: (lstate()) -> boolean()).
 -spec(get_limit/1  :: (lstate()) -> non_neg_integer()).
 -spec(ack/2        :: (lstate(), non_neg_integer()) -> 'ok').
+-spec(pid/1        :: (lstate()) -> pid()).
 
--spec(can_send/2   :: (lstate(), boolean()) -> boolean()).
--spec(register/1   :: (lstate()) -> 'ok').
--spec(unregister/1 :: (lstate()) -> 'ok').
+-spec(client/1       :: (pid()) -> qstate()).
+-spec(activate/1     :: (qstate()) -> qstate()).
+-spec(can_send/2     :: (qstate(), boolean()) ->
+                             {'continue' | 'suspend', qstate()}).
+-spec(resume/1       :: (qstate()) -> qstate()).
+-spec(forget/1       :: (qstate()) -> undefined).
+-spec(is_suspended/1 :: (qstate()) -> boolean()).
 
 -endif.
 
@@ -108,29 +116,37 @@ get_limit(L) -> gen_server:call(L#lstate.pid, get_limit).
 ack(#lstate{limited = false}, _AckCount) -> ok;
 ack(L, AckCount) -> gen_server:cast(L#lstate.pid, {ack, AckCount}).
 
+pid(#lstate{pid = Pid}) -> Pid.
+
+client(Pid) -> #qstate{pid = Pid, state = dormant}.
+
+activate(L = #qstate{state = dormant}) ->
+    ok = gen_server:cast(L#qstate.pid, {register, self()}),
+    L#qstate{state = active};
+activate(L) -> L.
+
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit.
-can_send(L, AckRequired) ->
-    case is_active(L) of
-        false -> true;
-        true  -> rabbit_misc:with_exit_handler(
-                   fun () -> true end,
-                   fun () -> Msg = {can_send, self(), AckRequired},
-                             gen_server2:call(L#lstate.pid, Msg, infinity)
-                   end)
-    end.
+can_send(L = #qstate{state = active}, AckRequired) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> {continue, L} end,
+      fun () -> Msg = {can_send, self(), AckRequired},
+                case gen_server2:call(L#qstate.pid, Msg, infinity) of
+                    true  -> {continue, L};
+                    false -> {suspend, L#qstate{state = suspended}}
+                end
+      end);
+can_send(L, _AckRequired) -> {continue, L}.
 
-register(L) ->
-    case is_active(L) of
-        false -> ok;
-        true  -> gen_server:cast(L#lstate.pid, {register, self()})
-    end.
+resume(L) -> L#qstate{state = active}.
 
-unregister(L) ->
-    case is_active(L) of
-        false -> ok;
-        true -> gen_server:cast(L#lstate.pid, {unregister, self()})
-    end.
+forget(#qstate{state = dormant}) -> undefined;
+forget(L) ->
+    ok = gen_server:cast(L#qstate.pid, {unregister, self()}),
+    undefined.
+
+is_suspended(#qstate{state = suspended}) -> true;
+is_suspended(#qstate{})                  -> false.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -220,10 +236,9 @@ remember_queue(QPid, State = #lim{queues = Queues}) ->
         true  -> State
     end.
 
-forget_queue(QPid, State = #lim{ch_pid = ChPid, queues = Queues}) ->
+forget_queue(QPid, State = #lim{queues = Queues}) ->
     case orddict:find(QPid, Queues) of
         {ok, {MRef, _}} -> true = erlang:demonitor(MRef),
-                           ok = rabbit_amqqueue:unblock(QPid, ChPid),
                            State#lim{queues = orddict:erase(QPid, Queues)};
         error           -> State
     end.
@@ -240,13 +255,13 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
                      end, {[], Queues}, Queues),
     case length(QList) of
         0 -> ok;
-        1 -> ok = rabbit_amqqueue:unblock(hd(QList), ChPid); %% common case
+        1 -> ok = rabbit_amqqueue:resume(hd(QList), ChPid); %% common case
         L ->
             %% We randomly vary the position of queues in the list,
             %% thus ensuring that each queue has an equal chance of
             %% being notified first.
             {L1, L2} = lists:split(random:uniform(L), QList),
-            [[ok = rabbit_amqqueue:unblock(Q, ChPid) || Q <- L3]
+            [[ok = rabbit_amqqueue:resume(Q, ChPid) || Q <- L3]
              || L3 <- [L2, L1]],
             ok
     end,

@@ -1100,20 +1100,14 @@ test_policy_validation() ->
 
 test_server_status() ->
     %% create a few things so there is some useful information to list
-    Writer = spawn(fun test_writer/0),
-    {ok, Ch} = rabbit_channel:start_link(
-                 1, self(), Writer, self(), "", rabbit_framing_amqp_0_9_1,
-                 user(<<"user">>), <<"/">>, [], self(),
-                 rabbit_limiter:make_token(self())),
+    {_Writer, Limiter, Ch} = test_channel(),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
-
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, rabbit_limiter:make_token(),
-           <<"ctag">>, true, undefined),
+           Q, true, Ch, Limiter, false, <<"ctag">>, true, undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -1191,8 +1185,6 @@ find_listener() ->
               N =:= node()],
     {H, P}.
 
-test_writer() -> test_writer(none).
-
 test_writer(Pid) ->
     receive
         {'$gen_call', From, flush} -> gen_server:reply(From, ok),
@@ -1202,13 +1194,18 @@ test_writer(Pid) ->
         shutdown                   -> ok
     end.
 
-test_spawn() ->
+test_channel() ->
     Me = self(),
     Writer = spawn(fun () -> test_writer(Me) end),
+    {ok, Limiter} = rabbit_limiter:start_link(),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
                  user(<<"guest">>), <<"/">>, [], Me,
                   rabbit_limiter:make_token(self())),
+    {Writer, Limiter, Ch}.
+
+test_spawn() ->
+    {Writer, _Limiter, Ch} = test_channel(),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_channel_open_ok)

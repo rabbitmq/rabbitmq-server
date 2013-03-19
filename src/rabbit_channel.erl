@@ -81,8 +81,8 @@
 -spec(start_link/11 ::
         (channel_number(), pid(), pid(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
-         rabbit_framing:amqp_table(),
-         pid(), pid()) -> rabbit_types:ok_pid_or_error()).
+         rabbit_framing:amqp_table(), pid(), pid()) ->
+                            rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -728,7 +728,9 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                    QueueName, ConnPid,
                    fun (Q) ->
                            {rabbit_amqqueue:basic_consume(
-                              Q, NoAck, self(), Limiter,
+                              Q, NoAck, self(),
+                              rabbit_limiter:pid(Limiter),
+                              rabbit_limiter:is_active(Limiter),
                               ActualConsumerTag, ExclusiveConsume,
                               ok_msg(NoWait, #'basic.consume_ok'{
                                        consumer_tag = ActualConsumerTag})),
@@ -1326,7 +1328,7 @@ maybe_limit_queues(OldLimiter, NewLimiter, State) ->
     case ((not rabbit_limiter:is_active(OldLimiter)) andalso
           rabbit_limiter:is_active(NewLimiter)) of
         true  -> Queues = consumer_queues(State#ch.consumer_mapping),
-                 rabbit_amqqueue:limit_all(Queues, self(), NewLimiter);
+                 rabbit_amqqueue:activate_limit_all(Queues, self());
         false -> ok
     end,
     State.

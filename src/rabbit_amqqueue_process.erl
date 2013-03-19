@@ -68,7 +68,6 @@
              consumer_count,
              blocked_consumers,
              limiter,
-             is_limit_active,
              unsent_message_count}).
 
 %%----------------------------------------------------------------------------
@@ -371,7 +370,6 @@ ch_record(ChPid) ->
                              acktags              = queue:new(),
                              consumer_count       = 0,
                              blocked_consumers    = queue:new(),
-                             is_limit_active      = false,
                              limiter              = undefined,
                              unsent_message_count = 0},
                      put(Key, C),
@@ -392,30 +390,18 @@ store_ch_record(C = #cr{ch_pid = ChPid}) ->
     put({ch, ChPid}, C),
     ok.
 
-erase_ch_record(#cr{ch_pid      = ChPid,
-                    limiter     = Limiter,
-                    monitor_ref = MonitorRef}) ->
-    ok = rabbit_limiter:unregister(Limiter),
+erase_ch_record(#cr{ch_pid = ChPid, monitor_ref = MonitorRef}) ->
     erlang:demonitor(MonitorRef),
     erase({ch, ChPid}),
     ok.
-
-update_consumer_count(C = #cr{consumer_count = 0, limiter = Limiter}, +1) ->
-    ok = rabbit_limiter:register(Limiter),
-    update_ch_record(C#cr{consumer_count = 1});
-update_consumer_count(C = #cr{consumer_count = 1, limiter = Limiter}, -1) ->
-    ok = rabbit_limiter:unregister(Limiter),
-    update_ch_record(C#cr{consumer_count = 0, limiter = undefined});
-update_consumer_count(C = #cr{consumer_count = Count}, Delta) ->
-    update_ch_record(C#cr{consumer_count = Count + Delta}).
 
 all_ch_record() -> [C || {{ch, _}, C} <- get()].
 
 block_consumer(C = #cr{blocked_consumers = Blocked}, QEntry) ->
     update_ch_record(C#cr{blocked_consumers = queue:in(QEntry, Blocked)}).
 
-is_ch_blocked(#cr{unsent_message_count = Count, is_limit_active = Limited}) ->
-    Limited orelse Count >= ?UNSENT_MESSAGE_LIMIT.
+is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
+    Count >= ?UNSENT_MESSAGE_LIMIT orelse rabbit_limiter:is_suspended(Limiter).
 
 ch_record_state_transition(OldCR, NewCR) ->
     case {is_ch_blocked(OldCR), is_ch_blocked(NewCR)} of
@@ -439,18 +425,20 @@ deliver_msgs_to_consumers(DeliverFun, false,
     end.
 
 deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
-    C = ch_record(ChPid),
+    C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E),
                  {false, State};
         false -> case rabbit_limiter:can_send(C#cr.limiter,
                                               Consumer#consumer.ack_required) of
-                     false -> block_consumer(C#cr{is_limit_active = true}, E),
-                              {false, State};
-                     true  -> AC1 = queue:in(E, State#q.active_consumers),
-                              deliver_msg_to_consumer(
-                                DeliverFun, Consumer, C,
-                                State#q{active_consumers = AC1})
+                     {suspend, Limiter} ->
+                         block_consumer(C#cr{limiter = Limiter}, E),
+                         {false, State};
+                     {continue, Limiter} ->
+                         AC1 = queue:in(E, State#q.active_consumers),
+                         deliver_msg_to_consumer(
+                           DeliverFun, Consumer, C#cr{limiter = Limiter},
+                           State#q{active_consumers = AC1})
                  end
     end.
 
@@ -1127,15 +1115,25 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             reply({ok, BQ:len(BQS), Msg}, State3)
     end;
 
-handle_call({basic_consume, NoAck, ChPid, Limiter,
+handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
              ConsumerTag, ExclusiveConsume, OkMsg},
             _From, State = #q{exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
         in_use ->
             reply({error, exclusive_consume_unavailable}, State);
         ok ->
-            C = ch_record(ChPid),
-            update_consumer_count(C#cr{limiter = Limiter}, +1),
+            C = #cr{consumer_count = Count,
+                    limiter        = Limiter0} = ch_record(ChPid),
+            Limiter = case Limiter0 of
+                          undefined -> rabbit_limiter:client(LimiterPid);
+                          _         -> Limiter0
+                      end,
+            Limiter1 = case LimiterActive of
+                           true  -> rabbit_limiter:activate(Limiter);
+                           false -> Limiter
+                       end,
+            update_ch_record(C#cr{consumer_count = Count + 1,
+                                  limiter        = Limiter1}),
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
@@ -1156,10 +1154,18 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
     case lookup_ch(ChPid) of
         not_found ->
             reply(ok, State);
-        C = #cr{blocked_consumers = Blocked} ->
+        C = #cr{consumer_count    = Count,
+                limiter           = Limiter,
+                blocked_consumers = Blocked} ->
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State)),
             Blocked1 = remove_consumer(ChPid, ConsumerTag, Blocked),
-            update_consumer_count(C#cr{blocked_consumers = Blocked1}, -1),
+            Limiter1 = case Count of
+                           1 -> rabbit_limiter:forget(Limiter);
+                           _ -> Limiter
+                       end,
+            update_ch_record(C#cr{consumer_count    = Count - 1,
+                                  limiter           = Limiter1,
+                                  blocked_consumers = Blocked1}),
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, ConsumerTag} -> none;
@@ -1287,10 +1293,13 @@ handle_cast({reject, AckTags, false, ChPid}, State) ->
 handle_cast(delete_immediately, State) ->
     stop(State);
 
-handle_cast({unblock, ChPid}, State) ->
+handle_cast({resume, ChPid}, State) ->
     noreply(
       possibly_unblock(State, ChPid,
-                       fun (C) -> C#cr{is_limit_active = false} end));
+                       fun (C = #cr{limiter = undefined}) -> C;
+                           (C = #cr{limiter = Limiter}) ->
+                               C#cr{limiter = rabbit_limiter:resume(Limiter)}
+                       end));
 
 handle_cast({notify_sent, ChPid, Credit}, State) ->
     noreply(
@@ -1299,20 +1308,13 @@ handle_cast({notify_sent, ChPid, Credit}, State) ->
                                C#cr{unsent_message_count = Count - Credit}
                        end));
 
-handle_cast({limit, ChPid, Limiter}, State) ->
+handle_cast({activate_limit, ChPid}, State) ->
     noreply(
       possibly_unblock(
         State, ChPid,
-        fun (C = #cr{consumer_count  = ConsumerCount,
-                     limiter         = OldLimiter,
-                     is_limit_active = OldLimited}) ->
-                case (ConsumerCount =/= 0 andalso
-                      not rabbit_limiter:is_active(OldLimiter)) of
-                    true  -> ok = rabbit_limiter:register(Limiter);
-                    false -> ok
-                end,
-                Limited = OldLimited andalso rabbit_limiter:is_active(Limiter),
-                C#cr{limiter = Limiter, is_limit_active = Limited}
+        fun (C = #cr{limiter = Limiter, consumer_count = Count}) ->
+                true = Limiter =/= undefined andalso Count =/= 0, %% assertion
+                C#cr{limiter = rabbit_limiter:activate(Limiter)}
         end));
 
 handle_cast({flush, ChPid}, State) ->
