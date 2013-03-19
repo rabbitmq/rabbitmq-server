@@ -805,6 +805,11 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
     rabbit_misc:protocol_error(not_implemented,
                                "prefetch_size!=0 (~w)", [Size]);
 
+handle_method(#'basic.qos'{prefetch_count = 0}, _,
+              State = #ch{limiter = Limiter}) ->
+    Limiter1 = rabbit_limiter:unlimit(Limiter),
+    {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
+
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount}, _,
               State = #ch{limiter = Limiter, unacked_message_q = UAMQ}) ->
     Limiter1 = rabbit_limiter:limit(Limiter, PrefetchCount, queue:len(UAMQ)),

@@ -401,14 +401,9 @@ block_consumer(C = #cr{blocked_consumers = Blocked}, QEntry) ->
     update_ch_record(C#cr{blocked_consumers = queue:in(QEntry, Blocked)}).
 
 is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
-    Count >= ?UNSENT_MESSAGE_LIMIT orelse rabbit_limiter:is_suspended(Limiter).
-
-ch_record_state_transition(OldCR, NewCR) ->
-    case {is_ch_blocked(OldCR), is_ch_blocked(NewCR)} of
-        {true, false} -> unblock;
-        {false, true} -> block;
-        {_, _}        -> ok
-    end.
+    Count >= ?UNSENT_MESSAGE_LIMIT
+        orelse (Limiter =/= undefined andalso
+                rabbit_limiter:is_suspended(Limiter)).
 
 deliver_msgs_to_consumers(_DeliverFun, true, State) ->
     {true, State};
@@ -629,15 +624,15 @@ possibly_unblock(State, ChPid, Update) ->
             State;
         C ->
             C1 = Update(C),
-            case ch_record_state_transition(C, C1) of
-                ok      ->  update_ch_record(C1),
-                            State;
-                unblock -> #cr{blocked_consumers = Consumers} = C1,
-                           update_ch_record(
-                             C1#cr{blocked_consumers = queue:new()}),
-                           AC1 = queue:join(State#q.active_consumers,
-                                            Consumers),
-                           run_message_queue(State#q{active_consumers = AC1})
+            case is_ch_blocked(C) andalso not is_ch_blocked(C1) of
+                false -> update_ch_record(C1),
+                         State;
+                true  -> #cr{blocked_consumers = Consumers} = C1,
+                         update_ch_record(
+                           C1#cr{blocked_consumers = queue:new()}),
+                         AC1 = queue:join(State#q.active_consumers,
+                                          Consumers),
+                         run_message_queue(State#q{active_consumers = AC1})
             end
     end.
 
