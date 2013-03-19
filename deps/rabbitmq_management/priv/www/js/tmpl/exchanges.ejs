@@ -1,8 +1,10 @@
 <h1>Exchanges</h1>
 <div class="section">
   <h2>All exchanges</h2>
-  <div class="hider updatable">
-<%= maybe_truncate(exchanges) %>
+  <div class="hider">
+<%= filter_ui(exchanges) %>
+  <div class="updatable">
+<% if (exchanges.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
@@ -36,6 +38,10 @@
   <% } %>
  </tbody>
 </table>
+<% } else { %>
+  <p>... no exchanges ...</p>
+<% } %>
+  </div>
   </div>
 </div>
 

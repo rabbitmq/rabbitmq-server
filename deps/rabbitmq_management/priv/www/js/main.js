@@ -188,6 +188,7 @@ function render(reqs, template, highlight) {
 }
 
 function update() {
+    replace_content('debug', '');
     clearInterval(timer);
     with_update(function(html) {
             update_navigation();
@@ -438,6 +439,15 @@ function postprocess() {
     $('.tag-link').click(function() {
         $('#tags').val($(this).attr('tag'));
     });
+    $('#filter').die().live('keyup', function() {
+        current_filter = $(this).val();
+        var table = $(this).parents('table').first();
+        table.removeClass('filter-active');
+        if ($(this).val() != '') {
+            table.addClass('filter-active');
+        }
+        partial_update();
+    });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -659,15 +669,15 @@ function sync_put(sammy, path_template) {
     return sync_req('PUT', sammy.params, path_template);
 }
 
-function sync_delete(sammy, path_template) {
-    return sync_req('DELETE', sammy.params, path_template);
+function sync_delete(sammy, path_template, options) {
+    return sync_req('DELETE', sammy.params, path_template, options);
 }
 
 function sync_post(sammy, path_template) {
     return sync_req('POST', sammy.params, path_template);
 }
 
-function sync_req(type, params0, path_template) {
+function sync_req(type, params0, path_template, options) {
     var params;
     var path;
     try {
@@ -681,6 +691,15 @@ function sync_req(type, params0, path_template) {
     req.open(type, 'api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     req.setRequestHeader('authorization', auth_header());
+
+    if (options != undefined || options != null) {
+	if (options.headers != undefined || options.headers != null) {
+	    jQuery.each(options.headers, function (k, v) {
+		req.setRequestHeader(k, v);
+	    });
+	}
+    }
+
     try {
         if (type == 'GET')
             req.send(null);

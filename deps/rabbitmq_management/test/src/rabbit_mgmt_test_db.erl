@@ -222,9 +222,9 @@ test_exchange_aggregation(_Conn, Chan) ->
              X = get_exchange(X1),
              110 = pget(publish, pget(message_stats_in, X)),
              110 = pget(publish, pget(message_stats_out, X)),
-             assert_aggregated(queue_details, [{name,Q1}, {vhost,<<"/">>}],
+             assert_aggregated(queue, [{name,Q1}, {vhost,<<"/">>}],
                                [{publish, 10}], pget(outgoing, X)),
-             assert_aggregated(queue_details, [{name,Q2}, {vhost,<<"/">>}],
+             assert_aggregated(queue, [{name,Q2}, {vhost,<<"/">>}],
                                [{publish, 100}], pget(outgoing, X))
      end].
 

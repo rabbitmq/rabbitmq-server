@@ -18,7 +18,7 @@
 
 -export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([parameter/1, timestamp/1, timestamp_ms/1, strip_pids/1]).
--export([node_from_pid/1, protocol/1, resource/1, queue/1]).
+-export([node_from_pid/1, protocol/1, resource/1, queue/1, queue_status/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
@@ -30,7 +30,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--define(PIDS_TO_STRIP, [connection, owner_pid, queue, channel,
+-define(PIDS_TO_STRIP, [connection, owner_pid, channel,
                         exclusive_consumer_pid]).
 
 %%--------------------------------------------------------------------
@@ -239,6 +239,10 @@ queue(#amqqueue{name            = Name,
        {fun amqp_table/1, [arguments]},
        {fun policy/1,     [policy]}]).
 
+queue_status({syncing, Msgs}) -> [{status,        syncing},
+                                  {sync_messages, Msgs}];
+queue_status(Status)          -> [{status,        Status}].
+
 %% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since
 %% there are no per-exchange / queue / etc variants for the latter. Therefore
 %% we have a record rather than a proplist to deal with.
@@ -262,12 +266,10 @@ basic_properties(Props = #'P_basic'{}) ->
 
 record(Record, Fields) ->
     {Res, _Ix} = lists:foldl(fun (K, {L, Ix}) ->
-                                     V = element(Ix, Record),
-                                     NewL = case V of
-                                                undefined -> L;
-                                                _         -> [{K, V}|L]
-                                            end,
-                                     {NewL, Ix + 1}
+                                     {case element(Ix, Record) of
+                                          undefined -> L;
+                                          V         -> [{K, V}|L]
+                                      end, Ix + 1}
                              end, {[], 2}, Fields),
     Res.
 
@@ -280,11 +282,10 @@ to_basic_properties(Props) ->
           end,
     {Res, _Ix} = lists:foldl(
                    fun (K, {P, Ix}) ->
-                           NewP = case proplists:get_value(a2b(K), Props) of
-                                      undefined -> P;
-                                      V         -> setelement(Ix, P, Fmt(K, V))
-                                  end,
-                           {NewP, Ix + 1}
+                           {case proplists:get_value(a2b(K), Props) of
+                                undefined -> P;
+                                V         -> setelement(Ix, P, Fmt(K, V))
+                            end, Ix + 1}
                    end, {#'P_basic'{}, 2},
                    record_info(fields, 'P_basic')),
     Res.

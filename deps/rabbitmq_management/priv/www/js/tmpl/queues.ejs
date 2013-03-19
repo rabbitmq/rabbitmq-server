@@ -1,8 +1,9 @@
 <h1>Queues</h1>
 <div class="section">
   <h2>All queues</h2>
-  <div class="hider updatable">
-<%= maybe_truncate(queues) %>
+  <div class="hider">
+<%= filter_ui(queues) %>
+  <div class="updatable">
 <% if (queues.length > 0) { %>
 <%
    var col_redeliver = !is_col_empty(queues, 'redeliver');
@@ -56,6 +57,9 @@
    <td>
      <%= fmt_node(queue.node) %>
      <%= fmt_mirrors(queue) %>
+     <% if (queue.status == 'syncing') { %>
+       <%= fmt_sync_status(queue) %>
+     <% } %>
    </td>
 <% } %>
    <td class="c">
@@ -81,6 +85,7 @@
 <% } else { %>
   <p>... no queues ...</p>
 <% } %>
+  </div>
   </div>
 </div>
 

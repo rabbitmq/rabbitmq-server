@@ -45,6 +45,14 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .tag-link { color: #444; cursor: pointer; }
 .tag-link:hover { color: #888; }
 
+.filter { overflow: auto; width: 100%; margin-bottom: 10px; }
+.filter table { float: left; }
+.filter div { float: right; }
+.filter p { padding: 8px; margin: 0; }
+.filter p.filter-warning { border-radius: 5px; background: #ff8; }
+.filter-active { background: #99ebff; border-radius: 5px; }
+.filter-highlight { background: #99ebff; }
+
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
 table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; }
@@ -120,14 +128,14 @@ div.status-bar .red *, div.status-bar .red-dark *, div.status-red * { color: whi
 .t { vertical-align: top !important; }
 
 p.status-ok { color: #888; text-align: right; }
-p.status-error { background: #f44; border: 1px solid #800; color: white; margin-top: 50px !important; }
+p.status-error { background: #ff7a7a; color: white; margin-top: 50px !important; }
 p.status-error th { background: white; }
-p.warning, div.form-popup-warn { background: #ff8; border: 1px solid #bb8; }
-div.form-popup-info { background: #8f8; border: 1px solid #4b4; }
+p.warning, div.form-popup-warn { background: #ff8; }
+div.form-popup-info { background: #8f8; }
 div.form-popup-help { text-align: left !important; background: #f8f8f8; border: 1px solid #ccc; }
 div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; }
 
-p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; font-weight: bold; }
+p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; }
 
 .highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
@@ -136,6 +144,7 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 .mini-highlight { font-size: 150%; padding:10px; background-color: #ddd; color: #888; border-radius: 10px; -moz-border-radius: 10px; line-height: 300%; }
 
 .micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
+.micro-highlight a { font-weight: normal !important; color: #888 !important; }
 .micro-highlight strong { font-size: 120%; color: #444; font-weight: normal; }
 
 div.section, div.section-hidden { margin: 0 0 1em 0; }
@@ -151,13 +160,13 @@ form.inline-form { float: left; }
 form.inline-form-right { float: right; }
 input, select { padding: 0.2em; }
 input[type=text], input[type=password] { font: 1.1em Andale Mono, Lucidatypewriter, Courier New, Courier, monospace; border: 1px solid #ccc; }
-input[type=text].wide, input[type=password].wide { width: 300px; }
 textarea { width: 600px; height: 200px; border: 1px solid #ccc; }
 .mand { color: #f88; padding: 0 5px;}
 
 table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; vertical-align: top; }
 table.form input[type=text], table.form input[type=password] { width: 200px; }
+table.form input[type=text].wide, table.form input[type=password].wide { width: 300px; }
 table.form select { width: 200px; }
 table.form select.narrow { width: 110px; }
 table.form .multifield { margin: 0; padding: 0; }
@@ -183,8 +192,8 @@ input[type=submit]:hover, button:hover {
     border: 1px solid #66b;
 }
 
-button[disabled] { background: #aac; }
-button[disabled]:hover { background: #aac; }
+input[type=submit][disabled], button[disabled] { background: #aac; cursor: default; }
+input[type=submit][disabled]:hover, button[disabled]:hover { background: #aac; }
 
 .form-popup-warn, .form-popup-info, .form-popup-help { display: none; position: fixed; min-width: 500px; }
 .form-popup-warn span, .form-popup-info span, .form-popup-help span { color: black; font-weight: bold; cursor: pointer; }

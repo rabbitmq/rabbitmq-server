@@ -26,16 +26,24 @@
 
   <div class="box">
     <div class="micro-highlight">
-      Connections: <strong><%= overview.object_totals.connections %></strong>
+      <a href="#/connections">
+        Connections: <strong><%= overview.object_totals.connections %></strong>
+      </a>
     </div>
     <div class="micro-highlight">
-      Channels: <strong><%= overview.object_totals.channels %></strong>
+      <a href="#/channels">
+        Channels: <strong><%= overview.object_totals.channels %></strong>
+      </a>
     </div>
     <div class="micro-highlight">
-      Exchanges: <strong><%= overview.object_totals.exchanges %></strong>
+      <a href="#/exchanges">
+        Exchanges: <strong><%= overview.object_totals.exchanges %></strong>
+      </a>
     </div>
     <div class="micro-highlight">
-      Queues: <strong><%= overview.object_totals.queues %></strong>
+      <a href="#/queues">
+        Queues: <strong><%= overview.object_totals.queues %></strong>
+      </a>
     </div>
 <% if (overview.object_totals['consumers'] != undefined) { %>    <tr>
     <div class="micro-highlight">
