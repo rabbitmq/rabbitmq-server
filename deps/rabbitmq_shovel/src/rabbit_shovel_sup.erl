@@ -24,7 +24,8 @@
 start_link() ->
     case parse_configuration(application:get_env(shovels)) of
         {ok, Configurations} ->
-            mirrored_supervisor:start_link({local, ?MODULE}, ?MODULE, [Configurations]);
+            mirrored_supervisor:start_link({local, ?MODULE},
+                                           ?MODULE, ?MODULE, [Configurations]);
         {error, Reason} ->
             {error, Reason}
     end.
