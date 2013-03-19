@@ -40,8 +40,11 @@
                           [{'not_found', (rabbit_types:binding_source() |
                                           rabbit_types:binding_destination())} |
                            {'absent', rabbit_types:amqqueue()}]})).
+
 -type(bind_ok_or_error() :: 'ok' | bind_errors() |
-                            rabbit_types:error('binding_not_found')).
+                            rabbit_types:error(
+                              'binding_not_found' |
+                              {'binding_invalid', string(), [any()]})).
 -type(bind_res() :: bind_ok_or_error() | rabbit_misc:thunk(bind_ok_or_error())).
 -type(inner_fun() ::
         fun((rabbit_types:exchange(),
@@ -157,15 +160,22 @@ add(Binding, InnerFun) ->
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
-              %% this argument is used to check queue exclusivity;
-              %% in general, we want to fail on that in preference to
-              %% anything else
-              case InnerFun(Src, Dst) of
-                  ok               -> case mnesia:read({rabbit_route, B}) of
-                                          []  -> add(Src, Dst, B);
-                                          [_] -> fun rabbit_misc:const_ok/0
-                                      end;
-                  {error, _} = Err -> rabbit_misc:const(Err)
+              case rabbit_exchange:validate_binding(Src, B) of
+                  ok ->
+                      %% this argument is used to check queue exclusivity;
+                      %% in general, we want to fail on that in preference to
+                      %% anything else
+                      case InnerFun(Src, Dst) of
+                          ok ->
+                              case mnesia:read({rabbit_route, B}) of
+                                  []  -> add(Src, Dst, B);
+                                  [_] -> fun rabbit_misc:const_ok/0
+                              end;
+                          {error, _} = Err ->
+                              rabbit_misc:const(Err)
+                      end;
+                  {error, _} = Err ->
+                      rabbit_misc:const(Err)
               end
       end).
 

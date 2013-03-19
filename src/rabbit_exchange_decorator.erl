@@ -45,6 +45,10 @@
 -callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
     'ok'.
 
+%% called when the policy attached to this exchange changes.
+-callback policy_changed(rabbit_types:exchange(), rabbit_types:exchange()) ->
+    'ok'.
+
 %% called after a binding has been added or recovered
 -callback add_binding(serial(), rabbit_types:exchange(),
                       rabbit_types:binding()) -> 'ok'.
@@ -53,17 +57,13 @@
 -callback remove_bindings(serial(), rabbit_types:exchange(),
                           [rabbit_types:binding()]) -> 'ok'.
 
-%% called when the policy attached to this exchange changes.
--callback policy_changed(
-            serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
-
 -else.
 
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
     [{description, 0}, {serialise_events, 1}, {create, 2}, {delete, 3},
-     {add_binding, 3}, {remove_bindings, 3}, {policy_changed, 3}];
+     {policy_changed, 2}, {add_binding, 3}, {remove_bindings, 3}];
 behaviour_info(_Other) ->
     undefined.
 

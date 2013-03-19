@@ -22,7 +22,7 @@
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/1, lookup_scratch/2, update_scratch/3,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         route/2, delete/2]).
+         route/2, delete/2, validate_binding/2]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/1, serial/1, peek_serial/1, update/2]).
 
@@ -83,6 +83,9 @@
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
                               rabbit_types:error('in_use')).
+-spec(validate_binding/2 ::
+        (rabbit_types:exchange(), rabbit_types:binding())
+        -> rabbit_types:ok_or_error({'binding_invalid', string(), [any()]})).
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
@@ -121,7 +124,10 @@ callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
-policy_changed(X1, X2) -> callback(X1, policy_changed, none, [X1, X2]).
+policy_changed(X = #exchange{type = XType}, X1) ->
+    [ok = M:policy_changed(X, X1) ||
+        M <- [type_to_module(XType) | registry_lookup(exchange_decorator)]],
+    ok.
 
 serialise_events(X = #exchange{type = Type}) ->
     lists:any(fun (M) -> M:serialise_events(X) end,
@@ -399,6 +405,10 @@ delete(XName, IfUnused) ->
               end
       end).
 
+validate_binding(X = #exchange{type = XType}, Binding) ->
+    Module = type_to_module(XType),
+    Module:validate_binding(X, Binding).
+
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
 maybe_auto_delete(#exchange{auto_delete = true} = X) ->
@@ -440,8 +450,7 @@ peek_serial(XName, LockType) ->
     end.
 
 invalid_module(T) ->
-    rabbit_log:warning(
-      "Could not find exchange type ~s.~n", [T]),
+    rabbit_log:warning("Could not find exchange type ~s.~n", [T]),
     put({xtype_to_module, T}, rabbit_exchange_type_invalid),
     rabbit_exchange_type_invalid.
 
