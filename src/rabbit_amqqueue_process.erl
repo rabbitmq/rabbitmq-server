@@ -372,7 +372,7 @@ ch_record(ChPid) ->
                              consumer_count       = 0,
                              blocked_consumers    = queue:new(),
                              is_limit_active      = false,
-                             limiter              = rabbit_limiter:make_token(),
+                             limiter              = undefined,
                              unsent_message_count = 0},
                      put(Key, C),
                      C;
@@ -395,18 +395,17 @@ store_ch_record(C = #cr{ch_pid = ChPid}) ->
 erase_ch_record(#cr{ch_pid      = ChPid,
                     limiter     = Limiter,
                     monitor_ref = MonitorRef}) ->
-    ok = rabbit_limiter:unregister(Limiter, self()),
+    ok = rabbit_limiter:unregister(Limiter),
     erlang:demonitor(MonitorRef),
     erase({ch, ChPid}),
     ok.
 
 update_consumer_count(C = #cr{consumer_count = 0, limiter = Limiter}, +1) ->
-    ok = rabbit_limiter:register(Limiter, self()),
+    ok = rabbit_limiter:register(Limiter),
     update_ch_record(C#cr{consumer_count = 1});
 update_consumer_count(C = #cr{consumer_count = 1, limiter = Limiter}, -1) ->
-    ok = rabbit_limiter:unregister(Limiter, self()),
-    update_ch_record(C#cr{consumer_count = 0,
-                          limiter = rabbit_limiter:make_token()});
+    ok = rabbit_limiter:unregister(Limiter),
+    update_ch_record(C#cr{consumer_count = 0, limiter = undefined});
 update_consumer_count(C = #cr{consumer_count = Count}, Delta) ->
     update_ch_record(C#cr{consumer_count = Count + Delta}).
 
@@ -444,7 +443,7 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E),
                  {false, State};
-        false -> case rabbit_limiter:can_send(C#cr.limiter, self(),
+        false -> case rabbit_limiter:can_send(C#cr.limiter,
                                               Consumer#consumer.ack_required) of
                      false -> block_consumer(C#cr{is_limit_active = true}, E),
                               {false, State};
@@ -1308,11 +1307,11 @@ handle_cast({limit, ChPid, Limiter}, State) ->
                      limiter         = OldLimiter,
                      is_limit_active = OldLimited}) ->
                 case (ConsumerCount =/= 0 andalso
-                      not rabbit_limiter:is_enabled(OldLimiter)) of
-                    true  -> ok = rabbit_limiter:register(Limiter, self());
+                      not rabbit_limiter:is_active(OldLimiter)) of
+                    true  -> ok = rabbit_limiter:register(Limiter);
                     false -> ok
                 end,
-                Limited = OldLimited andalso rabbit_limiter:is_enabled(Limiter),
+                Limited = OldLimited andalso rabbit_limiter:is_active(Limiter),
                 C#cr{limiter = Limiter, is_limit_active = Limited}
         end));
 

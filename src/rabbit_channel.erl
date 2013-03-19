@@ -82,7 +82,7 @@
         (channel_number(), pid(), pid(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(),
-         pid(), rabbit_limiter:token()) -> rabbit_types:ok_pid_or_error()).
+         pid(), pid()) -> rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -180,7 +180,7 @@ force_event_refresh() ->
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
-      Capabilities, CollectorPid, Limiter]) ->
+      Capabilities, CollectorPid, LimiterPid]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{state                   = starting,
@@ -190,7 +190,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 writer_pid              = WriterPid,
                 conn_pid                = ConnPid,
                 conn_name               = ConnName,
-                limiter                 = Limiter,
+                limiter                 = rabbit_limiter:new(LimiterPid),
                 tx                      = none,
                 next_tag                = 1,
                 unacked_message_q       = queue:new(),
@@ -804,18 +804,10 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
                                "prefetch_size!=0 (~w)", [Size]);
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount}, _,
-              State = #ch{limiter = Limiter}) ->
-    Limiter1 = case {rabbit_limiter:is_enabled(Limiter), PrefetchCount} of
-                   {false, 0} -> Limiter;
-                   {false, _} -> enable_limiter(State);
-                   {_, _}     -> Limiter
-               end,
-    Limiter3 = case rabbit_limiter:limit(Limiter1, PrefetchCount) of
-                   ok                   -> Limiter1;
-                   {disabled, Limiter2} -> ok = limit_queues(Limiter2, State),
-                                           Limiter2
-               end,
-    {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter3}};
+              State = #ch{limiter = Limiter, unacked_message_q = UAMQ}) ->
+    Limiter1 = rabbit_limiter:limit(Limiter, PrefetchCount, queue:len(UAMQ)),
+    {reply, #'basic.qos_ok'{},
+     maybe_limit_queues(Limiter, Limiter1, State#ch{limiter = Limiter1})};
 
 handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{unacked_message_q = UAMQ,
@@ -1078,25 +1070,23 @@ handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
 
 handle_method(#'channel.flow'{active = true}, _,
               State = #ch{limiter = Limiter}) ->
-    Limiter2 = case rabbit_limiter:unblock(Limiter) of
-                   ok                   -> Limiter;
-                   {disabled, Limiter1} -> ok = limit_queues(Limiter1, State),
-                                           Limiter1
-               end,
-    {reply, #'channel.flow_ok'{active = true}, State#ch{limiter = Limiter2}};
+    Limiter1 = rabbit_limiter:unblock(Limiter),
+    {reply, #'channel.flow_ok'{active = true},
+     maybe_limit_queues(Limiter, Limiter1, State#ch{limiter = Limiter1})};
 
 handle_method(#'channel.flow'{active = false}, _,
               State = #ch{consumer_mapping = Consumers,
                           limiter          = Limiter}) ->
-    Limiter1 = case rabbit_limiter:is_enabled(Limiter) of
-                   true  -> Limiter;
-                   false -> enable_limiter(State)
-               end,
-    State1 = State#ch{limiter = Limiter1},
-    ok = rabbit_limiter:block(Limiter1),
-    QPids = consumer_queues(Consumers),
-    ok = rabbit_amqqueue:flush_all(QPids, self()),
-    {noreply, maybe_send_flow_ok(State1#ch{blocking = sets:from_list(QPids)})};
+    case rabbit_limiter:is_blocked(Limiter) of
+        true  -> {noreply, maybe_send_flow_ok(State)};
+        false -> Limiter1 = rabbit_limiter:block(Limiter),
+                 State1 = maybe_limit_queues(Limiter, Limiter1,
+                                             State#ch{limiter = Limiter1}),
+                 QPids = consumer_queues(Consumers),
+                 ok = rabbit_amqqueue:flush_all(QPids, self()),
+                 {noreply, maybe_send_flow_ok(
+                             State1#ch{blocking = sets:from_list(QPids)})}
+    end;
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
@@ -1332,14 +1322,14 @@ foreach_per_queue(F, UAL) ->
                     end, gb_trees:empty(), UAL),
     rabbit_misc:gb_trees_foreach(F, T).
 
-enable_limiter(State = #ch{unacked_message_q = UAMQ,
-                           limiter           = Limiter}) ->
-    Limiter1 = rabbit_limiter:enable(Limiter, queue:len(UAMQ)),
-    ok = limit_queues(Limiter1, State),
-    Limiter1.
-
-limit_queues(Limiter, #ch{consumer_mapping = Consumers}) ->
-    rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), Limiter).
+maybe_limit_queues(OldLimiter, NewLimiter, State) ->
+    case ((not rabbit_limiter:is_active(OldLimiter)) andalso
+          rabbit_limiter:is_active(NewLimiter)) of
+        true  -> Queues = consumer_queues(State#ch.consumer_mapping),
+                 rabbit_amqqueue:limit_all(Queues, self(), NewLimiter);
+        false -> ok
+    end,
+    State.
 
 consumer_queues(Consumers) ->
     lists:usort([QPid ||
@@ -1350,7 +1340,7 @@ consumer_queues(Consumers) ->
 %% messages sent in a response to a basic.get (identified by their
 %% 'none' consumer tag)
 notify_limiter(Limiter, Acked) ->
-    case rabbit_limiter:is_enabled(Limiter) of
+    case rabbit_limiter:is_limited(Limiter) of
         false -> ok;
         true  -> case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
                                       ({_,    _, _}, Acc) -> Acc + 1
