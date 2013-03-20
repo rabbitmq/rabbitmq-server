@@ -22,12 +22,15 @@
          handle_info/2, prioritise_call/3]).
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
--export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
--export([get_limit/1, block/1, unblock/1, is_blocked/1]).
+-export([limit/2, can_send/4, ack/2, register/2, unregister/2]).
+-export([get_limit/1, block/1, unblock/1, is_consumer_blocked/2, is_blocked/1]).
+-export([credit/4, drained/1, forget_consumer/2, copy_queue_state/2]).
+
+-import(rabbit_misc, [serial_add/2, serial_diff/2]).
 
 %%----------------------------------------------------------------------------
 
--record(token, {pid, enabled}).
+-record(token, {pid, enabled, credits}).
 
 -ifdef(use_specs).
 
@@ -42,7 +45,8 @@
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
--spec(can_send/3 :: (token(), pid(), boolean()) -> boolean()).
+-spec(can_send/4 :: (token(), pid(), boolean(), rabbit_types:ctag())
+                    -> token() | 'consumer_blocked' | 'channel_blocked').
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
 -spec(unregister/2 :: (token(), pid()) -> 'ok').
@@ -50,6 +54,13 @@
 -spec(block/1 :: (token()) -> 'ok').
 -spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (token()) -> boolean()).
+-spec(is_consumer_blocked/2 :: (token(), rabbit_types:ctag()) -> boolean()).
+-spec(credit/4 :: (token(), rabbit_types:ctag(), non_neg_integer(), boolean())
+                  -> token()).
+-spec(drained/1 :: (token())
+                   -> {[{rabbit_types:ctag(), non_neg_integer()}], token()}).
+-spec(forget_consumer/2 :: (token(), rabbit_types:ctag()) -> token()).
+-spec(copy_queue_state/2 :: (token(), token()) -> token()).
 
 -endif.
 
@@ -64,6 +75,8 @@
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
 
+-record(credit, {credit = 0, drain = false}).
+
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
@@ -71,7 +84,9 @@
 start_link() -> gen_server2:start_link(?MODULE, [], []).
 
 make_token() -> make_token(undefined).
-make_token(Pid) -> #token{pid = Pid, enabled = false}.
+make_token(Pid) -> #token{pid     = Pid,
+                          enabled = false,
+                          credits = gb_trees:empty()}.
 
 is_enabled(#token{enabled = Enabled}) -> Enabled.
 
@@ -88,14 +103,23 @@ limit(Limiter, PrefetchCount) ->
 %% breaching a limit. Note that we don't use maybe_call here in order
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
-can_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
+can_send(Token = #token{pid = Pid, enabled = Enabled, credits = Credits},
+         QPid, AckReq, CTag) ->
+    case is_consumer_blocked(Token, CTag) of
+        false -> case not Enabled orelse call_can_send(Pid, QPid, AckReq) of
+                     true  -> Token#token{
+                                credits = record_send_q(CTag, Credits)};
+                     false -> channel_blocked
+                 end;
+        true  -> consumer_blocked
+    end.
+
+call_can_send(Pid, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
       fun () ->
               gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
-      end);
-can_send(_, _, _) ->
-    true.
+      end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
@@ -116,8 +140,58 @@ block(Limiter) ->
 unblock(Limiter) ->
     maybe_call(Limiter, {unblock, Limiter}, ok).
 
+is_consumer_blocked(#token{credits = Credits}, CTag) ->
+    case gb_trees:lookup(CTag, Credits) of
+        {value, #credit{credit = C}} when C > 0 -> false;
+        {value, #credit{}}                      -> true;
+        none                                    -> false
+    end.
+
 is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
+
+credit(Limiter = #token{credits = Credits}, CTag, Credit, Drain) ->
+    Limiter#token{credits = update_credit(CTag, Credit, Drain, Credits)}.
+
+drained(Limiter = #token{credits = Credits}) ->
+    {CTagCredits, Credits2} =
+        rabbit_misc:gb_trees_fold(
+          fun (CTag,  #credit{credit = C,  drain = true},  {Acc, Creds0}) ->
+                  {[{CTag, C} | Acc], update_credit(CTag, 0, false, Creds0)};
+              (_CTag, #credit{credit = _C, drain = false}, {Acc, Creds0}) ->
+                  {Acc, Creds0}
+          end, {[], Credits}, Credits),
+    {CTagCredits, Limiter#token{credits = Credits2}}.
+
+forget_consumer(Limiter = #token{credits = Credits}, CTag) ->
+    Limiter#token{credits = gb_trees:delete_any(CTag, Credits)}.
+
+copy_queue_state(#token{credits = Credits}, Token) ->
+    Token#token{credits = Credits}.
+
+%%----------------------------------------------------------------------------
+%% Queue-local code
+%%----------------------------------------------------------------------------
+
+%% We want to do all the AMQP 1.0-ish link level credit calculations
+%% in the queue (to do them elsewhere introduces a ton of
+%% races). However, it's a big chunk of code that is conceptually very
+%% linked to the limiter concept. So we get the queue to hold a bit of
+%% state for us (#token.credits), and maintain a fiction that the
+%% limiter is making the decisions...
+
+record_send_q(CTag, Credits) ->
+    case gb_trees:lookup(CTag, Credits) of
+        {value, #credit{credit = Credit, drain = Drain}} ->
+            update_credit(CTag, Credit - 1, Drain, Credits);
+        none ->
+            Credits
+    end.
+
+update_credit(CTag, Credit, Drain, Credits) ->
+    %% Using up all credit implies no need to send a 'drained' event
+    Drain1 = Drain andalso Credit > 0,
+    gb_trees:enter(CTag, #credit{credit = Credit, drain = Drain1}, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

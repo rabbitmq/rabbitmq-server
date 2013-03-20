@@ -21,7 +21,8 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, flushed/2]).
+-export([send_command/2, deliver/4, send_credit_reply/2, send_drained/2,
+         flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([force_event_refresh/0]).
@@ -94,6 +95,9 @@
 -spec(deliver/4 ::
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
+-spec(send_credit_reply/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(send_drained/2 :: (pid(), [{rabbit_types:ctag(), non_neg_integer()}])
+                        -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
@@ -137,6 +141,12 @@ send_command(Pid, Msg) ->
 
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
+
+send_credit_reply(Pid, Len) ->
+    gen_server2:cast(Pid, {send_credit_reply, Len}).
+
+send_drained(Pid, CTagCredit) ->
+    gen_server2:cast(Pid, {send_drained, CTagCredit}).
 
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
@@ -314,6 +324,19 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                             routing_key  = RoutingKey},
            Content),
     noreply(record_sent(ConsumerTag, AckRequired, Msg, State));
+
+handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
+    ok = rabbit_writer:send_command(
+           WriterPid, #'basic.credit_ok'{available = Len}),
+    noreply(State);
+
+handle_cast({send_drained, CTagCredit},
+            State = #ch{writer_pid = WriterPid}) ->
+    [ok = rabbit_writer:send_command(
+            WriterPid, #'basic.credit_drained'{consumer_tag   = ConsumerTag,
+                                               credit_drained = CreditDrained})
+     || {ConsumerTag, CreditDrained} <- CTagCredit],
+    noreply(State);
 
 handle_cast(force_event_refresh, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
@@ -706,7 +729,8 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                no_local     = _, % FIXME: implement
                                no_ack       = NoAck,
                                exclusive    = ExclusiveConsume,
-                               nowait       = NoWait},
+                               nowait       = NoWait,
+                               arguments    = Arguments},
               _, State = #ch{conn_pid          = ConnPid,
                              limiter           = Limiter,
                              consumer_mapping  = ConsumerMapping}) ->
@@ -730,6 +754,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                            {rabbit_amqqueue:basic_consume(
                               Q, NoAck, self(), Limiter,
                               ActualConsumerTag, ExclusiveConsume,
+                              parse_credit_args(Arguments),
                               ok_msg(NoWait, #'basic.consume_ok'{
                                        consumer_tag = ActualConsumerTag})),
                             Q}
@@ -1098,6 +1123,17 @@ handle_method(#'channel.flow'{active = false}, _,
     ok = rabbit_amqqueue:flush_all(QPids, self()),
     {noreply, maybe_send_flow_ok(State1#ch{blocking = sets:from_list(QPids)})};
 
+handle_method(#'basic.credit'{consumer_tag = CTag,
+                              credit       = Credit,
+                              drain        = Drain}, _,
+              State = #ch{consumer_mapping = Consumers}) ->
+    case dict:find(CTag, Consumers) of
+        {ok, Q} -> ok = rabbit_amqqueue:credit(
+                          Q, self(), CTag, Credit, Drain),
+                   {noreply, State};
+        error   -> precondition_failed("unknown consumer tag '~s'", [CTag])
+    end;
+
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
       command_invalid, "unimplemented method", []).
@@ -1163,6 +1199,16 @@ handle_consuming_queue_down(QPid,
 
 handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
     State#ch{delivering_queues = sets:del_element(QPid, DQ)}.
+
+parse_credit_args(Arguments) ->
+    case rabbit_misc:table_lookup(Arguments, <<"x-credit">>) of
+        {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
+                            rabbit_misc:table_lookup(T, <<"drain">>)} of
+                          {{long, Credit}, {boolean, Drain}} -> {Credit, Drain};
+                          _                                  -> none
+                      end;
+        undefined  -> none
+    end.
 
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
