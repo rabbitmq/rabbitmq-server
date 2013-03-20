@@ -676,12 +676,15 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
               _, State = #ch{writer_pid = WriterPid,
                              conn_pid   = ConnPid,
+                             limiter    = Limiter,
                              next_tag   = DeliveryTag}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
-           fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
+           fun (Q) -> rabbit_amqqueue:basic_get(
+                        Q, self(), NoAck, rabbit_limiter:pid(Limiter))
+           end) of
         {ok, MessageCount,
          Msg = {QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,

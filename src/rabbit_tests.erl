@@ -2718,12 +2718,13 @@ test_queue_recover() ->
     end,
     rabbit_amqqueue:stop(),
     rabbit_amqqueue:start(rabbit_amqqueue:recover()),
+    {ok, Limiter} = rabbit_limiter:start_link(),
     rabbit_amqqueue:with_or_die(
       QName,
       fun (Q1 = #amqqueue { pid = QPid1 }) ->
               CountMinusOne = Count - 1,
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
-                  rabbit_amqqueue:basic_get(Q1, self(), false),
+                  rabbit_amqqueue:basic_get(Q1, self(), false, Limiter),
               exit(QPid1, shutdown),
               VQ1 = variable_queue_init(Q, true),
               {{_Msg1, true, _AckTag1}, VQ2} =
@@ -2744,9 +2745,11 @@ test_variable_queue_delete_msg_store_files_callback() ->
 
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 
+    {ok, Limiter} = rabbit_limiter:start_link(),
+
     CountMinusOne = Count - 1,
     {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}} =
-        rabbit_amqqueue:basic_get(Q, self(), true),
+        rabbit_amqqueue:basic_get(Q, self(), true, Limiter),
     {ok, CountMinusOne} = rabbit_amqqueue:purge(Q),
 
     %% give the queue a second to receive the close_fds callback msg

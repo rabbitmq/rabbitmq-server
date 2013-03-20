@@ -21,12 +21,17 @@
 %%
 %% Each channel has an associated limiter process, created with
 %% start_link/1, which it passes to queues on consumer creation with
-%% rabbit_amqqueue:basic_consume/8. This process holds state that is,
-%% in effect, shared between the channel and all queues from which the
-%% channel is consuming. Essentially all these queues are competing
-%% for access to a single, limited resource - the ability to deliver
-%% messages via the channel - and it is the job of the limiter process
-%% to mediate that access.
+%% rabbit_amqqueue:basic_consume/8, and rabbit_amqqueue:basic_get/4.
+%% The latter isn't strictly necessary, since basic.get is not
+%% subject to limiting, but it means that whenever a queue knows about
+%% a channel, it also knows about its limiter, which is less fiddly.
+%%
+%% Th limiter process holds state that is, in effect, shared between
+%% the channel and all queues from which the channel is
+%% consuming. Essentially all these queues are competing for access to
+%% a single, limited resource - the ability to deliver messages via
+%% the channel - and it is the job of the limiter process to mediate
+%% that access.
 %%
 %% The limiter process is separate from the channel process for two
 %% reasons: separation of concerns, and efficiency. Channels can get
@@ -90,8 +95,10 @@
 %%    described in (5).
 %%
 %% 9. When a queues has no more consumers associated with a particular
-%%    channel, it unregisters with the limiter and forgets about it -
-%%    all via forget/1.
+%%    channel, it deactivates use of the limiter with deactivate/1,
+%%    which alters the local state such that no further interactions
+%%    with the limiter process take place until a subsequent
+%%    activate/1.
 
 -module(rabbit_limiter).
 
@@ -102,7 +109,8 @@
 -export([new/1, limit/3, unlimit/1, block/1, unblock/1,
          is_limited/1, is_blocked/1, is_active/1, get_limit/1, ack/2, pid/1]).
 %% queue API
--export([client/1, activate/1, can_send/2, resume/1, forget/1, is_suspended/1]).
+-export([client/1, activate/1, can_send/2, resume/1, deactivate/1,
+         is_suspended/1]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
@@ -140,7 +148,7 @@
 -spec(can_send/2     :: (qstate(), boolean()) ->
                              {'continue' | 'suspend', qstate()}).
 -spec(resume/1       :: (qstate()) -> qstate()).
--spec(forget/1       :: (qstate()) -> undefined).
+-spec(deactivate/1   :: (qstate()) -> qstate()).
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
 
 -endif.
@@ -219,10 +227,10 @@ can_send(L, _AckRequired) -> {continue, L}.
 
 resume(L) -> L#qstate{state = active}.
 
-forget(#qstate{state = dormant}) -> undefined;
-forget(L) ->
+deactivate(L = #qstate{state = dormant}) -> L;
+deactivate(L) ->
     ok = gen_server:cast(L#qstate.pid, {unregister, self()}),
-    undefined.
+    L#qstate{state = dormant}.
 
 is_suspended(#qstate{state = suspended}) -> true;
 is_suspended(#qstate{})                  -> false.

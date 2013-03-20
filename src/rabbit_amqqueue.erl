@@ -26,7 +26,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, wake_up/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
--export([basic_get/3, basic_consume/8, basic_cancel/4]).
+-export([basic_get/4, basic_consume/8, basic_cancel/4]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2, flush_all/2]).
 -export([notify_down_all/2, activate_limit_all/2]).
 -export([on_node_down/1]).
@@ -145,7 +145,7 @@
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(activate_limit_all/2 :: (qpids(), pid()) -> ok_or_errors()).
--spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
+-spec(basic_get/4 :: (rabbit_types:amqqueue(), pid(), boolean(), pid()) ->
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/8 ::
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
@@ -540,8 +540,8 @@ notify_down_all(QPids, ChPid) ->
 activate_limit_all(QPids, ChPid) ->
     delegate:cast(QPids, {activate_limit, ChPid}).
 
-basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
-    delegate:call(QPid, {basic_get, ChPid, NoAck}).
+basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
+    delegate:call(QPid, {basic_get, ChPid, NoAck, LimiterPid}).
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid, LimiterActive,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
