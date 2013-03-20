@@ -66,8 +66,14 @@
              monitor_ref,
              acktags,
              consumer_count,
+             %% Queue of {ChPid, #consumer{}} for consumers which have
+             %% been blocked for any reason
              blocked_consumers,
+             %% The limiter itself
              limiter,
+             %% Has the limiter imposed a channel-wide block, either
+             %% because of qos or channel flow?
+             %% Internal flow control for queue -> writer
              unsent_message_count}).
 
 %%----------------------------------------------------------------------------
@@ -404,6 +410,21 @@ block_consumer(C = #cr{blocked_consumers = Blocked}, QEntry) ->
 is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
     Count >= ?UNSENT_MESSAGE_LIMIT orelse rabbit_limiter:is_suspended(Limiter).
 
+maybe_send_drained(WasEmpty, State) ->
+    case (not WasEmpty) andalso is_empty(State) of
+        true  -> [send_drained(C) || C <- all_ch_record()];
+        false -> ok
+    end,
+    State.
+
+send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
+    case rabbit_limiter:drained(Limiter) of
+        {[], Limiter}          -> ok;
+        {CTagCredit, Limiter2} -> rabbit_channel:send_drained(
+                                    ChPid, CTagCredit),
+                                  update_ch_record(C#cr{limiter = Limiter2})
+    end.
+
 deliver_msgs_to_consumers(_DeliverFun, true, State) ->
     {true, State};
 deliver_msgs_to_consumers(DeliverFun, false,
@@ -424,14 +445,18 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
         true  -> block_consumer(C, E),
                  {false, State};
         false -> case rabbit_limiter:can_send(C#cr.limiter,
-                                              Consumer#consumer.ack_required) of
-                     {suspend, Limiter} ->
-                         block_consumer(C#cr{limiter = Limiter}, E),
+                                              Consumer#consumer.ack_required,
+                                              Consumer#consumer.tag) of
+                     consumer_blocked ->
+                         block_consumer(C, E),
                          {false, State};
-                     {continue, Limiter} ->
+                     channel_blocked ->
+                         block_consumer(C, E),
+                         {false, State};
+                     Limiter2 ->
                          AC1 = queue:in(E, State#q.active_consumers),
                          deliver_msg_to_consumer(
-                           DeliverFun, Consumer, C#cr{limiter = Limiter},
+                           DeliverFun, Consumer, C#cr{limiter = Limiter2},
                            State#q{active_consumers = AC1})
                  end
     end.
@@ -583,14 +608,16 @@ maybe_drop_head(State = #q{max_length          = MaxLen,
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
                                     backing_queue_state = BQS}) ->
+    WasEmpty = BQ:is_empty(BQS),
     {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
     {_Dropped, State1} = maybe_drop_head(State#q{backing_queue_state = BQS1}),
-    run_message_queue(drop_expired_msgs(State1)).
+    run_message_queue(maybe_send_drained(WasEmpty, drop_expired_msgs(State1))).
 
 fetch(AckRequired, State = #q{backing_queue       = BQ,
                               backing_queue_state = BQS}) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
-    {Result, drop_expired_msgs(State#q{backing_queue_state = BQS1})}.
+    State1 = drop_expired_msgs(State#q{backing_queue_state = BQS1}),
+    {Result, maybe_send_drained(Result =:= empty, State1)}.
 
 ack(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
@@ -619,20 +646,29 @@ remove_consumers(ChPid, Queue, QName) ->
 
 possibly_unblock(State, ChPid, Update) ->
     case lookup_ch(ChPid) of
-        not_found ->
-            State;
-        C ->
-            C1 = Update(C),
-            case is_ch_blocked(C) andalso not is_ch_blocked(C1) of
-                false -> update_ch_record(C1),
+        not_found -> State;
+        C         -> possibly_unblock(State, Update(C))
+    end.
+
+possibly_unblock(State, C = #cr{limiter = Limiter}) ->
+    case is_ch_blocked(C) of
+        true  -> update_ch_record(C),
+                 State;
+        false -> case lists:partition(
+                        fun({_ChPid, #consumer{tag = CTag}}) ->
+                                rabbit_limiter:is_consumer_blocked(
+                                  Limiter, CTag)
+                        end, queue:to_list(C#cr.blocked_consumers)) of
+                     {_, []} ->
+                         update_ch_record(C),
                          State;
-                true  -> #cr{blocked_consumers = Consumers} = C1,
-                         update_ch_record(
-                           C1#cr{blocked_consumers = queue:new()}),
-                         AC1 = queue:join(State#q.active_consumers,
-                                          Consumers),
+                     {Blocked, Unblocked} ->
+                         BlockedQ   = queue:from_list(Blocked),
+                         UnblockedQ = queue:from_list(Unblocked),
+                         update_ch_record(C#cr{blocked_consumers = BlockedQ}),
+                         AC1 = queue:join(State#q.active_consumers, UnblockedQ),
                          run_message_queue(State#q{active_consumers = AC1})
-            end
+                 end
     end.
 
 should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
@@ -729,6 +765,11 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
         T         -> now_micros() + T * 1000
     end.
 
+%% Logically this function should invoke maybe_send_drained/2.
+%% However, that is expensive. Since some frequent callers of
+%% drop_expired_msgs/1, in particular deliver_or_enqueue/3, cannot
+%% possibly cause the queue to become empty, we push the
+%% responsibility to the callers. So be cautious when adding new ones.
 drop_expired_msgs(State) ->
     case is_empty(State) of
         true  -> State;
@@ -1111,7 +1152,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             ConsumerTag, ExclusiveConsume, OkMsg},
+             ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg},
             _From, State = #q{exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
         in_use ->
@@ -1119,12 +1160,23 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
         ok ->
             C = #cr{consumer_count = Count,
                     limiter        = Limiter} = ch_record(ChPid, LimiterPid),
-            Limiter1 = case LimiterActive of
-                           true  -> rabbit_limiter:activate(Limiter);
-                           false -> Limiter
+            Limiter1 = case CreditArgs of
+                           none ->
+                               Limiter;
+                           {Credit, Drain} ->
+                               rabbit_limiter:credit(
+                                 Limiter, ConsumerTag, Credit, Drain)
                        end,
-            update_ch_record(C#cr{consumer_count = Count + 1,
-                                  limiter        = Limiter1}),
+            Limiter2 = case LimiterActive of
+                           true  -> rabbit_limiter:activate(Limiter1);
+                           false -> Limiter1
+                       end,
+            C1 = update_ch_record(C#cr{consumer_count = Count + 1,
+                                       limiter        = Limiter2}),
+            case is_empty(State) of
+                true  -> send_drained(C1);
+                false -> ok
+            end,
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
@@ -1149,13 +1201,14 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
                 limiter           = Limiter,
                 blocked_consumers = Blocked} ->
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State)),
+            Limiter1 = rabbit_limiter:forget_consumer(Limiter, ConsumerTag),
             Blocked1 = remove_consumer(ChPid, ConsumerTag, Blocked),
-            Limiter1 = case Count of
-                           1 -> rabbit_limiter:deactivate(Limiter);
-                           _ -> Limiter
+            Limiter2 = case Count of
+                           1 -> rabbit_limiter:deactivate(Limiter1);
+                           _ -> Limiter1
                        end,
             update_ch_record(C#cr{consumer_count    = Count - 1,
-                                  limiter           = Limiter1,
+                                  limiter           = Limiter2,
                                   blocked_consumers = Blocked1}),
             State1 = State#q{
                        exclusive_consumer = case Holder of
@@ -1189,7 +1242,8 @@ handle_call({delete, IfUnused, IfEmpty}, From,
 handle_call(purge, _From, State = #q{backing_queue       = BQ,
                                      backing_queue_state = BQS}) ->
     {Count, BQS1} = BQ:purge(BQS),
-    reply({ok, Count}, State#q{backing_queue_state = BQS1});
+    State1 = State#q{backing_queue_state = BQS1},
+    reply({ok, Count}, maybe_send_drained(Count =:= 0, State1));
 
 handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
@@ -1335,6 +1389,20 @@ handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
     noreply(State#q{backing_queue       = BQ1,
 		    backing_queue_state = BQS1});
 
+handle_cast({credit, ChPid, CTag, Credit, Drain},
+            State = #q{backing_queue       = BQ,
+                       backing_queue_state = BQS}) ->
+    Len = BQ:len(BQS),
+    rabbit_channel:send_credit_reply(ChPid, Len),
+    C = #cr{limiter = Lim} = lookup_ch(ChPid),
+    C1 = C#cr{limiter = rabbit_limiter:credit(Lim, CTag, Credit, Drain)},
+    noreply(case Drain andalso Len == 0 of
+                true  -> update_ch_record(C1),
+                         send_drained(C1),
+                         State;
+                false -> possibly_unblock(State, C1)
+            end);
+
 handle_cast(wake_up, State) ->
     noreply(State).
 
@@ -1354,7 +1422,9 @@ handle_info(maybe_expire, State) ->
     end;
 
 handle_info(drop_expired, State) ->
-    noreply(drop_expired_msgs(State#q{ttl_timer_ref = undefined}));
+    WasEmpty = is_empty(State),
+    State1 = drop_expired_msgs(State#q{ttl_timer_ref = undefined}),
+    noreply(maybe_send_drained(WasEmpty, State1));
 
 handle_info(emit_stats, State) ->
     emit_stats(State),

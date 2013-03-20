@@ -117,10 +117,14 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
 
+-export([is_consumer_blocked/2, credit/4, drained/1, forget_consumer/2]).
+
+-import(rabbit_misc, [serial_add/2, serial_diff/2]).
+
 %%----------------------------------------------------------------------------
 
 -record(lstate, {pid, prefetch_limited, blocked}).
--record(qstate, {pid, state}).
+-record(qstate, {pid, state, credits}).
 
 -ifdef(use_specs).
 
@@ -137,6 +141,8 @@
                                -> lstate()).
 -spec(unlimit_prefetch/1    :: (lstate()) -> lstate()).
 -spec(block/1               :: (lstate()) -> lstate()).
+-spec(can_send/4 :: (qstate(), pid(), boolean(), rabbit_types:ctag())
+                    -> qstate() | 'consumer_blocked' | 'channel_blocked').
 -spec(unblock/1             :: (lstate()) -> lstate()).
 -spec(is_prefetch_limited/1 :: (lstate()) -> boolean()).
 -spec(is_blocked/1          :: (lstate()) -> boolean()).
@@ -152,6 +158,12 @@
 -spec(resume/1       :: (qstate()) -> qstate()).
 -spec(deactivate/1   :: (qstate()) -> qstate()).
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
+-spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
+-spec(credit/4 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean())
+                  -> qstate()).
+-spec(drained/1 :: (qstate())
+                   -> {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}).
+-spec(forget_consumer/2 :: (qstate(), rabbit_types:ctag()) -> qstate()).
 
 -endif.
 
@@ -165,6 +177,8 @@
 %% 'Notify' is a boolean that indicates whether a queue should be
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
+
+-record(credit, {credit = 0, drain = false}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -196,6 +210,24 @@ unblock(L) ->
 
 is_prefetch_limited(#lstate{prefetch_limited = Limited}) -> Limited.
 
+can_send(Token = #qstate{pid = Pid, state = State, credits = Credits},
+         QPid, AckReq, CTag) ->
+    case is_consumer_blocked(Token, CTag) of
+        false -> case State =/= active orelse call_can_send(Pid, QPid, AckReq) of
+                     true  -> Token#qstate{
+                                credits = record_send_q(CTag, Credits)};
+                     false -> channel_blocked
+                 end;
+        true  -> consumer_blocked
+    end.
+
+call_can_send(Pid, QPid, AckRequired) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> true end,
+      fun () ->
+              gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
+      end).
+
 is_blocked(#lstate{blocked = Blocked}) -> Blocked.
 
 is_active(L) -> is_prefetch_limited(L) orelse is_blocked(L).
@@ -208,7 +240,7 @@ ack(L, AckCount) -> gen_server:cast(L#lstate.pid, {ack, AckCount}).
 
 pid(#lstate{pid = Pid}) -> Pid.
 
-client(Pid) -> #qstate{pid = Pid, state = dormant}.
+client(Pid) -> #qstate{pid = Pid, state = dormant, credits = gb_trees:empty()}.
 
 activate(L = #qstate{state = dormant}) ->
     ok = gen_server:cast(L#qstate.pid, {register, self()}),
@@ -235,6 +267,54 @@ deactivate(L) ->
 
 is_suspended(#qstate{state = suspended}) -> true;
 is_suspended(#qstate{})                  -> false.
+
+is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
+    case gb_trees:lookup(CTag, Credits) of
+        {value, #credit{credit = C}} when C > 0 -> false;
+        {value, #credit{}}                      -> true;
+        none                                    -> false
+    end.
+
+
+credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain) ->
+    Limiter#qstate{credits = update_credit(CTag, Credit, Drain, Credits)}.
+
+drained(Limiter = #qstate{credits = Credits}) ->
+    {CTagCredits, Credits2} =
+        rabbit_misc:gb_trees_fold(
+          fun (CTag,  #credit{credit = C,  drain = true},  {Acc, Creds0}) ->
+                  {[{CTag, C} | Acc], update_credit(CTag, 0, false, Creds0)};
+              (_CTag, #credit{credit = _C, drain = false}, {Acc, Creds0}) ->
+                  {Acc, Creds0}
+          end, {[], Credits}, Credits),
+    {CTagCredits, Limiter#qstate{credits = Credits2}}.
+
+forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
+    Limiter#qstate{credits = gb_trees:delete_any(CTag, Credits)}.
+
+%%----------------------------------------------------------------------------
+%% Queue-local code
+%%----------------------------------------------------------------------------
+
+%% We want to do all the AMQP 1.0-ish link level credit calculations
+%% in the queue (to do them elsewhere introduces a ton of
+%% races). However, it's a big chunk of code that is conceptually very
+%% linked to the limiter concept. So we get the queue to hold a bit of
+%% state for us (#qstate.credits), and maintain a fiction that the
+%% limiter is making the decisions...
+
+record_send_q(CTag, Credits) ->
+    case gb_trees:lookup(CTag, Credits) of
+        {value, #credit{credit = Credit, drain = Drain}} ->
+            update_credit(CTag, Credit - 1, Drain, Credits);
+        none ->
+            Credits
+    end.
+
+update_credit(CTag, Credit, Drain, Credits) ->
+    %% Using up all credit implies no need to send a 'drained' event
+    Drain1 = Drain andalso Credit > 0,
+    gb_trees:enter(CTag, #credit{credit = Credit, drain = Drain1}, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
