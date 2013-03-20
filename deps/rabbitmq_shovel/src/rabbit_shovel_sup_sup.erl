@@ -14,14 +14,19 @@
 %%  Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_shovel).
+-module(rabbit_shovel_sup_sup).
+-behaviour(mirrored_supervisor).
 
--export([start/0, stop/0, start/2, stop/1]).
+-export([start_link/0, init/1]).
 
-start()           -> rabbit_shovel_sup_sup:start_link(), ok.
+start_link() ->
+    mirrored_supervisor:start_link({local, ?MODULE}, ?MODULE, ?MODULE, []).
 
-stop()            -> ok.
-
-start(normal, []) -> rabbit_shovel_sup_sup:start_link().
-
-stop(_State)      -> ok.
+init([]) ->
+    ChildSpecs = [{rabbit_shovel_status,
+                   {rabbit_shovel_status, start_link, []},
+                   transient, 16#ffffffff, worker, [rabbit_shovel_status]},
+                  {rabbit_shovel_sup,
+                   {rabbit_shovel_sup, start_link, []},
+                   permanent, 16#ffffffff, supervisor, [rabbit_shovel_sup]}],
+    {ok, {{one_for_one, 3, 10}, ChildSpecs}}.
