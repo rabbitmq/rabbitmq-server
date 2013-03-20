@@ -32,8 +32,9 @@
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
+-define(RABBIT_DOWN_PING_INTERVAL, 1000).
 
--record(state, {monitors, partitions, subscribers}).
+-record(state, {monitors, partitions, subscribers, down_ping_timer}).
 
 %%----------------------------------------------------------------------------
 
@@ -272,10 +273,22 @@ handle_info({mnesia_system_event,
                     ordsets:add_element(Node, ordsets:from_list(Partitions))),
     {noreply, State1#state{partitions = Partitions1}};
 
+handle_info(ping_nodes, State) ->
+    %% We ping nodes when some are down to ensure that we find out
+    %% about healed partitions quickly. We ping all nodes rather than
+    %% just the ones we know are down for simplicity; it's not expensive.
+    State1 = State#state{down_ping_timer = undefined},
+    %% ratio() both pings all the nodes and tells us if we need to again :-)
+    {noreply, case ratio() of
+                  1.0 -> State1;
+                  _   -> ensure_ping_timer(State1)
+              end};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    rabbit_misc:stop_timer(State, #state.down_ping_timer),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -308,8 +321,8 @@ handle_dead_rabbit(Node) ->
     end,
     ok.
 
-majority() ->
-    length(alive_nodes()) / length(rabbit_mnesia:cluster_nodes(all)) > 0.5.
+majority() -> ratio() > 0.5.
+ratio()    -> length(alive_nodes()) / length(rabbit_mnesia:cluster_nodes(all)).
 
 %% mnesia:system_info(db_nodes) (and hence
 %% rabbit_mnesia:cluster_nodes(running)) does not give reliable results
@@ -350,7 +363,11 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
                       [] -> [];
                       _  -> Partitions
                   end,
-    State#state{partitions = Partitions1}.
+    ensure_ping_timer(State#state{partitions = Partitions1}).
+
+ensure_ping_timer(State) ->
+    rabbit_misc:ensure_timer(
+      State, #state.down_ping_timer, ?RABBIT_DOWN_PING_INTERVAL, ping_nodes).
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),
