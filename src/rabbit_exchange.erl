@@ -22,7 +22,7 @@
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/1, lookup_scratch/2, update_scratch/3,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         route/2, delete/2]).
+         route/2, delete/2, validate_binding/2]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/1, serial/1, peek_serial/1, update/2]).
 
@@ -39,8 +39,7 @@
 -spec(recover/0 :: () -> [name()]).
 -spec(callback/4::
         (rabbit_types:exchange(), fun_name(),
-         fun((boolean()) -> non_neg_integer()) | atom(),
-            [any()]) -> 'ok').
+         fun((boolean()) -> non_neg_integer()) | atom(), [any()]) -> 'ok').
 -spec(policy_changed/2 ::
         (rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok').
 -spec(declare/6 ::
@@ -84,6 +83,9 @@
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
                               rabbit_types:error('in_use')).
+-spec(validate_binding/2 ::
+        (rabbit_types:exchange(), rabbit_types:binding())
+        -> rabbit_types:ok_or_error({'binding_invalid', string(), [any()]})).
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
@@ -114,26 +116,23 @@ recover() ->
     [XName || #exchange{name = XName} <- Xs].
 
 callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
-    Serial = fun (Bool) ->
-                     case Serial0 of
-                         _ when is_atom(Serial0) -> Serial0;
-                         _                       -> Serial0(Bool)
-                     end
+    Serial = if is_function(Serial0) -> Serial0;
+                is_atom(Serial0)     -> fun (_Bool) -> Serial0 end
              end,
-    [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args])
-     || M <- decorators()],
+    [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args]) ||
+        M <- registry_lookup(exchange_decorator)],
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
-policy_changed(X1, X2) -> callback(X1, policy_changed, none, [X1, X2]).
+policy_changed(X = #exchange{type = XType}, X1) ->
+    [ok = M:policy_changed(X, X1) ||
+        M <- [type_to_module(XType) | registry_lookup(exchange_decorator)]],
+    ok.
 
 serialise_events(X = #exchange{type = Type}) ->
-    case [Serialise || M <- decorators(),
-                       Serialise <- [M:serialise_events(X)],
-                       Serialise == true] of
-        [] -> (type_to_module(Type)):serialise_events();
-        _  -> true
-    end.
+    lists:any(fun (M) -> M:serialise_events(X) end,
+              registry_lookup(exchange_decorator))
+        orelse (type_to_module(Type)):serialise_events().
 
 serial(#exchange{name = XName} = X) ->
     Serial = case serialise_events(X) of
@@ -144,8 +143,15 @@ serial(#exchange{name = XName} = X) ->
         (false) -> none
     end.
 
-decorators() ->
-    [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
+registry_lookup(exchange_decorator_route = Class) ->
+    case get(exchange_decorator_route_modules) of
+        undefined -> Mods = [M || {_, M} <- rabbit_registry:lookup_all(Class)],
+                     put(exchange_decorator_route_modules, Mods),
+                     Mods;
+        Mods      -> Mods
+    end;
+registry_lookup(Class) ->
+    [M || {_, M} <- rabbit_registry:lookup_all(Class)].
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = rabbit_policy:set(#exchange{name        = XName,
@@ -312,28 +318,35 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-%% Optimisation
-route(#exchange{name = #resource{name = <<"">>, virtual_host = VHost}},
-      #delivery{message = #basic_message{routing_keys = RKs}}) ->
-    [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
-
-route(X = #exchange{name = XName}, Delivery) ->
-    route1(Delivery, {queue:from_list([X]), XName, []}).
-
-route1(Delivery, {WorkList, SeenXs, QNames}) ->
-    case queue:out(WorkList) of
-        {empty, _WorkList} ->
-            lists:usort(QNames);
-        {{value, X = #exchange{type = Type}}, WorkList1} ->
-            DstNames = process_alternate(
-                         X, ((type_to_module(Type)):route(X, Delivery))),
-            route1(Delivery,
-                   lists:foldl(fun process_route/2, {WorkList1, SeenXs, QNames},
-                               DstNames))
+route(#exchange{name = #resource{virtual_host = VHost,
+                                 name         = RName} = XName} = X,
+      #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
+    case {registry_lookup(exchange_decorator_route), RName == <<"">>} of
+        {[], true} ->
+            %% Optimisation
+            [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
+        {Decorators, _} ->
+            QNames = route1(Delivery, {[X], XName, []}),
+            lists:usort(decorate_route(Decorators, X, Delivery, QNames))
     end.
 
+decorate_route([], _X, _Delivery, QNames) ->
+    QNames;
+decorate_route(Decorators, X, Delivery, QNames) ->
+    QNames ++
+        lists:append([Decorator:route(X, Delivery) || Decorator <- Decorators]).
+
+route1(_, {[], _, QNames}) ->
+    QNames;
+route1(Delivery, {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
+    DstNames = process_alternate(
+                 X, ((type_to_module(Type)):route(X, Delivery))),
+    route1(Delivery,
+           lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
+                       DstNames)).
+
 process_alternate(#exchange{arguments = []}, Results) -> %% optimisation
-     Results;
+    Results;
 process_alternate(#exchange{name = XName, arguments = Args}, []) ->
     case rabbit_misc:r_arg(XName, exchange, Args, <<"alternate-exchange">>) of
         undefined -> [];
@@ -347,22 +360,24 @@ process_route(#resource{kind = exchange} = XName,
     Acc;
 process_route(#resource{kind = exchange} = XName,
               {WorkList, #resource{kind = exchange} = SeenX, QNames}) ->
-    {case lookup(XName) of
-         {ok, X}            -> queue:in(X, WorkList);
-         {error, not_found} -> WorkList
-     end, gb_sets:from_list([SeenX, XName]), QNames};
+    {cons_if_present(XName, WorkList),
+     gb_sets:from_list([SeenX, XName]), QNames};
 process_route(#resource{kind = exchange} = XName,
               {WorkList, SeenXs, QNames} = Acc) ->
     case gb_sets:is_element(XName, SeenXs) of
         true  -> Acc;
-        false -> {case lookup(XName) of
-                      {ok, X}            -> queue:in(X, WorkList);
-                      {error, not_found} -> WorkList
-                  end, gb_sets:add_element(XName, SeenXs), QNames}
+        false -> {cons_if_present(XName, WorkList),
+                  gb_sets:add_element(XName, SeenXs), QNames}
     end;
 process_route(#resource{kind = queue} = QName,
               {WorkList, SeenXs, QNames}) ->
     {WorkList, SeenXs, [QName | QNames]}.
+
+cons_if_present(XName, L) ->
+    case lookup(XName) of
+        {ok, X}            -> [X | L];
+        {error, not_found} -> L
+    end.
 
 call_with_exchange(XName, Fun) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
@@ -389,6 +404,10 @@ delete(XName, IfUnused) ->
                       rabbit_misc:const(E)
               end
       end).
+
+validate_binding(X = #exchange{type = XType}, Binding) ->
+    Module = type_to_module(XType),
+    Module:validate_binding(X, Binding).
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
@@ -431,8 +450,7 @@ peek_serial(XName, LockType) ->
     end.
 
 invalid_module(T) ->
-    rabbit_log:warning(
-      "Could not find exchange type ~s.~n", [T]),
+    rabbit_log:warning("Could not find exchange type ~s.~n", [T]),
     put({xtype_to_module, T}, rabbit_exchange_type_invalid),
     rabbit_exchange_type_invalid.
 

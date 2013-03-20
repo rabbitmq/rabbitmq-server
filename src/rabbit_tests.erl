@@ -61,6 +61,7 @@ all_tests() ->
     passed = test_runtime_parameters(),
     passed = test_policy_validation(),
     passed = test_server_status(),
+    passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed =
         do_if_secondary_node(
@@ -911,10 +912,10 @@ test_arguments_parser() ->
 test_dynamic_mirroring() ->
     %% Just unit tests of the node selection logic, see multi node
     %% tests for the rest...
-    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, {OldM, OldSs}, All) ->
+    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, CurrentState, All) ->
                    {NewM, NewSs0} =
                        rabbit_mirror_queue_misc:suggested_queue_nodes(
-                         Policy, Params, {OldM, OldSs}, All),
+                         Policy, Params, CurrentState, All),
                    NewSs1 = lists:sort(NewSs0),
                    case dm_list_match(NewSs, NewSs1, ExtraSs) of
                        ok    -> ok;
@@ -922,28 +923,36 @@ test_dynamic_mirroring() ->
                    end
            end,
 
-    Test({a,[b,c],0},<<"all">>,'_',{a,[]},   [a,b,c]),
-    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c]},[a,b,c]),
-    Test({a,[b,c],0},<<"all">>,'_',{a,[d]},  [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[],   []},   [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c],[b,c]},[a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[d],  [d]},  [a,b,c]),
+
+    N = fun (Atoms) -> [list_to_binary(atom_to_list(A)) || A <- Atoms] end,
 
     %% Add a node
-    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
-    Test({b,[a,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([a,b,c]),{a,[b],[b]},[a,b,c,d]),
+    Test({b,[a,c],0},<<"nodes">>,N([a,b,c]),{b,[a],[a]},[a,b,c,d]),
     %% Add two nodes and drop one
-    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([a,b,c]),{a,[d],[d]},[a,b,c,d]),
     %% Don't try to include nodes that are not running
-    Test({a,[b],  0},<<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
+    Test({a,[b],  0},<<"nodes">>,N([a,b,f]),{a,[b],[b]},[a,b,c,d]),
     %% If we can't find any of the nodes listed then just keep the master
-    Test({a,[],   0},<<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
-    %% And once that's happened, still keep the master even when not listed
-    Test({a,[b,c],0},<<"nodes">>,[<<"b">>,<<"c">>],        {a,[]}, [a,b,c,d]),
+    Test({a,[],   0},<<"nodes">>,N([f,g,h]),{a,[b],[b]},[a,b,c,d]),
+    %% And once that's happened, still keep the master even when not listed,
+    %% if nothing is synced
+    Test({a,[b,c],0},<<"nodes">>,N([b,c]),  {a,[], []}, [a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([b,c]),  {a,[b],[]}, [a,b,c,d]),
+    %% But if something is synced we can lose the master - but make
+    %% sure we pick the new master from the nodes which are synced!
+    Test({b,[c],  0},<<"nodes">>,N([b,c]),  {a,[b],[b]},[a,b,c,d]),
+    Test({b,[c],  0},<<"nodes">>,N([c,b]),  {a,[b],[b]},[a,b,c,d]),
 
-    Test({a,[],   1},<<"exactly">>,2,{a,[]},   [a,b,c,d]),
-    Test({a,[],   2},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
-    Test({a,[c],  0},<<"exactly">>,2,{a,[c]},  [a,b,c,d]),
-    Test({a,[c],  1},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
-    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
-    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
+    Test({a,[],   1},<<"exactly">>,2,{a,[],   []},   [a,b,c,d]),
+    Test({a,[],   2},<<"exactly">>,3,{a,[],   []},   [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c],  [c]},  [a,b,c,d]),
+    Test({a,[c],  1},<<"exactly">>,3,{a,[c],  [c]},  [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d],[c,d]},[a,b,c,d]),
+    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d],[c,d]},[a,b,c,d]),
 
     passed.
 
@@ -1085,6 +1094,7 @@ test_policy_validation() ->
     {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
     {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
 
+    ok = control_action(clear_policy, ["name"]),
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     passed.
 
@@ -1123,11 +1133,9 @@ test_server_status() ->
             rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 
     %% list connections
-    [#listener{host = H, port = P} | _] =
-        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
-              N =:= node()],
-
-    {ok, _C} = gen_tcp:connect(H, P, []),
+    {H, P} = find_listener(),
+    {ok, C} = gen_tcp:connect(H, P, []),
+    gen_tcp:send(C, <<"AMQP", 0, 0, 9, 1>>),
     timer:sleep(100),
     ok = info_action(list_connections,
                      rabbit_networking:connection_info_keys(), false),
@@ -1163,6 +1171,25 @@ test_server_status() ->
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
+
+test_amqp_connection_refusal() ->
+    [passed = test_amqp_connection_refusal(V) ||
+        V <- [<<"AMQP",9,9,9,9>>, <<"AMQP",0,1,0,0>>, <<"XXXX",0,0,9,1>>]],
+    passed.
+
+test_amqp_connection_refusal(Header) ->
+    {H, P} = find_listener(),
+    {ok, C} = gen_tcp:connect(H, P, [binary, {active, false}]),
+    ok = gen_tcp:send(C, Header),
+    {ok, <<"AMQP",0,0,9,1>>} = gen_tcp:recv(C, 8, 100),
+    ok = gen_tcp:close(C),
+    passed.
+
+find_listener() ->
+    [#listener{host = H, port = P} | _] =
+        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
+              N =:= node()],
+    {H, P}.
 
 test_writer() -> test_writer(none).
 
@@ -1306,8 +1333,7 @@ test_statistics() ->
     QName = receive #'queue.declare_ok'{queue = Q0} -> Q0
             after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
             end,
-    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
-    QPid = Q#amqqueue.pid,
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
     X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
     rabbit_tests_event_receiver:start(self(), [node()], [channel_stats]),
@@ -1331,9 +1357,9 @@ test_statistics() ->
                        length(proplists:get_value(
                                 channel_queue_exchange_stats, E)) > 0
                end),
-    [{QPid,[{get,1}]}] = proplists:get_value(channel_queue_stats, Event2),
+    [{QRes, [{get,1}]}] = proplists:get_value(channel_queue_stats,    Event2),
     [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event2),
-    [{{QPid,X},[{publish,1}]}] =
+    [{{QRes,X},[{publish,1}]}] =
         proplists:get_value(channel_queue_exchange_stats, Event2),
 
     %% Check the stats remove stuff on queue deletion
@@ -1358,31 +1384,31 @@ test_refresh_events(SecondaryNode) ->
                                       [channel_created, queue_created]),
 
     {_Writer, Ch} = test_spawn(),
-    expect_events(Ch, channel_created),
+    expect_events(pid, Ch, channel_created),
     rabbit_channel:shutdown(Ch),
 
     {_Writer2, Ch2} = test_spawn(SecondaryNode),
-    expect_events(Ch2, channel_created),
+    expect_events(pid, Ch2, channel_created),
     rabbit_channel:shutdown(Ch2),
 
-    {new, #amqqueue { pid = QPid } = Q} =
+    {new, #amqqueue{name = QName} = Q} =
         rabbit_amqqueue:declare(test_queue(), false, false, [], none),
-    expect_events(QPid, queue_created),
+    expect_events(name, QName, queue_created),
     rabbit_amqqueue:delete(Q, false, false),
 
     rabbit_tests_event_receiver:stop(),
     passed.
 
-expect_events(Pid, Type) ->
-    expect_event(Pid, Type),
+expect_events(Tag, Key, Type) ->
+    expect_event(Tag, Key, Type),
     rabbit:force_event_refresh(),
-    expect_event(Pid, Type).
+    expect_event(Tag, Key, Type).
 
-expect_event(Pid, Type) ->
+expect_event(Tag, Key, Type) ->
     receive #event{type = Type, props = Props} ->
-            case pget(pid, Props) of
-                Pid -> ok;
-                _   -> expect_event(Pid, Type)
+            case pget(Tag, Props) of
+                Key -> ok;
+                _   -> expect_event(Tag, Key, Type)
             end
     after ?TIMEOUT -> throw({failed_to_receive_event, Type})
     end.
@@ -2237,6 +2263,10 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
 
 variable_queue_publish(IsPersistent, Count, PropFun, VQ) ->
+    variable_queue_publish(IsPersistent, 1, Count, PropFun,
+                           fun (_N) -> <<>> end, VQ).
+
+variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
     lists:foldl(
       fun (N, VQN) ->
               rabbit_variable_queue:publish(
@@ -2245,16 +2275,18 @@ variable_queue_publish(IsPersistent, Count, PropFun, VQ) ->
                   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
                                                        true  -> 2;
                                                        false -> 1
-                                                   end}, <<>>),
-                PropFun(N, #message_properties{}), self(), VQN)
-      end, VQ, lists:seq(1, Count)).
+                                                   end},
+                                   PayloadFun(N)),
+                PropFun(N, #message_properties{}), false, self(), VQN)
+      end, VQ, lists:seq(Start, Start + Count - 1)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
                         Rem = Len - N,
                         {{#basic_message { is_persistent = IsPersistent },
-                          IsDelivered, AckTagN, Rem}, VQM} =
+                          IsDelivered, AckTagN}, VQM} =
                             rabbit_variable_queue:fetch(true, VQN),
+                        Rem = rabbit_variable_queue:len(VQM),
                         {VQM, [AckTagN | AckTagsAcc]}
                 end, {VQ, []}, lists:seq(1, Count)).
 
@@ -2320,38 +2352,126 @@ test_variable_queue() ->
               fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
+              fun test_drop/1,
               fun test_variable_queue_fold_msg_on_disk/1,
-              fun test_dropwhile/1,
+              fun test_dropfetchwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
+              fun test_fetchwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1,
-              fun test_variable_queue_requeue/1]],
+              fun test_variable_queue_purge/1,
+              fun test_variable_queue_requeue/1,
+              fun test_variable_queue_fold/1]],
     passed.
 
-test_variable_queue_requeue(VQ0) ->
-    Interval = 50,
-    Count = rabbit_queue_index:next_segment_boundary(0) + 2 * Interval,
+test_variable_queue_fold(VQ0) ->
+    {PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
+        variable_queue_with_holes(VQ0),
+    Count = rabbit_variable_queue:depth(VQ1),
+    Msgs = lists:sort(PendingMsgs ++ RequeuedMsgs ++ FreshMsgs),
+    lists:foldl(fun (Cut, VQ2) ->
+                        test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ2)
+                end, VQ1, [0, 1, 2, Count div 2,
+                           Count - 1, Count, Count + 1, Count * 2]).
+
+test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ0) ->
+    {Acc, VQ1} = rabbit_variable_queue:fold(
+                   fun (M, _, Pending, A) ->
+                           MInt = msg2int(M),
+                           Pending = lists:member(MInt, PendingMsgs), %% assert
+                           case MInt =< Cut of
+                               true  -> {cont, [MInt | A]};
+                               false -> {stop, A}
+                           end
+                   end, [], VQ0),
+    Expected = lists:takewhile(fun (I) -> I =< Cut end, Msgs),
+    Expected = lists:reverse(Acc), %% assertion
+    VQ1.
+
+msg2int(#basic_message{content = #content{ payload_fragments_rev = P}}) ->
+    binary_to_term(list_to_binary(lists:reverse(P))).
+
+ack_subset(AckSeqs, Interval, Rem) ->
+    lists:filter(fun ({_Ack, N}) -> (N + Rem) rem Interval == 0 end, AckSeqs).
+
+requeue_one_by_one(Acks, VQ) ->
+    lists:foldl(fun (AckTag, VQN) ->
+                        {_MsgId, VQM} = rabbit_variable_queue:requeue(
+                                          [AckTag], VQN),
+                        VQM
+                end, VQ, Acks).
+
+%% Create a vq with messages in q1, delta, and q3, and holes (in the
+%% form of pending acks) in the latter two.
+variable_queue_with_holes(VQ0) ->
+    Interval = 64,
+    Count = rabbit_queue_index:next_segment_boundary(0)*2 + 2 * Interval,
     Seq = lists:seq(1, Count),
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
-    VQ2 = variable_queue_publish(false, Count, VQ1),
-    {VQ3, Acks} = variable_queue_fetch(Count, false, false, Count, VQ2),
-    Subset = lists:foldl(fun ({Ack, N}, Acc) when N rem Interval == 0 ->
-                                 [Ack | Acc];
-                             (_, Acc) ->
-                                 Acc
-                         end, [], lists:zip(Acks, Seq)),
-    {_MsgIds, VQ4} = rabbit_variable_queue:requeue(Acks -- Subset, VQ3),
-    VQ5 = lists:foldl(fun (AckTag, VQN) ->
-                              {_MsgId, VQM} = rabbit_variable_queue:requeue(
-                                                [AckTag], VQN),
-                              VQM
-                      end, VQ4, Subset),
-    VQ6 = lists:foldl(fun (AckTag, VQa) ->
-                              {{#basic_message{}, true, AckTag, _}, VQb} =
+    VQ2 = variable_queue_publish(
+            false, 1, Count,
+            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
+    {VQ3, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ2),
+    Acks = lists:reverse(AcksR),
+    AckSeqs = lists:zip(Acks, Seq),
+    [{Subset1, _Seq1}, {Subset2, _Seq2}, {Subset3, Seq3}] =
+        [lists:unzip(ack_subset(AckSeqs, Interval, I)) || I <- [0, 1, 2]],
+    %% we requeue in three phases in order to exercise requeuing logic
+    %% in various vq states
+    {_MsgIds, VQ4} = rabbit_variable_queue:requeue(
+                       Acks -- (Subset1 ++ Subset2 ++ Subset3), VQ3),
+    VQ5 = requeue_one_by_one(Subset1, VQ4),
+    %% by now we have some messages (and holes) in delt
+    VQ6 = requeue_one_by_one(Subset2, VQ5),
+    VQ7 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ6),
+    %% add the q1 tail
+    VQ8 = variable_queue_publish(
+            true, Count + 1, 64,
+            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ7),
+    %% assertions
+    [false = case V of
+                 {delta, _, 0, _} -> true;
+                 0                -> true;
+                 _                -> false
+             end || {K, V} <- rabbit_variable_queue:status(VQ8),
+                    lists:member(K, [q1, delta, q3])],
+    Depth = Count + 64,
+    Depth = rabbit_variable_queue:depth(VQ8),
+    Len = Depth - length(Subset3),
+    Len = rabbit_variable_queue:len(VQ8),
+    {Seq3, Seq -- Seq3, lists:seq(Count + 1, Count + 64), VQ8}.
+
+test_variable_queue_requeue(VQ0) ->
+    {_PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
+        variable_queue_with_holes(VQ0),
+    Msgs =
+        lists:zip(RequeuedMsgs,
+                  lists:duplicate(length(RequeuedMsgs), true)) ++
+        lists:zip(FreshMsgs,
+                  lists:duplicate(length(FreshMsgs), false)),
+    VQ2 = lists:foldl(fun ({I, Requeued}, VQa) ->
+                              {{M, MRequeued, _}, VQb} =
                                   rabbit_variable_queue:fetch(true, VQa),
+                              Requeued = MRequeued, %% assertion
+                              I = msg2int(M),       %% assertion
                               VQb
-                      end, VQ5, lists:reverse(Acks)),
-    {empty, VQ7} = rabbit_variable_queue:fetch(true, VQ6),
-    VQ7.
+                      end, VQ1, Msgs),
+    {empty, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
+    VQ3.
+
+test_variable_queue_purge(VQ0) ->
+    LenDepth = fun (VQ) ->
+                       {rabbit_variable_queue:len(VQ),
+                        rabbit_variable_queue:depth(VQ)}
+               end,
+    VQ1         = variable_queue_publish(false, 10, VQ0),
+    {VQ2, Acks} = variable_queue_fetch(6, false, false, 10, VQ1),
+    {4, VQ3}    = rabbit_variable_queue:purge(VQ2),
+    {0, 6}      = LenDepth(VQ3),
+    {_, VQ4}    = rabbit_variable_queue:requeue(lists:sublist(Acks, 2), VQ3),
+    {2, 6}      = LenDepth(VQ4),
+    VQ5         = rabbit_variable_queue:purge_acks(VQ4),
+    {2, 2}      = LenDepth(VQ5),
+    VQ5.
 
 test_variable_queue_ack_limiting(VQ0) ->
     %% start by sending in a bunch of messages
@@ -2382,41 +2502,86 @@ test_variable_queue_ack_limiting(VQ0) ->
 
     VQ6.
 
-test_dropwhile(VQ0) ->
+test_drop(VQ0) ->
+    %% start by sending a messages
+    VQ1 = variable_queue_publish(false, 1, VQ0),
+    %% drop message with AckRequired = true
+    {{MsgId, AckTag}, VQ2} = rabbit_variable_queue:drop(true, VQ1),
+    true = rabbit_variable_queue:is_empty(VQ2),
+    true = AckTag =/= undefinded,
+    %% drop again -> empty
+    {empty, VQ3} = rabbit_variable_queue:drop(false, VQ2),
+    %% requeue
+    {[MsgId], VQ4} = rabbit_variable_queue:requeue([AckTag], VQ3),
+    %% drop message with AckRequired = false
+    {{MsgId, undefined}, VQ5} = rabbit_variable_queue:drop(false, VQ4),
+    true = rabbit_variable_queue:is_empty(VQ5),
+    VQ5.
+
+test_dropfetchwhile(VQ0) ->
     Count = 10,
 
     %% add messages with sequential expiry
     VQ1 = variable_queue_publish(
-            false, Count,
-            fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
+            false, 1, Count,
+            fun (N, Props) -> Props#message_properties{expiry = N} end,
+            fun erlang:term_to_binary/1, VQ0),
+
+    %% fetch the first 5 messages
+    {#message_properties{expiry = 6}, {Msgs, AckTags}, VQ2} =
+        rabbit_variable_queue:fetchwhile(
+          fun (#message_properties{expiry = Expiry}) -> Expiry =< 5 end,
+          fun (Msg, AckTag, {MsgAcc, AckAcc}) ->
+                  {[Msg | MsgAcc], [AckTag | AckAcc]}
+          end, {[], []}, VQ1),
+    true = lists:seq(1, 5) == [msg2int(M) || M <- lists:reverse(Msgs)],
+
+    %% requeue them
+    {_MsgIds, VQ3} = rabbit_variable_queue:requeue(AckTags, VQ2),
 
     %% drop the first 5 messages
-    {_, undefined, VQ2} = rabbit_variable_queue:dropwhile(
-                            fun(#message_properties { expiry = Expiry }) ->
-                                    Expiry =< 5
-                            end, false, VQ1),
+    {#message_properties{expiry = 6}, VQ4} =
+        rabbit_variable_queue:dropwhile(
+          fun (#message_properties {expiry = Expiry}) -> Expiry =< 5 end, VQ3),
 
-    %% fetch five now
-    VQ3 = lists:foldl(fun (_N, VQN) ->
-                              {{#basic_message{}, _, _, _}, VQM} =
+    %% fetch 5
+    VQ5 = lists:foldl(fun (N, VQN) ->
+                              {{Msg, _, _}, VQM} =
                                   rabbit_variable_queue:fetch(false, VQN),
+                              true = msg2int(Msg) == N,
                               VQM
-                      end, VQ2, lists:seq(6, Count)),
+                      end, VQ4, lists:seq(6, Count)),
 
     %% should be empty now
-    {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
+    true = rabbit_variable_queue:is_empty(VQ5),
 
-    VQ4.
+    VQ5.
 
 test_dropwhile_varying_ram_duration(VQ0) ->
+    test_dropfetchwhile_varying_ram_duration(
+      fun (VQ1) ->
+              {_, VQ2} = rabbit_variable_queue:dropwhile(
+                           fun (_) -> false end, VQ1),
+              VQ2
+      end, VQ0).
+
+test_fetchwhile_varying_ram_duration(VQ0) ->
+    test_dropfetchwhile_varying_ram_duration(
+      fun (VQ1) ->
+              {_, ok, VQ2} = rabbit_variable_queue:fetchwhile(
+                               fun (_) -> false end,
+                               fun (_, _, A) -> A end,
+                               ok, VQ1),
+              VQ2
+      end, VQ0).
+
+test_dropfetchwhile_varying_ram_duration(Fun, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
-    {_, undefined, VQ3} = rabbit_variable_queue:dropwhile(
-                            fun(_) -> false end, false, VQ2),
+    VQ3 = Fun(VQ2),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_publish(false, 1, VQ4),
-    {_, undefined, VQ6} =
-        rabbit_variable_queue:dropwhile(fun(_) -> false end, false, VQ5),
+    VQ6 = Fun(VQ5),
     VQ6.
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
@@ -2451,7 +2616,8 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
     VQ0;
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
-    {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    {{_Msg, false, AckTag}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    Len = rabbit_variable_queue:len(VQ2),
     {_Guids, VQ3} = rabbit_variable_queue:ack([AckTag], VQ2),
     publish_fetch_and_ack(N-1, Len, VQ3).
 
@@ -2516,8 +2682,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
     VQ7 = variable_queue_init(test_amqqueue(true), true),
-    {{_Msg1, true, _AckTag1, Count1}, VQ8} =
-        rabbit_variable_queue:fetch(true, VQ7),
+    {{_Msg1, true, _AckTag1}, VQ8} = rabbit_variable_queue:fetch(true, VQ7),
+    Count1 = rabbit_variable_queue:len(VQ8),
     VQ9 = variable_queue_publish(false, 1, VQ8),
     VQ10 = rabbit_variable_queue:set_ram_duration_target(0, VQ9),
     {VQ11, _AckTags2} = variable_queue_fetch(Count1, true, true, Count, VQ10),
@@ -2539,7 +2705,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
 test_variable_queue_fold_msg_on_disk(VQ0) ->
     VQ1 = variable_queue_publish(true, 1, VQ0),
     {VQ2, AckTags} = variable_queue_fetch(1, true, false, 1, VQ1),
-    VQ3 = rabbit_variable_queue:fold(fun (_M, _A) -> ok end, VQ2, AckTags),
+    {ok, VQ3} = rabbit_variable_queue:ackfold(fun (_M, _A, ok) -> ok end,
+                                              ok, VQ2, AckTags),
     VQ3.
 
 test_queue_recover() ->
@@ -2563,10 +2730,11 @@ test_queue_recover() ->
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
               VQ1 = variable_queue_init(Q, true),
-              {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
+              {{_Msg1, true, _AckTag1}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
+              CountMinusOne = rabbit_variable_queue:len(VQ2),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
-              rabbit_amqqueue:internal_delete(QName, QPid1)
+              rabbit_amqqueue:internal_delete(QName)
       end),
     passed.
 
