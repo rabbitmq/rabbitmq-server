@@ -810,12 +810,13 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
 
 handle_method(#'basic.qos'{prefetch_count = 0}, _,
               State = #ch{limiter = Limiter}) ->
-    Limiter1 = rabbit_limiter:unlimit(Limiter),
+    Limiter1 = rabbit_limiter:unlimit_prefetch(Limiter),
     {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount}, _,
               State = #ch{limiter = Limiter, unacked_message_q = UAMQ}) ->
-    Limiter1 = rabbit_limiter:limit(Limiter, PrefetchCount, queue:len(UAMQ)),
+    Limiter1 = rabbit_limiter:limit_prefetch(Limiter,
+                                             PrefetchCount, queue:len(UAMQ)),
     {reply, #'basic.qos_ok'{},
      maybe_limit_queues(Limiter, Limiter1, State#ch{limiter = Limiter1})};
 
@@ -1363,7 +1364,7 @@ consumer_queues(Consumers) ->
 notify_limiter(Limiter, Acked) ->
     %% optimisation: avoid the potentially expensive 'foldl' in the
     %% common case.
-     case rabbit_limiter:is_limited(Limiter) of
+     case rabbit_limiter:is_prefetch_limited(Limiter) of
         false -> ok;
         true  -> case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
                                       ({_,    _, _}, Acc) -> Acc + 1
@@ -1528,7 +1529,7 @@ i(messages_uncommitted,    #ch{})                         -> 0;
 i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
 i(prefetch_count, #ch{limiter = Limiter}) ->
-    rabbit_limiter:get_limit(Limiter);
+    rabbit_limiter:get_prefetch_limit(Limiter);
 i(client_flow_blocked, #ch{limiter = Limiter}) ->
     rabbit_limiter:is_blocked(Limiter);
 i(Item, _) ->
