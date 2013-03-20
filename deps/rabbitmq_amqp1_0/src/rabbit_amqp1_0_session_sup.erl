@@ -65,15 +65,5 @@ start_link({rabbit_amqp1_0_framing, Sock, Channel, FrameMax, ReaderPid,
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.
 
-start_limiter_fun(SupPid) ->
-    fun (UnackedCount) ->
-            Me = self(),
-            {ok, _Pid} =
-                supervisor2:start_child(
-                  SupPid,
-                  {limiter, {rabbit_limiter, start_link, [Me, UnackedCount]},
-                   transient, ?MAX_WAIT, worker, [rabbit_limiter]})
-    end.
-
 adapter_info(Sock) ->
     amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}).
