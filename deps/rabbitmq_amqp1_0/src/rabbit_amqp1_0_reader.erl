@@ -359,22 +359,22 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                               connection = Connection,
                               throttle   = Throttle,
                               sock = Sock}) ->
-    ClientProps = case Props of
-                      undefined -> [];
-                      {map, Ps} -> Ps
-                  end,
+    ClientProps        = case Props of
+                             undefined -> [];
+                             {map, Ps} -> Ps
+                         end,
     ClientHeartbeatSec = case IdleTimeout of
                              undefined        -> 0;
                              {uint, Interval} -> Interval div 1000
                          end,
-    FrameMax = case ClientFrameMax of
-                   undefined -> unlimited;
-                   {_, FM}   -> FM
-               end,
-    ChannelMax = case ClientChannelMax of
-                     undefined -> unlimited;
-                     {_, CM}   -> CM
-                 end,
+    FrameMax           = case ClientFrameMax of
+                             undefined -> unlimited;
+                             {_, FM}   -> FM
+                         end,
+    ChannelMax         = case ClientChannelMax of
+                             undefined -> unlimited;
+                             {_, CM}   -> CM
+                         end,
     {ok, HeartbeatSec} = application:get_env(rabbit, heartbeat),
     State1 =
         if (FrameMax =/= unlimited) and (FrameMax < ?FRAME_1_0_MIN_SIZE) ->
