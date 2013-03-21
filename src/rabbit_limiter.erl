@@ -235,7 +235,7 @@ can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
                                 credits = record_send_q(CTag, Credits)}};
                      false -> {suspend, L#qstate{state = suspended}}
                  end;
-        true  -> {suspend, L#qstate{state = suspended}}
+        true  -> {suspend, L}
     end.
 
 call_can_send(Pid, QPid, AckRequired) ->
