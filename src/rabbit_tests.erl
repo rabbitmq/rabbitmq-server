@@ -1580,7 +1580,7 @@ control_action(Command, Node, Args, Opts) ->
 
 info_action(Command, Args, CheckVHost) ->
     ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, []);
+    if CheckVHost -> ok = control_action(Command, [], ["-p", "/"]);
        true       -> ok
     end,
     ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),

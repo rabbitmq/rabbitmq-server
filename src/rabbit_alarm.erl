@@ -208,11 +208,19 @@ internal_register(Pid, {M, F, A} = AlertMFA,
     State#alarms{alertees = NewAlertees}.
 
 handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
-    rabbit_log:warning("~s resource limit alarm set on node ~p~n",
-                       [Source, Node]),
+    rabbit_log:warning(
+      "~s resource limit alarm set on node ~p.~n~n"
+      "**********************************************************~n"
+      "*** Publishers will be blocked until this alarm clears ***~n"
+      "**********************************************************~n",
+      [Source, Node]),
     {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
 handle_set_alarm({file_descriptor_limit, []}, State) ->
-    rabbit_log:warning("file descriptor limit alarm set~n"),
+    rabbit_log:warning(
+      "file descriptor limit alarm set.~n~n"
+      "********************************************************************~n"
+      "*** New connections will not be accepted until this alarm clears ***~n"
+      "********************************************************************~n"),
     {ok, State};
 handle_set_alarm(Alarm, State) ->
     rabbit_log:warning("alarm '~p' set~n", [Alarm]),
