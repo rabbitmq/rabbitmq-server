@@ -58,9 +58,9 @@
                           [rabbit_types:binding()]) -> 'ok'.
 
 %% Decorators can optionally implement route/2 which allows additional
-%% queues to be added to the routing decision.
+%% destinations to be added to the routing decision.
 %% -callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
-%%     [rabbit_amqqueue:name() | rabbit_types:exchange()].
+%%     [rabbit_amqqueue:name() | rabbit_exchange:name()].
 
 -else.
 
