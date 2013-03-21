@@ -6,17 +6,17 @@ function render_charts() {
 
 var chart_colors = ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666666', '#aaaaaa'];
 
+var chart_chrome = {
+    series: { lines: { show: true } },
+    grid:   { borderWidth: 2, borderColor: "#aaa" },
+    xaxis:  { tickColor: "#fff", mode: "time" },
+    yaxis:  { tickColor: "#eee", min: 0 },
+    legend: { show: false }
+};
+
 function render_chart(div) {
     var id = div.attr('id').substring('chart-'.length);
     var rate_mode = div.hasClass('chart-rates');
-
-    var chrome = {
-        series: { lines: { show: true } },
-        grid:   { borderWidth: 2, borderColor: "#aaa" },
-        xaxis:  { tickColor: "#fff", mode: "time" },
-        yaxis:  { tickColor: "#eee", min: 0 },
-        legend: { show: false }
-    };
 
     var out_data = [];
     var i = 0;
@@ -46,7 +46,7 @@ function render_chart(div) {
     }
     chart_data[id] = {};
 
-    $.plot(div, out_data, chrome);
+    $.plot(div, out_data, chart_chrome);
 }
 
 function update_rate_options(sammy) {
