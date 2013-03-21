@@ -118,8 +118,6 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
 
--import(rabbit_misc, [serial_add/2, serial_diff/2]).
-
 %%----------------------------------------------------------------------------
 
 -record(lstate, {pid, prefetch_limited, blocked}).
