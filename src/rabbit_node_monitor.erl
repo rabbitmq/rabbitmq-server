@@ -276,13 +276,25 @@ handle_info({mnesia_system_event,
 handle_info(ping_nodes, State) ->
     %% We ping nodes when some are down to ensure that we find out
     %% about healed partitions quickly. We ping all nodes rather than
-    %% just the ones we know are down for simplicity; it's not expensive.
+    %% just the ones we know are down for simplicity; it's not expensive
+    %% to ping the nodes that are up, after all.
     State1 = State#state{down_ping_timer = undefined},
-    %% ratio() both pings all the nodes and tells us if we need to again :-)
-    {noreply, case ratio() of
-                  1.0 -> State1;
-                  _   -> ensure_ping_timer(State1)
-              end};
+    Self = self(),
+    %% ratio() both pings all the nodes and tells us if we need to again.
+    %%
+    %% We ping in a separate process since in a partition it might
+    %% take some noticeable length of time and we don't want to block
+    %% the node monitor for that long.
+    spawn_link(fun () ->
+                       case ratio() of
+                           1.0 -> ok;
+                           _   -> Self ! ping_again
+                       end
+               end),
+    {noreply, State1};
+
+handle_info(ping_again, State) ->
+    {noreply, ensure_ping_timer(State)};
 
 handle_info(_Info, State) ->
     {noreply, State}.
