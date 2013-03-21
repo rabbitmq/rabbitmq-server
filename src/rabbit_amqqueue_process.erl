@@ -71,8 +71,6 @@
              blocked_consumers,
              %% The limiter itself
              limiter,
-             %% Has the limiter imposed a channel-wide block, either
-             %% because of qos or channel flow?
              %% Internal flow control for queue -> writer
              unsent_message_count}).
 
@@ -1157,16 +1155,14 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
         ok ->
             C = #cr{consumer_count = Count,
                     limiter        = Limiter} = ch_record(ChPid, LimiterPid),
-            Limiter1 = case CreditArgs of
-                           none ->
-                               Limiter;
-                           {Credit, Drain} ->
-                               rabbit_limiter:credit(
-                                 Limiter, ConsumerTag, Credit, Drain)
+            Limiter1 = case LimiterActive of
+                           true  -> rabbit_limiter:activate(Limiter);
+                           false -> Limiter
                        end,
-            Limiter2 = case LimiterActive of
-                           true  -> rabbit_limiter:activate(Limiter1);
-                           false -> Limiter1
+            Limiter2 = case CreditArgs of
+                           none         -> Limiter1;
+                           {Crd, Drain} -> rabbit_limiter:credit(
+                                             Limiter1, ConsumerTag, Crd, Drain)
                        end,
             C1 = update_ch_record(C#cr{consumer_count = Count + 1,
                                        limiter        = Limiter2}),
@@ -1198,12 +1194,12 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
                 limiter           = Limiter,
                 blocked_consumers = Blocked} ->
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State)),
-            Limiter1 = rabbit_limiter:forget_consumer(Limiter, ConsumerTag),
             Blocked1 = remove_consumer(ChPid, ConsumerTag, Blocked),
-            Limiter2 = case Count of
-                           1 -> rabbit_limiter:deactivate(Limiter1);
-                           _ -> Limiter1
+            Limiter1 = case Count of
+                           1 -> rabbit_limiter:deactivate(Limiter);
+                           _ -> Limiter
                        end,
+            Limiter2 = rabbit_limiter:forget_consumer(Limiter1, ConsumerTag),
             update_ch_record(C#cr{consumer_count    = Count - 1,
                                   limiter           = Limiter2,
                                   blocked_consumers = Blocked1}),

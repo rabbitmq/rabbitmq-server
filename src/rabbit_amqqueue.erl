@@ -548,7 +548,6 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck, LimiterPid}).
 
-
 basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid, LimiterActive,
               ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg) ->
     delegate:call(QPid, {basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
