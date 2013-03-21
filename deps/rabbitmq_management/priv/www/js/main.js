@@ -491,6 +491,15 @@ function postprocess() {
     $('form.auto-submit select, form.auto-submit input').live('click', function(){
         $(this).parents('form').submit();
     });
+    $('#filter').die().live('keyup', function() {
+        current_filter = $(this).val();
+        var table = $(this).parents('table').first();
+        table.removeClass('filter-active');
+        if ($(this).val() != '') {
+            table.addClass('filter-active');
+        }
+        partial_update();
+    });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }

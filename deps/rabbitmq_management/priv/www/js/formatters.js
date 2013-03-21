@@ -255,7 +255,11 @@ function is_col_empty(objects, name, accessor) {
 }
 
 function fmt_exchange(name) {
-    return name == '' ? '(AMQP default)' : fmt_escape_html(name);
+    return fmt_escape_html(fmt_exchange0(name));
+}
+
+function fmt_exchange0(name) {
+    return name == '' ? '(AMQP default)' : name;
 }
 
 function fmt_exchange_type(type) {
@@ -546,41 +550,63 @@ function esc(str) {
 }
 
 function link_conn(name, desc) {
-    if (desc == undefined) desc = short_conn(name);
-    return _link_to(fmt_escape_html(desc), '#/connections/' + esc(name))
+    if (desc == undefined) {
+        return _link_to(short_conn(name), '#/connections/' + esc(name));
+    }
+    else {
+        return _link_to(desc, '#/connections/' + esc(name), false);
+    }
 }
 
 function link_channel(name) {
-    return _link_to(fmt_escape_html(short_chan(name)), '#/channels/' + esc(name))
+    return _link_to(short_chan(name), '#/channels/' + esc(name))
 }
 
 function link_exchange(vhost, name) {
     var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
-    return _link_to(fmt_exchange(name), '#/exchanges/' + url)
+    return _link_to(fmt_exchange0(name), '#/exchanges/' + url)
 }
 
 function link_queue(vhost, name) {
-    return _link_to(fmt_escape_html(name), '#/queues/' + esc(vhost) + '/' + esc(name))
+    return _link_to(name, '#/queues/' + esc(vhost) + '/' + esc(name))
 }
 
 function link_vhost(name) {
-    return _link_to(fmt_escape_html(name), '#/vhosts/' + esc(name))
+    return _link_to(name, '#/vhosts/' + esc(name))
 }
 
 function link_user(name) {
-    return _link_to(fmt_escape_html(name), '#/users/' + esc(name))
+    return _link_to(name, '#/users/' + esc(name))
 }
 
 function link_node(name) {
-    return _link_to(fmt_escape_html(name), '#/nodes/' + esc(name))
+    return _link_to(name, '#/nodes/' + esc(name))
 }
 
 function link_policy(vhost, name) {
-    return _link_to(fmt_escape_html(name), '#/policies/' + esc(vhost) + '/' + esc(name))
+    return _link_to(name, '#/policies/' + esc(vhost) + '/' + esc(name))
 }
 
-function _link_to(name, url) {
-    return '<a href="' + url + '">' + name + '</a>';
+function _link_to(name, url, highlight) {
+    if (highlight == undefined) highlight = true;
+    return '<a href="' + url + '">' +
+        (highlight ? fmt_highlight_filter(name) : fmt_escape_html(name)) +
+        '</a>';
+}
+
+function fmt_highlight_filter(text) {
+    if (current_filter == '') return fmt_escape_html(text);
+    var ix = text.toLowerCase().indexOf(current_filter.toLowerCase());
+    var l = current_filter.length;
+    if (ix == -1) {
+        return fmt_escape_html(text);
+    }
+    else {
+        return fmt_escape_html(text.substring(0, ix)) +
+            '<span class="filter-highlight">' +
+            fmt_escape_html(text.substring(ix, ix + l)) + '</span>' +
+            fmt_escape_html(text.substring(ix + l));
+    }
 }
 
 function message_rates(id, stats) {
@@ -688,6 +714,46 @@ function rates_text(items, stats, mode, rate_fmt) {
         }
     }
     return res == '' ? '' : '<div class="box">' + res + '</div>';
+}
+
+function filter_ui(items) {
+    var maximum = 100;
+    var total = items.length;
+
+    if (current_filter != '') {
+        var items2 = [];
+        for (var i in items) {
+            var item = items[i];
+            if (item.name.toLowerCase().indexOf(current_filter.toLowerCase()) != -1) {
+                items2.push(item);
+            }
+        }
+        items.length = items2.length;
+        for (var i in items2) items[i] = items2[i];
+    }
+
+    var res = '<div class="filter"><table' +
+        (current_filter == '' ? '' : ' class="filter-active"') +
+        '><tr><th>Filter:</th>' +
+        '<td><input id="filter" type="text" value="' +
+        fmt_escape_html(current_filter) + '"/></td></tr></table>' +
+        '<div class="updatable">';
+
+    var selected = current_filter == '' ? (items.length + ' items') :
+        (items.length + ' of ' + total + ' items selected');
+
+    if (items.length > maximum) {
+        res += '<p class="filter-warning">' + selected +
+            ' (only showing first ' + maximum + ')</p>';
+        items.length = maximum;
+    }
+    else {
+        res += '<p>' + selected + '</p>';
+    }
+
+    res += '</div></div>';
+
+    return res;
 }
 
 function maybe_truncate(items) {
