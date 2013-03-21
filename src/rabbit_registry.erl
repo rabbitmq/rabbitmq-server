@@ -95,8 +95,9 @@ internal_unregister(Class, TypeName) ->
     true = ets:delete(?ETS_NAME, UnregArg),
     ok.
 
-%% (un)register exchange decorator route callback only when implemented
-%% to avoid decorators being called unnecessarily on the fast publishing path
+%% register exchange decorator route callback only when implemented,
+%% in order to avoid unnecessary decorator calls on the fast
+%% publishing path
 conditional_register({{exchange_decorator, Type}, ModuleName}) ->
     case erlang:function_exported(ModuleName, route, 2) of
         true  -> true = ets:insert(?ETS_NAME,
