@@ -447,16 +447,13 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
         false -> case rabbit_limiter:can_send(C#cr.limiter,
                                               Consumer#consumer.ack_required,
                                               Consumer#consumer.tag) of
-                     consumer_blocked ->
-                         block_consumer(C, E),
+                     {suspend, Limiter} ->
+                         block_consumer(C#cr{limiter = Limiter}, E),
                          {false, State};
-                     channel_blocked ->
-                         block_consumer(C, E),
-                         {false, State};
-                     Limiter2 ->
+                     {continue, Limiter} ->
                          AC1 = queue:in(E, State#q.active_consumers),
                          deliver_msg_to_consumer(
-                           DeliverFun, Consumer, C#cr{limiter = Limiter2},
+                           DeliverFun, Consumer, C#cr{limiter = Limiter},
                            State#q{active_consumers = AC1})
                  end
     end.
