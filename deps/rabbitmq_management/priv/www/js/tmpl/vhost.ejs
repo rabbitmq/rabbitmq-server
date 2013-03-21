@@ -9,13 +9,13 @@
 
 <div class="section">
   <h2>Overview</h2>
-  <div class="hider updatable">
+  <div class="hider">
     <%= queue_lengths('lengths-vhost', vhost) %>
 <% if (statistics_level == 'fine') { %>
     <%= message_rates('msg-rates-vhost', vhost.message_stats) %>
 <% } %>
     <%= data_rates('data-rates-vhost', vhost, 'Data rates') %>
-
+  <div class="updatable">
     <h3>Details</h3>
     <table class="facts">
       <tr>
@@ -24,6 +24,7 @@
       </tr>
     </table>
   </div>
+</div>
 </div>
 
 <%= format('permissions', {'mode': 'vhost', 'permissions': permissions, 'users': users, 'parent': vhost}) %>
