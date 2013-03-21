@@ -333,9 +333,9 @@ route1(_, _, {[], _, QNames}) ->
     QNames;
 route1(Delivery, Decorators,
        {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
-    ExchangeDests = (type_to_module(Type)):route(X, Delivery),
+    ExchangeDests  = (type_to_module(Type)):route(X, Delivery),
+    DecorateDests  = process_decorators(X, Decorators, Delivery),
     AlternateDests = process_alternate(X, ExchangeDests),
-    DecorateDests = process_decorators(X, Decorators, Delivery),
     route1(Delivery, Decorators,
            lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
                        AlternateDests ++ DecorateDests  ++ ExchangeDests)).
@@ -350,7 +350,7 @@ process_alternate(#exchange{name = XName, arguments = Args}, []) ->
 process_alternate(_X, _Results) ->
     [].
 
-process_decorators(_, [], _) ->
+process_decorators(_, [], _) -> %% optimisation
     [];
 process_decorators(X, Decorators, Delivery) ->
     lists:append([Decorator:route(X, Delivery) || Decorator <- Decorators]).
