@@ -330,8 +330,7 @@ handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
            WriterPid, #'basic.credit_ok'{available = Len}),
     noreply(State);
 
-handle_cast({send_drained, CTagCredit},
-            State = #ch{writer_pid = WriterPid}) ->
+handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
     [ok = rabbit_writer:send_command(
             WriterPid, #'basic.credit_drained'{consumer_tag   = ConsumerTag,
                                                credit_drained = CreditDrained})
