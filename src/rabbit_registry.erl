@@ -108,16 +108,8 @@ conditional_register(_) ->
     ok.
 
 conditional_unregister({exchange_decorator, Type}) ->
-    case lookup_module(exchange_decorator, Type) of
-        {ok, ModName} ->
-            case erlang:function_exported(ModName, route, 2) of
-                true  -> true = ets:delete(?ETS_NAME,
-                                           {exchange_decorator_route, Type});
-                false -> ok
-            end;
-        {error, not_found} ->
-            ok
-    end;
+    true = ets:delete(?ETS_NAME, {exchange_decorator_route, Type}),
+    ok;
 conditional_unregister(_) ->
     ok.
 
