@@ -95,20 +95,27 @@ internal_unregister(Class, TypeName) ->
     true = ets:delete(?ETS_NAME, UnregArg),
     ok.
 
-conditional_register({{exchange_decorator, _Type}, ModuleName} = RegArg) ->
+
+%% (un)register exchange decorator route callback only when implemented
+%% to avoid decorators being called unnecessarily on the fast publishing path
+conditional_register({{exchange_decorator, _Type}, ModuleName}) ->
     case erlang:function_exported(ModuleName, route, 2) of
-        true  -> true = ets:insert(?ETS_NAME, RegArg);
+        true  -> true = ets:insert(?ETS_NAME,
+                                   {{exchange_decorator_route, _Type},
+                                    ModuleName});
         false -> ok
     end;
 conditional_register(_) ->
     ok.
 
-conditional_unregister({exchange_decorator, Type} = UnregArg) ->
+conditional_unregister({exchange_decorator, Type}) ->
     case lookup_module(exchange_decorator, Type) of
-        {ok, ModName} -> case erlang:function_exported(ModName, route, 2) of
-                             true  -> true = ets:delete(?ETS_NAME, UnregArg);
-                             false -> ok
-                         end;
+        {ok, ModName} ->
+            case erlang:function_exported(ModName, route, 2) of
+                true  -> true = ets:delete(?ETS_NAME,
+                                           {exchange_decorator_route, Type});
+                false -> ok
+            end;
         {error, not_found} ->
             ok
     end;
