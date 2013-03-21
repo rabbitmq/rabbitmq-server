@@ -24,9 +24,10 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 init([]) ->
+    {ok, DBModule} = application:get_env(rabbitmq_management, db_module),
     DB = {rabbit_mgmt_db,
-              {rabbit_mgmt_db, start_link, []},
-              permanent, ?MAX_WAIT, worker, [rabbit_mgmt_db]},
+              {DBModule, start_link, []},
+              permanent, ?MAX_WAIT, worker, [DBModule]},
     {ok, {{one_for_one, 10, 10}, [DB]}}.
 
 start_link() ->

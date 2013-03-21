@@ -38,8 +38,10 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-augmented(_ReqData, #context{user = User}) ->
-    [rabbit_vhost:info(V) || V <- rabbit_mgmt_util:list_visible_vhosts(User)].
+augmented(ReqData, #context{user = User}) ->
+    rabbit_mgmt_db:augment_vhosts(
+      [rabbit_vhost:info(V) || V <- rabbit_mgmt_util:list_visible_vhosts(User)],
+      rabbit_mgmt_util:range(ReqData)).
 
 basic() ->
     rabbit_vhost:info_all([name]).
