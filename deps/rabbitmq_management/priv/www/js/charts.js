@@ -41,7 +41,7 @@ function render_chart(div) {
             }
             d.push([x, y]);
         }
-        out_data.push({data: d, color: chart_colors[i]});
+        out_data.push({data: d, color: chart_colors[i], shadowSize: 0});
         i++;
     }
     chart_data[id] = {};
