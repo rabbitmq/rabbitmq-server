@@ -15,7 +15,7 @@
 %%
 
 -module(rabbit_shovel_sup).
--behaviour(mirrored_supervisor).
+-behaviour(supervisor2).
 
 -export([start_link/0, init/1]).
 
@@ -24,8 +24,7 @@
 start_link() ->
     case parse_configuration(application:get_env(shovels)) of
         {ok, Configurations} ->
-            mirrored_supervisor:start_link({local, ?MODULE},
-                                           ?MODULE, ?MODULE, [Configurations]);
+            supervisor2:start_link({local, ?MODULE}, ?MODULE, [Configurations]);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -44,14 +43,12 @@ make_child_specs(Configurations) ->
     dict:fold(
       fun (ShovelName, ShovelConfig, Acc) ->
               [{ShovelName,
-                {rabbit_shovel_worker, start_link, [ShovelName, ShovelConfig]},
-                case proplists:get_value(reconnect_delay, ShovelConfig) of
-                    N when is_integer(N) andalso N > 0 -> {permanent, N};
-                    _                                  -> temporary
-                end,
+                {rabbit_shovel_worker_sup, start_link,
+                    [ShovelName, ShovelConfig]},
+                permanent,
                 16#ffffffff,
-                worker,
-                [rabbit_shovel_worker]} | Acc]
+                supervisor,
+                [rabbit_shovel_worker_sup]} | Acc]
       end, [], Configurations).
 
 parse_configuration(undefined) ->

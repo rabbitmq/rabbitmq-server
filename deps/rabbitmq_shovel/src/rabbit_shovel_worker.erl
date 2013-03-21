@@ -38,10 +38,10 @@ start_link(Name, Config) ->
 %% Gen Server Implementation
 %%---------------------------
 
-init([Name, RawConfig]) ->
+init([Name, Config]) ->
     gen_server2:cast(self(), init),
-    {ok, Config} = rabbit_shovel_config:parse(Name, RawConfig),
-    {ok, #state{name = Name, config = Config}}.
+    {ok, Shovel} = rabbit_shovel_config:parse(Name, Config),
+    {ok, #state{name = Name, config = Shovel}}.
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
@@ -55,7 +55,6 @@ handle_cast(init, State = #state{config = Config}) ->
     #shovel{sources = Sources, destinations = Destinations} = Config,
     {InboundConn, InboundChan, InboundParams} =
         make_conn_and_chan(Sources#endpoint.amqp_params),
-    io:format("attempting to set outbound conn/chan: ~p~n", [Destinations#endpoint.amqp_params]),
     {OutboundConn, OutboundChan, OutboundParams} =
         make_conn_and_chan(Destinations#endpoint.amqp_params),
 
