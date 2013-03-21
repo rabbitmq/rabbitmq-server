@@ -57,12 +57,10 @@
 -callback remove_bindings(serial(), rabbit_types:exchange(),
                           [rabbit_types:binding()]) -> 'ok'.
 
-%% called after exchange routing
-%% return value is a list of queues to be added to the list of
-%% destination queues. decorators must register separately for
-%% this callback using exchange_decorator_route.
--callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
-    [rabbit_amqqueue:name()].
+%% Decorators can optionally implement route/2 which allows additional
+%% destinations to be added to the routing decision.
+%% -callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
+%%     [rabbit_amqqueue:name() | rabbit_exchange:name()].
 
 -else.
 
@@ -70,7 +68,7 @@
 
 behaviour_info(callbacks) ->
     [{description, 0}, {serialise_events, 1}, {create, 2}, {delete, 3},
-     {policy_changed, 2}, {add_binding, 3}, {remove_bindings, 3}, {route, 2}];
+     {policy_changed, 2}, {add_binding, 3}, {remove_bindings, 3}];
 behaviour_info(_Other) ->
     undefined.
 
