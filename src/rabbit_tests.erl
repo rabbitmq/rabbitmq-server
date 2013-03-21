@@ -1094,6 +1094,7 @@ test_policy_validation() ->
     {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
     {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
 
+    ok = control_action(clear_policy, ["name"]),
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     passed.
 

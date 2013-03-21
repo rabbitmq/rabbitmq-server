@@ -1196,6 +1196,8 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
               not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
                rabbit_misc:rs(DestinationName)]);
+        {error, {binding_invalid, Fmt, Args}} ->
+            rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
         {error, #amqp_error{} = Error} ->
             rabbit_misc:protocol_error(Error);
         ok -> return_ok(State, NoWait, ReturnMethod)

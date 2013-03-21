@@ -186,32 +186,37 @@ server_capabilities(_) ->
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
+socket_error(Reason) ->
+    log(error, "error on AMQP connection ~p: ~p (~s)~n",
+        [self(), Reason, rabbit_misc:format_inet_error(Reason)]).
+
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 socket_op(Sock, Fun) ->
     case Fun(Sock) of
         {ok, Res}       -> Res;
-        {error, Reason} -> log(error, "error on AMQP connection ~p: ~p~n",
-                               [self(), Reason]),
+        {error, Reason} -> socket_error(Reason),
                            %% NB: this is tcp socket, even in case of ssl
                            rabbit_net:fast_close(Sock),
                            exit(normal)
     end.
 
-name(Sock) ->
-    socket_op(Sock, fun (S) -> rabbit_net:connection_string(S, inbound) end).
-
-socket_ends(Sock) ->
-    socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end).
-
 start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    Name = name(Sock),
+    Name = case rabbit_net:connection_string(Sock, inbound) of
+               {ok, Str}         -> Str;
+               {error, enotconn} -> rabbit_net:fast_close(Sock),
+                                    exit(normal);
+               {error, Reason}   -> socket_error(Reason),
+                                    rabbit_net:fast_close(Sock),
+                                    exit(normal)
+           end,
     log(info, "accepting AMQP connection ~p (~s)~n", [self(), Name]),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(), handshake_timeout),
-    {PeerHost, PeerPort, Host, Port} = socket_ends(Sock),
+    {PeerHost, PeerPort, Host, Port} =
+        socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
                 connection          = #connection{
@@ -245,7 +250,6 @@ start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
                   last_blocked_by    = none,
                   last_blocked_at    = never}},
     try
-        ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         run({?MODULE, recvloop,
              [Deb, switch_callback(rabbit_event:init_stats_timer(
                                      State, #v1.stats_timer),
@@ -791,7 +795,7 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                           Connection#connection{
                             client_properties = ClientProperties,
                             capabilities      = Capabilities,
-                            auth_mechanism    = AuthMechanism,
+                            auth_mechanism    = {Mechanism, AuthMechanism},
                             auth_state        = AuthMechanism:init(Sock)}},
     auth_phase(Response, State);
 
@@ -918,15 +922,14 @@ auth_mechanisms_binary(Sock) ->
 auth_phase(Response,
            State = #v1{connection = Connection =
                            #connection{protocol       = Protocol,
-                                       auth_mechanism = AuthMechanism,
+                                       auth_mechanism = {Name, AuthMechanism},
                                        auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Msg, Args} ->
             rabbit_misc:protocol_error(
               access_refused, "~s login refused: ~s",
-              [proplists:get_value(name, AuthMechanism:description()),
-               io_lib:format(Msg, Args)]);
+              [Name, io_lib:format(Msg, Args)]);
         {protocol_error, Msg, Args} ->
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
@@ -986,10 +989,8 @@ ic(vhost,             #connection{vhost       = VHost})    -> VHost;
 ic(timeout,           #connection{timeout_sec = Timeout})  -> Timeout;
 ic(frame_max,         #connection{frame_max   = FrameMax}) -> FrameMax;
 ic(client_properties, #connection{client_properties = CP}) -> CP;
-ic(auth_mechanism,    #connection{auth_mechanism = none}) ->
-    none;
-ic(auth_mechanism,    #connection{auth_mechanism = Mechanism}) ->
-    proplists:get_value(name, Mechanism:description());
+ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
+ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->

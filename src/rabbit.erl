@@ -236,7 +236,7 @@
                {memory, any()}]).
 -spec(is_running/0 :: () -> boolean()).
 -spec(is_running/1 :: (node()) -> boolean()).
--spec(environment/0 :: () -> [{param() | term()}]).
+-spec(environment/0 :: () -> [{param(), term()}]).
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
 -spec(force_event_refresh/0 :: () -> 'ok').
 

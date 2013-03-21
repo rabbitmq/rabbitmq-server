@@ -76,6 +76,9 @@ init_file(File, PrevHandler) ->
         Error   -> Error
     end.
 
+%% filter out "application: foo; exited: stopped; type: temporary"
+handle_event({info_report, _, {_, std_info, _}}, State) ->
+    {ok, State};
 handle_event(Event, State) ->
     error_logger_file_h:handle_event(Event, State).
 
