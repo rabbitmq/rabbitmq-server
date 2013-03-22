@@ -16,17 +16,18 @@
 
 %% The purpose of the limiter is to stem the flow of messages from
 %% queues to channels, in order to act upon various protocol-level
-%% flow control mechanisms, specifically AMQP's basic.qos
-%% prefetch_count and channel.flow.
+%% flow control mechanisms, specifically AMQP 0-9-1's basic.qos
+%% prefetch_count and channel.flow, and AMQP 1.0's link (aka consumer)
+%% credit mechanism.
 %%
 %% Each channel has an associated limiter process, created with
 %% start_link/1, which it passes to queues on consumer creation with
-%% rabbit_amqqueue:basic_consume/8, and rabbit_amqqueue:basic_get/4.
+%% rabbit_amqqueue:basic_consume/9, and rabbit_amqqueue:basic_get/4.
 %% The latter isn't strictly necessary, since basic.get is not
 %% subject to limiting, but it means that whenever a queue knows about
 %% a channel, it also knows about its limiter, which is less fiddly.
 %%
-%% Th limiter process holds state that is, in effect, shared between
+%% The limiter process holds state that is, in effect, shared between
 %% the channel and all queues from which the channel is
 %% consuming. Essentially all these queues are competing for access to
 %% a single, limited resource - the ability to deliver messages via
@@ -54,33 +55,46 @@
 %% inactive. In practice it is rare for that to happen, though we
 %% could optimise this case in the future.
 %%
+%% In addition, the consumer credit bookkeeping is local to queues, so
+%% it is not necessary to store information about it in the limiter
+%% process. But for abstraction we hide it from the queue behind the
+%% limiter API, and it therefore becomes part of the queue local
+%% state.
+%%
 %% The interactions with the limiter are as follows:
 %%
 %% 1. Channels tell the limiter about basic.qos prefetch counts -
 %%    that's what the limit_prefetch/3, unlimit_prefetch/1,
 %%    is_prefetch_limited/1, get_prefetch_limit/1 API functions are
 %%    about - and channel.flow blocking - that's what block/1,
-%%    unblock/1 and is_blocked/1 are for.
+%%    unblock/1 and is_blocked/1 are for. They also tell the limiter
+%%    queue state (via the queue) about consumer credit changes -
+%%    that's what credit/4 is for.
 %%
-%% 2. Queues register with the limiter - this happens as part of
+%% 2. Queues also tell the limiter queue state about the queue
+%%    becoming empty (via drained/1) and consumers leaving (via
+%%    forget_consumer/2).
+%%
+%% 3. Queues register with the limiter - this happens as part of
 %%    activate/1.
 %%
 %% 4. The limiter process maintains an internal counter of 'messages
 %%    sent but not yet acknowledged', called the 'volume'.
 %%
-%% 5. Queues ask the limiter for permission (with can_send/2) whenever
+%% 5. Queues ask the limiter for permission (with can_send/3) whenever
 %%    they want to deliver a message to a channel. The limiter checks
-%%    whether a) the channel isn't blocked by channel.flow, and b) the
-%%    volume has not yet reached the prefetch limit. If so it
-%%    increments the volume and tells the queue to proceed. Otherwise
-%%    it marks the queue as requiring notification (see below) and
-%%    tells the queue not to proceed.
+%%    whether a) the channel isn't blocked by channel.flow, b) the
+%%    volume has not yet reached the prefetch limit, and c) whether
+%%    the consumer has enough credit. If so it increments the volume
+%%    and tells the queue to proceed. Otherwise it marks the queue as
+%%    requiring notification (see below) and tells the queue not to
+%%    proceed.
 %%
-%% 6. A queue that has told to proceed (by the return value of
-%%    can_send/2) sends the message to the channel. Conversely, a
+%% 6. A queue that has been told to proceed (by the return value of
+%%    can_send/3) sends the message to the channel. Conversely, a
 %%    queue that has been told not to proceed, will not attempt to
 %%    deliver that message, or any future messages, to the
-%%    channel. This is accomplished by can_send/2 capturing the
+%%    channel. This is accomplished by can_send/3 capturing the
 %%    outcome in the local state, where it can be accessed with
 %%    is_suspended/1.
 %%
@@ -88,14 +102,14 @@
 %%    how many messages were ack'ed. The limiter process decrements
 %%    the volume and if it falls below the prefetch_count then it
 %%    notifies (through rabbit_amqqueue:resume/2) all the queues
-%%    requiring notification, i.e. all those that had a can_send/2
+%%    requiring notification, i.e. all those that had a can_send/3
 %%    request denied.
 %%
 %% 8. Upon receipt of such a notification, queues resume delivery to
 %%    the channel, i.e. they will once again start asking limiter, as
 %%    described in (5).
 %%
-%% 9. When a queues has no more consumers associated with a particular
+%% 9. When a queue has no more consumers associated with a particular
 %%    channel, it deactivates use of the limiter with deactivate/1,
 %%    which alters the local state such that no further interactions
 %%    with the limiter process take place until a subsequent
@@ -111,8 +125,9 @@
          is_prefetch_limited/1, is_blocked/1, is_active/1,
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
--export([client/1, activate/1, can_send/2, resume/1, deactivate/1,
-         is_suspended/1]).
+-export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
+         is_suspended/1, is_consumer_blocked/2, credit/4, drained/1,
+         forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
@@ -120,7 +135,7 @@
 %%----------------------------------------------------------------------------
 
 -record(lstate, {pid, prefetch_limited, blocked}).
--record(qstate, {pid, state}).
+-record(qstate, {pid, state, credits}).
 
 -ifdef(use_specs).
 
@@ -147,11 +162,17 @@
 
 -spec(client/1       :: (pid()) -> qstate()).
 -spec(activate/1     :: (qstate()) -> qstate()).
--spec(can_send/2     :: (qstate(), boolean()) ->
+-spec(can_send/3     :: (qstate(), boolean(), rabbit_types:ctag()) ->
                              {'continue' | 'suspend', qstate()}).
 -spec(resume/1       :: (qstate()) -> qstate()).
 -spec(deactivate/1   :: (qstate()) -> qstate()).
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
+-spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
+-spec(credit/4 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean())
+                  -> qstate()).
+-spec(drained/1 :: (qstate())
+                   -> {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}).
+-spec(forget_consumer/2 :: (qstate(), rabbit_types:ctag()) -> qstate()).
 
 -endif.
 
@@ -165,6 +186,8 @@
 %% 'Notify' is a boolean that indicates whether a queue should be
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
+
+-record(credit, {credit = 0, drain = false}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -208,23 +231,29 @@ ack(L, AckCount) -> gen_server:cast(L#lstate.pid, {ack, AckCount}).
 
 pid(#lstate{pid = Pid}) -> Pid.
 
-client(Pid) -> #qstate{pid = Pid, state = dormant}.
+client(Pid) -> #qstate{pid = Pid, state = dormant, credits = gb_trees:empty()}.
 
 activate(L = #qstate{state = dormant}) ->
     ok = gen_server:cast(L#qstate.pid, {register, self()}),
     L#qstate{state = active};
 activate(L) -> L.
 
-can_send(L = #qstate{state = active}, AckRequired) ->
+can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
+         AckRequired, CTag) ->
+    case is_consumer_blocked(L, CTag) of
+        false -> case (State =/= active orelse
+                       safe_call(Pid, {can_send, self(), AckRequired}, true)) of
+                     true  -> {continue, L#qstate{
+                                credits = record_send_q(CTag, Credits)}};
+                     false -> {suspend, L#qstate{state = suspended}}
+                 end;
+        true  -> {suspend, L}
+    end.
+
+safe_call(Pid, Msg, ExitValue) ->
     rabbit_misc:with_exit_handler(
-      fun () -> {continue, L} end,
-      fun () -> Msg = {can_send, self(), AckRequired},
-                case gen_server2:call(L#qstate.pid, Msg, infinity) of
-                    true  -> {continue, L};
-                    false -> {suspend, L#qstate{state = suspended}}
-                end
-      end);
-can_send(L, _AckRequired) -> {continue, L}.
+      fun () -> ExitValue end,
+      fun () -> gen_server2:call(Pid, Msg, infinity) end).
 
 resume(L) -> L#qstate{state = active}.
 
@@ -235,6 +264,53 @@ deactivate(L) ->
 
 is_suspended(#qstate{state = suspended}) -> true;
 is_suspended(#qstate{})                  -> false.
+
+is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
+    case gb_trees:lookup(CTag, Credits) of
+        {value, #credit{credit = C}} when C > 0 -> false;
+        {value, #credit{}}                      -> true;
+        none                                    -> false
+    end.
+
+credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain) ->
+    Limiter#qstate{credits = update_credit(CTag, Credit, Drain, Credits)}.
+
+drained(Limiter = #qstate{credits = Credits}) ->
+    {CTagCredits, Credits2} =
+        rabbit_misc:gb_trees_fold(
+          fun (CTag,  #credit{credit = C,  drain = true},  {Acc, Creds0}) ->
+                  {[{CTag, C} | Acc], update_credit(CTag, 0, false, Creds0)};
+              (_CTag, #credit{credit = _C, drain = false}, {Acc, Creds0}) ->
+                  {Acc, Creds0}
+          end, {[], Credits}, Credits),
+    {CTagCredits, Limiter#qstate{credits = Credits2}}.
+
+forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
+    Limiter#qstate{credits = gb_trees:delete_any(CTag, Credits)}.
+
+%%----------------------------------------------------------------------------
+%% Queue-local code
+%%----------------------------------------------------------------------------
+
+%% We want to do all the AMQP 1.0-ish link level credit calculations
+%% in the queue (to do them elsewhere introduces a ton of
+%% races). However, it's a big chunk of code that is conceptually very
+%% linked to the limiter concept. So we get the queue to hold a bit of
+%% state for us (#qstate.credits), and maintain a fiction that the
+%% limiter is making the decisions...
+
+record_send_q(CTag, Credits) ->
+    case gb_trees:lookup(CTag, Credits) of
+        {value, #credit{credit = Credit, drain = Drain}} ->
+            update_credit(CTag, Credit - 1, Drain, Credits);
+        none ->
+            Credits
+    end.
+
+update_credit(CTag, Credit, Drain, Credits) ->
+    %% Using up all credit implies no need to send a 'drained' event
+    Drain1 = Drain andalso Credit > 0,
+    gb_trees:enter(CTag, #credit{credit = Credit, drain = Drain1}, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
