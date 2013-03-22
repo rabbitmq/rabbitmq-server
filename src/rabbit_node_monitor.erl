@@ -319,7 +319,7 @@ alive_nodes() ->
     [N || N <- Nodes, pong =:= net_adm:ping(N)].
 
 alive_rabbit_nodes() ->
-    [N || N <- alive_nodes(), rabbit_nodes:is_running(N, rabbit)].
+    [N || N <- alive_nodes(), rabbit_nodes:is_process_running(N, rabbit)].
 
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
