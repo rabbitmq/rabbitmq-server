@@ -11,7 +11,7 @@
 ##  The Original Code is RabbitMQ.
 ##
 ##  The Initial Developer of the Original Code is VMware, Inc.
-##  Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+##  Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 ##
 
 from __future__ import nested_scopes
@@ -119,7 +119,7 @@ mergers = {
 }
 
 def merge_load_specs(filenames, ignore_conflicts):
-    handles = [file(filename) for filename in filenames]
+    handles = [open(filename) for filename in filenames]
     docs = [json.load(handle) for handle in handles]
     spec = {}
     for doc in docs:
