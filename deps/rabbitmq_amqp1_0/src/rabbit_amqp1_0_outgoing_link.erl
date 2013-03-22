@@ -21,9 +21,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--import(rabbit_amqp1_0_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_util, [protocol_error/3, serial_add/2]).
 -import(rabbit_amqp1_0_link_util, [handle_to_ctag/1]).
--import(rabbit_misc, [serial_add/2]).
 
 -define(INIT_TXFR_COUNT, 0).
 -define(DEFAULT_SEND_SETTLED, false).
