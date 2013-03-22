@@ -21,7 +21,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--import(rabbit_amqp1_0_link_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_util, [protocol_error/3]).
 
 %% Just make these constant for the time being.
 -define(INCOMING_CREDIT, 65536).
@@ -197,9 +197,8 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                      {check_exchange, true}],
     case Dynamic of
         true ->
-            rabbit_amqp1_0_link_util:protocol_error(
-              ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-              "Dynamic targets not supported", []);
+            protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                           "Dynamic targets not supported", []);
         _ ->
             ok
     end,

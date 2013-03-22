@@ -19,8 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([outcomes/1, protocol_error/3, ctag_to_handle/1,
-         handle_to_ctag/1, durable/1]).
+-export([outcomes/1, ctag_to_handle/1, handle_to_ctag/1, durable/1]).
 
 -define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
 -define(DEFAULT_OUTCOME, #'v1_0.released'{}).
@@ -49,16 +48,10 @@ outcomes(Source) ->
         end,
     case [O || O <- Outcomes, not lists:member(O, ?OUTCOMES)] of
         []  -> {DefaultOutcome, {array, symbol, [X || {symbol, X} <- Outcomes]}};
-        Bad -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                              "Outcomes not supported: ~p", [Bad])
+        Bad -> rabbit_amqp1_0_util:protocol_error(
+                 ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                 "Outcomes not supported: ~p", [Bad])
     end.
-
-protocol_error(Condition, Msg, Args) ->
-    exit(#'v1_0.error'{
-        condition   = Condition,
-        description = {utf8, list_to_binary(
-                               lists:flatten(io_lib:format(Msg, Args)))}
-       }).
 
 handle_to_ctag({uint, H}) ->
     <<"ctag-", H:32/integer>>.

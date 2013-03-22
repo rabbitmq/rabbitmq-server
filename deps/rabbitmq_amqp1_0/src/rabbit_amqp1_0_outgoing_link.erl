@@ -21,7 +21,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--import(rabbit_amqp1_0_link_util, [protocol_error/3, handle_to_ctag/1]).
+-import(rabbit_amqp1_0_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_link_util, [handle_to_ctag/1]).
 -import(rabbit_misc, [serial_add/2]).
 
 -define(INIT_TXFR_COUNT, 0).
@@ -158,9 +159,8 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
     DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)},
                      {check_exchange, true}],
     case Dynamic of
-        true -> rabbit_amqp1_0_link_util:protocol_error(
-                   ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                   "Dynamic sources not supported", []);
+        true -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                               "Dynamic sources not supported", []);
         _    -> ok
     end,
     case Address of

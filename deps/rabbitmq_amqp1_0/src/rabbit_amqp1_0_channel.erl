@@ -22,7 +22,7 @@
 -export([call/2, call/3, cast/2, cast/3, cast_flow/3, subscribe/3]).
 -export([convert_error/1]).
 
--import(rabbit_amqp1_0_link_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_util, [protocol_error/3]).
 
 call(Ch, Method) ->
     convert_error(fun () -> amqp_channel:call(Ch, Method) end).

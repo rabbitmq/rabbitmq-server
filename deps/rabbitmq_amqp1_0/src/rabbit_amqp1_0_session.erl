@@ -25,7 +25,7 @@
          flow/2, ack/2, validate_attach/1]).
 
 -import(rabbit_misc, [serial_add/2, serial_diff/2, serial_compare/2]).
--import(rabbit_amqp1_0_link_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_util, [protocol_error/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").

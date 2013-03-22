@@ -31,7 +31,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--import(rabbit_amqp1_0_link_util, [protocol_error/3, ctag_to_handle/1]).
+-import(rabbit_amqp1_0_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_link_util, [ctag_to_handle/1]).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, []).

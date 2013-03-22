@@ -28,7 +28,7 @@
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 -export([conserve_resources/3]).
 
--import(rabbit_amqp1_0_link_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_util, [protocol_error/3]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
