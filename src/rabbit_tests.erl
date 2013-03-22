@@ -563,8 +563,9 @@ test_topic_matching() ->
     XName = #resource{virtual_host = <<"/">>,
                       kind = exchange,
                       name = <<"test_exchange">>},
-    X = #exchange{name = XName, type = topic, durable = false,
-                  auto_delete = false, arguments = []},
+    X0 = #exchange{name = XName, type = topic, durable = false,
+                   auto_delete = false, arguments = []},
+    X = rabbit_exchange_decorator:record(X0, []),
     %% create
     rabbit_exchange_type_topic:validate(X),
     exchange_op_callback(X, create, []),

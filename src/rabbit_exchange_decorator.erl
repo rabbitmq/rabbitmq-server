@@ -16,6 +16,10 @@
 
 -module(rabbit_exchange_decorator).
 
+-include("rabbit.hrl").
+
+-export([list/0, select/2, record/2]).
+
 %% This is like an exchange type except that:
 %%
 %% 1) It applies to all exchanges as soon as it is installed, therefore
@@ -45,10 +49,6 @@
 -callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
     'ok'.
 
-%% called when the policy attached to this exchange changes.
--callback policy_changed(rabbit_types:exchange(), rabbit_types:exchange()) ->
-    'ok'.
-
 %% called after a binding has been added or recovered
 -callback add_binding(serial(), rabbit_types:exchange(),
                       rabbit_types:binding()) -> 'ok'.
@@ -59,8 +59,12 @@
 
 %% Decorators can optionally implement route/2 which allows additional
 %% destinations to be added to the routing decision.
-%% -callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
-%%     [rabbit_amqqueue:name() | rabbit_exchange:name()].
+-callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
+    [rabbit_amqqueue:name() | rabbit_exchange:name()] | ok.
+
+%% Whether the decorator wishes to receive callbacks for the exchange
+%% none:no callbacks, noroute:all callbacks except route, all:all callbacks
+-callback active_for(rabbit_types:exchange()) -> 'none' | 'noroute' | 'all'.
 
 -else.
 
@@ -68,8 +72,29 @@
 
 behaviour_info(callbacks) ->
     [{description, 0}, {serialise_events, 1}, {create, 2}, {delete, 3},
-     {policy_changed, 2}, {add_binding, 3}, {remove_bindings, 3}];
+     {policy_changed, 2}, {add_binding, 3}, {remove_bindings, 3},
+     {active_for, 1}];
 behaviour_info(_Other) ->
     undefined.
 
 -endif.
+
+%%----------------------------------------------------------------------------
+
+list() -> [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
+
+%% select a subset of active decorators
+select(all,   {Route, NoRoute})  -> Route ++ NoRoute;
+select(route, {Route, _NoRoute}) -> Route.
+
+%% record active decorators in an exchange
+record(X, Decorators) ->
+    X#exchange{decorators =
+      lists:foldl(fun (D, {Route, NoRoute}) ->
+                          Callbacks = D:active_for(X),
+                          {cons_if_eq(all,     Callbacks, D, Route),
+                           cons_if_eq(noroute, Callbacks, D, NoRoute)}
+                 end, {[], []}, Decorators)}.
+
+cons_if_eq(Select,  Select, Item,  List) -> [Item | List];
+cons_if_eq(_Select, _Other, _Item, List) -> List.

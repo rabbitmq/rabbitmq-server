@@ -156,9 +156,10 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 
 update_policies(VHost) ->
     Policies = list(VHost),
+    Decorators = rabbit_exchange_decorator:list(),
     {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
                  fun() ->
-                         {[update_exchange(X, Policies) ||
+                         {[update_exchange(X, Policies, Decorators) ||
                               X <- rabbit_exchange:list(VHost)],
                           [update_queue(Q, Policies) ||
                               Q <- rabbit_amqqueue:list(VHost)]}
@@ -167,12 +168,18 @@ update_policies(VHost) ->
     [catch notify(Q) || Q <- Qs],
     ok.
 
-update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
+update_exchange(X = #exchange{name = XName, policy = OldPolicy},
+                Policies, Decorators) ->
     case match(XName, Policies) of
-        OldPolicy -> no_change;
-        NewPolicy -> rabbit_exchange:update(
-                       XName, fun(X1) -> X1#exchange{policy = NewPolicy} end),
-                     {X, X#exchange{policy = NewPolicy}}
+        OldPolicy ->
+            no_change;
+        NewPolicy ->
+            rabbit_exchange:update(
+              XName, fun(X1) ->
+                             rabbit_exchange_decorator:record(
+                               X1#exchange{policy = NewPolicy}, Decorators)
+                     end),
+            {X, X#exchange{policy = NewPolicy}}
     end.
 
 update_queue(Q = #amqqueue{name = QName, policy = OldPolicy}, Policies) ->
