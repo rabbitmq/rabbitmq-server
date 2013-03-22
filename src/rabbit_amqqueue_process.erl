@@ -1241,6 +1241,8 @@ handle_call(force_event_refresh, _From,
     end,
     reply(ok, State);
 
+handle_call({copy, Q}, _From, State = #q{q = #amqqueue{name = Q}}) ->
+    reply(ok, State);
 handle_call({copy, DestQName}, _From, State = #q{backing_queue       = BQ,
                                                  backing_queue_state = BQS0}) ->
     {ok, #amqqueue{pid = DestQPid} = DestQ} = rabbit_amqqueue:lookup(DestQName),

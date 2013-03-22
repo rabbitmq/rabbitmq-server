@@ -22,7 +22,8 @@
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
+         stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4,
+         copy/2]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, wake_up/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
@@ -143,6 +144,7 @@
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
+-spec(copy/2 :: (rabbit_types:amqqueue(), rabbit_amqqueue:name()) -> 'ok').
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: (qpids(), pid(), rabbit_limiter:token()) ->
                           ok_or_errors()).
@@ -527,6 +529,8 @@ ack(QPid, MsgIds, ChPid) -> delegate:cast(QPid, {ack, MsgIds, ChPid}).
 
 reject(QPid, MsgIds, Requeue, ChPid) ->
     delegate:cast(QPid, {reject, MsgIds, Requeue, ChPid}).
+
+copy(#amqqueue{pid = SrcQPid}, DestQ) -> delegate:call(SrcQPid, {copy, DestQ}).
 
 notify_down_all(QPids, ChPid) ->
     {_, Bads} = delegate:call(QPids, {notify_down, ChPid}),
