@@ -813,7 +813,7 @@ dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
                                              X, RK, SeqNo, QName) of
                         []    -> {[AckTag | AckImm], SeqNo, UC, QMons};
                         QPids -> {AckImm, SeqNo + 1,
-                                  dtree:insert(SeqNo, QPids, {ack, AckTag}, UC),
+                                  dtree:insert(SeqNo, QPids, AckTag, UC),
                                   pmon:monitor_all(QPids, QMons)}
                     end
             end, {[], SeqNo0, UC0, QMons0}, BQS),
@@ -861,17 +861,11 @@ stop(From, Reply, State = #q{unconfirmed = UC}) ->
         {false,      _} -> noreply(State#q{delayed_stop = {From, Reply}})
     end.
 
-cleanup_after_confirm(Actions, State = #q{delayed_stop        = DS,
+cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
                                           unconfirmed         = UC,
                                           backing_queue       = BQ,
                                           backing_queue_state = BQS}) ->
-    Acks = lists:foldl(fun ({reply, Reply, From}, Acc) ->
-                               gen_server2:reply(From, Reply),
-                               Acc;
-                           ({ack, Ack}, Acc) ->
-                               [Ack | Acc]
-                       end, [], Actions),
-    {_Guids, BQS1} = BQ:ack(Acks, BQS),
+    {_Guids, BQS1} = BQ:ack(AckTags, BQS),
     State1 = State#q{backing_queue_state = BQS1},
     case dtree:is_empty(UC) andalso DS =/= undefined of
         true  -> case DS of
@@ -1247,38 +1241,26 @@ handle_call(force_event_refresh, _From,
     end,
     reply(ok, State);
 
-handle_call({copy, DestQName}, From, State = #q{backing_queue       = BQ,
-                                                publish_seqno       = SeqNo0,
-                                                queue_monitors      = QMons0,
-                                                unconfirmed         = UC0,
-                                                backing_queue_state = BQS0}) ->
+handle_call({copy, DestQName}, _From, State = #q{backing_queue       = BQ,
+                                                 backing_queue_state = BQS0}) ->
     {ok, #amqqueue{pid = DestQPid} = DestQ} = rabbit_amqqueue:lookup(DestQName),
-    {SeqNo1, BQS1} =
-        BQ:fold(fun (Msg, _Props, _Unacked, SeqNo) ->
-                        Delivery = rabbit_basic:delivery(false, Msg, SeqNo),
+    {ok, BQS1} =
+        BQ:fold(fun (Msg, _Props, _Unacked, ok) ->
+                        Delivery = rabbit_basic:delivery(false, Msg, undefined),
                         rabbit_amqqueue:deliver([DestQ], Delivery),
-                        {cont, SeqNo + 1}
-                end, SeqNo0, BQS0),
-    case SeqNo1 - SeqNo0 of
-        0 ->
-            reply(0, State #q{backing_queue_state = BQS1});
-        Count ->
-            UC1 = dtree:insert(SeqNo1-1, [DestQPid], {reply, Count, From}, UC0),
-            QMons1 = pmon:monitor(DestQ#amqqueue.pid, QMons0),
-            noreply(State #q{backing_queue_state = BQS1,
-                             publish_seqno       = SeqNo1,
-                             unconfirmed         = UC1,
-                             queue_monitors      = QMons1})
-    end.
+                        {cont, ok}
+                end, ok, BQS0),
+    gen_server2:call(DestQPid, {info, []}),
+    reply(ok, State #q{backing_queue_state = BQS1}).
 
 handle_cast({confirm, MsgSeqNos, QPid}, State = #q{unconfirmed = UC}) ->
-    {MsgSeqNoActions, UC1} = dtree:take(MsgSeqNos, QPid, UC),
+    {MsgSeqNoAckTags, UC1} = dtree:take(MsgSeqNos, QPid, UC),
     State1 = case dtree:is_defined(QPid, UC1) of
                  false -> QMons = State#q.queue_monitors,
                           State#q{queue_monitors = pmon:demonitor(QPid, QMons)};
                  true  -> State
              end,
-    cleanup_after_confirm([Action || {_MsgSeqNo, Action} <- MsgSeqNoActions],
+    cleanup_after_confirm([AckTag || {_MsgSeqNo, AckTag} <- MsgSeqNoAckTags],
                           State1#q{unconfirmed = UC1});
 
 handle_cast(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
