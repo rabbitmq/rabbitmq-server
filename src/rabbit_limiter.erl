@@ -16,8 +16,9 @@
 
 %% The purpose of the limiter is to stem the flow of messages from
 %% queues to channels, in order to act upon various protocol-level
-%% flow control mechanisms, specifically AMQP's basic.qos
-%% prefetch_count and channel.flow.
+%% flow control mechanisms, specifically AMQP 0-9-1's basic.qos
+%% prefetch_count and channel.flow, and AMQP 1.0's link (aka consumer)
+%% credit mechanism.
 %%
 %% Each channel has an associated limiter process, created with
 %% start_link/1, which it passes to queues on consumer creation with
@@ -26,7 +27,7 @@
 %% subject to limiting, but it means that whenever a queue knows about
 %% a channel, it also knows about its limiter, which is less fiddly.
 %%
-%% Th limiter process holds state that is, in effect, shared between
+%% The limiter process holds state that is, in effect, shared between
 %% the channel and all queues from which the channel is
 %% consuming. Essentially all these queues are competing for access to
 %% a single, limited resource - the ability to deliver messages via
@@ -54,15 +55,27 @@
 %% inactive. In practice it is rare for that to happen, though we
 %% could optimise this case in the future.
 %%
+%% In addition, the consumer credit bookkeeping is local to queues, so
+%% it is not necessary to store information about it in the limiter
+%% process. But for abstraction we hide it from the queue behind the
+%% limiter API, and it therefore becomes part of the queue local
+%% state.
+%%
 %% The interactions with the limiter are as follows:
 %%
 %% 1. Channels tell the limiter about basic.qos prefetch counts -
 %%    that's what the limit_prefetch/3, unlimit_prefetch/1,
 %%    is_prefetch_limited/1, get_prefetch_limit/1 API functions are
 %%    about - and channel.flow blocking - that's what block/1,
-%%    unblock/1 and is_blocked/1 are for.
+%%    unblock/1 and is_blocked/1 are for. They also tell the limiter
+%%    queue state (via the queue) about consumer credit changes -
+%%    that's what credit/4 is for.
 %%
-%% 2. Queues register with the limiter - this happens as part of
+%% 2. Queues also tell the limiter queue state about the queue
+%%    becoming empty (via drained/1) and consumers leaving (via
+%%    forget_consumer/2).
+%%
+%% 3. Queues register with the limiter - this happens as part of
 %%    activate/1.
 %%
 %% 4. The limiter process maintains an internal counter of 'messages
@@ -70,13 +83,14 @@
 %%
 %% 5. Queues ask the limiter for permission (with can_send/3) whenever
 %%    they want to deliver a message to a channel. The limiter checks
-%%    whether a) the channel isn't blocked by channel.flow, and b) the
-%%    volume has not yet reached the prefetch limit. If so it
-%%    increments the volume and tells the queue to proceed. Otherwise
-%%    it marks the queue as requiring notification (see below) and
-%%    tells the queue not to proceed.
+%%    whether a) the channel isn't blocked by channel.flow, b) the
+%%    volume has not yet reached the prefetch limit, and c) whether
+%%    the consumer has enough credit. If so it increments the volume
+%%    and tells the queue to proceed. Otherwise it marks the queue as
+%%    requiring notification (see below) and tells the queue not to
+%%    proceed.
 %%
-%% 6. A queue that has told to proceed (by the return value of
+%% 6. A queue that has been told to proceed (by the return value of
 %%    can_send/3) sends the message to the channel. Conversely, a
 %%    queue that has been told not to proceed, will not attempt to
 %%    deliver that message, or any future messages, to the
@@ -95,7 +109,7 @@
 %%    the channel, i.e. they will once again start asking limiter, as
 %%    described in (5).
 %%
-%% 9. When a queues has no more consumers associated with a particular
+%% 9. When a queue has no more consumers associated with a particular
 %%    channel, it deactivates use of the limiter with deactivate/1,
 %%    which alters the local state such that no further interactions
 %%    with the limiter process take place until a subsequent
