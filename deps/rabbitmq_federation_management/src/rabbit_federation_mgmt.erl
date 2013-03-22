@@ -46,7 +46,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Chs = rabbit_mgmt_db:get_all_channels(
-            rabbit_mgmt_util:range(ReqData), basic),
+            rabbit_mgmt_util:range(ReqData)),
     rabbit_mgmt_util:reply_list(
       filter_vhost(status(Chs), ReqData), ReqData, Context).
 
