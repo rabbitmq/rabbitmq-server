@@ -280,15 +280,15 @@ handle_info(ping_nodes, State) ->
     %% to ping the nodes that are up, after all.
     State1 = State#state{down_ping_timer = undefined},
     Self = self(),
-    %% ratio() both pings all the nodes and tells us if we need to again.
+    %% all_nodes_up() both pings all the nodes and tells us if we need to again.
     %%
     %% We ping in a separate process since in a partition it might
     %% take some noticeable length of time and we don't want to block
     %% the node monitor for that long.
     spawn_link(fun () ->
-                       case ratio() of
-                           1.0 -> ok;
-                           _   -> Self ! ping_again
+                       case all_nodes_up() of
+                           true  -> ok;
+                           false -> Self ! ping_again
                        end
                end),
     {noreply, State1};
@@ -333,15 +333,20 @@ handle_dead_rabbit(Node) ->
     end,
     ok.
 
-majority() -> ratio() > 0.5.
-ratio()    -> length(alive_nodes()) / length(rabbit_mnesia:cluster_nodes(all)).
+majority() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
+
+all_nodes_up() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) =:= length(Nodes).
 
 %% mnesia:system_info(db_nodes) (and hence
 %% rabbit_mnesia:cluster_nodes(running)) does not give reliable results
 %% when partitioned.
-alive_nodes() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    [N || N <- Nodes, pong =:= net_adm:ping(N)].
+alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
+
+alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
 
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
