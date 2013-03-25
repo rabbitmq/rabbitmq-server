@@ -16,11 +16,22 @@ It will listen on the standard AMQP port, 5672. To reconfigure this,
 do so as you would for 0-9-1. Clients connecting with 0-9-1 and 0-8
 will continue to work on the same port.
 
+The following two configuration options (which are specific to the AMQP 1.0 adapter)
+are accepted in the `rabbitmq_amqp1_0` section of the configuration file.
+
 AMQP 1.0 conceptually allows connections that are not authenticated
 with SASL (i.e. where no username and password is supplied). By
 default these will connect as the "guest" user. To change this, set
-'default_user' to a string with the name of the user to use, or the
-atom 'none' to prevent unauthenticated connections.
+`default_user` to a string with the name of the user to use, or the
+atom `none` to prevent unauthenticated connections.
+
+    {default_user, "guest"}
+
+The `protocol_strict_mode` setting controls how strictly peers must conform
+to the specification. The default is not to enforce strictness, which allows
+non-fatal byte-counts in frames and inaccuracies in flow-control from peers.
+
+    {protocol_strict_mode, false}
 
 # Interoperability with AMQP 0-9-1
 
@@ -44,9 +55,7 @@ receive exactly what they expect.
 
 ## Message properties, annotations, headers, etc.
 
-Currently we expect no message- or delivery-annotations, and discard
-any footer. Otherwise, the various headers and properties map as
-follows:
+The headers and properties map as follows:
 
     AMQP 1.0                                 AMQP 0-9-1
     Header                                   Properties
@@ -145,10 +154,6 @@ At the minute, the RabbitMQ AMQP 1.0 adapter does not support:
  - Max message size for links
  - Aborted transfers
  - TLS negotiation via the AMQP2100 handshake (although SSL is supported)
- - Use of virtual hosts other than "/"
- - Some complex message formats including multiple-section messages,
-   amqp-sequence messages, delivery-annotations, message-annotations and
-   application-properties
 
 [9] We do not deduplicate as a target, though we may resend as a
 source (messages that have no settled outcome when an outgoing link is
