@@ -325,11 +325,11 @@ route1(_, _, {[], _, QNames}) ->
 route1(Delivery, RDecorators,
        {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
     ExchangeDests  = (type_to_module(Type)):route(X, Delivery),
-    DecorateDests  = process_decorators(X, RDecorators, Delivery),
+    RDecorateDests = process_decorators(X, RDecorators, Delivery),
     AlternateDests = process_alternate(X, ExchangeDests),
     route1(Delivery, RDecorators,
            lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
-                       AlternateDests ++ DecorateDests  ++ ExchangeDests)).
+                       AlternateDests ++ RDecorateDests  ++ ExchangeDests)).
 
 process_alternate(#exchange{arguments = []}, _Results) -> %% optimisation
     [];

@@ -94,7 +94,7 @@ record(X, Decorators) ->
                           Callbacks = D:active_for(X),
                           {cons_if_eq(all,     Callbacks, D, Route),
                            cons_if_eq(noroute, Callbacks, D, NoRoute)}
-                 end, {[], []}, Decorators)}.
+                  end, {[], []}, Decorators)}.
 
 cons_if_eq(Select,  Select, Item,  List) -> [Item | List];
 cons_if_eq(_Select, _Other, _Item, List) -> List.
