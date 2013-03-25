@@ -26,7 +26,7 @@
 
 -export([register/0]).
 -export([name/1, get/2, set/1]).
--export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
+-export([validate/4, notify/4, notify_clear/3]).
 -export([parse_set/5, set/5, delete/2, lookup/2, list/0, list/1,
          list_formatted/1, info_keys/0]).
 
@@ -145,9 +145,6 @@ info_keys() -> [vhost, name, pattern, definition, priority].
 validate(_VHost, <<"policy">>, Name, Term) ->
     rabbit_parameter_validation:proplist(
       Name, policy_validation(), Term).
-
-validate_clear(_VHost, <<"policy">>, _Name) ->
-    ok.
 
 notify(VHost, <<"policy">>, _Name, _Term) ->
     update_policies(VHost).

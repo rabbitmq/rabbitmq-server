@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([parse_set/4, set/4, set_any/4, clear/3, clear_any/3, list/0, list/1,
-         list_strict/1, list/2, list_strict/2, list_formatted/1, lookup/3,
+         list_component/1, list/2, list_formatted/1, lookup/3,
          value/3, value/4, info_keys/0]).
 
 %%----------------------------------------------------------------------------
@@ -40,12 +40,9 @@
                      -> ok_or_error_string()).
 -spec(list/0 :: () -> [rabbit_types:infos()]).
 -spec(list/1 :: (rabbit_types:vhost() | '_') -> [rabbit_types:infos()]).
--spec(list_strict/1 :: (binary() | '_')
-                       -> [rabbit_types:infos()] | 'not_found').
+-spec(list_component/1 :: (binary()) -> [rabbit_types:infos()]).
 -spec(list/2 :: (rabbit_types:vhost() | '_', binary() | '_')
                 -> [rabbit_types:infos()]).
--spec(list_strict/2 :: (rabbit_types:vhost() | '_', binary() | '_')
-                       -> [rabbit_types:infos()] | 'not_found').
 -spec(list_formatted/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(lookup/3 :: (rabbit_types:vhost(), binary(), binary())
                   -> rabbit_types:infos() | 'not_found').
@@ -120,21 +117,13 @@ clear(VHost, Component, Name) ->
     clear_any(VHost, Component, Name).
 
 clear_any(VHost, Component, Name) ->
-    case clear_any0(VHost, Component, Name) of
-        ok          -> ok;
-        {errors, L} -> format_error(L)
-    end.
-
-clear_any0(VHost, Component, Name) ->
-    case lookup_component(Component) of
-        {ok, Mod} -> case flatten_errors(
-                            Mod:validate_clear(VHost, Component, Name)) of
-                         ok -> mnesia_clear(VHost, Component, Name),
-                               Mod:notify_clear(VHost, Component, Name),
-                               ok;
-                         E  -> E
-                     end;
-        E         -> E
+    case lookup(VHost, Component, Name) of
+        not_found -> {error_string, "Parameter does not exist"};
+        _         -> mnesia_clear(VHost, Component, Name),
+                     case lookup_component(Component) of
+                         {ok, Mod} -> Mod:notify_clear(VHost, Component, Name);
+                         _         -> ok
+                     end
     end.
 
 mnesia_clear(VHost, Component, Name) ->
@@ -147,21 +136,14 @@ list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-
              rabbit_misc:dirty_read_all(?TABLE), Comp /= <<"policy">>].
 
-list(VHost)                   -> list(VHost, '_', []).
-list_strict(Component)        -> list('_',   Component, not_found).
-list(VHost, Component)        -> list(VHost, Component, []).
-list_strict(VHost, Component) -> list(VHost, Component, not_found).
+list(VHost)               -> list(VHost, '_').
+list_component(Component) -> list('_',   Component).
 
-list(VHost, Component, Default) ->
-    case component_good(Component) of
-        true -> Match = #runtime_parameters{key = {VHost, Component, '_'},
-                                            _ = '_'},
-                [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-
-                         mnesia:dirty_match_object(?TABLE, Match),
-                         Comp =/= <<"policy">> orelse
-                             Component =:= <<"policy">>];
-        _    -> Default
-    end.
+list(VHost, Component) ->
+    Match = #runtime_parameters{key = {VHost, Component, '_'}, _ = '_'},
+    [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
+                 mnesia:dirty_match_object(?TABLE, Match),
+             Comp =/= <<"policy">> orelse Component =:= <<"policy">>].
 
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
@@ -215,12 +197,6 @@ p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
 info_keys() -> [component, name, value].
 
 %%---------------------------------------------------------------------------
-
-component_good('_')       -> true;
-component_good(Component) -> case lookup_component(Component) of
-                                 {ok, _} -> true;
-                                 _       -> false
-                             end.
 
 lookup_component(Component) ->
     case rabbit_registry:lookup_module(

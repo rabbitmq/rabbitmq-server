@@ -912,10 +912,10 @@ test_arguments_parser() ->
 test_dynamic_mirroring() ->
     %% Just unit tests of the node selection logic, see multi node
     %% tests for the rest...
-    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, {OldM, OldSs}, All) ->
+    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, CurrentState, All) ->
                    {NewM, NewSs0} =
                        rabbit_mirror_queue_misc:suggested_queue_nodes(
-                         Policy, Params, {OldM, OldSs}, All),
+                         Policy, Params, CurrentState, All),
                    NewSs1 = lists:sort(NewSs0),
                    case dm_list_match(NewSs, NewSs1, ExtraSs) of
                        ok    -> ok;
@@ -923,28 +923,36 @@ test_dynamic_mirroring() ->
                    end
            end,
 
-    Test({a,[b,c],0},<<"all">>,'_',{a,[]},   [a,b,c]),
-    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c]},[a,b,c]),
-    Test({a,[b,c],0},<<"all">>,'_',{a,[d]},  [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[],   []},   [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c],[b,c]},[a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[d],  [d]},  [a,b,c]),
+
+    N = fun (Atoms) -> [list_to_binary(atom_to_list(A)) || A <- Atoms] end,
 
     %% Add a node
-    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
-    Test({b,[a,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([a,b,c]),{a,[b],[b]},[a,b,c,d]),
+    Test({b,[a,c],0},<<"nodes">>,N([a,b,c]),{b,[a],[a]},[a,b,c,d]),
     %% Add two nodes and drop one
-    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([a,b,c]),{a,[d],[d]},[a,b,c,d]),
     %% Don't try to include nodes that are not running
-    Test({a,[b],  0},<<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
+    Test({a,[b],  0},<<"nodes">>,N([a,b,f]),{a,[b],[b]},[a,b,c,d]),
     %% If we can't find any of the nodes listed then just keep the master
-    Test({a,[],   0},<<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
-    %% And once that's happened, still keep the master even when not listed
-    Test({a,[b,c],0},<<"nodes">>,[<<"b">>,<<"c">>],        {a,[]}, [a,b,c,d]),
+    Test({a,[],   0},<<"nodes">>,N([f,g,h]),{a,[b],[b]},[a,b,c,d]),
+    %% And once that's happened, still keep the master even when not listed,
+    %% if nothing is synced
+    Test({a,[b,c],0},<<"nodes">>,N([b,c]),  {a,[], []}, [a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([b,c]),  {a,[b],[]}, [a,b,c,d]),
+    %% But if something is synced we can lose the master - but make
+    %% sure we pick the new master from the nodes which are synced!
+    Test({b,[c],  0},<<"nodes">>,N([b,c]),  {a,[b],[b]},[a,b,c,d]),
+    Test({b,[c],  0},<<"nodes">>,N([c,b]),  {a,[b],[b]},[a,b,c,d]),
 
-    Test({a,[],   1},<<"exactly">>,2,{a,[]},   [a,b,c,d]),
-    Test({a,[],   2},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
-    Test({a,[c],  0},<<"exactly">>,2,{a,[c]},  [a,b,c,d]),
-    Test({a,[c],  1},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
-    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
-    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
+    Test({a,[],   1},<<"exactly">>,2,{a,[],   []},   [a,b,c,d]),
+    Test({a,[],   2},<<"exactly">>,3,{a,[],   []},   [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c],  [c]},  [a,b,c,d]),
+    Test({a,[c],  1},<<"exactly">>,3,{a,[c],  [c]},  [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d],[c,d]},[a,b,c,d]),
+    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d],[c,d]},[a,b,c,d]),
 
     passed.
 
@@ -1062,7 +1070,11 @@ test_runtime_parameters() ->
     ok = control_action(clear_parameter, ["test", "maybe"]),
     {error_string, _} =
         control_action(clear_parameter, ["test", "neverexisted"]),
+
+    %% We can delete for a component that no longer exists
+    Good(["test", "good", "\"ignore\""]),
     rabbit_runtime_parameters_test:unregister(),
+    ok = control_action(clear_parameter, ["test", "good"]),
     passed.
 
 test_policy_validation() ->
@@ -1082,25 +1094,20 @@ test_policy_validation() ->
     {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
     {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
 
+    ok = control_action(clear_policy, ["name"]),
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     passed.
 
 test_server_status() ->
     %% create a few things so there is some useful information to list
-    Writer = spawn(fun test_writer/0),
-    {ok, Ch} = rabbit_channel:start_link(
-                 1, self(), Writer, self(), "", rabbit_framing_amqp_0_9_1,
-                 user(<<"user">>), <<"/">>, [], self(),
-                 rabbit_limiter:make_token(self())),
+    {_Writer, Limiter, Ch} = test_channel(),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
-
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, rabbit_limiter:make_token(),
-           <<"ctag">>, true, undefined),
+           Q, true, Ch, Limiter, false, <<"ctag">>, true, none, undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -1178,8 +1185,6 @@ find_listener() ->
               N =:= node()],
     {H, P}.
 
-test_writer() -> test_writer(none).
-
 test_writer(Pid) ->
     receive
         {'$gen_call', From, flush} -> gen_server:reply(From, ok),
@@ -1189,13 +1194,17 @@ test_writer(Pid) ->
         shutdown                   -> ok
     end.
 
-test_spawn() ->
+test_channel() ->
     Me = self(),
     Writer = spawn(fun () -> test_writer(Me) end),
+    {ok, Limiter} = rabbit_limiter:start_link(),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], Me,
-                  rabbit_limiter:make_token(self())),
+                 user(<<"guest">>), <<"/">>, [], Me, Limiter),
+    {Writer, Limiter, Ch}.
+
+test_spawn() ->
+    {Writer, _Limiter, Ch} = test_channel(),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_channel_open_ok)
@@ -1567,7 +1576,7 @@ control_action(Command, Node, Args, Opts) ->
 
 info_action(Command, Args, CheckVHost) ->
     ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, []);
+    if CheckVHost -> ok = control_action(Command, [], ["-p", "/"]);
        true       -> ok
     end,
     ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
@@ -2709,12 +2718,13 @@ test_queue_recover() ->
     end,
     rabbit_amqqueue:stop(),
     rabbit_amqqueue:start(rabbit_amqqueue:recover()),
+    {ok, Limiter} = rabbit_limiter:start_link(),
     rabbit_amqqueue:with_or_die(
       QName,
       fun (Q1 = #amqqueue { pid = QPid1 }) ->
               CountMinusOne = Count - 1,
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
-                  rabbit_amqqueue:basic_get(Q1, self(), false),
+                  rabbit_amqqueue:basic_get(Q1, self(), false, Limiter),
               exit(QPid1, shutdown),
               VQ1 = variable_queue_init(Q, true),
               {{_Msg1, true, _AckTag1}, VQ2} =
@@ -2735,9 +2745,11 @@ test_variable_queue_delete_msg_store_files_callback() ->
 
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 
+    {ok, Limiter} = rabbit_limiter:start_link(),
+
     CountMinusOne = Count - 1,
     {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}} =
-        rabbit_amqqueue:basic_get(Q, self(), true),
+        rabbit_amqqueue:basic_get(Q, self(), true, Limiter),
     {ok, CountMinusOne} = rabbit_amqqueue:purge(Q),
 
     %% give the queue a second to receive the close_fds callback msg
