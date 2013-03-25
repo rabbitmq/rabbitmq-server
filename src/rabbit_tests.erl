@@ -63,6 +63,7 @@ all_tests() ->
     passed = test_server_status(),
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
+    passed = test_queue_copy(),
     passed =
         do_if_secondary_node(
           fun run_cluster_dependent_tests/1,
@@ -1300,6 +1301,24 @@ test_confirms() ->
     unlink(Ch),
     ok = rabbit_channel:shutdown(Ch),
 
+    passed.
+
+test_queue_copy() ->
+    {new, #amqqueue { name = QName1 } = Q1} =
+      rabbit_amqqueue:declare(queue_name(<<"test1">>), false, false, [], none),
+    {new, #amqqueue { name = QName2 } = Q2} =
+      rabbit_amqqueue:declare(queue_name(<<"test2">>), false, false, [], none),
+    Payload = "queue copy test payload",
+    publish_and_confirm(Q1, erlang:term_to_binary(Payload), 1),
+    rabbit_amqqueue:copy(Q1, QName2),
+    {ok, 0, {QName1, _Pid1, undefined, false, Msg1}} =
+        rabbit_amqqueue:basic_get(Q1, self(), true),
+    {ok, 0, {QName2, _Pid2, undefined, false, Msg2}} =
+        rabbit_amqqueue:basic_get(Q2, self(), true),
+    Payload = msg2int(Msg1),
+    Payload = msg2int(Msg2),
+    rabbit_amqqueue:delete(Q1, false, false),
+    rabbit_amqqueue:delete(Q2, false, false),
     passed.
 
 test_statistics_event_receiver(Pid) ->
