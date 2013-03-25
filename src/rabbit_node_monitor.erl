@@ -361,7 +361,7 @@ await_cluster_recovery() ->
 wait_for_cluster_recovery(Nodes) ->
     case majority() of
         true  -> rabbit:start();
-        false -> timer:sleep(1000),
+        false -> timer:sleep(?RABBIT_DOWN_PING_INTERVAL),
                  wait_for_cluster_recovery(Nodes)
     end.
 
