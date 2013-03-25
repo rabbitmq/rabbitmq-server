@@ -109,7 +109,7 @@ dispatcher_add(function(sammy) {
             if (sync_post(this, '/queues/:vhost/:name/actions'))
                 // We can't refresh fast enough, it's racy. So grey
                 // the button and wait for a normal refresh.
-                $('#action-button').prop('disabled', true);
+                $('#action-button').addClass('wait').prop('disabled', true);
             return false;
         });
     sammy.post('#/bindings', function() {
