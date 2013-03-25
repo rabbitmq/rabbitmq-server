@@ -30,7 +30,8 @@
          get_overview/2, get_overview/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, handle_pre_hibernate/1, format_message_queue/2]).
+         code_change/3, handle_pre_hibernate/1, prioritise_cast/3,
+         format_message_queue/2]).
 
 %% For testing
 -export([override_lookups/1, reset_lookups/0]).
@@ -153,6 +154,19 @@
 -define(GC_INTERVAL, 5000).
 -define(GC_MIN_ROWS, 100).
 -define(GC_MIN_RATIO, 0.01).
+
+-define(DROP_LENGTH, 1000).
+
+prioritise_cast({event, #event{type  = Type,
+                               props = Props}}, Len, _State)
+  when (Type =:= channel_stats orelse
+        Type =:= queue_stats) andalso Len > ?DROP_LENGTH ->
+    case pget(idle_since, Props) of
+        unknown -> drop;
+        _       -> 0
+    end;
+prioritise_cast(_Msg, _Len, _State) ->
+    0.
 
 %%----------------------------------------------------------------------------
 %% API
