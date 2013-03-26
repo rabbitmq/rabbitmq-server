@@ -21,7 +21,7 @@
 -include_lib("kernel/include/inet.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([init/2]).
+-export([init/2, mainloop/2]).
 
 %% TODO which of these are needed?
 -export([shutdown/2]).
