@@ -281,8 +281,10 @@ handle_info({mnesia_system_event,
     {noreply, State2#state{partitions = Partitions1}};
 
 handle_info({autoheal_request_winner, Node},
-            State = #state{autoheal = {wait_for_winner_reqs,[Node], Notify}}) ->
+            State = #state{autoheal   = {wait_for_winner_reqs,[Node], Notify},
+                           partitions = Partitions}) ->
     %% TODO actually do something sensible to figure out who the winner is
+    AllPartitions = all_partitions(Partitions),
     Winner = self(),
     rabbit_log:info("Autoheal: winner is ~p~n", [Winner]),
     [{?MODULE, N} ! {autoheal_winner, Winner} || N <- Notify],
@@ -452,6 +454,24 @@ autoheal_restart(Winner) ->
               erlang:demonitor(MRef, [flush]),
               rabbit:start()
       end).
+
+%% We have our local understanding of what partitions exist; but we
+%% only know which nodes we have been partitioned from, not which
+%% nodes are partitioned from each other.
+%%
+%% Note that here we assume that partition information is
+%% consistent. If it isn't, what can we do?
+all_partitions(PartitionedWith) ->
+    All = rabbit_mnesia:cluster_nodes(all),
+    OurPartition = All -- PartitionedWith,
+    all_partitions([OurPartition], PartitionedWith, All).
+
+all_partitions(AllPartitions, [], _) ->
+    AllPartitions;
+all_partitions(AllPartitions, [One | _] = ToDo, All) ->
+    {One, PartitionedFrom} = rpc:call(One, rabbit_node_monitor, partitions, []),
+    Partition = All -- PartitionedFrom,
+    all_partitions([Partition | AllPartitions], ToDo -- Partition, All).
 
 handle_dead_rabbit_state(State = #state{partitions = Partitions,
                                         autoheal   = Autoheal}) ->
