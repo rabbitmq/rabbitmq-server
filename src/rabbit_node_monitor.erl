@@ -284,6 +284,7 @@ handle_info({autoheal_request_winner, Node},
             State = #state{autoheal = {wait_for_winner_reqs,[Node], Notify}}) ->
     %% TODO actually do something sensible to figure out who the winner is
     Winner = self(),
+    rabbit_log:info("Autoheal: winner is ~p~n", [Winner]),
     [{?MODULE, N} ! {autoheal_winner, Winner} || N <- Notify],
     {noreply, State#state{autoheal = wait_for_winner}};
 
@@ -298,10 +299,15 @@ handle_info({autoheal_winner, Winner},
     Node = node(Winner),
     case lists:member(Node, Partitions) of
         false -> case node() of
-                     Node -> {noreply,
+                     Node -> rabbit_log:info(
+                               "Autoheal: waiting for nodes to stop: ~p~n",
+                               [Partitions]),
+                             {noreply,
                               State#state{autoheal = {wait_for, Partitions,
                                                       Partitions}}};
-                     _    -> {noreply, State#state{autoheal = not_healing}}
+                     _    -> rabbit_log:info(
+                               "Autoheal: nothing to do~n", []),
+                             {noreply, State#state{autoheal = not_healing}}
                  end;
         true  -> autoheal_restart(Winner),
                  {noreply, State}
@@ -313,6 +319,7 @@ handle_info({autoheal_winner, _Winner}, State) ->
 
 handle_info({autoheal_node_stopped, Node},
             State = #state{autoheal = {wait_for, [Node], Notify}}) ->
+    rabbit_log:info("Autoheal: final node has stopped, starting...~n",[]),
     [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
     {noreply, State#state{autoheal = not_healing}};
 
@@ -423,6 +430,7 @@ wait_for_cluster_recovery(Nodes) ->
 %% until it has seen a request from every node.
 autoheal(State) ->
     [Leader | _] = All = lists:usort(rabbit_mnesia:cluster_nodes(all)),
+    rabbit_log:info("Autoheal: leader is ~p~n", [Leader]),
     {?MODULE, Leader} ! {autoheal_request_winner, node()},
     State#state{autoheal = case node() of
                                Leader -> {wait_for_winner_reqs, All, All};
@@ -431,7 +439,7 @@ autoheal(State) ->
 
 autoheal_restart(Winner) ->
     rabbit_log:warning(
-      "Cluster partition healed; we were selected to restart~n", []),
+      "Autoheal: we were selected to restart; winner is ~p~n", [node(Winner)]),
     run_outside_applications(
       fun () ->
               MRef = erlang:monitor(process, Winner),
