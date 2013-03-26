@@ -739,8 +739,12 @@ function filter_ui(items) {
         fmt_escape_html(current_filter) + '"/></td></tr></table>' +
         '<div class="updatable">';
 
-    var selected = current_filter == '' ? (items.length + ' items') :
-        (items.length + ' of ' + total + ' items selected');
+    function items_desc(l) {
+        return l == 1 ? (l + ' item') : (l + ' items');
+    }
+
+    var selected = current_filter == '' ? (items_desc(items.length)) :
+        (items.length + ' of ' + items_desc(total) + ' selected');
 
     if (items.length > maximum) {
         res += '<p class="filter-warning">' + selected +
