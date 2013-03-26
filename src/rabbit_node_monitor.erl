@@ -283,9 +283,7 @@ handle_info({mnesia_system_event,
 handle_info({autoheal_request_winner, Node},
             State = #state{autoheal   = {wait_for_winner_reqs,[Node], Notify},
                            partitions = Partitions}) ->
-    %% TODO actually do something sensible to figure out who the winner is
-    AllPartitions = all_partitions(Partitions),
-    Winner = self(),
+    Winner = autoheal_select_winner(all_partitions(Partitions)),
     rabbit_log:info("Autoheal: winner is ~p~n", [Winner]),
     [{?MODULE, N} ! {autoheal_winner, Winner} || N <- Notify],
     {noreply, State#state{autoheal = wait_for_winner}};
@@ -298,18 +296,17 @@ handle_info({autoheal_request_winner, Node},
 handle_info({autoheal_winner, Winner},
             State = #state{autoheal   = wait_for_winner,
                            partitions = Partitions}) ->
-    Node = node(Winner),
-    case lists:member(Node, Partitions) of
+    case lists:member(Winner, Partitions) of
         false -> case node() of
-                     Node -> rabbit_log:info(
-                               "Autoheal: waiting for nodes to stop: ~p~n",
-                               [Partitions]),
-                             {noreply,
-                              State#state{autoheal = {wait_for, Partitions,
-                                                      Partitions}}};
-                     _    -> rabbit_log:info(
-                               "Autoheal: nothing to do~n", []),
-                             {noreply, State#state{autoheal = not_healing}}
+                     Winner -> rabbit_log:info(
+                                 "Autoheal: waiting for nodes to stop: ~p~n",
+                                 [Partitions]),
+                               {noreply,
+                                State#state{autoheal = {wait_for, Partitions,
+                                                        Partitions}}};
+                     _      -> rabbit_log:info(
+                                 "Autoheal: nothing to do~n", []),
+                               {noreply, State#state{autoheal = not_healing}}
                  end;
         true  -> autoheal_restart(Winner),
                  {noreply, State}
@@ -439,17 +436,29 @@ autoheal(State) ->
                                _      -> wait_for_winner
                            end}.
 
+autoheal_select_winner(AllPartitions) ->
+    {_, [Winner | _]} = hd(lists:sort(
+                             [{autoheal_value(P), P} || P <- AllPartitions])),
+    Winner.
+
+autoheal_value(Partition) ->
+    Connections = [Res || Node <- Partition,
+                          Res <- [rpc:call(Node, rabbit_networking,
+                                           connections_local, [])],
+                          is_list(Res)],
+    {length(lists:append(Connections)), length(Partition)}.
+
 autoheal_restart(Winner) ->
     rabbit_log:warning(
-      "Autoheal: we were selected to restart; winner is ~p~n", [node(Winner)]),
+      "Autoheal: we were selected to restart; winner is ~p~n", [Winner]),
     run_outside_applications(
       fun () ->
-              MRef = erlang:monitor(process, Winner),
+              MRef = erlang:monitor(process, {?MODULE, Winner}),
               rabbit:stop(),
-              Winner ! {autoheal_node_stopped, node()},
+              {?MODULE, Winner} ! {autoheal_node_stopped, node()},
               receive
-                  {'DOWN', MRef, process, Winner, _Reason} -> ok;
-                  autoheal_safe_to_start                   -> ok
+                  {'DOWN', MRef, process, {?MODULE, Winner}, _Reason} -> ok;
+                  autoheal_safe_to_start                              -> ok
               end,
               erlang:demonitor(MRef, [flush]),
               rabbit:start()
