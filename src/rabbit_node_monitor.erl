@@ -285,7 +285,8 @@ handle_info({autoheal_request_winner, Node},
             State = #state{autoheal   = {wait_for_winner_reqs,[Node], Notify},
                            partitions = Partitions}) ->
     Winner = autoheal_select_winner(all_partitions(Partitions)),
-    rabbit_log:info("Autoheal request winner from ~p: winner is ~p~n", [Node, Winner]),
+    rabbit_log:info("Autoheal request winner from ~p: winner is ~p~n",
+                    [Node, Winner]),
     [{?MODULE, N} ! {autoheal_winner, Winner} || N <- Notify],
     {noreply, State#state{autoheal = wait_for_winner}};
 
