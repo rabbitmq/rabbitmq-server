@@ -348,6 +348,9 @@ alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
 
 alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
 
+alive_rabbit_nodes() ->
+    [N || N <- alive_nodes(), rabbit_nodes:is_process_running(N, rabbit)].
+
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
                        []),
@@ -376,7 +379,7 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
     %% that we do not attempt to deal with individual (other) partitions
     %% going away. It's only safe to forget anything about partitions when
     %% there are no partitions.
-    Partitions1 = case Partitions -- (Partitions -- alive_nodes()) of
+    Partitions1 = case Partitions -- (Partitions -- alive_rabbit_nodes()) of
                       [] -> [];
                       _  -> Partitions
                   end,
