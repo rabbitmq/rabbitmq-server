@@ -32,8 +32,9 @@
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
+-define(RABBIT_DOWN_PING_INTERVAL, 1000).
 
--record(state, {monitors, partitions, subscribers, autoheal}).
+-record(state, {monitors, partitions, subscribers, down_ping_timer, autoheal}).
 
 %%----------------------------------------------------------------------------
 
@@ -270,9 +271,9 @@ handle_info({mnesia_system_event,
              end,
     ok = handle_live_rabbit(Node),
     State2 = case application:get_env(rabbit, cluster_partition_handling) of
-                 {ok, autoheal} -> case ratio() of
-                                       1.0 -> autoheal(State1);
-                                       _   -> State1
+                 {ok, autoheal} -> case all_nodes_up() of
+                                       true  -> autoheal(State1);
+                                       false -> State1
                                    end;
                  _              -> State1
              end,
@@ -284,12 +285,13 @@ handle_info({autoheal_request_winner, Node},
             State = #state{autoheal   = {wait_for_winner_reqs,[Node], Notify},
                            partitions = Partitions}) ->
     Winner = autoheal_select_winner(all_partitions(Partitions)),
-    rabbit_log:info("Autoheal: winner is ~p~n", [Winner]),
+    rabbit_log:info("Autoheal request winner from ~p: winner is ~p~n", [Node, Winner]),
     [{?MODULE, N} ! {autoheal_winner, Winner} || N <- Notify],
     {noreply, State#state{autoheal = wait_for_winner}};
 
 handle_info({autoheal_request_winner, Node},
             State = #state{autoheal = {wait_for_winner_reqs, Nodes, Notify}}) ->
+    rabbit_log:info("Autoheal request winner from ~p~n", [Node]),
     {noreply, State#state{autoheal = {wait_for_winner_reqs,
                                       Nodes -- [Node], Notify}}};
 
@@ -330,10 +332,34 @@ handle_info({autoheal_node_stopped, _Node}, State) ->
     %% ignore, we already cancelled the autoheal process
     {noreply, State};
 
+handle_info(ping_nodes, State) ->
+    %% We ping nodes when some are down to ensure that we find out
+    %% about healed partitions quickly. We ping all nodes rather than
+    %% just the ones we know are down for simplicity; it's not expensive
+    %% to ping the nodes that are up, after all.
+    State1 = State#state{down_ping_timer = undefined},
+    Self = self(),
+    %% all_nodes_up() both pings all the nodes and tells us if we need to again.
+    %%
+    %% We ping in a separate process since in a partition it might
+    %% take some noticeable length of time and we don't want to block
+    %% the node monitor for that long.
+    spawn_link(fun () ->
+                       case all_nodes_up() of
+                           true  -> ok;
+                           false -> Self ! ping_again
+                       end
+               end),
+    {noreply, State1};
+
+handle_info(ping_again, State) ->
+    {noreply, ensure_ping_timer(State)};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    rabbit_misc:stop_timer(State, #state.down_ping_timer),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -368,15 +394,20 @@ handle_dead_rabbit(Node) ->
     end,
     ok.
 
-majority() -> ratio() > 0.5.
-ratio()    -> length(alive_nodes()) / length(rabbit_mnesia:cluster_nodes(all)).
+majority() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
+
+all_nodes_up() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) =:= length(Nodes).
 
 %% mnesia:system_info(db_nodes) (and hence
 %% rabbit_mnesia:cluster_nodes(running)) does not give reliable results
 %% when partitioned.
-alive_nodes() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    [N || N <- Nodes, pong =:= net_adm:ping(N)].
+alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
+
+alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
 
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
@@ -401,7 +432,7 @@ run_outside_applications(Fun) ->
 wait_for_cluster_recovery(Nodes) ->
     case majority() of
         true  -> rabbit:start();
-        false -> timer:sleep(1000),
+        false -> timer:sleep(?RABBIT_DOWN_PING_INTERVAL),
                  wait_for_cluster_recovery(Nodes)
     end.
 
@@ -427,14 +458,16 @@ wait_for_cluster_recovery(Nodes) ->
 %% the leader may end up restarting, we also make sure that it does
 %% not announce its decision (and thus cue other nodes to restart)
 %% until it has seen a request from every node.
-autoheal(State) ->
+autoheal(State = #state{autoheal = not_healing}) ->
     [Leader | _] = All = lists:usort(rabbit_mnesia:cluster_nodes(all)),
     rabbit_log:info("Autoheal: leader is ~p~n", [Leader]),
     {?MODULE, Leader} ! {autoheal_request_winner, node()},
     State#state{autoheal = case node() of
                                Leader -> {wait_for_winner_reqs, All, All};
                                _      -> wait_for_winner
-                           end}.
+                           end};
+autoheal(State) ->
+    State.
 
 autoheal_select_winner(AllPartitions) ->
     {_, [Winner | _]} = hd(lists:sort(
@@ -493,11 +526,16 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions,
                       [] -> [];
                       _  -> Partitions
                   end,
-    State#state{partitions = Partitions1,
-                autoheal   = case Autoheal of
-                                 {wait_for, _Nodes, _Notify} -> Autoheal;
-                                 _                           -> not_healing
-                             end}.
+    ensure_ping_timer(
+      State#state{partitions = Partitions1,
+                  autoheal   = case Autoheal of
+                                   {wait_for, _Nodes, _Notify} -> Autoheal;
+                                   _                           -> not_healing
+                               end}).
+
+ensure_ping_timer(State) ->
+    rabbit_misc:ensure_timer(
+      State, #state.down_ping_timer, ?RABBIT_DOWN_PING_INTERVAL, ping_nodes).
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),
