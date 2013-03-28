@@ -296,7 +296,8 @@ exchange_decorators(Table) ->
               {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches, Policy,
                 {[], []}}
       end,
-      [name, type, durable, auto_delete, internal, arguments, scratches, policy, decorators]).
+      [name, type, durable, auto_delete, internal, arguments, scratches, policy,
+       decorators]).
 
 
 %%--------------------------------------------------------------------
