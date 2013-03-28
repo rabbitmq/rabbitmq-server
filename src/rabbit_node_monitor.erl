@@ -252,6 +252,7 @@ handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
     ok = handle_dead_rabbit(Node),
     [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
     {noreply, handle_dead_rabbit_state(
+                Node,
                 State#state{monitors = pmon:erase({rabbit, Node}, Monitors)})};
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
@@ -282,11 +283,40 @@ handle_info({mnesia_system_event,
     {noreply, State2#state{partitions = Partitions1}};
 
 handle_info({autoheal_request_winner, Node},
-            State = #state{autoheal   = {wait_for_winner_reqs,[Node], Notify},
+            State = #state{autoheal   = not_healing,
                            partitions = Partitions}) ->
-    Winner = autoheal_select_winner(all_partitions(Partitions)),
-    rabbit_log:info("Autoheal request winner from ~p: winner is ~p~n",
-                    [Node, Winner]),
+    case all_nodes_up() of
+        false -> {noreply, State};
+        true  -> Nodes = rabbit_mnesia:cluster_nodes(all),
+                 Partitioned =
+                     [N || N <- Nodes -- [node()],
+                           P <- [begin
+                                     {_, R} = rpc:call(N, rabbit_node_monitor,
+                                                       partitions, []),
+                                     R
+                                 end],
+                           is_list(P) andalso length(P) > 0],
+                 Partitioned1 = case Partitions of
+                                    [] -> Partitioned;
+                                    _  -> [node() | Partitioned]
+                                end,
+                 rabbit_log:info(
+                   "Autoheal leader start; partitioned nodes are ~p~n",
+                   [Partitioned1]),
+                 Autoheal = {wait_for_winner_reqs, Partitioned1, Partitioned1},
+                 handle_info({autoheal_request_winner, Node},
+                             State#state{autoheal = Autoheal})
+    end;
+
+handle_info({autoheal_request_winner, Node},
+            State = #state{autoheal   = {wait_for_winner_reqs, [Node], Notify},
+                           partitions = Partitions}) ->
+    AllPartitions = all_partitions(Partitions),
+    io:format("all partitions: ~p~n", [AllPartitions]),
+    Winner = autoheal_select_winner(AllPartitions),
+    rabbit_log:info("Autoheal request winner from ~p~n"
+                    "  Partitions were determined to be ~p~n"
+                    "  Winner is ~p~n", [Node, AllPartitions, Winner]),
     [{?MODULE, N} ! {autoheal_winner, Winner} || N <- Notify],
     {noreply, State#state{autoheal = wait_for_winner}};
 
@@ -299,6 +329,7 @@ handle_info({autoheal_request_winner, Node},
 handle_info({autoheal_winner, Winner},
             State = #state{autoheal   = wait_for_winner,
                            partitions = Partitions}) ->
+    io:format("got winner ~p~n", [[Winner, Partitions]]),
     case lists:member(Winner, Partitions) of
         false -> case node() of
                      Winner -> rabbit_log:info(
@@ -461,13 +492,14 @@ wait_for_cluster_recovery(Nodes) ->
 %% The winner and the leader are not necessarily the same node! Since
 %% the leader may end up restarting, we also make sure that it does
 %% not announce its decision (and thus cue other nodes to restart)
-%% until it has seen a request from every node.
+%% until it has seen a request from every node that has experienced a
+%% partition.
 autoheal(State = #state{autoheal = not_healing}) ->
-    [Leader | _] = All = lists:usort(rabbit_mnesia:cluster_nodes(all)),
+    [Leader | _] = lists:usort(rabbit_mnesia:cluster_nodes(all)),
     rabbit_log:info("Autoheal: leader is ~p~n", [Leader]),
     {?MODULE, Leader} ! {autoheal_request_winner, node()},
     State#state{autoheal = case node() of
-                               Leader -> {wait_for_winner_reqs, All, All};
+                               Leader -> not_healing;
                                _      -> wait_for_winner
                            end};
 autoheal(State) ->
@@ -506,7 +538,7 @@ autoheal_restart(Winner) ->
 %% nodes are partitioned from each other.
 %%
 %% Note that here we assume that partition information is
-%% consistent. If it isn't, what can we do?
+%% consistent - which it isn't. TODO fix this.
 all_partitions(PartitionedWith) ->
     All = rabbit_mnesia:cluster_nodes(all),
     OurPartition = All -- PartitionedWith,
@@ -519,8 +551,8 @@ all_partitions(AllPartitions, [One | _] = ToDo, All) ->
     Partition = All -- PartitionedFrom,
     all_partitions([Partition | AllPartitions], ToDo -- Partition, All).
 
-handle_dead_rabbit_state(State = #state{partitions = Partitions,
-                                        autoheal   = Autoheal}) ->
+handle_dead_rabbit_state(Node, State = #state{partitions = Partitions,
+                                              autoheal   = Autoheal}) ->
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
     %% that we do not attempt to deal with individual (other) partitions
@@ -530,12 +562,18 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions,
                       [] -> [];
                       _  -> Partitions
                   end,
-    ensure_ping_timer(
-      State#state{partitions = Partitions1,
-                  autoheal   = case Autoheal of
-                                   {wait_for, _Nodes, _Notify} -> Autoheal;
-                                   _                           -> not_healing
-                               end}).
+    Autoheal1 = case Autoheal of
+                    {wait_for, _Nodes, _Notify} ->
+                        Autoheal;
+                    not_healing ->
+                        not_healing;
+                    _ ->
+                        rabbit_log:info(
+                          "Autoheal: aborting - ~p went down~n", [Node]),
+                        not_healing
+                end,
+    ensure_ping_timer(State#state{partitions = Partitions1,
+                                  autoheal   = Autoheal1}).
 
 ensure_ping_timer(State) ->
     rabbit_misc:ensure_timer(
