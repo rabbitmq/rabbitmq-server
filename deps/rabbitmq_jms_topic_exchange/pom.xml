@@ -2,7 +2,6 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.rabbitmq.jms</groupId>
   <artifactId>rjms-topic-selector</artifactId>
 
   <name>rjms-topic</name>
@@ -10,27 +9,17 @@
 
   <packaging>pom</packaging>
 
-  <version>1.1-SNAPSHOT</version>
+  <parent>
+    <groupId>com.rabbitmq.jms</groupId>
+    <artifactId>rabbitmq-jms-parent</artifactId>
+    <version>1.1-SNAPSHOT</version>
+  </parent>
 
   <properties>
-
     <maven.artefact>${project.artifactId}-${project.version}.ez</maven.artefact>
-    <!-- plugin versions -->
-    <build-helper-maven-plugin.version>1.7</build-helper-maven-plugin.version>
-    <exec-maven-plugin.version>1.2.1</exec-maven-plugin.version>
-
-    <!-- overridable parameter -->
-    <rabbitmq.version>3.0.4</rabbitmq.version>
   </properties>
 
   <build>
-    <extensions>
-      <extension>
-        <groupId>org.springframework.build</groupId>
-        <artifactId>aws-maven</artifactId>
-        <version>4.4.0.RELEASE</version>
-      </extension>
-    </extensions>
 
     <plugins>
 
@@ -108,39 +97,7 @@
 
     </plugins>
 
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>exec-maven-plugin</artifactId>
-          <version>${exec-maven-plugin.version}</version>
-        </plugin>
-
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>build-helper-maven-plugin</artifactId>
-          <version>${build-helper-maven-plugin.version}</version>
-        </plugin>
-
-      </plugins>
-    </pluginManagement>
-
   </build>
-
-  <pluginRepositories>
-    <pluginRepository>
-      <id>unto.net</id>
-      <url>http://repository.unto.net/maven/</url>
-      <releases>
-        <updatePolicy>daily</updatePolicy>
-        <checksumPolicy>warn</checksumPolicy>
-      </releases>
-      <snapshots>
-        <updatePolicy>daily</updatePolicy>
-        <checksumPolicy>warn</checksumPolicy>
-      </snapshots>
-    </pluginRepository>
-  </pluginRepositories>
 
   <repositories>
     <repository>
@@ -148,19 +105,16 @@
       <name>Jboss Maven 2 Repository</name>
       <url>http://repository.jboss.org/nexus/content/groups/public-jboss/</url>
     </repository>
-  </repositories>
-
-  <distributionManagement>
     <repository>
       <id>vmware-release</id>
-      <name>VMware Release Repository</name>
-      <url>s3://private.maven.vmware.com/release</url>
+      <name>VMware Release repository</name>
+      <url>http://s3.amazonaws.com/private.maven.vmware.com/release</url>
     </repository>
-    <snapshotRepository>
+    <repository>
       <id>vmware-snapshot</id>
-      <name>VMware Snapshot Repository</name>
-      <url>s3://private.maven.vmware.com/snapshot</url>
-    </snapshotRepository>
-  </distributionManagement>
+      <name>VMware Snapshot repository</name>
+      <url>http://s3.amazonaws.com/private.maven.vmware.com/snapshot</url>
+    </repository>
+  </repositories>
 
 </project>
