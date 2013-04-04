@@ -173,7 +173,7 @@ stop(Reason, State = #state{}) ->
 stop(Reason, State = #state{ proc_state = PState }) ->
     % todo: maybe clean session
     ok = rabbit_mqtt_collector:unregister(
-           rabbit_mqtt_processor:info(client_id, PState)),
+           rabbit_mqtt_processor:info(client_info, PState)),
     {stop, Reason, close_connection(State)}.
 
 close_connection(State = #state{ proc_state = ProcState} ) ->
