@@ -33,6 +33,36 @@ non-fatal byte-counts in frames and inaccuracies in flow-control from peers.
 
     {protocol_strict_mode, false}
 
+# Clients we have tested
+
+The current field of AMQP 1.0 clients is somewhat limited. Therefore
+we have not achieved as much interoperability as we might like.
+
+We have tested against:
+
+ * SwiftMQ Java client (closed source) [1]
+   We have done most of our testing against this client and things seem
+   to work.
+
+ * QPid / Proton C client [2]
+   We have successfully tested against the "proton" command line tool
+   this client ships with.
+
+ * QPid / Proton Java client [2]
+   We have not been able to get this client to get as far as opening a
+   network connection (tested against 0.2 and 0.4).
+
+ * Windows Azure Service Bus [3]
+   It seems that the URI scheme used by this client assumes that it is
+   connecting to Azure; it does not seem to be possible to get it to
+   connect to another server.
+
+[1] http://www.swiftmq.com/products/router/swiftlets/sys_amqp/client/index.html
+[2] http://qpid.apache.org/proton/
+[3] http://www.windowsazure.com/en-us/develop/net/how-to-guides/service-bus-amqp/
+
+As new clients appear we will of course work on interoperability with them.
+
 # Interoperability with AMQP 0-9-1
 
 ## Message payloads
