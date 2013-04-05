@@ -1365,7 +1365,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     case handle_ch_down(DownPid, State) of
         {ok, State1}   -> noreply(State1);
-        {stop, State1} -> {stop, normal, State1}
+        {stop, State1} -> stop(State1)
     end;
 
 handle_info(update_ram_duration, State = #q{backing_queue = BQ,
