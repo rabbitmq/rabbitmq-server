@@ -18,7 +18,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/1, start_link/2]).
+-export([start_link/1, start_link/2, start_link/3]).
 
 -export([init/1]).
 
@@ -43,6 +43,12 @@ start_link(Callback) ->
 start_link(SupName, Callback) ->
     supervisor2:start_link(SupName, ?MODULE, Callback).
 
+start_link(SupName, Callback, worker) ->
+    supervisor2:start_link(SupName, ?MODULE, {Callback, worker}).
+
 init({M,F,A}) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
-          [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}}.
+          [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}};
+init({{M,F,A}, worker}) ->
+    {ok, {{simple_one_for_one_terminate, 0, 1},
+          [{client, {M,F,A}, temporary, ?MAX_WAIT, worker, [M]}]}}.
