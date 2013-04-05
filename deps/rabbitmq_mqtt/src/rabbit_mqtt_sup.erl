@@ -41,7 +41,7 @@ init([{Listeners, SslListeners}]) ->
               end,
     {ok, {{one_for_all, 10, 10},
           [{rabbit_mqtt_client_sup,
-            {rabbit_client_sup, start_link,
+            {rabbit_client_sup, start_link_worker,
              [{local, rabbit_mqtt_client_sup},
               {rabbit_mqtt_reader, start_link, []}]},
             transient, infinity, supervisor, [rabbit_client_sup]} |
