@@ -51,6 +51,9 @@
 
 -define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB
 
+ %% i.e. two pairs, so GC does not go idle when busy
+-define(MAXIMUM_SIMULTANEOUS_GC_FILES, 4).
+
 %%----------------------------------------------------------------------------
 
 -record(msstate,
@@ -1731,10 +1734,12 @@ maybe_compact(State = #msstate { sum_valid_data        = SumValid,
        (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     %% TODO: the algorithm here is sub-optimal - it may result in a
     %% complete traversal of FileSummaryEts.
-    case ets:first(FileSummaryEts) of
-        '$end_of_table' ->
+    First = ets:first(FileSummaryEts),
+    case First =:= '$end_of_table' orelse
+        orddict:size(Pending) >= ?MAXIMUM_SIMULTANEOUS_GC_FILES of
+        true ->
             State;
-        First ->
+        false ->
             case find_files_to_combine(FileSummaryEts, FileSizeLimit,
                                        ets:lookup(FileSummaryEts, First)) of
                 not_found ->
