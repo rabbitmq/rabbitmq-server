@@ -40,7 +40,7 @@ we have not achieved as much interoperability as we might like.
 
 We have tested against:
 
- * SwiftMQ Java client (closed source) [1]
+ * SwiftMQ Java client [1]
    We have done most of our testing against this client and things seem
    to work.
 
@@ -58,7 +58,9 @@ We have tested against:
    connect to another server.
 
 [1] http://www.swiftmq.com/products/router/swiftlets/sys_amqp/client/index.html
+
 [2] http://qpid.apache.org/proton/
+
 [3] http://www.windowsazure.com/en-us/develop/net/how-to-guides/service-bus-amqp/
 
 As new clients appear we will of course work on interoperability with them.
