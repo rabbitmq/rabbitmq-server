@@ -312,7 +312,6 @@ handle_info({autoheal_request_winner, Node},
             State = #state{autoheal   = {wait_for_winner_reqs, [Node], Notify},
                            partitions = Partitions}) ->
     AllPartitions = all_partitions(Partitions),
-    io:format("all partitions: ~p~n", [AllPartitions]),
     Winner = autoheal_select_winner(AllPartitions),
     rabbit_log:info("Autoheal request winner from ~p~n"
                     "  Partitions were determined to be ~p~n"
@@ -329,7 +328,6 @@ handle_info({autoheal_request_winner, Node},
 handle_info({autoheal_winner, Winner},
             State = #state{autoheal   = wait_for_winner,
                            partitions = Partitions}) ->
-    io:format("got winner ~p~n", [[Winner, Partitions]]),
     case lists:member(Winner, Partitions) of
         false -> case node() of
                      Winner -> rabbit_log:info(
