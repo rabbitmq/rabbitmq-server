@@ -506,8 +506,9 @@ autoheal(State) ->
     State.
 
 autoheal_select_winner(AllPartitions) ->
-    {_, [Winner | _]} = hd(lists:sort(
-                             [{autoheal_value(P), P} || P <- AllPartitions])),
+    {_, [Winner | _]} =
+        hd(lists:reverse(
+             lists:sort([{autoheal_value(P), P} || P <- AllPartitions]))),
     Winner.
 
 autoheal_value(Partition) ->
