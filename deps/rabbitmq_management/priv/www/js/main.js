@@ -491,15 +491,7 @@ function postprocess() {
     $('form.auto-submit select, form.auto-submit input').live('click', function(){
         $(this).parents('form').submit();
     });
-    $('#filter').die().live('keyup', function() {
-        current_filter = $(this).val();
-        var table = $(this).parents('table').first();
-        table.removeClass('filter-active');
-        if ($(this).val() != '') {
-            table.addClass('filter-active');
-        }
-        partial_update();
-    });
+    $('#filter').die().live('keyup', debounce(update_filter, 500));
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -562,6 +554,16 @@ function update_multifields() {
                                '_mfvalue" value=""/> ' + type_part + '</p>');
             }
         });
+}
+
+function update_filter() {
+    current_filter = $(this).val();
+    var table = $(this).parents('table').first();
+    table.removeClass('filter-active');
+    if ($(this).val() != '') {
+        table.addClass('filter-active');
+    }
+    partial_update();
 }
 
 function setup_visibility() {
@@ -1008,3 +1010,19 @@ function encode_utf8(str) {
         }
     });
 })(jQuery);
+
+function debounce(f, delay) {
+    var timeout = null;
+
+    return function() {
+        var obj = this;
+        var args = arguments;
+
+        function delayed () {
+            f.apply(obj, args);
+            timeout = null;
+        }
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(delayed, delay);
+    }
+}
