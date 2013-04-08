@@ -537,20 +537,26 @@ autoheal_restart(Winner) ->
 %% We have our local understanding of what partitions exist; but we
 %% only know which nodes we have been partitioned from, not which
 %% nodes are partitioned from each other.
-%%
-%% Note that here we assume that partition information is
-%% consistent - which it isn't. TODO fix this.
 all_partitions(PartitionedWith) ->
-    All = rabbit_mnesia:cluster_nodes(all),
-    OurPartition = All -- PartitionedWith,
-    all_partitions([OurPartition], PartitionedWith, All).
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Partitions = [{node(), PartitionedWith} |
+                  [rpc:call(Node, rabbit_node_monitor, partitions, [])
+                   || Node <- Nodes -- [node()]]],
+    all_partitions(Partitions, [Nodes]).
 
-all_partitions(AllPartitions, [], _) ->
-    AllPartitions;
-all_partitions(AllPartitions, [One | _] = ToDo, All) ->
-    {One, PartitionedFrom} = rpc:call(One, rabbit_node_monitor, partitions, []),
-    Partition = All -- PartitionedFrom,
-    all_partitions([Partition | AllPartitions], ToDo -- Partition, All).
+all_partitions([], Partitions) ->
+    Partitions;
+all_partitions([{Node, CantSee} | Rest], Partitions) ->
+    {[Containing], Others} =
+        lists:partition(fun (Part) -> lists:member(Node, Part) end, Partitions),
+    A = Containing -- CantSee,
+    B = Containing -- A,
+    Partitions1 = case {A, B} of
+                      {[], _}  -> Partitions;
+                      {_,  []} -> Partitions;
+                      _        -> [A, B | Others]
+                  end,
+    all_partitions(Rest, Partitions1).
 
 handle_dead_rabbit_state(Node, State = #state{partitions = Partitions,
                                               autoheal   = Autoheal}) ->
