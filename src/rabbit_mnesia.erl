@@ -740,6 +740,7 @@ check_consistency(OTP, Rabbit, Node, Status) ->
     rabbit_misc:sequence_error(
       [check_otp_consistency(OTP),
        check_rabbit_consistency(Rabbit),
+       check_beam_compatibility(Node),
        check_nodes_consistency(Node, Status)]).
 
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
@@ -779,6 +780,18 @@ check_rabbit_consistency(Remote) ->
     check_version_consistency(
       rabbit_misc:version(), Remote, "Rabbit",
       fun rabbit_misc:version_minor_equivalent/2).
+
+check_beam_compatibility(Node) ->
+    {delegate, RBin, _} =  rpc:call(Node, code, get_object_code, [delegate]),
+    {delegate, LBin, _} =  code:get_object_code(delegate),
+    {ok, {delegate, RHash}} = beam_lib:md5(RBin),
+    {ok, {delegate, LHash}} = beam_lib:md5(LBin),
+    case RHash == LHash of
+        true  -> ok;
+        false -> {error, {incompatible_bytecode,
+                          rabbit_misc:format("Incompatible Erlang bytecode on "
+                                             "node ~p", [Node])}}
+    end.
 
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
