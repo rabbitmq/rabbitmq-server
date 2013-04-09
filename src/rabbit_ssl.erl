@@ -165,12 +165,12 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
             {?'street-address'               , "STREET"}],
     case proplists:lookup(T, Fmts) of
         {_, Fmt} ->
-            io_lib:format(Fmt ++ "=~s", [FV]);
+            rabbit_misc:format(Fmt ++ "=~s", [FV]);
         none when is_tuple(T) ->
-            TypeL = [io_lib:format("~w", [X]) || X <- tuple_to_list(T)],
-            io_lib:format("~s:~s", [string:join(TypeL, "."), FV]);
+            TypeL = [rabbit_misc:format("~w", [X]) || X <- tuple_to_list(T)],
+            rabbit_misc:format("~s:~s", [string:join(TypeL, "."), FV]);
         none ->
-            io_lib:format("~p:~s", [T, FV])
+            rabbit_misc:format("~p:~s", [T, FV])
     end.
 
 %% Escape a string as per RFC4514.
@@ -204,14 +204,14 @@ format_asn1_value({ST, S}) when ST =:= teletexString; ST =:= printableString;
     format_directory_string(ST, S);
 format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                              Min1, Min2, S1, S2, $Z]}) ->
-    io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
-                  [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
+    rabbit_misc:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
+                       [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
 %% We appear to get an untagged value back for an ia5string
 %% (e.g. domainComponent).
 format_asn1_value(V) when is_list(V) ->
     V;
 format_asn1_value(V) ->
-    io_lib:format("~p", [V]).
+    rabbit_misc:format("~p", [V]).
 
 %% DirectoryString { INTEGER : maxSize } ::= CHOICE {
 %%     teletexString     TeletexString (SIZE (1..maxSize)),
