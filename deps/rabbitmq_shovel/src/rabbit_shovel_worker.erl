@@ -40,7 +40,8 @@ start_link(Name, Config) ->
 
 init([Name, Config]) ->
     gen_server2:cast(self(), init),
-    {ok, #state{name = Name, config = Config}}.
+    {ok, Shovel} = rabbit_shovel_config:parse(Name, Config),
+    {ok, #state{name = Name, config = Shovel}}.
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
