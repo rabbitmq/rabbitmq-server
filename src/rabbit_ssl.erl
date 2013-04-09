@@ -162,7 +162,8 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
             {?'id-at-pseudonym'              , "PSEUDONYM"},
             {?'id-domainComponent'           , "DC"},
             {?'id-emailAddress'              , "EMAILADDRESS"},
-            {?'street-address'               , "STREET"}],
+            {?'street-address'               , "STREET"},
+            {{0,9,2342,19200300,100,1,1}     , "UID"}],
     case proplists:lookup(T, Fmts) of
         {_, Fmt} ->
             rabbit_misc:format(Fmt ++ "=~s", [FV]);
