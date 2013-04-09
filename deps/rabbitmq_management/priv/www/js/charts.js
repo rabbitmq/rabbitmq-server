@@ -54,7 +54,7 @@ function render_chart(div) {
 
 function fmt_y_axis(fmt) {
     return function (val, axis) {
-        return fmt(val);
+        return fmt(val.toFixed(axis.tickDecimals));
     }
 }
 
