@@ -33,8 +33,8 @@
          code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(L(F, A), log("LDAP " ++ F, A, State)).
--define(L1(F, A), log("    LDAP " ++ F, A, State)).
+-define(L(F, A),  log("LDAP "         ++ F, A, State)).
+-define(L1(F, A), log("    LDAP "     ++ F, A, State)).
 -define(L2(F, A), log("        LDAP " ++ F, A, State)).
 
 -import(rabbit_misc, [pget/2]).
