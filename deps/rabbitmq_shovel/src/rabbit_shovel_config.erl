@@ -30,7 +30,7 @@ parse(ShovelName, Config) ->
                 fun parse_shovel_config_dict/1],
                {Config, Defaults})}
     catch throw:{error, Reason} ->
-            error({invalid_shovel_configuration, ShovelName, Reason})
+            {error, {invalid_shovel_configuration, ShovelName, Reason}}
     end.
 
 enrich_shovel_config({Config, Defaults}) ->
