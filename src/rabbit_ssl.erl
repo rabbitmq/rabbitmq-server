@@ -168,9 +168,9 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
             rabbit_misc:format(Fmt ++ "=~s", [FV]);
         none when is_tuple(T) ->
             TypeL = [rabbit_misc:format("~w", [X]) || X <- tuple_to_list(T)],
-            rabbit_misc:format("~s:~s", [string:join(TypeL, "."), FV]);
+            rabbit_misc:format("~s=~s", [string:join(TypeL, "."), FV]);
         none ->
-            rabbit_misc:format("~p:~s", [T, FV])
+            rabbit_misc:format("~p=~s", [T, FV])
     end.
 
 %% Escape a string as per RFC4514.
