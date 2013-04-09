@@ -209,25 +209,23 @@ with_ldap(Creds, Fun, State = #state{servers = Servers,
            end,
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
-            try
-                case Creds of
-                    anon ->
-                        ?L1("anonymous bind", [], State),
-                        Fun(LDAP);
-                    {UserDN, Password} ->
-                        case eldap:simple_bind(LDAP, UserDN, Password) of
-                            ok ->
-                                ?L1("bind succeeded: ~s", [UserDN], State),
-                                Fun(LDAP);
-                            {error, invalidCredentials} ->
-                                ?L1("bind returned \"invalid credentials\": ~s",
-                                   [UserDN], State),
-                                {refused, UserDN, []};
-                            {error, E} ->
-                                ?L1("bind error: ~s ~p", [UserDN, E], State),
-                                {error, E}
-                        end
-                end
+            try Creds of
+                anon ->
+                    ?L1("anonymous bind", [], State),
+                    Fun(LDAP);
+                {UserDN, Password} ->
+                    case eldap:simple_bind(LDAP, UserDN, Password) of
+                        ok ->
+                            ?L1("bind succeeded: ~s", [UserDN], State),
+                            Fun(LDAP);
+                        {error, invalidCredentials} ->
+                            ?L1("bind returned \"invalid credentials\": ~s",
+                                [UserDN], State),
+                            {refused, UserDN, []};
+                        {error, E} ->
+                            ?L1("bind error: ~s ~p", [UserDN, E], State),
+                            {error, E}
+                    end
             after
                 eldap:close(LDAP)
             end;
