@@ -235,6 +235,18 @@ function fmt_msgs_rate(num) {
     else              return '&nbsp;';
 }
 
+function fmt_rate_axis(num) {
+    return num + '/s';
+}
+
+function fmt_msgs_axis(num) {
+    return num;
+}
+
+function fmt_rate_bytes_axis(num) {
+    return fmt_bytes(num) + '/s';
+}
+
 function is_stat_empty(obj, name) {
     if (obj == undefined
         || obj[name] == undefined
@@ -619,22 +631,22 @@ function message_rates(id, stats) {
                  ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                  ['Get (noack)', 'get_no_ack'],
                  ['Return', 'return_unroutable']];
-    return rates_chart_or_text(id, stats, items, fmt_rate, fmt_rate_large, true, 'Message rates', 'message-rates');
+    return rates_chart_or_text(id, stats, items, fmt_rate, fmt_rate_large, fmt_rate_axis, true, 'Message rates', 'message-rates');
 }
 
 function queue_lengths(id, stats) {
     var items = [['Ready', 'messages_ready'],
                  ['Unacknowledged', 'messages_unacknowledged'],
                  ['Total', 'messages']];
-    return rates_chart_or_text(id, stats, items, fmt_msgs, fmt_msgs_large, false, 'Queued messages', 'queued-messages');
+    return rates_chart_or_text(id, stats, items, fmt_msgs, fmt_msgs_large, fmt_msgs_axis, false, 'Queued messages', 'queued-messages');
 }
 
 function data_rates(id, stats) {
     var items = [['From client', 'recv_oct'], ['To client', 'send_oct']];
-    return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_large, true, 'Data rates');
+    return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_large, fmt_rate_bytes_axis, true, 'Data rates');
 }
 
-function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, chart_rates,
+function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, chart_rates,
                              heading, heading_help) {
     var mode = get_pref('rate-mode-' + id);
     var range = get_pref('chart-range-' + id);
@@ -648,7 +660,7 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, chart_rates,
 
     if (keys(stats).length > 0) {
         if (mode == 'chart') {
-            res = rates_chart(id, items, stats, chart_fmt, chart_rates);
+            res = rates_chart(id, items, stats, chart_fmt, axis_fmt, chart_rates);
         }
         else {
             res = rates_text(items, stats, mode, text_fmt);
@@ -674,16 +686,18 @@ function prefix_title(mode, range) {
     }
 }
 
-function rates_chart(id, items, stats, rate_fmt, chart_rates) {
+function rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
     var size = get_pref('chart-size-' + id);
     var show = [];
     chart_data[id] = {};
+    chart_data[id]['data'] = {};
+    chart_data[id]['fmt'] = axis_fmt;
     for (var i in items) {
         var name = items[i][0];
         var key = items[i][1];
         var key_details = key + '_details';
         if (key_details in stats) {
-            chart_data[id][name] = stats[key_details];
+            chart_data[id]['data'][name] = stats[key_details];
             show.push([name, rate_fmt(stats, key)]);
         }
     }

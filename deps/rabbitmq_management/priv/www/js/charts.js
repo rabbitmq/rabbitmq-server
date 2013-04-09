@@ -20,9 +20,11 @@ function render_chart(div) {
 
     var out_data = [];
     var i = 0;
-    for (var name in chart_data[id]) {
-        var data = chart_data[id][name];
-        var samples = data.samples;
+    var data = chart_data[id]['data'];
+    var fmt = chart_data[id]['fmt'];
+    for (var name in data) {
+        var series = data[name];
+        var samples = series.samples;
         var d = [];
         for (var j = 1; j < samples.length; j++) {
             var x = samples[j].timestamp;
@@ -46,7 +48,14 @@ function render_chart(div) {
     }
     chart_data[id] = {};
 
+    chart_chrome.yaxis.tickFormatter = fmt_y_axis(fmt);
     $.plot(div, out_data, chart_chrome);
+}
+
+function fmt_y_axis(fmt) {
+    return function (val, axis) {
+        return fmt(val);
+    }
 }
 
 function update_rate_options(sammy) {
