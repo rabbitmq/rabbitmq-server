@@ -214,12 +214,12 @@ format_asn1_value(V) when is_list(V) ->
 format_asn1_value(V) when is_binary(V) ->
     %% OTP does not decode some values when combined with an unknown
     %% type. That's probably wrong, so as a last ditch effort let's
-    %% try manually decoding. This is certainly not guaranteed to work
-    %% in all cases, but if we have a printableString we're in luck.
-    %% 'CommonName' is somewhat arbitrary - we need a valid type, and
-    %% der_decode/2 will do some type checking against it.
+    %% try manually decoding. 'DirectoryString' is semi-arbitrary -
+    %% but it is the type which covers the various string types we
+    %% handle below.
     try
-        public_key:der_decode('CommonName', V)
+        {ST, S} = public_key:der_decode('DirectoryString', V),
+        format_directory_string(ST, S)
     catch _:_ ->
             rabbit_misc:format("~p", [V])
     end;
