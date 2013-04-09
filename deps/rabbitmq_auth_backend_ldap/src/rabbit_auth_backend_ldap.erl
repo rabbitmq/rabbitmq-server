@@ -33,9 +33,9 @@
          code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(L(F, A),  log("LDAP "         ++ F, A, State)).
--define(L1(F, A), log("    LDAP "     ++ F, A, State)).
--define(L2(F, A), log("        LDAP " ++ F, A, State)).
+-define(L(F, A, S),  log("LDAP "         ++ F, A, S)).
+-define(L1(F, A, S), log("    LDAP "     ++ F, A, S)).
+-define(L2(F, A, S), log("        LDAP " ++ F, A, S)).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -95,17 +95,17 @@ check_resource_access(User = #user{username = Username,
 %%--------------------------------------------------------------------
 
 evaluate(Query, Args, User, LDAP, State) ->
-    ?L1("evaluating query: ~p", [Query]),
+    ?L1("evaluating query: ~p", [Query], State),
     evaluate0(Query, Args, User, LDAP, State).
 
 evaluate0({constant, Bool}, _Args, _User, _LDAP, State) ->
-    ?L1("evaluated constant: ~p", [Bool]),
+    ?L1("evaluated constant: ~p", [Bool], State),
     Bool;
 
 evaluate0({for, [{Type, Value, SubQuery}|Rest]}, Args, User, LDAP, State) ->
     case pget(Type, Args) of
         undefined -> {error, {args_do_not_contain, Type, Args}};
-        Value     -> ?L1("selecting subquery ~s = ~s", [Type, Value]),
+        Value     -> ?L1("selecting subquery ~s = ~s", [Type, Value], State),
                      evaluate(SubQuery, Args, User, LDAP, State);
         _         -> evaluate0({for, Rest}, Args, User, LDAP, State)
     end;
@@ -118,7 +118,7 @@ evaluate0({exists, DNPattern}, Args, _User, LDAP, State) ->
     Filter = eldap:present("objectClass"),
     DN = fill(DNPattern, Args, State),
     R = object_exists(DN, Filter, LDAP),
-    ?L1("evaluated exists for \"~s\": ~p", [DN, R]),
+    ?L1("evaluated exists for \"~s\": ~p", [DN, R], State),
     R;
 
 evaluate0({in_group, DNPattern}, Args, User, LDAP, State) ->
@@ -129,7 +129,7 @@ evaluate0({in_group, DNPattern, Desc}, Args,
     Filter = eldap:equalityMatch(Desc, UserDN),
     DN = fill(DNPattern, Args, State),
     R = object_exists(DN, Filter, LDAP),
-    ?L1("evaluated in_group for \"~s\": ~p", [DN, R]),
+    ?L1("evaluated in_group for \"~s\": ~p", [DN, R], State),
     R;
 
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP, State) ->
@@ -139,19 +139,19 @@ evaluate0({match, StringQuery, REQuery}, Args, User, LDAP, State) ->
             {match, _} -> true;
             nomatch    -> false
         end,
-    ?L1("evaluated match \"~s\" against RE \"~s\": ~s", [String, RE, R]),
+    ?L1("evaluated match \"~s\" against RE \"~s\": ~s", [String, RE, R], State),
     R;
 
 evaluate0({string, StringPattern}, Args, _User, _LDAP, State) ->
     R = fill(StringPattern, Args, State),
-    ?L1("evaluated string for \"~s\"", [R]),
+    ?L1("evaluated string for \"~s\"", [R], State),
     R;
 
 evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP, State) ->
     DN = fill(DNPattern, Args, State),
     R = attribute(DN, AttributeName, LDAP),
     ?L1("evaluated attribute \"~s\" for \"~s\": ~p",
-        [AttributeName, DN, R]),
+        [AttributeName, DN, R], State),
     R;
 
 evaluate0(Q, Args, _User, _LDAP, _State) ->
@@ -212,19 +212,19 @@ with_ldap(Creds, Fun, State = #state{servers = Servers,
             try
                 case Creds of
                     anon ->
-                        ?L1("anonymous bind", []),
+                        ?L1("anonymous bind", [], State),
                         Fun(LDAP);
                     {UserDN, Password} ->
                         case eldap:simple_bind(LDAP, UserDN, Password) of
                             ok ->
-                                ?L1("bind succeeded: ~s", [UserDN]),
+                                ?L1("bind succeeded: ~s", [UserDN], State),
                                 Fun(LDAP);
                             {error, invalidCredentials} ->
                                 ?L1("bind returned \"invalid credentials\": ~s",
-                                   [UserDN]),
+                                   [UserDN], State),
                                 {refused, UserDN, []};
                             {error, E} ->
-                                ?L1("bind error: ~s ~p", [UserDN, E]),
+                                ?L1("bind error: ~s ~p", [UserDN, E], State),
                                 {error, E}
                         end
                 end
@@ -232,7 +232,7 @@ with_ldap(Creds, Fun, State = #state{servers = Servers,
                 eldap:close(LDAP)
             end;
         Error ->
-            ?L1("connect error: ~p", [Error]),
+            ?L1("connect error: ~p", [Error], State),
             Error
     end.
 
@@ -249,10 +249,11 @@ do_login(Username, Password, LDAP,
                                       password = Password}},
 
     TagRes = [begin
-                  ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
+                  ?L1("CHECK: does ~s have tag ~s?", [Username, Tag], State),
                   R = evaluate(Q, [{username, Username},
                                    {user_dn,  UserDN}], User, LDAP, State),
-                  ?L1("DECISION: does ~s have tag ~s? ~p", [Username, Tag, R]),
+                  ?L1("DECISION: does ~s have tag ~s? ~p",
+                      [Username, Tag, R], State),
                   {Tag, R}
               end || {Tag, Q} <- TagQueries],
     case [E || {_, E = {error, _}} <- TagRes] of
@@ -299,9 +300,9 @@ log(Fmt, Args, _State) ->
     rabbit_log:info(Fmt ++ "~n", Args).
 
 fill(Fmt, Args, State) ->
-    ?L2("filling template \"~s\" with~n            ~p", [Fmt, Args]),
+    ?L2("filling template \"~s\" with~n            ~p", [Fmt, Args], State),
     R = rabbit_auth_backend_ldap_util:fill(Fmt, Args),
-    ?L2("template result: \"~s\"", [R]),
+    ?L2("template result: \"~s\"", [R], State),
     R.
 
 log_result({ok, #user{}})   -> ok;
@@ -328,35 +329,36 @@ init([]) ->
 
 handle_call({login, Username}, _From, State) ->
     %% Without password, e.g. EXTERNAL
-    ?L("CHECK: passwordless login for ~s", [Username]),
+    ?L("CHECK: passwordless login for ~s", [Username], State),
     R = with_ldap(creds(none, State),
                   fun(LDAP) -> do_login(Username, none, LDAP, State) end,
                   State),
-    ?L("DECISION: passwordless login for ~s: ~p", [Username, log_result(R)]),
+    ?L("DECISION: passwordless login for ~s: ~p",
+       [Username, log_result(R)], State),
     {reply, R, State};
 
 handle_call({login, Username, Password}, _From, State) ->
-    ?L("CHECK: login for ~s", [Username]),
+    ?L("CHECK: login for ~s", [Username], State),
     R = with_ldap({fill_user_dn_pattern(Username, State), Password},
                   fun(LDAP) -> do_login(Username, Password, LDAP, State) end,
                   State),
-    ?L("DECISION: login for ~s: ~p", [Username, log_result(R)]),
+    ?L("DECISION: login for ~s: ~p", [Username, log_result(R)], State),
     {reply, R, State};
 
 handle_call({check_vhost, Args, User},
             _From, State = #state{vhost_access_query = Q}) ->
-    ?L("CHECK: ~s for ~s", [log_vhost(Args), log_user(User)]),
+    ?L("CHECK: ~s for ~s", [log_vhost(Args), log_user(User)], State),
     R = evaluate_ldap(Q, Args, User, State),
-    ?L("DECISION: ~s for ~s: ~p", [log_vhost(Args), log_user(User),
-                                   log_result(R)]),
+    ?L("DECISION: ~s for ~s: ~p",
+       [log_vhost(Args), log_user(User), log_result(R)], State),
     {reply, R, State};
 
 handle_call({check_resource, Args, User},
             _From, State = #state{resource_access_query = Q}) ->
-    ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
+    ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)], State),
     R = evaluate_ldap(Q, Args, User, State),
-    ?L("DECISION: ~s for ~s: ~p", [log_resource(Args), log_user(User),
-                                   log_result(R)]),
+    ?L("DECISION: ~s for ~s: ~p",
+       [log_resource(Args), log_user(User), log_result(R)], State),
     {reply, R, State};
 
 handle_call(_Req, _From, State) ->
