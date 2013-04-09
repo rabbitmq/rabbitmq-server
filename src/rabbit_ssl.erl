@@ -163,7 +163,7 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
             {?'id-domainComponent'           , "DC"},
             {?'id-emailAddress'              , "EMAILADDRESS"},
             {?'street-address'               , "STREET"},
-            {{0,9,2342,19200300,100,1,1}     , "UID"}],
+            {{0,9,2342,19200300,100,1,1}     , "UID"}], %% Not in public_key.hrl
     case proplists:lookup(T, Fmts) of
         {_, Fmt} ->
             rabbit_misc:format(Fmt ++ "=~s", [FV]);
