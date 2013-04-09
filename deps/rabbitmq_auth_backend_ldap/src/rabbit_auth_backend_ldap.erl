@@ -292,10 +292,8 @@ creds(#user{impl = #impl{user_dn = UserDN, password = Password}},
 creds(_, #state{other_bind = Creds}) ->
     Creds.
 
-log(_Fmt, _Args, #state{log = false}) ->
-    ok;
-log(Fmt, Args, _State) ->
-    rabbit_log:info(Fmt ++ "~n", Args).
+log(_Fmt, _Args, #state{log = false}) -> ok;
+log( Fmt,  Args, _State)              -> rabbit_log:info(Fmt ++ "~n", Args).
 
 fill(Fmt, Args, State) ->
     ?L2("filling template \"~s\" with~n            ~p", [Fmt, Args], State),
