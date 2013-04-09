@@ -63,19 +63,13 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
   when is_atom(ShovelName) andalso is_list(ShovelConfig) ->
     case dict:is_key(ShovelName, Acc) of
         true  -> {error, {duplicate_shovel_definition, ShovelName}};
-        false -> verify_worker_configuration(Defaults, Env, ShovelName,
-                                             ShovelConfig, Acc)
+        false -> case rabbit_shovel_config:parse(ShovelName, ShovelConfig) of
+                     {ok, _Shovel} ->
+                         Acc2 = dict:store(ShovelName, ShovelConfig, Acc),
+                         parse_configuration(Defaults, Env, Acc2);
+                     Error ->
+                         Error
+                 end
     end;
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
-
-verify_worker_configuration(Defaults, Env, ShovelName,
-                            ShovelConfig, Remaining) ->
-    case rabbit_shovel_config:parse(ShovelName, ShovelConfig) of
-        {ok, _Shovel} ->
-            parse_configuration(Defaults, Env,
-                                dict:store(ShovelName, ShovelConfig, Remaining));
-        Error ->
-            Error
-    end.
-
