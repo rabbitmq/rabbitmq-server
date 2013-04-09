@@ -632,12 +632,12 @@ append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
             ok
     end.
 
-append_sample(_Key, unknown, _NewMS, _OldStats, _Id, _State) ->
-    ok;
-
-append_sample(Key, Value, NewMS, OldStats, Id, State) ->
+append_sample(Key, Value, NewMS, OldStats, Id, State) when is_number(Value) ->
     record_sample(
-      Id, {Key, Value - pget(Key, OldStats, 0), NewMS, State}, State).
+      Id, {Key, Value - pget(Key, OldStats, 0), NewMS, State}, State);
+
+append_sample(_Key, _Value, _NewMS, _OldStats, _Id, _State) ->
+    ok.
 
 ignore_coarse_sample({coarse, {queue_stats, Q}}, State) ->
     not object_exists(Q, State);
