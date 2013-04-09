@@ -216,6 +216,8 @@ format_asn1_value(V) when is_binary(V) ->
     %% type. That's probably wrong, so as a last ditch effort let's
     %% try manually decoding. This is certainly not guaranteed to work
     %% in all cases, but if we have a printableString we're in luck.
+    %% 'CommonName' is somewhat arbitrary - we need a valid type, and
+    %% der_decode/2 will do some type checking against it.
     try
         public_key:der_decode('CommonName', V)
     catch _:_ ->
