@@ -210,6 +210,16 @@ format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
 %% (e.g. domainComponent).
 format_asn1_value(V) when is_list(V) ->
     V;
+format_asn1_value(V) when is_binary(V) ->
+    %% OTP does not decode some values when combined with an unknown
+    %% type. That's probably wrong, so as a last ditch effort let's
+    %% try manually decoding. This is certainly not guaranteed to work
+    %% in all cases, but if we have a printableString we're in luck.
+    try
+        public_key:der_decode('CommonName', V)
+    catch _:_ ->
+            rabbit_misc:format("~p", [V])
+    end;
 format_asn1_value(V) ->
     rabbit_misc:format("~p", [V]).
 
