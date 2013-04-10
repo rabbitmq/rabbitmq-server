@@ -162,7 +162,7 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 	else \
 	    dialyzer --output_plt $@ --build_plt \
 		--apps erts kernel stdlib compiler sasl os_mon mnesia tools \
-		  public_key crypto ssl; \
+		  public_key crypto ssl xmerl; \
 	fi
 
 clean:

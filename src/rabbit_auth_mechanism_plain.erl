@@ -36,8 +36,7 @@
 %% matching and will thus be much faster.
 
 description() ->
-    [{name, <<"PLAIN">>},
-     {description, <<"SASL PLAIN authentication mechanism">>}].
+    [{description, <<"SASL PLAIN authentication mechanism">>}].
 
 should_offer(_Sock) ->
     true.
