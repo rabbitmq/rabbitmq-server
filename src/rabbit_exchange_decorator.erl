@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([list/0, select/2, record/2]).
+-export([list/0, select/2, set/1]).
 
 %% This is like an exchange type except that:
 %%
@@ -59,8 +59,8 @@
 
 %% Decorators can optionally implement route/2 which allows additional
 %% destinations to be added to the routing decision.
--callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
-    [rabbit_amqqueue:name() | rabbit_exchange:name()] | ok.
+%% -callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
+%%     [rabbit_amqqueue:name() | rabbit_exchange:name()] | ok.
 
 %% Whether the decorator wishes to receive callbacks for the exchange
 %% none:no callbacks, noroute:all callbacks except route, all:all callbacks
@@ -87,14 +87,14 @@ list() -> [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
 select(all,   {Route, NoRoute})  -> Route ++ NoRoute;
 select(route, {Route, _NoRoute}) -> Route.
 
-%% record active decorators in an exchange
-record(X, Decorators) ->
-    X#exchange{decorators =
-      lists:foldl(fun (D, {Route, NoRoute}) ->
-                          Callbacks = D:active_for(X),
-                          {cons_if_eq(all,     Callbacks, D, Route),
-                           cons_if_eq(noroute, Callbacks, D, NoRoute)}
-                  end, {[], []}, Decorators)}.
+set(X) ->
+    X#exchange{
+      decorators =
+        lists:foldl(fun (D, {Route, NoRoute}) ->
+                            Callbacks = D:active_for(X),
+                            {cons_if_eq(all,     Callbacks, D, Route),
+                             cons_if_eq(noroute, Callbacks, D, NoRoute)}
+                    end, {[], []}, rabbit_exchange_decorator:list())}.
 
 cons_if_eq(Select,  Select, Item,  List) -> [Item | List];
 cons_if_eq(_Select, _Other, _Item, List) -> List.

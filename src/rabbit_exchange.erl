@@ -144,13 +144,12 @@ serial(#exchange{name = XName} = X) ->
     end.
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
-    X0 = rabbit_policy:set(#exchange{name        = XName,
-                                     type        = Type,
-                                     durable     = Durable,
-                                     auto_delete = AutoDelete,
-                                     internal    = Internal,
-                                     arguments   = Args}),
-    X = rabbit_exchange_decorator:record(X0, rabbit_exchange_decorator:list()),
+    X = rabbit_policy:set(#exchange{name        = XName,
+                                    type        = Type,
+                                    durable     = Durable,
+                                    auto_delete = AutoDelete,
+                                    internal    = Internal,
+                                    arguments   = Args}),
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
@@ -316,20 +315,20 @@ route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
         {<<"">>, []} ->
             %% Optimisation
             [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
-        {_, RDecorators} ->
-            lists:usort(route1(Delivery, RDecorators, {[X], XName, []}))
+        {_, SelectedDecorators} ->
+            lists:usort(route1(Delivery, SelectedDecorators, {[X], XName, []}))
     end.
 
 route1(_, _, {[], _, QNames}) ->
     QNames;
-route1(Delivery, RDecorators,
+route1(Delivery, Decorators,
        {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
     ExchangeDests  = (type_to_module(Type)):route(X, Delivery),
-    RDecorateDests = process_decorators(X, RDecorators, Delivery),
+    DecorateDests = process_decorators(X, Decorators, Delivery),
     AlternateDests = process_alternate(X, ExchangeDests),
-    route1(Delivery, RDecorators,
+    route1(Delivery, Decorators,
            lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
-                       AlternateDests ++ RDecorateDests  ++ ExchangeDests)).
+                       AlternateDests ++ DecorateDests  ++ ExchangeDests)).
 
 process_alternate(#exchange{arguments = []}, _Results) -> %% optimisation
     [];

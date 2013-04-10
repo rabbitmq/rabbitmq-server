@@ -46,7 +46,8 @@ name0(undefined) -> none;
 name0(Policy)    -> pget(name, Policy).
 
 set(Q = #amqqueue{name = Name}) -> Q#amqqueue{policy = set0(Name)};
-set(X = #exchange{name = Name}) -> X#exchange{policy = set0(Name)}.
+set(X = #exchange{name = Name}) -> rabbit_exchange_decorator:set(
+                                     X#exchange{policy = set0(Name)}).
 
 set0(Name = #resource{virtual_host = VHost}) -> match(Name, list(VHost)).
 
@@ -156,10 +157,9 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 
 update_policies(VHost) ->
     Policies = list(VHost),
-    Decorators = rabbit_exchange_decorator:list(),
     {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
                  fun() ->
-                         {[update_exchange(X, Policies, Decorators) ||
+                         {[update_exchange(X, Policies) ||
                               X <- rabbit_exchange:list(VHost)],
                           [update_queue(Q, Policies) ||
                               Q <- rabbit_amqqueue:list(VHost)]}
@@ -168,16 +168,15 @@ update_policies(VHost) ->
     [catch notify(Q) || Q <- Qs],
     ok.
 
-update_exchange(X = #exchange{name = XName, policy = OldPolicy},
-                Policies, Decorators) ->
+update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
     case match(XName, Policies) of
         OldPolicy ->
             no_change;
         NewPolicy ->
             rabbit_exchange:update(
               XName, fun(X1) ->
-                             rabbit_exchange_decorator:record(
-                               X1#exchange{policy = NewPolicy}, Decorators)
+                             rabbit_exchange_decorator:set(
+                               X1#exchange{policy = NewPolicy})
                      end),
             {X, X#exchange{policy = NewPolicy}}
     end.

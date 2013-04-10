@@ -565,7 +565,7 @@ test_topic_matching() ->
                       name = <<"test_exchange">>},
     X0 = #exchange{name = XName, type = topic, durable = false,
                    auto_delete = false, arguments = []},
-    X = rabbit_exchange_decorator:record(X0, []),
+    X = rabbit_exchange_decorator:set(X0),
     %% create
     rabbit_exchange_type_topic:validate(X),
     exchange_op_callback(X, create, []),
