@@ -403,7 +403,9 @@ cluster_status(WhichNodes) ->
     end.
 
 node_info() ->
-    {erlang:system_info(otp_release), rabbit_misc:version(),
+    DelegateBeamLocation = code:which(delegate),
+    {ok, {delegate, DelegateBeamHash}} = beam_lib:md5(DelegateBeamLocation),
+    {erlang:system_info(otp_release), rabbit_misc:version(), DelegateBeamHash,
      cluster_status_from_mnesia()}.
 
 node_type() ->
@@ -562,10 +564,10 @@ check_cluster_consistency(Node) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _Reason} ->
             {error, not_found};
-        {_OTP, _Rabbit, {error, _}} ->
+        {_OTP, _Rabbit, _Hash, {error, _}} ->
             {error, not_found};
-        {OTP, Rabbit, {ok, Status}} ->
-            case check_consistency(OTP, Rabbit, Node, Status) of
+        {OTP, Rabbit, Hash, {ok, Status}} ->
+            case check_consistency(OTP, Rabbit, Hash, Node, Status) of
                 {error, _} = E -> E;
                 {ok, Res}      -> {ok, Res}
             end
@@ -732,14 +734,17 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-check_consistency(OTP, Rabbit) ->
-    rabbit_misc:sequence_error(
-      [check_otp_consistency(OTP), check_rabbit_consistency(Rabbit)]).
-
-check_consistency(OTP, Rabbit, Node, Status) ->
+check_consistency(OTP, Rabbit, Hash) ->
     rabbit_misc:sequence_error(
       [check_otp_consistency(OTP),
        check_rabbit_consistency(Rabbit),
+       check_beam_compatibility(Hash)]).
+
+check_consistency(OTP, Rabbit, Hash, Node, Status) ->
+    rabbit_misc:sequence_error(
+      [check_otp_consistency(OTP),
+       check_rabbit_consistency(Rabbit),
+       check_beam_compatibility(Hash),
        check_nodes_consistency(Node, Status)]).
 
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
@@ -780,6 +785,15 @@ check_rabbit_consistency(Remote) ->
       rabbit_misc:version(), Remote, "Rabbit",
       fun rabbit_misc:version_minor_equivalent/2).
 
+check_beam_compatibility(RemoteHash) ->
+    DelegateBeamLocation = code:which(delegate),
+    {ok, {delegate, LocalHash}} = beam_lib:md5(DelegateBeamLocation),
+    case RemoteHash == LocalHash of
+        true  -> ok;
+        false -> {error, {incompatible_bytecode,
+                          "Incompatible Erlang bytecode found on nodes"}}
+    end.
+
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
 %% mnesia tables aren't there because restarted RAM nodes won't have
@@ -806,10 +820,10 @@ find_good_node([]) ->
 find_good_node([Node | Nodes]) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _Reason} -> find_good_node(Nodes);
-        {OTP, Rabbit, _}  -> case check_consistency(OTP, Rabbit) of
-                                 {error, _} -> find_good_node(Nodes);
-                                 ok         -> {ok, Node}
-                             end
+        {OTP, Rabbit, Hash, _}  -> case check_consistency(OTP, Rabbit, Hash) of
+                                       {error, _} -> find_good_node(Nodes);
+                                       ok         -> {ok, Node}
+                                   end
     end.
 
 is_only_clustered_disc_node() ->
