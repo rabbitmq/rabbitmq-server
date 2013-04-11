@@ -105,8 +105,8 @@ route( #exchange{name = XName}
   Headers = get_headers(Content),
   BindingFuns = get_binding_funs_x(XName),
   rabbit_router:match_bindings( XName
-                              , fun(#binding{key = Key}) ->
-                                  binding_fun_match(Key, Headers, BindingFuns)
+                              , fun(#binding{key = Key, destination = DestName}) ->
+                                  binding_fun_match({Key, DestName}, Headers, BindingFuns)
                                 end
                               ).
 
@@ -126,14 +126,14 @@ delete(_Tx, _X, _Bs) ->
 % A new binding has ben added or recovered
 add_binding( Tx
            , #exchange{name = XName}
-           , #binding{key = BindingKey, destination = QName, args = Args}
+           , #binding{key = BindingKey, destination = DestName, args = Args}
            ) ->
   SQL = get_sql_from_args(Args),
   case {Tx, generate_binding_fun(SQL)} of
     {transaction, {ok, BindFun}} ->
-      add_binding_fun(XName, {BindingKey, BindFun});
+      add_binding_fun(XName, {{BindingKey, DestName}, BindFun});
     {none, error} ->
-      parsing_error(XName, SQL, QName);
+      parsing_error(XName, SQL, DestName);
     _ ->
       ok
   end,
@@ -221,7 +221,7 @@ add_binding_fun(XName, BindingKeyAndFun) ->
 
 % remove binding funs from binding fun dictionary
 remove_binding_funs(XName, Bindings) ->
-  BindingKeys = [ BindingKey || #binding{key = BindingKey} <- Bindings ],
+  BindingKeys = [ {BindingKey, DestName} || #binding{key = BindingKey, destination = DestName} <- Bindings ],
   #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_for_update(XName),
   write_state_fun(XName, remove_items(BindingFuns, BindingKeys)).
 
@@ -266,9 +266,9 @@ exchange_state_corrupt_error(#resource{name = XName}) ->
                             , [XName] ).
 
 % parsing error
-parsing_error(#resource{name = XName}, S, #resource{name = QName}) ->
+parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
   rabbit_misc:protocol_error( precondition_failed
-                            , "cannot parse selector '~s' binding queue '~s' to exchange '~s'"
-                            , [S, QName, XName] ).
+                            , "cannot parse selector '~s' binding destination '~s' to exchange '~s'"
+                            , [S, DestName, XName] ).
 
 %%----------------------------------------------------------------------------
