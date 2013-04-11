@@ -125,8 +125,12 @@ callback(X = #exchange{type       = XType,
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
-policy_changed(X = #exchange{type = XType}, X1) ->
-    ok = (type_to_module(XType)):policy_changed(X, X1).
+policy_changed(X = #exchange{type       = XType,
+                             decorators = Decorators}, X1) ->
+    [ok = M:policy_changed(X, X1) ||
+        M <- [type_to_module(XType) |
+              rabbit_exchange_decorator:select(all, Decorators)]],
+    ok.
 
 serialise_events(X = #exchange{type = Type, decorators = Decorators}) ->
     lists:any(fun (M) ->
@@ -324,7 +328,7 @@ route1(_, _, {[], _, QNames}) ->
 route1(Delivery, Decorators,
        {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
     ExchangeDests  = (type_to_module(Type)):route(X, Delivery),
-    DecorateDests = process_decorators(X, Decorators, Delivery),
+    DecorateDests  = process_decorators(X, Decorators, Delivery),
     AlternateDests = process_alternate(X, ExchangeDests),
     route1(Delivery, Decorators,
            lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
