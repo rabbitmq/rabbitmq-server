@@ -912,10 +912,11 @@ test_arguments_parser() ->
 test_dynamic_mirroring() ->
     %% Just unit tests of the node selection logic, see multi node
     %% tests for the rest...
-    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, CurrentState, All) ->
-                   {NewM, NewSs0} =
-                       rabbit_mirror_queue_misc:suggested_queue_nodes(
-                         Policy, Params, CurrentState, All),
+    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params,
+                {MNode, SNodes, SSNodes}, All) ->
+                   {ok, M} = rabbit_mirror_queue_misc:module(Policy),
+                   {NewM, NewSs0} = M:suggested_queue_nodes(
+                                      Params, MNode, SNodes, SSNodes, All),
                    NewSs1 = lists:sort(NewSs0),
                    case dm_list_match(NewSs, NewSs1, ExtraSs) of
                        ok    -> ok;
