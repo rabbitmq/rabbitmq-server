@@ -42,13 +42,9 @@ ensure_statistics_enabled() ->
         {true,  fine} ->
             ok;
         {true,  _} ->
-            application:set_env(rabbit, collect_statistics, fine),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            " to fine.~n");
+            application:set_env(rabbit, collect_statistics, fine);
         {false, none} ->
-            application:set_env(rabbit, collect_statistics, coarse),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            " to coarse.~n");
+            application:set_env(rabbit, collect_statistics, coarse);
         {_, _} ->
             ok
     end.
