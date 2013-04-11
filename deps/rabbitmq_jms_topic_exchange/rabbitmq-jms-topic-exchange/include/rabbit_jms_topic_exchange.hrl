@@ -25,8 +25,8 @@
 %% Key is x_name -- the exchange name
 -record(?JMS_TOPIC_RECORD, {x_name, x_state}).
 
-%% x_state field consists of an `orddict` dictionary of binding functions:
-%%         [{RoutingKey, BindingSelectorFun}, ...]
+%% x_state field consists of a `dict` dictionary of binding functions:
+%%         dict: RoutingKey -> BindingSelectorFun
 %% there is no default
 
 %% Name of arg on binding used to specify selector -- string type

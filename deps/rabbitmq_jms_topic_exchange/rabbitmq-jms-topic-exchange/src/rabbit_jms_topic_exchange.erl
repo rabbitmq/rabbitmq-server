@@ -161,7 +161,7 @@ policy_changed(_Tx, _X1, _X2) -> ok.
 
 % Select binding function from Funs dictionary, apply it to Headers and return result (true|false)
 binding_fun_match(Key, Headers, FunsDict) ->
-  case orddict:find(Key, FunsDict) of
+  case dict:find(Key, FunsDict) of
     {ok, Fun} when is_function(Fun, 1) -> Fun(Headers);
     error                              -> false          % do not match if no function found
   end.
@@ -226,11 +226,11 @@ remove_binding_funs(XName, Bindings) ->
   write_state_fun(XName, remove_items(BindingFuns, BindingKeys)).
 
 % add an item to the dictionary of binding functions
-put_item(Dict, {Key, Item}) -> orddict:store(Key, Item, Dict).
+put_item(Dict, {Key, Item}) -> dict:store(Key, Item, Dict).
 
 % remove a list of keyed items from the dictionary, by key
 remove_items(Dict, []) -> Dict;
-remove_items(Dict, [Key | Keys]) -> remove_items(orddict:erase(Key, Dict), Keys).
+remove_items(Dict, [Key | Keys]) -> remove_items(dict:erase(Key, Dict), Keys).
 
 % delete all the state saved for this exchange
 delete_state(XName) ->
@@ -245,7 +245,7 @@ read_state(XName) -> read_state(XName, read).
 % Lockable read
 read_state(XName, Lock) ->
   case mnesia:read(?JMS_TOPIC_TABLE, XName, Lock) of
-    []    -> #?JMS_TOPIC_RECORD{x_name = XName, x_state = orddict:new()};
+    []    -> #?JMS_TOPIC_RECORD{x_name = XName, x_state = dict:new()};
     [Rec] -> Rec;
     _     -> exchange_state_corrupt_error(XName)
   end.
