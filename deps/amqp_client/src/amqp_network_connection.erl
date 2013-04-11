@@ -26,6 +26,7 @@
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
+-define(TCP_MAX_PACKET_SIZE, 16#4000000).
 
 -record(state, {sock,
                 heartbeat,
@@ -212,9 +213,13 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
     [ChannelMax, Heartbeat, FrameMax] =
         lists:zipwith(fun (Client, Server) when Client =:= 0; Server =:= 0 ->
                               lists:max([Client, Server]);
+                          ({ClientFrame, TcpMaxPacketSz}, ServerFrame) ->
+                              lists:min([ClientFrame, ServerFrame,
+                                         TcpMaxPacketSz]);
                           (Client, Server) ->
                               lists:min([Client, Server])
-                      end, [ClientChannelMax, ClientHeartbeat, ClientFrameMax],
+                      end, [ClientChannelMax, ClientHeartbeat,
+                            {ClientFrameMax, ?TCP_MAX_PACKET_SIZE}],
                            [ServerChannelMax, ServerHeartbeat, ServerFrameMax]),
     NewState = State#state{heartbeat = Heartbeat, frame_max = FrameMax},
     start_heartbeat(SHF, NewState),
