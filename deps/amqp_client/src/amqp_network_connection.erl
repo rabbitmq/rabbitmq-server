@@ -27,6 +27,7 @@
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
 -define(TCP_MAX_PACKET_SIZE, 16#4000000).
+-define(FRAME_SIZE_UNBOUNDED, 0).
 
 -record(state, {sock,
                 heartbeat,
@@ -213,19 +214,25 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
     [ChannelMax, Heartbeat, FrameMax] =
         lists:zipwith(fun (Client, Server) when Client =:= 0; Server =:= 0 ->
                               lists:max([Client, Server]);
-                          ({ClientFrame, TcpMaxPacketSz}, ServerFrame) ->
-                              lists:min([ClientFrame, ServerFrame,
-                                         TcpMaxPacketSz]);
                           (Client, Server) ->
                               lists:min([Client, Server])
                       end, [ClientChannelMax, ClientHeartbeat,
-                            {ClientFrameMax, ?TCP_MAX_PACKET_SIZE}],
-                           [ServerChannelMax, ServerHeartbeat, ServerFrameMax]),
+                            cap_max_supported_frame_size(ClientFrameMax)],
+                           [ServerChannelMax, ServerHeartbeat,
+                            cap_max_supported_frame_size(ServerFrameMax)]),
     NewState = State#state{heartbeat = Heartbeat, frame_max = FrameMax},
     start_heartbeat(SHF, NewState),
     {#'connection.tune_ok'{channel_max = ChannelMax,
                            frame_max   = FrameMax,
                            heartbeat   = Heartbeat}, ChannelMax, NewState}.
+
+%% if we attempt to recv > 64Mb, inet_drv will return enomem,
+%% so we cap the max negotiated frame size accordingly
+cap_max_supported_frame_size(MaxFrameSize)
+  when MaxFrameSize > ?FRAME_SIZE_UNBOUNDED ->
+    lists:min([MaxFrameSize, ?TCP_MAX_PACKET_SIZE]);
+cap_max_supported_frame_size(_UnboundedMaxFrame) ->
+    ?TCP_MAX_PACKET_SIZE.
 
 start_heartbeat(SHF, #state{sock = Sock, heartbeat = Heartbeat}) ->
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
