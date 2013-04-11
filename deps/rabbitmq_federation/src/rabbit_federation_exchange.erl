@@ -30,7 +30,7 @@
 
 -export([description/0, serialise_events/1]).
 -export([create/2, delete/3, policy_changed/2,
-         add_binding/3, remove_bindings/3]).
+         add_binding/3, remove_bindings/3, route/2, active_for/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -70,6 +70,10 @@ remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
                  ok;
         false -> ok
     end.
+
+route(_, _) -> ok.
+
+active_for(X) -> noroute.
 
 %%----------------------------------------------------------------------------
 
