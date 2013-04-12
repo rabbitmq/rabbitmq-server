@@ -60,7 +60,7 @@ and_expr -> cmp_expr op_and and_expr       : conjunction('$1', '$3').
 
 cmp_expr -> plus_expr                      : '$1'.
 cmp_expr -> plus_expr op_between plus_expr op_and plus_expr : binary_op(value_of('$2'), '$1', to_range('$3', '$5')).
-cmp_expr -> plus_expr op_cmp cmp_expr      : binary_op(op_name(value_of('$2')), '$1', '$3').
+cmp_expr -> plus_expr op_cmp plus_expr     : binary_op(op_name(value_of('$2')), '$1', '$3').
 
 plus_expr -> mult_expr                     : '$1'.
 plus_expr -> mult_expr op_plus plus_expr   : binary_op(value_of('$2'), '$1', '$3').

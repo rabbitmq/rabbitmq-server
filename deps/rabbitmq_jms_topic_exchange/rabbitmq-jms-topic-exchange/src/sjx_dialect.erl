@@ -41,18 +41,31 @@ check_types(AST) ->
         _ -> error
     end.
 
-%% Identifier types we know about
-match_type_of(<<"JMSDeliveryMode">>, Match) -> Match =:= enum;
-match_type_of(<<"JMSPriority">>, Match) -> Match =:= int;
-match_type_of(<<"JMSMessageID">>, Match) -> Match =:= string;
-match_type_of(<<"JMSTimestamp">>, Match) -> Match =:= int;
-match_type_of(<<"JMSCorrelationID">>, Match) -> Match =:= string;
-match_type_of(<<"JMSType">>, Match) -> Match =:= string;
-match_type_of(_, _Match) -> true.          %% presumption of innocence
+%% Type checking identifiers
+%%
+-define(IDENT_TYPE_INFO,
+[ {<<"JMSDeliveryMode">>, {enum, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}}
+, {<<"JMSPriority">>, number}
+, {<<"JMSMessageID">>, string}
+, {<<"JMSTimestamp">>, number}
+, {<<"JMSCorrelationID">>, string}
+, {<<"JMSType">>, string}
+]).
 
+get_ident_type(Ident) -> proplists:get_value(Ident, ?IDENT_TYPE_INFO).
+
+match_ident_type(Ident, Match) ->
+    case get_ident_type(Ident) of
+        undefined -> true;  %% presumption of innocence
+        Match     -> true;
+        _         -> false
+    end.
+
+%% Type checking general expressions
+%%
 check_type_bool( true ) -> true;
 check_type_bool( false ) -> true;
-check_type_bool( {'ident', Ident } ) -> match_type_of(Ident, bool);
+check_type_bool( {'ident', Ident } ) -> match_ident_type(Ident, boolean);
 check_type_bool( {'not', Exp }) -> check_type_bool(Exp);
 check_type_bool( {'and', Exp1, Exp2 }) -> check_type_bool(Exp1) andalso check_type_bool(Exp2);
 check_type_bool( {'or', Exp1, Exp2 }) -> check_type_bool(Exp1) andalso check_type_bool(Exp2);
@@ -68,9 +81,9 @@ check_type_bool( { Op, LHS, RHS }) ->
                   orelse
                   (check_type_bool(LHS) andalso check_type_bool(RHS))
                   orelse
-                  (check_type_enum(LHS) andalso check_type_enum(RHS))
-                  orelse
                   (check_type_string(LHS) andalso check_type_string(RHS))
+                  orelse
+                  check_type_enums(LHS, RHS)
                 ) )
     orelse
     ( check_cmp_op(Op) andalso check_type_arith(LHS) andalso check_type_arith(RHS) );
@@ -79,15 +92,26 @@ check_type_bool( _Expression ) -> false.
 check_type_ident( {'ident', _} ) -> true;
 check_type_ident(_) -> false.
 
-check_type_enum( {'ident', <<"JMSDeliveryMode">>} ) -> true;
-check_type_enum(Exp) when is_binary(Exp) -> (Exp == <<"NON_PERSISTENT">> orelse Exp == <<"PERSISTENT">>);
-check_type_enum(_) -> false.
+check_type_enums({'ident', LIdent}, {'ident', RIdent}) ->
+    case {get_ident_type(LIdent), get_ident_type(RIdent)} of
+        {undefined, _} -> true;  %% either can be undefined
+        {_, undefined} -> true;
+        {EType, EType} -> true;  %% or both types must match exactly
+        _              -> false
+    end;
+check_type_enums(LHS, RHS = {'ident', _}) -> check_type_enums(RHS, LHS);
+check_type_enums({'ident', Ident}, RHS) when is_binary(RHS) ->
+    case get_ident_type(Ident) of
+        {'enum', BinList} -> lists:member(RHS, BinList);
+        _                 -> false
+    end;
+check_type_enums(_,_) -> false.
 
-check_type_string( {'ident', Ident} ) -> match_type_of(Ident, string);
+check_type_string( {'ident', Ident} ) -> match_ident_type(Ident, string);
 check_type_string(Exp) when is_binary(Exp) -> true;
 check_type_string(_) -> false.
 
-check_type_arith( {'ident', Ident} ) -> match_type_of(Ident, int);
+check_type_arith( {'ident', Ident} ) -> match_ident_type(Ident, number);
 check_type_arith( E ) when is_number(E) -> true;
 check_type_arith( { Op, LHS, RHS }) -> check_arith_op(Op) andalso check_type_arith(LHS) andalso check_type_arith(RHS);
 check_type_arith( { Op, Exp }) -> check_sign_op(Op) andalso check_type_arith(Exp);
