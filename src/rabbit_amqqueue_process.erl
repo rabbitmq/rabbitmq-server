@@ -930,7 +930,7 @@ is_dead_letter_cycle(Queue, Deaths) ->
                   {longstr, Queue} =/= rabbit_misc:table_lookup(D, <<"queue">>);
               (_) ->
                   true
-          end, lists:reverse(Deaths)),
+          end, Deaths),
     %% Is there a cycle, and if so, is it entirely due to expiry?
     case Rest of
         []    -> false;
