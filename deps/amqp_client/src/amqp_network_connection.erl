@@ -26,7 +26,7 @@
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
--define(TCP_MAX_PACKET_SIZE, 16#4000000).
+-define(TCP_MAX_PACKET_SIZE, (16#4000000 + ?EMPTY_FRAME_SIZE - 1)).
 
 -record(state, {sock,
                 heartbeat,
@@ -218,8 +218,10 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
                       end,
                       [ClientChannelMax, ClientHeartbeat, ClientFrameMax],
                       [ServerChannelMax, ServerHeartbeat, ServerFrameMax]),
-    %% if we attempt to recv > 64Mb, inet_drv will return enomem, so
-    %% we cap the max negotiated frame size accordingly
+    %% If we attempt to recv > 64Mb, inet_drv will return enomem, so
+    %% we cap the max negotiated frame size accordingly. Note that
+    %% since we receive the frame header separately, we can actually
+    %% cope with frame sizes of 64M + ?EMPTY_FRAME_SIZE - 1.
     CappedFrameMax = case FrameMax of
                          0 -> ?TCP_MAX_PACKET_SIZE;
                          _ -> lists:min([FrameMax, ?TCP_MAX_PACKET_SIZE])
