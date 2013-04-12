@@ -115,23 +115,27 @@ recover() ->
            rabbit_durable_exchange),
     [XName || #exchange{name = XName} <- Xs].
 
-callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
+callback(X = #exchange{type       = XType,
+                       decorators = Decorators}, Fun, Serial0, Args) ->
     Serial = if is_function(Serial0) -> Serial0;
                 is_atom(Serial0)     -> fun (_Bool) -> Serial0 end
              end,
     [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args]) ||
-        M <- registry_lookup(exchange_decorator)],
+        M <- rabbit_exchange_decorator:select(all, Decorators)],
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
-policy_changed(X = #exchange{type = XType}, X1) ->
+policy_changed(X = #exchange{type       = XType,
+                             decorators = Decorators}, X1) ->
     [ok = M:policy_changed(X, X1) ||
-        M <- [type_to_module(XType) | registry_lookup(exchange_decorator)]],
+        M <- [type_to_module(XType) |
+              rabbit_exchange_decorator:select(all, Decorators)]],
     ok.
 
-serialise_events(X = #exchange{type = Type}) ->
-    lists:any(fun (M) -> M:serialise_events(X) end,
-              registry_lookup(exchange_decorator))
+serialise_events(X = #exchange{type = Type, decorators = Decorators}) ->
+    lists:any(fun (M) ->
+                      M:serialise_events(X)
+              end, rabbit_exchange_decorator:select(all, Decorators))
         orelse (type_to_module(Type)):serialise_events().
 
 serial(#exchange{name = XName} = X) ->
@@ -142,16 +146,6 @@ serial(#exchange{name = XName} = X) ->
     fun (true)  -> Serial;
         (false) -> none
     end.
-
-registry_lookup(exchange_decorator_route = Class) ->
-    case get(exchange_decorator_route_modules) of
-        undefined -> Mods = [M || {_, M} <- rabbit_registry:lookup_all(Class)],
-                     put(exchange_decorator_route_modules, Mods),
-                     Mods;
-        Mods      -> Mods
-    end;
-registry_lookup(Class) ->
-    [M || {_, M} <- rabbit_registry:lookup_all(Class)].
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = rabbit_policy:set(#exchange{name        = XName,
@@ -318,15 +312,15 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-route(#exchange{name = #resource{virtual_host = VHost,
-                                 name         = RName} = XName} = X,
+route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
+                decorators = Decorators} = X,
       #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
-    case {registry_lookup(exchange_decorator_route), RName == <<"">>} of
-        {[], true} ->
+    case {RName, rabbit_exchange_decorator:select(route, Decorators)} of
+        {<<"">>, []} ->
             %% Optimisation
             [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
-        {Decorators, _} ->
-            lists:usort(route1(Delivery, Decorators, {[X], XName, []}))
+        {_, SelectedDecorators} ->
+            lists:usort(route1(Delivery, SelectedDecorators, {[X], XName, []}))
     end.
 
 route1(_, _, {[], _, QNames}) ->
