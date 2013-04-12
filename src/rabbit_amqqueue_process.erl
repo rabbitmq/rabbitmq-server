@@ -934,9 +934,13 @@ is_dead_letter_cycle(Queue, Deaths) ->
     %% Is there a cycle, and if so, is it entirely due to expiry?
     case Rest of
         []    -> false;
-        [H|_] -> [] =:= [D || {table, D} <- Cycle ++ [H],
-                              {longstr, <<"expired">>} =/=
-                                  rabbit_misc:table_lookup(D, <<"reason">>)]
+        [H|_] -> lists:all(
+                   fun ({table, D}) ->
+                           {longstr, <<"expired">>} =:=
+                               rabbit_misc:table_lookup(D, <<"reason">>);
+                       (_) ->
+                           false
+                   end, Cycle ++ [H])
     end.
 
 make_dead_letter_msg(Msg = #basic_message{content       = Content,
