@@ -88,4 +88,6 @@ basic_parse_test_() ->
 
      ?_assertMatch(
     {'or',{eq,{'ident',<<"JMSType">>},<<"car">>},{'and',{eq,{'ident',<<"colour">>},<<"blue">>},{gt,{'ident',<<"weight">>},2500}}},
-     analyze("JMSType = 'car' OR colour = 'blue' AND weight > 2500"))].
+     analyze("JMSType = 'car' OR colour = 'blue' AND weight > 2500")),
+
+     ?_assertMatch({eq,{ident,<<"JMSDeliveryMode">>}, <<"PERSISTENT">>},analyze("JMSDeliveryMode = 'PERSISTENT'"))].
