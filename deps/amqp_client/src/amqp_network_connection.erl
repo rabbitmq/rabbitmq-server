@@ -309,6 +309,8 @@ handshake_recv(Expecting) ->
             end;
         {socket_error, _} = SocketError ->
             exit({SocketError, {expecting, Expecting}});
+        {refused, Version} ->
+            exit({server_refused_connection, Version});
         heartbeat_timeout ->
             exit(heartbeat_timeout);
         Other ->
