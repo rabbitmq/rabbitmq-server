@@ -133,9 +133,8 @@ policy_changed(X = #exchange{type       = XType,
     ok.
 
 serialise_events(X = #exchange{type = Type, decorators = Decorators}) ->
-    lists:any(fun (M) ->
-                      M:serialise_events(X)
-              end, rabbit_exchange_decorator:select(all, Decorators))
+    lists:any(fun (M) -> M:serialise_events(X) end,
+              rabbit_exchange_decorator:select(all, Decorators))
         orelse (type_to_module(Type)):serialise_events().
 
 serial(#exchange{name = XName} = X) ->

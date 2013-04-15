@@ -170,15 +170,13 @@ update_policies(VHost) ->
 
 update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
     case match(XName, Policies) of
-        OldPolicy ->
-            no_change;
-        NewPolicy ->
-            rabbit_exchange:update(
-              XName, fun(X1) ->
-                             rabbit_exchange_decorator:set(
-                               X1#exchange{policy = NewPolicy})
-                     end),
-            {X, X#exchange{policy = NewPolicy}}
+        OldPolicy -> no_change;
+        NewPolicy -> rabbit_exchange:update(
+                       XName, fun(X1) ->
+                                      rabbit_exchange_decorator:set(
+                                        X1#exchange{policy = NewPolicy})
+                              end),
+                     {X, X#exchange{policy = NewPolicy}}
     end.
 
 update_queue(Q = #amqqueue{name = QName, policy = OldPolicy}, Policies) ->
