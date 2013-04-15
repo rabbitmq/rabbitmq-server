@@ -22,10 +22,21 @@
 -module(sjx_evaluate_tests).
 -include_lib("eunit/include/eunit.hrl").
 
--import(sjx_dialect, [analyze/1]).
+-import(sjx_dialect, [analyze/2]).
 -import(sjx_evaluator, [evaluate/2]).
 
-eval(Hs, S) -> evaluate(analyze(S),Hs).
+%% Fixed type info for identifiers
+%%
+-define(TEST_TYPE_INFO,
+[ {<<"JMSDeliveryMode">>, {enum, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}}
+, {<<"JMSPriority">>, number}
+, {<<"JMSMessageID">>, string}
+, {<<"JMSTimestamp">>, number}
+, {<<"JMSCorrelationID">>, string}
+, {<<"JMSType">>, string}
+]).
+
+eval(Hs, S) -> evaluate(analyze(?TEST_TYPE_INFO, S),Hs).
 
 basic_evaluate_test_() ->
     Hs = [{<<"JMSType">>, longstr, <<"car">>},

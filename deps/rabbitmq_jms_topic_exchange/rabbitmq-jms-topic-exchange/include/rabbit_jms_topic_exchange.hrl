@@ -33,3 +33,14 @@
 %%      private static final RJMS_SELECTOR_ARG = "rjms_selector";
 %% in JMS Client.
 -define(RJMS_SELECTOR_ARG, <<"rjms_selector">>).
+
+%% Fixed type info for identifiers
+%%
+-define(IDENT_TYPE_INFO,
+[ {<<"JMSDeliveryMode">>, {enum, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}}
+, {<<"JMSPriority">>, number}
+, {<<"JMSMessageID">>, string}
+, {<<"JMSTimestamp">>, number}
+, {<<"JMSCorrelationID">>, string}
+, {<<"JMSType">>, string}
+]).

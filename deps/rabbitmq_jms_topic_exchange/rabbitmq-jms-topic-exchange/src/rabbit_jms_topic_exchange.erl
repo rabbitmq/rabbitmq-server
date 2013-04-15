@@ -192,7 +192,7 @@ get_sql_from_args(Args) ->
 
 % scan and parse SQL expression
 compile_sql(SQL) ->
-  case sjx_dialect:analyze(SQL) of
+  case sjx_dialect:analyze(?IDENT_TYPE_INFO, SQL) of
     error    -> error;
     Compiled -> Compiled
   end.

@@ -23,20 +23,9 @@
 %% -----------------------------------------------------------------------------
 -module(sjx_dialect).
 
--export([analyze/1]).
+-export([analyze/2]).
 
-%% Type info for identifiers
-%%
--define(IDENT_TYPE_INFO,
-[ {<<"JMSDeliveryMode">>, {enum, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}}
-, {<<"JMSPriority">>, number}
-, {<<"JMSMessageID">>, string}
-, {<<"JMSTimestamp">>, number}
-, {<<"JMSCorrelationID">>, string}
-, {<<"JMSType">>, string}
-]).
-
-analyze(S) -> validate(?IDENT_TYPE_INFO, parse(scan(S))).
+analyze(TypeInfo, S) -> validate(TypeInfo, parse(scan(S))).
 
 scan(S) -> sjx_scanner:string(S).
 
