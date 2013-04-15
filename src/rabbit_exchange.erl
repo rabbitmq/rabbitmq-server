@@ -113,7 +113,16 @@ recover() ->
                    callback(X, create, map_create_tx(Tx), [X])
            end,
            rabbit_durable_exchange),
+    report_missing_decorators(Xs),
     [XName || #exchange{name = XName} <- Xs].
+
+report_missing_decorators(Xs) ->
+    Mods = lists:usort(lists:append([rabbit_exchange_decorator:select(raw, D) ||
+                                     #exchange{decorators = D} <- Xs])),
+    case [M || M <- Mods, code:which(M) =:= non_existing] of
+        [] -> ok;
+        M  -> rabbit_log:warning("Missing exchange decorators: ~p~n", [M])
+    end.
 
 callback(X = #exchange{type       = XType,
                        decorators = Decorators}, Fun, Serial0, Args) ->

@@ -84,11 +84,13 @@ behaviour_info(_Other) ->
 
 %%----------------------------------------------------------------------------
 
-list() -> [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
-
 %% select a subset of active decorators
-select(all,   {Route, NoRoute})  -> Route ++ NoRoute;
-select(route, {Route, _NoRoute}) -> Route.
+select(all,   {Route, NoRoute})  -> filter(Route ++ NoRoute);
+select(route, {Route, _NoRoute}) -> filter(Route);
+select(raw,   {Route, NoRoute})  -> Route ++ NoRoute.
+
+filter(Modules) ->
+    [M || M <- Modules, code:which(M) =/= non_existing].
 
 set(X) ->
     X#exchange{
@@ -98,6 +100,8 @@ set(X) ->
                             {cons_if_eq(all,     Callbacks, D, Route),
                              cons_if_eq(noroute, Callbacks, D, NoRoute)}
                     end, {[], []}, list())}.
+
+list() -> [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
 
 cons_if_eq(Select,  Select, Item,  List) -> [Item | List];
 cons_if_eq(_Select, _Other, _Item, List) -> List.
