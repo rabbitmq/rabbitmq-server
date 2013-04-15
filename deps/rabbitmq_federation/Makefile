@@ -22,6 +22,3 @@ start-other-node:
 
 stop-other-node:
 	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop 2> /dev/null || true
-
-cleandb-other-node:
-	rm -rf $(BASEDIR)/rabbitmq-$(OTHER_NODE)-mnesia

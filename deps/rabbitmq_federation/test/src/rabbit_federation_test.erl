@@ -238,7 +238,6 @@ binding_recovery_test() ->
     Q = <<"durable-Q">>,
 
     stop_other_node(?HARE),
-    cleandb_other_node(?HARE),
     Ch = start_other_node(?HARE, "hare-two-upstreams"),
 
     declare_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
@@ -413,7 +412,6 @@ upstream_has_no_federation_test() ->
     with_ch(
       fun (Downstream) ->
               stop_other_node(?HARE),
-              cleandb_other_node(?HARE),
               Upstream = start_other_node(
                            ?HARE, "hare-no-federation", "no_plugins"),
               declare_exchange(Upstream, x(<<"upstream">>)),
@@ -514,10 +512,6 @@ with_ch(Fun, Xs) ->
 declare_all(Ch, Xs) -> [declare_exchange(Ch, X) || X <- Xs].
 delete_all(Ch, Xs) ->
     [delete_exchange(Ch, X) || #'exchange.declare'{exchange = X} <- Xs].
-
-cleandb_other_node({Name, _Port}) ->
-    os:cmd("make -C " ++ plugin_dir() ++
-           " OTHER_NODE=" ++ Name ++ " cleandb-other-node").
 
 start_other_node({Name, Port}) ->
     start_other_node({Name, Port}, Name).
