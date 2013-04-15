@@ -1,11 +1,11 @@
 UPSTREAM_GIT=https://git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.java.git
-BRANCH=master
+REVISION=00b5b2f99ae8410b7d96d106e080a092c5f92546
 
 JC=javac
 
 TEST_SRC=src
 CHECKOUT_DIR=test_client
-PAHO_JAR_NAME=paho.jar
+PAHO_JAR_NAME=org.eclipse.paho.client.mqttv3.jar
 PAHO_JAR=$(CHECKOUT_DIR)/org.eclipse.paho.client.mqttv3/$(PAHO_JAR_NAME)
 JUNIT_JAR=../lib/junit.jar
 JAVA_AMQP_DIR=../../rabbitmq-java-client/

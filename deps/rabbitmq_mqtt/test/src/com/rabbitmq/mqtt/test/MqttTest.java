@@ -19,6 +19,7 @@ package com.rabbitmq.mqtt.test;
 import com.rabbitmq.client.*;
 import junit.framework.Assert;
 import junit.framework.TestCase;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
@@ -28,7 +29,6 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttTopic;
 import org.eclipse.paho.client.mqttv3.internal.NetworkModule;
 import org.eclipse.paho.client.mqttv3.internal.TCPNetworkModule;
-import org.eclipse.paho.client.mqttv3.internal.trace.Trace;
 import org.eclipse.paho.client.mqttv3.internal.wire.MqttOutputStream;
 import org.eclipse.paho.client.mqttv3.internal.wire.MqttPublish;
 
@@ -130,7 +130,7 @@ public class MqttTest extends TestCase implements MqttCallback {
 
     public void testConnectFirst() throws MqttException, IOException, InterruptedException {
         MqttPublish publish = new MqttPublish(this.getName(), new MqttMessage(payload));
-        NetworkModule networkModule = new TCPNetworkModule(Trace.getTrace(""), SocketFactory.getDefault(), host, port);
+        NetworkModule networkModule = new TCPNetworkModule(SocketFactory.getDefault(), host, port, "");
         networkModule.start();
         MqttOutputStream mqttOut = new MqttOutputStream(networkModule.getOutputStream());
         try {
@@ -315,7 +315,13 @@ public class MqttTest extends TestCase implements MqttCallback {
             }
             public Socket createSocket(InetAddress a, int i, InetAddress a1, int i1) throws IOException {
                 return null;
-            };
+            }
+            @Override
+            public Socket createSocket() throws IOException {
+                Socket sock = new Socket();
+                sockets.add(sock);
+                return sock;
+            }
         };
         conOpt.setSocketFactory(testFactory);
         MqttTopic willTopic = client.getTopic(topic);
@@ -417,11 +423,11 @@ public class MqttTest extends TestCase implements MqttCallback {
             fail("Connection unexpectedly lost");
     }
 
-    public void messageArrived(MqttTopic topic, MqttMessage message) throws Exception {
+    public void messageArrived(String topic, MqttMessage message) throws Exception {
         lastReceipt = System.currentTimeMillis();
         receivedMessages.add(message);
     }
 
-    public void deliveryComplete(MqttDeliveryToken token) {
+    public void deliveryComplete(IMqttDeliveryToken token) {
     }
 }
