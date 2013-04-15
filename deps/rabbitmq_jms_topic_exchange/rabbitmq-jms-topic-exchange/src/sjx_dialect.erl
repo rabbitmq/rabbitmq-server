@@ -25,23 +25,7 @@
 
 -export([analyze/1]).
 
-analyze(S) -> validate(parse(scan(S))).
-
-scan(S) -> sjx_scanner:string(S).
-
-parse({ok, Tokens, _}) -> sjx_parser:parse(Tokens);
-parse(_) -> error.
-
-validate({ok, AST}) -> check_types(AST);
-validate(_) -> error.
-
-check_types(AST) ->
-    case check_type_bool(AST) of
-        true -> AST;
-        _ -> error
-    end.
-
-%% Type checking identifiers
+%% Type info for identifiers
 %%
 -define(IDENT_TYPE_INFO,
 [ {<<"JMSDeliveryMode">>, {enum, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}}
@@ -52,10 +36,28 @@ check_types(AST) ->
 , {<<"JMSType">>, string}
 ]).
 
-get_ident_type(Ident) -> proplists:get_value(Ident, ?IDENT_TYPE_INFO).
+analyze(S) -> validate(?IDENT_TYPE_INFO, parse(scan(S))).
 
-match_ident_type(Ident, Match) ->
-    case get_ident_type(Ident) of
+scan(S) -> sjx_scanner:string(S).
+
+parse({ok, Tokens, _}) -> sjx_parser:parse(Tokens);
+parse(_) -> error.
+
+validate(TypeInfo, {ok, AST}) -> check_types(TypeInfo, AST);
+validate(_, _) -> error.
+
+%% Validation functions
+
+check_types(TypeInfo, AST) ->
+    case check_type_bool(TypeInfo, AST) of
+        true -> AST;
+        _ -> error
+    end.
+
+get_ident_type(Ident, TypeInfo) -> proplists:get_value(Ident, TypeInfo).
+
+match_ident_type(Ident, Match, TypeInfo) ->
+    case get_ident_type(Ident, TypeInfo) of
         undefined -> true;  %% presumption of innocence
         Match     -> true;
         _         -> false
@@ -63,59 +65,59 @@ match_ident_type(Ident, Match) ->
 
 %% Type checking general expressions
 %%
-check_type_bool( true ) -> true;
-check_type_bool( false ) -> true;
-check_type_bool( {'ident', Ident } ) -> match_ident_type(Ident, boolean);
-check_type_bool( {'not', Exp }) -> check_type_bool(Exp);
-check_type_bool( {'and', Exp1, Exp2 }) -> check_type_bool(Exp1) andalso check_type_bool(Exp2);
-check_type_bool( {'or', Exp1, Exp2 }) -> check_type_bool(Exp1) andalso check_type_bool(Exp2);
-check_type_bool( {'like', LHS, {regex, _RX} }) -> check_type_string(LHS);
-check_type_bool( {'not_like', LHS, {regex, _RX} }) -> check_type_string(LHS);
-check_type_bool( {'between', Exp1, Exp2 }) -> check_type_arith(Exp1) andalso check_type_range(Exp2);
-check_type_bool( {'not_between', Exp1, Exp2 }) -> check_type_arith(Exp1) andalso check_type_range(Exp2);
-check_type_bool( {'is_null', Exp }) -> check_type_ident(Exp);
-check_type_bool( {'not_null', Exp }) -> check_type_ident(Exp);
-check_type_bool( { Op, LHS, RHS }) ->
+check_type_bool(_TypeInfo, true ) -> true;
+check_type_bool(_TypeInfo, false ) -> true;
+check_type_bool( TypeInfo, {'ident', Ident } ) -> match_ident_type(Ident, boolean, TypeInfo);
+check_type_bool( TypeInfo, {'not', Exp }) -> check_type_bool(TypeInfo, Exp);
+check_type_bool( TypeInfo, {'and', Exp1, Exp2 }) -> check_type_bool(TypeInfo, Exp1) andalso check_type_bool(TypeInfo, Exp2);
+check_type_bool( TypeInfo, {'or', Exp1, Exp2 }) -> check_type_bool(TypeInfo, Exp1) andalso check_type_bool(TypeInfo, Exp2);
+check_type_bool( TypeInfo, {'like', LHS, {regex, _RX} }) -> check_type_string(TypeInfo, LHS);
+check_type_bool( TypeInfo, {'not_like', LHS, {regex, _RX} }) -> check_type_string(TypeInfo, LHS);
+check_type_bool( TypeInfo, {'between', Exp1, Exp2 }) -> check_type_arith(TypeInfo, Exp1) andalso check_type_range(TypeInfo, Exp2);
+check_type_bool( TypeInfo, {'not_between', Exp1, Exp2 }) -> check_type_arith(TypeInfo, Exp1) andalso check_type_range(TypeInfo, Exp2);
+check_type_bool(_TypeInfo, {'is_null', Exp }) -> check_type_ident(Exp);
+check_type_bool(_TypeInfo, {'not_null', Exp }) -> check_type_ident(Exp);
+check_type_bool( TypeInfo, { Op, LHS, RHS }) ->
     ( check_eq_op(Op)
-        andalso ( (check_type_arith(LHS) andalso check_type_arith(RHS))
-                  orelse
-                  (check_type_bool(LHS) andalso check_type_bool(RHS))
-                  orelse
-                  (check_type_string(LHS) andalso check_type_string(RHS))
-                  orelse
-                  check_type_enums(LHS, RHS)
-                ) )
-    orelse
-    ( check_cmp_op(Op) andalso check_type_arith(LHS) andalso check_type_arith(RHS) );
-check_type_bool( _Expression ) -> false.
+        andalso ( (check_type_arith(TypeInfo, LHS) andalso check_type_arith(TypeInfo, RHS))
+                orelse
+                  (check_type_bool(TypeInfo, LHS) andalso check_type_bool(TypeInfo, RHS))
+                orelse
+                  (check_type_string(TypeInfo, LHS) andalso check_type_string(TypeInfo, RHS))
+                orelse
+                  check_type_enums(TypeInfo, LHS, RHS)
+                )
+    ) orelse
+    ( check_cmp_op(Op) andalso check_type_arith(TypeInfo, LHS) andalso check_type_arith(TypeInfo, RHS) );
+check_type_bool(_,_) -> false.
 
 check_type_ident( {'ident', _} ) -> true;
 check_type_ident(_) -> false.
 
-check_type_enums({'ident', LIdent}, {'ident', RIdent}) ->
-    case {get_ident_type(LIdent), get_ident_type(RIdent)} of
+check_type_enums( TypeInfo, {'ident', LIdent}, {'ident', RIdent}) ->
+    case {get_ident_type(LIdent, TypeInfo), get_ident_type(RIdent, TypeInfo)} of
         {undefined, _} -> true;  %% either can be undefined
         {_, undefined} -> true;
         {EType, EType} -> true;  %% or both types must match exactly
         _              -> false
     end;
-check_type_enums(LHS, RHS = {'ident', _}) -> check_type_enums(RHS, LHS);
-check_type_enums({'ident', Ident}, RHS) when is_binary(RHS) ->
-    case get_ident_type(Ident) of
+check_type_enums( TypeInfo, LHS, RHS = {'ident', _}) -> check_type_enums(TypeInfo, RHS, LHS);
+check_type_enums( TypeInfo, {'ident', Ident}, RHS) when is_binary(RHS) ->
+    case get_ident_type(Ident, TypeInfo) of
         {'enum', BinList} -> lists:member(RHS, BinList);
         _                 -> false
     end;
-check_type_enums(_,_) -> false.
+check_type_enums(_,_,_) -> false.
 
-check_type_string( {'ident', Ident} ) -> match_ident_type(Ident, string);
-check_type_string(Exp) when is_binary(Exp) -> true;
-check_type_string(_) -> false.
+check_type_string( TypeInfo, {'ident', Ident} ) -> match_ident_type(Ident, string, TypeInfo);
+check_type_string(_TypeInfo, Exp) when is_binary(Exp) -> true;
+check_type_string(_,_) -> false.
 
-check_type_arith( {'ident', Ident} ) -> match_ident_type(Ident, number);
-check_type_arith( E ) when is_number(E) -> true;
-check_type_arith( { Op, LHS, RHS }) -> check_arith_op(Op) andalso check_type_arith(LHS) andalso check_type_arith(RHS);
-check_type_arith( { Op, Exp }) -> check_sign_op(Op) andalso check_type_arith(Exp);
-check_type_arith(_) -> false.
+check_type_arith( TypeInfo, {'ident', Ident} ) -> match_ident_type(Ident, number, TypeInfo);
+check_type_arith(_TypeInfo, E ) when is_number(E) -> true;
+check_type_arith( TypeInfo, { Op, LHS, RHS }) -> check_arith_op(Op) andalso check_type_arith(TypeInfo, LHS) andalso check_type_arith(TypeInfo, RHS);
+check_type_arith( TypeInfo, { Op, Exp }) -> check_sign_op(Op) andalso check_type_arith(TypeInfo, Exp);
+check_type_arith(_,_) -> false.
 
 check_eq_op( 'eq' ) -> true;
 check_eq_op( 'neq' ) -> true;
@@ -137,5 +139,5 @@ check_cmp_op( 'lteq' ) -> true;
 check_cmp_op( 'gteq' ) -> true;
 check_cmp_op(_) -> false.
 
-check_type_range({'range', From, To }) -> check_type_arith(From) andalso check_type_arith(To);
-check_type_range(_) -> false.
+check_type_range( TypeInfo, {'range', From, To }) -> check_type_arith(TypeInfo, From) andalso check_type_arith(TypeInfo, To);
+check_type_range(_,_) -> false.
