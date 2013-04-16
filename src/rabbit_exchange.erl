@@ -134,11 +134,13 @@ callback(X = #exchange{type       = XType,
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
-policy_changed(X = #exchange{type       = XType,
-                             decorators = Decorators}, X1) ->
-    [ok = M:policy_changed(X, X1) ||
-        M <- [type_to_module(XType) |
-              rabbit_exchange_decorator:select(all, Decorators)]],
+policy_changed(X  = #exchange{type       = XType,
+                              decorators = Decorators},
+               X1 = #exchange{decorators = Decorators1}) ->
+    D  = rabbit_exchange_decorator:select(all, Decorators),
+    D1 = rabbit_exchange_decorator:select(all, Decorators1),
+    Diff = (D -- D1) ++ (D1 -- D),
+    [ok = M:policy_changed(X, X1) || M <- [type_to_module(XType) | Diff]],
     ok.
 
 serialise_events(X = #exchange{type = Type, decorators = Decorators}) ->
@@ -275,7 +277,8 @@ update_scratch(Name, App, Fun) ->
                              Scratches2 = orddict:store(
                                             App, Fun(Scratch), Scratches1),
                              X#exchange{scratches = Scratches2}
-                     end)
+                     end),
+              ok
       end).
 
 update(Name, Fun) ->
@@ -286,7 +289,8 @@ update(Name, Fun) ->
             case Durable of
                 true -> ok = mnesia:write(rabbit_durable_exchange, X1, write);
                 _    -> ok
-            end;
+            end,
+            X1;
         [] ->
             ok
     end.
