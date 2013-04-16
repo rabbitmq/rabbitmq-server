@@ -45,7 +45,8 @@
                      client_properties, capabilities,
                      auth_mechanism, auth_state}).
 
--record(throttle, {conserve_resources, last_blocked_by, last_blocked_at}).
+-record(throttle, {conserve_resources, last_blocked_by, last_blocked_at,
+                   blocked_sent}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
@@ -142,8 +143,8 @@ info(Pid, Items) ->
 force_event_refresh(Pid) ->
     gen_server:cast(Pid, force_event_refresh).
 
-conserve_resources(Pid, _Source, Conserve) ->
-    Pid ! {conserve_resources, Conserve},
+conserve_resources(Pid, Source, Conserve) ->
+    Pid ! {conserve_resources, Source, Conserve},
     ok.
 
 server_properties(Protocol) ->
@@ -246,9 +247,10 @@ start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
                 buf                 = [],
                 buf_len             = 0,
                 throttle            = #throttle{
-                  conserve_resources = false,
-                  last_blocked_by    = none,
-                  last_blocked_at    = never}},
+                                         conserve_resources  = [],
+                                         last_blocked_by     = none,
+                                         last_blocked_at     = never,
+                                         blocked_sent        = false}},
     try
         run({?MODULE, recvloop,
              [Deb, switch_callback(rabbit_event:init_stats_timer(
@@ -321,9 +323,12 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
             end
     end.
 
-handle_other({conserve_resources, Conserve},
+handle_other({conserve_resources, Source, Conserve},
              State = #v1{throttle = Throttle}) ->
-    Throttle1 = Throttle#throttle{conserve_resources = Conserve},
+    Throttle1 = Throttle#throttle{conserve_resources = case Conserve of
+                                                           true  -> [Source];
+                                                           false -> []
+                                                       end},
     control_throttle(State#v1{throttle = Throttle1});
 handle_other({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
@@ -409,30 +414,60 @@ terminate(_Explanation, State) ->
     {force, State}.
 
 control_throttle(State = #v1{connection_state = CS, throttle = Throttle}) ->
-    case {CS, (Throttle#throttle.conserve_resources orelse
+    case {CS, ((Throttle#throttle.conserve_resources =/= []) orelse
                credit_flow:blocked())} of
         {running,   true} -> State#v1{connection_state = blocking};
         {blocking, false} -> State#v1{connection_state = running};
         {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
                                     State#v1.heartbeater),
-                             State#v1{connection_state = running};
+                             maybe_send_unblocked(State),
+                             State#v1{connection_state = running,
+                                      throttle = Throttle#throttle{
+                                                   blocked_sent = false}};
         {blocked,   true} -> State#v1{throttle = update_last_blocked_by(
                                                    Throttle)};
         {_,            _} -> State
     end.
 
-maybe_block(State = #v1{connection_state = blocking, throttle = Throttle}) ->
+maybe_block(State = #v1{connection_state = blocking,
+                        throttle         = Throttle}) ->
     ok = rabbit_heartbeat:pause_monitor(State#v1.heartbeater),
+    Sent = maybe_send_blocked(State),
     State#v1{connection_state = blocked,
              throttle = update_last_blocked_by(
-                          Throttle#throttle{last_blocked_at = erlang:now()})};
+                          Throttle#throttle{last_blocked_at = erlang:now(),
+                                            blocked_sent    = Sent})};
 maybe_block(State) ->
     State.
 
-update_last_blocked_by(Throttle = #throttle{conserve_resources = true}) ->
-    Throttle#throttle{last_blocked_by = resource};
-update_last_blocked_by(Throttle = #throttle{conserve_resources = false}) ->
-    Throttle#throttle{last_blocked_by = flow}.
+maybe_send_blocked(#v1{throttle = #throttle{conserve_resources = []}}) ->
+    false;
+maybe_send_blocked(#v1{throttle   = #throttle{conserve_resources = CR},
+                       connection = #connection{
+                                       protocol     = Protocol,
+                                       capabilities = Capabilities},
+                       sock       = Sock}) ->
+    case rabbit_misc:table_lookup(Capabilities, <<"connection.blocked">>) of
+        {bool, true} ->
+            RStr = string:join([atom_to_list(A) || A <- CR], " & "),
+            Reason = list_to_binary(rabbit_misc:format("low on ~s", [RStr])),
+            ok = send_on_channel0(Sock, #'connection.blocked'{reason = Reason},
+                                  Protocol),
+            true;
+        _ ->
+            false
+    end.
+
+maybe_send_unblocked(#v1{throttle = #throttle{blocked_sent = false}}) ->
+    ok;
+maybe_send_unblocked(#v1{connection = #connection{protocol = Protocol},
+                         sock       = Sock}) ->
+    ok = send_on_channel0(Sock, #'connection.unblocked'{}, Protocol).
+
+update_last_blocked_by(Throttle = #throttle{conserve_resources = []}) ->
+    Throttle#throttle{last_blocked_by = flow};
+update_last_blocked_by(Throttle) ->
+    Throttle#throttle{last_blocked_by = resource}.
 
 %%--------------------------------------------------------------------------
 %% error handling / termination
