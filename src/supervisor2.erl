@@ -141,9 +141,6 @@
 -define(SETS, sets).
 -define(SET, set).
 
--define(is_explicit_restart(R),
-        R == {shutdown, restart}).
-
 -ifdef(use_specs).
 -record(state, {name,
 		strategy               :: strategy(),
@@ -172,6 +169,8 @@
                           (is_tuple(R) andalso
                            tuple_size(R) == 2 andalso
                            element(1, R) =:= permanent))).
+-define(is_explicit_restart(R),
+        R == {shutdown, restart}).
 
 -ifdef(use_specs).
 -callback init(Args :: term()) ->
