@@ -566,6 +566,9 @@ check_cluster_consistency(Node) ->
             {error, not_found};
         {_OTP, _Rabbit, _Hash, {error, _}} ->
             {error, not_found};
+        {_OTP, Rabbit, _Status} ->
+             %% pre-2013/04 format implies version mismatch
+            version_error("Rabbit", rabbit_misc:version(), Rabbit);
         {OTP, Rabbit, Hash, {ok, Status}} ->
             case check_consistency(OTP, Rabbit, Hash, Node, Status) of
                 {error, _} = E -> E;
@@ -819,8 +822,8 @@ find_good_node([]) ->
     none;
 find_good_node([Node | Nodes]) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
-        {badrpc, _Reason} -> find_good_node(Nodes);
-        {OTP, Rabbit, Hash, _}  -> case check_consistency(OTP, Rabbit, Hash) of
+        {badrpc, _Reason}      -> find_good_node(Nodes);
+        {OTP, Rabbit, Hash, _} -> case check_consistency(OTP, Rabbit, Hash) of
                                        {error, _} -> find_good_node(Nodes);
                                        ok         -> {ok, Node}
                                    end
