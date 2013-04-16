@@ -890,11 +890,8 @@ handle_delayed_restart({intrinsic, _Delay}=Restart, Reason, Child, State) ->
                                     fun delete_child_and_stop/2,
                                     Reason, Child, State).
 
-restart_if_explicit_or_abnormal(RestartHow, _Otherwise, Reason, Child, State)
-  when ?is_explicit_restart(Reason) ->
-    RestartHow(Child, State);
 restart_if_explicit_or_abnormal(RestartHow, Otherwise, Reason, Child, State) ->
-    case is_abnormal_termination(Reason) of
+    case ?is_explicit_restart(Reason) orelse is_abnormal_termination(Reason) of
         true  -> RestartHow(Child, State);
         false -> Otherwise(Child, State)
     end.
