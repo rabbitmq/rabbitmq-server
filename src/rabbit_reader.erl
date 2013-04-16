@@ -324,11 +324,13 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
     end.
 
 handle_other({conserve_resources, Source, Conserve},
-             State = #v1{throttle = Throttle}) ->
-    Throttle1 = Throttle#throttle{conserve_resources = case Conserve of
-                                                           true  -> [Source];
-                                                           false -> []
-                                                       end},
+             State = #v1{throttle = Throttle =
+                             #throttle{conserve_resources = CR}}) ->
+    CR1 = case Conserve of
+              true  -> [Source | CR];
+              false -> CR -- [Source]
+          end,
+    Throttle1 = Throttle#throttle{conserve_resources = CR1},
     control_throttle(State#v1{throttle = Throttle1});
 handle_other({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
