@@ -891,12 +891,9 @@ handle_delayed_restart({intrinsic, _Delay}=Restart, Reason, Child, State) ->
                                     Reason, Child, State).
 
 restart_if_explicit_or_abnormal(RestartHow, _Otherwise, Reason, Child, State)
-  when is_function(RestartHow, 2) andalso
-       ?is_explicit_restart(Reason) ->
+  when ?is_explicit_restart(Reason) ->
     RestartHow(Child, State);
-restart_if_explicit_or_abnormal(RestartHow, Otherwise, Reason, Child, State)
-  when is_function(RestartHow, 2) andalso
-       is_function(Otherwise, 2) ->
+restart_if_explicit_or_abnormal(RestartHow, Otherwise, Reason, Child, State) ->
     case is_abnormal_termination(Reason) of
         true  -> RestartHow(Child, State);
         false -> Otherwise(Child, State)
