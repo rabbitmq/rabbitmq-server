@@ -138,3 +138,45 @@ plugin_memory(App) ->
 
 is_plugin("rabbitmq_" ++ _) -> true;
 is_plugin(App)              -> lists:member(App, ?MAGIC_PLUGINS).
+
+%% TODO support Pids, not just Names - need this for plugins
+sum_processes(Names, Acc0) ->
+    sum_processes(Names, fun (_, X, Y) -> X + Y end,
+                  [{Item, 0} || Item <- Acc0]).
+
+sum_processes(Names, Fun, Acc0) ->
+    Items = [Item || {Item, _Val0} <- Acc0],
+    Acc0Dict  = orddict:from_list(Acc0),
+    NameAccs0 = orddict:from_list([{Name, Acc0Dict} || Name <- Names]),
+    {NameAccs, OtherAcc} =
+        lists:foldl(fun (Pid, Acc) ->
+                            case process_info(Pid, [dictionary | Items]) of
+                                undefined ->
+                                    Acc;
+                                [{dictionary, D} | Vals] ->
+                                    ValsDict = orddict:from_list(Vals),
+                                    accumulate(find_ancestor(D, Names), Fun,
+                                               ValsDict, Acc)
+                            end
+                    end, {NameAccs0, Acc0Dict}, processes()),
+    %% these conversions aren't strictly necessary; we do them simply
+    %% for the sake of encapsulating the representation.
+    {[orddict:to_list(NameAcc) || NameAcc <- orddict:to_list(NameAccs)],
+     orddict:to_list(OtherAcc)}.
+
+find_ancestor(D, Names) ->
+    case lists:keyfind('$ancestors', 1, D) of
+        false          -> undefined;
+        {_, Ancestors} -> case lists:splitwith(
+                                 fun (A) -> not lists:member(A, Names) end,
+                                 Ancestors) of
+                              {_,         []} -> undefined;
+                              {_, [Name | _]} -> Name
+                          end
+    end.
+
+accumulate(undefined, Fun, ValsDict, {NameAccs, OtherAcc}) ->
+    {NameAccs, orddict:merge(Fun, ValsDict, OtherAcc)};
+accumulate(Name,      Fun, ValsDict, {NameAccs, OtherAcc}) ->
+    F = fun (NameAcc) -> orddict:merge(Fun, ValsDict, NameAcc) end,
+    {orddict:update(Name, F, NameAccs), OtherAcc}.
