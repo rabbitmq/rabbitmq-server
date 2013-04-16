@@ -327,7 +327,7 @@ handle_other({conserve_resources, Source, Conserve},
              State = #v1{throttle = Throttle =
                              #throttle{conserve_resources = CR}}) ->
     CR1 = case Conserve of
-              true  -> [Source | CR];
+              true  -> lists:usort([Source | CR]);
               false -> CR -- [Source]
           end,
     Throttle1 = Throttle#throttle{conserve_resources = CR1},
