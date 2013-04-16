@@ -29,8 +29,8 @@
 -export([transform_dir/3, force_recovery/2]). %% upgrade
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, prioritise_call/3, prioritise_cast/2,
-         prioritise_info/2, format_message_queue/2]).
+         code_change/3, prioritise_call/4, prioritise_cast/3,
+         prioritise_info/3, format_message_queue/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -50,6 +50,9 @@
 -define(FILE_EXTENSION_TMP,    ".rdt").
 
 -define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB
+
+ %% i.e. two pairs, so GC does not go idle when busy
+-define(MAXIMUM_SIMULTANEOUS_GC_FILES, 4).
 
 %%----------------------------------------------------------------------------
 
@@ -738,7 +741,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-prioritise_call(Msg, _From, _State) ->
+prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         successfully_recovered_state                        -> 7;
         {new_client_state, _Ref, _Pid, _MODC, _CloseFDsFun} -> 7;
@@ -746,7 +749,7 @@ prioritise_call(Msg, _From, _State) ->
         _                                                   -> 0
     end.
 
-prioritise_cast(Msg, _State) ->
+prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {combine_files, _Source, _Destination, _Reclaimed} -> 8;
         {delete_file, _File, _Reclaimed}                   -> 8;
@@ -755,7 +758,7 @@ prioritise_cast(Msg, _State) ->
         _                                                  -> 0
     end.
 
-prioritise_info(Msg, _State) ->
+prioritise_info(Msg, _Len, _State) ->
     case Msg of
         sync                                               -> 8;
         _                                                  -> 0
@@ -1728,10 +1731,12 @@ maybe_compact(State = #msstate { sum_valid_data        = SumValid,
        (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     %% TODO: the algorithm here is sub-optimal - it may result in a
     %% complete traversal of FileSummaryEts.
-    case ets:first(FileSummaryEts) of
-        '$end_of_table' ->
+    First = ets:first(FileSummaryEts),
+    case First =:= '$end_of_table' orelse
+        orddict:size(Pending) >= ?MAXIMUM_SIMULTANEOUS_GC_FILES of
+        true ->
             State;
-        First ->
+        false ->
             case find_files_to_combine(FileSummaryEts, FileSizeLimit,
                                        ets:lookup(FileSummaryEts, First)) of
                 not_found ->

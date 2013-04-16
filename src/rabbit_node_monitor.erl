@@ -32,8 +32,9 @@
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
+-define(RABBIT_DOWN_PING_INTERVAL, 1000).
 
--record(state, {monitors, partitions, subscribers}).
+-record(state, {monitors, partitions, subscribers, down_ping_timer}).
 
 %%----------------------------------------------------------------------------
 
@@ -272,10 +273,34 @@ handle_info({mnesia_system_event,
                     ordsets:add_element(Node, ordsets:from_list(Partitions))),
     {noreply, State1#state{partitions = Partitions1}};
 
+handle_info(ping_nodes, State) ->
+    %% We ping nodes when some are down to ensure that we find out
+    %% about healed partitions quickly. We ping all nodes rather than
+    %% just the ones we know are down for simplicity; it's not expensive
+    %% to ping the nodes that are up, after all.
+    State1 = State#state{down_ping_timer = undefined},
+    Self = self(),
+    %% all_nodes_up() both pings all the nodes and tells us if we need to again.
+    %%
+    %% We ping in a separate process since in a partition it might
+    %% take some noticeable length of time and we don't want to block
+    %% the node monitor for that long.
+    spawn_link(fun () ->
+                       case all_nodes_up() of
+                           true  -> ok;
+                           false -> Self ! ping_again
+                       end
+               end),
+    {noreply, State1};
+
+handle_info(ping_again, State) ->
+    {noreply, ensure_ping_timer(State)};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    rabbit_misc:stop_timer(State, #state.down_ping_timer),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -309,17 +334,22 @@ handle_dead_rabbit(Node) ->
     ok.
 
 majority() ->
-    length(alive_nodes()) / length(rabbit_mnesia:cluster_nodes(all)) > 0.5.
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
+
+all_nodes_up() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) =:= length(Nodes).
 
 %% mnesia:system_info(db_nodes) (and hence
 %% rabbit_mnesia:cluster_nodes(running)) does not give reliable results
 %% when partitioned.
-alive_nodes() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    [N || N <- Nodes, pong =:= net_adm:ping(N)].
+alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
+
+alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
 
 alive_rabbit_nodes() ->
-    [N || N <- alive_nodes(), rabbit_nodes:is_running(N, rabbit)].
+    [N || N <- alive_nodes(), rabbit_nodes:is_process_running(N, rabbit)].
 
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
@@ -339,7 +369,7 @@ await_cluster_recovery() ->
 wait_for_cluster_recovery(Nodes) ->
     case majority() of
         true  -> rabbit:start();
-        false -> timer:sleep(1000),
+        false -> timer:sleep(?RABBIT_DOWN_PING_INTERVAL),
                  wait_for_cluster_recovery(Nodes)
     end.
 
@@ -353,7 +383,11 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
                       [] -> [];
                       _  -> Partitions
                   end,
-    State#state{partitions = Partitions1}.
+    ensure_ping_timer(State#state{partitions = Partitions1}).
+
+ensure_ping_timer(State) ->
+    rabbit_misc:ensure_timer(
+      State, #state.down_ping_timer, ?RABBIT_DOWN_PING_INTERVAL, ping_nodes).
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),

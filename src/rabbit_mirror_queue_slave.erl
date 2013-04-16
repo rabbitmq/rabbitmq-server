@@ -27,8 +27,8 @@
 -export([start_link/1, set_maximum_since_use/2, info/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
+         code_change/3, handle_pre_hibernate/1, prioritise_call/4,
+         prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 
 -export([joined/2, members_changed/3, handle_msg/3]).
 
@@ -323,14 +323,14 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
     BQS3 = BQ:handle_pre_hibernate(BQS2),
     {hibernate, stop_rate_timer(State #state { backing_queue_state = BQS3 })}.
 
-prioritise_call(Msg, _From, _State) ->
+prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         info                                 -> 9;
         {gm_deaths, _Deaths}                 -> 5;
         _                                    -> 0
     end.
 
-prioritise_cast(Msg, _State) ->
+prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
@@ -339,7 +339,7 @@ prioritise_cast(Msg, _State) ->
         _                                    -> 0
     end.
 
-prioritise_info(Msg, _State) ->
+prioritise_info(Msg, _Len, _State) ->
     case Msg of
         update_ram_duration                  -> 8;
         sync_timeout                         -> 6;
