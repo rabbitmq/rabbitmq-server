@@ -823,6 +823,7 @@ find_good_node([]) ->
 find_good_node([Node | Nodes]) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _Reason}      -> find_good_node(Nodes);
+        {_OTP, _Rabbit, _}     -> find_good_node(Nodes);
         {OTP, Rabbit, Hash, _} -> case check_consistency(OTP, Rabbit, Hash) of
                                        {error, _} -> find_good_node(Nodes);
                                        ok         -> {ok, Node}
