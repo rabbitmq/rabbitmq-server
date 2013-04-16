@@ -827,7 +827,7 @@ find_good_node([Node | Nodes]) ->
         {OTP, Rabbit, Hash, _} -> case check_consistency(OTP, Rabbit, Hash) of
                                        {error, _} -> find_good_node(Nodes);
                                        ok         -> {ok, Node}
-                                   end
+                                  end
     end.
 
 is_only_clustered_disc_node() ->
