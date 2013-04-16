@@ -49,7 +49,6 @@
             ttl_timer_ref,
             ttl_timer_expiry,
             senders,
-            queue_monitors,
             dlx,
             dlx_routing_key,
             max_length,
@@ -831,9 +830,8 @@ dead_letter_publish(Msg, Reason, X, RK, QName) ->
     {Queues, Cycles} = detect_dead_letter_cycles(
                          DLMsg, rabbit_exchange:route(X, Delivery)),
     lists:foreach(fun log_cycle_once/1, Cycles),
-    {_, DeliveredQPids} = rabbit_amqqueue:deliver(
-                            rabbit_amqqueue:lookup(Queues), Delivery),
-    DeliveredQPids.
+    rabbit_amqqueue:deliver( rabbit_amqqueue:lookup(Queues), Delivery),
+    ok.
 
 stop(State) -> stop(noreply, State).
 
