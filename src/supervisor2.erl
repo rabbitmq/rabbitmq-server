@@ -871,21 +871,13 @@ handle_restart(intrinsic, Reason, Child, State) ->
                                     Reason, Child, State);
 handle_restart(temporary, _Reason, Child, State) ->
     delete_child_and_continue(Child, State);
-handle_restart({_RestartType, _Delay}=Restart, Reason, Child, State) ->
-    handle_delayed_restart(Restart, Reason, Child, State).
-
-handle_delayed_restart({permanent, _Delay}=Restart, Reason, Child, State) ->
+handle_restart({permanent, _Delay}=Restart, Reason, Child, State) ->
     do_restart_delay(Restart, Reason, Child, State);
-handle_delayed_restart({RestartType, _Delay}=Restart, Reason, Child, State)
-  when ?is_explicit_restart(Reason) andalso
-       (RestartType =:= transient orelse
-        RestartType =:= intrinsic) ->
-    do_restart_delay(Restart, Reason, Child, State);
-handle_delayed_restart({transient, _Delay}=Restart, Reason, Child, State) ->
+handle_restart({transient, _Delay}=Restart, Reason, Child, State) ->
     restart_if_explicit_or_abnormal(defer_to_restart_delay(Restart, Reason),
                                     fun delete_child_and_continue/2,
                                     Reason, Child, State);
-handle_delayed_restart({intrinsic, _Delay}=Restart, Reason, Child, State) ->
+handle_restart({intrinsic, _Delay}=Restart, Reason, Child, State) ->
     restart_if_explicit_or_abnormal(defer_to_restart_delay(Restart, Reason),
                                     fun delete_child_and_stop/2,
                                     Reason, Child, State).
