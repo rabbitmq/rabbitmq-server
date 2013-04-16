@@ -63,7 +63,7 @@
 
 %% Allows additional destinations to be added to the routing decision.
 -callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
-    [rabbit_amqqueue:name() | rabbit_exchange:name()] | ok.
+    [rabbit_amqqueue:name() | rabbit_exchange:name()].
 
 %% Whether the decorator wishes to receive callbacks for the exchange
 %% none:no callbacks, noroute:all callbacks except route, all:all callbacks

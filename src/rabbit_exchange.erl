@@ -68,7 +68,10 @@
 -spec(update_scratch/3 :: (name(), atom(), fun((any()) -> any())) -> 'ok').
 -spec(update/2 ::
         (name(),
-         fun((rabbit_types:exchange()) -> rabbit_types:exchange())) -> 'ok').
+         fun((rabbit_types:exchange()) -> rabbit_types:exchange()))
+         -> {exchange_not_found, rabbit_exchange:name()} |
+            {exchange_not_durable, rabbit_exchange:name()} |
+            rabbit_types:exchange()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
@@ -139,8 +142,8 @@ policy_changed(X  = #exchange{type       = XType,
                X1 = #exchange{decorators = Decorators1}) ->
     D  = rabbit_exchange_decorator:select(all, Decorators),
     D1 = rabbit_exchange_decorator:select(all, Decorators1),
-    Diff = (D -- D1) ++ (D1 -- D),
-    [ok = M:policy_changed(X, X1) || M <- [type_to_module(XType) | Diff]],
+    DAll = lists:usort(D ++ D1),
+    [ok = M:policy_changed(X, X1) || M <- [type_to_module(XType) | DAll]],
     ok.
 
 serialise_events(X = #exchange{type = Type, decorators = Decorators}) ->
@@ -288,11 +291,11 @@ update(Name, Fun) ->
             ok = mnesia:write(rabbit_exchange, X1, write),
             case Durable of
                 true -> ok = mnesia:write(rabbit_durable_exchange, X1, write);
-                _    -> ok
+                _    -> {exchange_not_durable, Name}
             end,
             X1;
         [] ->
-            ok
+            {exchange_not_found, Name}
     end.
 
 info_keys() -> ?INFO_KEYS.
