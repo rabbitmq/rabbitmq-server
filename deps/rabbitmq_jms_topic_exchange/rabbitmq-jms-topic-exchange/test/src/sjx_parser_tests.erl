@@ -28,7 +28,7 @@
 %% Fixed type info for identifiers
 %%
 -define(TEST_TYPE_INFO,
-[ {<<"JMSDeliveryMode">>, {enum, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}}
+[ {<<"JMSDeliveryMode">>, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}
 , {<<"JMSPriority">>, number}
 , {<<"JMSMessageID">>, string}
 , {<<"JMSTimestamp">>, number}

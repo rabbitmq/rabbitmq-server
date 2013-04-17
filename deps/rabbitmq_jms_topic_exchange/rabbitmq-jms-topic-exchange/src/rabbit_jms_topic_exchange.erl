@@ -114,7 +114,16 @@ route( #exchange{name = XName}
 validate(_X) -> ok.
 
 % After exchange declaration and recovery
-create(_Tx, _X) -> ok.
+create(Tx, #exchange{name = XName, arguments = Args}) ->
+  case {Tx, get_type_info_from_arguments(Args)} of
+    {transaction, {ok, TypePropList}} ->
+      add_initial_record(XName, TypePropList);
+    {none, error} ->
+      create_error(XName, Args);
+    _ ->
+      ok
+  end,
+  ok.
 
 % Delete an exchange
 delete(transaction, #exchange{name = XName}, _Bs) ->
@@ -125,11 +134,12 @@ delete(_Tx, _X, _Bs) ->
 
 % A new binding has ben added or recovered
 add_binding( Tx
-           , #exchange{name = XName}
+           , #exchange{name = XName, arguments = XArgs}
            , #binding{key = BindingKey, destination = DestName, args = Args}
            ) ->
   SQL = get_sql_from_args(Args),
-  case {Tx, generate_binding_fun(SQL)} of
+  {ok, TypeInfo} = get_type_info_from_arguments(XArgs),
+  case {Tx, generate_binding_fun(SQL, TypeInfo)} of
     {transaction, {ok, BindFun}} ->
       add_binding_fun(XName, {{BindingKey, DestName}, BindFun});
     {none, error} ->
@@ -166,6 +176,47 @@ binding_fun_match(Key, Headers, FunsDict) ->
     error                              -> false          % do not match if no function found
   end.
 
+get_type_info_from_arguments(Args) ->
+  case rabbit_misc:table_lookup(Args, ?RJMS_TYPE_INFO_ARG) of
+    {table, TypeInfoTable} -> {ok, table_to_proplist(TypeInfoTable)};
+    _                      -> error %% not supplied or wrong type
+  end.
+
+%% table_to_proplist(Table) :: PropList
+%%
+%% Table is in this format (example):
+%%    [ {<<"JMSType">>,          longstr, <<"string">>}
+%%    , {<<"JMSCorrelationID">>, longstr, <<"string">>}
+%%    , {<<"JMSMessageID">>,     longstr, <<"string">>}
+%%    , {<<"JMSDeliveryMode">>,  array, [ {longstr, <<"PERSISTENT">>}
+%%                                      , {longstr, <<"NON_PERSISTENT">>}
+%%                                      ]
+%%      }
+%%    , {<<"JMSPriority">>,  longstr, <<"number">>}
+%%    , {<<"JMSTimestamp">>, longstr, <<"number">>}
+%%    ]
+%%
+%% PropList should be in this format (example):
+%%    [ {<<"JMSDeliveryMode">>,  [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}
+%%    , {<<"JMSPriority">>,      number}
+%%    , {<<"JMSMessageID">>,     string}
+%%    , {<<"JMSTimestamp">>,     number}
+%%    , {<<"JMSCorrelationID">>, string}
+%%    , {<<"JMSType">>,          string}
+%%    ]
+%% where order in the list(s) is not significant.
+table_to_proplist(Table) ->
+  [ {Id, convert_type(RangeType, Val)} || {Id, RangeType, Val} <- Table ].
+
+convert_type(longstr, BinTypeName) when is_binary(BinTypeName) ->
+  binary_to_type_atom(BinTypeName);
+convert_type(array, ArrayList) when is_list(ArrayList) ->
+  [ BinString || {longstr, BinString} <- ArrayList ].
+
+binary_to_type_atom(<<"string">> ) -> string;
+binary_to_type_atom(<<"boolean">>) -> boolean;
+binary_to_type_atom(<<"number">> ) -> number.
+
 % get Headers from message content
 get_headers(Content) ->
   case (Content#content.properties)#'P_basic'.headers of
@@ -174,8 +225,8 @@ get_headers(Content) ->
   end.
 
 % generate the function that checks the message against the SQL expression
-generate_binding_fun(SQL) ->
-  case compile_sql(SQL) of
+generate_binding_fun(SQL, TypeInfo) ->
+  case compile_sql(SQL, TypeInfo) of
     error          -> error;
     CompiledSQLExp -> { ok,
                         fun(Headers) ->
@@ -191,8 +242,8 @@ get_sql_from_args(Args) ->
   end.
 
 % scan and parse SQL expression
-compile_sql(SQL) ->
-  case sjx_dialect:analyze(?IDENT_TYPE_INFO, SQL) of
+compile_sql(SQL, TypeInfo) ->
+  case sjx_dialect:analyze(TypeInfo, SQL) of
     error    -> error;
     Compiled -> Compiled
   end.
@@ -208,22 +259,25 @@ sql_match(SQL, Headers) ->
 get_binding_funs_x(XName) ->
   mnesia:async_dirty(
     fun() ->
-      #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state(XName),
+      #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state(XName),
       BindingFuns
     end,
     []
   ).
 
+add_initial_record(XName, TypeInfo) ->
+  write_initial_state(XName, TypeInfo).
+
 % add binding fun to binding fun dictionary
 add_binding_fun(XName, BindingKeyAndFun) ->
-  #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_for_update(XName),
-  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun)).
+  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns, x_type_info = TInfo} = read_state_for_update(XName),
+  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun), TInfo).
 
 % remove binding funs from binding fun dictionary
 remove_binding_funs(XName, Bindings) ->
   BindingKeys = [ {BindingKey, DestName} || #binding{key = BindingKey, destination = DestName} <- Bindings ],
-  #?JMS_TOPIC_RECORD{x_state = BindingFuns} = read_state_for_update(XName),
-  write_state_fun(XName, remove_items(BindingFuns, BindingKeys)).
+  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns, x_type_info = TInfo} = read_state_for_update(XName),
+  write_state_fun(XName, remove_items(BindingFuns, BindingKeys), TInfo).
 
 % add an item to the dictionary of binding functions
 put_item(Dict, {Key, Item}) -> dict:store(Key, Item, Dict).
@@ -245,15 +299,20 @@ read_state(XName) -> read_state(XName, read).
 % Lockable read
 read_state(XName, Lock) ->
   case mnesia:read(?JMS_TOPIC_TABLE, XName, Lock) of
-    []    -> #?JMS_TOPIC_RECORD{x_name = XName, x_state = dict:new()};
     [Rec] -> Rec;
     _     -> exchange_state_corrupt_error(XName)
   end.
 
 % Basic write after read for update
-write_state_fun(XName, State) ->
+write_state_fun(XName, BFuns, TInfo) ->
   mnesia:write( ?JMS_TOPIC_TABLE
-              , #?JMS_TOPIC_RECORD{x_name = XName, x_state = State}
+              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = BFuns, x_type_info = TInfo}
+              , write ).
+
+% Write first record
+write_initial_state(XName, TInfo) ->
+  mnesia:write( ?JMS_TOPIC_TABLE
+              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = dict:new(), x_type_info = TInfo}
               , write ).
 
 %%----------------------------------------------------------------------------
@@ -262,7 +321,7 @@ write_state_fun(XName, State) ->
 % state error
 exchange_state_corrupt_error(#resource{name = XName}) ->
   rabbit_misc:protocol_error( internal_error
-                            , "exchange named '~s' has incorrect saved state"
+                            , "exchange named '~s' has no saved state or incorrect saved state"
                             , [XName] ).
 
 % parsing error
@@ -270,5 +329,11 @@ parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
   rabbit_misc:protocol_error( precondition_failed
                             , "cannot parse selector '~s' binding destination '~s' to exchange '~s'"
                             , [S, DestName, XName] ).
+
+% create error
+create_error(#resource{name = XName}, Args) ->
+  rabbit_misc:protocol_error( precondition_failed
+                            , "cannot create exchange '~s' with arguments '~p'"
+                            , [XName, Args] ).
 
 %%----------------------------------------------------------------------------

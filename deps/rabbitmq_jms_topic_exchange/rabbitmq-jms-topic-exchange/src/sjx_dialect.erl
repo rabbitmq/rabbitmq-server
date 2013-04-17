@@ -93,8 +93,8 @@ check_type_enums( TypeInfo, {'ident', LIdent}, {'ident', RIdent}) ->
 check_type_enums( TypeInfo, LHS, RHS = {'ident', _}) -> check_type_enums(TypeInfo, RHS, LHS);
 check_type_enums( TypeInfo, {'ident', Ident}, RHS) when is_binary(RHS) ->
     case get_ident_type(Ident, TypeInfo) of
-        {'enum', BinList} -> lists:member(RHS, BinList);
-        _                 -> false
+        BinList when is_list(BinList) -> lists:member(RHS, BinList);
+        _                             -> false
     end;
 check_type_enums(_,_,_) -> false.
 
