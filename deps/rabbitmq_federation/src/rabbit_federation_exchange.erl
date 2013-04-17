@@ -71,7 +71,7 @@ remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
         false -> ok
     end.
 
-route(_, _) -> ok.
+route(_, _) -> [].
 
 active_for(X) ->
     case federate(X) of
