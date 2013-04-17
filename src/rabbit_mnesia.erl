@@ -403,10 +403,8 @@ cluster_status(WhichNodes) ->
     end.
 
 node_info() ->
-    DelegateBeamLocation = code:which(delegate),
-    {ok, {delegate, DelegateBeamHash}} = beam_lib:md5(DelegateBeamLocation),
-    {erlang:system_info(otp_release), rabbit_misc:version(), DelegateBeamHash,
-     cluster_status_from_mnesia()}.
+    {erlang:system_info(otp_release), rabbit_misc:version(),
+     delegate_beam_hash(), cluster_status_from_mnesia()}.
 
 node_type() ->
     DiscNodes = cluster_nodes(disc),
@@ -789,13 +787,16 @@ check_rabbit_consistency(Remote) ->
       fun rabbit_misc:version_minor_equivalent/2).
 
 check_beam_compatibility(RemoteHash) ->
-    DelegateBeamLocation = code:which(delegate),
-    {ok, {delegate, LocalHash}} = beam_lib:md5(DelegateBeamLocation),
-    case RemoteHash == LocalHash of
+    case RemoteHash == delegate_beam_hash() of
         true  -> ok;
         false -> {error, {incompatible_bytecode,
                           "Incompatible Erlang bytecode found on nodes"}}
     end.
+
+delegate_beam_hash() ->
+    DelegateBeamLocation = code:which(delegate),
+    {ok, {delegate, Hash}} = beam_lib:md5(DelegateBeamLocation),
+    Hash.
 
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
