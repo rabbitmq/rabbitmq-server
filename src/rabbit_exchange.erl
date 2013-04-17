@@ -69,8 +69,7 @@
 -spec(update/2 ::
         (name(),
          fun((rabbit_types:exchange()) -> rabbit_types:exchange()))
-         -> {exchange_not_found, rabbit_exchange:name()} |
-            {exchange_not_durable, rabbit_exchange:name()} |
+         -> exchange_not_found | exchange_not_durable |
             rabbit_types:exchange()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
@@ -291,11 +290,11 @@ update(Name, Fun) ->
             ok = mnesia:write(rabbit_exchange, X1, write),
             case Durable of
                 true -> ok = mnesia:write(rabbit_durable_exchange, X1, write);
-                _    -> {exchange_not_durable, Name}
+                _    -> exchange_not_durable
             end,
             X1;
         [] ->
-            {exchange_not_found, Name}
+            exchange_not_found
     end.
 
 info_keys() -> ?INFO_KEYS.

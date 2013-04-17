@@ -176,9 +176,9 @@ update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
                                            rabbit_exchange_decorator:set(
                                              X0 #exchange{policy = NewPolicy})
                                    end) of
-                         #exchange{} = X1          -> {X, X1};
-                         {exchange_not_found, _}   -> {X, X };
-                         {exchange_not_durable, _} -> {X, X }
+                         #exchange{} = X1     -> {X, X1};
+                         exchange_not_found   -> {X, X };
+                         exchange_not_durable -> {X, X }
                      end
     end.
 
