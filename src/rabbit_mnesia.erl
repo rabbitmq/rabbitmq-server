@@ -793,6 +793,9 @@ check_beam_compatibility(RemoteHash) ->
                           "Incompatible Erlang bytecode found on nodes"}}
     end.
 
+%% The delegate module sends functions across the cluster; if it is
+%% out of sync (say due to mixed compilers), we will get badfun
+%% exceptions when trying to do so. Let's detect that at startup.
 delegate_beam_hash() ->
     DelegateBeamLocation = code:which(delegate),
     {ok, {delegate, Hash}} = beam_lib:md5(DelegateBeamLocation),
