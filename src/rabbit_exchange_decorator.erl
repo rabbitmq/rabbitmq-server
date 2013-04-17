@@ -93,13 +93,12 @@ filter(Modules) ->
     [M || M <- Modules, code:which(M) =/= non_existing].
 
 set(X) ->
-    X#exchange{
-      decorators =
-        lists:foldl(fun (D, {Route, NoRoute}) ->
-                            Callbacks = D:active_for(X),
-                            {cons_if_eq(all,     Callbacks, D, Route),
-                             cons_if_eq(noroute, Callbacks, D, NoRoute)}
-                    end, {[], []}, list())}.
+    Decs = lists:foldl(fun (D, {Route, NoRoute}) ->
+                               ActiveFor = D:active_for(X),
+                               {cons_if_eq(all,     ActiveFor, D, Route),
+                                cons_if_eq(noroute, ActiveFor, D, NoRoute)}
+                       end, {[], []}, list()),
+    X#exchange{decorators = Decs}.
 
 list() -> [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
 
