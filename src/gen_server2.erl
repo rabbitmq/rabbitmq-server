@@ -883,6 +883,13 @@ common_become(_Name, _Mod, _NState, [] = _Debug) ->
 common_become(Name, Mod, NState, Debug) ->
     sys:handle_debug(Debug, fun print_event/3, Name, {become, Mod, NState}).
 
+handle_msg({'$gen_call', From, {debug_state, Fun}},
+           GS2State = #gs2_state{state = State,
+                                 name  = Name,
+                                 debug = Debug}) ->
+    Debug1 = common_reply(Name, From, catch Fun(State), State, Debug),
+    loop(GS2State #gs2_state { state = State,
+                               debug = Debug1 });
 handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
                                                              state = State,
                                                              name = Name,
