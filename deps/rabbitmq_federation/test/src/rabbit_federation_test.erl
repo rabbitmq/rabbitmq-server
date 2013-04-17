@@ -492,6 +492,10 @@ federate_unfederate_test() ->
               set_pol("dyn", "^dyn\\.", policy("all")),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
+              %% Change policy - links change
+              set_pol("dyn", "^dyn\\.", policy("localhost")),
+              assert_connections(Xs, [<<"localhost">>]),
+
               %% Unfederate them - links disappear
               clear_pol("dyn"),
               assert_connections(Xs, [])
