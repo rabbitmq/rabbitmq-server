@@ -37,19 +37,19 @@ memory() ->
     QProcs        = [rabbit_amqqueue_sup, rabbit_mirror_queue_slave_sup],
     MsgIndexProcs = [msg_store_transient, msg_store_persistent],
     MgmtDbProcs   = [rabbit_mgmt_sup],
-    %% TODO: plug-ins
+    PluginProcs   = plugin_sups(),
 
-    All = [ConnProcs, QProcs, MsgIndexProcs, MgmtDbProcs],
+    All = [ConnProcs, QProcs, MsgIndexProcs, MgmtDbProcs, PluginProcs],
 
     {Sums, _Other} = sum_processes(lists:append(All), [memory]),
 
-    [Conns, Qs, MsgIndexProc, MgmtDbProc] =
+    [Conns, Qs, MsgIndexProc, MgmtDbProc, AllPlugins] =
         [aggregate_memory(Names, Sums) || Names <- All],
 
     Mnesia       = mnesia_memory(),
     MsgIndexETS  = ets_memory(rabbit_msg_store_ets_index),
     MgmtDbETS    = ets_memory(rabbit_mgmt_db),
-    Plugins      = plugin_memory() - MgmtDbProc,
+    Plugins      = AllPlugins - MgmtDbProc,
 
     [{total,     Total},
      {processes, Processes},
@@ -62,7 +62,7 @@ memory() ->
 
     %% TODO: should we replace this with the value extracted from
     %% 'Other'?
-    OtherProc = Processes - Conns - Qs - MsgIndexProc - MgmtDbProc - Plugins,
+    OtherProc = Processes - Conns - Qs - MsgIndexProc - AllPlugins,
 
     [{total,            Total},
      {connection_procs, Conns},
@@ -85,35 +85,6 @@ memory() ->
 
 %%----------------------------------------------------------------------------
 
-sup_memory(Sup) ->
-    lists:sum([child_memory(P, T) || {_, P, T, _} <- sup_children(Sup)]) +
-        pid_memory(Sup).
-
-sup_children(Sup) ->
-    rabbit_misc:with_exit_handler(
-      rabbit_misc:const([]),
-      fun () ->
-              %% Just in case we end up talking to something that is
-              %% not a supervisor by mistake.
-              case supervisor:which_children(Sup) of
-                  L when is_list(L) -> L;
-                  _                 -> []
-              end
-      end).
-
-pid_memory(Pid)  when is_pid(Pid)   -> case process_info(Pid, memory) of
-                                           {memory, M} -> M;
-                                           _           -> 0
-                                       end;
-pid_memory(Name) when is_atom(Name) -> case whereis(Name) of
-                                           P when is_pid(P) -> pid_memory(P);
-                                           _                -> 0
-                                       end.
-
-child_memory(Pid, worker)     when is_pid (Pid) -> pid_memory(Pid);
-child_memory(Pid, supervisor) when is_pid (Pid) -> sup_memory(Pid);
-child_memory(_, _)                              -> 0.
-
 mnesia_memory() ->
     case mnesia:system_info(is_running) of
         yes -> lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
@@ -128,19 +99,25 @@ ets_memory(Name) ->
 
 bytes(Words) ->  Words * erlang:system_info(wordsize).
 
-plugin_memory() ->
-    lists:sum([plugin_memory(App) ||
-                  {App, _, _} <- application:which_applications(),
-                  is_plugin(atom_to_list(App))]).
+plugin_sups() ->
+    lists:append([plugin_sup(App) ||
+                     {App, _, _} <- application:which_applications(),
+                     is_plugin(atom_to_list(App))]).
 
-plugin_memory(App) ->
+plugin_sup(App) ->
     case application_controller:get_master(App) of
-        undefined -> 0;
+        undefined -> [];
         Master    -> case application_master:get_child(Master) of
-                         {Pid, _} when is_pid(Pid) -> sup_memory(Pid);
-                         Pid      when is_pid(Pid) -> sup_memory(Pid);
-                         _                         -> 0
+                         {Pid, _} when is_pid(Pid) -> [process_name(Pid)];
+                         Pid      when is_pid(Pid) -> [process_name(Pid)];
+                         _                         -> []
                      end
+    end.
+
+process_name(Pid) ->
+    case process_info(Pid, registered_name) of
+        {registered_name, Name} -> Name;
+        _                       -> Pid
     end.
 
 is_plugin("rabbitmq_" ++ _) -> true;
@@ -154,7 +131,6 @@ extract_memory(Name, Sums) ->
     {memory, V} = lists:keyfind(memory, 1, Accs),
     V.
 
-%% TODO support Pids, not just Names - need this for plugins
 %% NB: this code is non-rabbit specific
 sum_processes(Names, Items) ->
     sum_processes(Names, fun (_, X, Y) -> X + Y end,
