@@ -140,9 +140,9 @@ is_plugin("rabbitmq_" ++ _) -> true;
 is_plugin(App)              -> lists:member(App, ?MAGIC_PLUGINS).
 
 %% TODO support Pids, not just Names - need this for plugins
-sum_processes(Names, Acc0) ->
+sum_processes(Names, Items) ->
     sum_processes(Names, fun (_, X, Y) -> X + Y end,
-                  [{Item, 0} || Item <- Acc0]).
+                  [{Item, 0} || Item <- Items]).
 
 sum_processes(Names, Fun, Acc0) ->
     Items = [Item || {Item, _Val0} <- Acc0],
