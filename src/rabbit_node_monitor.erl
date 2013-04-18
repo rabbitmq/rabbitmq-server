@@ -60,6 +60,9 @@
 -spec(partitions/0 :: () -> {node(), [node()]}).
 -spec(subscribe/1 :: (pid()) -> 'ok').
 
+-spec(all_nodes_up/0 :: () -> boolean()).
+-spec(run_outside_applications/1 :: (fun (() -> any())) -> pid()).
+
 -endif.
 
 %%----------------------------------------------------------------------------
