@@ -52,14 +52,7 @@
 %% not_healing
 %%   - the default
 %%
-%% {leader_wait_for_winner_requests, OutstandingRequests, Notify}
-%%   - we are the leader and are waiting to hear requests from all
-%%   other partitioned nodes
-%%
-%% wait_for_winner
-%%   - we are not the leader and are waiting to see what it has to say
-%%
-%% {winner_wait_for_stops, OutstandingStops, Notify}
+%% {winner_waiting, OutstandingStops, Notify}
 %%   - we are the winner and are waiting for all losing nodes to stop
 %%   before telling them they can restart
 %%
@@ -74,14 +67,11 @@
 init() -> not_healing.
 
 maybe_start(not_healing) ->
-    case enabled() andalso rabbit_node_monitor:all_nodes_up() of
+    case enabled() of
         true  -> [Leader | _] = lists:usort(rabbit_mnesia:cluster_nodes(all)),
-                 rabbit_log:info("Autoheal: leader is ~p~n", [Leader]),
-                 send(Leader, {request_winner, node()}),
-                 case node() of
-                     Leader -> not_healing;
-                     _      -> wait_for_winner
-                 end;
+                 send(Leader, {request_start, node()}),
+                 rabbit_log:info("Autoheal request sent to ~p~n", [Leader]),
+                 not_healing;
         false -> not_healing
     end;
 maybe_start(State) ->
@@ -90,7 +80,7 @@ maybe_start(State) ->
 enabled() ->
     {ok, autoheal} =:= application:get_env(rabbit, cluster_partition_handling).
 
-node_down(_Node, {winner_wait_for_stops, _Nodes, _Notify} = Autoheal) ->
+node_down(_Node, {winner_waiting, _Nodes, _Notify} = Autoheal) ->
     Autoheal;
 node_down(_Node, not_healing) ->
     not_healing;
@@ -99,105 +89,39 @@ node_down(Node, _State) ->
     not_healing.
 
 %% By receiving this message we become the leader
-handle_msg({request_winner, Node},
+%% TODO should we try to debounce this?
+handle_msg({request_start, Node},
            not_healing, Partitions) ->
+    rabbit_log:info("Autoheal request received from ~p~n", [Node]),
     case rabbit_node_monitor:all_nodes_up() of
         false -> not_healing;
-        true  -> Nodes = rabbit_mnesia:cluster_nodes(all),
-                 Partitioned =
-                     [N || N <- Nodes -- [node()],
-                           P <- [begin
-                                     {_, R} = rpc:call(N, rabbit_node_monitor,
-                                                       partitions, []),
-                                     R
-                                 end],
-                           is_list(P) andalso length(P) > 0],
-                 Partitioned1 = case Partitions of
-                                    [] -> Partitioned;
-                                    _  -> [node() | Partitioned]
-                                end,
-                 rabbit_log:info(
-                   "Autoheal leader start; partitioned nodes are ~p~n",
-                   [Partitioned1]),
-                 handle_msg({request_winner, Node},
-                            {leader_wait_for_winner_requests,
-                             Partitioned1, Partitioned1},
-                            Partitions)
+        true  -> AllPartitions = all_partitions(Partitions),
+                 {Winner, Losers} = make_decision(AllPartitions),
+                 rabbit_log:info("Autoheal decision~n"
+                                 "  * Partitions: ~p~n"
+                                 "  * Winner:     ~p~n"
+                                 "  * Losers:     ~p~n",
+                                 [AllPartitions, Winner, Losers]),
+                 send(Winner, {become_winner, Losers}),
+                 [send(L, {winner_is, Winner}) || L <- Losers],
+                 not_healing
     end;
 
-%% This is the leader receiving its last winner request - all
-%% partitioned nodes have checked in
-handle_msg({request_winner, Node},
-           {leader_wait_for_winner_requests, [Node], Notify}, Partitions) ->
-    AllPartitions = all_partitions(Partitions),
-    Winner = select_winner(AllPartitions),
-    rabbit_log:info("Autoheal request winner from ~p~n"
-                    "  Partitions were determined to be ~p~n"
-                    "  Winner is ~p~n", [Node, AllPartitions, Winner]),
-    [send(N, {winner_is, Winner}) || N <- Notify],
-    wait_for_winner;
+handle_msg({become_winner, Losers},
+           not_healing, _Partitions) ->
+    rabbit_log:info("Autoheal: I am the winner, waiting for ~p to stop~n",
+                    [Losers]),
+    {winner_waiting, Losers, Losers};
 
-%% This is the leader receiving any other winner request
-handle_msg({request_winner, Node},
-           {leader_wait_for_winner_requests, Nodes, Notify}, _Partitions) ->
-    rabbit_log:info("Autoheal request winner from ~p~n", [Node]),
-    {leader_wait_for_winner_requests, Nodes -- [Node], Notify};
+handle_msg({become_winner, Losers},
+           {winner_waiting, WaitFor, Notify}, _Partitions) ->
+    rabbit_log:info("Autoheal: I am the winner, waiting additionally for "
+                    "~p to stop~n", [Losers]),
+    {winner_waiting, lists:usort(Losers ++ WaitFor),
+     lists:usort(Losers ++ Notify)};
 
 handle_msg({winner_is, Winner},
-           wait_for_winner, Partitions) ->
-    case lists:member(Winner, Partitions) of
-        false -> case node() of
-                     Winner -> rabbit_log:info(
-                                 "Autoheal: waiting for nodes to stop: ~p~n",
-                                 [Partitions]),
-                               {winner_wait_for_stops,
-                                Partitions, Partitions};
-                     _      -> rabbit_log:info(
-                                 "Autoheal: nothing to do~n", []),
-                               not_healing
-                 end;
-        true  -> restart_me(Winner),
-                 restarting
-    end;
-
-handle_msg({winner_is, _Winner}, State, _Partitions) ->
-    %% ignore, we already cancelled the autoheal process
-    State;
-
-%% This is the winner receiving its last notification that a node has
-%% stopped - all nodes can now start again
-handle_msg({node_stopped, Node},
-           {winner_wait_for_stops, [Node], Notify}, _Partitions) ->
-    rabbit_log:info("Autoheal: final node has stopped, starting...~n",[]),
-    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
-    not_healing;
-
-handle_msg({node_stopped, Node},
-           {winner_wait_for_stops, WaitFor, Notify}, _Partitions) ->
-    {winner_wait_for_stops, WaitFor -- [Node], Notify};
-
-handle_msg({node_stopped, _Node}, State, _Partitions) ->
-    %% ignore, we already cancelled the autoheal process
-    State.
-
-%%----------------------------------------------------------------------------
-
-send(Node, Msg) -> {?SERVER, Node} ! {autoheal_msg, Msg}.
-
-select_winner(AllPartitions) ->
-    {_, [Winner | _]} =
-        hd(lists:reverse(
-             lists:sort([{partition_value(P), P} || P <- AllPartitions]))),
-    Winner.
-
-partition_value(Partition) ->
-    Connections = [Res || Node <- Partition,
-                          Res <- [rpc:call(Node, rabbit_networking,
-                                           connections_local, [])],
-                          is_list(Res)],
-    {length(lists:append(Connections)), length(Partition)}.
-
-restart_me(Winner) ->
+           not_healing, _Partitions) ->
     rabbit_log:warning(
       "Autoheal: we were selected to restart; winner is ~p~n", [Winner]),
     rabbit_node_monitor:run_outside_applications(
@@ -211,7 +135,44 @@ restart_me(Winner) ->
               end,
               erlang:demonitor(MRef, [flush]),
               rabbit:start()
-      end).
+      end),
+    restarting;
+
+%% This is the winner receiving its last notification that a node has
+%% stopped - all nodes can now start again
+handle_msg({node_stopped, Node},
+           {winner_waiting, [Node], Notify}, _Partitions) ->
+    rabbit_log:info("Autoheal: final node has stopped, starting...~n",[]),
+    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
+    not_healing;
+
+handle_msg({node_stopped, Node},
+           {winner_waiting, WaitFor, Notify}, _Partitions) ->
+    {winner_waiting, WaitFor -- [Node], Notify};
+
+handle_msg(_, restarting, _Partitions) ->
+    %% ignore, we can contribute no further
+    restarting;
+
+handle_msg({node_stopped, _Node}, State, _Partitions) ->
+    %% ignore, we already cancelled the autoheal process
+    State.
+
+%%----------------------------------------------------------------------------
+
+send(Node, Msg) -> {?SERVER, Node} ! {autoheal_msg, Msg}.
+
+make_decision(AllPartitions) ->
+    Sorted = lists:sort([{partition_value(P), P} || P <- AllPartitions]),
+    [[Winner | _] | Rest] = lists:reverse([P || {_, P} <- Sorted]),
+    {Winner, lists:append(Rest)}.
+
+partition_value(Partition) ->
+    Connections = [Res || Node <- Partition,
+                          Res <- [rpc:call(Node, rabbit_networking,
+                                           connections_local, [])],
+                          is_list(Res)],
+    {length(lists:append(Connections)), length(Partition)}.
 
 %% We have our local understanding of what partitions exist; but we
 %% only know which nodes we have been partitioned from, not which
