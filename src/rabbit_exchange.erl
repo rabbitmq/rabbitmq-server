@@ -68,7 +68,8 @@
 -spec(update_scratch/3 :: (name(), atom(), fun((any()) -> any())) -> 'ok').
 -spec(update/2 ::
         (name(),
-         fun((rabbit_types:exchange()) -> rabbit_types:exchange())) -> 'ok').
+         fun((rabbit_types:exchange()) -> rabbit_types:exchange()))
+         -> not_found | rabbit_types:exchange()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
@@ -113,25 +114,39 @@ recover() ->
                    callback(X, create, map_create_tx(Tx), [X])
            end,
            rabbit_durable_exchange),
+    report_missing_decorators(Xs),
     [XName || #exchange{name = XName} <- Xs].
 
-callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
+report_missing_decorators(Xs) ->
+    Mods = lists:usort(lists:append([rabbit_exchange_decorator:select(raw, D) ||
+                                     #exchange{decorators = D} <- Xs])),
+    case [M || M <- Mods, code:which(M) =:= non_existing] of
+        [] -> ok;
+        M  -> rabbit_log:warning("Missing exchange decorators: ~p~n", [M])
+    end.
+
+callback(X = #exchange{type       = XType,
+                       decorators = Decorators}, Fun, Serial0, Args) ->
     Serial = if is_function(Serial0) -> Serial0;
                 is_atom(Serial0)     -> fun (_Bool) -> Serial0 end
              end,
     [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args]) ||
-        M <- registry_lookup(exchange_decorator)],
+        M <- rabbit_exchange_decorator:select(all, Decorators)],
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
-policy_changed(X = #exchange{type = XType}, X1) ->
-    [ok = M:policy_changed(X, X1) ||
-        M <- [type_to_module(XType) | registry_lookup(exchange_decorator)]],
+policy_changed(X  = #exchange{type       = XType,
+                              decorators = Decorators},
+               X1 = #exchange{decorators = Decorators1}) ->
+    D  = rabbit_exchange_decorator:select(all, Decorators),
+    D1 = rabbit_exchange_decorator:select(all, Decorators1),
+    DAll = lists:usort(D ++ D1),
+    [ok = M:policy_changed(X, X1) || M <- [type_to_module(XType) | DAll]],
     ok.
 
-serialise_events(X = #exchange{type = Type}) ->
+serialise_events(X = #exchange{type = Type, decorators = Decorators}) ->
     lists:any(fun (M) -> M:serialise_events(X) end,
-              registry_lookup(exchange_decorator))
+              rabbit_exchange_decorator:select(all, Decorators))
         orelse (type_to_module(Type)):serialise_events().
 
 serial(#exchange{name = XName} = X) ->
@@ -142,16 +157,6 @@ serial(#exchange{name = XName} = X) ->
     fun (true)  -> Serial;
         (false) -> none
     end.
-
-registry_lookup(exchange_decorator_route = Class) ->
-    case get(exchange_decorator_route_modules) of
-        undefined -> Mods = [M || {_, M} <- rabbit_registry:lookup_all(Class)],
-                     put(exchange_decorator_route_modules, Mods),
-                     Mods;
-        Mods      -> Mods
-    end;
-registry_lookup(Class) ->
-    [M || {_, M} <- rabbit_registry:lookup_all(Class)].
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = rabbit_policy:set(#exchange{name        = XName,
@@ -273,7 +278,8 @@ update_scratch(Name, App, Fun) ->
                              Scratches2 = orddict:store(
                                             App, Fun(Scratch), Scratches1),
                              X#exchange{scratches = Scratches2}
-                     end)
+                     end),
+              ok
       end).
 
 update(Name, Fun) ->
@@ -284,9 +290,10 @@ update(Name, Fun) ->
             case Durable of
                 true -> ok = mnesia:write(rabbit_durable_exchange, X1, write);
                 _    -> ok
-            end;
+            end,
+            X1;
         [] ->
-            ok
+            not_found
     end.
 
 info_keys() -> ?INFO_KEYS.
@@ -318,15 +325,15 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-route(#exchange{name = #resource{virtual_host = VHost,
-                                 name         = RName} = XName} = X,
+route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
+                decorators = Decorators} = X,
       #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
-    case {registry_lookup(exchange_decorator_route), RName == <<"">>} of
-        {[], true} ->
+    case {RName, rabbit_exchange_decorator:select(route, Decorators)} of
+        {<<"">>, []} ->
             %% Optimisation
             [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
-        {Decorators, _} ->
-            lists:usort(route1(Delivery, Decorators, {[X], XName, []}))
+        {_, SelectedDecorators} ->
+            lists:usort(route1(Delivery, SelectedDecorators, {[X], XName, []}))
     end.
 
 route1(_, _, {[], _, QNames}) ->

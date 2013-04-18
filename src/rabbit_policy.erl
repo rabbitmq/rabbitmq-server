@@ -46,7 +46,8 @@ name0(undefined) -> none;
 name0(Policy)    -> pget(name, Policy).
 
 set(Q = #amqqueue{name = Name}) -> Q#amqqueue{policy = set0(Name)};
-set(X = #exchange{name = Name}) -> X#exchange{policy = set0(Name)}.
+set(X = #exchange{name = Name}) -> rabbit_exchange_decorator:set(
+                                     X#exchange{policy = set0(Name)}).
 
 set0(Name = #resource{virtual_host = VHost}) -> match(Name, list(VHost)).
 
@@ -170,9 +171,14 @@ update_policies(VHost) ->
 update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
     case match(XName, Policies) of
         OldPolicy -> no_change;
-        NewPolicy -> rabbit_exchange:update(
-                       XName, fun(X1) -> X1#exchange{policy = NewPolicy} end),
-                     {X, X#exchange{policy = NewPolicy}}
+        NewPolicy -> case rabbit_exchange:update(
+                            XName, fun (X0) ->
+                                           rabbit_exchange_decorator:set(
+                                             X0 #exchange{policy = NewPolicy})
+                                   end) of
+                         #exchange{} = X1 -> {X, X1};
+                         not_found        -> {X, X }
+                     end
     end.
 
 update_queue(Q = #amqqueue{name = QName, policy = OldPolicy}, Policies) ->
