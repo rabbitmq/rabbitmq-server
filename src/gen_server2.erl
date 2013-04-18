@@ -75,6 +75,12 @@
 %% format_message_queue/2 which is the equivalent of format_status/2
 %% but where the second argument is specifically the priority_queue
 %% which contains the prioritised message_queue.
+%%
+%% 9) The function with_state/2 can be used to debug a process with
+%% heavyweight state (without needing to copy the entire state out of
+%% process as sys:get_status/1 would). Pass through a function which
+%% can be invoked on the state, get back the result. The state is not
+%% modified.
 
 %% All modifications are (C) 2009-2013 VMware, Inc.
 
@@ -180,7 +186,7 @@
 %% API
 -export([start/3, start/4,
          start_link/3, start_link/4,
-         call/2, call/3,
+         call/2, call/3, with_state/2,
          cast/2, reply/2,
          abcast/2, abcast/3,
          multi_call/2, multi_call/3, multi_call/4,
@@ -317,6 +323,14 @@ call(Name, Request, Timeout) ->
             Res;
         {'EXIT',Reason} ->
             exit({Reason, {?MODULE, call, [Name, Request, Timeout]}})
+    end.
+
+with_state(Name, Fun) ->
+    case catch gen:call(Name, '$with_state', Fun, infinity) of
+        {ok,Res} ->
+            Res;
+        {'EXIT',Reason} ->
+            exit({Reason, {?MODULE, with_state, [Name, Fun]}})
     end.
 
 %% -----------------------------------------------------------------
@@ -645,6 +659,8 @@ in({'$gen_cast', Msg} = Input,
 in({'$gen_call', From, Msg} = Input,
    GS2State = #gs2_state { prioritisers = {F, _, _} }) ->
     in(Input, F(Msg, From, GS2State), GS2State);
+in({'$with_state', _From, _Fun} = Input, GS2State) ->
+    in(Input, 0, GS2State);
 in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
     in(Input, infinity, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
@@ -883,7 +899,7 @@ common_become(_Name, _Mod, _NState, [] = _Debug) ->
 common_become(Name, Mod, NState, Debug) ->
     sys:handle_debug(Debug, fun print_event/3, Name, {become, Mod, NState}).
 
-handle_msg({'$gen_call', From, {debug_state, Fun}},
+handle_msg({'$with_state', From, Fun},
            GS2State = #gs2_state{state = State,
                                  name  = Name,
                                  debug = Debug}) ->
