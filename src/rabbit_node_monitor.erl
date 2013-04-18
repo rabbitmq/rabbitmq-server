@@ -280,17 +280,10 @@ handle_info(ping_nodes, State) ->
     %% to ping the nodes that are up, after all.
     State1 = State#state{down_ping_timer = undefined},
     Self = self(),
-    %% all_nodes_up() both pings all the nodes and tells us if we need to again.
-    %%
     %% We ping in a separate process since in a partition it might
     %% take some noticeable length of time and we don't want to block
     %% the node monitor for that long.
-    spawn_link(fun () ->
-                       case all_nodes_up() of
-                           true  -> ok;
-                           false -> Self ! ping_again
-                       end
-               end),
+    spawn_link(fun () -> ping_nodes(Self) end),
     {noreply, State1};
 
 handle_info(ping_again, State) ->
@@ -384,6 +377,19 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
                       _  -> Partitions
                   end,
     ensure_ping_timer(State#state{partitions = Partitions1}).
+
+%% all_nodes_up() both pings all the nodes and tells us if we need to again.
+ping_nodes(Self) ->
+    DownNodes = [Node || Node <- rabbit_mnesia:cluster_nodes(all),
+                         mnesia_recover:has_mnesia_down(Node)],
+    case DownNodes of
+        [] -> ok;
+        _  -> [begin
+                   net_adm:ping(Node),
+                   spawn_link(mnesia_monitor, detect_partitioned_network,
+                              [self(), Node])
+               end || Node <- DownNodes]
+    end.
 
 ensure_ping_timer(State) ->
     rabbit_misc:ensure_timer(
