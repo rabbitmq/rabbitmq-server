@@ -33,17 +33,22 @@
 
 %% Like erlang:memory(), but with awareness of rabbit-y things
 memory() ->
-    Conns        = (sup_memory(rabbit_tcp_client_sup) +
-                        sup_memory(ssl_connection_sup) +
-                        sup_memory(amqp_sup)),
-    Qs           = (sup_memory(rabbit_amqqueue_sup) +
-                        sup_memory(rabbit_mirror_queue_slave_sup)),
+    ConnProcs     = [rabbit_tcp_client_sup, ssl_connection_sup, amqp_sup],
+    QProcs        = [rabbit_amqqueue_sup, rabbit_mirror_queue_slave_sup],
+    MsgIndexProcs = [msg_store_transient, msg_store_persistent],
+    MgmtDbProcs   = [rabbit_mgmt_sup],
+    %% TODO: plug-ins
+
+    All = [ConnProcs, QProcs, MsgIndexProcs, MgmtDbProcs],
+
+    {Sums, _Other} = sum_processes(lists:append(All), [memory]),
+
+    [Conns, Qs, MsgIndexProc, MgmtDbProc] =
+        [aggregate_memory(Names, Sums) || Names <- All],
+
     Mnesia       = mnesia_memory(),
     MsgIndexETS  = ets_memory(rabbit_msg_store_ets_index),
-    MsgIndexProc = (pid_memory(msg_store_transient) +
-                        pid_memory(msg_store_persistent)),
     MgmtDbETS    = ets_memory(rabbit_mgmt_db),
-    MgmtDbProc   = sup_memory(rabbit_mgmt_sup),
     Plugins      = plugin_memory() - MgmtDbProc,
 
     [{total,     Total},
@@ -55,6 +60,8 @@ memory() ->
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
 
+    %% TODO: should we replace this with the value extracted from
+    %% 'Other'?
     OtherProc = Processes - Conns - Qs - MsgIndexProc - MgmtDbProc - Plugins,
 
     [{total,            Total},
@@ -139,7 +146,16 @@ plugin_memory(App) ->
 is_plugin("rabbitmq_" ++ _) -> true;
 is_plugin(App)              -> lists:member(App, ?MAGIC_PLUGINS).
 
+aggregate_memory(Names, Sums) ->
+    lists:sum([extract_memory(Name, Sums) || Name <- Names]).
+
+extract_memory(Name, Sums) ->
+    {_, Accs} = lists:keyfind(Name, 1, Sums),
+    {memory, V} = lists:keyfind(memory, 1, Accs),
+    V.
+
 %% TODO support Pids, not just Names - need this for plugins
+%% NB: this code is non-rabbit specific
 sum_processes(Names, Items) ->
     sum_processes(Names, fun (_, X, Y) -> X + Y end,
                   [{Item, 0} || Item <- Items]).
