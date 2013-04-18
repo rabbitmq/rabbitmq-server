@@ -12,10 +12,11 @@
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
 %% Copyright (c) 2012, 2013 VMware, Inc.  All rights reserved.
-%%
+%% -----------------------------------------------------------------------------
 
 %% JMS on Rabbit Topic Selector Exchange plugin
 
+%% -----------------------------------------------------------------------------
 -module(rabbit_jms_topic_exchange).
 
 -behaviour(rabbit_exchange_type).
@@ -116,8 +117,8 @@ validate(_X) -> ok.
 % After exchange declaration and recovery
 create(Tx, #exchange{name = XName, arguments = Args}) ->
   case {Tx, get_type_info_from_arguments(Args)} of
-    {transaction, {ok, TypePropList}} ->
-      add_initial_record(XName, TypePropList);
+    {transaction, {ok, _}} ->
+      add_initial_record(XName);
     {none, error} ->
       create_error(XName, Args);
     _ ->
@@ -265,19 +266,19 @@ get_binding_funs_x(XName) ->
     []
   ).
 
-add_initial_record(XName, TypeInfo) ->
-  write_initial_state(XName, TypeInfo).
+add_initial_record(XName) ->
+  write_initial_state(XName).
 
 % add binding fun to binding fun dictionary
 add_binding_fun(XName, BindingKeyAndFun) ->
-  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns, x_type_info = TInfo} = read_state_for_update(XName),
-  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun), TInfo).
+  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state_for_update(XName),
+  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun)).
 
 % remove binding funs from binding fun dictionary
 remove_binding_funs(XName, Bindings) ->
   BindingKeys = [ {BindingKey, DestName} || #binding{key = BindingKey, destination = DestName} <- Bindings ],
-  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns, x_type_info = TInfo} = read_state_for_update(XName),
-  write_state_fun(XName, remove_items(BindingFuns, BindingKeys), TInfo).
+  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state_for_update(XName),
+  write_state_fun(XName, remove_items(BindingFuns, BindingKeys)).
 
 % add an item to the dictionary of binding functions
 put_item(Dict, {Key, Item}) -> dict:store(Key, Item, Dict).
@@ -304,15 +305,15 @@ read_state(XName, Lock) ->
   end.
 
 % Basic write after read for update
-write_state_fun(XName, BFuns, TInfo) ->
+write_state_fun(XName, BFuns) ->
   mnesia:write( ?JMS_TOPIC_TABLE
-              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = BFuns, x_type_info = TInfo}
+              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = BFuns}
               , write ).
 
 % Write first record
-write_initial_state(XName, TInfo) ->
+write_initial_state(XName) ->
   mnesia:write( ?JMS_TOPIC_TABLE
-              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = dict:new(), x_type_info = TInfo}
+              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = dict:new()}
               , write ).
 
 %%----------------------------------------------------------------------------

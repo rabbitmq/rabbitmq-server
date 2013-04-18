@@ -8,12 +8,15 @@
 %% the License for the specific language governing rights and
 %% limitations under the License.
 %%
-%% The Original Code is rabbitmq_jms_topic_exchange.
+%% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011-2013 VMware, Inc; Eduard Sergeev.
-%% All rights reserved.
-%%
+%% Copyright (c) 2012, 2013 VMware, Inc.  All rights reserved.
+%% -----------------------------------------------------------------------------
+
+%% Unit test file for RJMS Topic Selector plugin
+
+%% -----------------------------------------------------------------------------
 
 -module(rjms_topic_selector_unit_tests).
 

@@ -1,21 +1,42 @@
-%
-% Evaluation function
-%
-% Given Headers (a list of keyed typed values), and a
-% parsed SQL string, evaluate the truth or falsity of the expression.
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2012, 2013 VMware, Inc.  All rights reserved.
+%% -----------------------------------------------------------------------------
+%% Derived from works which were:
+%% Copyright (c) 2002, 2012 Tim Watson (watson.timothy@gmail.com)
+%% Copyright (c) 2012, 2013 Steve Powell (Zteve.Powell@gmail.com)
+%% -----------------------------------------------------------------------------
 
-% If an identifier is absent from Headers, or the types do not match the comparisons, the
-% test clause will be false.
+%% Evaluate an SQL expression for filtering purposes
+
+%% -----------------------------------------------------------------------------
+
 
 -module(sjx_evaluator).
 
 -export([evaluate/2]).
+%% Evaluation function
+%%
+%%   Given Headers (a list of keyed typed values), and a
+%%   parsed SQL string, evaluate the truth or falsity of the expression.
+%%
+%%   If an identifier is absent from Headers, or the types do not match the comparisons, the
+%%   expression will evaluate to false.
 
 -type itemname() :: binary().
 -type itemtype() ::
-      'longstr' | 'signedint' | 'decimal' | 'timestamp' |
-      'table' | 'byte' | 'double' | 'float' | 'long' |
-      'short' | 'bool' | 'binary' | 'void' | 'array'.
+      'longstr' | 'signedint' | 'byte' | 'double' | 'float' | 'long' | 'short' | 'bool'.
 -type itemvalue() :: any().
 
 -type tableitem() :: { itemname(), itemtype(), itemvalue() }.
