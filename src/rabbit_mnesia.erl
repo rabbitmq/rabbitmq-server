@@ -797,8 +797,8 @@ check_beam_compatibility(RemoteHash) ->
 %% out of sync (say due to mixed compilers), we will get badfun
 %% exceptions when trying to do so. Let's detect that at startup.
 delegate_beam_hash() ->
-    DelegateBeamLocation = code:which(delegate),
-    {ok, {delegate, Hash}} = beam_lib:md5(DelegateBeamLocation),
+    {delegate, Obj, _} = code:get_object_code(delegate),
+    {ok, {delegate, Hash}} = beam_lib:md5(Obj),
     Hash.
 
 %% This is fairly tricky.  We want to know if the node is in the state
