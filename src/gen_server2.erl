@@ -679,6 +679,10 @@ process_msg({system, From, Req},
     %% gen_server puts Hib on the end as the 7th arg, but that version
     %% of the fun seems not to be documented so leaving out for now.
     sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State);
+process_msg({'$with_state', From, Fun},
+           GS2State = #gs2_state{state = State}) ->
+    reply(From, catch Fun(State)),
+    loop(GS2State);
 process_msg({'EXIT', Parent, Reason} = Msg,
             GS2State = #gs2_state { parent = Parent }) ->
     terminate(Reason, Msg, GS2State);
@@ -899,13 +903,6 @@ common_become(_Name, _Mod, _NState, [] = _Debug) ->
 common_become(Name, Mod, NState, Debug) ->
     sys:handle_debug(Debug, fun print_event/3, Name, {become, Mod, NState}).
 
-handle_msg({'$with_state', From, Fun},
-           GS2State = #gs2_state{state = State,
-                                 name  = Name,
-                                 debug = Debug}) ->
-    Debug1 = common_reply(Name, From, catch Fun(State), State, Debug),
-    loop(GS2State #gs2_state { state = State,
-                               debug = Debug1 });
 handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
                                                              state = State,
                                                              name = Name,
