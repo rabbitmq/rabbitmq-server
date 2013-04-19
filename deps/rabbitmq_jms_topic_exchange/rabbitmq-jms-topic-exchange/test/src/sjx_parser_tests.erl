@@ -29,12 +29,14 @@
 %% Fixed type info for identifiers
 %%
 -define(TEST_TYPE_INFO,
-[ {<<"JMSDeliveryMode">>, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}
-, {<<"JMSPriority">>, number}
-, {<<"JMSMessageID">>, string}
-, {<<"JMSTimestamp">>, number}
-, {<<"JMSCorrelationID">>, string}
-, {<<"JMSType">>, string}
+[ {<<"JMSType">>,          longstr, <<"string">>}
+, {<<"JMSCorrelationID">>, longstr, <<"string">>}
+, {<<"JMSMessageID">>,     longstr, <<"string">>}
+, {<<"JMSDeliveryMode">>,  array,
+     [{longstr, <<"PERSISTENT">>}, {longstr, <<"NON_PERSISTENT">>}]}
+, {<<"JMSPriority">>,      longstr, <<"number">>}
+, {<<"JMSTimestamp">>,     longstr, <<"number">>}
+, {<<"TestBoolean">>,      longstr, <<"boolean">>}
 ]).
 
 basic_parse_test_() ->
@@ -78,6 +80,12 @@ basic_parse_test_() ->
     , ?_assertMatch( error,                                            analyze(?TEST_TYPE_INFO, "1.0 <> false                 "))
     , ?_assertMatch( error,                                            analyze(?TEST_TYPE_INFO, "1 <> false                   "))
     , ?_assertMatch( error,                                            analyze(?TEST_TYPE_INFO, "-dummy <> false              "))
+
+    , ?_assertMatch( error,                                            analyze(?TEST_TYPE_INFO, "-TestBoolean = 0             "))
+    , ?_assertMatch( error,                                            analyze(?TEST_TYPE_INFO, "TestBoolean >= 0             "))
+    , ?_assertMatch( error,                                            analyze(?TEST_TYPE_INFO, "not JMSPriority              "))
+    , ?_assertMatch( {'not', {'ident', <<"TestBoolean">>}},            analyze(?TEST_TYPE_INFO, "not TestBoolean              "))
+
     , ?_assertMatch( {'ident', <<"dummy">> },                          analyze(?TEST_TYPE_INFO, "true and dummy               "))
     , ?_assertMatch( false,                                            analyze(?TEST_TYPE_INFO, "false and dummy              "))
     , ?_assertMatch( {'ident', <<"dummy">> },                          analyze(?TEST_TYPE_INFO, "false or dummy               "))

@@ -115,15 +115,9 @@ route( #exchange{name = XName}
 validate(_X) -> ok.
 
 % After exchange declaration and recovery
-create(Tx, #exchange{name = XName, arguments = Args}) ->
-  case {Tx, get_type_info_from_arguments(Args)} of
-    {transaction, {ok, _}} ->
-      add_initial_record(XName);
-    {none, error} ->
-      create_error(XName, Args);
-    _ ->
-      ok
-  end,
+create(transaction, #exchange{name = XName}) ->
+  add_initial_record(XName);
+create(_,_) ->
   ok.
 
 % Delete an exchange
@@ -139,7 +133,7 @@ add_binding( Tx
            , #binding{key = BindingKey, destination = DestName, args = Args}
            ) ->
   SQL = get_sql_from_args(Args),
-  {ok, TypeInfo} = get_type_info_from_arguments(XArgs),
+  TypeInfo = get_type_info_from_arguments(XArgs),
   case {Tx, generate_binding_fun(SQL, TypeInfo)} of
     {transaction, {ok, BindFun}} ->
       add_binding_fun(XName, {{BindingKey, DestName}, BindFun});
@@ -179,44 +173,32 @@ binding_fun_match(Key, Headers, FunsDict) ->
 
 get_type_info_from_arguments(Args) ->
   case rabbit_misc:table_lookup(Args, ?RJMS_TYPE_INFO_ARG) of
-    {table, TypeInfoTable} -> {ok, table_to_proplist(TypeInfoTable)};
-    _                      -> error %% not supplied or wrong type
+    {table, TypeInfoTable} -> TypeInfoTable;
+    _                      -> [] %% not supplied or wrong type => ignored
   end.
 
-%% table_to_proplist(Table) :: PropList
+%% The rjms_type_info value has a slightly klunky format,
+%% due to the neccesity of tramsmitting this over the AMQP protocol.
 %%
-%% Table is in this format (example):
-%%    [ {<<"JMSType">>,          longstr, <<"string">>}
-%%    , {<<"JMSCorrelationID">>, longstr, <<"string">>}
-%%    , {<<"JMSMessageID">>,     longstr, <<"string">>}
-%%    , {<<"JMSDeliveryMode">>,  array, [ {longstr, <<"PERSISTENT">>}
-%%                                      , {longstr, <<"NON_PERSISTENT">>}
-%%                                      ]
-%%      }
-%%    , {<<"JMSPriority">>,  longstr, <<"number">>}
-%%    , {<<"JMSTimestamp">>, longstr, <<"number">>}
-%%    ]
+%% In general it is a table:
+%%    type_info()   :: [ident_type()]
+%% where
+%%    ident_type()  ::   {ident(), 'longstr', scalar_type()}
+%%                     | {ident(), 'array',   enum_type()  }
+%%    ident()       :: binary()
+%%    scalar_type() :: <<"string">> | <<"boolean">> | <<"number">>
+%%    enum_type()   :: [{longstr, enum_value()}]
+%%    enum_value()  :: binary()
 %%
-%% PropList should be in this format (example):
-%%    [ {<<"JMSDeliveryMode">>,  [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}
-%%    , {<<"JMSPriority">>,      number}
-%%    , {<<"JMSMessageID">>,     string}
-%%    , {<<"JMSTimestamp">>,     number}
-%%    , {<<"JMSCorrelationID">>, string}
-%%    , {<<"JMSType">>,          string}
-%%    ]
-%% where order in the list(s) is not significant.
-table_to_proplist(Table) ->
-  [ {Id, convert_type(RangeType, Val)} || {Id, RangeType, Val} <- Table ].
-
-convert_type(longstr, BinTypeName) when is_binary(BinTypeName) ->
-  binary_to_type_atom(BinTypeName);
-convert_type(array, ArrayList) when is_list(ArrayList) ->
-  [ BinString || {longstr, BinString} <- ArrayList ].
-
-binary_to_type_atom(<<"string">> ) -> string;
-binary_to_type_atom(<<"boolean">>) -> boolean;
-binary_to_type_atom(<<"number">> ) -> number.
+%% For example, the standard JMS type-info argument is supplied as:
+%%   [ {<<"JMSType">>,          longstr, <<"string">>}
+%%   , {<<"JMSCorrelationID">>, longstr, <<"string">>}
+%%   , {<<"JMSMessageID">>,     longstr, <<"string">>}
+%%   , {<<"JMSDeliveryMode">>,  array,
+%%        [{longstr, <<"PERSISTENT">>}, {longstr, <<"NON_PERSISTENT">>}]}
+%%   , {<<"JMSPriority">>,      longstr, <<"number">>}
+%%   , {<<"JMSTimestamp">>,     longstr, <<"number">>}
+%%   ]
 
 % get Headers from message content
 get_headers(Content) ->
@@ -330,11 +312,5 @@ parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
   rabbit_misc:protocol_error( precondition_failed
                             , "cannot parse selector '~s' binding destination '~s' to exchange '~s'"
                             , [S, DestName, XName] ).
-
-% create error
-create_error(#resource{name = XName}, Args) ->
-  rabbit_misc:protocol_error( precondition_failed
-                            , "cannot create exchange '~s' with arguments '~p'"
-                            , [XName, Args] ).
 
 %%----------------------------------------------------------------------------

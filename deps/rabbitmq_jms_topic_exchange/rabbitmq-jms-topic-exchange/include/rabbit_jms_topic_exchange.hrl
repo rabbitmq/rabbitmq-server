@@ -42,25 +42,3 @@
 %% in a Java Client application.
 -define(RJMS_TYPE_INFO_ARG, <<"rjms_type_info">>).
 %%
-%% The rjms_type_info value has a slightly klunky format,
-%% due to the neccesity of tramsmitting this over the AMQP protocol.
-%%
-%% In general it is a table:
-%%    type_info()   :: [ident_type()]
-%% where
-%%    ident_type()  ::   {ident(), 'longstr', scalar_type()}
-%%                     | {ident(), 'array',   enum_type()  }
-%%    ident()       :: binary()
-%%    scalar_type() :: <<"string">> | <<"boolean">> | <<"number">>
-%%    enum_type()   :: [{longstr, enum_value()}]
-%%    enum_value()  :: binary()
-%%
-%% For example, the standard JMS type-info argument is supplied as:
-%%   [ {<<"JMSType">>,          longstr, <<"string">>}
-%%   , {<<"JMSCorrelationID">>, longstr, <<"string">>}
-%%   , {<<"JMSMessageID">>,     longstr, <<"string">>}
-%%   , {<<"JMSDeliveryMode">>,  array,
-%%        [{longstr, <<"PERSISTENT">>}, {longstr, <<"NON_PERSISTENT">>}]}
-%%   , {<<"JMSPriority">>,      longstr, <<"number">>}
-%%   , {<<"JMSTimestamp">>,     longstr, <<"number">>}
-%%   ]

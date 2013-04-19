@@ -29,12 +29,13 @@
 %% Fixed type info for identifiers
 %%
 -define(TEST_TYPE_INFO,
-[ {<<"JMSDeliveryMode">>, [<<"PERSISTENT">>, <<"NON_PERSISTENT">>]}
-, {<<"JMSPriority">>, number}
-, {<<"JMSMessageID">>, string}
-, {<<"JMSTimestamp">>, number}
-, {<<"JMSCorrelationID">>, string}
-, {<<"JMSType">>, string}
+[ {<<"JMSType">>,          longstr, <<"string">>}
+, {<<"JMSCorrelationID">>, longstr, <<"string">>}
+, {<<"JMSMessageID">>,     longstr, <<"string">>}
+, {<<"JMSDeliveryMode">>,  array,
+     [{longstr, <<"PERSISTENT">>}, {longstr, <<"NON_PERSISTENT">>}]}
+, {<<"JMSPriority">>,      longstr, <<"number">>}
+, {<<"JMSTimestamp">>,     longstr, <<"number">>}
 ]).
 
 eval(Hs, S) -> evaluate(analyze(?TEST_TYPE_INFO, S),Hs).

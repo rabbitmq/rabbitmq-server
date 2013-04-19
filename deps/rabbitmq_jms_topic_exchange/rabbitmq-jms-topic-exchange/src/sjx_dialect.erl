@@ -43,20 +43,24 @@ check_types(TypeInfo, AST) ->
         _ -> error
     end.
 
-get_ident_type(Ident, TypeInfo) -> proplists:get_value(Ident, TypeInfo).
+get_ident_type(Ident, TypeInfo) ->
+    case proplists:lookup(Ident, TypeInfo) of
+        {_, _, Type} -> Type;
+        _            -> undefined
+    end.
 
 match_ident_type(Ident, Match, TypeInfo) ->
     case get_ident_type(Ident, TypeInfo) of
         undefined -> true;  %% presumption of innocence
         Match     -> true;
-        _         -> false
+        _         -> false  %% defined but not the same type
     end.
 
 %% Type checking general expressions
 %%
 check_type_bool(_TypeInfo, true ) -> true;
 check_type_bool(_TypeInfo, false ) -> true;
-check_type_bool( TypeInfo, {'ident', Ident } ) -> match_ident_type(Ident, boolean, TypeInfo);
+check_type_bool( TypeInfo, {'ident', Ident } ) -> match_ident_type(Ident, <<"boolean">>, TypeInfo);
 check_type_bool( TypeInfo, {'not', Exp }) -> check_type_bool(TypeInfo, Exp);
 check_type_bool( TypeInfo, {'and', Exp1, Exp2 }) -> check_type_bool(TypeInfo, Exp1) andalso check_type_bool(TypeInfo, Exp2);
 check_type_bool( TypeInfo, {'or', Exp1, Exp2 }) -> check_type_bool(TypeInfo, Exp1) andalso check_type_bool(TypeInfo, Exp2);
@@ -92,17 +96,18 @@ check_type_enums( TypeInfo, {'ident', LIdent}, {'ident', RIdent}) ->
     end;
 check_type_enums( TypeInfo, LHS, RHS = {'ident', _}) -> check_type_enums(TypeInfo, RHS, LHS);
 check_type_enums( TypeInfo, {'ident', Ident}, RHS) when is_binary(RHS) ->
+    io:format("check_type_enums(~p~n, ~p~n, ~p~n                )~n", [TypeInfo, {'ident', Ident}, RHS]),
     case get_ident_type(Ident, TypeInfo) of
-        BinList when is_list(BinList) -> lists:member(RHS, BinList);
-        _                             -> false
+        ElemList when is_list(ElemList) -> lists:member({longstr, RHS}, ElemList);
+        _                               -> false
     end;
 check_type_enums(_,_,_) -> false.
 
-check_type_string( TypeInfo, {'ident', Ident} ) -> match_ident_type(Ident, string, TypeInfo);
+check_type_string( TypeInfo, {'ident', Ident} ) -> match_ident_type(Ident, <<"string">>, TypeInfo);
 check_type_string(_TypeInfo, Exp) when is_binary(Exp) -> true;
 check_type_string(_,_) -> false.
 
-check_type_arith( TypeInfo, {'ident', Ident} ) -> match_ident_type(Ident, number, TypeInfo);
+check_type_arith( TypeInfo, {'ident', Ident} ) -> match_ident_type(Ident, <<"number">>, TypeInfo);
 check_type_arith(_TypeInfo, E ) when is_number(E) -> true;
 check_type_arith( TypeInfo, { Op, LHS, RHS }) -> check_arith_op(Op) andalso check_type_arith(TypeInfo, LHS) andalso check_type_arith(TypeInfo, RHS);
 check_type_arith( TypeInfo, { Op, Exp }) -> check_sign_op(Op) andalso check_type_arith(TypeInfo, Exp);
