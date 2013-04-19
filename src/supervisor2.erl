@@ -837,7 +837,7 @@ restart_child(Pid, Reason, State) ->
     end.
 
 try_restart(RestartType, Reason, Child, State) ->
-    case do_restart(RestartType, Reason, Child, State) of
+    case handle_restart(RestartType, Reason, Child, State) of
         {ok, NState}       -> {noreply, NState};
         {shutdown, State2} -> {stop, shutdown, State2}
     end.
@@ -1259,6 +1259,9 @@ state_del_child(Child, State) ->
     State#state{children = NChildren}.
 
 del_child(Name, [Ch|Chs]) when Ch#child.name =:= Name, Ch#child.restart_type =:= temporary ->
+    Chs;
+del_child(NameOrPid, [Ch=#child{pid = ?restarting(_)}|_]=Chs)
+  when Ch#child.name =:= NameOrPid ->
     Chs;
 del_child(Name, [Ch|Chs]) when Ch#child.name =:= Name ->
     [Ch#child{pid = undefined} | Chs];
