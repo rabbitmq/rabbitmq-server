@@ -186,10 +186,11 @@
 %% API
 -export([start/3, start/4,
          start_link/3, start_link/4,
-         call/2, call/3, with_state/2,
+         call/2, call/3,
          cast/2, reply/2,
          abcast/2, abcast/3,
          multi_call/2, multi_call/3, multi_call/4,
+         with_state/2,
          enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/1]).
 
 %% System exports
@@ -325,14 +326,6 @@ call(Name, Request, Timeout) ->
             exit({Reason, {?MODULE, call, [Name, Request, Timeout]}})
     end.
 
-with_state(Name, Fun) ->
-    case catch gen:call(Name, '$with_state', Fun, infinity) of
-        {ok,Res} ->
-            Res;
-        {'EXIT',Reason} ->
-            exit({Reason, {?MODULE, with_state, [Name, Fun]}})
-    end.
-
 %% -----------------------------------------------------------------
 %% Make a cast to a generic server.
 %% -----------------------------------------------------------------
@@ -396,6 +389,16 @@ multi_call(Nodes, Name, Req, Timeout)
   when is_list(Nodes), is_atom(Name), is_integer(Timeout), Timeout >= 0 ->
     do_multi_call(Nodes, Name, Req, Timeout).
 
+%% -----------------------------------------------------------------
+%% Apply a function to a generic server's state.
+%% -----------------------------------------------------------------
+with_state(Name, Fun) ->
+    case catch gen:call(Name, '$with_state', Fun, infinity) of
+        {ok,Res} ->
+            Res;
+        {'EXIT',Reason} ->
+            exit({Reason, {?MODULE, with_state, [Name, Fun]}})
+    end.
 
 %%-----------------------------------------------------------------
 %% enter_loop(Mod, Options, State, <ServerName>, <TimeOut>, <Backoff>) ->_
