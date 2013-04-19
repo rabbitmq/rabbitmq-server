@@ -378,7 +378,8 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
                   end,
     ensure_ping_timer(State#state{partitions = Partitions1}).
 
-%% all_nodes_up() both pings all the nodes and tells us if we need to again.
+%% Sometimes Mnesia does not seem to detect a partitioned network
+%% without a nudge. So let's give it that nudge.
 ping_nodes(Self) ->
     DownNodes = [Node || Node <- rabbit_mnesia:cluster_nodes(all),
                          mnesia_recover:has_mnesia_down(Node)],
@@ -386,8 +387,11 @@ ping_nodes(Self) ->
         [] -> ok;
         _  -> [begin
                    net_adm:ping(Node),
-                   spawn_link(mnesia_monitor, detect_partitioned_network,
-                              [self(), Node])
+                   spawn_link(
+                     fun () ->
+                             catch mnesia_monitor:detect_partitioned_network(
+                                     self(), Node)
+                     end)
                end || Node <- DownNodes]
     end.
 
