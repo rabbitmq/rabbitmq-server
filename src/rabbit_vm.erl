@@ -127,8 +127,8 @@ aggregate_memory(Names, Sums) ->
     lists:sum([extract_memory(Name, Sums) || Name <- Names]).
 
 extract_memory(Name, Sums) ->
-    {_, Accs} = lists:keyfind(Name, 1, Sums),
-    {memory, V} = lists:keyfind(memory, 1, Accs),
+    {value, {_, Accs}} = lists:keysearch(Name, 1, Sums),
+    {value, {memory, V}} = lists:keysearch(memory, 1, Accs),
     V.
 
 %% NB: this code is non-rabbit specific
@@ -165,11 +165,12 @@ sum_processes(Names, Fun, Acc0) ->
      orddict:to_list(OtherAcc)}.
 
 find_ancestor(Extra, D, Names) ->
+    Ancestors = case lists:keysearch('$ancestors', 1, D) of
+                    {value, {_, Ancs}} -> Ancs;
+                    false              -> []
+                end,
     case lists:splitwith(fun (A) -> not lists:member(A, Names) end,
-                         Extra ++ case lists:keyfind('$ancestors', 1, D) of
-                                      false          -> [];
-                                      {_, Ancestors} -> Ancestors
-                                  end) of
+                         Extra ++ Ancestors) of
         {_,         []} -> undefined;
         {_, [Name | _]} -> Name
     end.
