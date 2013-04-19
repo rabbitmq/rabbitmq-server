@@ -63,6 +63,7 @@ all_tests() ->
     passed = test_server_status(),
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
+    passed = test_with_state(),
     passed =
         do_if_secondary_node(
           fun run_cluster_dependent_tests/1,
@@ -1297,6 +1298,11 @@ test_confirms() ->
     unlink(Ch),
     ok = rabbit_channel:shutdown(Ch),
 
+    passed.
+
+test_with_state() ->
+    fhc_state = gen_server2:with_state(file_handle_cache,
+                                       fun (S) -> element(1, S) end),
     passed.
 
 test_statistics_event_receiver(Pid) ->

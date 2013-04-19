@@ -75,6 +75,12 @@
 %% format_message_queue/2 which is the equivalent of format_status/2
 %% but where the second argument is specifically the priority_queue
 %% which contains the prioritised message_queue.
+%%
+%% 9) The function with_state/2 can be used to debug a process with
+%% heavyweight state (without needing to copy the entire state out of
+%% process as sys:get_status/1 would). Pass through a function which
+%% can be invoked on the state, get back the result. The state is not
+%% modified.
 
 %% All modifications are (C) 2009-2013 VMware, Inc.
 
@@ -184,6 +190,7 @@
          cast/2, reply/2,
          abcast/2, abcast/3,
          multi_call/2, multi_call/3, multi_call/4,
+         with_state/2,
          enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/1]).
 
 %% System exports
@@ -382,6 +389,16 @@ multi_call(Nodes, Name, Req, Timeout)
   when is_list(Nodes), is_atom(Name), is_integer(Timeout), Timeout >= 0 ->
     do_multi_call(Nodes, Name, Req, Timeout).
 
+%% -----------------------------------------------------------------
+%% Apply a function to a generic server's state.
+%% -----------------------------------------------------------------
+with_state(Name, Fun) ->
+    case catch gen:call(Name, '$with_state', Fun, infinity) of
+        {ok,Res} ->
+            Res;
+        {'EXIT',Reason} ->
+            exit({Reason, {?MODULE, with_state, [Name, Fun]}})
+    end.
 
 %%-----------------------------------------------------------------
 %% enter_loop(Mod, Options, State, <ServerName>, <TimeOut>, <Backoff>) ->_
@@ -645,6 +662,8 @@ in({'$gen_cast', Msg} = Input,
 in({'$gen_call', From, Msg} = Input,
    GS2State = #gs2_state { prioritisers = {F, _, _} }) ->
     in(Input, F(Msg, From, GS2State), GS2State);
+in({'$with_state', _From, _Fun} = Input, GS2State) ->
+    in(Input, 0, GS2State);
 in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
     in(Input, infinity, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
@@ -663,6 +682,10 @@ process_msg({system, From, Req},
     %% gen_server puts Hib on the end as the 7th arg, but that version
     %% of the fun seems not to be documented so leaving out for now.
     sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State);
+process_msg({'$with_state', From, Fun},
+           GS2State = #gs2_state{state = State}) ->
+    reply(From, catch Fun(State)),
+    loop(GS2State);
 process_msg({'EXIT', Parent, Reason} = Msg,
             GS2State = #gs2_state { parent = Parent }) ->
     terminate(Reason, Msg, GS2State);
