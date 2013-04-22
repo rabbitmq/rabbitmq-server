@@ -60,8 +60,6 @@ memory() ->
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
 
-    %% TODO: should we replace this with the value extracted from
-    %% 'Other'?
     OtherProc = Processes - Conns - Qs - MsgIndexProc - AllPlugins,
 
     [{total,            Total},
