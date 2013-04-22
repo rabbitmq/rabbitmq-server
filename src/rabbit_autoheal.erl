@@ -93,7 +93,7 @@ node_down(Node, _State) ->
 handle_msg({request_start, Node},
            not_healing, Partitions) ->
     rabbit_log:info("Autoheal request received from ~p~n", [Node]),
-    case rabbit_node_monitor:all_nodes_up() of
+    case rabbit_node_monitor:all_rabbit_nodes_up() of
         false -> not_healing;
         true  -> AllPartitions = all_partitions(Partitions),
                  {Winner, Losers} = make_decision(AllPartitions),

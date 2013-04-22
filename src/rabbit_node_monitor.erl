@@ -31,7 +31,7 @@
          code_change/3]).
 
  %% Utils
--export([all_nodes_up/0, run_outside_applications/1]).
+-export([all_rabbit_nodes_up/0, run_outside_applications/1]).
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
@@ -60,7 +60,7 @@
 -spec(partitions/0 :: () -> {node(), [node()]}).
 -spec(subscribe/1 :: (pid()) -> 'ok').
 
--spec(all_nodes_up/0 :: () -> boolean()).
+-spec(all_rabbit_nodes_up/0 :: () -> boolean()).
 -spec(run_outside_applications/1 :: (fun (() -> any())) -> pid()).
 
 -endif.
@@ -350,24 +350,6 @@ handle_dead_rabbit(Node) ->
     end,
     ok.
 
-majority() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
-
-all_nodes_up() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_nodes(Nodes)) =:= length(Nodes).
-
-%% mnesia:system_info(db_nodes) (and hence
-%% rabbit_mnesia:cluster_nodes(running)) does not give reliable results
-%% when partitioned.
-alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
-
-alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
-
-alive_rabbit_nodes() ->
-    [N || N <- alive_nodes(), rabbit_nodes:is_process_running(N, rabbit)].
-
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
                        []),
@@ -441,3 +423,30 @@ legacy_should_be_disc_node(DiscNodes) ->
 add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 
 del_node(Node, Nodes) -> Nodes -- [Node].
+
+%%--------------------------------------------------------------------
+
+%% mnesia:system_info(db_nodes) (and hence
+%% rabbit_mnesia:cluster_nodes(running)) does not give reliable
+%% results when partitioned. So we have a small set of replacement
+%% functions here. "rabbit" in a function's name implies we test if
+%% the rabbit application is up, not just the node.
+
+majority() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
+
+all_nodes_up() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) =:= length(Nodes).
+
+all_rabbit_nodes_up() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
+
+alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
+
+alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_mnesia:cluster_nodes(all)).
+
+alive_rabbit_nodes(Nodes) ->
+    [N || N <- alive_nodes(Nodes), rabbit_nodes:is_process_running(N, rabbit)].
