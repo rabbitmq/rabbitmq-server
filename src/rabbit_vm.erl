@@ -129,11 +129,58 @@ extract_memory(Name, Sums) ->
     {value, {memory, V}} = lists:keysearch(memory, 1, Accs),
     V.
 
-%% NB: this code is non-rabbit specific
+%%----------------------------------------------------------------------------
+
+%% NB: this code is non-rabbit specific.
+
+-ifdef(use_specs).
+-type(process() :: pid() | atom()).
+-type(info_key() :: atom()).
+-type(info_value() :: any()).
+-type(info_item() :: {info_key(), info_value()}).
+-type(accumulate() :: fun ((info_key(), info_value(), info_value()) ->
+                                  info_value())).
+-spec(sum_processes/2 :: ([process()], [info_key()]) ->
+                              {[{process(), [info_item()]}], [info_item()]}).
+-spec(sum_processes/3 :: ([process()], accumulate(), [info_item()]) ->
+                              {[{process(), [info_item()]}], [info_item()]}).
+-endif.
+
 sum_processes(Names, Items) ->
     sum_processes(Names, fun (_, X, Y) -> X + Y end,
                   [{Item, 0} || Item <- Items]).
 
+%% summarize the process_info of all processes based on their
+%% '$ancestor' hierarchy, recorded in their process dictionary.
+%%
+%% The function takes
+%%
+%% 1) a list of names/pids of processes that are accumulation points
+%%    in the hierarchy.
+%%
+%% 2) a function that aggregates individual info items -taking the
+%%    info item key, value and accumulated value as the input and
+%%    producing a new accumulated value.
+%%
+%% 3) a list of info item key / initial accumulator value pairs.
+%%
+%% The process_info of a process is accumulated at the nearest of its
+%% ancestors that is mentioned in the first argument, or, if no such
+%% ancestor exists or the ancestor information is absent, in a special
+%% 'other' bucket.
+%%
+%% The result is a pair consisting of
+%%
+%% 1) a k/v list, containing for each of the accumulation names/pids a
+%%    list of info items, containing the accumulated data, and
+%%
+%% 2) the 'other' bucket - a list of info items containing the
+%%    accumulated data of all processes with no matching ancestors
+%%
+%% Note that this function operates on names as well as pids, but
+%% these must match whatever is contained in the '$ancestor' process
+%% dictionary entry. Generally that means for all registered processes
+%% the name should be used.
 sum_processes(Names, Fun, Acc0) ->
     Items = [Item || {Item, _Val0} <- Acc0],
     Acc0Dict  = orddict:from_list(Acc0),
