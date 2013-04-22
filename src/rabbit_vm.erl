@@ -159,7 +159,8 @@ sum_processes(Names, Fun, Acc0) ->
           end, {NameAccs0, Acc0Dict}, processes()),
     %% these conversions aren't strictly necessary; we do them simply
     %% for the sake of encapsulating the representation.
-    {[orddict:to_list(NameAcc) || NameAcc <- orddict:to_list(NameAccs)],
+    {[{Name, orddict:to_list(Accs)} ||
+         {Name, Accs} <- orddict:to_list(NameAccs)],
      orddict:to_list(OtherAcc)}.
 
 find_ancestor(Extra, D, Names) ->
