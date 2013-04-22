@@ -200,6 +200,7 @@ init([]) ->
     %% writing out the cluster status files - bad things can then
     %% happen.
     process_flag(trap_exit, true),
+    net_kernel:monitor_nodes(true),
     {ok, _} = mnesia:subscribe(system),
     {ok, #state{monitors    = pmon:new(),
                 subscribers = pmon:new(),
@@ -264,6 +265,10 @@ handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
+
+handle_info({nodedown, Node}, State) ->
+    ok = handle_dead_node(Node),
+    {noreply, State};
 
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
@@ -333,6 +338,18 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
     ok = rabbit_mnesia:on_node_down(Node),
+    ok.
+
+handle_dead_node(_Node) ->
+    %% In general in rabbit_node_monitor we care about whether the
+    %% rabbit application is up rather than the node; we do this so
+    %% that we can respond in the same way to "rabbitmqctl stop_app"
+    %% and "rabbitmqctl stop" as much as possible.
+    %%
+    %% However, for pause_minority mode we can't do this, since we
+    %% depend on looking at whether other nodes are up to decide
+    %% whether to come back up ourselves - if we decide that based on
+    %% the rabbit application we would go down and never come back.
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
             case majority() of
@@ -347,8 +364,7 @@ handle_dead_rabbit(Node) ->
             rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
                                "assuming 'ignore'~n", [Term]),
             ok
-    end,
-    ok.
+    end.
 
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
