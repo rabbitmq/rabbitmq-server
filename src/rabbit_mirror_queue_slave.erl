@@ -604,9 +604,12 @@ stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #state.rate_timer_ref).
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
     State #state { known_senders = pmon:monitor(ChPid, KS) }.
 
-local_sender_death(ChPid, State) ->
-    credit_flow:peer_down(ChPid),
-    ok = confirm_sender_death(ChPid),
+local_sender_death(ChPid, State = #state { known_senders = KS }) ->
+    ok = case pmon:is_monitored(ChPid, KS) of
+             false -> ok;
+             true  -> credit_flow:peer_down(ChPid),
+                      confirm_sender_death(ChPid)
+         end,
     State.
 
 confirm_sender_death(Pid) ->
