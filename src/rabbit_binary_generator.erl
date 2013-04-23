@@ -222,6 +222,13 @@ map_exception(Channel, Reason, Protocol) ->
                                             method_id  = MethodId}}
     end.
 
+lookup_amqp_exception(#amqp_error{method = 'basic.credit'} = E, P) ->
+    lookup_amqp_exception(E#amqp_error{method = none}, P);
+lookup_amqp_exception(#amqp_error{method = 'basic.credit_ok'} = E, P) ->
+    lookup_amqp_exception(E#amqp_error{method = none}, P);
+lookup_amqp_exception(#amqp_error{method = 'basic.credit_drained'} = E, P) ->
+    lookup_amqp_exception(E#amqp_error{method = none}, P);
+
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,
                                   method      = Method},

@@ -108,3 +108,11 @@
 -define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
 -define(DELETED_HEADER, <<"BCC">>).
+
+%%----------------------------------------------------------------------------
+
+%% Fake method records, only for use by the direct client
+
+-record('basic.credit', {consumer_tag = <<"">>, credit, drain}).
+-record('basic.credit_ok', {available}).
+-record('basic.credit_drained', {consumer_tag = <<"">>, credit_drained}).
