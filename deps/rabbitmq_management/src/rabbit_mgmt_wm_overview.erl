@@ -36,24 +36,25 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
-    Overview0 = [{management_version, version(rabbitmq_management)},
-                 {statistics_level,   StatsLevel},
-                 {exchange_types,     ExchangeTypes},
-                 {rabbitmq_version,   version(rabbit)},
-                 {erlang_version,     list_to_binary(
-                                        erlang:system_info(otp_release))}],
+    Overview0 = [{management_version,  version(rabbitmq_management)},
+                 {statistics_level,    StatsLevel},
+                 {exchange_types,      ExchangeTypes},
+                 {rabbitmq_version,    version(rabbit)},
+                 {erlang_version,      erl_version(otp_release)},
+                 {erlang_full_version, erl_version(system_version)}],
+    Range = rabbit_mgmt_util:range(ReqData),
     Overview =
         case rabbit_mgmt_util:is_monitor(Tags) of
             true ->
                 Overview0 ++
-                    rabbit_mgmt_db:get_overview() ++
+                    rabbit_mgmt_db:get_overview(Range) ++
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          listeners()},
                      {contexts,           rabbit_web_dispatch_contexts()}];
             _ ->
                 Overview0 ++
-                    rabbit_mgmt_db:get_overview(User)
+                    rabbit_mgmt_db:get_overview(User, Range)
         end,
     rabbit_mgmt_util:reply(Overview, ReqData, Context).
 
@@ -88,3 +89,6 @@ rabbit_web_dispatch_contexts() ->
 
 rabbit_web_dispatch_contexts(N) ->
     [[{node, pget(name, N)} | C] || C <- pget(contexts, N, [])].
+
+erl_version(K) ->
+    list_to_binary(string:strip(erlang:system_info(K), both, $\n)).

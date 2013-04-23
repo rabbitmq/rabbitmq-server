@@ -35,8 +35,8 @@ allowed_methods(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     case conn(ReqData) of
-        error -> {false, ReqData, Context};
-        _Conn -> {true, ReqData, Context}
+        not_found -> {false, ReqData, Context};
+        _Conn     -> {true, ReqData, Context}
     end.
 
 to_json(ReqData, Context) ->
@@ -46,7 +46,10 @@ to_json(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     Conn = conn(ReqData),
     Pid = proplists:get_value(pid, Conn),
-    Reason = "Closed via management plugin",
+    Reason = case wrq:get_req_header(<<"X-Reason">>, ReqData) of
+                 undefined -> "Closed via management plugin";
+                 V         -> V
+             end,
     case proplists:get_value(type, Conn) of
         direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);
         network -> rabbit_networking:close_connection(Pid, Reason)
@@ -59,5 +62,5 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 conn(ReqData) ->
-    hd(rabbit_mgmt_db:get_connections(
-         [rabbit_mgmt_util:id(connection, ReqData)])).
+    rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData),
+                                  rabbit_mgmt_util:range(ReqData)).

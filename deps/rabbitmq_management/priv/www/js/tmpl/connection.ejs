@@ -2,29 +2,11 @@
 
 <div class="section">
 <h2>Overview</h2>
-<div class="hider updatable">
+<div class="hider">
+  <%= data_rates('data-rates-conn', connection, 'Data rates') %>
 
-<% if (connection.recv_oct) { %>
-<table class="facts">
-<tr>
-  <th>From client</th>
-  <td>
-<% if (connection.recv_oct_details) { %>
-    <span class="mini-highlight"><%= fmt_bytes(connection.recv_oct_details.rate) %>/s</span>
-<% } %>
-  </td>
-</tr>
-<tr>
-  <th>To client</th>
-  <td>
-<% if (connection.send_oct_details) { %>
-    <span class="mini-highlight"><%= fmt_bytes(connection.send_oct_details.rate) %>/s</span>
-  </td>
-<% } %>
-</tr>
-</table>
-<% } %>
-
+<div class="updatable">
+<h3>Details</h3>
 <table class="facts">
 <% if (nodes_interesting) { %>
 <tr>
@@ -78,6 +60,7 @@
 </tr>
 </table>
 <% } %>
+</div>
 
 </div>
 </div>
@@ -147,6 +130,14 @@
   <div class="hider">
     <form action="#/connections" method="delete" class="confirm">
       <input type="hidden" name="name" value="<%= fmt_string(connection.name) %>"/>
+      <table class="form">
+        <tr>
+          <th><label>Reason:</label></th>
+          <td>
+            <input type="text" name="reason" value="Closed via management plugin" class="wide"/>
+          </td>
+        </tr>
+      </table>
       <input type="submit" value="Force Close"/>
     </form>
   </div>

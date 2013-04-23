@@ -4,38 +4,39 @@
 <% } %>
 <div class="section">
 <h2>Totals</h2>
-<div class="hider updatable">
+<div class="hider">
 <% if (overview.statistics_db_node != 'not_running') { %>
-  <h3>Queued messages <span class="help" id="queued-messages"></span></h3>
-  <div class="box">
-    <%= queue_length(overview.queue_totals, 'Ready', 'messages_ready') %>
-    <%= queue_length(overview.queue_totals, 'Unacknowledged', 'messages_unacknowledged') %>
-    <%= queue_length(overview.queue_totals, 'Total', 'messages') %>
-  </div>
+  <%= queue_lengths('lengths-over', overview.queue_totals) %>
 <% if (statistics_level == 'fine') { %>
-  <h3>Message rates <span class="help" id="message-rates"></span></h3>
-  <div class="box">
-    <%= message_rates(overview.message_stats) %>
-  </div>
+  <%= message_rates('msg-rates-over', overview.message_stats) %>
 <% } %>
 <% } else { %>
     Totals not available
 <% } %>
 
+<div class="updatable">
   <h3>Global counts <span class="help" id="resource-counts"></span></h3>
 
   <div class="box">
     <div class="micro-highlight">
-      Connections: <strong><%= overview.object_totals.connections %></strong>
+      <a href="#/connections">
+        Connections: <strong><%= overview.object_totals.connections %></strong>
+      </a>
     </div>
     <div class="micro-highlight">
-      Channels: <strong><%= overview.object_totals.channels %></strong>
+      <a href="#/channels">
+        Channels: <strong><%= overview.object_totals.channels %></strong>
+      </a>
     </div>
     <div class="micro-highlight">
-      Exchanges: <strong><%= overview.object_totals.exchanges %></strong>
+      <a href="#/exchanges">
+        Exchanges: <strong><%= overview.object_totals.exchanges %></strong>
+      </a>
     </div>
     <div class="micro-highlight">
-      Queues: <strong><%= overview.object_totals.queues %></strong>
+      <a href="#/queues">
+        Queues: <strong><%= overview.object_totals.queues %></strong>
+      </a>
     </div>
 <% if (overview.object_totals['consumers'] != undefined) { %>    <tr>
     <div class="micro-highlight">
@@ -43,6 +44,7 @@
     </div>
 <% } %>
   </div>
+ </div>
 
 </div>
 </div>

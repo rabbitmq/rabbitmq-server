@@ -19,7 +19,9 @@
 -export([all_tests/0]).
 
 all_tests() ->
-    ok = eunit:test(rabbit_mgmt_test_unit,[verbose]),
+    ok = eunit:test(rabbit_mgmt_test_unit, [verbose]),
+    ok = eunit:test(rabbit_mgmt_test_db_unit, [verbose]),
+    ok = eunit:test(rabbit_mgmt_test_db, [verbose]),
     ok = eunit:test(tests(rabbit_mgmt_test_http, 60), [verbose]),
     io:format("Starting second node...~n"),
     ok = rabbit_mgmt_test_clustering:start_second_node(),
@@ -28,9 +30,7 @@ all_tests() ->
         ok = eunit:test(rabbit_mgmt_test_clustering,[verbose])
     after
         ok = rabbit_mgmt_test_clustering:stop_second_node()
-    end,
-    ok = rabbit_mgmt_test_db:test().
-
+    end.
 
 tests(Module, Timeout) ->
     {foreach, fun() -> ok end,

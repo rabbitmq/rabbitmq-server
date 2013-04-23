@@ -1,7 +1,7 @@
 include ../umbrella.mk
 
 RABBITMQCTL=../rabbitmq-server/scripts/rabbitmqctl
-TEST_TMPDIR=/tmp/rabbitmq-test
+TEST_TMPDIR=$(TMPDIR)/rabbitmq-test
 OTHER_NODE=undefined
 OTHER_PORT=undefined
 

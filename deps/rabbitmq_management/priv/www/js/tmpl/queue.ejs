@@ -2,14 +2,13 @@
 
 <div class="section">
   <h2>Overview</h2>
-  <div class="hider updatable">
-    <h3>Messages</h3>
-    <div class="box">
-      <%= queue_length(queue, 'Ready', 'messages_ready') %>
-      <%= queue_length(queue, 'Unacknowledged', 'messages_unacknowledged') %>
-      <%= queue_length(queue, 'Total', 'messages') %>
-    </div>
+  <div class="hider">
+    <%= queue_lengths('lengths-q', queue) %>
+<% if (statistics_level == 'fine') { %>
+    <%= message_rates('msg-rates-q', queue.message_stats) %>
+<% } %>
 
+    <div class="updatable">
     <h3>Details</h3>
     <table class="facts">
       <tr>
@@ -39,11 +38,7 @@
       </tr>
       <tr>
         <th>Consumers</th>
-        <td>
-          <%= fmt_string(queue.active_consumers) %> active
-          <span class="help" id="active-consumers"></span><br/>
-          <%= fmt_string(queue.consumers) %> total
-        </td>
+        <td><%= fmt_string(queue.consumers) %></td>
       </tr>
       <tr>
         <th>Memory</th>
@@ -66,26 +61,56 @@
       <tr>
         <th>Mirrors</th>
         <td>
-          <% for (var i in queue.slave_nodes) {
-             var node = queue.slave_nodes[i];
+          <%
+             var has_unsynced_node = false;
+             for (var i in queue.slave_nodes) {
+               var node = queue.slave_nodes[i];
           %>
-            <% if (jQuery.inArray(node, queue.synchronised_slave_nodes) == -1) { %>
+            <%
+               if (jQuery.inArray(node, queue.synchronised_slave_nodes) == -1) {
+                 has_unsynced_node = true;
+            %>
              <%= fmt_node(node) %> <b>(unsynchronised)</b>
             <% } else { %>
              <%= fmt_node(node) %>
             <% } %>
             <br/>
           <% } %>
+          <% if (queue.status == 'syncing') { %>
+          <table>
+            <tr>
+              <td>
+                <%= fmt_sync_status(queue) %>
+              </td>
+              <td>
+                <form action="#/queues/actions" method="post">
+                  <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+                  <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+                  <input type="hidden" name="action" value="cancel_sync"/>
+                  <input type="submit" value="Cancel" id="action-button" />
+                </form>
+              </td>
+            </tr>
+          </table>
+          <% } else if (has_unsynced_node) { %>
+          <form action="#/queues/actions" method="post">
+            <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+            <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+            <input type="hidden" name="action" value="sync"/>
+            <input type="submit" value="Synchronise" id="action-button" />
+          </form>
+          <% } %>
         </td>
       </tr>
 <% } %>
     </table>
+    </div>
   </div>
 </div>
 
 <% if (statistics_level == 'fine') { %>
 <div class="section-hidden">
-<h2>Message rates</h2>
+<h2>Message rates breakdown</h2>
 <div class="hider updatable">
 <table class="two-col-layout">
   <tr>
@@ -93,15 +118,13 @@
       <%= format('msg-detail-publishes',
                  {'mode':   'queue',
                   'object': queue.incoming,
-                  'label':  'Incoming',
-                  'totals': queue.message_stats}) %>
+                  'label':  'Incoming'}) %>
 
     </td>
     <td>
       <%= format('msg-detail-deliveries',
                  {'mode':   'queue',
-                  'object': queue.deliveries,
-                  'totals': queue.message_stats}) %>
+                  'object': queue.deliveries}) %>
     </td>
   </tr>
 </table>

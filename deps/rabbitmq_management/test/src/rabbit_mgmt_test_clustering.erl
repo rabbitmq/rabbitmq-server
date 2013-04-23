@@ -65,7 +65,7 @@ cluster_nodes_test() ->
     ok.
 
 ha_test_() ->
-    {timeout, 60, fun ha/0}.
+    {timeout, 120, fun ha/0}.
 
 ha() ->
     Policy = [{pattern,    <<".*">>},

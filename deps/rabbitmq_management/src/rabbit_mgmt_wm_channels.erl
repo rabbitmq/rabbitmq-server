@@ -40,4 +40,5 @@ is_authorized(ReqData, Context) ->
 
 augmented(ReqData, Context) ->
     rabbit_mgmt_util:filter_conn_ch_list(
-      rabbit_mgmt_db:get_all_channels(basic), ReqData, Context).
+      rabbit_mgmt_db:get_all_channels(
+        rabbit_mgmt_util:range(ReqData)), ReqData, Context).
