@@ -122,6 +122,9 @@ destination_type(ReqData) ->
     end.
 
 reply(Facts, ReqData, Context) ->
+    reply0(extract_columns(Facts, ReqData), ReqData, Context).
+
+reply0(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
     try
         {mochijson2:encode(Facts), ReqData1, Context}
@@ -138,7 +141,7 @@ reply_list(Facts, ReqData, Context) ->
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
     reply(sort_list(
-            extract_columns(Facts, ReqData),
+            extract_columns_list(Facts, ReqData),
             DefaultSorts,
             wrq:get_qs_value("sort", ReqData),
             wrq:get_qs_value("sort_reverse", ReqData)),
@@ -181,7 +184,10 @@ pget_bin(Key, List, Default) ->
         {[],        _} -> Default
     end.
 
-extract_columns(Items, ReqData) ->
+extract_columns(Item, ReqData) ->
+    extract_column_items(Item, columns(ReqData)).
+
+extract_columns_list(Items, ReqData) ->
     Cols = columns(ReqData),
     [extract_column_items(Item, Cols) || Item <- Items].
 

@@ -808,6 +808,8 @@ columns_test() ->
              ?NO_CONTENT),
     [[{name, <<"test">>}, {arguments, [{foo, <<"bar">>}]}]] =
         http_get("/queues?columns=arguments.foo,name", ?OK),
+    [{name, <<"test">>}, {arguments, [{foo, <<"bar">>}]}] =
+        http_get("/queues/%2f/test?columns=arguments.foo,name", ?OK),
     http_delete("/queues/%2f/test", ?NO_CONTENT),
     ok.
 
