@@ -82,7 +82,8 @@ case "$(uname -s)" in
 esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if ! erl -pa "$RABBITMQ_EBIN_ROOT" \
+if ! ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+            -boot "${CLEAN_BOOT_FILE}" \
 	    -noinput \
 	    -hidden \
 	    -s rabbit_prelaunch \
@@ -103,11 +104,11 @@ RABBITMQ_LISTEN_ARG=
 # there is no other way of preventing their expansion.
 set -f
 
-exec erl \
+exec ${ERL_DIR}erl \
     -pa ${RABBITMQ_EBIN_ROOT} \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
-    -boot start_sasl \
+    -boot "${SASL_BOOT_FILE}" \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
