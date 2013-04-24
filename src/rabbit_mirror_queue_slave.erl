@@ -605,6 +605,10 @@ ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
     State #state { known_senders = pmon:monitor(ChPid, KS) }.
 
 local_sender_death(ChPid, State = #state { known_senders = KS }) ->
+    %% The channel will be monitored iff we have received a delivery
+    %% from it but not heard about its death from the master. So if it
+    %% is monitored we need to point the death out to the master (see
+    %% essay).
     ok = case pmon:is_monitored(ChPid, KS) of
              false -> ok;
              true  -> credit_flow:peer_down(ChPid),
@@ -621,6 +625,10 @@ confirm_sender_death(Pid) ->
         fun (?MODULE, State = #state { known_senders = KS,
                                        gm            = GM }) ->
                 %% We're running still as a slave
+                %%
+                %% See comment in local_sender_death/2; we might have
+                %% received a sender_death in the meanwhile so check
+                %% again.
                 ok = case pmon:is_monitored(Pid, KS) of
                          false -> ok;
                          true  -> gm:broadcast(GM, {ensure_monitoring, [Pid]}),
@@ -766,6 +774,9 @@ process_instruction({sender_death, ChPid},
                     State = #state { sender_queues = SQ,
                                      msg_id_status = MS,
                                      known_senders = KS }) ->
+    %% The channel will be monitored iff we have received a message
+    %% from it. In this case we just want to avoid doing work if we
+    %% never got any messages.
     {ok, case pmon:is_monitored(ChPid, KS) of
              false -> State;
              true  -> MS1 = case dict:find(ChPid, SQ) of
