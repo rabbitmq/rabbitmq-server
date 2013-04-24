@@ -595,8 +595,7 @@ ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
 local_sender_death(ChPid, State = #state { known_senders = KS }) ->
     ok = case pmon:is_monitored(ChPid, KS) of
              false -> ok;
-             true  -> credit_flow:peer_down(ChPid),
-                      confirm_sender_death(ChPid)
+             true  -> confirm_sender_death(ChPid)
          end,
     State.
 
@@ -779,6 +778,7 @@ process_instruction({sender_death, ChPid},
                                     lists:foldl(fun dict:erase/2, MS,
                                                 sets:to_list(PendingCh))
                             end,
+                      credit_flow:peer_down(ChPid),
                       State #state { sender_queues = dict:erase(ChPid, SQ),
                                      msg_id_status = MS1,
                                      known_senders = pmon:demonitor(ChPid, KS) }
