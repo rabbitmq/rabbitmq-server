@@ -67,8 +67,12 @@ handle_info({inet_async, Sock, _, {ok, <<"AMQP", A, B, C>>}},
     {ok, <<D>>} = rabbit_net:sync_recv(Sock, 1),
     handle_error({refused, {A, B, C, D}}, State);
 handle_info({inet_async, Sock, _, {ok, <<Type:8, Channel:16, Length:32>>}},
-            State = #state{sock = Sock, message = none}) ->
+            State = #state{sock = Sock, message = none}) when
+      Type =:= 1; Type =:= 2; Type =:= 3; Type =:= 4 ->
     next(Length + 1, State#state{message = {Type, Channel, Length}});
+handle_info({inet_async, Sock, _, {ok, <<Type:8, _Remainder:48>> = All}},
+            State = #state{sock = Sock, message = none}) ->
+    handle_error({malformed_header, All}, State);
 handle_info({inet_async, Sock, _, {ok, Data}},
             State = #state{sock = Sock, message = {Type, Channel, L}}) ->
     <<Payload:L/binary, ?FRAME_END>> = Data,
@@ -114,6 +118,9 @@ handle_error(closed, State = #state{connection = Conn}) ->
     {noreply, State};
 handle_error({refused, Version},  State = #state{connection = Conn}) ->
     Conn ! {refused, Version},
+    {noreply, State};
+handle_error({malformed_header, Version},  State = #state{connection = Conn}) ->
+    Conn ! {malformed_header, Version},
     {noreply, State};
 handle_error(Reason, State = #state{connection = Conn}) ->
     Conn ! {socket_error, Reason},
