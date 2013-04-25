@@ -289,7 +289,7 @@
 
       <variablelist>
         <varlistentry id="join_cluster">
-          <term><cmdsynopsis><command>join_cluster</command> <arg choice="req"><replaceable>clusternode</replaceable></arg><arg choice="opt"><replaceable>--ram</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>join_cluster</command> <arg choice="req"><replaceable>clusternode</replaceable></arg> <arg choice="opt">--ram</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
