@@ -140,6 +140,93 @@ amqp_uri_parse_test() ->
 
     ok.
 
+%%--------------------------------------------------------------------
+%% Destination Parsing Tests
+%%--------------------------------------------------------------------
+
+route_destination_test() ->
+    %% valid queue
+    ?assertMatch({ok, {queue, "test"}}, parse_dest("/queue/test")),
+
+    %% valid topic
+    ?assertMatch({ok, {topic, "test"}}, parse_dest("/topic/test")),
+
+    %% valid exchange
+    ?assertMatch({ok, {exchange, {"test", undefined}}}, parse_dest("/exchange/test")),
+
+    %% valid temp queue
+    ?assertMatch({ok, {temp_queue, "test"}}, parse_dest("/temp-queue/test")),
+
+    %% valid reply queue
+    ?assertMatch({ok, {reply_queue, "test"}}, parse_dest("/reply-queue/test")),
+    ?assertMatch({ok, {reply_queue, "test/2"}}, parse_dest("/reply-queue/test/2")),
+
+    %% valid exchange with pattern
+    ?assertMatch({ok, {exchange, {"test", "pattern"}}},
+        parse_dest("/exchange/test/pattern")),
+
+    %% valid pre-declared queue
+    ?assertMatch({ok, {amqqueue, "test"}}, parse_dest("/amq/queue/test")),
+
+    %% queue without name
+    ?assertMatch({error, {invalid_destination, queue, ""}}, parse_dest("/queue")),
+    ?assertMatch({ok, {queue, undefined}}, parse_dest("/queue", true)),
+
+    %% topic without name
+    ?assertMatch({error, {invalid_destination, topic, ""}}, parse_dest("/topic")),
+
+    %% exchange without name
+    ?assertMatch({error, {invalid_destination, exchange, ""}},
+        parse_dest("/exchange")),
+
+    %% exchange default name
+    ?assertMatch({error, {invalid_destination, exchange, "//foo"}},
+        parse_dest("/exchange//foo")),
+
+    %% amqqueue without name
+    ?assertMatch({error, {invalid_destination, amqqueue, ""}},
+        parse_dest("/amq/queue")),
+
+    %% queue without name with trailing slash
+    ?assertMatch({error, {invalid_destination, queue, "/"}}, parse_dest("/queue/")),
+
+    %% topic without name with trailing slash
+    ?assertMatch({error, {invalid_destination, topic, "/"}}, parse_dest("/topic/")),
+
+    %% exchange without name with trailing slash
+    ?assertMatch({error, {invalid_destination, exchange, "/"}},
+        parse_dest("/exchange/")),
+
+    %% queue with invalid name
+    ?assertMatch({error, {invalid_destination, queue, "/foo/bar"}},
+        parse_dest("/queue/foo/bar")),
+
+    %% topic with invalid name
+    ?assertMatch({error, {invalid_destination, topic, "/foo/bar"}},
+        parse_dest("/topic/foo/bar")),
+
+    %% exchange with invalid name
+    ?assertMatch({error, {invalid_destination, exchange, "/foo/bar/baz"}},
+        parse_dest("/exchange/foo/bar/baz")),
+
+    %% unknown destination
+    ?assertMatch({error, {unknown_destination, "/blah/boo"}},
+        parse_dest("/blah/boo")),
+
+    %% queue with escaped name
+    ?assertMatch({ok, {queue, "te/st"}}, parse_dest("/queue/te%2Fst")),
+
+    %% valid exchange with escaped name and pattern
+    ?assertMatch({ok, {exchange, {"te/st", "pa/tt/ern"}}},
+        parse_dest("/exchange/te%2Fst/pa%2Ftt%2Fern")),
+
+    ok.
+
+parse_dest(Destination, Params) ->
+    rabbit_routing_util:parse_endpoint(Destination, Params).
+parse_dest(Destination) ->
+    rabbit_routing_util:parse_endpoint(Destination).
+
 %%%%
 %%
 %% This is an example of how the client interaction should work
@@ -640,13 +727,14 @@ confirm_barrier_test() ->
     true = amqp_channel:wait_for_confirms(Channel),
     teardown(Connection, Channel).
 
-confirm_barrier_nop_test() ->
+confirm_select_before_wait_test() ->
     {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    true = amqp_channel:wait_for_confirms(Channel),
-    amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
-                      #amqp_msg{payload = <<"foo">>}),
-    true = amqp_channel:wait_for_confirms(Channel),
+    try amqp_channel:wait_for_confirms(Channel) of
+        _ -> exit(success_despite_lack_of_confirm_mode)
+    catch
+        not_in_confirm_mode -> ok
+    end,
     teardown(Connection, Channel).
 
 confirm_barrier_timeout_test() ->
