@@ -84,8 +84,8 @@ HELP = {
 
     'message-get-requeue':
       '<p>Clicking "Get Message(s)" will consume messages from the queue. \
-      If requeue is set the message will be re-added to the queue, \
-      but ordering will not be preserved and "redelivered" will be set.</p> \
+      If requeue is set the message will be put back into the queue in place, \
+      but "redelivered" will be set on the message.</p> \
       <p>If requeue is not set messages will be removed from the queue.</p> \
       <p>Furthermore, message payloads will be truncated to 50000 bytes.</p>',
 
