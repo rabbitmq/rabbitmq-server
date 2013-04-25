@@ -71,7 +71,7 @@ handle_info({inet_async, Sock, _, {ok, <<Type:8, Channel:16, Length:32>>}},
       Type =:= ?FRAME_METHOD; Type =:= ?FRAME_HEADER;
       Type =:= ?FRAME_BODY;   Type =:= ?FRAME_HEARTBEAT ->
     next(Length + 1, State#state{message = {Type, Channel, Length}});
-handle_info({inet_async, Sock, _, {ok, <<Type:8, _Remainder:48>> = All}},
+handle_info({inet_async, Sock, _, {ok, All}},
             State = #state{sock = Sock, message = none}) ->
     handle_error({malformed_header, All}, State);
 handle_info({inet_async, Sock, _, {ok, Data}},
