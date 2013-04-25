@@ -492,6 +492,7 @@ function postprocess() {
         $(this).parents('form').submit();
     });
     $('#filter').die().live('keyup', debounce(update_filter, 500));
+    $('#truncate').die().live('keyup', debounce(update_truncate, 500));
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -558,9 +559,20 @@ function update_multifields() {
 
 function update_filter() {
     current_filter = $(this).val();
-    var table = $(this).parents('table').first();
+    update_filter0(this);
+}
+
+function update_truncate() {
+    var current_truncate_str = $(this).val().replace(new RegExp('\D', 'g'), '');
+    current_truncate = parseInt(current_truncate_str);
+    store_pref('truncate', current_truncate);
+    update_filter0(this);
+}
+
+function update_filter0(thing) {
+    var table = $(thing).parents('table').first();
     table.removeClass('filter-active');
-    if ($(this).val() != '') {
+    if ($(thing).val() != '') {
         table.addClass('filter-active');
     }
     partial_update();

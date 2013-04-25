@@ -53,6 +53,8 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .filter-active { background: #99ebff; border-radius: 5px; }
 .filter-highlight { background: #99ebff; }
 
+input#truncate { width: 50px; text-align: right; }
+
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
 table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; }

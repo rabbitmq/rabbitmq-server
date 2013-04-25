@@ -731,7 +731,8 @@ function rates_text(items, stats, mode, rate_fmt) {
 }
 
 function filter_ui(items) {
-    var maximum = 100;
+    current_truncate = (current_truncate == null) ?
+        parseInt(get_pref('truncate')) : current_truncate;
     var total = items.length;
 
     if (current_filter != '') {
@@ -760,13 +761,16 @@ function filter_ui(items) {
     var selected = current_filter == '' ? (items_desc(items.length)) :
         (items.length + ' of ' + items_desc(total) + ' selected');
 
-    if (items.length > maximum) {
+    var truncate = '<input type="text" id="truncate" value="' +
+        current_truncate + '">';
+
+    if (items.length > current_truncate) {
         res += '<p class="filter-warning">' + selected +
-            ' (only showing first ' + maximum + ')</p>';
-        items.length = maximum;
+            ' (only showing first ' + truncate + ')</p>';
+        items.length = current_truncate;
     }
     else {
-        res += '<p>' + selected + '</p>';
+        res += '<p>' + selected + ' (show at most ' + truncate + ')</p>';
     }
 
     res += '</div></div>';
