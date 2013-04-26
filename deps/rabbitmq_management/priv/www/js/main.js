@@ -512,6 +512,13 @@ function postprocess_partial() {
             update();
         });
     $('.help').html('(?)');
+    // TODO remove this hack when we get rid of "updatable"
+    if ($('#filter-warning-show').length > 0) {
+        $('#filter-truncate').addClass('filter-warning');
+    }
+    else {
+        $('#filter-truncate').removeClass('filter-warning');
+    }
 }
 
 function update_multifields() {

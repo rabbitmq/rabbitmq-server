@@ -751,8 +751,7 @@ function filter_ui(items) {
         (current_filter == '' ? '' : ' class="filter-active"') +
         '><tr><th>Filter:</th>' +
         '<td><input id="filter" type="text" value="' +
-        fmt_escape_html(current_filter) + '"/></td></tr></table>' +
-        '<div class="updatable">';
+        fmt_escape_html(current_filter) + '"/></td></tr></table>';
 
     function items_desc(l) {
         return l == 1 ? (l + ' item') : (l + ' items');
@@ -761,19 +760,20 @@ function filter_ui(items) {
     var selected = current_filter == '' ? (items_desc(items.length)) :
         (items.length + ' of ' + items_desc(total) + ' selected');
 
-    var truncate = '<input type="text" id="truncate" value="' +
+    var truncate_input = '<input type="text" id="truncate" value="' +
         current_truncate + '">';
 
     if (items.length > current_truncate) {
-        res += '<p class="filter-warning">' + selected +
-            ' (only showing first ' + truncate + ')</p>';
+        selected += '<span id="filter-warning-show"> ' +
+            '(only showing first</span> ';
         items.length = current_truncate;
     }
     else {
-        res += '<p>' + selected + ' (show at most ' + truncate + ')</p>';
+        selected += ' (show at most ';
     }
-
-    res += '</div></div>';
+    res += '<p id="filter-truncate"><span class="updatable">' + selected +
+        '</span>' + truncate_input + ')</p>';
+    res += '</div>';
 
     return res;
 }
