@@ -559,22 +559,18 @@ function update_multifields() {
 
 function update_filter() {
     current_filter = $(this).val();
-    update_filter0(this);
+    var table = $(this).parents('table').first();
+    table.removeClass('filter-active');
+    if ($(this).val() != '') {
+        table.addClass('filter-active');
+    }
+    partial_update();
 }
 
 function update_truncate() {
     var current_truncate_str = $(this).val().replace(new RegExp('\D', 'g'), '');
     current_truncate = parseInt(current_truncate_str);
     store_pref('truncate', current_truncate);
-    update_filter0(this);
-}
-
-function update_filter0(thing) {
-    var table = $(thing).parents('table').first();
-    table.removeClass('filter-active');
-    if ($(thing).val() != '') {
-        table.addClass('filter-active');
-    }
     partial_update();
 }
 
