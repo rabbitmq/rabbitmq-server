@@ -492,6 +492,7 @@ function postprocess() {
         $(this).parents('form').submit();
     });
     $('#filter').die().live('keyup', debounce(update_filter, 500));
+    $('#truncate').die().live('keyup', debounce(update_truncate, 500));
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -511,6 +512,13 @@ function postprocess_partial() {
             update();
         });
     $('.help').html('(?)');
+    // TODO remove this hack when we get rid of "updatable"
+    if ($('#filter-warning-show').length > 0) {
+        $('#filter-truncate').addClass('filter-warning');
+    }
+    else {
+        $('#filter-truncate').removeClass('filter-warning');
+    }
 }
 
 function update_multifields() {
@@ -563,6 +571,18 @@ function update_filter() {
     if ($(this).val() != '') {
         table.addClass('filter-active');
     }
+    partial_update();
+}
+
+function update_truncate() {
+    var current_truncate_str =
+        $(this).val().replace(new RegExp('\\D', 'g'), '');
+    if (current_truncate_str == '')
+        current_truncate_str = '0';
+    if ($(this).val() != current_truncate_str)
+        $(this).val(current_truncate_str);
+    current_truncate = parseInt(current_truncate_str, 10);
+    store_pref('truncate', current_truncate);
     partial_update();
 }
 

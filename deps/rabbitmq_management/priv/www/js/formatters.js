@@ -731,7 +731,8 @@ function rates_text(items, stats, mode, rate_fmt) {
 }
 
 function filter_ui(items) {
-    var maximum = 100;
+    current_truncate = (current_truncate == null) ?
+        parseInt(get_pref('truncate')) : current_truncate;
     var total = items.length;
 
     if (current_filter != '') {
@@ -750,8 +751,7 @@ function filter_ui(items) {
         (current_filter == '' ? '' : ' class="filter-active"') +
         '><tr><th>Filter:</th>' +
         '<td><input id="filter" type="text" value="' +
-        fmt_escape_html(current_filter) + '"/></td></tr></table>' +
-        '<div class="updatable">';
+        fmt_escape_html(current_filter) + '"/></td></tr></table>';
 
     function items_desc(l) {
         return l == 1 ? (l + ' item') : (l + ' items');
@@ -760,16 +760,20 @@ function filter_ui(items) {
     var selected = current_filter == '' ? (items_desc(items.length)) :
         (items.length + ' of ' + items_desc(total) + ' selected');
 
-    if (items.length > maximum) {
-        res += '<p class="filter-warning">' + selected +
-            ' (only showing first ' + maximum + ')</p>';
-        items.length = maximum;
+    var truncate_input = '<input type="text" id="truncate" value="' +
+        current_truncate + '">';
+
+    if (items.length > current_truncate) {
+        selected += '<span id="filter-warning-show"> ' +
+            '(only showing first</span> ';
+        items.length = current_truncate;
     }
     else {
-        res += '<p>' + selected + '</p>';
+        selected += ' (show at most ';
     }
-
-    res += '</div></div>';
+    res += '<p id="filter-truncate"><span class="updatable">' + selected +
+        '</span>' + truncate_input + ')</p>';
+    res += '</div>';
 
     return res;
 }
