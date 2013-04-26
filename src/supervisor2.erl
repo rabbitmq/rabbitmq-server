@@ -1260,11 +1260,12 @@ state_del_child(Child, State) ->
 
 del_child(Name, [Ch|Chs]) when Ch#child.name =:= Name, Ch#child.restart_type =:= temporary ->
     Chs;
-del_child(NameOrPid, [Ch=#child{pid = ?restarting(_)}|_]=Chs)
-  when Ch#child.name =:= NameOrPid ->
+del_child(Name, [Ch=#child{pid = ?restarting(_)}|_]=Chs)
+  when Ch#child.name =:= Name ->
     Chs;
 del_child(Name, [Ch|Chs]) when Ch#child.name =:= Name ->
     [Ch#child{pid = undefined} | Chs];
+%% the next two clauses only handle deletions during a one_for_all restart
 del_child(Pid, [Ch|Chs]) when Ch#child.pid =:= Pid, Ch#child.restart_type =:= temporary ->
     Chs;
 del_child(Pid, [Ch|Chs]) when Ch#child.pid =:= Pid ->
