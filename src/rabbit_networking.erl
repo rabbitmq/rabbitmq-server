@@ -18,7 +18,8 @@
 
 -export([boot/0, start/0, start_tcp_listener/1, start_ssl_listener/2,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
-         node_listeners/1, connections/0, connection_info_keys/0,
+         node_listeners/1, register_connection/1, unregister_connection/1,
+         connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          close_connection/2, force_connection_event_refresh/0, tcp_host/1]).
@@ -65,6 +66,8 @@
 -spec(stop_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
+-spec(register_connection/1 :: (pid()) -> ok).
+-spec(unregister_connection/1 :: (pid()) -> ok).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
 -spec(connections_local/0 :: () -> [rabbit_types:connection()]).
 -spec(connection_info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -294,20 +297,15 @@ start_client(Sock) ->
 start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
+register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
+
+unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
+
 connections() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
-connections_local() ->
-    [Reader ||
-        {_, ConnSup, supervisor, _}
-            <- supervisor:which_children(rabbit_tcp_client_sup),
-        Reader <- [try
-                       rabbit_connection_sup:reader(ConnSup)
-                   catch exit:{noproc, _} ->
-                           noproc
-                   end],
-        Reader =/= noproc].
+connections_local() -> pg_local:get_members(rabbit_connections).
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
