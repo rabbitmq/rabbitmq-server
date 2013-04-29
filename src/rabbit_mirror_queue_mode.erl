@@ -25,7 +25,9 @@
 -callback description() -> [proplists:property()].
 
 %% Called whenever we think we might need to change nodes for a
-%% mirrored queue.
+%% mirrored queue. Note that this is called from a variety of
+%% contexts, both inside and outside Mnesia transactions. Ideally it
+%% will be pure-functional.
 %%
 %% Takes: parameters set in the policy,
 %%        current master,
