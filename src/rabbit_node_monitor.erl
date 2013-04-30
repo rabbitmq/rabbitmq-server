@@ -30,11 +30,14 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
+ %% Utils
+-export([all_rabbit_nodes_up/0, run_outside_applications/1]).
+
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
 
--record(state, {monitors, partitions, subscribers, down_ping_timer}).
+-record(state, {monitors, partitions, subscribers, down_ping_timer, autoheal}).
 
 %%----------------------------------------------------------------------------
 
@@ -56,6 +59,9 @@
 
 -spec(partitions/0 :: () -> {node(), [node()]}).
 -spec(subscribe/1 :: (pid()) -> 'ok').
+
+-spec(all_rabbit_nodes_up/0 :: () -> boolean()).
+-spec(run_outside_applications/1 :: (fun (() -> any())) -> pid()).
 
 -endif.
 
@@ -194,10 +200,12 @@ init([]) ->
     %% writing out the cluster status files - bad things can then
     %% happen.
     process_flag(trap_exit, true),
+    net_kernel:monitor_nodes(true),
     {ok, _} = mnesia:subscribe(system),
     {ok, #state{monitors    = pmon:new(),
                 subscribers = pmon:new(),
-                partitions  = []}}.
+                partitions  = [],
+                autoheal    = rabbit_autoheal:init()}}.
 
 handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
     {reply, {node(), Partitions}, State};
@@ -251,16 +259,22 @@ handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
     ok = handle_dead_rabbit(Node),
     [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
     {noreply, handle_dead_rabbit_state(
+                Node,
                 State#state{monitors = pmon:erase({rabbit, Node}, Monitors)})};
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
+handle_info({nodedown, Node}, State) ->
+    ok = handle_dead_node(Node),
+    {noreply, State};
+
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
             State = #state{partitions = Partitions,
-                           monitors   = Monitors}) ->
+                           monitors   = Monitors,
+                           autoheal   = AState}) ->
     %% We will not get a node_up from this node - yet we should treat it as
     %% up (mostly).
     State1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
@@ -271,7 +285,13 @@ handle_info({mnesia_system_event,
     ok = handle_live_rabbit(Node),
     Partitions1 = ordsets:to_list(
                     ordsets:add_element(Node, ordsets:from_list(Partitions))),
-    {noreply, State1#state{partitions = Partitions1}};
+    {noreply, State1#state{partitions = Partitions1,
+                           autoheal   = rabbit_autoheal:maybe_start(AState)}};
+
+handle_info({autoheal_msg, Msg}, State = #state{autoheal   = AState,
+                                                partitions = Partitions}) ->
+    AState1 = rabbit_autoheal:handle_msg(Msg, AState, Partitions),
+    {noreply, State#state{autoheal = AState1}};
 
 handle_info(ping_nodes, State) ->
     %% We ping nodes when some are down to ensure that we find out
@@ -318,6 +338,18 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
     ok = rabbit_mnesia:on_node_down(Node),
+    ok.
+
+handle_dead_node(_Node) ->
+    %% In general in rabbit_node_monitor we care about whether the
+    %% rabbit application is up rather than the node; we do this so
+    %% that we can respond in the same way to "rabbitmqctl stop_app"
+    %% and "rabbitmqctl stop" as much as possible.
+    %%
+    %% However, for pause_minority mode we can't do this, since we
+    %% depend on looking at whether other nodes are up to decide
+    %% whether to come back up ourselves - if we decide that based on
+    %% the rabbit application we would go down and never come back.
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
             case majority() of
@@ -326,44 +358,32 @@ handle_dead_rabbit(Node) ->
             end;
         {ok, ignore} ->
             ok;
+        {ok, autoheal} ->
+            ok;
         {ok, Term} ->
             rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
                                "assuming 'ignore'~n", [Term]),
             ok
-    end,
-    ok.
-
-majority() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
-
-all_nodes_up() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_nodes(Nodes)) =:= length(Nodes).
-
-%% mnesia:system_info(db_nodes) (and hence
-%% rabbit_mnesia:cluster_nodes(running)) does not give reliable results
-%% when partitioned.
-alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
-
-alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
-
-alive_rabbit_nodes() ->
-    [N || N <- alive_nodes(), rabbit_nodes:is_process_running(N, rabbit)].
+    end.
 
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
                        []),
     Nodes = rabbit_mnesia:cluster_nodes(all),
+    run_outside_applications(fun () ->
+                                     rabbit:stop(),
+                                     wait_for_cluster_recovery(Nodes)
+                             end).
+
+run_outside_applications(Fun) ->
     spawn(fun () ->
                   %% If our group leader is inside an application we are about
                   %% to stop, application:stop/1 does not return.
                   group_leader(whereis(init), self()),
-                  %% Ensure only one restarting process at a time, will
+                  %% Ensure only one such process at a time, will
                   %% exit(badarg) (harmlessly) if one is already running
-                  register(rabbit_restarting_process, self()),
-                  rabbit:stop(),
-                  wait_for_cluster_recovery(Nodes)
+                  register(rabbit_outside_app_process, self()),
+                  Fun()
           end).
 
 wait_for_cluster_recovery(Nodes) ->
@@ -373,7 +393,8 @@ wait_for_cluster_recovery(Nodes) ->
                  wait_for_cluster_recovery(Nodes)
     end.
 
-handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
+handle_dead_rabbit_state(Node, State = #state{partitions = Partitions,
+                                              autoheal   = Autoheal}) ->
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
     %% that we do not attempt to deal with individual (other) partitions
@@ -383,7 +404,9 @@ handle_dead_rabbit_state(State = #state{partitions = Partitions}) ->
                       [] -> [];
                       _  -> Partitions
                   end,
-    ensure_ping_timer(State#state{partitions = Partitions1}).
+    ensure_ping_timer(
+      State#state{partitions = Partitions1,
+                  autoheal   = rabbit_autoheal:node_down(Node, Autoheal)}).
 
 ensure_ping_timer(State) ->
     rabbit_misc:ensure_timer(
@@ -416,3 +439,30 @@ legacy_should_be_disc_node(DiscNodes) ->
 add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 
 del_node(Node, Nodes) -> Nodes -- [Node].
+
+%%--------------------------------------------------------------------
+
+%% mnesia:system_info(db_nodes) (and hence
+%% rabbit_mnesia:cluster_nodes(running)) does not give reliable
+%% results when partitioned. So we have a small set of replacement
+%% functions here. "rabbit" in a function's name implies we test if
+%% the rabbit application is up, not just the node.
+
+majority() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
+
+all_nodes_up() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_nodes(Nodes)) =:= length(Nodes).
+
+all_rabbit_nodes_up() ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
+
+alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
+
+alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_mnesia:cluster_nodes(all)).
+
+alive_rabbit_nodes(Nodes) ->
+    [N || N <- alive_nodes(Nodes), rabbit_nodes:is_process_running(N, rabbit)].

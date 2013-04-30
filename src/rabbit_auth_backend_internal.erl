@@ -203,7 +203,9 @@ hash_password(Cleartext) ->
     <<Salt/binary, Hash/binary>>.
 
 check_password(Cleartext, <<Salt:4/binary, Hash/binary>>) ->
-    Hash =:= salted_md5(Salt, Cleartext).
+    Hash =:= salted_md5(Salt, Cleartext);
+check_password(_Cleartext, _Any) ->
+    false.
 
 make_salt() ->
     {A1,A2,A3} = now(),
