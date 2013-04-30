@@ -11,8 +11,12 @@ SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 DOCS_DIR=docs
-INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
+INCLUDES_GEN=$(INCLUDE_DIR)/rabbit_framing.hrl
+INCLUDES_NOGEN=$(filter-out $(INCLUDES_GEN),$(wildcard $(INCLUDE_DIR)/*.hrl))
+INCLUDES=$(INCLUDES_NOGEN) $(INCLUDES_GEN)
+SOURCES_GEN=$(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
+SOURCES_NOGEN=$(filter-out $(SOURCES_GEN),$(wildcard $(SOURCE_DIR)/*.erl))
+SOURCES=$(SOURCES_NOGEN) $(SOURCES_NOGEN)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS) plugins
 WEB_URL=http://www.rabbitmq.com/
@@ -126,7 +130,7 @@ check-xref:
 
 endif
 
-$(DEPS_FILE): $(SOURCES) $(INCLUDES)
+$(DEPS_FILE): $(SOURCES_NOGEN) $(INCLUDES_NOGEN)
 	rm -f $@
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
