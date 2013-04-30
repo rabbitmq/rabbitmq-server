@@ -18,6 +18,8 @@
 
 -ifdef(use_specs).
 
+-export_type([validate_results/0]).
+
 -type(validate_results() ::
         'ok' | {error, string(), [term()]} | [validate_results()]).
 
