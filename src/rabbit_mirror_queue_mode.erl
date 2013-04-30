@@ -50,7 +50,7 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {suggested_queue_nodes, 5}, {validate_policy, 1}].
+    [{description, 0}, {suggested_queue_nodes, 5}, {validate_policy, 1}];
 behaviour_info(_Other) ->
     undefined.
 
