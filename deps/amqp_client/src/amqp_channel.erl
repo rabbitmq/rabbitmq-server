@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 %% @type close_reason(Type) = {shutdown, amqp_reason(Type)}.
@@ -214,7 +214,7 @@ next_publish_seqno(Channel) ->
 %%      Channel = pid()
 %% @doc Wait until all messages published since the last call have
 %% been either ack'd or nack'd by the broker.  Note, when called on a
-%% non-Confirm channel, waitForConfirms returns true immediately.
+%% non-Confirm channel, waitForConfirms returns an error.
 wait_for_confirms(Channel) ->
     wait_for_confirms(Channel, infinity).
 
@@ -224,10 +224,13 @@ wait_for_confirms(Channel) ->
 %%      Timeout = non_neg_integer() | 'infinity'
 %% @doc Wait until all messages published since the last call have
 %% been either ack'd or nack'd by the broker or the timeout expires.
-%% Note, when called on a non-Confirm channel, waitForConfirms returns
-%% true immediately.
+%% Note, when called on a non-Confirm channel, waitForConfirms throws
+%% an exception.
 wait_for_confirms(Channel, Timeout) ->
-    gen_server:call(Channel, {wait_for_confirms, Timeout}, infinity).
+    case gen_server:call(Channel, {wait_for_confirms, Timeout}, infinity) of
+        {error, Reason} -> throw(Reason);
+        Other           -> Other
+    end.
 
 %% @spec (Channel) -> true
 %% where
@@ -709,23 +712,19 @@ handle_method_from_server1(
     {noreply, State};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler = none} = State) ->
-    ?LOG_WARN("Channel (~p): received ~p but there is no "
-              "confirm handler registered~n", [self(), BasicAck]),
     {noreply, update_confirm_set(BasicAck, State)};
-handle_method_from_server1(
-        #'basic.ack'{} = BasicAck, none,
-        #state{confirm_handler = {ConfirmHandler, _Ref}} = State) ->
-    ConfirmHandler ! BasicAck,
+handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
+                           #state{confirm_handler = {CH, _Ref}} = State) ->
+    CH ! BasicAck,
     {noreply, update_confirm_set(BasicAck, State)};
 handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
                            #state{confirm_handler = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicNack]),
     {noreply, update_confirm_set(BasicNack, State)};
-handle_method_from_server1(
-        #'basic.nack'{} = BasicNack, none,
-        #state{confirm_handler = {ConfirmHandler, _Ref}} = State) ->
-    ConfirmHandler ! BasicNack,
+handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
+                           #state{confirm_handler = {CH, _Ref}} = State) ->
+    CH ! BasicNack,
     {noreply, update_confirm_set(BasicNack, State)};
 
 handle_method_from_server1(Method, none, State) ->
@@ -884,6 +883,8 @@ notify_confirm_waiters(State = #state{waiting_set        = WSet,
     State#state{waiting_set        = gb_trees:empty(),
                 only_acks_received = true}.
 
+handle_wait_for_confirms(_From, _Timeout, State = #state{next_pub_seqno = 0}) ->
+    {reply, {error, not_in_confirm_mode}, State};
 handle_wait_for_confirms(From, Timeout,
                          State = #state{unconfirmed_set = USet,
                                         waiting_set     = WSet}) ->

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -62,9 +62,18 @@ handle_call(Call, From, State) ->
 handle_cast(Cast, State) ->
     {stop, {unexpected_cast, Cast}, State}.
 
-handle_info({inet_async, Sock, _, {ok, <<Type:8, Channel:16, Length:32>>}},
+handle_info({inet_async, Sock, _, {ok, <<"AMQP", A, B, C>>}},
             State = #state{sock = Sock, message = none}) ->
+    {ok, <<D>>} = rabbit_net:sync_recv(Sock, 1),
+    handle_error({refused, {A, B, C, D}}, State);
+handle_info({inet_async, Sock, _, {ok, <<Type:8, Channel:16, Length:32>>}},
+            State = #state{sock = Sock, message = none}) when
+      Type =:= ?FRAME_METHOD; Type =:= ?FRAME_HEADER;
+      Type =:= ?FRAME_BODY;   Type =:= ?FRAME_HEARTBEAT ->
     next(Length + 1, State#state{message = {Type, Channel, Length}});
+handle_info({inet_async, Sock, _, {ok, All}},
+            State = #state{sock = Sock, message = none}) ->
+    handle_error({malformed_header, All}, State);
 handle_info({inet_async, Sock, _, {ok, Data}},
             State = #state{sock = Sock, message = {Type, Channel, L}}) ->
     <<Payload:L/binary, ?FRAME_END>> = Data,
@@ -107,6 +116,12 @@ next(Length, State = #state{sock = Sock}) ->
 
 handle_error(closed, State = #state{connection = Conn}) ->
     Conn ! socket_closed,
+    {noreply, State};
+handle_error({refused, Version},  State = #state{connection = Conn}) ->
+    Conn ! {refused, Version},
+    {noreply, State};
+handle_error({malformed_header, Version},  State = #state{connection = Conn}) ->
+    Conn ! {malformed_header, Version},
     {noreply, State};
 handle_error(Reason, State = #state{connection = Conn}) ->
     Conn ! {socket_error, Reason},

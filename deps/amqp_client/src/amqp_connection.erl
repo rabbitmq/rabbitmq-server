@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 %% @type close_reason(Type) = {shutdown, amqp_reason(Type)}.
@@ -73,6 +73,7 @@
 -export([start/1, close/1, close/2, close/3]).
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
+-export([socket_adapter_info/2]).
 
 -define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
 
@@ -147,11 +148,7 @@
 %% the default ports will be selected depending on whether this is a
 %% normal or an SSL connection.
 start(AmqpParams) ->
-    case amqp_client:start() of
-        ok                                      -> ok;
-        {error, {already_started, amqp_client}} -> ok;
-        {error, _} = E                          -> throw(E)
-    end,
+    ensure_started(),
     AmqpParams1 =
         case AmqpParams of
             #amqp_params_network{port = undefined, ssl_options = none} ->
@@ -163,6 +160,24 @@ start(AmqpParams) ->
         end,
     {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams1),
     amqp_gen_connection:connect(Connection).
+
+%% Usually the amqp_client application will already be running. We
+%% check whether that is the case by invoking an undocumented function
+%% which does not require a synchronous call to the application
+%% controller. That way we don't risk a dead-lock if, say, the
+%% application controller is in the process of shutting down the very
+%% application which is making this call.
+ensure_started() ->
+    case application_controller:get_master(amqp_client) of
+        undefined ->
+            case amqp_client:start() of
+                ok                                      -> ok;
+                {error, {already_started, amqp_client}} -> ok;
+                {error, _} = E                          -> throw(E)
+            end;
+        _ ->
+            ok
+    end.
 
 %%---------------------------------------------------------------------------
 %% Commands
@@ -318,3 +333,8 @@ info_keys(ConnectionPid) ->
 %% atoms that can be used for a certain connection, use info_keys/1.
 info_keys() ->
     amqp_gen_connection:info_keys().
+
+%% @doc Takes a socket and a protocol, returns an #amqp_adapter_info{}
+%% based on the socket for the protocol given.
+socket_adapter_info(Sock, Protocol) ->
+    amqp_direct_connection:socket_adapter_info(Sock, Protocol).

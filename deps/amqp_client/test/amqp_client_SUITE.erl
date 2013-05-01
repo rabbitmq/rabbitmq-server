@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
 -module(amqp_client_SUITE).
@@ -37,6 +37,7 @@
 %%---------------------------------------------------------------------------
 
 amqp_uri_parse_test_()                  -> ?RUN([]).
+route_destination_test_()               -> ?RUN([]).
 basic_get_test_()                       -> ?RUN([]).
 basic_get_ipv6_test_()                  -> ?RUN([]).
 basic_return_test_()                    -> ?RUN([]).
@@ -65,10 +66,10 @@ pub_and_close_test_()                   -> ?RUN([]).
 channel_tune_negotiation_test_()        -> ?RUN([]).
 confirm_test_()                         -> ?RUN([]).
 confirm_barrier_test_()                 -> ?RUN([]).
-confirm_barrier_nop_test_()             -> ?RUN([]).
+confirm_select_before_wait_test_()      -> ?RUN([]).
 confirm_barrier_timeout_test_()         -> ?RUN([]).
 confirm_barrier_die_timeout_test_()     -> ?RUN([]).
-default_consumer_test()                 -> ?RUN([]).
+default_consumer_test_()                -> ?RUN([]).
 subscribe_nowait_test_()                -> ?RUN([]).
 
 non_existent_exchange_test_()           -> ?RUN([negative]).
