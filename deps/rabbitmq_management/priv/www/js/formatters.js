@@ -244,7 +244,8 @@ function fmt_msgs_axis(num) {
 }
 
 function fmt_rate_bytes_axis(num) {
-    return fmt_bytes(num) + '/s';
+    num = parseInt(num);
+    return fmt_bytes(isNaN(num) ? 0 : num) + '/s';
 }
 
 function is_stat_empty(obj, name) {
