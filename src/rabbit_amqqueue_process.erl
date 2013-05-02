@@ -1018,12 +1018,17 @@ prioritise_call(Msg, _From, _Len, _State) ->
         _                                    -> 0
     end.
 
-prioritise_cast(Msg, _Len, _State) ->
+prioritise_cast(Msg, _Len, State) ->
     case Msg of
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
+        {notify_sent, _ChPid, _Credit} ->
+            case is_empty(State) of
+                true                         -> 3;
+                false                        -> 0
+            end;
         _                                    -> 0
     end.
 
