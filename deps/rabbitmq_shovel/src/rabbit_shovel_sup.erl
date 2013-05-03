@@ -66,10 +66,7 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
         false -> case rabbit_shovel_config:parse(ShovelName, ShovelConfig) of
                      {ok, Shovel} ->
                          UpdatedShovelConfig =
-                             lists:keystore(reconnect_delay, 1,
-                                            ShovelConfig,
-                                            {reconnect_delay,
-                                             Shovel#shovel.reconnect_delay}),
+                             apply_preset_reconnect_delay(ShovelConfig, Shovel),
                          Acc2 = dict:store(ShovelName, UpdatedShovelConfig, Acc),
                          parse_configuration(Defaults, Env, Acc2);
                      Error ->
@@ -78,4 +75,10 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
     end;
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
+
+apply_preset_reconnect_delay(ShovelConfig, Shovel) ->
+    lists:keystore(reconnect_delay, 1,
+                   ShovelConfig,
+                   {reconnect_delay,
+                    Shovel#shovel.reconnect_delay}).
 
