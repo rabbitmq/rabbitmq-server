@@ -43,6 +43,7 @@
 -rabbit_upgrade({sync_slave_pids,       mnesia, [policy]}).
 -rabbit_upgrade({no_mirror_nodes,       mnesia, [sync_slave_pids]}).
 -rabbit_upgrade({gm_pids,               mnesia, [no_mirror_nodes]}).
+-rabbit_upgrade({exchange_decorators,   mnesia, [policy]}).
 
 %% -------------------------------------------------------------------
 
@@ -68,6 +69,7 @@
 -spec(sync_slave_pids/0       :: () -> 'ok').
 -spec(no_mirror_nodes/0       :: () -> 'ok').
 -spec(gm_pids/0               :: () -> 'ok').
+-spec(exchange_decorators/0   :: () -> 'ok').
 
 -endif.
 
@@ -282,6 +284,20 @@ gm_pids() ->
      || T <- Tables],
     ok.
 
+exchange_decorators() ->
+    ok = exchange_decorators(rabbit_exchange),
+    ok = exchange_decorators(rabbit_durable_exchange).
+
+exchange_decorators(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches,
+            Policy}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches, Policy,
+                {[], []}}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches, policy,
+       decorators]).
 
 
 %%--------------------------------------------------------------------

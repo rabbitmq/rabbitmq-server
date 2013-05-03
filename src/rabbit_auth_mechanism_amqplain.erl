@@ -33,8 +33,7 @@
 %% referring generically to "SASL security mechanism", i.e. the above.
 
 description() ->
-    [{name, <<"AMQPLAIN">>},
-     {description, <<"QPid AMQPLAIN mechanism">>}].
+    [{description, <<"QPid AMQPLAIN mechanism">>}].
 
 should_offer(_Sock) ->
     true.

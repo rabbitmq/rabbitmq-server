@@ -64,7 +64,7 @@ TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
 SIBLING_CODEGEN_DIR=../rabbitmq-codegen/
 AMQP_CODEGEN_DIR=$(shell [ -d $(SIBLING_CODEGEN_DIR) ] && echo $(SIBLING_CODEGEN_DIR) || echo codegen)
-AMQP_SPEC_JSON_FILES_0_9_1=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.9.1.json
+AMQP_SPEC_JSON_FILES_0_9_1=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.9.1.json $(AMQP_CODEGEN_DIR)/credit_extension.json
 AMQP_SPEC_JSON_FILES_0_8=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
@@ -162,7 +162,7 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 	else \
 	    dialyzer --output_plt $@ --build_plt \
 		--apps erts kernel stdlib compiler sasl os_mon mnesia tools \
-		  public_key crypto ssl; \
+		  public_key crypto ssl xmerl; \
 	fi
 
 clean:

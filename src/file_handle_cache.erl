@@ -152,7 +152,7 @@
 -export([ulimit/0]).
 
 -export([start_link/0, start_link/2, init/1, handle_call/3, handle_cast/2,
-         handle_info/2, terminate/2, code_change/3, prioritise_cast/2]).
+         handle_info/2, terminate/2, code_change/3, prioritise_cast/3]).
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 100).
@@ -848,7 +848,7 @@ init([AlarmSet, AlarmClear]) ->
                       alarm_set      = AlarmSet,
                       alarm_clear    = AlarmClear }}.
 
-prioritise_cast(Msg, _State) ->
+prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {release, _, _}              -> 5;
         _                            -> 0

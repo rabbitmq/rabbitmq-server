@@ -37,11 +37,19 @@
 %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
 -callback validate(rabbit_types:exchange()) -> 'ok'.
 
+%% called BEFORE declaration, to check args etc
+-callback validate_binding(rabbit_types:exchange(), rabbit_types:binding()) ->
+    rabbit_types:ok_or_error({'binding_invalid', string(), [any()]}).
+
 %% called after declaration and recovery
 -callback create(tx(), rabbit_types:exchange()) -> 'ok'.
 
 %% called after exchange (auto)deletion.
 -callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
+    'ok'.
+
+%% called when the policy attached to this exchange changes.
+-callback policy_changed(rabbit_types:exchange(), rabbit_types:exchange()) ->
     'ok'.
 
 %% called after a binding has been added or recovered
@@ -58,18 +66,15 @@
                                   rabbit_framing:amqp_table()) ->
     'ok' | rabbit_types:connection_exit().
 
-%% called when the policy attached to this exchange changes.
--callback policy_changed(serial(), rabbit_types:exchange(),
-                         rabbit_types:exchange()) -> 'ok'.
-
 -else.
 
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {serialise_events, 0}, {route, 2}, {validate, 1},
+    [{description, 0}, {serialise_events, 0}, {route, 2},
+     {validate, 1}, {validate_binding, 2}, {policy_changed, 2},
      {create, 2}, {delete, 3}, {add_binding, 3}, {remove_bindings, 3},
-     {assert_args_equivalence, 2}, {policy_changed, 3}];
+     {assert_args_equivalence, 2}];
 behaviour_info(_Other) ->
     undefined.
 
