@@ -26,6 +26,8 @@
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
+-export([socket_adapter_info/2]).
+
 -record(state, {node,
                 user,
                 vhost,
@@ -153,3 +155,52 @@ ensure_adapter_info(A = #amqp_adapter_info{name = unknown}) ->
     ensure_adapter_info(A#amqp_adapter_info{name = Name});
 
 ensure_adapter_info(Info) -> Info.
+
+socket_adapter_info(Sock, Protocol) ->
+    {PeerHost, PeerPort, Host, Port} =
+        case rabbit_net:socket_ends(Sock, inbound) of
+            {ok, Res} -> Res;
+            _          -> {unknown, unknown, unknown, unknown}
+        end,
+    Name = case rabbit_net:connection_string(Sock, inbound) of
+               {ok, Res1} -> Res1;
+               _          -> unknown
+           end,
+    #amqp_adapter_info{protocol        = Protocol,
+                       name            = list_to_binary(Name),
+                       host            = Host,
+                       port            = Port,
+                       peer_host       = PeerHost,
+                       peer_port       = PeerPort,
+                       additional_info = maybe_ssl_info(Sock)}.
+
+maybe_ssl_info(Sock) ->
+    case rabbit_net:is_ssl(Sock) of
+        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
+        false -> [{ssl, false}]
+    end.
+
+ssl_info(Sock) ->
+    {Protocol, KeyExchange, Cipher, Hash} =
+        case rabbit_net:ssl_info(Sock) of
+            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
+            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
+            _                       -> {unknown, unknown, unknown, unknown}
+        end,
+    [{ssl_protocol,     Protocol},
+     {ssl_key_exchange, KeyExchange},
+     {ssl_cipher,       Cipher},
+     {ssl_hash,         Hash}].
+
+ssl_cert_info(Sock) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, Cert} ->
+            [{peer_cert_issuer,   list_to_binary(
+                                    rabbit_ssl:peer_cert_issuer(Cert))},
+             {peer_cert_subject,  list_to_binary(
+                                    rabbit_ssl:peer_cert_subject(Cert))},
+             {peer_cert_validity, list_to_binary(
+                                    rabbit_ssl:peer_cert_validity(Cert))}];
+        _ ->
+            []
+    end.
