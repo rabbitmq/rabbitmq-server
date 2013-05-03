@@ -20,8 +20,9 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, serialise_events/0, route/2]).
--export([validate/1, create/2, delete/3, policy_changed/3, add_binding/3,
-         remove_bindings/3, assert_args_equivalence/2]).
+-export([validate/1, validate_binding/2,
+         create/2, delete/3, policy_changed/2,
+         add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 -export([init/0]).
 
 -record(bucket, {source_number, destination, binding}).
@@ -45,13 +46,13 @@
 -define(PHASH2_RANGE, 134217728). %% 2^27
 
 description() ->
-    [{name, <<"x-consistent-hash">>},
-     {description, <<"Consistent Hashing Exchange">>}].
+    [{description, <<"Consistent Hashing Exchange">>}].
 
 serialise_events() -> false.
 
-route(#exchange { name = Name } = X,
-      #delivery { message = #basic_message { routing_keys = Routes } } = D) ->
+route(#exchange { name      = Name,
+                  arguments = Args },
+      #delivery { message = Msg }) ->
     %% Yes, we're being exceptionally naughty here, by using ets on an
     %% mnesia table. However, RabbitMQ-server itself is just as
     %% naughty, and for good reasons.
@@ -64,7 +65,8 @@ route(#exchange { name = Name } = X,
     %% end up as relatively deep data structures which cost a lot to
     %% continually copy to the process heap. Consequently, such
     %% approaches have not been found to be much faster, if at all.
-    H = erlang:phash2(Routes, ?PHASH2_RANGE),
+    HashOn = rabbit_misc:table_lookup(Args, <<"hash-header">>),
+    H = erlang:phash2(hash(HashOn, Msg), ?PHASH2_RANGE),
     case ets:select(?TABLE, [{#bucket { source_number = {Name, '$2'},
                                         destination   = '$1',
                                         _             = '_' },
@@ -81,16 +83,20 @@ route(#exchange { name = Name } = X,
     end.
 
 validate(_X) -> ok.
+
+validate_binding(_X, _B) -> ok.
+
 create(_Tx, _X) -> ok.
+
 delete(transaction, #exchange { name = Name }, _Bs) ->
     ok = mnesia:write_lock_table(?TABLE),
     [ok = mnesia:delete_object(?TABLE, R, write) ||
         R <- mnesia:match_object(
                ?TABLE, #bucket{source_number = {Name, '_'}, _ = '_'}, write)],
     ok;
-
 delete(_Tx, _X, _Bs) -> ok.
-policy_changed(_Tx, _X1, _X2) -> ok.
+
+policy_changed(_X1, _X2) -> ok.
 
 add_binding(transaction, _X,
             #binding { source = S, destination = D, key = K } = B) ->
@@ -147,4 +153,13 @@ find_numbers(Source, N, Acc) ->
     case mnesia:read(?TABLE, {Source, Number}, write) of
         []  -> find_numbers(Source, N-1, [Number | Acc]);
         [_] -> find_numbers(Source, N, Acc)
+    end.
+
+hash(undefined, #basic_message { routing_keys = Routes }) ->
+    Routes;
+hash({longstr, Header}, #basic_message { content = Content }) ->
+    Headers = rabbit_basic:extract_headers(Content),
+    case Headers of
+        undefined -> undefined;
+        _         -> rabbit_misc:table_lookup(Headers, Header)
     end.
