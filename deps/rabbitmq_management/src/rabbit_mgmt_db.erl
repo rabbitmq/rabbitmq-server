@@ -864,7 +864,10 @@ extract_msg_stats(Stats) ->
     FineStats = lists:append([[K, details_key(K)] || K <- ?FINE_STATS]),
     {MsgStats, Other} =
         lists:partition(fun({K, _}) -> lists:member(K, FineStats) end, Stats),
-    [{message_stats, MsgStats} | Other].
+    case MsgStats of
+        [] -> Other;
+        _  -> [{message_stats, MsgStats} | Other]
+    end.
 
 detail_stats(Ranges, Name, AggregatedStatsType, Id, State) ->
     {Name,
