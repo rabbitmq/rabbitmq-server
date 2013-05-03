@@ -38,56 +38,61 @@ init(SupPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
             {ok, Sock} = SockTransform(Sock0),
-            {ok, ProcessorPid} = start_processor(SupPid, Configuration, Sock),
-            {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
-            log(info, "accepting STOMP connection ~p (~s)~n",
-                [self(), ConnStr]),
+            case rabbit_net:connection_string(Sock, inbound) of
+                {ok, ConnStr} ->
+                    {ok, ProcessorPid} =
+                        start_processor(SupPid, Configuration, Sock),
+                    log(info, "accepting STOMP connection ~p (~s)~n",
+                        [self(), ConnStr]),
 
-            ParseState = rabbit_stomp_frame:initial_state(),
-            try
-                rabbit_misc:throw_on_error(
-                  inet_error, fun () -> rabbit_net:tune_buffer_size(Sock) end),
-                mainloop(
-                  control_throttle(
-                    register_resource_alarm(
-                      #reader_state{socket             = Sock,
-                                    parse_state        = ParseState,
-                                    processor          = ProcessorPid,
-                                    state              = running,
-                                    conserve_resources = false,
-                                    recv_outstanding   = false}))),
-                log(info, "closing STOMP connection ~p (~s)~n",
-                    [self(), ConnStr])
-            catch
-                _:Ex -> log(error, "closing STOMP connection ~p (~s):~n~p~n",
-                          [self(), ConnStr, Ex])
-            after
-                rabbit_stomp_processor:flush_and_die(ProcessorPid)
-            end,
-
-            done
+                    ParseState = rabbit_stomp_frame:initial_state(),
+                    try
+                        mainloop(
+                          register_resource_alarm(
+                            #reader_state{socket             = Sock,
+                                          parse_state        = ParseState,
+                                          processor          = ProcessorPid,
+                                          state              = running,
+                                          conserve_resources = false,
+                                          recv_outstanding   = false})),
+                        log(info, "closing STOMP connection ~p (~s)~n",
+                            [self(), ConnStr])
+                    catch
+                        _:Ex -> log(error, "closing STOMP connection "
+                                    "~p (~s):~n~p~n", [self(), ConnStr, Ex])
+                    after
+                        rabbit_stomp_processor:flush_and_die(ProcessorPid)
+                    end,
+                    done;
+                {error, enotconn} ->
+                    rabbit_net:fast_close(Sock),
+                    done;
+                {error, Reason} ->
+                    log(warning, "STOMP network error while starting up: ~p~n",
+                        [Reason]),
+                    rabbit_net:fast_close(Sock)
+            end
     end.
 
 mainloop(State0 = #reader_state{socket = Sock}) ->
-    State = run_socket(State0),
+    State = run_socket(control_throttle(State0)),
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
-            process_received_bytes(
-              Data, State#reader_state{recv_outstanding = false});
+            mainloop(process_received_bytes(
+                       Data, State#reader_state{recv_outstanding = false}));
         {inet_async, _Sock, _Ref, {error, closed}} ->
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
             throw({inet_error, Reason});
         {conserve_resources, Conserve} ->
-            mainloop(control_throttle(
-                       State#reader_state{conserve_resources = Conserve}));
+            mainloop(State#reader_state{conserve_resources = Conserve});
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
-            mainloop(control_throttle(State))
+            mainloop(State)
     end.
 
 process_received_bytes([], State) ->
-    mainloop(State);
+    State;
 process_received_bytes(Bytes,
                        State = #reader_state{
                          processor   = Processor,
@@ -95,15 +100,13 @@ process_received_bytes(Bytes,
                          state       = S}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
-            mainloop(State#reader_state{parse_state = ParseState1});
+            State#reader_state{parse_state = ParseState1};
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
-            process_received_bytes(Rest,
-                                   control_throttle(
-                                     State#reader_state{
-                                       parse_state = PS,
-                                       state       = next_state(S, Frame)}))
+            process_received_bytes(Rest, State#reader_state{
+                                           parse_state = PS,
+                                           state       = next_state(S, Frame)})
     end.
 
 conserve_resources(Pid, _Source, Conserve) ->
@@ -162,53 +165,7 @@ start_processor(SupPid, Configuration, Sock) ->
 
 
 adapter_info(Sock) ->
-    {PeerHost, PeerPort, Host, Port} =
-        case rabbit_net:socket_ends(Sock, inbound) of
-            {ok, Res} -> Res;
-            _          -> {unknown, unknown}
-        end,
-    Name = case rabbit_net:connection_string(Sock, inbound) of
-               {ok, Res3} -> Res3;
-               _          -> unknown
-           end,
-    #amqp_adapter_info{protocol        = {'STOMP', 0},
-                       name            = list_to_binary(Name),
-                       host            = Host,
-                       port            = Port,
-                       peer_host       = PeerHost,
-                       peer_port       = PeerPort,
-                       additional_info = maybe_ssl_info(Sock)}.
-
-maybe_ssl_info(Sock) ->
-    case rabbit_net:is_ssl(Sock) of
-        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
-        false -> [{ssl, false}]
-    end.
-
-ssl_info(Sock) ->
-    {Protocol, KeyExchange, Cipher, Hash} =
-        case rabbit_net:ssl_info(Sock) of
-            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
-            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
-            _                       -> {unknown, unknown, unknown, unknown}
-        end,
-    [{ssl_protocol,       Protocol},
-     {ssl_key_exchange,   KeyExchange},
-     {ssl_cipher,         Cipher},
-     {ssl_hash,           Hash}].
-
-ssl_cert_info(Sock) ->
-    case rabbit_net:peercert(Sock) of
-        {ok, Cert} ->
-            [{peer_cert_issuer,   list_to_binary(
-                                    rabbit_ssl:peer_cert_issuer(Cert))},
-             {peer_cert_subject,  list_to_binary(
-                                    rabbit_ssl:peer_cert_subject(Cert))},
-             {peer_cert_validity, list_to_binary(
-                                    rabbit_ssl:peer_cert_validity(Cert))}];
-        _ ->
-            []
-    end.
+    amqp_connection:socket_adapter_info(Sock, {'STOMP', 0}).
 
 ssl_login_name(_Sock, #stomp_configuration{ssl_cert_login = false}) ->
     none;
