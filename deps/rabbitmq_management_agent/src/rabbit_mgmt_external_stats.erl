@@ -188,8 +188,8 @@ list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
 
 list_registry_plugins(Type, Fun) ->
-    [registry_plugin_enabled(Module:description(), Fun) ||
-        {_, Module} <- rabbit_registry:lookup_all(Type)].
+    [registry_plugin_enabled(set_plugin_name(Name, Module), Fun) ||
+        {Name, Module} <- rabbit_registry:lookup_all(Type)].
 
 registry_plugin_enabled(Desc, Fun) ->
     Desc ++ [{enabled, Fun(proplists:get_value(name, Desc))}].
@@ -198,6 +198,10 @@ format_application({Application, Description, Version}) ->
     [{name, Application},
      {description, list_to_binary(Description)},
      {version, list_to_binary(Version)}].
+
+set_plugin_name(Name, Module) ->
+    [{name, list_to_binary(atom_to_list(Name))} |
+     proplists:delete(name, Module:description())].
 
 %%--------------------------------------------------------------------
 
@@ -214,14 +218,12 @@ rabbit_web_dispatch_registry_list_all() ->
     case code:is_loaded(rabbit_web_dispatch_registry) of
         false -> [];
         _     -> try
-                     apply0(rabbit_web_dispatch_registry, list_all, [])
+                     M = rabbit_web_dispatch_registry, %% Fool xref
+                     M:list_all()
                  catch exit:{noproc, _} ->
                          []
                  end
     end.
-
-%% Fool xref. Simply using apply(M, F, A) with constants is not enough.
-apply0(M, F, A) -> apply(M, F, A).
 
 format_context({Path, Description, Rest}) ->
     [{description, list_to_binary(Description)},
@@ -242,7 +244,14 @@ format_mochiweb_option(_K, V) ->
 
 init([]) ->
     State = #state{fd_total = file_handle_cache:ulimit()},
-    {ok, emit_update(State)}.
+    %% If we emit an update straight away we will do so just before
+    %% the mgmt db starts up - and then have to wait ?REFRESH_RATIO
+    %% until we send another. So let's have a shorter wait in the hope
+    %% that the db will have started by the time we emit an update,
+    %% and thus shorten that little gap at startup where mgmt knows
+    %% nothing about any nodes.
+    erlang:send_after(1000, self(), emit_update),
+    {ok, State}.
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.

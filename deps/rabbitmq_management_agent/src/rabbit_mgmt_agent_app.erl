@@ -30,11 +30,7 @@
 
 
 start(_Type, _StartArgs) ->
-    log_startup(),
     rabbit_mgmt_agent_sup:start_link().
 
 stop(_State) ->
     ok.
-
-log_startup() ->
-    rabbit_log:info("Management agent started.~n", []).
