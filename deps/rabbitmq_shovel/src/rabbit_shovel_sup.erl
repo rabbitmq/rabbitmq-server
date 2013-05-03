@@ -64,8 +64,13 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
     case dict:is_key(ShovelName, Acc) of
         true  -> {error, {duplicate_shovel_definition, ShovelName}};
         false -> case rabbit_shovel_config:parse(ShovelName, ShovelConfig) of
-                     {ok, _Shovel} ->
-                         Acc2 = dict:store(ShovelName, ShovelConfig, Acc),
+                     {ok, Shovel} ->
+                         UpdatedShovelConfig =
+                             lists:keystore(reconnect_delay, 1,
+                                            ShovelConfig,
+                                            {reconnect_delay,
+                                             Shovel#shovel.reconnect_delay}),
+                         Acc2 = dict:store(ShovelName, UpdatedShovelConfig, Acc),
                          parse_configuration(Defaults, Env, Acc2);
                      Error ->
                          Error
@@ -73,3 +78,4 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
     end;
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
+
