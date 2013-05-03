@@ -92,13 +92,25 @@ shared_validation() ->
      {<<"expires">>,        fun rabbit_parameter_validation:number/2, optional},
      {<<"message-ttl">>,    fun rabbit_parameter_validation:number/2, optional},
      {<<"trust-user-id">>,  fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"ack-mode">>,       rabbit_parameter_validation:enum(
+                              ['no-ack', 'on-publish', 'on-confirm']), optional},
      {<<"ha-policy">>,      fun rabbit_parameter_validation:binary/2, optional}].
 
-validate_uri(Name, Term) ->
+validate_uri(Name, Term) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
                   {ok, _}    -> ok;
                   {error, E} -> {error, "\"~s\" not a valid URI: ~p", [Term, E]}
+              end;
+        E  -> E
+    end;
+validate_uri(Name, Term) ->
+    case rabbit_parameter_validation:list(Name, Term) of
+        ok -> case [V || U <- Term,
+                         V <- [validate_uri(Name, U)],
+                         element(1, V) =:= error] of
+                  []      -> ok;
+                  [E | _] -> E
               end;
         E  -> E
     end.

@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([report/3, remove_exchange/1, remove_upstream/1, remove/2, status/0]).
+-export([report/4, remove_exchange/1, remove/2, status/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -33,20 +33,17 @@
 -define(ETS_NAME, ?MODULE).
 
 -record(state, {}).
--record(entry, {key, status, timestamp}).
+-record(entry, {key, uri, status, timestamp}).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-report(Upstream, XName, Status) ->
-    gen_server:cast(?SERVER, {report, Upstream, XName, Status,
+report(Upstream, UParams, XName, Status) ->
+    gen_server:cast(?SERVER, {report, Upstream, UParams, XName, Status,
                               calendar:local_time()}).
 
 remove_exchange(XName) ->
     gen_server:call(?SERVER, {remove_exchange, XName}, infinity).
-
-remove_upstream(Upstream) ->
-    gen_server:call(?SERVER, {remove_upstream, Upstream}, infinity).
 
 remove(Upstream, XName) ->
     gen_server:call(?SERVER, {remove, Upstream, XName}, infinity).
@@ -60,31 +57,25 @@ init([]) ->
     {ok, #state{}}.
 
 handle_call({remove_exchange, XName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, #entry{key       = xkey(XName),
-                                              status    = '_',
-                                              timestamp = '_'}),
-    {reply, ok, State};
-
-handle_call({remove_upstream, Upstream}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, #entry{key       = ukey(Upstream),
-                                              status    = '_',
-                                              timestamp = '_'}),
+    true = ets:match_delete(?ETS_NAME, match_entry(xkey(XName))),
     {reply, ok, State};
 
 handle_call({remove, Upstream, XName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, #entry{key       = key(XName, Upstream),
-                                              status    = '_',
-                                              timestamp = '_'}),
+    true = ets:match_delete(?ETS_NAME, match_entry(key(XName, Upstream))),
     {reply, ok, State};
 
 handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
     {reply, [format(Entry) || Entry <- Entries], State}.
 
-handle_cast({report, Upstream, XName, Status, Timestamp}, State) ->
-    true = ets:insert(?ETS_NAME, #entry{key        = key(XName, Upstream),
-                                        status     = Status,
-                                        timestamp  = Timestamp}),
+handle_cast({report, Upstream, #upstream_params{uri = URI0},
+             XName, Status, Timestamp}, State) ->
+    URI = rabbit_federation_upstream:remove_credentials(URI0),
+    true = ets:insert(?ETS_NAME,
+                      #entry{key        = key(XName, Upstream),
+                             status     = Status,
+                             uri        = URI,
+                             timestamp  = Timestamp}),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -99,22 +90,28 @@ code_change(_OldVsn, State, _Extra) ->
 format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = exchange,
                                      name         = XNameBin},
-                           Connection, UX},
+                           Connection, UXNameBin},
               status    = Status,
+              uri       = URI,
               timestamp = Timestamp}) ->
         [{exchange,          XNameBin},
          {vhost,             VHost},
          {connection,        Connection},
-         {upstream_exchange, name(UX)},
+         {uri,               URI},
+         {upstream_exchange, UXNameBin},
          {status,            Status},
          {timestamp,         Timestamp}].
 
 %% We don't want to key off the entire upstream, bits of it may change
-key(XName, #upstream{name = UpstreamName, exchange = UX}) ->
-    {XName, UpstreamName, UX}.
+key(XName, #upstream{name          = UpstreamName,
+                     exchange_name = UXNameBin}) ->
+    {XName, UpstreamName, UXNameBin}.
 
 xkey(XName) ->
     {XName, '_', '_'}.
 
-ukey(#upstream{name = UpstreamName, exchange = UX}) ->
-    {'_', UpstreamName, UX}.
+match_entry(Key) ->
+    #entry{key               = Key,
+           uri               = '_',
+           status            = '_',
+           timestamp         = '_'}.

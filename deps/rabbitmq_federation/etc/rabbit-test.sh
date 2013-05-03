@@ -7,6 +7,7 @@ $CTL set_parameter federation-upstream localhost '{"uri": "amqp://"}'
 $CTL set_parameter federation-upstream local5673 '{"uri": "amqp://guest:guest@localhost:5673"}'
 
 $CTL set_parameter federation-upstream-set upstream     '[{"upstream": "localhost", "exchange": "upstream"}]'
+$CTL set_parameter federation-upstream-set localhost    '[{"upstream": "localhost"}]'
 $CTL set_parameter federation-upstream-set upstream12   '[{"upstream": "localhost", "exchange": "upstream"},
                                                           {"upstream": "localhost", "exchange": "upstream2"}]'
 $CTL set_parameter federation-upstream-set one          '[{"upstream": "localhost", "exchange": "one"}]'

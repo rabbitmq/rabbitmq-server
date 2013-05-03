@@ -29,14 +29,13 @@
 -behaviour(rabbit_exchange_decorator).
 
 -export([description/0, serialise_events/1]).
--export([create/2, delete/3, add_binding/3, remove_bindings/3,
-         policy_changed/3]).
+-export([create/2, delete/3, policy_changed/2,
+         add_binding/3, remove_bindings/3, route/2, active_for/1]).
 
 %%----------------------------------------------------------------------------
 
 description() ->
-    [{name, <<"federation">>},
-     {description, <<"Federation exchange decorator">>}].
+    [{description, <<"Federation exchange decorator">>}].
 
 serialise_events(X) -> federate(X).
 
@@ -49,6 +48,10 @@ delete(transaction, _X, _Bs) ->
     ok;
 delete(none, X, _Bs) ->
     maybe_stop(X).
+
+policy_changed(OldX, NewX) ->
+    maybe_stop(OldX),
+    maybe_start(NewX).
 
 add_binding(transaction, _X, _B) ->
     ok;
@@ -68,9 +71,13 @@ remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
         false -> ok
     end.
 
-policy_changed(none, OldX, NewX) ->
-    maybe_stop(OldX),
-    maybe_start(NewX).
+route(_, _) -> [].
+
+active_for(X) ->
+    case federate(X) of
+        true  -> noroute;
+        false -> none
+    end.
 
 %%----------------------------------------------------------------------------
 
