@@ -67,8 +67,9 @@ validate_binding(_X, #binding{args = Args}) ->
                                  {binding_invalid, "x-match field missing", []}}
     end.
 
-parse_x_match(<<"all">>) -> all;
-parse_x_match(<<"any">>) -> any.
+parse_x_match({longstr, <<"all">>}) -> all;
+parse_x_match({longstr, <<"any">>}) -> any;
+parse_x_match(_)                    -> all. %% legacy; we didn't validate
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort
@@ -80,8 +81,8 @@ parse_x_match(<<"any">>) -> any.
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %%
 headers_match(Args, Data) ->
-    {longstr, MK} = rabbit_misc:table_lookup(Args, <<"x-match">>),
-    headers_match(Args, Data, true, false, parse_x_match(MK)).
+    MK = parse_x_match(rabbit_misc:table_lookup(Args, <<"x-match">>)),
+    headers_match(Args, Data, true, false, MK).
 
 headers_match([], _Data, AllMatch, _AnyMatch, all) ->
     AllMatch;
