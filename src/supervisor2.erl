@@ -655,8 +655,9 @@ handle_cast({try_again_restart,Pid,Reason}, #state{children=[Child]}=State)
     end;
 
 handle_cast({try_again_restart,Name,Reason}, State) ->
-    case lists:keyfind(Name,#child.name,State#state.children) of
-	Child = #child{pid=?restarting(_), restart_type=RestartType} ->
+    %% we still support >= R12-B3 in which lists:keyfind/3 doesn't exist
+    case lists:keysearch(Name,#child.name,State#state.children) of
+	{value, Child = #child{pid=?restarting(_), restart_type=RestartType}} ->
             try_restart(RestartType, Reason, Child, State);
 	_ ->
 	    {noreply,State}
