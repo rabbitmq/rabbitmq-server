@@ -63,9 +63,10 @@ validate_binding(_X, #binding{args = Args}) ->
                                  {binding_invalid,
                                   "Invalid x-match field type ~p (value ~p); "
                                   "expected longstr", [Type, Other]}};
-        undefined            -> {error,
-                                 {binding_invalid, "x-match field missing", []}}
+        undefined            -> ok %% [0]
     end.
+%% [0] spec is vague on whether it can be omitted but in practice it's
+%% useful to allow people to do this
 
 parse_x_match({longstr, <<"all">>}) -> all;
 parse_x_match({longstr, <<"any">>}) -> any;
