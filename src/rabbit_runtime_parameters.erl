@@ -127,10 +127,10 @@ clear_any(VHost, Component, Name) ->
     end.
 
 mnesia_clear(VHost, Component, Name) ->
-    ok = rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
-           end).
+    F = fun () ->
+                ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
+        end,
+    ok = rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
 
 list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-
