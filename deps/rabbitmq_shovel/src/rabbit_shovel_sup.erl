@@ -19,6 +19,8 @@
 
 -export([start_link/0, init/1]).
 
+-import(rabbit_shovel_config, [ensure_defaults/2]).
+
 -include("rabbit_shovel.hrl").
 
 start_link() ->
@@ -63,9 +65,13 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
   when is_atom(ShovelName) andalso is_list(ShovelConfig) ->
     case dict:is_key(ShovelName, Acc) of
         true  -> {error, {duplicate_shovel_definition, ShovelName}};
-        false -> case rabbit_shovel_config:parse(ShovelName, ShovelConfig) of
-                     {ok, _Shovel} ->
-                         Acc2 = dict:store(ShovelName, ShovelConfig, Acc),
+        false -> case validate_shovel_config(ShovelName, ShovelConfig) of
+                     {ok, Shovel} ->
+                         %% make sure the config we accumulate has any
+                         %% relevant default values (discovered during
+                         %% validation), applied back to it
+                         UpdatedConfig = ensure_defaults(ShovelConfig, Shovel),
+                         Acc2 = dict:store(ShovelName, UpdatedConfig, Acc),
                          parse_configuration(Defaults, Env, Acc2);
                      Error ->
                          Error
@@ -73,3 +79,6 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
     end;
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
+
+validate_shovel_config(ShovelName, ShovelConfig) ->
+    rabbit_shovel_config:parse(ShovelName, ShovelConfig).
