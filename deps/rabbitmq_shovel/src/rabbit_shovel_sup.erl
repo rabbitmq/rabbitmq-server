@@ -19,6 +19,8 @@
 
 -export([start_link/0, init/1]).
 
+-import(rabbit_shovel_config, [ensure_defaults/2]).
+
 -include("rabbit_shovel.hrl").
 
 start_link() ->
@@ -63,11 +65,13 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
   when is_atom(ShovelName) andalso is_list(ShovelConfig) ->
     case dict:is_key(ShovelName, Acc) of
         true  -> {error, {duplicate_shovel_definition, ShovelName}};
-        false -> case rabbit_shovel_config:parse(ShovelName, ShovelConfig) of
+        false -> case validate_shovel_config(ShovelName, ShovelConfig) of
                      {ok, Shovel} ->
-                         UpdatedShovelConfig =
-                             apply_preset_reconnect_delay(ShovelConfig, Shovel),
-                         Acc2 = dict:store(ShovelName, UpdatedShovelConfig, Acc),
+                         %% make sure the config we accumulate has any
+                         %% relevant default values (discovered during
+                         %% validation), applied back to it
+                         UpdatedConfig = ensure_defaults(ShovelConfig, Shovel),
+                         Acc2 = dict:store(ShovelName, UpdatedConfig, Acc),
                          parse_configuration(Defaults, Env, Acc2);
                      Error ->
                          Error
@@ -76,9 +80,5 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
 parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
 
-apply_preset_reconnect_delay(ShovelConfig, Shovel) ->
-    lists:keystore(reconnect_delay, 1,
-                   ShovelConfig,
-                   {reconnect_delay,
-                    Shovel#shovel.reconnect_delay}).
-
+validate_shovel_config(ShovelName, ShovelConfig) ->
+    rabbit_shovel_config:parse(ShovelName, ShovelConfig).

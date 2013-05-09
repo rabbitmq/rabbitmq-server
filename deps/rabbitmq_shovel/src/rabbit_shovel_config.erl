@@ -16,7 +16,8 @@
 
 -module(rabbit_shovel_config).
 
--export([parse/2]).
+-export([parse/2,
+         ensure_defaults/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
@@ -32,6 +33,14 @@ parse(ShovelName, Config) ->
     catch throw:{error, Reason} ->
             {error, {invalid_shovel_configuration, ShovelName, Reason}}
     end.
+
+%% ensures that any defaults that have been applied to a parsed
+%% shovel, are written back to the original proplist
+ensure_defaults(ShovelConfig, ParsedShovel) ->
+    lists:keystore(reconnect_delay, 1,
+                   ShovelConfig,
+                   {reconnect_delay,
+                    ParsedShovel#shovel.reconnect_delay}).
 
 enrich_shovel_config({Config, Defaults}) ->
     Config1 = proplists:unfold(Config),
