@@ -140,6 +140,7 @@ list(VHost)               -> list(VHost, '_').
 list_component(Component) -> list('_',   Component).
 
 list(VHost, Component) ->
+    assert_vhost(VHost),
     Match = #runtime_parameters{key = {VHost, Component, '_'}, _ = '_'},
     [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
                  mnesia:dirty_match_object(?TABLE, Match),
@@ -147,6 +148,12 @@ list(VHost, Component) ->
 
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
+
+assert_vhost('_')   -> ok;
+assert_vhost(VHost) -> case rabbit_vhost:exists(VHost) of
+                           true  -> ok;
+                           false -> throw({error, {no_such_vhost, VHost}})
+                       end.
 
 lookup(VHost, Component, Name) ->
     case lookup0(VHost, Component, Name, rabbit_misc:const(not_found)) of
