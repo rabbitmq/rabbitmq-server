@@ -441,7 +441,8 @@ function postprocess() {
         });
     $('#download-definitions').click(function() {
             var path = 'api/definitions?download=' +
-                esc($('#download-filename').val());
+                esc($('#download-filename').val()) +
+                '&auth=' + get_cookie('auth');
             window.location = path;
             setTimeout('app.run()');
             return false;
