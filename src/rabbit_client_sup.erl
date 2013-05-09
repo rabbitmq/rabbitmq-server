@@ -18,7 +18,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/1, start_link/2]).
+-export([start_link/1, start_link/2, start_link_worker/2]).
 
 -export([init/1]).
 
@@ -32,6 +32,8 @@
                            rabbit_types:ok_pid_or_error()).
 -spec(start_link/2 :: ({'local', atom()}, rabbit_types:mfargs()) ->
                            rabbit_types:ok_pid_or_error()).
+-spec(start_link_worker/2 :: ({'local', atom()}, rabbit_types:mfargs()) ->
+                                  rabbit_types:ok_pid_or_error()).
 
 -endif.
 
@@ -43,6 +45,13 @@ start_link(Callback) ->
 start_link(SupName, Callback) ->
     supervisor2:start_link(SupName, ?MODULE, Callback).
 
+start_link_worker(SupName, Callback) ->
+    supervisor2:start_link(SupName, ?MODULE, {Callback, worker}).
+
 init({M,F,A}) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
-          [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}}.
+    {ok, {{simple_one_for_one, 0, 1},
+          [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}};
+init({{M,F,A}, worker}) ->
+    {ok, {{simple_one_for_one, 0, 1},
+          [{client, {M,F,A}, temporary, ?MAX_WAIT, worker, [M]}]}}.
+

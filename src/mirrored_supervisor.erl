@@ -212,9 +212,8 @@ start_link0(Prefix, Group, Init) ->
 init(Mod, Args) ->
     case Mod:init(Args) of
         {ok, {{Bad, _, _}, _ChildSpecs}} when
-              Bad =:= simple_one_for_one orelse
-              Bad =:= simple_one_for_one_terminate -> erlang:error(badarg);
-        Init                                       -> Init
+              Bad =:= simple_one_for_one -> erlang:error(badarg);
+        Init                             -> Init
     end.
 
 start_child(Sup, ChildSpec) -> call(Sup, {start_child,  ChildSpec}).
