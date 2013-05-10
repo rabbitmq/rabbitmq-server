@@ -140,7 +140,10 @@ list(VHost)               -> list(VHost, '_').
 list_component(Component) -> list('_',   Component).
 
 list(VHost, Component) ->
-    rabbit_vhost:assert(VHost),
+    case VHost of
+        '_' -> ok;
+        _   -> rabbit_vhost:assert(VHost)
+    end,
     Match = #runtime_parameters{key = {VHost, Component, '_'}, _ = '_'},
     [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
                  mnesia:dirty_match_object(?TABLE, Match),
