@@ -1356,7 +1356,7 @@ handle_cast(wake_up, State) ->
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
         true  -> stop(State);
-        false -> noreply(ensure_expiry_timer(State))
+        false -> noreply(State#q{expiry_timer_ref = undefined})
     end;
 
 handle_info(drop_expired, State) ->
