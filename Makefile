@@ -369,7 +369,7 @@ TESTABLEGOALS:=$(MAKECMDGOALS)
 endif
 
 ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
--include $(DEPS_FILE)
+include $(DEPS_FILE)
 endif
 
 .PHONY: run-qc
