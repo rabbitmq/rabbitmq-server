@@ -841,6 +841,8 @@ handle_method(#'basic.qos'{prefetch_count = 0}, _,
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount}, _,
               State = #ch{limiter = Limiter, unacked_message_q = UAMQ}) ->
+    %% TODO queue:len(UAMQ) is not strictly right since that counts
+    %% unacked messages from basic.get too. Pretty obscure though.
     Limiter1 = rabbit_limiter:limit_prefetch(Limiter,
                                              PrefetchCount, queue:len(UAMQ)),
     {reply, #'basic.qos_ok'{},

@@ -324,12 +324,12 @@ prioritise_call(_Msg,               _From, _Len, _State) -> 0.
 handle_call({new, ChPid}, _From, State = #lim{ch_pid = undefined}) ->
     {reply, ok, State#lim{ch_pid = ChPid}};
 
-handle_call({limit_prefetch, PrefetchCount, UnackedCount}, _From, State) ->
-    %% assertion
-    true = State#lim.prefetch_count == 0 orelse
-        State#lim.volume == UnackedCount,
+handle_call({limit_prefetch, PrefetchCount, UnackedCount}, _From,
+            State = #lim{prefetch_count = 0}) ->
     {reply, ok, maybe_notify(State, State#lim{prefetch_count = PrefetchCount,
                                               volume         = UnackedCount})};
+handle_call({limit_prefetch, PrefetchCount, _UnackedCount}, _From, State) ->
+    {reply, ok, maybe_notify(State, State#lim{prefetch_count = PrefetchCount})};
 
 handle_call(unlimit_prefetch, _From, State) ->
     {reply, ok, maybe_notify(State, State#lim{prefetch_count = 0,
