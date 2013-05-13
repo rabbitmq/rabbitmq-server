@@ -451,7 +451,10 @@ function postprocess() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
     $('input, select').die();
-    $('.multifield input').live('blur', function() {
+    $('.multifield input').live('keyup', function() {
+            update_multifields();
+        });
+    $('.multifield select').live('change', function() {
             update_multifields();
         });
     $('.controls-appearance').change(function() {
@@ -523,46 +526,84 @@ function postprocess_partial() {
 }
 
 function update_multifields() {
-    $('.multifield').each(function(index) {
-            var largest_id = 0;
-            var empty_found = false;
-            var name = $(this).attr('id');
-            $('#' + name + ' input[name$="_mfkey"]').each(function(index) {
-                    var match = $(this).attr('name').
-                        match(/[a-z]*_([0-9]*)_mfkey/);
-                    var id = parseInt(match[1]);
-                    largest_id = Math.max(id, largest_id);
-                    var key = $(this).val();
-                    var value = $(this).next('input').val();
-                    if (key == '' && value == '') {
-                        if (empty_found) {
-                            $(this).parent().remove();
-                        }
-                        else {
-                            empty_found = true;
-                        }
-                    }
-                });
-            if (!empty_found) {
-                var prefix = name + '_' + (largest_id + 1);
-                var type_part;
-                if ($(this).hasClass('string-only')) {
-                    type_part = '<input type="hidden" name="' + prefix +
-                        '_mftype" value="string"/>';
-                } else {
-                    type_part = '<select name="' + prefix +
-                        '_mftype">' +
-                        '<option value="string">String</option>' +
-                        '<option value="number">Number</option>' +
-                        '<option value="boolean">Boolean</option>' +
-                        '</select>';
-                }
-                $(this).append('<p><input type="text" name="' + prefix +
-                               '_mfkey" value=""/> = ' +
-                               '<input type="text" name="' + prefix +
-                               '_mfvalue" value=""/> ' + type_part + '</p>');
+    $('div.multifield').each(function(index) {
+        update_multifield($(this), true);
+    });
+}
+
+function update_multifield(multifield, dict) {
+    var largest_id = 0;
+    var empty_found = false;
+    var name = multifield.attr('id');
+    $('#' + name + ' *[name$="_mftype"]').each(function(index) {
+        var re = new RegExp(name + '_([0-9]*)_mftype');
+        var match = $(this).attr('name').match(re);
+        if (!match) return;
+        var id = parseInt(match[1]);
+        largest_id = Math.max(id, largest_id);
+        var prefix = name + '_' + id;
+        var type = $(this).val();
+        var input = $('#' + prefix + '_mfvalue');
+        if (type == 'list') {
+            if (input.size() == 1) {
+                input.replaceWith('<div class="multifield-sub" id="' + prefix +
+                                  '"></div>');
             }
-        });
+            update_multifield($('#' + prefix), false);
+        }
+        else {
+            if (input.size() == 1) {
+                var key = dict ? $('#' + prefix + '_mfkey').val() : '';
+                var value = input.val();
+                if (key == '' && value == '') {
+                    if (empty_found) {
+                        $(this).parent().remove();
+                    }
+                    empty_found = true;
+                }
+            }
+            else {
+                $('#' + prefix).replaceWith(multifield_input(prefix, 'value',
+                                                             'text'));
+            }
+        }
+    });
+    if (!empty_found) {
+        var prefix = name + '_' + (largest_id + 1);
+        var t = multifield.hasClass('string-only') ? 'hidden' : 'select';
+        var val_type = multifield_input(prefix, 'value', 'text') + ' ' +
+            multifield_input(prefix, 'type', t);
+
+        if (dict) {
+            multifield.append('<table><tr><td>' +
+                              multifield_input(prefix, 'key', 'text') +
+                              '</td><td class="equals"> = </td><td>' +
+                              val_type + '</td></tr></table>');
+        }
+        else {
+            multifield.append('<div>' + val_type + '</div>');
+        }
+    }
+}
+
+function multifield_input(prefix, suffix, type) {
+    if (type == 'hidden' ) {
+        return '<input type="hidden" id="' + prefix + '_mf' + suffix +
+            '" name="' + prefix + '_mf' + suffix + '" value="string"/>';
+    }
+    else if (type == 'text' ) {
+        return '<input type="text" id="' + prefix + '_mf' + suffix +
+            '" name="' + prefix + '_mf' + suffix + '" value=""/>';
+    }
+    else if (type == 'select' ) {
+        return '<select id="' + prefix + '_mf' + suffix + '" name="' + prefix +
+            '_mf' + suffix + '">' +
+            '<option value="string">String</option>' +
+            '<option value="number">Number</option>' +
+            '<option value="boolean">Boolean</option>' +
+            '<option value="list">List</option>' +
+            '</select>';
+    }
 }
 
 function update_filter() {
@@ -906,9 +947,6 @@ function add_known_arguments(params) {
                 if (isNaN(v)) {
                     throw(k + " must be an integer.");
                 }
-            }
-            else if (type == 'array' && typeof(v) == 'string') {
-                v = v.split(' ');
             }
             params.arguments[k] = v;
         }
