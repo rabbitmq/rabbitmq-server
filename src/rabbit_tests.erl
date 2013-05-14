@@ -60,6 +60,7 @@ all_tests() ->
     passed = test_user_management(),
     passed = test_runtime_parameters(),
     passed = test_policy_validation(),
+    passed = test_ha_policy_validation(),
     passed = test_server_status(),
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
@@ -1099,6 +1100,34 @@ test_policy_validation() ->
 
     ok = control_action(clear_policy, ["name"]),
     rabbit_runtime_parameters_test:unregister_policy_validator(),
+    passed.
+
+test_ha_policy_validation() ->
+    Set  = fun (JSON) -> control_action(set_policy, ["name", ".*", JSON]) end,
+    OK   = fun (JSON) -> ok = Set(JSON) end,
+    Fail = fun (JSON) -> {error_string, _} = Set(JSON) end,
+
+    OK  ("{\"ha-mode\":\"all\"}"),
+    Fail("{\"ha-mode\":\"made_up\"}"),
+
+    Fail("{\"ha-mode\":\"nodes\"}"),
+    Fail("{\"ha-mode\":\"nodes\",\"ha-params\":2}"),
+    Fail("{\"ha-mode\":\"nodes\",\"ha-params\":[\"a\",2]}"),
+    OK  ("{\"ha-mode\":\"nodes\",\"ha-params\":[\"a\",\"b\"]}"),
+    Fail("{\"ha-params\":[\"a\",\"b\"]}"),
+
+    Fail("{\"ha-mode\":\"exactly\"}"),
+    Fail("{\"ha-mode\":\"exactly\",\"ha-params\":[\"a\",\"b\"]}"),
+    OK  ("{\"ha-mode\":\"exactly\",\"ha-params\":2}"),
+    Fail("{\"ha-params\":2}"),
+
+    OK  ("{\"ha-mode\":\"all\",\"ha-sync-mode\":\"manual\"}"),
+    OK  ("{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}"),
+    Fail("{\"ha-mode\":\"all\",\"ha-sync-mode\":\"made_up\"}"),
+    Fail("{\"ha-sync-mode\":\"manual\"}"),
+    Fail("{\"ha-sync-mode\":\"automatic\"}"),
+
+    ok = control_action(clear_policy, ["name"]),
     passed.
 
 test_server_status() ->
