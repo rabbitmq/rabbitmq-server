@@ -897,10 +897,13 @@ function params_magic(params) {
 
 function collapse_multifields(params0) {
     var params = {};
-    for (key in params0) {
-        var match = key.match(/([a-z]*)_([0-9]*)_mfkey/);
-        var match2 = key.match(/[a-z]*_[0-9]*_mfvalue/);
-        var match3 = key.match(/[a-z]*_[0-9]*_mftype/);
+    var ks = keys(params0);
+    var ids = [];
+    for (i in ks) {
+        var key = ks[i];
+        var match = key.match(/([a-z]*)_([0-9_]*)_mftype/);
+        var match2 = key.match(/[a-z]*_[0-9_]*_mfkey/);
+        var match3 = key.match(/[a-z]*_[0-9_]*_mfvalue/);
         if (match == null && match2 == null && match3 == null) {
             params[key] = params0[key];
         }
@@ -910,27 +913,49 @@ function collapse_multifields(params0) {
         else {
             var name = match[1];
             var id = match[2];
-            if (params[name] == undefined) {
-                params[name] = {};
+            ids.push([name, id]);
+        }
+    }
+    ids.sort();
+    var id_map = {};
+    for (i in ids) {
+        var name = ids[i][0];
+        var id = ids[i][1];
+        if (params[name] == undefined) {
+            params[name] = {};
+            id_map[name] = {};
+        }
+        var id_parts = id.split('_');
+        var k = params0[name + '_' + id_parts[0] + '_mfkey'];
+        var v = params0[name + '_' + id + '_mfvalue'];
+        var t = params0[name + '_' + id + '_mftype'];
+        // TODO do we need to be able to set ""?
+        if (t == 'list' || (v != '' && v != undefined)) {
+            var val;
+            if (t == 'boolean') {
+                if (v != 'true' && v != 'false')
+                    throw(k + ' must be "true" or "false"; got ' + v);
+                val = (v == 'true');
             }
-            if (params0[key] != "") {
-                var k = params0[key];
-                var v = params0[name + '_' + id + '_mfvalue'];
-                var t = params0[name + '_' + id + '_mftype'];
-                if (t == 'boolean') {
-                    if (v != 'true' && v != 'false')
-                        throw(k + ' must be "true" or "false"; got ' + v);
-                    params[name][k] = (v == 'true');
-                }
-                else if (t == 'number') {
-                    var n = parseFloat(v);
-                    if (isNaN(n))
-                        throw(k + ' must be a number; got ' + v);
-                    params[name][k] = n;
-                }
-                else {
-                    params[name][k] = v;
-                }
+            else if (t == 'number') {
+                var n = parseFloat(v);
+                if (isNaN(n))
+                    throw(k + ' must be a number; got ' + v);
+                val = n;
+            }
+            else if (t == 'list') {
+                val = [];
+                id_map[name][id] = val;
+            }
+            else {
+                val = v;
+            }
+            if (id_parts.length == 1) {
+                params[name][k] = val;
+            }
+            else {
+                var prefix = id_parts.slice(0, id_parts.length - 1).join('_');
+                id_map[name][prefix].push(val);
             }
         }
     }
