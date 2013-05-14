@@ -123,7 +123,7 @@
 -define(REL_SEQ_BITS, 14).
 -define(SEGMENT_ENTRY_COUNT, 16384). %% trunc(math:pow(2,?REL_SEQ_BITS))).
 
-%% seq only is binary 00 followed by 14 bits of rel seq id
+%% seq only is binary 01 followed by 14 bits of rel seq id
 %% (range: 0 - 16383)
 -define(REL_SEQ_ONLY_PREFIX, 01).
 -define(REL_SEQ_ONLY_PREFIX_BITS, 2).
@@ -718,10 +718,9 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                     case file_handle_cache:read(Hdl, ?PUB_RECORD_BODY_BYTES) of
                         %% Journal entry composed only of zeroes was probably
                         %% produced during a dirty shutdown so stop reading
-                        {ok, <<0:?PUB_RECORD_BODY_BYTES/unit:8>>}
-                          when Prefix =:= ?PUB_PERSIST_JPREFIX ->
+                        {ok, <<0:?PUB_RECORD_BODY_BYTES/unit:8>>} ->
                             State;
-                        {ok, <<Bin:?PUB_RECORD_BODY_BYTES/binary-unit:8>>} ->
+                        {ok, <<Bin:?PUB_RECORD_BODY_BYTES/binary>>} ->
                             {MsgId, MsgProps} = parse_pub_record_body(Bin),
                             IsPersistent = case Prefix of
                                                ?PUB_PERSIST_JPREFIX -> true;
