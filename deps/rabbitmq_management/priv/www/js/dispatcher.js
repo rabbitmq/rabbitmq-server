@@ -5,7 +5,9 @@ dispatcher_add(function(sammy) {
             });
     }
     sammy.get('#/', function() {
-            var reqs = {'overview': '/overview'};
+            var reqs = {'overview': {path:    '/overview',
+                                     options: {ranges: ['lengths-over',
+                                                        'msg-rates-over']}}};
             if (user_monitor) {
                 reqs['nodes'] = '/nodes';
             }
@@ -17,10 +19,13 @@ dispatcher_add(function(sammy) {
                    'node', '');
         });
 
-    path('#/connections', {'connections': '/connections'}, 'connections');
+    path('#/connections',
+         {'connections': {path: '/connections', options: {sort:true}}},
+        'connections');
     sammy.get('#/connections/:name', function() {
             var name = esc(this.params['name']);
-            render({'connection': '/connections/' + name,
+            render({'connection': {path:    '/connections/' + name,
+                                   options: {ranges: ['data-rates-conn']}},
                     'channels': '/connections/' + name + '/channels'},
                 'connection', '#/connections');
         });
@@ -35,16 +40,21 @@ dispatcher_add(function(sammy) {
            return false;
         });
 
-    path('#/channels', {'channels': '/channels'}, 'channels');
+    path('#/channels', {'channels': {path: '/channels', options: {sort:true}}},
+         'channels');
     sammy.get('#/channels/:name', function() {
-            render({'channel': '/channels/' + esc(this.params['name'])}, 'channel',
-                   '#/channels');
+            render({'channel': {path:   '/channels/' + esc(this.params['name']),
+                                options:{ranges:['msg-rates-ch']}}},
+                   'channel', '#/channels');
         });
 
-    path('#/exchanges', {'exchanges': '/exchanges', 'vhosts': '/vhosts'}, 'exchanges');
+    path('#/exchanges', {'exchanges':  {path:    '/exchanges',
+                                        options: {sort:true,vhost:true}},
+                         'vhosts': '/vhosts'}, 'exchanges');
     sammy.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
-            render({'exchange': path,
+            render({'exchange': {path:    path,
+                                 options: {ranges:['msg-rates-x']}},
                     'bindings_source': path + '/bindings/source',
                     'bindings_destination': path + '/bindings/destination'},
                 'exchange', '#/exchanges');
@@ -64,10 +74,13 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
-    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
+    path('#/queues', {'queues':  {path:    '/queues',
+                                  options: {sort:true,vhost:true}},
+                      'vhosts': '/vhosts'}, 'queues');
     sammy.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
-            render({'queue': path,
+            render({'queue': {path:    path,
+                              options: {ranges:['lengths-q', 'msg-rates-q']}},
                     'bindings': path + '/bindings'}, 'queue', '#/queues');
         });
     sammy.put('#/queues', function() {
@@ -96,7 +109,7 @@ dispatcher_add(function(sammy) {
             if (sync_post(this, '/queues/:vhost/:name/actions'))
                 // We can't refresh fast enough, it's racy. So grey
                 // the button and wait for a normal refresh.
-                $('#action-button').prop('disabled', true);
+                $('#action-button').addClass('wait').prop('disabled', true);
             return false;
         });
     sammy.post('#/bindings', function() {
@@ -110,9 +123,14 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
-    path('#/vhosts', {'vhosts': '/vhosts', 'permissions': '/permissions'}, 'vhosts');
+    path('#/vhosts', {'vhosts':  {path:    '/vhosts',
+                                  options: {sort:true}},
+                      'permissions': '/permissions'}, 'vhosts');
     sammy.get('#/vhosts/:id', function() {
-            render({'vhost': '/vhosts/' + esc(this.params['id']),
+            render({'vhost': {path:    '/vhosts/' + esc(this.params['id']),
+                              options: {ranges: ['lengths-vhost',
+                                                 'msg-rates-vhost',
+                                                 'data-rates-vhost']}},
                     'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
                     'users': '/users/'},
                 'vhost', '#/vhosts');
@@ -132,7 +150,9 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
-    path('#/users', {'users': '/users', 'permissions': '/permissions'}, 'users');
+    path('#/users', {'users': {path:    '/users',
+                               options: {sort:true}},
+                     'permissions': '/permissions'}, 'users');
     sammy.get('#/users/:id', function() {
             render({'user': '/users/' + esc(this.params['id']),
                     'permissions': '/users/' + esc(this.params['id']) + '/permissions',
@@ -189,5 +209,8 @@ dispatcher_add(function(sammy) {
 
     sammy.get('#/import-succeeded', function() {
             render({}, 'import-succeeded', '#/overview');
+        });
+    sammy.put('#/rate-options', function() {
+            update_rate_options(this);
         });
 });

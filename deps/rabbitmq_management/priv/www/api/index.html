@@ -53,6 +53,15 @@
     with the <code>columns</code> parameter. This is a comma-separated
     list of subfields separated by dots. See the example below.</p>
 
+    <p>URIs which return some forms of numerical data (such as message
+    rates and queue lengths) can return historical samples. Set
+    the <code>sample_age</code> and <code>sample_incr</code>
+    parameters to do this. Both of these parameters should be
+    integers, specifying seconds. The end of the range returned will
+    always correspond to the present. For example,
+    appending <code>?sample_age=3600&sample_incr=60</code> will return
+    the last hour's data, with a sample for every minute.</p>
+
     <h2>Examples</h2>
 
     <p>A few quick examples, using the Unix command line

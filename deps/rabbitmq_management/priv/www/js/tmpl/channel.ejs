@@ -1,8 +1,14 @@
 <h1>Channel: <b><%= fmt_escape_html(channel.name) %></b></h1>
 
 <div class="section">
-<h2>Details</h2>
-<div class="hider updatable">
+<h2>Overview</h2>
+<div class="hider">
+<% if (statistics_level == 'fine') { %>
+    <%= message_rates('msg-rates-ch', channel.message_stats) %>
+<% } %>
+
+<div class="updatable">
+<h3>Details</h3>
 <table class="facts">
   <tr>
     <th>Connection</th>
@@ -64,6 +70,8 @@
   </tr>
 </table>
 </div>
+
+</div>
 </div>
 
 <div class="section">
@@ -75,7 +83,7 @@
 
 <% if (statistics_level == 'fine') { %>
 <div class="section">
-<h2>Message rates</h2>
+<h2>Message rates breakdown</h2>
 <div class="hider updatable">
 <table class="two-col-layout">
   <tr>
@@ -83,14 +91,12 @@
       <%= format('msg-detail-publishes',
                  {'mode':   'channel',
                   'object': channel.publishes,
-                  'label':  'Publishes',
-                  'totals': channel.message_stats}) %>
+                  'label':  'Publishes'}) %>
     </td>
     <td>
       <%= format('msg-detail-deliveries',
                  {'mode':   'channel',
-                  'object': channel.deliveries,
-                  'totals': channel.message_stats}) %>
+                  'object': channel.deliveries}) %>
     </td>
   </tr>
 </table>

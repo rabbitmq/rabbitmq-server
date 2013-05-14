@@ -14,6 +14,9 @@ HELP = {
     'queue-expires':
       'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/ttl.html#queue-ttl">x-expires</a>" argument.)',
 
+    'queue-max-length':
+      'How many (ready) messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/maxlength.html">x-max-length</a>" argument.)',
+
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
@@ -81,8 +84,8 @@ HELP = {
 
     'message-get-requeue':
       '<p>Clicking "Get Message(s)" will consume messages from the queue. \
-      If requeue is set the message will be re-added to the queue, \
-      but ordering will not be preserved and "redelivered" will be set.</p> \
+      If requeue is set the message will be put back into the queue in place, \
+      but "redelivered" will be set on the message.</p> \
       <p>If requeue is not set messages will be removed from the queue.</p> \
       <p>Furthermore, message payloads will be truncated to 50000 bytes.</p>',
 
@@ -147,8 +150,7 @@ HELP = {
       </p>',
 
     'queued-messages':
-    'Total messages in all queues:\
-      <dl>\
+      '<dl>                          \
         <dt>Ready</dt>\
         <dd>Number of messages that are available to be delivered now.</dd>\
         <dt>Unacknowledged</dt>\
@@ -160,7 +162,7 @@ HELP = {
     <b>not</b> include messages removed due to queue deletion.',
 
     'message-rates':
-    'Total rates for all queues. Only rates for which some activity is taking place will be shown.\
+    'Only rates for which some activity is taking place will be shown.\
       <dl>\
         <dt>Publish</dt>\
         <dd>Rate at which messages are entering the server.</dd>\
@@ -200,6 +202,10 @@ HELP = {
     Absent if <code>ha-mode</code> is <code>all</code>, a number\
     if <code>ha-mode</code> is <code>exactly</code>, or an array\
     of strings if <code>ha-mode</code> is <code>nodes</code>.\
+  </dd>\
+  <dt><code>ha-sync-mode</code></dt>\
+  <dd>\
+    One of <code>manual</code> or <code>automatic</code>.\
   </dd>\
   <dt><code>federation-upstream-set</code></dt>\
   <dd>\

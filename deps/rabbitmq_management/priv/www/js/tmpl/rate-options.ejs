@@ -1,0 +1,45 @@
+<%
+   var id = span.attr('for');
+   var mode = get_pref('rate-mode-' + id);
+   var size = get_pref('chart-size-' + id);
+   var range = get_pref('chart-range-' + id);
+%>
+
+<form action="#/rate-options" method="put" class="auto-submit">
+  <input type="hidden" name="id" value="<%= id %>"/>
+  <table class="form" width="100%">
+    <tr>
+      <td colspan="2">
+        <h3>This time series</h3>
+      </td>
+    </tr>
+    <tr>
+      <th><label>Display:</label></th>
+      <td>
+        <%= fmt_radio('mode', 'Chart',         'chart', mode) %>
+        <%= fmt_radio('mode', 'Current value',  'curr', mode) %>
+        <%= fmt_radio('mode', 'Moving average',  'avg', mode) %>
+      </td>
+    </tr>
+    <tr>
+      <th><label>Chart size:</label></th>
+      <td>
+        <%= fmt_radio('size', 'Small',   'small', size) %>
+        <%= fmt_radio('size', 'Medium', 'medium', size) %>
+        <%= fmt_radio('size', 'Large',   'large', size) %>
+      </td>
+    </tr>
+    <tr>
+      <th><label>Chart range:</label></th>
+      <td>
+<%
+   for (p in CHART_PERIODS) {
+%>
+    <%= fmt_radio('range', CHART_PERIODS[p], p, range) %>
+<%
+   }
+%>
+      </td>
+    </tr>
+  </table>
+</form>

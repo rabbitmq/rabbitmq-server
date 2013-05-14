@@ -2,14 +2,13 @@
 
 <div class="section">
   <h2>Overview</h2>
-  <div class="hider updatable">
-    <h3>Messages</h3>
-    <div class="box">
-      <%= queue_length(queue, 'Ready', 'messages_ready') %>
-      <%= queue_length(queue, 'Unacknowledged', 'messages_unacknowledged') %>
-      <%= queue_length(queue, 'Total', 'messages') %>
-    </div>
+  <div class="hider">
+    <%= queue_lengths('lengths-q', queue) %>
+<% if (statistics_level == 'fine') { %>
+    <%= message_rates('msg-rates-q', queue.message_stats) %>
+<% } %>
 
+    <div class="updatable">
     <h3>Details</h3>
     <table class="facts">
       <tr>
@@ -105,12 +104,13 @@
       </tr>
 <% } %>
     </table>
+    </div>
   </div>
 </div>
 
 <% if (statistics_level == 'fine') { %>
 <div class="section-hidden">
-<h2>Message rates</h2>
+<h2>Message rates breakdown</h2>
 <div class="hider updatable">
 <table class="two-col-layout">
   <tr>
@@ -118,15 +118,13 @@
       <%= format('msg-detail-publishes',
                  {'mode':   'queue',
                   'object': queue.incoming,
-                  'label':  'Incoming',
-                  'totals': queue.message_stats}) %>
+                  'label':  'Incoming'}) %>
 
     </td>
     <td>
       <%= format('msg-detail-deliveries',
                  {'mode':   'queue',
-                  'object': queue.deliveries,
-                  'totals': queue.message_stats}) %>
+                  'object': queue.deliveries}) %>
     </td>
   </tr>
 </table>

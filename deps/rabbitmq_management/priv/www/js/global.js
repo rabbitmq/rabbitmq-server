@@ -13,19 +13,11 @@ function map(list) {
     return res;
 }
 
-// Which queries need to have the current vhost appended (if there is one)?
-var VHOST_QUERIES = [new RegExp('^/queues$'),
-                     new RegExp('^/exchanges$'),
-                     new RegExp('^/parameters/[^/]*$')];
-
-// Which queries need to have the current sort appended (if there is one)?
-var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
-                         '/queues', '/exchanges']);
-
 // Extension arguments that we know about and present specially in the UI.
 var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'},
                   'x-message-ttl':             {'short': 'TTL', 'type': 'int'},
                   'x-expires':                 {'short': 'Exp', 'type': 'int'},
+                  'x-max-length':              {'short': 'Lim', 'type': 'int'},
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
                   'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'}};
 
@@ -48,6 +40,12 @@ var NAVIGATION = {'Overview':    ['#/',                            false],
                                    'Virtual Hosts': ['#/vhosts',   true],
                                    'Policies':      ['#/policies', true]}, true]
                  };
+
+var CHART_PERIODS = {'60|5':       'Last minute',
+                     '600|5':      'Last ten minutes',
+                     '3600|60':    'Last hour',
+                     '28800|600':  'Last eight hours',
+                     '86400|1800': 'Last day'};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
@@ -82,7 +80,9 @@ function setup_global_vars(user) {
     replace_content('login-details',
                     '<p>User: <b>' + user.name + '</b></p>' +
                     '<p>RabbitMQ ' + overview.rabbitmq_version +
-                    ', Erlang ' + overview.erlang_version + '</p>');
+                    ', <acronym class="normal" title="' +
+                    overview.erlang_full_version + '">Erlang ' +
+                    overview.erlang_version + '</acronym></p>');
     var tags = user.tags.split(",");
     user_administrator = jQuery.inArray("administrator", tags) != -1;
     user_monitor = user_administrator ||
@@ -130,6 +130,9 @@ var current_vhost = '';
 var current_sort;
 var current_sort_reverse = false;
 
+var current_filter = '';
+var current_truncate;
+
 // The timer object for auto-updates, and how often it goes off
 var timer;
 var timer_interval;
@@ -142,3 +145,6 @@ var last_successful_connect;
 // TODO: maybe we don't need this any more?
 var update_counter = 0;
 
+// Holds chart data in between writing the div in an ejs and rendering
+// the chart.
+var chart_data = {};

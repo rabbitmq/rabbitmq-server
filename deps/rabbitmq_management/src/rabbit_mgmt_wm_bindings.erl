@@ -74,7 +74,7 @@ accept_content(ReqData, {_Mode, Context}) ->
         {{halt, _}, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
-            Loc = rabbit_mochiweb_util:relativise(
+            Loc = rabbit_web_dispatch_util:relativise(
                     wrq:path(ReqData),
                     binary_to_list(
                       rabbit_mgmt_format:url(

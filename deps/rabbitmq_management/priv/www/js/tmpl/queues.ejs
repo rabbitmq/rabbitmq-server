@@ -1,8 +1,9 @@
 <h1>Queues</h1>
 <div class="section">
   <h2>All queues</h2>
-  <div class="hider updatable">
-<%= maybe_truncate(queues) %>
+  <div class="hider">
+<%= filter_ui(queues) %>
+  <div class="updatable">
 <% if (queues.length > 0) { %>
 <%
    var col_redeliver = !is_col_empty(queues, 'redeliver');
@@ -73,9 +74,9 @@
    <td class="r"><%= fmt_string(queue.messages_unacknowledged) %></td>
    <td class="r"><%= fmt_string(queue.messages) %></td>
 <% if (statistics_level == 'fine') { %>
-    <td class="r"><%= fmt_rate(queue.message_stats, 'publish', false) %></td>
+    <td class="r"><%= fmt_rate(queue.message_stats, 'publish') %></td>
     <td class="r"><%= fmt_deliver_rate(queue.message_stats, col_redeliver) %></td>
-    <td class="r"><%= fmt_rate(queue.message_stats, 'ack', false) %></td>
+    <td class="r"><%= fmt_rate(queue.message_stats, 'ack') %></td>
 <% } %>
   </tr>
   <% } %>
@@ -84,6 +85,7 @@
 <% } else { %>
   <p>... no queues ...</p>
 <% } %>
+  </div>
   </div>
 </div>
 
@@ -150,6 +152,10 @@
         <tr>
           <th><label>Auto expire: <span class="help" id="queue-expires"></span></label></th>
           <td><input type="text" name="x-expires"/> ms</td>
+        </tr>
+        <tr>
+          <th><label>Max length: <span class="help" id="queue-max-length"></span></label></th>
+          <td><input type="text" name="x-max-length"/></td>
         </tr>
         <tr>
           <th><label>Dead letter exchange: <span class="help" id="queue-dead-letter-exchange"></span></label></th>

@@ -18,7 +18,8 @@
 
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
--export([is_authorized/2, is_authorized_admin/2, vhost/1]).
+-export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
+         vhost/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
          is_authorized_monitor/2]).
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
@@ -31,7 +32,7 @@
 -export([with_decode/5, decode/1, decode/2, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, is_monitor/1]).
--export([list_visible_vhosts/1, b64decode_or_throw/1]).
+-export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -47,6 +48,11 @@ is_authorized(ReqData, Context) ->
 
 is_authorized_admin(ReqData, Context) ->
     is_authorized(ReqData, Context,
+                  <<"Not administrator user">>,
+                  fun(#user{tags = Tags}) -> is_admin(Tags) end).
+
+is_authorized_admin(ReqData, Context, Username, Password) ->
+    is_authorized(ReqData, Context, Username, Password,
                   <<"Not administrator user">>,
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
@@ -81,29 +87,29 @@ is_authorized_user(ReqData, Context, Item) ->
                   end).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
-    ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
-    case rabbit_mochiweb_util:parse_auth_header(
+    case rabbit_web_dispatch_util:parse_auth_header(
            wrq:get_req_header("authorization", ReqData)) of
         [Username, Password] ->
-            case rabbit_access_control:check_user_pass_login(
-                   Username, Password) of
-                {ok, User = #user{tags = Tags}} ->
-                    case is_mgmt_user(Tags) of
-                        true  -> case Fun(User) of
-                                     true  -> {true, ReqData,
-                                               Context#context{
-                                                 user     = User,
-                                                 password = Password}};
-                                     false -> ErrFun(ErrorMsg)
-                                 end;
-                        false -> ErrFun(<<"Not management user">>)
-                    end;
-                _ ->
-                    ErrFun(<<"Login failed">>)
-
-            end;
+            is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun);
         _ ->
             {?AUTH_REALM, ReqData, Context}
+    end.
+
+is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
+    ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
+    case rabbit_access_control:check_user_pass_login(Username, Password) of
+        {ok, User = #user{tags = Tags}} ->
+            case is_mgmt_user(Tags) of
+                true  -> case Fun(User) of
+                             true  -> {true, ReqData,
+                                       Context#context{user     = User,
+                                                       password = Password}};
+                             false -> ErrFun(ErrorMsg)
+                         end;
+                false -> ErrFun(<<"Not management user">>)
+            end;
+        _ ->
+            ErrFun(<<"Login failed">>)
     end.
 
 vhost(ReqData) ->
@@ -122,6 +128,9 @@ destination_type(ReqData) ->
     end.
 
 reply(Facts, ReqData, Context) ->
+    reply0(extract_columns(Facts, ReqData), ReqData, Context).
+
+reply0(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
     try
         {mochijson2:encode(Facts), ReqData1, Context}
@@ -138,7 +147,7 @@ reply_list(Facts, ReqData, Context) ->
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
     reply(sort_list(
-            extract_columns(Facts, ReqData),
+            extract_columns_list(Facts, ReqData),
             DefaultSorts,
             wrq:get_qs_value("sort", ReqData),
             wrq:get_qs_value("sort_reverse", ReqData)),
@@ -181,7 +190,10 @@ pget_bin(Key, List, Default) ->
         {[],        _} -> Default
     end.
 
-extract_columns(Items, ReqData) ->
+extract_columns(Item, ReqData) ->
+    extract_column_items(Item, columns(ReqData)).
+
+extract_columns_list(Items, ReqData) ->
     Cols = columns(ReqData),
     [extract_column_items(Item, Cols) || Item <- Items].
 
@@ -485,4 +497,38 @@ b64decode_or_throw(B64) ->
         base64:decode(B64)
     catch error:_ ->
             throw({error, {not_base64, B64}})
+    end.
+
+no_range() -> {no_range, no_range, no_range}.
+
+range(ReqData) -> {range("lengths",    ReqData),
+                   range("msg_rates",  ReqData),
+                   range("data_rates", ReqData)}.
+
+range(Prefix, ReqData) ->
+    Age0 = int(Prefix ++ "_age", ReqData),
+    Incr0 = int(Prefix ++ "_incr", ReqData),
+    if
+        is_integer(Age0) andalso is_integer(Incr0) ->
+            Age = Age0 * 1000,
+            Incr = Incr0 * 1000,
+            %% Take floor on queries so we make sure we only return samples
+            %% for which we've finished receiving events. Fixes the "drop at
+            %% the end" problem.
+            Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
+            Last = (Now div Incr) * Incr,
+            #range{first = (Last - Age),
+                   last  = Last,
+                   incr  = Incr};
+        true ->
+            no_range
+    end.
+
+int(Name, ReqData) ->
+    case wrq:get_qs_value(Name, ReqData) of
+        undefined -> undefined;
+        Str       -> case catch list_to_integer(Str) of
+                         {'EXIT', _} -> undefined;
+                         Integer     -> Integer
+                     end
     end.

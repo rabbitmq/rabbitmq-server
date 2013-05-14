@@ -15,5 +15,7 @@
 %%
 
 -record(context, {user, password = none}).
+-record(range, {first, last, incr}).
+-record(stats, {diffs, base}).
 
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Management\"").
