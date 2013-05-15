@@ -1219,8 +1219,8 @@ parse_credit_args(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-credit">>) of
         {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
                             rabbit_misc:table_lookup(T, <<"drain">>)} of
-                          {{long, Credit}, {boolean, Drain}} -> {Credit, Drain};
-                          _                                  -> none
+                          {{long, Credit}, {bool, Drain}} -> {Credit, Drain};
+                          _                               -> none
                       end;
         undefined  -> none
     end.

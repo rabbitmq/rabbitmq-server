@@ -190,6 +190,10 @@ declare(Recover, From, State = #q{q                   = Q,
                     recovery_barrier(Recover),
                     State1 = process_args(State#q{backing_queue       = BQ,
                                                   backing_queue_state = BQS}),
+                    case Q#amqqueue.name#resource.name of
+                        <<"test">> -> rabbit_federation_queue:start_link(Q);
+                        _          -> ok
+                    end,
                     rabbit_event:notify(queue_created,
                                         infos(?CREATION_EVENT_KEYS, State1)),
                     rabbit_event:if_enabled(State1, #q.stats_timer,
@@ -518,11 +522,14 @@ discard(#delivery{sender     = SenderPid,
         end,
     BQS1 = BQ:discard(MsgId, SenderPid, BQS),
     State1#q{backing_queue_state = BQS1}.
-
-run_message_queue(State) ->
+run_message_queue(State = #q{q = Q}) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(
                             fun deliver_from_queue_deliver/2,
                             is_empty(State), State),
+    case queue:len(State1#q.active_consumers) of
+        0 -> rabbit_federation_queue:stop(Q);
+        _ -> rabbit_federation_queue:go(Q)
+    end,
     State1.
 
 attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
