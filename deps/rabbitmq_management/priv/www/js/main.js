@@ -929,9 +929,13 @@ function collapse_multifields(params0) {
         var k = params0[name + '_' + id_parts[0] + '_mfkey'];
         var v = params0[name + '_' + id + '_mfvalue'];
         var t = params0[name + '_' + id + '_mftype'];
+        var val = null;
+        if (t == 'list') {
+            val = [];
+            id_map[name][id] = val;
+        }
         // TODO do we need to be able to set ""?
-        if (t == 'list' || (v != '' && v != undefined)) {
-            var val;
+        else if (v != '' && v != undefined) {
             if (t == 'boolean') {
                 if (v != 'true' && v != 'false')
                     throw(k + ' must be "true" or "false"; got ' + v);
@@ -943,13 +947,11 @@ function collapse_multifields(params0) {
                     throw(k + ' must be a number; got ' + v);
                 val = n;
             }
-            else if (t == 'list') {
-                val = [];
-                id_map[name][id] = val;
-            }
             else {
                 val = v;
             }
+        }
+        if (val != null) {
             if (id_parts.length == 1) {
                 params[name][k] = val;
             }
