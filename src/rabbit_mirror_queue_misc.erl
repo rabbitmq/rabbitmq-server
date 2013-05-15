@@ -316,24 +316,30 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
 %%----------------------------------------------------------------------------
 
 validate_policy(KeyList) ->
-    Mode = proplists:get_value(<<"ha-mode">>, KeyList),
+    Mode = proplists:get_value(<<"ha-mode">>, KeyList, none),
     Params = proplists:get_value(<<"ha-params">>, KeyList, none),
-    case Mode of
-        undefined -> ok;
-        _         -> case module(Mode) of
-                         {ok, M} -> case M:validate_policy(Params) of
-                                        ok -> validate_sync_mode(KeyList);
-                                        E  -> E
-                                    end;
-                         _       -> {error,
-                                     "~p is not a valid ha-mode value", [Mode]}
-                     end
+    SyncMode = proplists:get_value(<<"ha-sync-mode">>, KeyList, none),
+    case {Mode, Params, SyncMode} of
+        {none, none, none} ->
+            ok;
+        {none, _, _} ->
+            {error, "ha-mode must be specified to specify ha-params or "
+             "ha-sync-mode", []};
+        _ ->
+            case module(Mode) of
+                {ok, M} -> case M:validate_policy(Params) of
+                               ok -> validate_sync_mode(SyncMode);
+                               E  -> E
+                           end;
+                _       -> {error, "~p is not a valid ha-mode value", [Mode]}
+            end
     end.
 
-validate_sync_mode(KeyList) ->
-    case proplists:get_value(<<"ha-sync-mode">>, KeyList, <<"manual">>) of
+validate_sync_mode(SyncMode) ->
+    case SyncMode of
         <<"automatic">> -> ok;
         <<"manual">>    -> ok;
+        none            -> ok;
         Mode            -> {error, "ha-sync-mode must be \"manual\" "
                             "or \"automatic\", got ~p", [Mode]}
     end.
