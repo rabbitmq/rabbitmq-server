@@ -27,6 +27,11 @@ atom `none` to prevent unauthenticated connections.
 
     {default_user, "guest"}
 
+The default virtual host can be specified using the `default_vhost` setting.
+See the "Virtual Hosts" section below for a description.
+
+    {default_vhost, <<"/">>}
+
 The `protocol_strict_mode` setting controls how strictly peers must conform
 to the specification. The default is not to enforce strictness, which allows
 non-fatal byte-counts in frames and inaccuracies in flow-control from peers.
@@ -167,7 +172,7 @@ AMQP 1.0 has no equivalent of AMQP 0-9-1 virtual hosts. A virtual host
 on the broker may be addressed when opening an AMQP 1.0 connection by setting
 the `hostname` field, prefixing with "vhost:". Setting the `hostname` field
 to "vhost:/" addresses the default virtual host. If the `hostname` field
-does not start with "vhost:" then the broker `default_vhost` configuration
+does not start with "vhost:" then the `default_vhost` configuration
 setting will be consulted.
 
 # Limitations and unsupported features
