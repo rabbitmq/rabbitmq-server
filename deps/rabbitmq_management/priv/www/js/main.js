@@ -896,6 +896,8 @@ function params_magic(params) {
 }
 
 function collapse_multifields(params0) {
+    function set(x) { return x != '' && x != undefined }
+
     var params = {};
     var ks = keys(params0);
     var ids = [];
@@ -930,12 +932,12 @@ function collapse_multifields(params0) {
         var v = params0[name + '_' + id + '_mfvalue'];
         var t = params0[name + '_' + id + '_mftype'];
         var val = null;
+        debug(k + "|" + v + "|" + t);
         if (t == 'list') {
             val = [];
             id_map[name][id] = val;
         }
-        // TODO do we need to be able to set ""?
-        else if (v != '' && v != undefined) {
+        else if (set(k) || set(v)) {
             if (t == 'boolean') {
                 if (v != 'true' && v != 'false')
                     throw(k + ' must be "true" or "false"; got ' + v);
