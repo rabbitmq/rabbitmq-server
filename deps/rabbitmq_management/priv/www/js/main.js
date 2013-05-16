@@ -441,7 +441,8 @@ function postprocess() {
         });
     $('#download-definitions').click(function() {
             var path = 'api/definitions?download=' +
-                esc($('#download-filename').val());
+                esc($('#download-filename').val()) +
+                '&auth=' + get_cookie('auth');
             window.location = path;
             setTimeout('app.run()');
             return false;
@@ -941,7 +942,8 @@ function maybe_remove_fields(params) {
     return params;
 }
 
-function put_parameter(sammy, mandatory_keys, num_keys, bool_keys) {
+function put_parameter(sammy, mandatory_keys, num_keys, bool_keys,
+                       arrayable_keys) {
     for (var i in sammy.params) {
         if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
         if (sammy.params[i] == '' && jQuery.inArray(i, mandatory_keys) == -1) {
@@ -952,6 +954,12 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys) {
         }
         else if (jQuery.inArray(i, bool_keys) != -1) {
             sammy.params[i] = sammy.params[i] == 'true';
+        }
+        else if (jQuery.inArray(i, arrayable_keys) != -1) {
+            sammy.params[i] = sammy.params[i].split(' ');
+            if (sammy.params[i].length == 1) {
+                sammy.params[i] = sammy.params[i][0];
+            }
         }
     }
     var params = {"component": sammy.params.component,

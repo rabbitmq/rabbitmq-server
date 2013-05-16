@@ -99,7 +99,19 @@ accept_multipart(ReqData, Context) ->
     end.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+    case wrq:get_qs_value("auth", ReqData) of
+        undefined -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
+        Auth      -> is_authorized_qs(ReqData, Context, Auth)
+    end.
+
+%% Support for the web UI - it can't add a normal "authorization"
+%% header for a file download.
+is_authorized_qs(ReqData, Context, Auth) ->
+    case rabbit_web_dispatch_util:parse_auth_header("Basic " ++ Auth) of
+        [Username, Password] -> rabbit_mgmt_util:is_authorized_admin(
+                                  ReqData, Context, Username, Password);
+        _                    -> {?AUTH_REALM, ReqData, Context}
+    end.
 
 %%--------------------------------------------------------------------
 

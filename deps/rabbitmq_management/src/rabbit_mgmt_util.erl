@@ -18,7 +18,8 @@
 
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
--export([is_authorized/2, is_authorized_admin/2, vhost/1]).
+-export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
+         vhost/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
          is_authorized_monitor/2]).
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
@@ -47,6 +48,11 @@ is_authorized(ReqData, Context) ->
 
 is_authorized_admin(ReqData, Context) ->
     is_authorized(ReqData, Context,
+                  <<"Not administrator user">>,
+                  fun(#user{tags = Tags}) -> is_admin(Tags) end).
+
+is_authorized_admin(ReqData, Context, Username, Password) ->
+    is_authorized(ReqData, Context, Username, Password,
                   <<"Not administrator user">>,
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
@@ -81,29 +87,29 @@ is_authorized_user(ReqData, Context, Item) ->
                   end).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
-    ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
     case rabbit_web_dispatch_util:parse_auth_header(
            wrq:get_req_header("authorization", ReqData)) of
         [Username, Password] ->
-            case rabbit_access_control:check_user_pass_login(
-                   Username, Password) of
-                {ok, User = #user{tags = Tags}} ->
-                    case is_mgmt_user(Tags) of
-                        true  -> case Fun(User) of
-                                     true  -> {true, ReqData,
-                                               Context#context{
-                                                 user     = User,
-                                                 password = Password}};
-                                     false -> ErrFun(ErrorMsg)
-                                 end;
-                        false -> ErrFun(<<"Not management user">>)
-                    end;
-                _ ->
-                    ErrFun(<<"Login failed">>)
-
-            end;
+            is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun);
         _ ->
             {?AUTH_REALM, ReqData, Context}
+    end.
+
+is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
+    ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
+    case rabbit_access_control:check_user_pass_login(Username, Password) of
+        {ok, User = #user{tags = Tags}} ->
+            case is_mgmt_user(Tags) of
+                true  -> case Fun(User) of
+                             true  -> {true, ReqData,
+                                       Context#context{user     = User,
+                                                       password = Password}};
+                             false -> ErrFun(ErrorMsg)
+                         end;
+                false -> ErrFun(<<"Not management user">>)
+            end;
+        _ ->
+            ErrFun(<<"Login failed">>)
     end.
 
 vhost(ReqData) ->

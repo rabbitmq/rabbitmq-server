@@ -521,8 +521,15 @@ function fmt_resource_bar_count(used, total, thresholds) {
     }
 }
 
-function fmt_shortened_uri(uri0) {
-    var uri = fmt_escape_html(uri0);
+function fmt_shortened_uri(uri) {
+    if (typeof uri == 'object') {
+        var res = '';
+        for (i in uri) {
+            res += fmt_shortened_uri(uri[i]) + '<br/>';
+        }
+        return res;
+    }
+    var uri = fmt_escape_html(uri);
     if (uri.indexOf('?') == -1) {
         return uri;
     }
