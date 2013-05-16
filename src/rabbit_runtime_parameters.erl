@@ -100,16 +100,16 @@ set_any0(VHost, Component, Name, Term) ->
             E
     end.
 
-mnesia_update(VHost, Component, Name, Term) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              Res = case mnesia:read(?TABLE, {VHost, Component, Name}, read) of
-                        []       -> new;
-                        [Params] -> {old, Params#runtime_parameters.value}
-                    end,
-              ok = mnesia:write(?TABLE, c(VHost, Component, Name, Term), write),
-              Res
-      end).
+mnesia_update(VHost, Comp, Name, Term) ->
+    F = fun () ->
+                Res = case mnesia:read(?TABLE, {VHost, Comp, Name}, read) of
+                          []       -> new;
+                          [Params] -> {old, Params#runtime_parameters.value}
+                      end,
+                ok = mnesia:write(?TABLE, c(VHost, Comp, Name, Term), write),
+                Res
+        end,
+    rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
 
 clear(_, <<"policy">> , _) ->
     {error_string, "policies may not be cleared using this method"};
@@ -127,10 +127,10 @@ clear_any(VHost, Component, Name) ->
     end.
 
 mnesia_clear(VHost, Component, Name) ->
-    ok = rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
-           end).
+    F = fun () ->
+                ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
+        end,
+    ok = rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
 
 list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-
@@ -140,6 +140,10 @@ list(VHost)               -> list(VHost, '_').
 list_component(Component) -> list('_',   Component).
 
 list(VHost, Component) ->
+    case VHost of
+        '_' -> ok;
+        _   -> rabbit_vhost:assert(VHost)
+    end,
     Match = #runtime_parameters{key = {VHost, Component, '_'}, _ = '_'},
     [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
                  mnesia:dirty_match_object(?TABLE, Match),

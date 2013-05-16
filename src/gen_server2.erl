@@ -16,12 +16,15 @@
 %% The original code could reorder messages when communicating with a
 %% process on a remote node that was not currently connected.
 %%
-%% 4) The callback module can optionally implement prioritise_call/3,
-%% prioritise_cast/2 and prioritise_info/2.  These functions take
-%% Message, From and State or just Message and State and return a
-%% single integer representing the priority attached to the message.
-%% Messages with higher priorities are processed before requests with
-%% lower priorities. The default priority is 0.
+%% 4) The callback module can optionally implement prioritise_call/4,
+%% prioritise_cast/3 and prioritise_info/3.  These functions take
+%% Message, From, Length and State or just Message, Length and State
+%% (where Length is the current number of messages waiting to be
+%% processed) and return a single integer representing the priority
+%% attached to the message, or 'drop' to ignore it (for
+%% prioritise_cast/3 and prioritise_info/3 only).  Messages with
+%% higher priorities are processed before requests with lower
+%% priorities. The default priority is 0.
 %%
 %% 5) The callback module can optionally implement
 %% handle_pre_hibernate/1 and handle_post_hibernate/1. These will be
@@ -72,6 +75,12 @@
 %% format_message_queue/2 which is the equivalent of format_status/2
 %% but where the second argument is specifically the priority_queue
 %% which contains the prioritised message_queue.
+%%
+%% 9) The function with_state/2 can be used to debug a process with
+%% heavyweight state (without needing to copy the entire state out of
+%% process as sys:get_status/1 would). Pass through a function which
+%% can be invoked on the state, get back the result. The state is not
+%% modified.
 
 %% All modifications are (C) 2009-2013 VMware, Inc.
 
@@ -181,6 +190,7 @@
          cast/2, reply/2,
          abcast/2, abcast/3,
          multi_call/2, multi_call/3, multi_call/4,
+         with_state/2,
          enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/1]).
 
 %% System exports
@@ -196,8 +206,7 @@
 
 %% State record
 -record(gs2_state, {parent, name, state, mod, time,
-                    timeout_state, queue, debug, prioritise_call,
-                    prioritise_cast, prioritise_info}).
+                    timeout_state, queue, debug, prioritisers}).
 
 -ifdef(use_specs).
 
@@ -380,6 +389,16 @@ multi_call(Nodes, Name, Req, Timeout)
   when is_list(Nodes), is_atom(Name), is_integer(Timeout), Timeout >= 0 ->
     do_multi_call(Nodes, Name, Req, Timeout).
 
+%% -----------------------------------------------------------------
+%% Apply a function to a generic server's state.
+%% -----------------------------------------------------------------
+with_state(Name, Fun) ->
+    case catch gen:call(Name, '$with_state', Fun, infinity) of
+        {ok,Res} ->
+            Res;
+        {'EXIT',Reason} ->
+            exit({Reason, {?MODULE, with_state, [Name, Fun]}})
+    end.
 
 %%-----------------------------------------------------------------
 %% enter_loop(Mod, Options, State, <ServerName>, <TimeOut>, <Backoff>) ->_
@@ -638,17 +657,22 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
     {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, RandomState1}.
 
 in({'$gen_cast', Msg} = Input,
-   GS2State = #gs2_state { prioritise_cast = PC }) ->
-    in(Input, PC(Msg, GS2State), GS2State);
+   GS2State = #gs2_state { prioritisers = {_, F, _} }) ->
+    in(Input, F(Msg, GS2State), GS2State);
 in({'$gen_call', From, Msg} = Input,
-   GS2State = #gs2_state { prioritise_call = PC }) ->
-    in(Input, PC(Msg, From, GS2State), GS2State);
+   GS2State = #gs2_state { prioritisers = {F, _, _} }) ->
+    in(Input, F(Msg, From, GS2State), GS2State);
+in({'$with_state', _From, _Fun} = Input, GS2State) ->
+    in(Input, 0, GS2State);
 in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
     in(Input, infinity, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
     in(Input, infinity, GS2State);
-in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
-    in(Input, PI(Input, GS2State), GS2State).
+in(Input, GS2State = #gs2_state { prioritisers = {_, _, F} }) ->
+    in(Input, F(Input, GS2State), GS2State).
+
+in(_Input, drop, GS2State) ->
+    GS2State;
 
 in(Input, Priority, GS2State = #gs2_state { queue = Queue }) ->
     GS2State # gs2_state { queue = priority_queue:in(Input, Priority, Queue) }.
@@ -658,6 +682,10 @@ process_msg({system, From, Req},
     %% gen_server puts Hib on the end as the 7th arg, but that version
     %% of the fun seems not to be documented so leaving out for now.
     sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State);
+process_msg({'$with_state', From, Fun},
+           GS2State = #gs2_state{state = State}) ->
+    reply(From, catch Fun(State)),
+    loop(GS2State);
 process_msg({'EXIT', Parent, Reason} = Msg,
             GS2State = #gs2_state { parent = Parent }) ->
     terminate(Reason, Msg, GS2State);
@@ -864,13 +892,19 @@ dispatch(Info, Mod, State) ->
 common_reply(_Name, From, Reply, _NState, [] = _Debug) ->
     reply(From, Reply),
     [];
-common_reply(Name, From, Reply, NState, Debug) ->
-    reply(Name, From, Reply, NState, Debug).
+common_reply(Name, {To, _Tag} = From, Reply, NState, Debug) ->
+    reply(From, Reply),
+    sys:handle_debug(Debug, fun print_event/3, Name, {out, Reply, To, NState}).
 
-common_debug([] = _Debug, _Func, _Info, _Event) ->
+common_noreply(_Name, _NState, [] = _Debug) ->
     [];
-common_debug(Debug, Func, Info, Event) ->
-    sys:handle_debug(Debug, Func, Info, Event).
+common_noreply(Name, NState, Debug) ->
+    sys:handle_debug(Debug, fun print_event/3, Name, {noreply, NState}).
+
+common_become(_Name, _Mod, _NState, [] = _Debug) ->
+    [];
+common_become(Name, Mod, NState, Debug) ->
+    sys:handle_debug(Debug, fun print_event/3, Name, {become, Mod, NState}).
 
 handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
                                                              state = State,
@@ -887,23 +921,11 @@ handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
             loop(GS2State #gs2_state { state = NState,
                                        time  = Time1,
                                        debug = Debug1});
-        {noreply, NState} ->
-            Debug1 = common_debug(Debug, fun print_event/3, Name,
-                                  {noreply, NState}),
-            loop(GS2State #gs2_state {state = NState,
-                                      time  = infinity,
-                                      debug = Debug1});
-        {noreply, NState, Time1} ->
-            Debug1 = common_debug(Debug, fun print_event/3, Name,
-                                  {noreply, NState}),
-            loop(GS2State #gs2_state {state = NState,
-                                      time  = Time1,
-                                      debug = Debug1});
         {stop, Reason, Reply, NState} ->
             {'EXIT', R} =
                 (catch terminate(Reason, Msg,
                                  GS2State #gs2_state { state = NState })),
-            reply(Name, From, Reply, NState, Debug),
+            common_reply(Name, From, Reply, NState, Debug),
             exit(R);
         Other ->
             handle_common_reply(Other, Msg, GS2State)
@@ -916,28 +938,24 @@ handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
                                                         debug = Debug}) ->
     case Reply of
         {noreply, NState} ->
-            Debug1 = common_debug(Debug, fun print_event/3, Name,
-                                  {noreply, NState}),
-            loop(GS2State #gs2_state { state = NState,
-                                       time  = infinity,
-                                       debug = Debug1 });
+            Debug1 = common_noreply(Name, NState, Debug),
+            loop(GS2State #gs2_state {state = NState,
+                                      time  = infinity,
+                                      debug = Debug1});
         {noreply, NState, Time1} ->
-            Debug1 = common_debug(Debug, fun print_event/3, Name,
-                                  {noreply, NState}),
-            loop(GS2State #gs2_state { state = NState,
-                                       time  = Time1,
-                                       debug = Debug1 });
+            Debug1 = common_noreply(Name, NState, Debug),
+            loop(GS2State #gs2_state {state = NState,
+                                      time  = Time1,
+                                      debug = Debug1});
         {become, Mod, NState} ->
-            Debug1 = common_debug(Debug, fun print_event/3, Name,
-                                  {become, Mod, NState}),
+            Debug1 = common_become(Name, Mod, NState, Debug),
             loop(find_prioritisers(
                    GS2State #gs2_state { mod   = Mod,
                                          state = NState,
                                          time  = infinity,
                                          debug = Debug1 }));
         {become, Mod, NState, Time1} ->
-            Debug1 = common_debug(Debug, fun print_event/3, Name,
-                                  {become, Mod, NState}),
+            Debug1 = common_become(Name, Mod, NState, Debug),
             loop(find_prioritisers(
                    GS2State #gs2_state { mod   = Mod,
                                          state = NState,
@@ -956,12 +974,6 @@ handle_common_termination(Reply, Msg, GS2State) ->
         _ ->
             terminate({bad_return_value, Reply}, Msg, GS2State)
     end.
-
-reply(Name, {To, Tag}, Reply, State, Debug) ->
-    reply({To, Tag}, Reply),
-    sys:handle_debug(
-      Debug, fun print_event/3, Name, {out, Reply, To, State}).
-
 
 %%-----------------------------------------------------------------
 %% Callback functions for system messages handling.
@@ -1165,30 +1177,33 @@ whereis_name(Name) ->
     end.
 
 find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
-    PrioriCall = function_exported_or_default(
-                   Mod, 'prioritise_call', 3,
-                   fun (_Msg, _From, _State) -> 0 end),
-    PrioriCast = function_exported_or_default(Mod, 'prioritise_cast', 2,
-                                              fun (_Msg, _State) -> 0 end),
-    PrioriInfo = function_exported_or_default(Mod, 'prioritise_info', 2,
-                                              fun (_Msg, _State) -> 0 end),
-    GS2State #gs2_state { prioritise_call = PrioriCall,
-                          prioritise_cast = PrioriCast,
-                          prioritise_info = PrioriInfo }.
+    PCall = function_exported_or_default(Mod, 'prioritise_call', 4,
+                                         fun (_Msg, _From, _State) -> 0 end),
+    PCast = function_exported_or_default(Mod, 'prioritise_cast', 3,
+                                         fun (_Msg, _State) -> 0 end),
+    PInfo = function_exported_or_default(Mod, 'prioritise_info', 3,
+                                         fun (_Msg, _State) -> 0 end),
+    GS2State #gs2_state { prioritisers = {PCall, PCast, PInfo} }.
 
 function_exported_or_default(Mod, Fun, Arity, Default) ->
     case erlang:function_exported(Mod, Fun, Arity) of
         true -> case Arity of
-                    2 -> fun (Msg, GS2State = #gs2_state { state = State }) ->
-                                 case catch Mod:Fun(Msg, State) of
+                    3 -> fun (Msg, GS2State = #gs2_state { queue = Queue,
+                                                           state = State }) ->
+                                 Length = priority_queue:len(Queue),
+                                 case catch Mod:Fun(Msg, Length, State) of
+                                     drop ->
+                                         drop;
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->
                                          handle_common_termination(Err, Msg, GS2State)
                                  end
                          end;
-                    3 -> fun (Msg, From, GS2State = #gs2_state { state = State }) ->
-                                 case catch Mod:Fun(Msg, From, State) of
+                    4 -> fun (Msg, From, GS2State = #gs2_state { queue = Queue,
+                                                                 state = State }) ->
+                                 Length = priority_queue:len(Queue),
+                                 case catch Mod:Fun(Msg, From, Length, State) of
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->

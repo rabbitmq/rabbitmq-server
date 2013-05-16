@@ -16,14 +16,17 @@
 
 -module(rabbit_exchange_decorator).
 
+-include("rabbit.hrl").
+
+-export([select/2, set/1]).
+
 %% This is like an exchange type except that:
 %%
 %% 1) It applies to all exchanges as soon as it is installed, therefore
 %% 2) It is not allowed to affect validation, so no validate/1 or
 %%    assert_args_equivalence/2
-%% 3) It also can't affect routing
 %%
-%% It's possible in the future we might relax 3), or even make these
+%% It's possible in the future we might make decorators
 %% able to manipulate messages as they are published.
 
 -ifdef(use_specs).
@@ -46,6 +49,10 @@
 -callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
     'ok'.
 
+%% called when the policy attached to this exchange changes.
+-callback policy_changed(rabbit_types:exchange(), rabbit_types:exchange()) ->
+    'ok'.
+
 %% called after a binding has been added or recovered
 -callback add_binding(serial(), rabbit_types:exchange(),
                       rabbit_types:binding()) -> 'ok'.
@@ -54,9 +61,13 @@
 -callback remove_bindings(serial(), rabbit_types:exchange(),
                           [rabbit_types:binding()]) -> 'ok'.
 
-%% called when the policy attached to this exchange changes.
--callback policy_changed (
-            serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
+%% Allows additional destinations to be added to the routing decision.
+-callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
+    [rabbit_amqqueue:name() | rabbit_exchange:name()].
+
+%% Whether the decorator wishes to receive callbacks for the exchange
+%% none:no callbacks, noroute:all callbacks except route, all:all callbacks
+-callback active_for(rabbit_types:exchange()) -> 'none' | 'noroute' | 'all'.
 
 -else.
 
@@ -64,8 +75,32 @@
 
 behaviour_info(callbacks) ->
     [{description, 0}, {serialise_events, 1}, {create, 2}, {delete, 3},
-     {add_binding, 3}, {remove_bindings, 3}, {policy_changed, 3}];
+     {policy_changed, 2}, {add_binding, 3}, {remove_bindings, 3},
+     {route, 2}, {active_for, 1}];
 behaviour_info(_Other) ->
     undefined.
 
 -endif.
+
+%%----------------------------------------------------------------------------
+
+%% select a subset of active decorators
+select(all,   {Route, NoRoute})  -> filter(Route ++ NoRoute);
+select(route, {Route, _NoRoute}) -> filter(Route);
+select(raw,   {Route, NoRoute})  -> Route ++ NoRoute.
+
+filter(Modules) ->
+    [M || M <- Modules, code:which(M) =/= non_existing].
+
+set(X) ->
+    Decs = lists:foldl(fun (D, {Route, NoRoute}) ->
+                               ActiveFor = D:active_for(X),
+                               {cons_if_eq(all,     ActiveFor, D, Route),
+                                cons_if_eq(noroute, ActiveFor, D, NoRoute)}
+                       end, {[], []}, list()),
+    X#exchange{decorators = Decs}.
+
+list() -> [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
+
+cons_if_eq(Select,  Select, Item,  List) -> [Item | List];
+cons_if_eq(_Select, _Other, _Item, List) -> List.

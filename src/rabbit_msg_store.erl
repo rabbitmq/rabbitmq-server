@@ -29,8 +29,8 @@
 -export([transform_dir/3, force_recovery/2]). %% upgrade
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, prioritise_call/3, prioritise_cast/2,
-         prioritise_info/2, format_message_queue/2]).
+         code_change/3, prioritise_call/4, prioritise_cast/3,
+         prioritise_info/3, format_message_queue/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -741,7 +741,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-prioritise_call(Msg, _From, _State) ->
+prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         successfully_recovered_state                        -> 7;
         {new_client_state, _Ref, _Pid, _MODC, _CloseFDsFun} -> 7;
@@ -749,7 +749,7 @@ prioritise_call(Msg, _From, _State) ->
         _                                                   -> 0
     end.
 
-prioritise_cast(Msg, _State) ->
+prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {combine_files, _Source, _Destination, _Reclaimed} -> 8;
         {delete_file, _File, _Reclaimed}                   -> 8;
@@ -758,7 +758,7 @@ prioritise_cast(Msg, _State) ->
         _                                                  -> 0
     end.
 
-prioritise_info(Msg, _State) ->
+prioritise_info(Msg, _Len, _State) ->
     case Msg of
         sync                                               -> 8;
         _                                                  -> 0
@@ -946,15 +946,12 @@ next_state(State = #msstate { cref_to_msg_ids = CTM }) ->
         _ -> {State, 0}
     end.
 
-start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync),
-    State #msstate { sync_timer_ref = TRef }.
+start_sync_timer(State) ->
+    rabbit_misc:ensure_timer(State, #msstate.sync_timer_ref,
+                             ?SYNC_INTERVAL, sync).
 
-stop_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    State;
-stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
-    erlang:cancel_timer(TRef),
-    State #msstate { sync_timer_ref = undefined }.
+stop_sync_timer(State) ->
+    rabbit_misc:stop_timer(State, #msstate.sync_timer_ref).
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,
                                  cref_to_msg_ids     = CTM }) ->

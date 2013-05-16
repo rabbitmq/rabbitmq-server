@@ -20,7 +20,7 @@
 
 %%----------------------------------------------------------------------------
 
--export([add/1, delete/1, exists/1, list/0, with/2]).
+-export([add/1, delete/1, exists/1, list/0, with/2, assert/1]).
 -export([info/1, info/2, info_all/0, info_all/1]).
 
 -ifdef(use_specs).
@@ -30,6 +30,7 @@
 -spec(exists/1 :: (rabbit_types:vhost()) -> boolean()).
 -spec(list/0 :: () -> [rabbit_types:vhost()]).
 -spec(with/2 :: (rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A).
+-spec(assert/1 :: (rabbit_types:vhost()) -> 'ok').
 
 -spec(info/1 :: (rabbit_types:vhost()) -> rabbit_types:infos()).
 -spec(info/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
@@ -70,6 +71,7 @@ add(VHostPath) ->
                            {<<"amq.rabbitmq.trace">>, topic}]],
                   ok
           end),
+    rabbit_event:notify(vhost_created, info(VHostPath)),
     R.
 
 delete(VHostPath) ->
@@ -87,6 +89,7 @@ delete(VHostPath) ->
           with(VHostPath, fun () ->
                                   ok = internal_delete(VHostPath)
                           end)),
+    ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
     R.
 
 internal_delete(VHostPath) ->
@@ -118,12 +121,18 @@ with(VHostPath, Thunk) ->
             end
     end.
 
+%% Like with/2 but outside an Mnesia tx
+assert(VHostPath) -> case rabbit_vhost:exists(VHostPath) of
+                         true  -> ok;
+                         false -> throw({error, {no_such_vhost, VHostPath}})
+                     end.
+
 %%----------------------------------------------------------------------------
 
 infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,    VHost) -> VHost;
-i(tracing, VHost) -> rabbit_trace:tracing(VHost);
+i(tracing, VHost) -> rabbit_trace:enabled(VHost);
 i(Item, _)        -> throw({bad_argument, Item}).
 
 info(VHost)        -> infos(?INFO_KEYS, VHost).
