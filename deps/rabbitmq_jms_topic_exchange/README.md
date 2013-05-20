@@ -36,8 +36,8 @@ Build
 -----
 
 This plugin is _not_ a standard RabbitMQ plugin repository, but contains
-one wrapped in a Maven project. The standard RabbitMQ plugin directory
-is in a sub-directory of the same name.
+one wrapped in a customised Maven `pom` project. The standard RabbitMQ
+plugin directory is in a sub-directory of the same name.
 
 To build it, and install the `*.ez` artefact in the local Maven
 repository, issue the command:
@@ -64,5 +64,5 @@ Alternatively, the copy of the subdirectory
 commands (see [Plugin
 Development](http://www.rabbitmq.com/plugin-development.html) on the
 RabbitMQ site). **Beware**: Re-issuing the Maven `clean` goal will
-delete the umbrella copy, along with any changes you may have made in
-the copy of the plugin directory.
+delete the umbrella copy, along with any changes made in the copy of
+the plugin directory.
