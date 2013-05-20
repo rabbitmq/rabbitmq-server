@@ -39,13 +39,8 @@
 %% To coordinate the restarting nodes we pick a special node from the
 %% winning partition - the "winner". Restarting nodes then stop, tell
 %% the winner they have done so, and wait for it to tell them it is
-%% safe to start again.
-%%
-%% The winner and the leader are not necessarily the same node! Since
-%% the leader may end up restarting, we also make sure that it does
-%% not announce its decision (and thus cue other nodes to restart)
-%% until it has seen a request from every node that has experienced a
-%% partition.
+%% safe to start again. The winner and the leader are not necessarily
+%% the same node.
 %%
 %% Possible states:
 %%
