@@ -1085,8 +1085,9 @@ handle_method(#'tx.commit'{}, _, #ch{tx = none}) ->
 handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Msgs, Acks},
                                              limiter = Limiter}) ->
     State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, Msgs),
-    lists:foreach(fun ({ack,     A}) -> ack(A, State1);
-                      ({Requeue, A}) -> reject(Requeue, A, Limiter)
+    Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
+    lists:foreach(fun ({ack,     A}) -> ack(Rev(A), State1);
+                      ({Requeue, A}) -> reject(Requeue, Rev(A), Limiter)
                   end, lists:reverse(Acks)),
     {noreply, maybe_complete_tx(State1#ch{tx = committing})};
 
