@@ -105,7 +105,7 @@ handle_msg({request_start, Node},
 handle_msg({request_start, Node},
            State, _Partitions) ->
     rabbit_log:info("Autoheal request received from ~p when in state ~p; "
-                    "ignoring ~n", [Node, State]),
+                    "ignoring~n", [Node, State]),
     State;
 
 handle_msg({become_winner, Losers},
