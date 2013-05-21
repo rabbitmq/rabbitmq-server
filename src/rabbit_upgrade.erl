@@ -247,6 +247,7 @@ apply_upgrades(Scope, Upgrades, Fun) ->
     ok = rabbit_file:lock_file(lock_filename()),
     info("~s upgrades: ~w to apply~n", [Scope, length(Upgrades)]),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    rabbit_table:wait_for_replicated(),
     Fun(),
     [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
     info("~s upgrades: All upgrades applied successfully~n", [Scope]),
