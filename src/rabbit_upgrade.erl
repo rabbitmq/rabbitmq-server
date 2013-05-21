@@ -238,6 +238,7 @@ maybe_upgrade_local() ->
                                           ok = apply_upgrades(local, Upgrades,
                                                               fun () -> ok end),
                                           ensure_backup_removed(),
+                                          rabbit_table:wait_for_replicated(),
                                           ok
     end.
 
@@ -247,7 +248,6 @@ apply_upgrades(Scope, Upgrades, Fun) ->
     ok = rabbit_file:lock_file(lock_filename()),
     info("~s upgrades: ~w to apply~n", [Scope, length(Upgrades)]),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    rabbit_table:wait_for_replicated(),
     Fun(),
     [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
     info("~s upgrades: All upgrades applied successfully~n", [Scope]),
