@@ -1,6 +1,5 @@
-open_source_licenses.txt
+open_source_license.txt
 
-Rabbit JMS Adapter v1.1 GA
+JMS Client for VMware vFabric RabbitMQ 1.1.0
 
-THE CONTENTS OF THIS FILE ARE TO BE SUPPLIED CONSISTENT WITH v1.1
-===========================================================================
+tbd
