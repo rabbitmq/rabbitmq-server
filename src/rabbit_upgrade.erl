@@ -238,7 +238,6 @@ maybe_upgrade_local() ->
                                           ok = apply_upgrades(local, Upgrades,
                                                               fun () -> ok end),
                                           ensure_backup_removed(),
-                                          rabbit_table:wait_for_replicated(),
                                           ok
     end.
 
