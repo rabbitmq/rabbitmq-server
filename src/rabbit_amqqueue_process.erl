@@ -522,13 +522,14 @@ discard(#delivery{sender     = SenderPid,
         end,
     BQS1 = BQ:discard(MsgId, SenderPid, BQS),
     State1#q{backing_queue_state = BQS1}.
+
 run_message_queue(State = #q{q = Q}) ->
-    {_IsEmpty1, State1} = deliver_msgs_to_consumers(
+    {IsEmpty1, State1} = deliver_msgs_to_consumers(
                             fun deliver_from_queue_deliver/2,
                             is_empty(State), State),
-    case queue:len(State1#q.active_consumers) of
-        0 -> rabbit_federation_queue:stop(Q);
-        _ -> rabbit_federation_queue:go(Q)
+    case queue:len(State1#q.active_consumers) =/= 0 andalso IsEmpty1 of
+        true  -> rabbit_federation_queue:go(Q);
+        false -> rabbit_federation_queue:stop(Q)
     end,
     State1.
 
