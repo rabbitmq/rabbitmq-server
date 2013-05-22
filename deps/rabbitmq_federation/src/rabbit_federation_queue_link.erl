@@ -45,7 +45,8 @@ init({#upstream_params{params = Params}, Coordinator, Queue}) ->
     %% TODO monitor and share code with _link
     erlang:send_after(5000, self(), {start, Params}),
     {ok, #state{queue       = Queue,
-                coordinator = Coordinator}}.
+                coordinator = Coordinator,
+                credit      = {not_started, 0}}}.
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
@@ -55,6 +56,10 @@ handle_cast(go, State = #state{ch = Ch, credit = stopped, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
                                           credit       = ?CREDIT}),
     {noreply, State#state{credit = ?CREDIT}};
+
+%% TODO this hack should go away when we are supervised...
+handle_cast(go, State = #state{credit = {not_started, _}}) ->
+    {noreply, State#state{credit = {not_started, ?CREDIT}}};
 
 handle_cast(go, State) ->
     %%io:format("ignore go!~n"),
@@ -73,17 +78,18 @@ handle_cast(stop, State = #state{ch = Ch, ctag = CTag}) ->
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
-handle_info({start, Params}, State = #state{queue = #amqqueue{name = _QName}}) ->
+handle_info({start, Params}, State = #state{queue = #amqqueue{name = QName},
+                                            credit = {not_started, Credit}}) ->
     {ok, Conn} = amqp_connection:start(Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, DConn} = amqp_connection:start(#amqp_params_direct{}),
     {ok, DCh} = amqp_connection:open_channel(DConn),
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:call(Ch, #'basic.consume'{
-                            queue     = <<"upstream">>, %%QName#resource.name,
+                            queue     = QName#resource.name,
                             no_ack    = true,
                             arguments = [{<<"x-credit">>, table,
-                                          [{<<"credit">>, long,    0},
+                                          [{<<"credit">>, long, Credit},
                                            {<<"drain">>,  bool, false}]}]}),
     {noreply, State#state{conn = Conn, ch = Ch,
                           dconn = DConn, dch = DCh,
