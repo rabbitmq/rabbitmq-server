@@ -189,12 +189,14 @@ evaluate_ldap(Q, Args, User, State) ->
 
 %%--------------------------------------------------------------------
 
+with_ldap({error, _} = E, _Fun, _State) ->
+    E;
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
-with_ldap(Creds, Fun, State = #state{servers = Servers,
-                                     use_ssl = SSL,
-                                     log     = Log,
-                                     port    = Port}) ->
+with_ldap({ok, Creds}, Fun, State = #state{servers = Servers,
+                                           use_ssl = SSL,
+                                           log     = Log,
+                                           port    = Port}) ->
     Opts0 = [{ssl, SSL}, {port, Port}],
     Opts = case Log of
                network ->
@@ -285,12 +287,12 @@ fill_user_dn_pattern(Username,
     fill(UserDNPattern, [{username, Username}], State).
 
 creds(none, #state{other_bind = as_user}) ->
-    exit(as_user_no_password);
+    {error, "'other_bind' set to 'as_user' but no password supplied"};
 creds(#user{impl = #impl{user_dn = UserDN, password = Password}},
       #state{other_bind = as_user}) ->
-    {UserDN, Password};
+    {ok, {UserDN, Password}};
 creds(_, #state{other_bind = Creds}) ->
-    Creds.
+    {ok, Creds}.
 
 log(_Fmt, _Args, #state{log = false}) -> ok;
 log( Fmt,  Args, _State)              -> rabbit_log:info(Fmt ++ "~n", Args).
@@ -335,7 +337,7 @@ handle_call({login, Username}, _From, State) ->
 
 handle_call({login, Username, Password}, _From, State) ->
     ?L("CHECK: login for ~s", [Username], State),
-    R = with_ldap({fill_user_dn_pattern(Username, State), Password},
+    R = with_ldap({ok, {fill_user_dn_pattern(Username, State), Password}},
                   fun(LDAP) -> do_login(Username, Password, LDAP, State) end,
                   State),
     ?L("DECISION: login for ~s: ~p", [Username, log_result(R)], State),
