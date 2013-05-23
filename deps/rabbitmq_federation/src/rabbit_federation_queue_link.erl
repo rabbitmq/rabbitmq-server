@@ -21,57 +21,88 @@
 
 -behaviour(gen_server2).
 
--export([start_link/3, go/1, stop/1]).
+-export([start_link/1, go/0, run/1, stop/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {queue, coordinator, conn, ch, dconn, dch, credit, ctag}).
+-record(state, {queue, conn, ch, dconn, dch, credit, ctag}).
 
+%% TODO make this configurable
 -define(CREDIT, 200).
 -define(CREDIT_MORE_AT, 50).
 
-%% TODO the whole supervisor thing
-start_link(Params, Coordinator, Queue) ->
-    gen_server2:start_link(?MODULE, {Params, Coordinator, Queue},
-                           [{timeout, infinity}]).
+start_link(Args) ->
+    gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-go(Pid)   -> gen_server2:cast(Pid, go).
-stop(Pid) -> gen_server2:cast(Pid, stop).
+%% TODO on restart we will lose stopped / started state!
+run(QName)  -> cast(QName, run).
+stop(QName) -> cast(QName, stop).
+go()        -> cast(go).
+
+%%----------------------------------------------------------------------------
+%%call(QName, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- q(QName)].
+cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
+cast(QName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- q(QName)].
+
+join(Name) ->
+    pg2_fixed:create(Name),
+    ok = pg2_fixed:join(Name, self()).
+
+all() ->
+    pg2_fixed:create(rabbit_federation_queues),
+    pg2_fixed:get_members(rabbit_federation_queues).
+
+q(QName) ->
+    pg2_fixed:create({rabbit_federation_queue, QName}),
+    pg2_fixed:get_members({rabbit_federation_queue, QName}).
+
+federation_up() ->
+    proplists:is_defined(rabbitmq_federation,
+                         application:which_applications(infinity)).
 
 %%----------------------------------------------------------------------------
 
-init({#upstream_params{params = Params}, Coordinator, Queue}) ->
-    %% TODO monitor and share code with _link
-    erlang:send_after(5000, self(), {start, Params}),
-    {ok, #state{queue       = Queue,
-                coordinator = Coordinator,
-                credit      = {not_started, 0}}}.
+init({#upstream_params{params = Params}, Queue = #amqqueue{name = QName}}) ->
+    join(rabbit_federation_queues),
+    join({rabbit_federation_queue, QName}),
+    gen_server2:cast(self(), maybe_go),
+    {ok, #state{queue  = Queue,
+                credit = {not_started, 0, Params}}}.
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast(go, State = #state{ch = Ch, credit = stopped, ctag = CTag}) ->
-    %%io:format("go!~n"),
+handle_cast(maybe_go, State) ->
+    case federation_up() of
+        true  -> go(State);
+        false -> {noreply, State}
+    end;
+
+handle_cast(go, State = #state{credit = {not_started, _, _}}) ->
+    go(State);
+
+handle_cast(go, State) ->
+    {noreply, State};
+
+handle_cast(run, State = #state{ch = Ch, credit = stopped, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
                                           credit       = ?CREDIT}),
     {noreply, State#state{credit = ?CREDIT}};
 
-%% TODO this hack should go away when we are supervised...
-handle_cast(go, State = #state{credit = {not_started, _}}) ->
-    {noreply, State#state{credit = {not_started, ?CREDIT}}};
+handle_cast(run, State = #state{credit = {not_started, _, Params}}) ->
+    {noreply, State#state{credit = {not_started, ?CREDIT, Params}}};
 
-handle_cast(go, State) ->
-    %%io:format("ignore go!~n"),
-    %% Already going
+handle_cast(run, State) ->
+    %% Already started
     {noreply, State};
 
 handle_cast(stop, State = #state{credit = stopped}) ->
     %% Already stopped
     {noreply, State};
 
-handle_cast(stop, State = #state{credit = {not_started, _}}) ->
-    {noreply, State#state{credit = {not_started, 0}}};
+handle_cast(stop, State = #state{credit = {not_started, _, Params}}) ->
+    {noreply, State#state{credit = {not_started, 0, Params}}};
 
 handle_cast(stop, State = #state{ch = Ch, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
@@ -80,27 +111,6 @@ handle_cast(stop, State = #state{ch = Ch, ctag = CTag}) ->
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
-
-handle_info({start, Params}, State = #state{queue = #amqqueue{name = QName},
-                                            credit = {not_started, Credit}}) ->
-    {ok, Conn} = amqp_connection:start(Params),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    {ok, DConn} = amqp_connection:start(#amqp_params_direct{}),
-    {ok, DCh} = amqp_connection:open_channel(DConn),
-    #'basic.consume_ok'{consumer_tag = CTag} =
-        amqp_channel:call(Ch, #'basic.consume'{
-                            queue     = QName#resource.name,
-                            no_ack    = true,
-                            arguments = [{<<"x-purpose">>, longstr, <<"federation">>},
-                                         {<<"x-credit">>, table,
-                                          [{<<"credit">>, long, Credit},
-                                           {<<"drain">>,  bool, false}]}]}),
-    {noreply, State#state{conn = Conn, ch = Ch,
-                          dconn = DConn, dch = DCh,
-                          credit = case Credit of
-                                       0 -> stopped;
-                                       _ -> Credit
-                                   end, ctag = CTag}};
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
@@ -138,3 +148,27 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%----------------------------------------------------------------------------
+
+go(State = #state{queue = #amqqueue{name = QName},
+                  credit = {not_started, Credit, Params}}) ->
+    %% TODO monitor and share code with _link
+    {ok, Conn} = amqp_connection:start(Params),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {ok, DConn} = amqp_connection:start(#amqp_params_direct{}),
+    {ok, DCh} = amqp_connection:open_channel(DConn),
+    #'basic.consume_ok'{consumer_tag = CTag} =
+        amqp_channel:call(Ch, #'basic.consume'{
+                            queue     = QName#resource.name,
+                            no_ack    = true,
+                            arguments = [{<<"x-purpose">>, longstr, <<"federation">>},
+                                         {<<"x-credit">>, table,
+                                          [{<<"credit">>, long, Credit},
+                                           {<<"drain">>,  bool, false}]}]}),
+    {noreply, State#state{conn = Conn, ch = Ch,
+                          dconn = DConn, dch = DCh,
+                          credit = case Credit of
+                                       0 -> stopped;
+                                       _ -> Credit
+                                   end, ctag = CTag}}.
