@@ -70,6 +70,9 @@ handle_cast(stop, State = #state{credit = stopped}) ->
     %% Already stopped
     {noreply, State};
 
+handle_cast(stop, State = #state{credit = {not_started, _}}) ->
+    {noreply, State#state{credit = {not_started, 0}}};
+
 handle_cast(stop, State = #state{ch = Ch, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
                                           credit       = 0}),
@@ -88,7 +91,8 @@ handle_info({start, Params}, State = #state{queue = #amqqueue{name = QName},
         amqp_channel:call(Ch, #'basic.consume'{
                             queue     = QName#resource.name,
                             no_ack    = true,
-                            arguments = [{<<"x-credit">>, table,
+                            arguments = [{<<"x-purpose">>, longstr, <<"federation">>},
+                                         {<<"x-credit">>, table,
                                           [{<<"credit">>, long, Credit},
                                            {<<"drain">>,  bool, false}]}]}),
     {noreply, State#state{conn = Conn, ch = Ch,
