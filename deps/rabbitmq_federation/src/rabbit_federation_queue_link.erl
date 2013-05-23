@@ -21,13 +21,13 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, go/0, run/1, stop/1]).
+-export([start_link/1, go/0, run/1, stop/1, basic_get/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {queue, conn, ch, dconn, dch, credit, ctag}).
--record(not_started, {queue, credit, params}).
+-record(not_started, {queue, run, params}).
+-record(state, {queue, run, conn, ch, dconn, dch, credit, ctag}).
 
 %% TODO make this configurable
 -define(CREDIT, 200).
@@ -37,9 +37,10 @@ start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 %% TODO on restart we will lose stopped / started state!
-run(QName)  -> cast(QName, run).
-stop(QName) -> cast(QName, stop).
-go()        -> cast(go).
+run(QName)       -> cast(QName, run).
+stop(QName)      -> cast(QName, stop).
+basic_get(QName) -> cast(QName, basic_get).
+go()             -> cast(go).
 
 %%----------------------------------------------------------------------------
 %%call(QName, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- q(QName)].
@@ -68,7 +69,9 @@ init({#upstream_params{params = Params}, Queue = #amqqueue{name = QName}}) ->
     join(rabbit_federation_queues),
     join({rabbit_federation_queue, QName}),
     gen_server2:cast(self(), maybe_go),
-    {ok, #not_started{queue = Queue, credit = stopped, params = Params}}.
+    {ok, #not_started{queue  = Queue,
+                      run    = false,
+                      params = Params}}.
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
@@ -85,29 +88,39 @@ handle_cast(go, State = #not_started{}) ->
 handle_cast(go, State) ->
     {noreply, State};
 
-handle_cast(run, State = #state{ch = Ch, credit = stopped, ctag = CTag}) ->
+handle_cast(run, State = #state{ch = Ch, run = false, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
                                           credit       = ?CREDIT}),
-    {noreply, State#state{credit = ?CREDIT}};
+    {noreply, State#state{run = true, credit = ?CREDIT}};
 
 handle_cast(run, State = #not_started{}) ->
-    {noreply, State#not_started{credit = ?CREDIT}};
+    {noreply, State#not_started{run = true}};
 
 handle_cast(run, State) ->
     %% Already started
     {noreply, State};
 
-handle_cast(stop, State = #state{credit = stopped}) ->
+handle_cast(stop, State = #state{run = false}) ->
     %% Already stopped
     {noreply, State};
 
 handle_cast(stop, State = #not_started{}) ->
-    {noreply, State#not_started{credit = stopped}};
+    {noreply, State#not_started{run = false}};
 
 handle_cast(stop, State = #state{ch = Ch, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
                                           credit       = 0}),
-    {noreply, State#state{credit = stopped}};
+    {noreply, State#state{run = false, credit = 0}};
+
+handle_cast(basic_get, State = #not_started{}) ->
+    {noreply, State};
+
+handle_cast(basic_get, State = #state{ch = Ch, credit = Credit, ctag = CTag}) ->
+    Credit1 = Credit + 1,
+    amqp_channel:cast(
+      Ch, #'basic.credit'{consumer_tag = CTag,
+                          credit       = Credit1}),
+    {noreply, State#state{credit = Credit1}};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
@@ -117,26 +130,29 @@ handle_info(#'basic.consume_ok'{}, State) ->
 
 handle_info({#'basic.deliver'{}, Msg},
             State = #state{queue  = #amqqueue{name = QName},
-                           credit = Credit,
-                           ctag   = CTag,
-                           ch     = Ch,
-                           dch    = DCh}) ->
+                           run         = Run,
+                           credit      = Credit,
+                           ctag        = CTag,
+                           ch          = Ch,
+                           dch         = DCh}) ->
     %% TODO share with _link
     amqp_channel:cast(DCh, #'basic.publish'{exchange    = <<"">>,
                                             routing_key = QName#resource.name},
                       Msg),
     %% TODO we could also hook this up to internal credit
     %% TODO actually we could reject when 'stopped'
-    Credit1 = case Credit of
-                  stopped ->
-                      stopped;
-                  I when I < ?CREDIT_MORE_AT ->
-                      More = ?CREDIT - ?CREDIT_MORE_AT,
-                      amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
-                                                            credit       = More}),
-                      I - 1 + More;
-                  I ->
-                      I - 1
+    Credit1 = case Run of
+                  false -> Credit - 1;
+                  true  -> case Credit of
+                               I when I < ?CREDIT_MORE_AT ->
+                                   More = ?CREDIT - ?CREDIT_MORE_AT,
+                                   amqp_channel:cast(
+                                     Ch, #'basic.credit'{consumer_tag = CTag,
+                                                         credit       = More}),
+                                   I - 1 + More;
+                               I ->
+                                   I - 1
+                           end
               end,
     {noreply, State#state{credit = Credit1}};
 
@@ -151,9 +167,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-go(#not_started{credit = Credit,
-                params = Params,
-                queue  = Queue = #amqqueue{name = QName}}) ->
+go(#not_started{run       = Run,
+                params    = Params,
+                queue     = Queue = #amqqueue{name = QName}}) ->
+    Credit = case Run of
+                 true  -> ?CREDIT;
+                 false -> 0
+             end,
     %% TODO monitor and share code with _link
     {ok, Conn} = amqp_connection:start(Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -165,12 +185,13 @@ go(#not_started{credit = Credit,
                             no_ack    = true,
                             arguments = [{<<"x-purpose">>, longstr, <<"federation">>},
                                          {<<"x-credit">>, table,
-                                          [{<<"credit">>, long, c(Credit)},
+                                          [{<<"credit">>, long, Credit},
                                            {<<"drain">>,  bool, false}]}]}),
-    {noreply, #state{queue = Queue,
-                     conn = Conn, ch = Ch,
-                     dconn = DConn, dch = DCh,
-                     credit = Credit, ctag = CTag}}.
-
-c(stopped) -> 0;
-c(Credit)  -> Credit.
+    {noreply, #state{queue     = Queue,
+                     run       = Run,
+                     conn      = Conn,
+                     ch        = Ch,
+                     dconn     = DConn,
+                     dch       = DCh,
+                     credit    = Credit,
+                     ctag      = CTag}}.
