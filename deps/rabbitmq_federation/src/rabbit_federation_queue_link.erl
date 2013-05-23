@@ -27,6 +27,7 @@
          terminate/2, code_change/3]).
 
 -record(state, {queue, conn, ch, dconn, dch, credit, ctag}).
+-record(not_started, {queue, credit, params}).
 
 %% TODO make this configurable
 -define(CREDIT, 200).
@@ -67,8 +68,7 @@ init({#upstream_params{params = Params}, Queue = #amqqueue{name = QName}}) ->
     join(rabbit_federation_queues),
     join({rabbit_federation_queue, QName}),
     gen_server2:cast(self(), maybe_go),
-    {ok, #state{queue  = Queue,
-                credit = {not_started, 0, Params}}}.
+    {ok, #not_started{queue = Queue, credit = stopped, params = Params}}.
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
@@ -79,7 +79,7 @@ handle_cast(maybe_go, State) ->
         false -> {noreply, State}
     end;
 
-handle_cast(go, State = #state{credit = {not_started, _, _}}) ->
+handle_cast(go, State = #not_started{}) ->
     go(State);
 
 handle_cast(go, State) ->
@@ -90,8 +90,8 @@ handle_cast(run, State = #state{ch = Ch, credit = stopped, ctag = CTag}) ->
                                           credit       = ?CREDIT}),
     {noreply, State#state{credit = ?CREDIT}};
 
-handle_cast(run, State = #state{credit = {not_started, _, Params}}) ->
-    {noreply, State#state{credit = {not_started, ?CREDIT, Params}}};
+handle_cast(run, State = #not_started{}) ->
+    {noreply, State#not_started{credit = ?CREDIT}};
 
 handle_cast(run, State) ->
     %% Already started
@@ -101,8 +101,8 @@ handle_cast(stop, State = #state{credit = stopped}) ->
     %% Already stopped
     {noreply, State};
 
-handle_cast(stop, State = #state{credit = {not_started, _, Params}}) ->
-    {noreply, State#state{credit = {not_started, 0, Params}}};
+handle_cast(stop, State = #not_started{}) ->
+    {noreply, State#not_started{credit = stopped}};
 
 handle_cast(stop, State = #state{ch = Ch, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
@@ -151,8 +151,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-go(State = #state{queue = #amqqueue{name = QName},
-                  credit = {not_started, Credit, Params}}) ->
+go(#not_started{credit = Credit,
+                params = Params,
+                queue  = Queue = #amqqueue{name = QName}}) ->
     %% TODO monitor and share code with _link
     {ok, Conn} = amqp_connection:start(Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -164,11 +165,12 @@ go(State = #state{queue = #amqqueue{name = QName},
                             no_ack    = true,
                             arguments = [{<<"x-purpose">>, longstr, <<"federation">>},
                                          {<<"x-credit">>, table,
-                                          [{<<"credit">>, long, Credit},
+                                          [{<<"credit">>, long, c(Credit)},
                                            {<<"drain">>,  bool, false}]}]}),
-    {noreply, State#state{conn = Conn, ch = Ch,
-                          dconn = DConn, dch = DCh,
-                          credit = case Credit of
-                                       0 -> stopped;
-                                       _ -> Credit
-                                   end, ctag = CTag}}.
+    {noreply, #state{queue = Queue,
+                     conn = Conn, ch = Ch,
+                     dconn = DConn, dch = DCh,
+                     credit = Credit, ctag = CTag}}.
+
+c(stopped) -> 0;
+c(Credit)  -> Credit.
