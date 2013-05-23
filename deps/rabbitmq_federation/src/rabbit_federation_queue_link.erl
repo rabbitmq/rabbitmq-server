@@ -93,7 +93,10 @@ handle_info({start, Params}, State = #state{queue = #amqqueue{name = QName},
                                            {<<"drain">>,  bool, false}]}]}),
     {noreply, State#state{conn = Conn, ch = Ch,
                           dconn = DConn, dch = DCh,
-                          credit = stopped, ctag = CTag}};
+                          credit = case Credit of
+                                       0 -> stopped;
+                                       _ -> Credit
+                                   end, ctag = CTag}};
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
