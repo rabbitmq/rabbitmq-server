@@ -55,7 +55,7 @@
             status
            }).
 
--record(consumer, {tag, ack_required}).
+-record(consumer, {tag, ack_required, args}).
 
 %% These are held in our process dictionary
 -record(cr, {ch_pid,
@@ -527,11 +527,21 @@ run_message_queue(State = #q{q = Q}) ->
     {IsEmpty1, State1} = deliver_msgs_to_consumers(
                             fun deliver_from_queue_deliver/2,
                             is_empty(State), State),
-    case queue:len(State1#q.active_consumers) =/= 0 andalso IsEmpty1 of
+    case IsEmpty1 andalso active_unfederated(State1#q.active_consumers) of
         true  -> rabbit_federation_queue:go(Q);
         false -> rabbit_federation_queue:stop(Q)
     end,
     State1.
+
+active_unfederated(Cs) ->
+    case queue:out(Cs) of
+        {empty, _} -> false;
+        {{value, {_Pid, #consumer{args = Args}}}, Cs1} ->
+            case rabbit_misc:table_lookup(Args, <<"x-purpose">>) of
+                {longstr, <<"federation">>} -> active_unfederated(Cs1);
+                _                           -> true
+            end
+    end.
 
 attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
@@ -1118,7 +1128,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg},
+             ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg},
             _From, State = #q{exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
         in_use ->
@@ -1142,7 +1152,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 false -> ok
             end,
             Consumer = #consumer{tag = ConsumerTag,
-                                 ack_required = not NoAck},
+                                 ack_required = not NoAck,
+                                 args         = OtherArgs},
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
                                    true             -> Holder
                                 end,
