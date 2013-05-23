@@ -528,7 +528,7 @@ run_message_queue(State = #q{q = Q}) ->
                             fun deliver_from_queue_deliver/2,
                             is_empty(State), State),
     case IsEmpty1 andalso active_unfederated(State1#q.active_consumers) of
-        true  -> rabbit_federation_queue:go(Q);
+        true  -> rabbit_federation_queue:run(Q);
         false -> rabbit_federation_queue:stop(Q)
     end,
     State1.
