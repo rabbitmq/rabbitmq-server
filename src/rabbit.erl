@@ -393,7 +393,7 @@ await_startup() ->
 
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
-          {running_applications, application:which_applications(infinity)},
+          {running_applications, application:which_applications()},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()}],
