@@ -1,3 +1,9 @@
+rabbitmq-server (3.1.1-1) unstable; urgency=low
+
+  * Test release
+
+ -- Tim Watson <tim@rabbitmq.com>  Mon, 20 May 2013 16:21:20 +0100
+
 rabbitmq-server (3.1.0-1) unstable; urgency=low
 
   * New Upstream Release
