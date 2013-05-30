@@ -34,13 +34,15 @@
 %% default values are used.  If the hostname is zero-length, an
 %% #amqp_params_direct{} record is returned; otherwise, an
 %% #amqp_params_network{} record is returned.  Extra parameters may be
-%% specified via the query string (e.g. "?heartbeat=5"). In case of
-%% failure, an {error, {Info, Uri}} tuple is returned.
+%% specified via the query string
+%% (e.g. "?heartbeat=5&auth_mechanism=external"). In case of failure,
+%% an {error, {Info, Uri}} tuple is returned.
 %%
 %% The extra parameters that may be specified are channel_max,
-%% frame_max, and heartbeat.  The extra parameters that may be
-%% specified for an SSL connection are cacertfile, certfile, keyfile,
-%% verify, and fail_if_no_peer_cert.
+%% frame_max, heartbeat and auth_mechanism (the latter can appear more
+%% than once).  The extra parameters that may be specified for an SSL
+%% connection are cacertfile, certfile, keyfile, verify, and
+%% fail_if_no_peer_cert.
 parse(Uri) -> parse(Uri, <<"/">>).
 
 parse(Uri, DefaultVHost) ->
