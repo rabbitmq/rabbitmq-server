@@ -125,14 +125,14 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
             ErrorFun(E);
         {ok, _, All} ->
             try
-                for_all(parameters,  All, fun add_parameter/1),
-                for_all(policies,    All, fun add_policy/1),
                 for_all(users,       All, fun add_user/1),
                 for_all(vhosts,      All, fun add_vhost/1),
                 for_all(permissions, All, fun add_permission/1),
                 for_all(queues,      All, fun add_queue/1),
                 for_all(exchanges,   All, fun add_exchange/1),
                 for_all(bindings,    All, fun add_binding/1),
+                for_all(parameters,  All, fun add_parameter/1),
+                for_all(policies,    All, fun add_policy/1),
                 SuccessFun()
             catch {error, E} -> ErrorFun(E);
                   exit:E     -> ErrorFun(E)
