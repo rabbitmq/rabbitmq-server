@@ -59,11 +59,11 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(
       [{rabbit_version, list_to_binary(Vsn)}] ++
       filter(
-        [{parameters,  rabbit_mgmt_wm_parameters:basic(ReqData)},
-         {policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
-         {users,       rabbit_mgmt_wm_users:users()},
+        [{users,       rabbit_mgmt_wm_users:users()},
          {vhosts,      rabbit_mgmt_wm_vhosts:basic()},
          {permissions, rabbit_mgmt_wm_permissions:permissions()},
+         {parameters,  rabbit_mgmt_wm_parameters:basic(ReqData)},
+         {policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
          {queues,      Qs},
          {exchanges,   Xs},
          {bindings,    Bs}]),
@@ -128,11 +128,11 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
                 for_all(users,       All, fun add_user/1),
                 for_all(vhosts,      All, fun add_vhost/1),
                 for_all(permissions, All, fun add_permission/1),
+                for_all(parameters,  All, fun add_parameter/1),
+                for_all(policies,    All, fun add_policy/1),
                 for_all(queues,      All, fun add_queue/1),
                 for_all(exchanges,   All, fun add_exchange/1),
                 for_all(bindings,    All, fun add_binding/1),
-                for_all(parameters,  All, fun add_parameter/1),
-                for_all(policies,    All, fun add_policy/1),
                 SuccessFun()
             catch {error, E} -> ErrorFun(E);
                   exit:E     -> ErrorFun(E)
@@ -169,11 +169,11 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{parameters,  [vhost, component, name, value]},
-     {policies,    [vhost, name, pattern, definition, priority]},
-     {users,       [name, password_hash, tags]},
+    [{users,       [name, password_hash, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
+     {parameters,  [vhost, component, name, value]},
+     {policies,    [vhost, name, pattern, definition, priority]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
      {exchanges,   [name, vhost, type, durable, auto_delete, internal,
                     arguments]},
