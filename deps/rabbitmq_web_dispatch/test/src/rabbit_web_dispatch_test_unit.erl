@@ -19,22 +19,18 @@
 -include_lib("eunit/include/eunit.hrl").
 
 relativise_test() ->
-    ?assertEqual("baz",
-                 rabbit_web_dispatch_util:relativise("/foo/bar/bash",
-                                                 "/foo/bar/baz")),
-    ?assertEqual("../bax/baz",
-                 rabbit_web_dispatch_util:relativise("/foo/bar/bash",
-                                                 "/foo/bax/baz")),
-    ?assertEqual("../bax/baz",
-                 rabbit_web_dispatch_util:relativise("/bar/bash",
-                                                 "/bax/baz")),
-    ?assertEqual("..",
-                 rabbit_web_dispatch_util:relativise("/foo/bar/bash",
-                                                 "/foo/bar")),
-    ?assertEqual("../..",
-                 rabbit_web_dispatch_util:relativise("/foo/bar/bash",
-                                                 "/foo")),
-    ?assertEqual("bar/baz",
-                 rabbit_web_dispatch_util:relativise("/foo/bar",
-                                                 "/foo/bar/baz")),
-    ?assertEqual("foo", rabbit_web_dispatch_util:relativise("/", "/foo")).
+    Rel = fun rabbit_web_dispatch_util:relativise/2,
+    ?assertEqual("baz",        Rel("/foo/bar/bash", "/foo/bar/baz")),
+    ?assertEqual("../bax/baz", Rel("/foo/bar/bash", "/foo/bax/baz")),
+    ?assertEqual("../bax/baz", Rel("/bar/bash",     "/bax/baz")),
+    ?assertEqual("..",         Rel("/foo/bar/bash", "/foo/bar")),
+    ?assertEqual("../..",      Rel("/foo/bar/bash", "/foo")),
+    ?assertEqual("bar/baz",    Rel("/foo/bar",      "/foo/bar/baz")),
+    ?assertEqual("foo",        Rel("/",             "/foo")).
+
+unrelativise_test() ->
+    Un = fun rabbit_web_dispatch_util:unrelativise/2,
+    ?assertEqual("/foo/bar", Un("/foo/foo", "bar")),
+    ?assertEqual("/foo/bar", Un("/foo/foo", "./bar")),
+    ?assertEqual("bar",      Un("foo", "bar")),
+    ?assertEqual("/baz/bar", Un("/foo/foo", "../baz/bar")).

@@ -17,7 +17,7 @@
 -module(rabbit_web_dispatch_util).
 
 -export([parse_auth_header/1]).
--export([relativise/2]).
+-export([relativise/2, unrelativise/2]).
 
 parse_auth_header(Header) ->
     case Header of
@@ -47,3 +47,17 @@ relativise0([_|From], To) ->
     lists:duplicate(length(From), "..") ++ To;
 relativise0([], To) ->
     To.
+
+unrelativise(F, "/"   ++ T) -> "/" ++ T;
+unrelativise(F, "./"  ++ T) -> unrelativise(F, T);
+unrelativise(F, "../" ++ T) -> unrelativise(strip_tail(F), T);
+unrelativise(F, T)          -> case string:str(F, "/") of
+                                   0 -> T;
+                                   _ -> strip_tail(F) ++ "/" ++ T
+                               end.
+
+strip_tail("") -> exit(not_enough_to_strip);
+strip_tail(S)  -> case string:rstr(S, "/") of
+                      0 -> "";
+                      I -> string:left(S, I - 1)
+                  end.
