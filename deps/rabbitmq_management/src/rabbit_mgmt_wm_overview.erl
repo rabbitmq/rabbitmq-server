@@ -70,7 +70,7 @@ stats_db_node() ->
     end.
 
 version(App) ->
-    {_, _, V} = lists:keyfind(App, 1, application:which_applications()),
+    {ok, V} = application:get_key(App, vsn),
     list_to_binary(V).
 
 listeners() ->
