@@ -561,27 +561,46 @@ unicode_test() ->
     ok.
 
 defs(Key, URI, CreateMethod, Args) ->
+    defs(Key, URI, CreateMethod, Args,
+         fun(URI2) -> http_delete(URI2, ?NO_CONTENT) end).
+
+defs_v(Key, URI, CreateMethod, Args) ->
+    Rep1 = fun (S, S2) -> re:replace(S, "<vhost>", S2, [{return, list}]) end,
+    Rep2 = fun (L, V2) -> lists:keymap(fun (vhost) -> V2;
+                                           (V)     -> V end, 2, L) end,
+    %% Test against default vhost
+    defs(Key, Rep1(URI, "%2f"), CreateMethod, Rep2(Args, <<"/">>)),
+
+    %% Test against new vhost
+    http_put("/vhosts/test", [], ?NO_CONTENT),
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put("/permissions/test/guest", PermArgs, ?NO_CONTENT),
+    defs(Key, Rep1(URI, "test"), CreateMethod, Rep2(Args, <<"test">>),
+         fun(URI2) -> http_delete(URI2, ?NO_CONTENT),
+                      http_delete("/vhosts/test", ?NO_CONTENT) end).
+
+defs(Key, URI, CreateMethod, Args, DeleteFun) ->
     %% Create the item
     URI2 = case CreateMethod of
                put   -> http_put(URI, Args, ?NO_CONTENT),
                         URI;
                post  -> Headers = http_post(URI, Args, ?CREATED),
-                        "../../../.." ++ Loc = pget("location", Headers),
-                        "/" ++ atom_to_list(Key) ++ Loc
+                        rabbit_web_dispatch_util:unrelativise(
+                          URI, pget("location", Headers))
            end,
     %% Make sure it ends up in definitions
     Definitions = http_get("/definitions", ?OK),
     true = lists:any(fun(I) -> test_item(Args, I) end, pget(Key, Definitions)),
 
     %% Delete it
-    http_delete(URI2, ?NO_CONTENT),
+    DeleteFun(URI2),
 
     %% Post the definitions back, it should get recreated in correct form
     http_post("/definitions", Definitions, ?CREATED),
     assert_item(Args, http_get(URI2, ?OK)),
 
     %% And delete it again
-    http_delete(URI2, ?NO_CONTENT),
+    DeleteFun(URI2),
 
     ok.
 
@@ -589,25 +608,25 @@ definitions_test() ->
     rabbit_runtime_parameters_test:register(),
     rabbit_runtime_parameters_test:register_policy_validator(),
 
-    defs(queues, "/queues/%2f/my-queue", put,
-         [{name,    <<"my-queue">>},
-          {durable, true}]),
-    defs(exchanges, "/exchanges/%2f/my-exchange", put,
-         [{name, <<"my-exchange">>},
-          {type, <<"direct">>}]),
-    defs(bindings, "/bindings/%2f/e/amq.direct/e/amq.fanout", post,
-         [{routing_key, <<"routing">>}, {arguments, []}]),
-    defs(policies, "/policies/%2f/my-policy", put,
-         [{vhost,      <<"/">>},
-          {name,       <<"my-policy">>},
-          {pattern,    <<".*">>},
-          {definition, [{testpos, [1, 2, 3]}]},
-          {priority,   1}]),
-    defs(parameters, "/parameters/test/%2f/good", put,
-         [{vhost,     <<"/">>},
-          {component, <<"test">>},
-          {name,      <<"good">>},
-          {value,     <<"ignore">>}]),
+    defs_v(queues, "/queues/<vhost>/my-queue", put,
+           [{name,    <<"my-queue">>},
+            {durable, true}]),
+    defs_v(exchanges, "/exchanges/<vhost>/my-exchange", put,
+           [{name, <<"my-exchange">>},
+            {type, <<"direct">>}]),
+    defs_v(bindings, "/bindings/<vhost>/e/amq.direct/e/amq.fanout", post,
+           [{routing_key, <<"routing">>}, {arguments, []}]),
+    defs_v(policies, "/policies/<vhost>/my-policy", put,
+           [{vhost,      vhost},
+            {name,       <<"my-policy">>},
+            {pattern,    <<".*">>},
+            {definition, [{testpos, [1, 2, 3]}]},
+            {priority,   1}]),
+    defs_v(parameters, "/parameters/test/<vhost>/good", put,
+           [{vhost,     vhost},
+            {component, <<"test">>},
+            {name,      <<"good">>},
+            {value,     <<"ignore">>}]),
     defs(users, "/users/myuser", put,
          [{name,          <<"myuser">>},
           {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
