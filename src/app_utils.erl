@@ -93,7 +93,7 @@ app_dependency_order(RootApps, StripUnreachable) ->
 %% Private API
 
 wait_for_application(Application) ->
-    case lists:keymember(Application, 1, application:which_applications()) of
+    case lists:keymember(Application, 1, rabbit_misc:which_applications()) of
          true  -> ok;
          false -> timer:sleep(1000),
                   wait_for_application(Application)
