@@ -178,7 +178,7 @@ i(auth_mechanisms, _State) ->
       fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
 i(applications, _State) ->
     [format_application(A) ||
-        A <- lists:keysort(1, application:which_applications())].
+        A <- lists:keysort(1, rabbit_misc:which_applications())].
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
