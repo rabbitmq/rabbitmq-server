@@ -194,13 +194,12 @@ HELP = {
 <dt><code>ha-mode</code></dt>\
   <dd>\
     One of <code>all</code>, <code>exactly</code>\
-    or <code>nodes</code> (the latter currently not supported by\
-    web UI).\
+    or <code>nodes</code>.\
   </dd>\
   <dt><code>ha-params</code></dt>\
   <dd>\
     Absent if <code>ha-mode</code> is <code>all</code>, a number\
-    if <code>ha-mode</code> is <code>exactly</code>, or an array\
+    if <code>ha-mode</code> is <code>exactly</code>, or a list\
     of strings if <code>ha-mode</code> is <code>nodes</code>.\
   </dd>\
   <dt><code>ha-sync-mode</code></dt>\
