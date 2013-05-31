@@ -393,7 +393,7 @@ await_startup() ->
 
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
-          {running_applications, application:which_applications(infinity)},
+          {running_applications, catch application:which_applications()},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()}],
@@ -421,7 +421,7 @@ status() ->
 
 is_running() -> is_running(node()).
 
-is_running(Node) -> rabbit_nodes:is_running(Node, rabbit).
+is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
 
 environment() ->
     lists:keysort(1, [P || P = {K, _} <- application:get_all_env(rabbit),
