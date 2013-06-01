@@ -76,21 +76,23 @@ connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
     end;
 
 connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
-    connect0(check_user_pass_login, Username, Password, VHost, Protocol, Pid,
-             Infos);
+    connect0(fun () -> rabbit_access_control:check_user_pass_login(
+                         Username, Password) end,
+             VHost, Protocol, Pid, Infos);
 
 connect(Username, VHost, Protocol, Pid, Infos) ->
-    connect0(check_user_login, Username, [], VHost, Protocol, Pid, Infos).
+    connect0(fun () -> rabbit_access_control:check_user_login(
+                         Username, []) end,
+             VHost, Protocol, Pid, Infos).
 
-connect0(FunctionName, U, P, VHost, Protocol, Pid, Infos) ->
+connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
     case rabbit:is_running() of
-        true  ->
-            case rabbit_access_control:FunctionName(U, P) of
-                {ok, User}        -> connect(User, VHost, Protocol, Pid, Infos);
-                {refused, _M, _A} -> {error, auth_failure}
-            end;
-        false ->
-            {error, broker_not_found_on_node}
+        true  -> case AuthFun() of
+                     {ok, User}        -> connect(User, VHost, Protocol, Pid,
+                                                  Infos);
+                     {refused, _M, _A} -> {error, auth_failure}
+                 end;
+        false -> {error, broker_not_found_on_node}
     end.
 
 
