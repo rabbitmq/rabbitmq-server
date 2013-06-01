@@ -35,8 +35,10 @@
                      {rabbit_types:username(), rabbit_types:password()}),
                     rabbit_types:vhost(), rabbit_types:protocol(), pid(),
                     rabbit_event:event_props()) ->
-                        {'ok', {rabbit_types:user(),
-                                rabbit_framing:amqp_table()}}).
+                        rabbit_types:ok_or_error2(
+                          {rabbit_types:user(), rabbit_framing:amqp_table()},
+                          'broker_not_found_on_node' | 'auth_failure' |
+                          'access_refused')).
 -spec(start_channel/9 ::
         (rabbit_channel:channel_number(), pid(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
