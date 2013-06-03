@@ -734,7 +734,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                no_ack       = NoAck,
                                exclusive    = ExclusiveConsume,
                                nowait       = NoWait,
-                               arguments    = Arguments},
+                               arguments    = Args},
               _, State = #ch{conn_pid          = ConnPid,
                              limiter           = Limiter,
                              consumer_mapping  = ConsumerMapping}) ->
@@ -755,12 +755,13 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
             case rabbit_amqqueue:with_exclusive_access_or_die(
                    QueueName, ConnPid,
                    fun (Q) ->
+                           {CreditArgs, OtherArgs} = parse_credit_args(Args),
                            {rabbit_amqqueue:basic_consume(
                               Q, NoAck, self(),
                               rabbit_limiter:pid(Limiter),
                               rabbit_limiter:is_active(Limiter),
                               ActualConsumerTag, ExclusiveConsume,
-                              parse_credit_args(Arguments),
+                              CreditArgs, OtherArgs,
                               ok_msg(NoWait, #'basic.consume_ok'{
                                        consumer_tag = ActualConsumerTag})),
                             Q}
@@ -1218,12 +1219,12 @@ handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
 
 parse_credit_args(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-credit">>) of
-        {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
-                            rabbit_misc:table_lookup(T, <<"drain">>)} of
-                          {{long, Credit}, {boolean, Drain}} -> {Credit, Drain};
-                          _                                  -> none
-                      end;
-        undefined  -> none
+        {table, T} -> {case {rabbit_misc:table_lookup(T, <<"credit">>),
+                             rabbit_misc:table_lookup(T, <<"drain">>)} of
+                           {{long, Credit}, {bool, Drain}} -> {Credit, Drain};
+                           _                               -> none
+                       end, lists:keydelete(<<"x-credit">>, 1, Arguments)};
+        undefined  -> {none, Arguments}
     end.
 
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
