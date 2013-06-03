@@ -291,6 +291,7 @@ store_queue(Q = #amqqueue{durable = false}) ->
 
 policy_changed(Q1, Q2) ->
     rabbit_mirror_queue_misc:update_mirrors(Q1, Q2),
+    rabbit_federation_queue:policy_changed(Q1, Q2),
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
     wake_up(Q1).
