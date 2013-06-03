@@ -29,17 +29,17 @@
 
 %%----------------------------------------------------------------------------
 
-set_for(X) -> rabbit_policy:get(<<"federation-upstream-set">>, X).
+set_for(XorQ) -> rabbit_policy:get(<<"federation-upstream-set">>, XorQ).
 
-for(X) ->
-    case set_for(X) of
-        {ok, UpstreamSet}  -> from_set(UpstreamSet, X);
+for(XorQ) ->
+    case set_for(XorQ) of
+        {ok, UpstreamSet}  -> from_set(UpstreamSet, XorQ);
         {error, not_found} -> []
     end.
 
-for(X, UpstreamName) ->
-    case set_for(X) of
-        {ok, UpstreamSet}  -> from_set(UpstreamSet, X, UpstreamName);
+for(XorQ, UpstreamName) ->
+    case set_for(XorQ) of
+        {ok, UpstreamSet}  -> from_set(UpstreamSet, XorQ, UpstreamName);
         {error, not_found} -> []
     end.
 
@@ -78,42 +78,43 @@ to_params(#upstream{uris = URIs, exchange_name = XNameBin}, X) ->
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
-from_set(SetName, X, UpstName) ->
-    rabbit_federation_util:find_upstreams(UpstName, from_set(SetName, X)).
+from_set(SetName, XorQ, UpstName) ->
+    rabbit_federation_util:find_upstreams(UpstName, from_set(SetName, XorQ)).
 
-from_set(<<"all">>, X) ->
+from_set(<<"all">>, XorQ) ->
     Connections = rabbit_runtime_parameters:list(
-                    vhost(X), <<"federation-upstream">>),
+                    vhost(XorQ), <<"federation-upstream">>),
     Set = [[{<<"upstream">>, pget(name, C)}] || C <- Connections],
-    from_set_contents(Set, X);
+    from_set_contents(Set, XorQ);
 
-from_set(SetName, X) ->
+from_set(SetName, XorQ) ->
     case rabbit_runtime_parameters:value(
-           vhost(X), <<"federation-upstream-set">>, SetName) of
+           vhost(XorQ), <<"federation-upstream-set">>, SetName) of
         not_found -> [];
-        Set       -> from_set_contents(Set, X)
+        Set       -> from_set_contents(Set, XorQ)
     end.
 
-from_set_contents(Set, X) ->
-    Results = [from_set_element(P, X) || P <- Set],
+from_set_contents(Set, XorQ) ->
+    Results = [from_set_element(P, XorQ) || P <- Set],
     [R || R <- Results, R =/= not_found].
 
-from_set_element(UpstreamSetElem, X) ->
+from_set_element(UpstreamSetElem, XorQ) ->
     Name = bget(upstream, UpstreamSetElem, []),
     case rabbit_runtime_parameters:value(
-           vhost(X), <<"federation-upstream">>, Name) of
+           vhost(XorQ), <<"federation-upstream">>, Name) of
         not_found  -> not_found;
-        Upstream   -> from_props_connection(UpstreamSetElem, Name, Upstream, X)
+        Upstream   -> from_props_connection(
+                        UpstreamSetElem, Name, Upstream, XorQ)
     end.
 
-from_props_connection(U, Name, C, X) ->
+from_props_connection(U, Name, C, XorQ) ->
     URIParam = bget(uri, U, C),
     URIs = case URIParam of
                B when is_binary(B) -> [B];
                L when is_list(L)   -> L
            end,
     #upstream{uris            = URIs,
-              exchange_name   = bget(exchange,          U, C, name(X)),
+              exchange_name   = bget(exchange,          U, C, name(XorQ)),
               prefetch_count  = bget('prefetch-count',  U, C, ?DEFAULT_PREFETCH),
               reconnect_delay = bget('reconnect-delay', U, C, 1),
               max_hops        = bget('max-hops',        U, C, 1),

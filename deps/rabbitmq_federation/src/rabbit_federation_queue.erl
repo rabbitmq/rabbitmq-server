@@ -19,11 +19,34 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([start_link/1, run/1, stop/1, basic_get/1]).
+-export([maybe_start/1, terminate/1, policy_changed/2]).
+-export([run/1, stop/1, basic_get/1]).
 
-%% TODO Is it worth keeping this as a facade?
-start_link(Q) -> rabbit_federation_queue_link_sup:start_link(Q).
+maybe_start(Q) ->
+    case federate(Q) of
+        true  -> rabbit_federation_queue_link_sup_sup:start_child(Q);
+        false -> ok
+    end.
+
+terminate(Q) ->
+    %% TODO naming of stop vs terminate not consistent with exchange
+    rabbit_federation_queue_link_sup_sup:stop_child(Q).
+
+policy_changed(Q1 = #amqqueue{name = QName}, Q2) ->
+    case {federate(Q1), federate(Q2)} of
+        {false, false} -> ok;
+        {false, true}  -> maybe_start(Q2);
+        {true,  false} -> terminate(QName);
+        {true,  true}  -> ok
+    end.
 
 run(#amqqueue{name = QName})       -> rabbit_federation_queue_link:run(QName).
 stop(#amqqueue{name = QName})      -> rabbit_federation_queue_link:stop(QName).
 basic_get(#amqqueue{name = QName}) -> rabbit_federation_queue_link:basic_get(QName).
+
+%% TODO dedup from _exchange (?)
+federate(Q) ->
+    case rabbit_federation_upstream:set_for(Q) of
+        {ok, _}    -> true;
+        {error, _} -> false
+    end.

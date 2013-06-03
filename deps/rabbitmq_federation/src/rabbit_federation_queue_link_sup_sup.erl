@@ -14,15 +14,15 @@
 %% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_link_sup_sup).
+-module(rabbit_federation_queue_link_sup_sup).
 
--behaviour(mirrored_supervisor).
+-behaviour(supervisor2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -define(SUPERVISOR, ?MODULE).
 
-%% Supervises the upstream links for all exchanges (but not queues). We need
-%% different handling here since exchanges want a mirrored sup.
+%% Supervises the upstream links for all queues (but not exchanges). We need
+%% different handling here since queues do not want a mirrored sup.
 
 -export([start_link/0, start_child/1, adjust/1, stop_child/1]).
 -export([init/1]).
@@ -30,15 +30,14 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    mirrored_supervisor:start_link({local, ?SUPERVISOR},
-                                   ?SUPERVISOR, ?MODULE, []).
+    supervisor2:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 %% Note that the next supervisor down, rabbit_federation_link_sup, is common
 %% between exchanges and queues.
-start_child(X) ->
-    case mirrored_supervisor:start_child(
+start_child(Q) ->
+    case supervisor2:start_child(
            ?SUPERVISOR,
-           {id(X), {rabbit_federation_link_sup, start_link, [X]},
+           {id(Q), {rabbit_federation_link_sup, start_link, [Q]},
             transient, ?MAX_WAIT, supervisor,
             [rabbit_federation_link_sup]}) of
         {ok, _Pid}             -> ok;
@@ -47,17 +46,17 @@ start_child(X) ->
     end.
 
 adjust(Reason) ->
-    [rabbit_federation_link_sup:adjust(Pid, X, Reason) ||
-        {X, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+    [rabbit_federation_link_sup:adjust(Pid, Q, Reason) ||
+        {Q, Pid, _, _} <- supervisor2:which_children(?SUPERVISOR)],
     ok.
 
-stop_child(X) ->
-    ok = mirrored_supervisor:terminate_child(?SUPERVISOR, id(X)),
-    ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(X)).
+stop_child(Q) ->
+    ok = supervisor2:terminate_child(?SUPERVISOR, id(Q)),
+    ok = supervisor2:delete_child(?SUPERVISOR, id(Q)).
 
 %%----------------------------------------------------------------------------
 
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
-id(X = #exchange{}) -> X#exchange{scratches = undefined}.
+id(Q = #amqqueue{}) -> Q.
