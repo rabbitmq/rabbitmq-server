@@ -30,15 +30,17 @@ maybe_start(Q) ->
 
 terminate(Q) ->
     %% TODO naming of stop vs terminate not consistent with exchange
-    rabbit_federation_queue_link_sup_sup:stop_child(Q).
-
-policy_changed(Q1 = #amqqueue{name = QName}, Q2) ->
-    case {federate(Q1), federate(Q2)} of
-        {false, false} -> ok;
-        {false, true}  -> maybe_start(Q2);
-        {true,  false} -> terminate(QName);
-        {true,  true}  -> ok
+    case federate(Q) of
+        true  -> rabbit_federation_queue_link_sup_sup:stop_child(Q);
+        false -> ok
     end.
+
+%% TODO serious clustering bug here - policy_changed/2 gets invoked on
+%% the node against which rabbitmqctl was run. Which may not be the
+%% node the master + hence link processes are running on.
+policy_changed(Q1, Q2) ->
+    terminate(Q1),
+    maybe_start(Q2).
 
 run(#amqqueue{name = QName})       -> rabbit_federation_queue_link:run(QName).
 stop(#amqqueue{name = QName})      -> rabbit_federation_queue_link:stop(QName).
