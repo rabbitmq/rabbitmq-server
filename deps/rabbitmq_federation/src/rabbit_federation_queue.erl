@@ -20,6 +20,7 @@
 -include("rabbit_federation.hrl").
 
 -export([maybe_start/1, terminate/1, policy_changed/2]).
+-export([policy_changed_local/2]).
 -export([run/1, stop/1, basic_get/1]).
 
 maybe_start(Q) ->
@@ -35,10 +36,16 @@ terminate(Q) ->
         false -> ok
     end.
 
-%% TODO serious clustering bug here - policy_changed/2 gets invoked on
-%% the node against which rabbitmqctl was run. Which may not be the
-%% node the master + hence link processes are running on.
-policy_changed(Q1, Q2) ->
+policy_changed(Q1 = #amqqueue{name = QName}, Q2) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, #amqqueue{pid = QPid}} ->
+            rpc:call(node(QPid), rabbit_federation_queue,
+                     policy_changed_local, [Q1, Q2]);
+        {error, not_found} ->
+            ok
+    end.
+
+policy_changed_local(Q1, Q2) ->
     terminate(Q1),
     maybe_start(Q2).
 
