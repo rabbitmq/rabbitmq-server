@@ -912,9 +912,13 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
                 HeadersFun1(rabbit_basic:prepend_table_header(<<"x-death">>,
                                                               Info, Headers))
         end,
-    Content1 = rabbit_basic:map_headers(HeadersFun2, Content),
+    Content1 = #content{properties = Props} =
+        rabbit_basic:map_headers(HeadersFun2, Content),
+    PropsNoExpiration = Props#'P_basic'{expiration = undefined},
+    ContentNoExpiration = Content1#content{properties = PropsNoExpiration},
     Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
-                      routing_keys = DeathRoutingKeys, content = Content1}.
+                      routing_keys = DeathRoutingKeys,
+                      content = ContentNoExpiration}.
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 
