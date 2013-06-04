@@ -358,7 +358,7 @@ binding_op(UpdateFun, Cmd, B = #binding{args = Args},
 bind_cmd(Type, #binding{key = Key, args = Args},
          State = #state{internal_exchange = IntXNameBin,
                         upstream_params   = UpstreamParams}) ->
-    #upstream_params{exchange = X} = UpstreamParams,
+    #upstream_params{x_or_q = X} = UpstreamParams,
     case update_binding(Args, State) of
         ignore  -> ignore;
         NewArgs -> bind_cmd0(Type, name(X), IntXNameBin, Key, NewArgs)
@@ -564,8 +564,8 @@ consume_from_upstream_queue(
               expires        = Expiry,
               message_ttl    = TTL,
               ha_policy      = HA} = Upstream,
-    #upstream_params{exchange = X,
-                     params   = Params} = UParams,
+    #upstream_params{x_or_q = X,
+                     params = Params} = UParams,
     Q = upstream_queue_name(name(X), vhost(Params), DownXName),
     Args = [Arg || {_K, _T, V} = Arg <- [{<<"x-expires">>,     long,    Expiry},
                                          {<<"x-message-ttl">>, long,    TTL},
@@ -588,7 +588,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         channel             = Ch,
                                         downstream_exchange = DownXName,
                                         queue               = Q}, Bindings) ->
-    #upstream_params{exchange = X, params = Params} = UParams,
+    #upstream_params{x_or_q = X, params = Params} = UParams,
     OldSuffix = rabbit_federation_db:get_active_suffix(
                   DownXName, Upstream, <<"A">>),
     Suffix = case OldSuffix of
@@ -611,7 +611,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
 ensure_upstream_exchange(#state{upstream_params = UParams,
                                 connection      = Conn,
                                 channel         = Ch}) ->
-    #upstream_params{exchange = X} = UParams,
+    #upstream_params{x_or_q = X} = UParams,
     #exchange{type        = Type,
               durable     = Durable,
               auto_delete = AutoDelete,

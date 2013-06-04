@@ -104,10 +104,7 @@ spec(Upstream = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
      [rabbit_federation_link]};
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, Q = #amqqueue{}) ->
-    %% TODO don't depend on an exchange here!
-    FakeX = rabbit_exchange:lookup_or_die(
-              rabbit_misc:r(<<"/">>, exchange, <<"">>)),
-    Params = rabbit_federation_upstream:to_params(Upstream, FakeX),
+    Params = rabbit_federation_upstream:to_params(Upstream, Q),
     {Upstream, {rabbit_federation_queue_link, start_link, [{Params, Q}]},
      {permanent, Delay}, ?MAX_WAIT, worker,
      [rabbit_federation_queue_link]}.

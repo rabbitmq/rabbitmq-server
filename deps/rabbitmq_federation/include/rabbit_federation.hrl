@@ -16,6 +16,7 @@
 
 -record(upstream, {uris,
                    exchange_name,
+                   queue_name,
                    prefetch_count,
                    max_hops,
                    reconnect_delay,
@@ -26,7 +27,7 @@
                    ha_policy,
                    name}).
 
--record(upstream_params, {uri, params, exchange}).
+-record(upstream_params, {uri, params, x_or_q}).
 
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(BINDING_HEADER, <<"x-bound-from">>).

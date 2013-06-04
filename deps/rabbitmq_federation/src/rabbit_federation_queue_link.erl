@@ -26,6 +26,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-import(rabbit_federation_util, [name/1]).
+
 -record(not_started, {queue, run, params}).
 -record(state, {queue, run, conn, ch, dconn, dch, credit, ctag}).
 
@@ -65,7 +67,7 @@ federation_up() ->
 
 %%----------------------------------------------------------------------------
 
-init({#upstream_params{params = Params}, Queue = #amqqueue{name = QName}}) ->
+init({Params, Queue = #amqqueue{name = QName}}) ->
     join(rabbit_federation_queues),
     join({rabbit_federation_queue, QName}),
     gen_server2:cast(self(), maybe_go),
@@ -90,7 +92,8 @@ handle_cast(go, State) ->
 
 handle_cast(run, State = #state{ch = Ch, run = false, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
-                                          credit       = ?CREDIT}),
+                                          credit       = ?CREDIT,
+                                          drain        = false}),
     {noreply, State#state{run = true, credit = ?CREDIT}};
 
 handle_cast(run, State = #not_started{}) ->
@@ -109,7 +112,8 @@ handle_cast(stop, State = #not_started{}) ->
 
 handle_cast(stop, State = #state{ch = Ch, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
-                                          credit       = 0}),
+                                          credit       = 0,
+                                          drain        = false}),
     {noreply, State#state{run = false, credit = 0}};
 
 handle_cast(basic_get, State = #not_started{}) ->
@@ -119,7 +123,8 @@ handle_cast(basic_get, State = #state{ch = Ch, credit = Credit, ctag = CTag}) ->
     Credit1 = Credit + 1,
     amqp_channel:cast(
       Ch, #'basic.credit'{consumer_tag = CTag,
-                          credit       = Credit1}),
+                          credit       = Credit1,
+                          drain        = false}),
     {noreply, State#state{credit = Credit1}};
 
 handle_cast(Msg, State) ->
@@ -148,7 +153,8 @@ handle_info({#'basic.deliver'{}, Msg},
                                    More = ?CREDIT - ?CREDIT_MORE_AT,
                                    amqp_channel:cast(
                                      Ch, #'basic.credit'{consumer_tag = CTag,
-                                                         credit       = More}),
+                                                         credit       = More,
+                                                         drain        = false}),
                                    I - 1 + More;
                                I ->
                                    I - 1
@@ -167,9 +173,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-go(#not_started{run       = Run,
-                params    = Params,
-                queue     = Queue = #amqqueue{name = QName}}) ->
+go(#not_started{run    = Run,
+                params = #upstream_params{x_or_q = UQueue,
+                                          params = Params},
+                queue  = Queue}) ->
     Credit = case Run of
                  true  -> ?CREDIT;
                  false -> 0
@@ -181,7 +188,7 @@ go(#not_started{run       = Run,
     {ok, DCh} = amqp_connection:open_channel(DConn),
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:call(Ch, #'basic.consume'{
-                            queue     = QName#resource.name,
+                            queue     = name(UQueue),
                             no_ack    = true,
                             arguments = [{<<"x-purpose">>, longstr, <<"federation">>},
                                          {<<"x-credit">>, table,

@@ -21,7 +21,7 @@
 -include("rabbit_federation.hrl").
 
 -export([local_params/2, local_nodename/1, should_forward/2, find_upstreams/2]).
--export([validate_arg/3, fail/2, name/1, vhost/1]).
+-export([validate_arg/3, fail/2, name/1, vhost/1, r/1]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
 
@@ -77,10 +77,13 @@ fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
 
 name(                 #resource{name = XName})  -> XName;
 name(#exchange{name = #resource{name = XName}}) -> XName;
-name(#amqqueue{name = #resource{name = XName}}) -> XName.
+name(#amqqueue{name = #resource{name = QName}}) -> QName.
 
 vhost(                 #resource{virtual_host = VHost})  -> VHost;
 vhost(#exchange{name = #resource{virtual_host = VHost}}) -> VHost;
 vhost(#amqqueue{name = #resource{virtual_host = VHost}}) -> VHost;
 vhost( #amqp_params_direct{virtual_host = VHost}) -> VHost;
 vhost(#amqp_params_network{virtual_host = VHost}) -> VHost.
+
+r(#exchange{name = XName}) -> XName;
+r(#amqqueue{name = QName}) -> QName.

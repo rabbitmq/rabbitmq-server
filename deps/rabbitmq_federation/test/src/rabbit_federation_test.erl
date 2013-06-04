@@ -23,6 +23,9 @@
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1]).
 
+-import(rabbit_federation_test_util,
+        [publish_expect/5, publish/4, expect/3, expect_empty/2]).
+
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               x(<<"fed.downstream">>)]).
 
@@ -611,47 +614,6 @@ delete_exchange(Ch, X) ->
 
 delete_queue(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
-
-publish(Ch, X, Key, Payload) when is_binary(Payload) ->
-    publish(Ch, X, Key, #amqp_msg{payload = Payload});
-
-publish(Ch, X, Key, Msg = #amqp_msg{}) ->
-    %% The trouble is that we transmit bindings upstream asynchronously...
-    timer:sleep(5000),
-    amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
-                                           routing_key = Key}, Msg).
-
-
-expect(Ch, Q, Fun) when is_function(Fun) ->
-    amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
-                                                no_ack = true}, self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = CTag} -> ok
-    end,
-    Fun(),
-    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag});
-
-expect(Ch, Q, Payloads) ->
-    expect(Ch, Q, fun() -> expect(Payloads) end).
-
-expect([]) ->
-    ok;
-expect(Payloads) ->
-    receive
-        {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
-            case lists:member(Payload, Payloads) of
-                true  -> expect(Payloads -- [Payload]);
-                false -> throw({expected, Payloads, actual, Payload})
-            end
-    end.
-
-publish_expect(Ch, X, Key, Q, Payload) ->
-    publish(Ch, X, Key, Payload),
-    expect(Ch, Q, [Payload]).
-
-expect_empty(Ch, Q) ->
-    ?assertMatch(#'basic.get_empty'{},
-                 amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
 assert_bindings(Nodename, X, BindingsExp) ->
     Bindings0 = rpc:call(n(Nodename), rabbit_binding, list_for_source, [r(X)]),
