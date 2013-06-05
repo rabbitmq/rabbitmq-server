@@ -1363,11 +1363,8 @@ publish_alpha(MsgStatus, State) ->
     {MsgStatus, inc_ram_msg_count(State)}.
 
 publish_beta(MsgStatus, State) ->
-    {#msg_status { msg = Msg} = MsgStatus1,
-     #vqstate { ram_msg_count = RamMsgCount } = State1} =
-        maybe_write_to_disk(true, false, MsgStatus, State),
-    {MsgStatus1, State1 #vqstate {
-                   ram_msg_count = RamMsgCount + one_if(Msg =/= undefined) }}.
+    {MsgStatus1, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
+    {m(trim_msg_status(MsgStatus1)), State1}.
 
 %% Rebuild queue, inserting sequence ids to maintain ordering
 queue_merge(SeqIds, Q, MsgIds, Limit, PubFun, State) ->
