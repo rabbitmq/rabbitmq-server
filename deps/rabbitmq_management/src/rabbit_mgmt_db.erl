@@ -288,7 +288,7 @@ handle_call({get_overview, User, Ranges}, _From,
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
     VStats = [read_simple_stats(vhost_stats, VHost, State) ||
-                 VHost <- rabbit_vhost:list()],
+                 VHost <- VHosts],
     MessageStats = [overview_sum(Type, VStats) || Type <- ?FINE_STATS],
     QueueStats = [overview_sum(Type, VStats) || Type <- ?COARSE_QUEUE_STATS],
     F = case User of
