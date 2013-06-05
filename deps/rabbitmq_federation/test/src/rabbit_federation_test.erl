@@ -24,7 +24,8 @@
 -import(rabbit_federation_util, [name/1]).
 
 -import(rabbit_federation_test_util,
-        [publish_expect/5, publish/4, expect/3, expect_empty/2]).
+        [expect/3, expect_empty/2, set_param/3, clear_param/2,
+         set_pol/3, clear_pol/1, plugin_dir/0, policy/1]).
 
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               x(<<"fed.downstream">>)]).
@@ -545,33 +546,6 @@ stop_other_node({Name, _Port}) ->
                       " stop-other-node"),
     timer:sleep(1000).
 
-set_param(Component, Name, Value) ->
-    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).
-
-clear_param(Component, Name) ->
-    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Name])).
-
-set_pol(Name, Pattern, Defn) ->
-    rabbitmqctl(fmt("set_policy ~s \"~s\" '~s'", [Name, Pattern, Defn])).
-
-clear_pol(Name) ->
-    rabbitmqctl(fmt("clear_policy ~s ", [Name])).
-
-fmt(Fmt, Args) ->
-    string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
-
-rabbitmqctl(Args) ->
-    ?assertCmd(
-       plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
-    timer:sleep(100).
-
-policy(UpstreamSet) ->
-    rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
-
-plugin_dir() ->
-    {ok, [[File]]} = init:get_argument(config),
-    filename:dirname(filename:dirname(File)).
-
 declare_exchange(Ch, X) ->
     amqp_channel:call(Ch, X).
 
@@ -614,6 +588,19 @@ delete_exchange(Ch, X) ->
 
 delete_queue(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
+
+publish(Ch, X, Key, Payload) when is_binary(Payload) ->
+    publish(Ch, X, Key, #amqp_msg{payload = Payload});
+
+publish(Ch, X, Key, Msg = #amqp_msg{}) ->
+    %% The trouble is that we transmit bindings upstream asynchronously...
+    timer:sleep(5000),
+    amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
+                                           routing_key = Key}, Msg).
+
+publish_expect(Ch, X, Key, Q, Payload) ->
+    publish(Ch, X, Key, Payload),
+    expect(Ch, Q, [Payload]).
 
 assert_bindings(Nodename, X, BindingsExp) ->
     Bindings0 = rpc:call(n(Nodename), rabbit_binding, list_for_source, [r(X)]),

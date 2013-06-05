@@ -23,7 +23,8 @@
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1]).
 
--import(rabbit_federation_test_util, [publish_expect/5]).
+-import(rabbit_federation_test_util, [expect/3, set_param/3, clear_param/2,
+         set_pol/3, clear_pol/1, policy/1]).
 
 -define(UPSTREAM_DOWNSTREAM, [q(<<"upstream">>),
                               q(<<"fed.downstream">>)]).
@@ -31,10 +32,92 @@
 simple_test() ->
     with_ch(
       fun (Ch) ->
-              publish_expect(Ch, <<>>, <<"upstream">>, <<"fed.downstream">>,
-                             <<"HELLO">>)
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
       end, [q(<<"upstream">>),
             q(<<"fed.downstream">>)]).
+
+multiple_upstreams_test() ->
+    with_ch(
+      fun (Ch) ->
+              expect_federation(Ch, <<"upstream">>, <<"fed12.downstream">>),
+              expect_federation(Ch, <<"upstream2">>, <<"fed12.downstream">>)
+      end, [q(<<"upstream">>),
+            q(<<"upstream2">>),
+            q(<<"fed12.downstream">>)]).
+
+multiple_downstreams_test() ->
+    with_ch(
+      fun (Ch) ->
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>)
+      end, [q(<<"upstream">>),
+            q(<<"fed.downstream">>),
+            q(<<"fed.downstream2">>)]).
+
+bidirectional_test() ->
+    with_ch(
+      fun (Ch) ->
+              publish_expect(Ch, <<>>, <<"one">>, <<"one">>, <<"first one">>),
+              publish_expect(Ch, <<>>, <<"two">>, <<"two">>, <<"first two">>),
+              Seq = lists:seq(1, 100),
+              [publish(Ch, <<>>, <<"one">>, <<"bulk">>) || _ <- Seq],
+              [publish(Ch, <<>>, <<"two">>, <<"bulk">>) || _ <- Seq],
+              expect(Ch, <<"one">>, repeat(150, <<"bulk">>)),
+              expect(Ch, <<"two">>, repeat(50, <<"bulk">>)),
+              expect_empty(Ch, <<"one">>),
+              expect_empty(Ch, <<"two">>)
+      end, [q(<<"one">>),
+            q(<<"two">>)]).
+
+dynamic_reconfiguration_test() ->
+    with_ch(
+      fun (Ch) ->
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
+
+              %% Test this at least does not blow up
+              set_param("federation", "local-nodename", "\"test\""),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
+
+              %% Test that clearing connections works
+              clear_param("federation-upstream", "localhost"),
+              expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
+
+              %% Test that readding them and changing them works
+              set_param("federation-upstream", "localhost",
+                        "{\"uri\": \"amqp://localhost\"}"),
+              %% Do it twice so we at least hit the no-restart optimisation
+              set_param("federation-upstream", "localhost",
+                        "{\"uri\": \"amqp://\"}"),
+              set_param("federation-upstream", "localhost",
+                        "{\"uri\": \"amqp://\"}"),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
+      end, [q(<<"upstream">>),
+            q(<<"fed.downstream">>)]).
+
+federate_unfederate_test() ->
+    with_ch(
+      fun (Ch) ->
+              expect_no_federation(Ch, <<"upstream">>, <<"downstream">>),
+              expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>),
+
+              %% Federate it
+              set_pol("dyn", "^downstream\$", policy("upstream")),
+              expect_federation(Ch, <<"upstream">>, <<"downstream">>),
+              expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>),
+
+              %% Change policy - upstream changes
+              set_pol("dyn", "^downstream\$", policy("upstream2")),
+              expect_no_federation(Ch, <<"upstream">>, <<"downstream">>),
+              expect_federation(Ch, <<"upstream2">>, <<"downstream">>),
+
+              %% Unfederate it - no federation
+              clear_pol("dyn"),
+              expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>)
+      end, [q(<<"upstream">>),
+            q(<<"upstream2">>),
+            q(<<"downstream">>)]).
+
+%% TODO Multi-broker up/down tests
 
 %%----------------------------------------------------------------------------
 
@@ -42,6 +125,7 @@ with_ch(Fun, Qs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_all(Ch, Qs),
+    %% TODO test status when we, umm, support status
     %%assert_status(Qs),
     Fun(Ch),
     delete_all(Ch, Qs),
@@ -61,3 +145,31 @@ delete_queue(Ch, Q) ->
 q(Name) ->
     #'queue.declare'{queue   = Name,
                      durable = true}.
+
+repeat(Count, Item) -> [Item || _ <- lists:seq(1, Count)].
+
+%%----------------------------------------------------------------------------
+
+publish(Ch, X, Key, Payload) when is_binary(Payload) ->
+    publish(Ch, X, Key, #amqp_msg{payload = Payload});
+
+publish(Ch, X, Key, Msg = #amqp_msg{}) ->
+    amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
+                                           routing_key = Key}, Msg).
+
+publish_expect(Ch, X, Key, Q, Payload) ->
+    publish(Ch, X, Key, Payload),
+    expect(Ch, Q, [Payload]).
+
+%% Doubled due to our strange basic.get behaviour.
+expect_empty(Ch, Q) ->
+    rabbit_federation_test_util:expect_empty(Ch, Q),
+    rabbit_federation_test_util:expect_empty(Ch, Q).
+
+expect_federation(Ch, UpstreamQ, DownstreamQ) ->
+    publish_expect(Ch, <<>>, UpstreamQ, DownstreamQ, <<"HELLO">>).
+
+expect_no_federation(Ch, UpstreamQ, DownstreamQ) ->
+    publish(Ch, <<>>, UpstreamQ, <<"HELLO">>),
+    expect_empty(Ch, DownstreamQ),
+    expect(Ch, UpstreamQ, [<<"HELLO">>]).

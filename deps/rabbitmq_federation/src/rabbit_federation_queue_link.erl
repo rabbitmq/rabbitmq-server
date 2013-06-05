@@ -181,11 +181,13 @@ go(#not_started{run    = Run,
                  true  -> ?CREDIT;
                  false -> 0
              end,
-    %% TODO monitor and share code with _link
+    %% TODO monitor and share code with rabbit_federation_link
     {ok, Conn} = amqp_connection:start(Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, DConn} = amqp_connection:start(#amqp_params_direct{}),
     {ok, DCh} = amqp_connection:open_channel(DConn),
+    %% At least link until we share code
+    [link(P) || P <- [Conn, Ch, DConn, DCh]],
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:call(Ch, #'basic.consume'{
                             queue     = name(UQueue),

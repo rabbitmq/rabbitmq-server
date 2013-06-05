@@ -22,16 +22,6 @@
 
 -compile(export_all).
 
-publish(Ch, X, Key, Payload) when is_binary(Payload) ->
-    publish(Ch, X, Key, #amqp_msg{payload = Payload});
-
-publish(Ch, X, Key, Msg = #amqp_msg{}) ->
-    %% The trouble is that we transmit bindings upstream asynchronously...
-    timer:sleep(5000),
-    amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
-                                           routing_key = Key}, Msg).
-
-
 expect(Ch, Q, Fun) when is_function(Fun) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                 no_ack = true}, self()),
@@ -55,11 +45,33 @@ expect(Payloads) ->
             end
     end.
 
-publish_expect(Ch, X, Key, Q, Payload) ->
-    publish(Ch, X, Key, Payload),
-    expect(Ch, Q, [Payload]).
-
 expect_empty(Ch, Q) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
+set_param(Component, Name, Value) ->
+    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).
+
+clear_param(Component, Name) ->
+    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Name])).
+
+set_pol(Name, Pattern, Defn) ->
+    rabbitmqctl(fmt("set_policy ~s \"~s\" '~s'", [Name, Pattern, Defn])).
+
+clear_pol(Name) ->
+    rabbitmqctl(fmt("clear_policy ~s ", [Name])).
+
+fmt(Fmt, Args) ->
+    string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
+
+rabbitmqctl(Args) ->
+    ?assertCmd(
+       plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
+    timer:sleep(100).
+
+policy(UpstreamSet) ->
+    rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
+
+plugin_dir() ->
+    {ok, [[File]]} = init:get_argument(config),
+    filename:dirname(filename:dirname(File)).
