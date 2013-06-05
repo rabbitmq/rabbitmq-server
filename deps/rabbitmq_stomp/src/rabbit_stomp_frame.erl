@@ -38,6 +38,7 @@ initial_state() -> none.
 %%  o   Escape codes for header names and values include \r for CR
 %%      and CR is not allowed.
 %%  o   Header names and values are not limited to UTF-8 strings.
+%%  o   Header values may contain unescaped colons
 %%
 %%  frame_seq   ::= *(noise frame)
 %%  noise       ::= *(NUL | eol)
@@ -113,8 +114,6 @@ parser(              Rest,          headers ,  State) -> goto(headers,  hdrname,
 parser(<<?COLON,     Rest/binary>>, hdrname ,  State) -> goto(hdrname,  hdrvalue, Rest, State);
 parser(<<?LF,        Rest/binary>>, hdrname ,  State) -> goto(hdrname,  headers,  Rest, State);
 parser(<<?LF,        Rest/binary>>, hdrvalue,  State) -> goto(hdrvalue, headers,  Rest, State);
-%% trap invalid colons
-parser(<<?COLON,    _Rest/binary>>, hdrvalue, _State) -> {error, {unexpected_char_in_header_value, [?COLON]}};
 %% accumulate
 parser(<<Ch:8,       Rest/binary>>, Term    ,  State) -> parser(Rest, Term, accum(Ch, State)).
 
