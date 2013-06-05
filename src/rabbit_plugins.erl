@@ -47,7 +47,7 @@ setup() ->
 active() ->
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
     InstalledPlugins = [ P#plugin.name || P <- list(ExpandDir) ],
-    [App || {App, _, _} <- application:which_applications(),
+    [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
 
 %% @doc Get the list of plugins which are ready to be enabled.

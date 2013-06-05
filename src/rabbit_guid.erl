@@ -63,6 +63,7 @@ update_disk_serial() ->
     Filename = filename(),
     Serial = case rabbit_file:read_term_file(Filename) of
                  {ok, [Num]}     -> Num;
+                 {ok, []}        -> 0; %% [1]
                  {error, enoent} -> 0;
                  {error, Reason} ->
                      throw({error, {cannot_read_serial_file, Filename, Reason}})
@@ -73,6 +74,10 @@ update_disk_serial() ->
             throw({error, {cannot_write_serial_file, Filename, Reason1}})
     end,
     Serial.
+%% [1] a couple of users have reported startup failures due to the
+%% file being empty, presumably as a result of filesystem
+%% corruption. While rabbit doesn't cope with that in general, in this
+%% specific case we can be more accommodating.
 
 %% Generate an un-hashed guid.
 fresh() ->

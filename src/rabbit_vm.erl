@@ -99,7 +99,7 @@ bytes(Words) ->  Words * erlang:system_info(wordsize).
 
 plugin_sups() ->
     lists:append([plugin_sup(App) ||
-                     {App, _, _} <- application:which_applications(),
+                     {App, _, _} <- rabbit_misc:which_applications(),
                      is_plugin(atom_to_list(App))]).
 
 plugin_sup(App) ->
