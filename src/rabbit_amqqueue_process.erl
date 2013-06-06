@@ -898,10 +898,7 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
     TimeSec = rabbit_misc:now_ms() div 1000,
-    PerMsgTTL = case Reason of
-                    expired -> per_msg_ttl_header(Content#content.properties);
-                    _       -> []
-                end,
+    PerMsgTTL = per_msg_ttl_header(Content#content.properties),
     HeadersFun2 =
         fun (Headers) ->
                 %% The first routing key is the one specified in the
