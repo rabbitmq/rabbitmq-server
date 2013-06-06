@@ -898,13 +898,10 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
     TimeSec = rabbit_misc:now_ms() div 1000,
-    MaybePerMsgTTL =
-        case Reason of
-            expired ->
-                OriginalProps = Content#content.properties,
-                maybe_create_per_msg_ttl_xdeath_header(OriginalProps);
-            _ -> []
-        end,
+    PerMsgTTL = case Reason of
+                    expired -> per_msg_ttl_header(Content#content.properties);
+                    _       -> []
+                end,
     HeadersFun2 =
         fun (Headers) ->
                 %% The first routing key is the one specified in the
@@ -915,27 +912,27 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
                         {<<"queue">>,        longstr,   QName},
                         {<<"time">>,         timestamp, TimeSec},
                         {<<"exchange">>,     longstr,   Exchange#resource.name},
-                        {<<"routing-keys">>, array,     RKs1}] ++ MaybePerMsgTTL,
+                        {<<"routing-keys">>, array,     RKs1}] ++ PerMsgTTL,
                 HeadersFun1(rabbit_basic:prepend_table_header(<<"x-death">>,
                                                               Info, Headers))
         end,
     Content1 = #content{properties = Props} =
         rabbit_basic:map_headers(HeadersFun2, Content),
-    PropsNoExpiration = Props#'P_basic'{expiration = undefined},
-    ContentNoExpiration = Content1#content{properties = PropsNoExpiration},
-    Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
-                      routing_keys = DeathRoutingKeys,
-                      content = ContentNoExpiration}.
+    Content2 = Content1#content{properties =
+                                    Props#'P_basic'{expiration = undefined}},
+    Msg#basic_message{exchange_name = DLX,
+                      id            = rabbit_guid:gen(),
+                      routing_keys  = DeathRoutingKeys,
+                      content       = Content2}.
 
-maybe_create_per_msg_ttl_xdeath_header(#'P_basic'{}=Props) ->
+per_msg_ttl_header(#'P_basic'{} = Props) ->
     case rabbit_basic:parse_expiration(Props) of
         {ok, Exp} when is_integer(Exp) ->
-            [{<<"original-expiration">>, longstr,
-              integer_to_list(Exp)}];
+            [{<<"original-expiration">>, longstr, integer_to_list(Exp)}];
         _ ->
             []
     end;
-maybe_create_per_msg_ttl_xdeath_header(_) ->
+per_msg_ttl_header(_) ->
     [].
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
