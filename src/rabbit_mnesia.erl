@@ -465,10 +465,11 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes) ->
     %% about the cluster
     case NodeType of
         ram  -> start_mnesia(),
-                change_extra_db_nodes(ClusterNodes, false),
-                rabbit_table:wait_for_replicated();
+                change_extra_db_nodes(ClusterNodes, false);
         disc -> ok
     end,
+    %% ...and all nodes will need to wait for tables
+    rabbit_table:wait_for_replicated(),
     ok.
 
 init_db_with_mnesia(ClusterNodes, NodeType,
