@@ -1022,7 +1022,18 @@ journal_minus_segment1({no_pub, del, ack},         {?PUB, no_del, no_ack}) ->
 journal_minus_segment1({no_pub, del, ack},         {?PUB, del, no_ack}) ->
     {{no_pub, no_del, ack}, 0};
 journal_minus_segment1({no_pub, del, ack},         {?PUB, del, ack}) ->
-    {undefined, -1}.
+    {undefined, -1};
+
+%% Missing segment. If flush_journal/1 is interrupted after deleting
+%% the segment but before truncating the journal we can get these
+%% cases: a delivery and an acknowledgement in the journal, or just an
+%% acknowledgement in the journal, but with no segment. In both cases
+%% we have really forgotten the message; so ignore what's in the
+%% journal.
+journal_minus_segment1({no_pub, no_del, ack},      undefined) ->
+    {undefined, 0};
+journal_minus_segment1({no_pub, del, ack},         undefined) ->
+    {undefined, 0}.
 
 %%----------------------------------------------------------------------------
 %% upgrade
