@@ -901,13 +901,8 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
     MaybePerMsgTTL =
         case Reason of
             expired ->
-                OrigProps = Content#content.properties,
-                case rabbit_basic:parse_expiration(OrigProps) of
-                    {ok, Exp} when is_integer(Exp) ->
-                        [{<<"original-expiration">>, longstr,
-                          integer_to_list(Exp)}];
-                    _ -> []
-                end;
+                OriginalProps = Content#content.properties,
+                maybe_create_per_msg_ttl_xdeath_header(OriginalProps);
             _ -> []
         end,
     HeadersFun2 =
@@ -931,6 +926,17 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
     Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
                       routing_keys = DeathRoutingKeys,
                       content = ContentNoExpiration}.
+
+maybe_create_per_msg_ttl_xdeath_header(#'P_basic'{}=Props) ->
+    case rabbit_basic:parse_expiration(Props) of
+        {ok, Exp} when is_integer(Exp) ->
+            [{<<"original-expiration">>, longstr,
+              integer_to_list(Exp)}];
+        _ ->
+            []
+    end;
+maybe_create_per_msg_ttl_xdeath_header(_) ->
+    [].
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 
