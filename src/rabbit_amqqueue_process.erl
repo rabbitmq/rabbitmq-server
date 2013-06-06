@@ -898,6 +898,18 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
     TimeSec = rabbit_misc:now_ms() div 1000,
+    MaybePerMsgTTL =
+        case Reason of
+            expired ->
+                OrigProps = Content#content.properties,
+                case rabbit_basic:parse_expiration(OrigProps) of
+                    {ok, Exp} when is_integer(Exp) ->
+                        [{<<"original-expiration">>, longstr,
+                          integer_to_list(Exp)}];
+                    _ -> []
+                end;
+            _ -> []
+        end,
     HeadersFun2 =
         fun (Headers) ->
                 %% The first routing key is the one specified in the
@@ -908,7 +920,7 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
                         {<<"queue">>,        longstr,   QName},
                         {<<"time">>,         timestamp, TimeSec},
                         {<<"exchange">>,     longstr,   Exchange#resource.name},
-                        {<<"routing-keys">>, array,     RKs1}],
+                        {<<"routing-keys">>, array,     RKs1}] ++ MaybePerMsgTTL,
                 HeadersFun1(rabbit_basic:prepend_table_header(<<"x-death">>,
                                                               Info, Headers))
         end,
