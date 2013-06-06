@@ -28,8 +28,9 @@
 
 -import(rabbit_federation_util, [name/1]).
 
--record(not_started, {queue, run, params}).
--record(state, {queue, run, conn, ch, dconn, dch, credit, ctag}).
+-record(not_started, {queue, run, upstream, upstream_params}).
+-record(state, {queue, run, conn, ch, dconn, dch, credit, ctag,
+                upstream, upstream_params}).
 
 %% TODO make this configurable
 -define(CREDIT, 200).
@@ -67,13 +68,16 @@ federation_up() ->
 
 %%----------------------------------------------------------------------------
 
-init({Params, Queue = #amqqueue{name = QName}}) ->
+init({Upstream, Queue = #amqqueue{name = QName}}) ->
+    UParams = rabbit_federation_upstream:to_params(Upstream, Queue),
+    rabbit_federation_status:report(Upstream, UParams, QName, starting),
     join(rabbit_federation_queues),
     join({rabbit_federation_queue, QName}),
     gen_server2:cast(self(), maybe_go),
-    {ok, #not_started{queue  = Queue,
-                      run    = false,
-                      params = Params}}.
+    {ok, #not_started{queue           = Queue,
+                      run             = false,
+                      upstream        = Upstream,
+                      upstream_params = UParams}}.
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
@@ -130,8 +134,16 @@ handle_cast(basic_get, State = #state{ch = Ch, credit = Credit, ctag = CTag}) ->
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
+
+
+%% TODO these should go away when we finish merging with rabbit_federation_link
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
+handle_info(#'basic.cancel'{}, State) ->
+    {noreply, State};
+handle_info(#'basic.ack'{}, State) ->
+    {noreply, State};
+
 
 handle_info({#'basic.deliver'{}, Msg},
             State = #state{queue  = #amqqueue{name = QName},
@@ -165,7 +177,14 @@ handle_info({#'basic.deliver'{}, Msg},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-terminate(_Reason, _State) ->
+terminate(Reason, #state{dconn           = DConn,
+                         conn            = Conn,
+                         upstream        = Upstream,
+                         upstream_params = UParams,
+                         queue           = #amqqueue{name = QName}}) ->
+    rabbit_federation_link_util:ensure_connection_closed(DConn),
+    rabbit_federation_link_util:ensure_connection_closed(Conn),
+    rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -173,34 +192,33 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-go(#not_started{run    = Run,
-                params = #upstream_params{x_or_q = UQueue,
-                                          params = Params},
-                queue  = Queue}) ->
+go(S0 = #not_started{run             = Run,
+                     upstream        = Upstream,
+                     upstream_params = UParams,
+                     queue           = Queue = #amqqueue{name = QName}}) ->
+    #upstream_params{x_or_q = UQueue} = UParams,
     Credit = case Run of
                  true  -> ?CREDIT;
                  false -> 0
              end,
-    %% TODO monitor and share code with rabbit_federation_link
-    {ok, Conn} = amqp_connection:start(Params),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    {ok, DConn} = amqp_connection:start(#amqp_params_direct{}),
-    {ok, DCh} = amqp_connection:open_channel(DConn),
-    %% At least link until we share code
-    [link(P) || P <- [Conn, Ch, DConn, DCh]],
-    #'basic.consume_ok'{consumer_tag = CTag} =
-        amqp_channel:call(Ch, #'basic.consume'{
-                            queue     = name(UQueue),
-                            no_ack    = true,
-                            arguments = [{<<"x-purpose">>, longstr, <<"federation">>},
-                                         {<<"x-credit">>, table,
-                                          [{<<"credit">>, long, Credit},
-                                           {<<"drain">>,  bool, false}]}]}),
-    {noreply, #state{queue     = Queue,
-                     run       = Run,
-                     conn      = Conn,
-                     ch        = Ch,
-                     dconn     = DConn,
-                     dch       = DCh,
-                     credit    = Credit,
-                     ctag      = CTag}}.
+    Args = [{<<"x-purpose">>, longstr, <<"federation">>},
+            {<<"x-credit">>,  table,   [{<<"credit">>, long, Credit},
+                                        {<<"drain">>,  bool, false}]}],
+    rabbit_federation_link_util:start_conn_ch(
+      fun (Conn, Ch, DConn, DCh) ->
+              #'basic.consume_ok'{consumer_tag = CTag} =
+                  amqp_channel:call(
+                    Ch, #'basic.consume'{queue     = name(UQueue),
+                                         no_ack    = true,
+                                         arguments = Args}),
+              {noreply, #state{queue           = Queue,
+                                    run             = Run,
+                               conn            = Conn,
+                               ch              = Ch,
+                               dconn           = DConn,
+                               dch             = DCh,
+                               credit          = Credit,
+                               ctag            = CTag,
+                               upstream        = Upstream,
+                               upstream_params = UParams}}
+      end, Upstream, UParams, QName, S0).

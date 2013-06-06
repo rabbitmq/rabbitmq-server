@@ -29,9 +29,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--import(rabbit_misc, [pget/2]).
--import(rabbit_federation_util, [name/1]).
--import(rabbit_federation_util, [vhost/1]).
+-import(rabbit_federation_util, [name/1, vhost/1]).
 
 -record(state, {upstream,
                 upstream_params,
@@ -94,7 +92,8 @@ handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
     {reply, lists:sort([K || {K, _} <- dict:fetch_keys(Bindings)]), State};
 
 handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
-    disposable_channel_call(Conn, #'queue.delete'{queue = Q}),
+    rabbit_federation_link_util:disposable_channel_call(
+      Conn, #'queue.delete'{queue = Q}),
     {stop, normal, ok, State};
 
 handle_call(Msg, _From, State) ->
@@ -187,8 +186,11 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                  {noreply, State}
     end;
 
-handle_info(#'basic.cancel'{}, State) ->
-    connection_error(local, basic_cancel, State);
+handle_info(#'basic.cancel'{}, State = #state{upstream            = Upstream,
+                                              upstream_params     = UParams,
+                                              downstream_exchange = XName}) ->
+    rabbit_federation_link_util:connection_error(
+      local, basic_cancel, Upstream, UParams, XName, State);
 
 %% If the downstream channel shuts down cleanly, we can just ignore it
 %% - we're the same node, we're presumably about to go down too.
@@ -199,8 +201,12 @@ handle_info({'DOWN', _Ref, process, Ch, shutdown},
 %% If the upstream channel goes down for an intelligible reason, just
 %% log it and die quietly.
 handle_info({'DOWN', _Ref, process, Ch, {shutdown, Reason}},
-            State = #state{channel = Ch}) ->
-    connection_error(remote, {upstream_channel_down, Reason}, State);
+            State = #state{channel             = Ch,
+                           upstream            = Upstream,
+                           upstream_params     = UParams,
+                           downstream_exchange = XName}) ->
+    rabbit_federation_link_util:connection_error(
+      remote, {upstream_channel_down, Reason}, Upstream, UParams, XName, State);
 
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{channel = Ch}) ->
@@ -216,35 +222,15 @@ handle_info(Msg, State) ->
 terminate(_Reason, {not_started, _}) ->
     ok;
 
-terminate(Reason, State = #state{downstream_connection = DConn,
-                                 connection            = Conn}) ->
-    ensure_connection_closed(DConn),
-    ensure_connection_closed(Conn),
-    log_terminate(Reason, State),
+terminate(Reason, #state{downstream_connection = DConn,
+                         connection            = Conn,
+                         upstream              = Upstream,
+                         upstream_params       = UParams,
+                         downstream_exchange   = XName}) ->
+    rabbit_federation_link_util:ensure_connection_closed(DConn),
+    rabbit_federation_link_util:ensure_connection_closed(Conn),
+    rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, XName),
     ok.
-
-log_terminate({shutdown, restart}, _State) ->
-    %% We've already logged this before munging the reason
-    ok;
-log_terminate(shutdown, #state{downstream_exchange = XName,
-                               upstream            = Upstream,
-                               upstream_params     = UParams}) ->
-    %% The supervisor is shutting us down; we are probably restarting
-    %% the link because configuration has changed. So try to shut down
-    %% nicely so that we do not cause unacked messages to be
-    %% redelivered.
-    rabbit_log:info("Federation ~s disconnecting from ~s~n",
-                    [rabbit_misc:rs(XName),
-                     rabbit_federation_upstream:params_to_string(UParams)]),
-    rabbit_federation_status:remove(Upstream, XName);
-
-log_terminate(Reason, #state{downstream_exchange = XName,
-                             upstream            = Upstream,
-                             upstream_params     = UParams}) ->
-    %% Unexpected death. sasl will log it, but we should update
-    %% rabbit_federation_status.
-    rabbit_federation_status:report(Upstream, UParams, XName,
-                                    clean_reason(Reason)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -299,23 +285,6 @@ play_back_commands(State = #state{waiting_cmds = Waiting,
                          State
                  end;
         true  -> State
-    end.
-
-open_monitor(Params) ->
-    case open(Params) of
-        {ok, Conn, Ch} -> erlang:monitor(process, Ch),
-                          {ok, Conn, Ch};
-        E              -> E
-    end.
-
-open(Params) ->
-    case amqp_connection:start(Params) of
-        {ok, Conn} -> case amqp_connection:open_channel(Conn) of
-                          {ok, Ch} -> {ok, Conn, Ch};
-                          E        -> catch amqp_connection:close(Conn),
-                                      E
-                      end;
-        E -> E
     end.
 
 add_binding(B, State) ->
@@ -443,8 +412,7 @@ update_binding(Args, #state{downstream_exchange = X,
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
-go(S0 = {not_started, {Upstream, UParams, DownXName =
-                           #resource{virtual_host = DownVHost}}}) ->
+go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     %% We trap exits so terminate/2 gets called. Note that this is not
     %% in init() since we need to cope with the link getting restarted
     %% during shutdown (when a broker federates with itself), which
@@ -452,106 +420,35 @@ go(S0 = {not_started, {Upstream, UParams, DownXName =
     %% us to exit. We can therefore only trap exits when past that
     %% point. Bug 24372 may help us do something nicer.
     process_flag(trap_exit, true),
-    case open_monitor(
-           rabbit_federation_util:local_params(Upstream, DownVHost)) of
-        {ok, DConn, DCh} ->
-            case Upstream#upstream.ack_mode of
-                'on-confirm' ->
-                    #'confirm.select_ok'{} =
-                        amqp_channel:call(DCh, #'confirm.select'{}),
-                    amqp_channel:register_confirm_handler(DCh, self());
-                _ ->
-                    ok
-            end,
-            case open_monitor(UParams#upstream_params.params) of
-                {ok, Conn, Ch} ->
-                    {Serial, Bindings} =
-                        rabbit_misc:execute_mnesia_transaction(
-                          fun () ->
-                                  {rabbit_exchange:peek_serial(DownXName),
-                                   rabbit_binding:list_for_source(DownXName)}
-                          end),
-                    true = is_integer(Serial),
-                    %% If we are very short lived, Serial can be undefined at
-                    %% this point (since the deletion of the X could have
-                    %% overtaken the creation of this process). However, this
-                    %% is not a big deal - 'undefined' just becomes the next
-                    %% serial we will process. Since it compares larger than
-                    %% any number we never process any commands. And we will
-                    %% soon get told to stop anyway.
-                    try
-                        State = ensure_upstream_bindings(
-                                  consume_from_upstream_queue(
-                                    #state{upstream              = Upstream,
-                                           upstream_params       = UParams,
-                                           connection            = Conn,
-                                           channel               = Ch,
-                                           next_serial           = Serial,
-                                           downstream_connection = DConn,
-                                           downstream_channel    = DCh,
-                                       downstream_exchange   = DownXName}),
-                                  Bindings),
-                        rabbit_log:info(
-                          "Federation ~s connected to ~s~n",
-                          [rabbit_misc:rs(DownXName),
-                           rabbit_federation_upstream:params_to_string(
-                             UParams)]),
-                        Name = pget(name, amqp_connection:info(DConn, [name])),
-                        rabbit_federation_status:report(
-                          Upstream, UParams, DownXName, {running, Name}),
-                        {noreply, State}
-                    catch exit:E ->
-                            %% terminate/2 will not get this, as we
-                            %% have not put them in our state yet
-                            ensure_connection_closed(DConn),
-                            ensure_connection_closed(Conn),
-                            connection_error(remote, E, S0)
-                    end;
-                E ->
-                    ensure_connection_closed(DConn),
-                    connection_error(remote, E, S0)
-            end;
-        E ->
-            connection_error(local, E, S0)
-    end.
-
-connection_error(remote, E, State = {not_started, {U, UParams, XName}}) ->
-    rabbit_federation_status:report(U, UParams, XName, clean_reason(E)),
-    rabbit_log:warning("Federation ~s did not connect to ~s~n~p~n",
-                       [rabbit_misc:rs(XName),
-                        rabbit_federation_upstream:params_to_string(UParams),
-                        E]),
-    {stop, {shutdown, restart}, State};
-
-connection_error(remote, E, State = #state{upstream            = U,
-                                           upstream_params     = UParams,
-                                           downstream_exchange = XName}) ->
-    rabbit_federation_status:report(U, UParams, XName, clean_reason(E)),
-    rabbit_log:info("Federation ~s disconnected from ~s~n~p~n",
-                    [rabbit_misc:rs(XName),
-                     rabbit_federation_upstream:params_to_string(UParams), E]),
-    {stop, {shutdown, restart}, State};
-
-connection_error(local, basic_cancel,
-                 State = #state{upstream            = U,
-                                upstream_params     = UParams,
-                                downstream_exchange = XName}) ->
-    rabbit_federation_status:report(U, UParams, XName, {error, basic_cancel}),
-    rabbit_log:info("Federation ~s received 'basic.cancel'~n",
-                    [rabbit_misc:rs(XName)]),
-    {stop, {shutdown, restart}, State};
-
-connection_error(local, E, State = {not_started, {U, UParams, XName}}) ->
-    rabbit_federation_status:report(U, UParams, XName, clean_reason(E)),
-    rabbit_log:warning("Federation ~s did not connect locally~n~p~n",
-                       [rabbit_misc:rs(XName), E]),
-    {stop, {shutdown, restart}, State}.
-
-%% If we terminate due to a gen_server call exploding (almost
-%% certainly due to an amqp_channel:call() exploding) then we do not
-%% want to report the gen_server call in our status.
-clean_reason({E = {shutdown, _}, _}) -> E;
-clean_reason(E)                      -> E.
+    rabbit_federation_link_util:start_conn_ch(
+      fun (Conn, Ch, DConn, DCh) ->
+              {Serial, Bindings} =
+                  rabbit_misc:execute_mnesia_transaction(
+                    fun () ->
+                            {rabbit_exchange:peek_serial(DownXName),
+                             rabbit_binding:list_for_source(DownXName)}
+                    end),
+              true = is_integer(Serial),
+              %% If we are very short lived, Serial can be undefined at
+              %% this point (since the deletion of the X could have
+              %% overtaken the creation of this process). However, this
+              %% is not a big deal - 'undefined' just becomes the next
+              %% serial we will process. Since it compares larger than
+              %% any number we never process any commands. And we will
+              %% soon get told to stop anyway.
+              State = ensure_upstream_bindings(
+                        consume_from_upstream_queue(
+                          #state{upstream              = Upstream,
+                                 upstream_params       = UParams,
+                                 connection            = Conn,
+                                 channel               = Ch,
+                                 next_serial           = Serial,
+                                 downstream_connection = DConn,
+                                 downstream_channel    = DCh,
+                                 downstream_exchange   = DownXName}),
+                        Bindings),
+              {noreply, State}
+      end, Upstream, UParams, DownXName, S0).
 
 %% local / disconnected never gets invoked, see handle_info({'DOWN', ...
 
@@ -623,10 +520,11 @@ ensure_upstream_exchange(#state{upstream_params = UParams,
                                auto_delete = AutoDelete,
                                internal    = Internal,
                                arguments   = Arguments},
-    disposable_channel_call(Conn, Decl#'exchange.declare'{passive = true},
-                           fun(?NOT_FOUND, _Text) ->
-                                   amqp_channel:call(Ch, Decl)
-                           end).
+    rabbit_federation_link_util:disposable_channel_call(
+      Conn, Decl#'exchange.declare'{passive = true},
+      fun(?NOT_FOUND, _Text) ->
+              amqp_channel:call(Ch, Decl)
+      end).
 
 ensure_internal_exchange(IntXNameBin,
                          #state{upstream        = #upstream{max_hops = MaxHops},
@@ -642,9 +540,10 @@ ensure_internal_exchange(IntXNameBin,
     XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
                                   arguments = [{?MAX_HOPS_ARG, long, MaxHops}]},
     Fan = Base#'exchange.declare'{type = <<"fanout">>},
-    disposable_connection_call(Params, XFU, fun(?COMMAND_INVALID, _Text) ->
-                                                    amqp_channel:call(Ch, Fan)
-                                            end).
+    rabbit_federation_link_util:disposable_connection_call(
+      Params, XFU, fun(?COMMAND_INVALID, _Text) ->
+                           amqp_channel:call(Ch, Fan)
+                   end).
 
 upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                                                virtual_host = DownVHost}) ->
@@ -664,40 +563,8 @@ upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
     <<Name/binary, " ", Suffix/binary>>.
 
 delete_upstream_exchange(Conn, XNameBin) ->
-    disposable_channel_call(Conn, #'exchange.delete'{exchange = XNameBin}).
-
-disposable_channel_call(Conn, Method) ->
-    disposable_channel_call(Conn, Method, fun(_, _) -> ok end).
-
-disposable_channel_call(Conn, Method, ErrFun) ->
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    try
-        amqp_channel:call(Ch, Method)
-    catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
-            ErrFun(Code, Text)
-    after
-        ensure_channel_closed(Ch)
-    end.
-
-disposable_connection_call(Params, Method, ErrFun) ->
-    case open(Params) of
-        {ok, Conn, Ch} ->
-            try
-                amqp_channel:call(Ch, Method)
-            catch exit:{{shutdown, {connection_closing,
-                                    {server_initiated_close, Code, Txt}}}, _} ->
-                    ErrFun(Code, Txt)
-            after
-                ensure_connection_closed(Conn)
-            end;
-        E ->
-            E
-    end.
-
-ensure_channel_closed(Ch) -> catch amqp_channel:close(Ch).
-
-ensure_connection_closed(Conn) ->
-    catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT).
+    rabbit_federation_link_util:disposable_channel_call(
+      Conn, #'exchange.delete'{exchange = XNameBin}).
 
 ack(Tag, Multiple, #state{channel = Ch}) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,

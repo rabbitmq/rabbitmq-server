@@ -104,8 +104,7 @@ spec(Upstream = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
      [rabbit_federation_link]};
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, Q = #amqqueue{}) ->
-    Params = rabbit_federation_upstream:to_params(Upstream, Q),
-    {Upstream, {rabbit_federation_queue_link, start_link, [{Params, Q}]},
+    {Upstream, {rabbit_federation_queue_link, start_link, [{Upstream, Q}]},
      {permanent, Delay}, ?MAX_WAIT, worker,
      [rabbit_federation_queue_link]}.
 

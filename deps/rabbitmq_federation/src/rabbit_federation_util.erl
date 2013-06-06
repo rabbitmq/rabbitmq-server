@@ -20,29 +20,12 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([local_params/2, local_nodename/1, should_forward/2, find_upstreams/2]).
+-export([local_nodename/1, should_forward/2, find_upstreams/2]).
 -export([validate_arg/3, fail/2, name/1, vhost/1, r/1]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
 
 %%----------------------------------------------------------------------------
-
-local_params(#upstream{trust_user_id = Trust}, VHost) ->
-    {ok, DefaultUser} = application:get_env(rabbit, default_user),
-    Username = rabbit_runtime_parameters:value(
-                 VHost, <<"federation">>, <<"local-username">>, DefaultUser),
-    case rabbit_access_control:check_user_login(Username, []) of
-        {ok, User0}        -> User = maybe_impersonator(Trust, User0),
-                              #amqp_params_direct{username     = User,
-                                                  virtual_host = VHost};
-        {refused, _M, _A}  -> exit({error, user_does_not_exist})
-    end.
-
-maybe_impersonator(Trust, User = #user{tags = Tags}) ->
-    case Trust andalso not lists:member(impersonator, Tags) of
-        true  -> User#user{tags = [impersonator | Tags]};
-        false -> User
-    end.
 
 local_nodename(VHost) ->
     rabbit_runtime_parameters:value(
