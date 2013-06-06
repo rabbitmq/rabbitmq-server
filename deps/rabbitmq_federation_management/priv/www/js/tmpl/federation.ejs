@@ -11,7 +11,7 @@
 <% if (vhosts_interesting) { %>
     <th>Virtual Host</th>
 <% } %>
-    <th>Exchange</th>
+    <th>Exchange / Queue</th>
 <% if (nodes_interesting) { %>
     <th>Node</th>
 <% } %>
@@ -28,15 +28,22 @@
    <tr<%= alt_rows(i)%>>
     <td>
       <%= fmt_string(link.connection) %>
-      <% if (link.exchange != link.upstream_exchange) { %>
-      <sub><%= fmt_string(link.upstream_exchange) %></sub>
+      <% if (link.name != link.upstream_name) { %>
+      <sub><%= fmt_string(link.upstream_name) %></sub>
       <% } %>
     </td>
     <td><%= fmt_string(link.uri) %></td>
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(link.vhost) %></td>
 <% } %>
-    <td><%= link_exchange(link.vhost, link.exchange) %></td>
+    <td>
+      <% if (link.type == 'exchange') { %>
+        <%= link_exchange(link.vhost, link.name) %>
+      <% } else { %>
+        <%= link_queue(link.vhost, link.name) %>
+      <% } %>
+    <sub><%= fmt_string(link.type) %></sub>
+    </td>
 <% if (nodes_interesting) { %>
     <td><%= fmt_node(link.node) %></td>
 <% } %>
