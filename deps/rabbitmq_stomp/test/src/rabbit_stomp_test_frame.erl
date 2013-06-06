@@ -160,7 +160,11 @@ header_value_with_cr_test() ->
 
 header_value_with_colon_test() ->
     Content = "COMMAND\nheader:val:ue\n\n\0",
-    {error, {unexpected_char_in_header_value, ":"}} = parse(Content).
+    {ok, Frame, _} = parse(Content),
+    ?assertEqual(Frame,
+                 #stomp_frame{ command     = "COMMAND",
+                               headers     = [{"header", "val:ue"}],
+                               body_iolist = []}).
 
 headers_escaping_roundtrip_test() ->
     Content = "COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0",

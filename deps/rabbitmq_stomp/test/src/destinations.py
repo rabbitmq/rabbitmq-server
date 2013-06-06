@@ -318,6 +318,34 @@ class TestReplyQueue(base.BaseTest):
             conn2.stop()
             conn3.stop()
 
+    def test_perm_reply_queue(self):
+        '''As test_reply_queue, but with a non-temp reply queue'''
+
+        known = '/queue/known'
+        reply = '/queue/reply'
+
+        ## Client 1 uses pre-supplied connection and listener
+        ## Set up client 2
+        conn1, listener1 = self.create_subscriber_connection(reply)
+        conn2, listener2 = self.create_subscriber_connection(known)
+
+        try:
+            conn1.send("test", destination=known,
+                       headers = {"reply-to": reply})
+
+            self.assertTrue(listener2.await(5))
+            self.assertEquals(1, len(listener2.messages))
+
+            reply_to = listener2.messages[0]['headers']['reply-to']
+            self.assertTrue(reply_to == reply)
+
+            conn2.send("reply", destination=reply_to)
+            self.assertTrue(listener1.await(5))
+            self.assertEquals("reply", listener1.messages[0]['message'])
+        finally:
+            conn1.stop()
+            conn2.stop()
+
 class TestDurableSubscription(base.BaseTest):
 
     ID = 'test.subscription'
