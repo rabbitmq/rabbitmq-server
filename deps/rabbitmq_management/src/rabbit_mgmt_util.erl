@@ -32,7 +32,8 @@
 -export([with_decode/5, decode/1, decode/2, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, is_monitor/1]).
--export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1]).
+-export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
+         range_ceil/1, floor/2, ceil/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -501,28 +502,46 @@ b64decode_or_throw(B64) ->
 
 no_range() -> {no_range, no_range, no_range}.
 
-range(ReqData) -> {range("lengths",    ReqData),
-                   range("msg_rates",  ReqData),
-                   range("data_rates", ReqData)}.
+%% Take floor on queries so we make sure we only return samples
+%% for which we've finished receiving events. Fixes the "drop at
+%% the end" problem.
+range(ReqData) -> {range("lengths",    fun floor/2, ReqData),
+                   range("msg_rates",  fun floor/2, ReqData),
+                   range("data_rates", fun floor/2, ReqData)}.
 
-range(Prefix, ReqData) ->
+%% ...but if we know only one event could have contributed towards
+%% what we are interested in, then let's take the ceiling instead and
+%% get slightly fresher data.
+%%
+%% Why does msg_rates still use floor/2? Because in the cases where we
+%% call this function (for connections and queues) the msg_rates are still
+%% aggregated even though the lengths and data rates aren't.
+range_ceil(ReqData) -> {range("lengths",    fun ceil/2,  ReqData),
+                        range("msg_rates",  fun floor/2, ReqData),
+                        range("data_rates", fun ceil/2,  ReqData)}.
+
+range(Prefix, Round, ReqData) ->
     Age0 = int(Prefix ++ "_age", ReqData),
     Incr0 = int(Prefix ++ "_incr", ReqData),
     if
         is_integer(Age0) andalso is_integer(Incr0) ->
             Age = Age0 * 1000,
             Incr = Incr0 * 1000,
-            %% Take floor on queries so we make sure we only return samples
-            %% for which we've finished receiving events. Fixes the "drop at
-            %% the end" problem.
             Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
-            Last = (Now div Incr) * Incr,
+            Last = Round(Now, Incr),
             #range{first = (Last - Age),
                    last  = Last,
                    incr  = Incr};
         true ->
             no_range
     end.
+
+floor(TS, Interval) -> (TS div Interval) * Interval.
+
+ceil(TS, Interval) -> case floor(TS, Interval) of
+                          TS    -> TS;
+                          Floor -> Floor + Interval
+                      end.
 
 int(Name, ReqData) ->
     case wrq:get_qs_value(Name, ReqData) of
