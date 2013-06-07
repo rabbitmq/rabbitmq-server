@@ -414,14 +414,10 @@ lookup_element(Table, Key, Pos) ->
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
-floor(TS, State) -> floor0(rabbit_mgmt_format:timestamp_ms(TS), State).
-ceil (TS, State) -> ceil0 (rabbit_mgmt_format:timestamp_ms(TS), State).
-
-floor0(MS, #state{interval = Interval})        -> (MS div Interval) * Interval.
-ceil0(MS, State = #state{interval = Interval}) -> case floor0(MS, State) of
-                                                      MS    -> MS;
-                                                      Floor -> Floor + Interval
-                                                  end.
+floor(TS, #state{interval = Interval}) ->
+    rabbit_mgmt_util:floor(rabbit_mgmt_format:timestamp_ms(TS), Interval).
+ceil(TS, #state{interval = Interval}) ->
+    rabbit_mgmt_util:ceil (rabbit_mgmt_format:timestamp_ms(TS), Interval).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
