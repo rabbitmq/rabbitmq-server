@@ -416,7 +416,7 @@ fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
 floor(TS, #state{interval = Interval}) ->
     rabbit_mgmt_util:floor(rabbit_mgmt_format:timestamp_ms(TS), Interval).
-ceil (TS, #state{interval = Interval}) ->
+ceil(TS, #state{interval = Interval}) ->
     rabbit_mgmt_util:ceil (rabbit_mgmt_format:timestamp_ms(TS), Interval).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
