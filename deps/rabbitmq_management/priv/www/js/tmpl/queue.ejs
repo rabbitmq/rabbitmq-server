@@ -47,6 +47,32 @@
     </table>
 
     <table class="facts">
+      <tr>
+        <th>
+          Memory-resident <span class="help" id="queue-memory-resident"></span>
+        </th>
+        <td>
+          <%= queue.backing_queue_status.ram_msg_count + queue.backing_queue_status.ram_ack_count %> msg
+          <sub>
+            <% if (queue.backing_queue_status.target_ram_count == 'infinity') { %>
+              no limit
+            <% } else { %>
+              <%= queue.backing_queue_status.target_ram_count %> msg limit
+            <% } %>
+          </sub>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Persistent <span class="help" id="queue-persistent"></span>
+        </th>
+        <td>
+          <%= queue.backing_queue_status.persistent_count %> msg
+        </td>
+      </tr>
+    </table>
+
+    <table class="facts">
 <% if (vhosts_interesting) { %>
       <tr>
         <th>Virtual host</th>
