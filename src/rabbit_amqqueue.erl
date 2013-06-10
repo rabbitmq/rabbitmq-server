@@ -577,14 +577,16 @@ resume(QPid, ChPid) -> delegate:cast(QPid, {resume, ChPid}).
 
 flush_all(QPids, ChPid) -> delegate:cast(QPids, {flush, ChPid}).
 
-internal_delete1(QueueName) ->
-    ok = mnesia:delete({rabbit_queue, QueueName}),
-    %% this 'guarded' delete prevents unnecessary writes to the mnesia
-    %% disk log
-    case mnesia:wread({rabbit_durable_queue, QueueName}) of
+%% 'guarded' delete prevents unnecessary writes to the mnesia disk log
+guarded_delete(Table, QueueName) ->
+    case mnesia:wread({Table, QueueName}) of
         []  -> ok;
-        [_] -> ok = mnesia:delete({rabbit_durable_queue, QueueName})
-    end,
+        [_] -> ok = mnesia:delete({Table, QueueName})
+    end.
+
+internal_delete1(QueueName) ->
+    guarded_delete(rabbit_durable_queue, QueueName),
+    guarded_delete(rabbit_queue, QueueName),
     %% we want to execute some things, as decided by rabbit_exchange,
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName).
@@ -592,15 +594,18 @@ internal_delete1(QueueName) ->
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
-              case mnesia:wread({rabbit_queue, QueueName}) of
-                  []  -> rabbit_misc:const({error, not_found});
-                  [_] -> Deletions = internal_delete1(QueueName),
-                         T = rabbit_binding:process_deletions(Deletions),
-                         fun() ->
-                                 ok = T(),
-                                 ok = rabbit_event:notify(queue_deleted,
-                                                          [{name, QueueName}])
-                         end
+              case {mnesia:wread({rabbit_queue, QueueName}),
+                    mnesia:wread({rabbit_durable_queue, QueueName})} of
+                  {[], []} ->
+                      rabbit_misc:const({error, not_found});
+                  _ ->
+                      Deletions = internal_delete1(QueueName),
+                      T = rabbit_binding:process_deletions(Deletions),
+                      fun() ->
+                              ok = T(),
+                              ok = rabbit_event:notify(queue_deleted,
+                                                       [{name, QueueName}])
+                      end
               end
       end).
 

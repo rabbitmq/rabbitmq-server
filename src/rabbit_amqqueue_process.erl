@@ -1047,17 +1047,20 @@ handle_call({init, Recover}, From,
     case rabbit_misc:is_process_alive(Owner) of
         true  -> erlang:monitor(process, Owner),
                  declare(Recover, From, State);
-        false -> #q{backing_queue = BQ, backing_queue_state = undefined,
-                    q = #amqqueue{name = QName} = Q} = State,
+        false -> #q{backing_queue       = undefined,
+                    backing_queue_state = undefined,
+                    q                   = #amqqueue{name = QName} = Q} = State,
                  gen_server2:reply(From, not_found),
                  case Recover of
                      new -> rabbit_log:warning(
                               "Queue ~p exclusive owner went away~n", [QName]);
                      _   -> ok
                  end,
+                 BQ = backing_queue_module(Q),
                  BQS = bq_init(BQ, Q, Recover),
                  %% Rely on terminate to delete the queue.
-                 {stop, normal, State#q{backing_queue_state = BQS}}
+                 {stop, normal, State#q{backing_queue       = BQ,
+                                        backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->
