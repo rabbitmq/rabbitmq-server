@@ -1052,7 +1052,8 @@ handle_call({init, Recover}, From,
                  gen_server2:reply(From, not_found),
                  case Recover of
                      new -> rabbit_log:warning(
-                              "Queue ~p exclusive owner went away~n", [QName]);
+                              "Queue ~p exclusive owner went away~n",
+                              [rabbit_misc:rs(QName)]);
                      _   -> ok
                  end,
                  BQS = bq_init(BQ, Q, Recover),
