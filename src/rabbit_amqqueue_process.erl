@@ -922,13 +922,10 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
                       routing_keys  = DeathRoutingKeys,
                       content       = Content2}.
 
-per_msg_ttl_header(#'P_basic'{} = Props) ->
-    case rabbit_basic:parse_expiration(Props) of
-        {ok, Exp} when is_integer(Exp) ->
-            [{<<"original-expiration">>, longstr, integer_to_list(Exp)}];
-        _ ->
-            []
-    end;
+per_msg_ttl_header(#'P_basic'{expiration = undefined}) ->
+    [];
+per_msg_ttl_header(#'P_basic'{expiration = Expiration}) ->
+    [{<<"original-expiration">>, longstr, Expiration}];
 per_msg_ttl_header(_) ->
     [].
 
