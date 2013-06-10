@@ -898,6 +898,7 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
     TimeSec = rabbit_misc:now_ms() div 1000,
+    PerMsgTTL = per_msg_ttl_header(Content#content.properties),
     HeadersFun2 =
         fun (Headers) ->
                 %% The first routing key is the one specified in the
@@ -908,13 +909,25 @@ make_dead_letter_msg(Msg = #basic_message{content       = Content,
                         {<<"queue">>,        longstr,   QName},
                         {<<"time">>,         timestamp, TimeSec},
                         {<<"exchange">>,     longstr,   Exchange#resource.name},
-                        {<<"routing-keys">>, array,     RKs1}],
+                        {<<"routing-keys">>, array,     RKs1}] ++ PerMsgTTL,
                 HeadersFun1(rabbit_basic:prepend_table_header(<<"x-death">>,
                                                               Info, Headers))
         end,
-    Content1 = rabbit_basic:map_headers(HeadersFun2, Content),
-    Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
-                      routing_keys = DeathRoutingKeys, content = Content1}.
+    Content1 = #content{properties = Props} =
+        rabbit_basic:map_headers(HeadersFun2, Content),
+    Content2 = Content1#content{properties =
+                                    Props#'P_basic'{expiration = undefined}},
+    Msg#basic_message{exchange_name = DLX,
+                      id            = rabbit_guid:gen(),
+                      routing_keys  = DeathRoutingKeys,
+                      content       = Content2}.
+
+per_msg_ttl_header(#'P_basic'{expiration = undefined}) ->
+    [];
+per_msg_ttl_header(#'P_basic'{expiration = Expiration}) ->
+    [{<<"original-expiration">>, longstr, Expiration}];
+per_msg_ttl_header(_) ->
+    [].
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 
