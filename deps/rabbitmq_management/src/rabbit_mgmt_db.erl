@@ -442,6 +442,7 @@ handle_event(Event = #event{type = queue_deleted,
                             props = [{name, Name}],
                             timestamp = Timestamp},
              State = #state{old_stats = OldTable}) ->
+    delete_consumers(Name, State),
     %% This is fiddly. Unlike for connections and channels, we need to
     %% decrease any amalgamated coarse stats for [messages,
     %% messages_ready, messages_unacknowledged] for this queue - since
@@ -576,6 +577,17 @@ handle_consumer(Fun, Props, State = #state{tables = Tables}) ->
     Fun(QTable, {Q, Ch, CTag}, P),
     Fun(ChTable, {Ch, Q, CTag}, P),
     {ok, State}.
+
+%% The consumer_deleted event is emitted by queues themselves -
+%% therefore in the event that a queue dies suddenly we may not get
+%% it. The best way to handle this is to make sure we also clean up
+%% consumers when we hear about any queue going down.
+delete_consumers(QName, #state{tables = Tables}) ->
+    QTable = orddict:fetch(consumers_by_queue, Tables),
+    ChTable = orddict:fetch(consumers_by_channel, Tables),
+    ChCTags = ets:match(QTable, {{QName, '$1', '$2'}, '_'}),
+    ets:match_delete(QTable, {{QName, '_', '_'}, '_'}),
+    [ets:delete(ChTable, {Ch, QName, CTag}) || [Ch, CTag] <- ChCTags].
 
 handle_fine_stats(Type, Props, Timestamp, State) ->
     case pget(Type, Props) of
