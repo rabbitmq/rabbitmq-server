@@ -565,8 +565,7 @@ handle_deleted(TName, #event{props = Props}, State = #state{tables    = Tables,
     ets:match_delete(Old, {{fine, {Id, '_', '_'}}, '_'}),
     {ok, State}.
 
-handle_consumer(Fun, Props,
-                State = #state{tables = Tables}) ->
+handle_consumer(Fun, Props, State = #state{tables = Tables}) ->
     P = rabbit_mgmt_format:format(Props, []),
     Table = orddict:fetch(consumers, Tables),
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
