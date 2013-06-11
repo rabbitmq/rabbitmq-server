@@ -42,8 +42,8 @@
 init([]) ->
     {ok, #state{}}.
 
-open_channel_args(#state{sock = Sock}) ->
-    [Sock].
+open_channel_args(#state{sock = Sock, frame_max=FrameMax}) ->
+    [Sock, FrameMax].
 
 do(#'connection.close_ok'{} = CloseOk, State) ->
     erlang:send_after(?SOCKET_CLOSING_TIMEOUT, self(), socket_closing_timeout),
