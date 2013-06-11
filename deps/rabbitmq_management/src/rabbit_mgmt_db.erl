@@ -510,14 +510,6 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
     handle_consumer(fun(Table, Id, _P) -> ets:delete(Table, Id) end,
                     Props, State);
 
-handle_event(#event{type = queue_mirror_deaths, props = Props},
-             #state{tables = Tables}) ->
-    Dead = pget(pids, Props),
-    Table = orddict:fetch(queue_stats, Tables),
-    %% Only the master can be in the DB, but it's easier just to
-    %% delete all of them
-    [ets:delete(Table, {Pid, stats}) || Pid <- Dead];
-
 %% TODO: we don't clear up after dead nodes here - this is a very tiny
 %% leak every time a node is permanently removed from the cluster. Do
 %% we care?
