@@ -569,11 +569,11 @@ handle_deleted(TName, #event{props = Props}, State = #state{tables    = Tables,
 handle_consumer(Fun, Props, State = #state{tables = Tables}) ->
     P = rabbit_mgmt_format:format(Props, []),
     CTag = pget(consumer_tag, P),
-    Q = pget(queue, P),
-    Ch = pget(channel, P),
-    QTable = orddict:fetch(consumers_by_queue, Tables),
+    Q    = pget(queue, P),
+    Ch   = pget(channel, P),
+    QTable  = orddict:fetch(consumers_by_queue, Tables),
     ChTable = orddict:fetch(consumers_by_channel, Tables),
-    Fun(QTable, {Q, Ch, CTag}, P),
+    Fun(QTable,  {Q, Ch, CTag}, P),
     Fun(ChTable, {Ch, Q, CTag}, P),
     {ok, State}.
 
