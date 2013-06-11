@@ -153,6 +153,8 @@ init_state(Q) ->
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
+terminate({shutdown, missing_owner}, State) ->
+    terminate(missing_owner, State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
@@ -161,8 +163,11 @@ terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
       fun (BQS) ->
               BQS1 = BQ:delete_and_terminate(Reason, BQS),
               %% don't care if the internal delete doesn't return 'ok'.
-              rabbit_event:if_enabled(State, #q.stats_timer,
-                                      fun() -> emit_stats(State) end),
+              if Reason =/= missing_owner ->
+                      rabbit_event:if_enabled(State, #q.stats_timer,
+                                              fun() -> emit_stats(State) end);
+                 true -> ok
+              end,
               rabbit_amqqueue:internal_delete(QName),
               BQS1
       end, State).
@@ -1059,8 +1064,8 @@ handle_call({init, Recover}, From,
                  BQ = backing_queue_module(Q),
                  BQS = bq_init(BQ, Q, Recover),
                  %% Rely on terminate to delete the queue.
-                 {stop, normal, State#q{backing_queue       = BQ,
-                                        backing_queue_state = BQS}}
+                 {stop, {shutdown, missing_owner},
+                  State#q{backing_queue = BQ, backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->
