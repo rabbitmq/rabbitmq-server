@@ -777,11 +777,6 @@ version_error(Name, This, Remote) ->
 check_otp_consistency(Remote) ->
     check_version_consistency(erlang:system_info(otp_release), Remote, "OTP").
 
-%% Unlike the rest of 3.0.x, 3.0.0 is not compatible. This can be
-%% removed after 3.1.0 is released.
-check_rabbit_consistency("3.0.0") ->
-    version_error("Rabbit", rabbit_misc:version(), "3.0.0");
-
 check_rabbit_consistency(Remote) ->
     check_version_consistency(
       rabbit_misc:version(), Remote, "Rabbit",
