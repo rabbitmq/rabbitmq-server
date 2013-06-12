@@ -147,19 +147,19 @@ handle_info(#'basic.nack'{} = Nack, State = #state{ch      = Ch,
     Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
     {noreply, State#state{unacked = Unacked1}};
 
-handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
-            State = #state{queue    = #amqqueue{name = QName},
-                           upstream = Upstream,
-                           run      = Run,
-                           credit   = Credit,
-                           ctag     = CTag,
-                           ch       = Ch,
-                           dch      = DCh,
-                           unacked  = Unacked}) ->
+handle_info({#'basic.deliver'{redelivered = Redelivered} = DeliverMethod, Msg},
+            State = #state{queue           = #amqqueue{name = QName},
+                           upstream        = Upstream,
+                           upstream_params = UParams,
+                           run             = Run,
+                           credit          = Credit,
+                           ctag            = CTag,
+                           ch              = Ch,
+                           dch             = DCh,
+                           unacked         = Unacked}) ->
     PublishMethod = #'basic.publish'{exchange    = <<"">>,
                                      routing_key = QName#resource.name},
-    %% TODO Actually update the headers
-    HeadersFun = fun (H) -> H end,
+    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, H) end,
     ForwardFun = fun (_H) -> true end,
     Unacked1 = rabbit_federation_link_util:forward(
                  Upstream, DeliverMethod, Ch, DCh, PublishMethod,
@@ -253,3 +253,37 @@ go(S0 = #not_started{run             = Run,
                                upstream_params = UParams,
                                unacked         = Unacked}}
       end, Upstream, UParams, QName, S0).
+
+update_headers(UParams, Redelivered, Headers) ->
+    {table, Info} = rabbit_federation_upstream:params_to_table(UParams),
+    {Headers1, Count} =
+        case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
+            undefined ->
+                {Headers, 0};
+            {array, Been} ->
+                {Found, Been1} = lists:partition(
+                                      fun (I) -> visit_match(I, Info) end,
+                                      Been),
+                C = case Found of
+                        []           -> 0;
+                        [{table, T}] -> case rabbit_misc:table_lookup(
+                                               T, <<"visit-count">>) of
+                                            {_, I} when is_number(I) -> I;
+                                            _                        -> 0
+                                        end
+                    end,
+                {rabbit_misc:set_table_value(
+                   Headers, ?ROUTING_HEADER, array, Been1), C}
+        end,
+    rabbit_basic:prepend_table_header(
+      ?ROUTING_HEADER, Info ++ [{<<"redelivered">>, bool, Redelivered},
+                                {<<"visit-count">>, long, Count + 1}],
+      Headers1).
+
+visit_match({table, T}, Info) ->
+    lists:all(fun (K) ->
+                      rabbit_misc:table_lookup(T, K) =:=
+                          rabbit_misc:table_lookup(Info, K)
+              end, [<<"uri">>, <<"virtual_host">>, <<"queue">>]);
+visit_match(_ ,_) ->
+    false.

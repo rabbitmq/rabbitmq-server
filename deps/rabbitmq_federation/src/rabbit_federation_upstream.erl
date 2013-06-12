@@ -46,10 +46,13 @@ for(XorQ, UpstreamName) ->
 params_to_table(#upstream_params{uri    = URI,
                                  params = Params,
                                  x_or_q = XorQ}) ->
+    Key = case XorQ of
+              #exchange{} -> <<"exchange">>;
+              #amqqueue{} -> <<"queue">>
+          end,
     {table, [{<<"uri">>,          longstr, remove_credentials(URI)},
              {<<"virtual_host">>, longstr, vhost(Params)},
-             %% TODO derp
-             {<<"exchange">>,     longstr, name(XorQ)}]}.
+             {Key,                longstr, name(XorQ)}]}.
 
 params_to_string(#upstream_params{uri    = URI,
                                   x_or_q = XorQ}) ->
