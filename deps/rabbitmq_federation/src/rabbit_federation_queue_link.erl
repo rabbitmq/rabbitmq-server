@@ -202,6 +202,9 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
+terminate(_Reason, #not_started{}) ->
+    ok;
+
 terminate(Reason, #state{dconn           = DConn,
                          conn            = Conn,
                          upstream        = Upstream,
@@ -230,12 +233,13 @@ go(S0 = #not_started{run             = Run,
             {<<"x-credit">>,  table,   [{<<"credit">>, long, Credit},
                                         {<<"drain">>,  bool, false}]}],
     Unacked = rabbit_federation_link_util:unacked_new(),
+    NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
               #'basic.consume_ok'{consumer_tag = CTag} =
                   amqp_channel:call(
                     Ch, #'basic.consume'{queue     = name(UQueue),
-                                         no_ack    = true,
+                                         no_ack    = NoAck,
                                          arguments = Args}),
               {noreply, #state{queue           = Queue,
                                run             = Run,
