@@ -634,8 +634,8 @@ assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
     {This, Rest} = lists:partition(
                      fun(St) ->
                              pget(connection, St) =:= ConnectionName andalso
-                                 pget(exchange, St) =:= DXNameBin andalso
-                                 pget(upstream_exchange, St) =:= UXNameBin
+                                 pget(name, St) =:= DXNameBin andalso
+                                 pget(upstream_name, St) =:= UXNameBin
                      end, Status),
     ?assertMatch([_], This),
     Rest.
