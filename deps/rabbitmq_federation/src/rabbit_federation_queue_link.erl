@@ -30,7 +30,7 @@
 
 -record(not_started, {queue, run, upstream, upstream_params}).
 -record(state, {queue, run, conn, ch, dconn, dch, credit, ctag,
-                upstream, upstream_params}).
+                upstream, upstream_params, unacked}).
 
 %% TODO make this configurable
 -define(CREDIT, 200).
@@ -134,28 +134,36 @@ handle_cast(basic_get, State = #state{ch = Ch, credit = Credit, ctag = CTag}) ->
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
-
-
-%% TODO these should go away when we finish merging with rabbit_federation_link
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
-handle_info(#'basic.cancel'{}, State) ->
-    {noreply, State};
-handle_info(#'basic.ack'{}, State) ->
-    {noreply, State};
 
+handle_info(#'basic.ack'{} = Ack, State = #state{ch      = Ch,
+                                                 unacked = Unacked}) ->
+    Unacked1 = rabbit_federation_link_util:ack(Ack, Ch, Unacked),
+    {noreply, State#state{unacked = Unacked1}};
 
-handle_info({#'basic.deliver'{}, Msg},
-            State = #state{queue  = #amqqueue{name = QName},
-                           run         = Run,
-                           credit      = Credit,
-                           ctag        = CTag,
-                           ch          = Ch,
-                           dch         = DCh}) ->
-    %% TODO share with _link
-    amqp_channel:cast(DCh, #'basic.publish'{exchange    = <<"">>,
-                                            routing_key = QName#resource.name},
-                      Msg),
+handle_info(#'basic.nack'{} = Nack, State = #state{ch      = Ch,
+                                                   unacked = Unacked}) ->
+    Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
+    {noreply, State#state{unacked = Unacked1}};
+
+handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
+            State = #state{queue    = #amqqueue{name = QName},
+                           upstream = Upstream,
+                           run      = Run,
+                           credit   = Credit,
+                           ctag     = CTag,
+                           ch       = Ch,
+                           dch      = DCh,
+                           unacked  = Unacked}) ->
+    PublishMethod = #'basic.publish'{exchange    = <<"">>,
+                                     routing_key = QName#resource.name},
+    %% TODO Actually update the headers
+    HeadersFun = fun (H) -> H end,
+    ForwardFun = fun (_H) -> true end,
+    Unacked1 = rabbit_federation_link_util:forward(
+                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
+                 HeadersFun, ForwardFun, Msg, Unacked),
     %% TODO we could also hook this up to internal credit
     %% TODO actually we could reject when 'stopped'
     Credit1 = case Run of
@@ -172,7 +180,24 @@ handle_info({#'basic.deliver'{}, Msg},
                                    I - 1
                            end
               end,
-    {noreply, State#state{credit = Credit1}};
+    {noreply, State#state{credit  = Credit1,
+                          unacked = Unacked1}};
+
+handle_info(#'basic.cancel'{},
+            State = #state{queue           = #amqqueue{name = QName},
+                           upstream        = Upstream,
+                           upstream_params = UParams}) ->
+    rabbit_federation_link_util:connection_error(
+      local, basic_cancel, Upstream, UParams, QName, State);
+
+handle_info({'DOWN', _Ref, process, Pid, Reason},
+            State = #state{dch             = DCh,
+                           ch              = Ch,
+                           upstream        = Upstream,
+                           upstream_params = UParams,
+                           queue           = #amqqueue{name = QName}}) ->
+    rabbit_federation_link_util:handle_down(
+      Pid, Reason, Ch, DCh, {Upstream, UParams, QName}, State);
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -204,6 +229,7 @@ go(S0 = #not_started{run             = Run,
     Args = [{<<"x-purpose">>, longstr, <<"federation">>},
             {<<"x-credit">>,  table,   [{<<"credit">>, long, Credit},
                                         {<<"drain">>,  bool, false}]}],
+    Unacked = rabbit_federation_link_util:unacked_new(),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
               #'basic.consume_ok'{consumer_tag = CTag} =
@@ -212,7 +238,7 @@ go(S0 = #not_started{run             = Run,
                                          no_ack    = true,
                                          arguments = Args}),
               {noreply, #state{queue           = Queue,
-                                    run             = Run,
+                               run             = Run,
                                conn            = Conn,
                                ch              = Ch,
                                dconn           = DConn,
@@ -220,5 +246,6 @@ go(S0 = #not_started{run             = Run,
                                credit          = Credit,
                                ctag            = CTag,
                                upstream        = Upstream,
-                               upstream_params = UParams}}
+                               upstream_params = UParams,
+                               unacked         = Unacked}}
       end, Upstream, UParams, QName, S0).

@@ -22,7 +22,8 @@
 %% real
 -export([start_conn_ch/5, disposable_channel_call/2, disposable_channel_call/3,
          disposable_connection_call/3, ensure_connection_closed/1,
-         log_terminate/4]).
+         log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
+         handle_down/6]).
 
 %% temp
 -export([connection_error/6]).
@@ -143,6 +144,94 @@ clean_reason({E = {shutdown, _}, _}) -> E;
 clean_reason(E)                      -> E.
 
 %% local / disconnected never gets invoked, see handle_info({'DOWN', ...
+
+%%----------------------------------------------------------------------------
+
+unacked_new() -> gb_trees:empty().
+
+ack(#'basic.ack'{delivery_tag = Seq,
+                 multiple     = Multiple}, Ch, Unack) ->
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = gb_trees:get(Seq, Unack),
+                                       multiple     = Multiple}),
+    remove_delivery_tags(Seq, Multiple, Unack).
+
+
+%% Note: at time of writing the broker will never send requeue=false. And it's
+%% hard to imagine why it would. But we may as well handle it.
+nack(#'basic.nack'{delivery_tag = Seq,
+                   multiple     = Multiple,
+                   requeue      = Requeue}, Ch, Unack) ->
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = gb_trees:get(Seq, Unack),
+                                        multiple     = Multiple,
+                                        requeue      = Requeue}),
+    remove_delivery_tags(Seq, Multiple, Unack).
+
+remove_delivery_tags(Seq, false, Unacked) ->
+    gb_trees:delete(Seq, Unacked);
+remove_delivery_tags(Seq, true, Unacked) ->
+    case gb_trees:is_empty(Unacked) of
+        true  -> Unacked;
+        false -> {Smallest, _Val, Unacked1} = gb_trees:take_smallest(Unacked),
+                 case Smallest > Seq of
+                     true  -> Unacked;
+                     false -> remove_delivery_tags(Seq, true, Unacked1)
+                 end
+    end.
+
+forward(#upstream{ack_mode      = AckMode,
+                  trust_user_id = Trust},
+        #'basic.deliver'{delivery_tag = DT},
+        Ch, DCh, PublishMethod, HeadersFun, ForwardFun, Msg, Unacked) ->
+    Headers = extract_headers(Msg),
+    case ForwardFun(Headers) of
+        true  -> Msg1 = maybe_clear_user_id(
+                          Trust, update_headers(HeadersFun(Headers), Msg)),
+                 Seq = amqp_channel:next_publish_seqno(DCh),
+                 amqp_channel:cast(DCh, PublishMethod, Msg1),
+                 case AckMode of
+                     'on-confirm' ->
+                         gb_trees:insert(Seq, DT, Unacked);
+                     'on-publish' ->
+                         amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT}),
+                         Unacked;
+                     'no-ack' ->
+                         Unacked
+                 end;
+        false -> amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT}),
+                 %% Drop it, but acknowledge it!
+                 Unacked
+    end.
+
+maybe_clear_user_id(false, Msg = #amqp_msg{props = Props}) ->
+    Msg#amqp_msg{props = Props#'P_basic'{user_id = undefined}};
+maybe_clear_user_id(true, Msg) ->
+    Msg.
+
+extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
+    Headers.
+
+update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
+    Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
+
+%%----------------------------------------------------------------------------
+
+%% If the downstream channel shuts down cleanly, we can just ignore it
+%% - we're the same node, we're presumably about to go down too.
+handle_down(DCh, shutdown, _Ch, DCh, _Args, State) ->
+    {noreply, State};
+
+%% If the upstream channel goes down for an intelligible reason, just
+%% log it and die quietly.
+handle_down(Ch, {shutdown, Reason}, Ch, _DCh,
+            {Upstream, UParams, XName}, State) ->
+    rabbit_federation_link_util:connection_error(
+      remote, {upstream_channel_down, Reason}, Upstream, UParams, XName, State);
+
+handle_down(Ch, Reason, Ch, _DCh, _Args, State) ->
+    {stop, {upstream_channel_down, Reason}, State};
+
+handle_down(DCh, Reason, _Ch, DCh, _Args, State) ->
+    {stop, {downstream_channel_down, Reason}, State}.
 
 %%----------------------------------------------------------------------------
 

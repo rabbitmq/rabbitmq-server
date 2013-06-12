@@ -44,7 +44,7 @@
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange,
-                unacked = gb_trees:empty()}).
+                unacked}).
 
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
@@ -126,65 +126,36 @@ handle_cast(Msg, State) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
-            State = #state{unacked = Unacked}) ->
-    ack(gb_trees:get(Seq, Unacked), Multiple, State),
-    {noreply, State#state{unacked = remove_delivery_tags(Seq, Multiple,
-                                                         Unacked)}};
+handle_info(#'basic.ack'{} = Ack, State = #state{channel = Ch,
+                                                 unacked = Unacked}) ->
+    Unacked1 = rabbit_federation_link_util:ack(Ack, Ch, Unacked),
+    {noreply, State#state{unacked = Unacked1}};
 
-%% Note: at time of writing the broker will never send requeue=false. And it's
-%% hard to imagine why it would. But we may as well handle it.
-handle_info(#'basic.nack'{delivery_tag = Seq,
-                          multiple     = Multiple,
-                          requeue      = ReQueue},
-            State = #state{unacked = Unacked}) ->
-    nack(gb_trees:get(Seq, Unacked), Multiple, ReQueue, State),
-    {noreply, State#state{unacked = remove_delivery_tags(Seq, Multiple,
-                                                         Unacked)}};
+handle_info(#'basic.nack'{} = Nack, State = #state{channel = Ch,
+                                                   unacked = Unacked}) ->
+    Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
+    {noreply, State#state{unacked = Unacked1}};
 
 handle_info({#'basic.deliver'{routing_key  = Key,
-                              delivery_tag = DTag,
-                              redelivered  = Redelivered}, Msg},
+                              redelivered  = Redelivered} = DeliverMethod, Msg},
             State = #state{
-              upstream            = #upstream{max_hops      = MaxHops,
-                                              ack_mode      = AckMode,
-                                              trust_user_id = Trust},
+              upstream            = Upstream = #upstream{max_hops = MaxH},
               upstream_params     = UParams,
               downstream_exchange = #resource{name = XNameBin},
               downstream_channel  = DCh,
               channel             = Ch,
               unacked             = Unacked}) ->
-    Headers0 = extract_headers(Msg),
+    PublishMethod = #'basic.publish'{exchange    = XNameBin,
+                                     routing_key = Key},
     %% TODO add user information here?
+    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, H) end,
     %% We need to check should_forward/2 here in case the upstream
     %% does not have federation and thus is using a fanout exchange.
-    case rabbit_federation_util:should_forward(Headers0, MaxHops) of
-        true  -> {table, Info0} = rabbit_federation_upstream:params_to_table(
-                                    UParams),
-                 Info = Info0 ++ [{<<"redelivered">>, bool, Redelivered}],
-                 Headers = rabbit_basic:prepend_table_header(
-                             ?ROUTING_HEADER, Info, Headers0),
-                 Seq = amqp_channel:next_publish_seqno(DCh),
-                 amqp_channel:cast(DCh, #'basic.publish'{exchange    = XNameBin,
-                                                         routing_key = Key},
-                                   maybe_clear_user_id(
-                                     Trust, update_headers(Headers, Msg))),
-                 State1 =
-                     case AckMode of
-                         'on-confirm' ->
-                             State#state{unacked = gb_trees:insert(
-                                                     Seq, DTag, Unacked)};
-                         'on-publish' ->
-                             amqp_channel:cast(
-                               Ch, #'basic.ack'{delivery_tag = DTag}),
-                             State;
-                         'no-ack' ->
-                             State
-                     end,
-                 {noreply, State1};
-        false -> ack(DTag, false, State), %% Drop it, but acknowledge it!
-                 {noreply, State}
-    end;
+    ForwardFun = fun (H) -> rabbit_federation_util:should_forward(H, MaxH) end,
+    Unacked1 = rabbit_federation_link_util:forward(
+                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
+                 HeadersFun, ForwardFun, Msg, Unacked),
+    {noreply, State#state{unacked = Unacked1}};
 
 handle_info(#'basic.cancel'{}, State = #state{upstream            = Upstream,
                                               upstream_params     = UParams,
@@ -192,29 +163,14 @@ handle_info(#'basic.cancel'{}, State = #state{upstream            = Upstream,
     rabbit_federation_link_util:connection_error(
       local, basic_cancel, Upstream, UParams, XName, State);
 
-%% If the downstream channel shuts down cleanly, we can just ignore it
-%% - we're the same node, we're presumably about to go down too.
-handle_info({'DOWN', _Ref, process, Ch, shutdown},
-            State = #state{downstream_channel = Ch}) ->
-    {noreply, State};
-
-%% If the upstream channel goes down for an intelligible reason, just
-%% log it and die quietly.
-handle_info({'DOWN', _Ref, process, Ch, {shutdown, Reason}},
-            State = #state{channel             = Ch,
+handle_info({'DOWN', _Ref, process, Pid, Reason},
+            State = #state{downstream_channel  = DCh,
+                           channel             = Ch,
                            upstream            = Upstream,
                            upstream_params     = UParams,
                            downstream_exchange = XName}) ->
-    rabbit_federation_link_util:connection_error(
-      remote, {upstream_channel_down, Reason}, Upstream, UParams, XName, State);
-
-handle_info({'DOWN', _Ref, process, Ch, Reason},
-            State = #state{channel = Ch}) ->
-    {stop, {upstream_channel_down, Reason}, State};
-
-handle_info({'DOWN', _Ref, process, Ch, Reason},
-            State = #state{downstream_channel = Ch}) ->
-    {stop, {downstream_channel_down, Reason}, State};
+    rabbit_federation_link_util:handle_down(
+      Pid, Reason, Ch, DCh, {Upstream, UParams, XName}, State);
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -420,6 +376,7 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     %% us to exit. We can therefore only trap exits when past that
     %% point. Bug 24372 may help us do something nicer.
     process_flag(trap_exit, true),
+    Unacked = rabbit_federation_link_util:unacked_new(),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
               {Serial, Bindings} =
@@ -445,7 +402,8 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                                  next_serial           = Serial,
                                  downstream_connection = DConn,
                                  downstream_channel    = DCh,
-                                 downstream_exchange   = DownXName}),
+                                 downstream_exchange   = DownXName,
+                                 unacked               = Unacked}),
                         Bindings),
               {noreply, State}
       end, Upstream, UParams, DownXName, S0).
@@ -566,34 +524,8 @@ delete_upstream_exchange(Conn, XNameBin) ->
     rabbit_federation_link_util:disposable_channel_call(
       Conn, #'exchange.delete'{exchange = XNameBin}).
 
-ack(Tag, Multiple, #state{channel = Ch}) ->
-    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
-                                       multiple     = Multiple}).
-
-nack(Tag, Multiple, ReQueue, #state{channel = Ch}) ->
-    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = Tag,
-                                        multiple     = Multiple,
-                                        requeue      = ReQueue}).
-
-remove_delivery_tags(Seq, false, Unacked) ->
-    gb_trees:delete(Seq, Unacked);
-remove_delivery_tags(Seq, true, Unacked) ->
-    case gb_trees:is_empty(Unacked) of
-        true  -> Unacked;
-        false -> {Smallest, _Val, Unacked1} = gb_trees:take_smallest(Unacked),
-                 case Smallest > Seq of
-                     true  -> Unacked;
-                     false -> remove_delivery_tags(Seq, true, Unacked1)
-                 end
-    end.
-
-extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
-    Headers.
-
-maybe_clear_user_id(false, Msg = #amqp_msg{props = Props}) ->
-    Msg#amqp_msg{props = Props#'P_basic'{user_id = undefined}};
-maybe_clear_user_id(true, Msg) ->
-    Msg.
-
-update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
-    Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
+update_headers(UParams, Redelivered, Headers) ->
+    {table, Info} = rabbit_federation_upstream:params_to_table(UParams),
+    rabbit_basic:prepend_table_header(
+      ?ROUTING_HEADER, Info ++ [{<<"redelivered">>, bool, Redelivered}],
+      Headers).
