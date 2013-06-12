@@ -61,7 +61,7 @@
 -export([multi_call/2]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
--export([version/0]).
+-export([version/0, which_applications/0]).
 -export([sequence_error/1]).
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
 -export([check_expiry/1]).
@@ -232,6 +232,7 @@
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 -spec(version/0 :: () -> string()).
+-spec(which_applications/0 :: () -> [{atom(), string(), string()}]).
 -spec(sequence_error/1 :: ([({'error', any()} | any())])
                        -> {'error', any()} | any()).
 -spec(json_encode/1 :: (any()) -> {'ok', string()} | {'error', any()}).
@@ -984,6 +985,16 @@ gb_sets_difference(S1, S2) ->
 version() ->
     {ok, VSN} = application:get_key(rabbit, vsn),
     VSN.
+
+%% application:which_applications(infinity) is dangerous, since it can
+%% cause deadlocks on shutdown. So we have to use a timeout variant,
+%% but w/o creating spurious timeout errors.
+which_applications() ->
+    try
+        application:which_applications()
+    catch
+        exit:{timeout, _} -> []
+    end.
 
 sequence_error([T])                      -> T;
 sequence_error([{error, _} = Error | _]) -> Error;

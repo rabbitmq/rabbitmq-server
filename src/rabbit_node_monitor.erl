@@ -465,4 +465,4 @@ alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
 alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_mnesia:cluster_nodes(all)).
 
 alive_rabbit_nodes(Nodes) ->
-    [N || N <- alive_nodes(Nodes), rabbit_nodes:is_process_running(N, rabbit)].
+    [N || N <- alive_nodes(Nodes), rabbit:is_running(N)].

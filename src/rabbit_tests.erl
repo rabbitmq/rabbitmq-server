@@ -2393,6 +2393,7 @@ test_variable_queue() ->
               fun test_variable_queue_ack_limiting/1,
               fun test_variable_queue_purge/1,
               fun test_variable_queue_requeue/1,
+              fun test_variable_queue_requeue_ram_beta/1,
               fun test_variable_queue_fold/1]],
     passed.
 
@@ -2490,6 +2491,20 @@ test_variable_queue_requeue(VQ0) ->
                       end, VQ1, Msgs),
     {empty, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
     VQ3.
+
+%% requeue from ram_pending_ack into q3, move to delta and then empty queue
+test_variable_queue_requeue_ram_beta(VQ0) ->
+    Count = rabbit_queue_index:next_segment_boundary(0)*2 + 2,
+    VQ1 = rabbit_tests:variable_queue_publish(false, Count, VQ0),
+    {VQ2, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ1),
+    {Back, Front} = lists:split(Count div 2, AcksR),
+    {_, VQ3} = rabbit_variable_queue:requeue(erlang:tl(Back), VQ2),
+    VQ4 = rabbit_variable_queue:set_ram_duration_target(0, VQ3),
+    {_, VQ5} = rabbit_variable_queue:requeue([erlang:hd(Back)], VQ4),
+    VQ6 = requeue_one_by_one(Front, VQ5),
+    {VQ7, AcksAll} = variable_queue_fetch(Count, false, true, Count, VQ6),
+    {_, VQ8} = rabbit_variable_queue:ack(AcksAll, VQ7),
+    VQ8.
 
 test_variable_queue_purge(VQ0) ->
     LenDepth = fun (VQ) ->

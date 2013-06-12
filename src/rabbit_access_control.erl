@@ -68,8 +68,11 @@ check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->
     check_access(
       fun() ->
-              rabbit_vhost:exists(VHostPath) andalso
-                  Module:check_vhost_access(User, VHostPath)
+              %% TODO this could be an andalso shortcut under >R13A
+              case rabbit_vhost:exists(VHostPath) of
+                  false -> false;
+                  true  -> Module:check_vhost_access(User, VHostPath)
+              end
       end,
       Module, "access to vhost '~s' refused for user '~s'",
       [VHostPath, Username]).
