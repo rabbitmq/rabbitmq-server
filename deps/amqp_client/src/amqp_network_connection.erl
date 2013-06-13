@@ -42,7 +42,7 @@
 init([]) ->
     {ok, #state{}}.
 
-open_channel_args(#state{sock = Sock, frame_max=FrameMax}) ->
+open_channel_args(#state{sock = Sock, frame_max = FrameMax}) ->
     [Sock, FrameMax].
 
 do(#'connection.close_ok'{} = CloseOk, State) ->
