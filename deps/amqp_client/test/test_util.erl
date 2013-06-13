@@ -1022,9 +1022,11 @@ rpc_client_consume_loop(Channel) ->
             Publish = #'basic.publish'{exchange = <<>>,
                                        routing_key = Q,
                                        mandatory = true},
-            amqp_channel:call(Channel, Publish, #amqp_msg{props = Properties,
-                                                          payload = CorrelationId}),
-            amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
+            amqp_channel:call(
+              Channel, Publish, #amqp_msg{props = Properties,
+                                          payload = CorrelationId}),
+            amqp_channel:call(
+              Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
             rpc_client_consume_loop(Channel);
         _ ->
             rpc_client_consume_loop(Channel)
