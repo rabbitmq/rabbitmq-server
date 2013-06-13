@@ -34,7 +34,7 @@ HEX     = 0x[0-9a-fA-F]+
 WS      = ([\000-\s])
 S       = ({COMMA}|{PARENS})
 CMP     = (>=|<=|<>|[=><])
-IDENT   = {L}({L}|{D})*
+IDENT   = {L}({L}|{D}|\.)*
 APLUS   = [-+]
 AMULT   = [*/]
 STRING  = '([^']|'')*'
@@ -42,6 +42,8 @@ STRING  = '([^']|'')*'
 
 % COMMENT = /\*([^\*]|\*[^/])*\*/       % Do not (need to) support comments
 % WS      = ([\000-\s]|%.*)             % Do not (need to) support line comments
+
+% IDENT to allow periods in names (not starting)
 
 % All keywords are case insensitive
 LIKE    = [Ll][Ii][Kk][Ee]
