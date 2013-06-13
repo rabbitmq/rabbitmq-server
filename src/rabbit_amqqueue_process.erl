@@ -153,8 +153,9 @@ init_state(Q) ->
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate({shutdown, missing_owner = R}, State) ->
-    terminate_shutdown(terminate_delete(false, R, State), State);
+terminate({shutdown, missing_owner} = Reason, State) ->
+    %% if the owner was missing then there will be no queue, so don't emit stats
+    terminate_shutdown(terminate_delete(false, Reason, State), State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(Reason,            State) ->
