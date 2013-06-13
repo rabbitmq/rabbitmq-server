@@ -55,7 +55,7 @@ start_writer_fun(_Sup, direct, [ConnPid, ConnName, Node, User, VHost,
             link(RabbitCh),
             {ok, RabbitCh}
     end;
-start_writer_fun(Sup, network, [Sock, FrameMax], ChNumber) ->  %% TODO: pass frame-size here...
+start_writer_fun(Sup, network, [Sock, FrameMax], ChNumber) ->
     fun () ->
             {ok, _} = supervisor2:start_child(
                         Sup,
