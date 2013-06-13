@@ -153,24 +153,26 @@ init_state(Q) ->
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate({shutdown, missing_owner}, State) ->
-    terminate(missing_owner, State);
+terminate({shutdown, missing_owner = R}, State) ->
+    terminate_shutdown(terminate_delete(false, R, State), State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
-                                        backing_queue = BQ}) ->
-    terminate_shutdown(
-      fun (BQS) ->
-              BQS1 = BQ:delete_and_terminate(Reason, BQS),
-              %% don't care if the internal delete doesn't return 'ok'.
-              if Reason =/= missing_owner ->
-                      rabbit_event:if_enabled(State, #q.stats_timer,
-                                              fun() -> emit_stats(State) end);
-                 true -> ok
-              end,
-              rabbit_amqqueue:internal_delete(QName),
-              BQS1
-      end, State).
+terminate(Reason,            State) ->
+    terminate_shutdown(terminate_delete(true, Reason, State), State).
+
+terminate_delete(EmitStats, Reason,
+                 State = #q{q = #amqqueue{name          = QName},
+                                          backing_queue = BQ}) ->
+    fun (BQS) ->
+        BQS1 = BQ:delete_and_terminate(Reason, BQS),
+        %% don't care if the internal delete doesn't return 'ok'.
+        if EmitStats -> rabbit_event:if_enabled(State, #q.stats_timer,
+                                                fun() -> emit_stats(State) end);
+           true      -> ok
+        end,
+        rabbit_amqqueue:internal_delete(QName),
+        BQS1
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
