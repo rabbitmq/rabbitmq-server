@@ -109,5 +109,6 @@ basic_parse_test_() ->
     , ?_assertMatch({eq,{ident,<<"JMSDeliveryMode">>}, <<"PERSISTENT">>},              analyze(?TEST_TYPE_INFO, "JMSDeliveryMode = 'PERSISTENT'    "))
     , ?_assertMatch({eq,<<"PERSISTENT">>, {ident,<<"JMSDeliveryMode">>}},              analyze(?TEST_TYPE_INFO, "'PERSISTENT'    = JMSDeliveryMode "))
     , ?_assertMatch({eq,{ident,<<"JMSDeliveryMode">>}, {ident,<<"JMSDeliveryMode">>}}, analyze(?TEST_TYPE_INFO, "JMSDeliveryMode = JMSDeliveryMode "))
+    , ?_assertMatch({eq,{ident,<<"id.with.periods.in">>}, <<"TEST">>},                 analyze(?TEST_TYPE_INFO, "id.with.periods.in = 'TEST'       "))
     , ?_assertMatch(error,                                                             analyze(?TEST_TYPE_INFO, "JMSDeliveryMode = 'non_persistent'"))
     ].
