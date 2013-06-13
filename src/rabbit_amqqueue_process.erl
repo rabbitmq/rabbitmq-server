@@ -166,11 +166,11 @@ terminate_delete(EmitStats, Reason,
                                           backing_queue = BQ}) ->
     fun (BQS) ->
         BQS1 = BQ:delete_and_terminate(Reason, BQS),
-        %% don't care if the internal delete doesn't return 'ok'.
         if EmitStats -> rabbit_event:if_enabled(State, #q.stats_timer,
                                                 fun() -> emit_stats(State) end);
            true      -> ok
         end,
+        %% don't care if the internal delete doesn't return 'ok'.
         rabbit_amqqueue:internal_delete(QName),
         BQS1
     end.
