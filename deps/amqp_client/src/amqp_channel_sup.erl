@@ -55,12 +55,12 @@ start_writer_fun(_Sup, direct, [ConnPid, ConnName, Node, User, VHost,
             link(RabbitCh),
             {ok, RabbitCh}
     end;
-start_writer_fun(Sup, network, [Sock], ChNumber) ->
+start_writer_fun(Sup, network, [Sock, FrameMax], ChNumber) ->
     fun () ->
             {ok, _} = supervisor2:start_child(
                         Sup,
                         {writer, {rabbit_writer, start_link,
-                                  [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
+                                  [Sock, ChNumber, FrameMax, ?PROTOCOL,
                                    self()]},
                          intrinsic, ?MAX_WAIT, worker, [rabbit_writer]})
     end.
