@@ -973,6 +973,67 @@ rpc_test() ->
     wait_for_death(Connection),
     ok.
 
+%% This tests if the RPC continues to generate valid correlation ids
+%% over a series of requests.
+rpc_client_test() ->
+    {ok, Connection} = new_connection(),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Q = uuid(),
+    Latch = 255, % enough requests to tickle bad correlation ids
+    %% Start a server to return correlation ids to the client.
+    Server = spawn_link(fun() ->
+                                rpc_correlation_server(Channel, Q)
+                        end),
+    %% Generate a series of RPC requests on the same client.
+    Client = amqp_rpc_client:start(Connection, Q),
+    Parent = self(),
+    [spawn(fun() ->
+                   Reply = amqp_rpc_client:call(Client, <<>>),
+                   Parent ! {finished, Reply}
+           end) || _ <- lists:seq(1, Latch)],
+    %% Verify that the correlation ids are valid UTF-8 strings.
+    CorrelationIds = latch_loop(Latch),
+    [?assertMatch(<<_/binary>>, DecodedId)
+     || DecodedId <- [unicode:characters_to_binary(Id, utf8)
+                      || Id <- CorrelationIds]],
+    %% Cleanup.
+    Server ! stop,
+    amqp_rpc_client:stop(Client),
+    teardown(Connection, Channel),
+    ok.
+
+%% Consumer of RPC requests that replies with the CorrelationId.
+rpc_correlation_server(Channel, Q) ->
+    amqp_channel:register_return_handler(Channel, self()),
+    amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    amqp_channel:call(Channel, #'basic.consume'{queue = Q}),
+    rpc_client_consume_loop(Channel),
+    amqp_channel:unregister_return_handler(Channel).
+
+rpc_client_consume_loop(Channel) ->
+    receive
+        stop ->
+            ok;
+        {#'basic.deliver'{delivery_tag = DeliveryTag},
+         #amqp_msg{props = Props}} ->
+            #'P_basic'{correlation_id = CorrelationId,
+                       reply_to = Q} = Props,
+            Properties = #'P_basic'{correlation_id = CorrelationId},
+            Publish = #'basic.publish'{exchange = <<>>,
+                                       routing_key = Q,
+                                       mandatory = true},
+            amqp_channel:call(
+              Channel, Publish, #amqp_msg{props = Properties,
+                                          payload = CorrelationId}),
+            amqp_channel:call(
+              Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
+            rpc_client_consume_loop(Channel);
+        _ ->
+            rpc_client_consume_loop(Channel)
+    after 3000 ->
+            exit(no_request_received)
+    end.
+
 %%---------------------------------------------------------------------------
 
 setup_publish(Channel) ->

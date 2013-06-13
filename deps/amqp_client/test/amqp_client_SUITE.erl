@@ -62,6 +62,7 @@ async_sync_method_serialization_test_() -> ?RUN([]).
 sync_async_method_serialization_test_() -> ?RUN([]).
 teardown_test_()                        -> ?RUN([repeat]).
 rpc_test_()                             -> ?RUN([]).
+rpc_client_test_()                      -> ?RUN([]).
 pub_and_close_test_()                   -> ?RUN([]).
 channel_tune_negotiation_test_()        -> ?RUN([]).
 confirm_test_()                         -> ?RUN([]).
