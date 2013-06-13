@@ -592,15 +592,18 @@ internal_delete1(QueueName) ->
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
-              case mnesia:wread({rabbit_queue, QueueName}) of
-                  []  -> rabbit_misc:const({error, not_found});
-                  [_] -> Deletions = internal_delete1(QueueName),
-                         T = rabbit_binding:process_deletions(Deletions),
-                         fun() ->
-                                 ok = T(),
-                                 ok = rabbit_event:notify(queue_deleted,
-                                                          [{name, QueueName}])
-                         end
+              case {mnesia:wread({rabbit_queue, QueueName}),
+                    mnesia:wread({rabbit_durable_queue, QueueName})} of
+                  {[], []} ->
+                      rabbit_misc:const({error, not_found});
+                  _ ->
+                      Deletions = internal_delete1(QueueName),
+                      T = rabbit_binding:process_deletions(Deletions),
+                      fun() ->
+                              ok = T(),
+                              ok = rabbit_event:notify(queue_deleted,
+                                                       [{name, QueueName}])
+                      end
               end
       end).
 

@@ -153,19 +153,27 @@ init_state(Q) ->
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
+terminate({shutdown, missing_owner} = Reason, State) ->
+    %% if the owner was missing then there will be no queue, so don't emit stats
+    terminate_shutdown(terminate_delete(false, Reason, State), State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
-                                        backing_queue = BQ}) ->
-    terminate_shutdown(
-      fun (BQS) ->
-              BQS1 = BQ:delete_and_terminate(Reason, BQS),
-              %% don't care if the internal delete doesn't return 'ok'.
-              rabbit_event:if_enabled(State, #q.stats_timer,
-                                      fun() -> emit_stats(State) end),
-              rabbit_amqqueue:internal_delete(QName),
-              BQS1
-      end, State).
+terminate(Reason,            State) ->
+    terminate_shutdown(terminate_delete(true, Reason, State), State).
+
+terminate_delete(EmitStats, Reason,
+                 State = #q{q = #amqqueue{name          = QName},
+                                          backing_queue = BQ}) ->
+    fun (BQS) ->
+        BQS1 = BQ:delete_and_terminate(Reason, BQS),
+        if EmitStats -> rabbit_event:if_enabled(State, #q.stats_timer,
+                                                fun() -> emit_stats(State) end);
+           true      -> ok
+        end,
+        %% don't care if the internal delete doesn't return 'ok'.
+        rabbit_amqqueue:internal_delete(QName),
+        BQS1
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -1060,8 +1068,9 @@ handle_call({init, Recover}, From,
     case rabbit_misc:is_process_alive(Owner) of
         true  -> erlang:monitor(process, Owner),
                  declare(Recover, From, State);
-        false -> #q{backing_queue = BQ, backing_queue_state = undefined,
-                    q = #amqqueue{name = QName} = Q} = State,
+        false -> #q{backing_queue       = undefined,
+                    backing_queue_state = undefined,
+                    q                   = #amqqueue{name = QName} = Q} = State,
                  gen_server2:reply(From, not_found),
                  case Recover of
                      new -> rabbit_log:warning(
@@ -1069,9 +1078,11 @@ handle_call({init, Recover}, From,
                               [rabbit_misc:rs(QName)]);
                      _   -> ok
                  end,
+                 BQ = backing_queue_module(Q),
                  BQS = bq_init(BQ, Q, Recover),
                  %% Rely on terminate to delete the queue.
-                 {stop, normal, State#q{backing_queue_state = BQS}}
+                 {stop, {shutdown, missing_owner},
+                  State#q{backing_queue = BQ, backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->
