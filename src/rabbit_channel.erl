@@ -1198,7 +1198,8 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
 
 handle_consuming_queue_down(QPid,
                             State = #ch{consumer_mapping = ConsumerMapping,
-                                        queue_consumers  = QCons}) ->
+                                        queue_consumers  = QCons,
+                                        queue_names      = QNames}) ->
     ConsumerTags = case dict:find(QPid, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
@@ -1208,6 +1209,11 @@ handle_consuming_queue_down(QPid,
                              ok = send(#'basic.cancel'{consumer_tag = CTag,
                                                        nowait       = true},
                                        State),
+                             rabbit_event:notify(
+                               consumer_deleted,
+                               [{consumer_tag, CTag},
+                                {channel,      self()},
+                                {queue,        dict:fetch(QPid, QNames)}]),
                              dict:erase(CTag, CMap)
                      end, ConsumerMapping, ConsumerTags),
     State#ch{consumer_mapping = ConsumerMapping1,
