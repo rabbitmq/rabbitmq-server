@@ -35,7 +35,7 @@
 %% #amqp_params_direct{} record is returned; otherwise, an
 %% #amqp_params_network{} record is returned.  Extra parameters may be
 %% specified via the query string
-%% (e.g. "?heartbeat=5&auth_mechanism=external"). In case of failure,
+%% (e.g. "?heartbeat=5&amp;auth_mechanism=external"). In case of failure,
 %% an {error, {Info, Uri}} tuple is returned.
 %%
 %% The extra parameters that may be specified are channel_max,
