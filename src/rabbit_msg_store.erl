@@ -630,7 +630,7 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
         false -> try ets:update_counter(FlyingEts, Key, {2, Diff}) of
                      0    -> ok;
                      Diff -> ok;
-                     Err  -> throw({unexpected_flying_ets_counter, Diff, Err})
+                     Err  -> throw({bad_flying_ets_update, Diff, Err, Key})
                  catch error:badarg ->
                          %% this is guaranteed to succeed since the
                          %% server only removes and updates flying_ets
@@ -983,7 +983,8 @@ update_flying(Diff, MsgId, CRef, #msstate { flying_ets = FlyingEts }) ->
                         true = ets:delete_object(FlyingEts, {Key, 0}),
                         process;
         [{_, 0}]     -> true = ets:delete_object(FlyingEts, {Key, 0}),
-                        ignore
+                        ignore;
+        [{_, Err}]   -> throw({bad_flying_ets_record, Diff, Err, Key})
     end.
 
 write_action({true, not_found}, _MsgId, State) ->
