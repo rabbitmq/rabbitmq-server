@@ -627,7 +627,10 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
     Key = {MsgId, CRef},
     case ets:insert_new(FlyingEts, {Key, Diff}) of
         true  -> ok;
-        false -> try ets:update_counter(FlyingEts, Key, {2, Diff})
+        false -> try ets:update_counter(FlyingEts, Key, {2, Diff}) of
+                     0    -> ok;
+                     Diff -> ok;
+                     Err  -> throw({unexpected_flying_ets_counter, Diff, Err})
                  catch error:badarg ->
                          %% this is guaranteed to succeed since the
                          %% server only removes and updates flying_ets
