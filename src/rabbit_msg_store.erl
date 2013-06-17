@@ -978,7 +978,7 @@ update_flying(Diff, MsgId, CRef, #msstate { flying_ets = FlyingEts }) ->
     NDiff = -Diff,
     case ets:lookup(FlyingEts, Key) of
         []           -> ignore;
-        [{_,  Diff}] -> ignore;
+        [{_,  Diff}] -> ignore; %% [1]
         [{_, NDiff}] -> ets:update_counter(FlyingEts, Key, {2, Diff}),
                         true = ets:delete_object(FlyingEts, {Key, 0}),
                         process;
@@ -986,6 +986,13 @@ update_flying(Diff, MsgId, CRef, #msstate { flying_ets = FlyingEts }) ->
                         ignore;
         [{_, Err}]   -> throw({bad_flying_ets_record, Diff, Err, Key})
     end.
+%% [1] We can get here, for example, in the following scenario: There
+%% is a write followed by a remove in flight. The counter will be 0,
+%% so on processing the write the server attempts to delete the
+%% entry. If at that point the client injects another write it will
+%% either insert a new entry, containing +1, or increment the existing
+%% entry to +1, thus preventing its removal. Either way therefore when
+%% the server processes the read, the counter will be +1.
 
 write_action({true, not_found}, _MsgId, State) ->
     {ignore, undefined, State};
