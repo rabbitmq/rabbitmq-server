@@ -5,7 +5,7 @@
         "status": [
             "This extension is used internally by the broker and plugins. ",
             "It is NOT intended to be used by regular clients over the ",
-            "network. This extension is subject to change without notice; "
+            "network. This extension is subject to change without notice; ",
             "hence you are strongly discouraged from building clients ",
             "which use it."],
         "copyright": [
