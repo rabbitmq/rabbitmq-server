@@ -123,7 +123,7 @@
                    [{description, "node monitor"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_node_monitor]}},
-                    {requires,    kernel_ready},
+                    {requires,    rabbit_alarm},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
