@@ -37,7 +37,7 @@
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(register/2 :: (pid(), rabbit_types:mfargs()) -> boolean()).
+-spec(register/2 :: (pid(), rabbit_types:mfargs()) -> [atom()]).
 -spec(set_alarm/1 :: (any()) -> 'ok').
 -spec(clear_alarm/1 :: (any()) -> 'ok').
 -spec(on_node_up/1 :: (node()) -> 'ok').
@@ -93,8 +93,8 @@ init([]) ->
                  alarmed_nodes = dict:new(),
                  alarms        = []}}.
 
-handle_call({register, Pid, AlertMFA}, State) ->
-    {ok, 0 < dict:size(State#alarms.alarmed_nodes),
+handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
+    {ok, lists:usort(lists:append([V || {_, V} <- dict:to_list(AN)])),
      internal_register(Pid, AlertMFA, State)};
 
 handle_call(get_alarms, State = #alarms{alarms = Alarms}) ->
