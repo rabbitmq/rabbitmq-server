@@ -102,7 +102,7 @@ table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px;
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
-table.facts-fixed-width th, table.facts-fixed-width td { width: 100px; }
+table.facts-fixed-width th, table.facts-fixed-width td { width: 130px; }
 
 table.mini th { border: none; padding: 0 2px 2px 2px; text-align: right; }
 table.mini td { border: none; padding: 0 2px 2px 2px; }

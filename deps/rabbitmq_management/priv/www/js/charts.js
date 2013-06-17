@@ -54,7 +54,12 @@ function render_chart(div) {
 
 function fmt_y_axis(fmt) {
     return function (val, axis) {
-        return fmt(val.toFixed(axis.tickDecimals));
+        // axis.ticks seems to include the bottom value but not the top
+        if (axis.max == 1 && axis.ticks.length > 1) {
+            var newTicks = [axis.ticks[0]];
+            axis.ticks = newTicks;
+        }
+        return fmt(val, axis.max);
     }
 }
 
