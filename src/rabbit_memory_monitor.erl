@@ -198,7 +198,11 @@ internal_update(State = #state { queue_durations = Durations,
                                  queue_duration_count = Count }) ->
     {ok, LimitThreshold} =
         application:get_env(rabbit, vm_memory_high_watermark_paging_ratio),
-    MemoryRatio = erlang:memory(total) / vm_memory_monitor:get_memory_limit(),
+    MemoryLimit = vm_memory_monitor:get_memory_limit(),
+    MemoryRatio = case MemoryLimit > 0.0 of
+                      true  -> erlang:memory(total) / MemoryLimit;
+                      false -> infinity
+                  end,
     DesiredDurationAvg1 =
         if MemoryRatio =:= infinity ->
                 0.0;
