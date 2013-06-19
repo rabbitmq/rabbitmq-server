@@ -546,9 +546,11 @@ handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
     {ok, State}.
 
 handle_stats(TName, Stats, Timestamp, Funs, RatesKeys,
-             State = #state{tables = Tables}) ->
+             State = #state{tables = Tables, old_stats = OldTable}) ->
     Id = id(TName, Stats),
-    append_samples(Stats, Timestamp, {coarse, {TName, Id}}, RatesKeys, State),
+    IdSamples = {coarse, {TName, Id}},
+    OldStats = lookup_element(OldTable, IdSamples),
+    append_samples(Stats, Timestamp, OldStats, IdSamples, RatesKeys, State),
     StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
     Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
@@ -591,24 +593,29 @@ delete_consumers(PrimId, PrimTableName, SecTableName,
     ets:match_delete(Table1, {{PrimId, '_', '_'}, '_'}),
     [ets:delete(Table2, {SecId, PrimId, CTag}) || [SecId, CTag] <- SecIdCTags].
 
-handle_fine_stats(Type, Props, Timestamp, State) ->
+handle_fine_stats(Type, Props, Timestamp, State = #state{old_stats = Old}) ->
     case pget(Type, Props) of
         unknown ->
             ok;
-        AllFineStats ->
+        AllFineStats0 ->
             ChPid = id(channel_stats, Props),
-            [handle_fine_stat(
-               fine_stats_id(ChPid, Ids), Stats, Timestamp, State) ||
-                {Ids, Stats} <- AllFineStats]
+            AllFineStats = [begin
+                                Id = fine_stats_id(ChPid, Ids),
+                                {Id, Stats, lookup_element(Old, {fine, Id})}
+                            end || {Ids, Stats} <- AllFineStats0],
+            ets:match_delete(Old, {{fine, {ChPid, '_'}},      '_'}),
+            ets:match_delete(Old, {{fine, {ChPid, '_', '_'}}, '_'}),
+            [handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ||
+                {Id, Stats, OldStats} <- AllFineStats]
     end.
 
-handle_fine_stat(Id, Stats, Timestamp, State) ->
+handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
     Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
     Stats1 = case Total of
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    append_samples(Stats1, Timestamp, {fine, Id}, all, State).
+    append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, State).
 
 delete_samples(Type, {Id, '_'}, State) ->
     delete_samples_with_index(Type, Id, fun forward/2, State);
@@ -632,10 +639,10 @@ reverse(A, B) -> {B, A}.
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
-append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
+append_samples(Stats, TS, OldStats, Id, Keys,
+               State = #state{old_stats = OldTable}) ->
     case ignore_coarse_sample(Id, State) of
         false ->
-            OldStats = lookup_element(OldTable, Id),
             %% This ceil must correspond to the ceil in handle_event
             %% queue_deleted
             NewMS = ceil(TS, State),
