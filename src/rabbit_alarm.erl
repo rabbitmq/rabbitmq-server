@@ -104,7 +104,8 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
-    handle_set_alarm(Alarm, State#alarms{alarms = [Alarm|Alarms]});
+    UpdatedAlarms = lists:usort([Alarm|Alarms]),
+    handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms});
 
 handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
     handle_clear_alarm(Alarm, State#alarms{alarms = lists:keydelete(Alarm, 1,
