@@ -620,11 +620,11 @@ delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
 delete_samples_with_index(Type, Id, Order,
                           #state{aggregated_stats       = ETS,
                                  aggregated_stats_index = ETSi}) ->
-    Ids2 = lists:append(ets:match(ETSi, {{Type, Id}, '$1'})),
-    ets:match_delete(ETSi, {{Type, Id}, '_'}),
+    Ids2 = lists:append(ets:match(ETSi, {{Type, Id, '$1'}})),
+    ets:match_delete(ETSi, {{Type, Id, '_'}}),
     [begin
          ets:match_delete(ETS, delete_match(Type, Order(Id, Id2))),
-         ets:match_delete(ETSi, {{Type, Id2}, Id})
+         ets:match_delete(ETSi, {{Type, Id2, Id}})
      end || Id2 <- Ids2].
 
 forward(A, B) -> {A, B}.
@@ -753,8 +753,8 @@ record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
     Old = case lookup_element(ETS, Id) of
               [] -> case Id0 of
                         {Type, {Id1, Id2}} ->
-                            ets:insert(ETSi, {{Type, Id2}, Id1}),
-                            ets:insert(ETSi, {{Type, Id1}, Id2});
+                            ets:insert(ETSi, {{Type, Id2, Id1}}),
+                            ets:insert(ETSi, {{Type, Id1, Id2}});
                         _ ->
                             ok
                     end,
