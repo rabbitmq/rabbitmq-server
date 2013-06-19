@@ -502,12 +502,15 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
     {ok, State};
 
 handle_event(Event = #event{type = channel_closed,
-                            props = [{pid, Pid}]}, State) ->
+                            props = [{pid, Pid}]},
+             State = #state{old_stats = Old}) ->
     delete_consumers(Pid, consumers_by_channel, consumers_by_queue, State),
     delete_samples(channel_queue_stats,    {Pid, '_'}, State),
     delete_samples(channel_exchange_stats, {Pid, '_'}, State),
     delete_samples(channel_stats,          Pid,        State),
-    handle_deleted(channel_stats, Event, State);
+    handle_deleted(channel_stats, Event, State),
+    ets:match_delete(Old, {{fine, {Pid, '_'}},      '_'}),
+    ets:match_delete(Old, {{fine, {Pid, '_', '_'}}, '_'});
 
 handle_event(#event{type = consumer_created, props = Props}, State) ->
     handle_consumer(fun(Table, Id, P) -> ets:insert(Table, {Id, P}) end,
@@ -566,8 +569,6 @@ handle_deleted(TName, #event{props = Props}, State = #state{tables    = Tables,
         error       -> ok
     end,
     ets:delete(Old, {coarse, {TName, Id}}),
-    ets:match_delete(Old, {{fine, {Id, '_'}},      '_'}),
-    ets:match_delete(Old, {{fine, {Id, '_', '_'}}, '_'}),
     {ok, State}.
 
 handle_consumer(Fun, Props, State = #state{tables = Tables}) ->
