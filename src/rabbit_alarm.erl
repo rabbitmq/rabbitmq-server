@@ -145,7 +145,12 @@ dict_unappend_all(Key, _Val, Dict) ->
     dict:erase(Key, Dict).
 
 dict_unappend(Key, Val, Dict) ->
-    case lists:delete(Val, dict:fetch(Key, Dict)) of
+    L = case dict:find(Key, Dict) of
+	    {ok, V} -> V;
+	    error   -> []
+	end,
+
+    case lists:delete(Val, L) of
         [] -> dict:erase(Key, Dict);
         X  -> dict:store(Key, X, Dict)
     end.
