@@ -114,7 +114,7 @@ handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
     end;
 
 handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
-    ExistingAlarm = lists:member(Alarm, [Res || {Res, _} <- Alarms]),
+    ExistingAlarm = lists:keymember(Alarm, 1, Alarms),
     case ExistingAlarm of
 	true ->
 	    handle_clear_alarm(Alarm,
