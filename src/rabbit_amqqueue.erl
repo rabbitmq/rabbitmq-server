@@ -222,9 +222,7 @@ find_durable_queues() ->
               qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
                                               pid  = Pid}
                                     <- mnesia:table(rabbit_durable_queue),
-                                #amqqueue{name = Name2}
-                                    <- mnesia:table(rabbit_queue),
-                                Name =:= Name2,
+                                mnesia:read(rabbit_queue, Name, read) =:= [],
                                 node(Pid) == Node]))
       end).
 
