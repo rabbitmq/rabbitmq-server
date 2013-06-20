@@ -110,7 +110,12 @@
 %% rates, in order to apportion simple / detailed stats into time
 %% slices as they come in. These instantaneous rates are not returned
 %% in response to any query, the rates shown in the API are calculated
-%% at query time.
+%% at query time. old_stats contains both coarse and fine
+%% entries. Coarse entries are pruned when the corresponding object is
+%% deleted, and fine entries are pruned when the emitting channel is
+%% closed, and whenever we receive new fine stats from a channel. So
+%% it's quite close to being a cache of "the previous stats we
+%% received".
 %%
 %% We also keep a timer going, in order to prune old samples from
 %% #state.aggregated_stats.
@@ -498,12 +503,15 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
     {ok, State};
 
 handle_event(Event = #event{type = channel_closed,
-                            props = [{pid, Pid}]}, State) ->
+                            props = [{pid, Pid}]},
+             State = #state{old_stats = Old}) ->
     delete_consumers(Pid, consumers_by_channel, consumers_by_queue, State),
     delete_samples(channel_queue_stats,    {Pid, '_'}, State),
     delete_samples(channel_exchange_stats, {Pid, '_'}, State),
     delete_samples(channel_stats,          Pid,        State),
-    handle_deleted(channel_stats, Event, State);
+    handle_deleted(channel_stats, Event, State),
+    ets:match_delete(Old, {{fine, {Pid, '_'}},      '_'}),
+    ets:match_delete(Old, {{fine, {Pid, '_', '_'}}, '_'});
 
 handle_event(#event{type = consumer_created, props = Props}, State) ->
     handle_consumer(fun(Table, Id, P) -> ets:insert(Table, {Id, P}) end,
@@ -534,9 +542,11 @@ handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
     {ok, State}.
 
 handle_stats(TName, Stats, Timestamp, Funs, RatesKeys,
-             State = #state{tables = Tables}) ->
+             State = #state{tables = Tables, old_stats = OldTable}) ->
     Id = id(TName, Stats),
-    append_samples(Stats, Timestamp, {coarse, {TName, Id}}, RatesKeys, State),
+    IdSamples = {coarse, {TName, Id}},
+    OldStats = lookup_element(OldTable, IdSamples),
+    append_samples(Stats, Timestamp, OldStats, IdSamples, RatesKeys, State),
     StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
     Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
@@ -552,8 +562,6 @@ handle_deleted(TName, #event{props = Props}, State = #state{tables    = Tables,
         error       -> ok
     end,
     ets:delete(Old, {coarse, {TName, Id}}),
-    ets:match_delete(Old, {{fine, {Id, '_'}},      '_'}),
-    ets:match_delete(Old, {{fine, {Id, '_', '_'}}, '_'}),
     {ok, State}.
 
 handle_consumer(Fun, Props, State = #state{tables = Tables}) ->
@@ -579,24 +587,29 @@ delete_consumers(PrimId, PrimTableName, SecTableName,
     ets:match_delete(Table1, {{PrimId, '_', '_'}, '_'}),
     [ets:delete(Table2, {SecId, PrimId, CTag}) || [SecId, CTag] <- SecIdCTags].
 
-handle_fine_stats(Type, Props, Timestamp, State) ->
+handle_fine_stats(Type, Props, Timestamp, State = #state{old_stats = Old}) ->
     case pget(Type, Props) of
         unknown ->
             ok;
-        AllFineStats ->
+        AllFineStats0 ->
             ChPid = id(channel_stats, Props),
-            [handle_fine_stat(
-               fine_stats_id(ChPid, Ids), Stats, Timestamp, State) ||
-                {Ids, Stats} <- AllFineStats]
+            AllFineStats = [begin
+                                Id = fine_stats_id(ChPid, Ids),
+                                {Id, Stats, lookup_element(Old, {fine, Id})}
+                            end || {Ids, Stats} <- AllFineStats0],
+            ets:match_delete(Old, {{fine, {ChPid, '_'}},      '_'}),
+            ets:match_delete(Old, {{fine, {ChPid, '_', '_'}}, '_'}),
+            [handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ||
+                {Id, Stats, OldStats} <- AllFineStats]
     end.
 
-handle_fine_stat(Id, Stats, Timestamp, State) ->
+handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
     Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
     Stats1 = case Total of
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    append_samples(Stats1, Timestamp, {fine, Id}, all, State).
+    append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, State).
 
 delete_samples(Type, {Id, '_'}, State) ->
     delete_samples_with_index(Type, Id, fun forward/2, State);
@@ -608,11 +621,11 @@ delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
 delete_samples_with_index(Type, Id, Order,
                           #state{aggregated_stats       = ETS,
                                  aggregated_stats_index = ETSi}) ->
-    Ids2 = lists:append(ets:match(ETSi, {{Type, Id}, '$1'})),
-    ets:match_delete(ETSi, {{Type, Id}, '_'}),
+    Ids2 = lists:append(ets:match(ETSi, {{Type, Id, '$1'}})),
+    ets:match_delete(ETSi, {{Type, Id, '_'}}),
     [begin
          ets:match_delete(ETS, delete_match(Type, Order(Id, Id2))),
-         ets:match_delete(ETSi, {{Type, Id2}, Id})
+         ets:match_delete(ETSi, {{Type, Id2, Id}})
      end || Id2 <- Ids2].
 
 forward(A, B) -> {A, B}.
@@ -620,10 +633,10 @@ reverse(A, B) -> {B, A}.
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
-append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
+append_samples(Stats, TS, OldStats, Id, Keys,
+               State = #state{old_stats = OldTable}) ->
     case ignore_coarse_sample(Id, State) of
         false ->
-            OldStats = lookup_element(OldTable, Id),
             %% This ceil must correspond to the ceil in handle_event
             %% queue_deleted
             NewMS = ceil(TS, State),
@@ -741,8 +754,8 @@ record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
     Old = case lookup_element(ETS, Id) of
               [] -> case Id0 of
                         {Type, {Id1, Id2}} ->
-                            ets:insert(ETSi, {{Type, Id2}, Id1}),
-                            ets:insert(ETSi, {{Type, Id1}, Id2});
+                            ets:insert(ETSi, {{Type, Id2, Id1}}),
+                            ets:insert(ETSi, {{Type, Id1, Id2}});
                         _ ->
                             ok
                     end,
