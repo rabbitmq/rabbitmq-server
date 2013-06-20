@@ -142,6 +142,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+dict_append(Key, Val, Dict) ->
+    L = case dict:find(Key, Dict) of
+	    {ok, V} -> V;
+	    error   -> []
+	end,
+    dict:store(Key, lists:usort([Val|L]), Dict).
+
 dict_unappend_all(Key, _Val, Dict) ->
     dict:erase(Key, Dict).
 
@@ -220,7 +227,7 @@ handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
       "*** Publishers will be blocked until this alarm clears ***~n"
       "**********************************************************~n",
       [Source, Node]),
-    {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
+    {ok, maybe_alert(fun dict_append/3, Node, Source, State)};
 handle_set_alarm({file_descriptor_limit, []}, State) ->
     rabbit_log:warning(
       "file descriptor limit alarm set.~n~n"
