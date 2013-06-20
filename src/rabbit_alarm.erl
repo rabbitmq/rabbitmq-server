@@ -104,12 +104,15 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
+    IsDuplicate = lists:member(Alarm, Alarms),
     UpdatedAlarms = lists:usort([Alarm|Alarms]),
-    handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms});
+    handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms}, IsDuplicate);
 
 handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
+    IsDuplicate = not lists:member(Alarm, Alarms),
     handle_clear_alarm(Alarm, State#alarms{alarms = lists:keydelete(Alarm, 1,
-                                                                    Alarms)});
+                                                                    Alarms)},
+		       IsDuplicate);
 
 handle_event({node_up, Node}, State) ->
     %% Must do this via notify and not call to avoid possible deadlock.
@@ -220,7 +223,7 @@ internal_register(Pid, {M, F, A} = AlertMFA,
     NewAlertees = dict:store(Pid, AlertMFA, Alertees),
     State#alarms{alertees = NewAlertees}.
 
-handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
+handle_set_alarm({{resource_limit, Source, Node}, []}, State, false) ->
     rabbit_log:warning(
       "~s resource limit alarm set on node ~p.~n~n"
       "**********************************************************~n"
@@ -228,24 +231,32 @@ handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
       "**********************************************************~n",
       [Source, Node]),
     {ok, maybe_alert(fun dict_append/3, Node, Source, State)};
-handle_set_alarm({file_descriptor_limit, []}, State) ->
+handle_set_alarm({{resource_limit, Source, Node}, []}, State, true) ->
+    {ok, maybe_alert(fun dict_append/3, Node, Source, State)};
+handle_set_alarm({file_descriptor_limit, []}, State, false) ->
     rabbit_log:warning(
       "file descriptor limit alarm set.~n~n"
       "********************************************************************~n"
       "*** New connections will not be accepted until this alarm clears ***~n"
       "********************************************************************~n"),
     {ok, State};
-handle_set_alarm(Alarm, State) ->
+handle_set_alarm({file_descriptor_limit, []}, State, true) ->
+    {ok, State};
+handle_set_alarm(Alarm, State, _IsDuplicate) ->
     rabbit_log:warning("alarm '~p' set~n", [Alarm]),
     {ok, State}.
 
-handle_clear_alarm({resource_limit, Source, Node}, State) ->
+handle_clear_alarm({resource_limit, Source, Node}, State, false) ->
     rabbit_log:warning("~s resource limit alarm cleared on node ~p~n",
                        [Source, Node]),
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
-handle_clear_alarm(file_descriptor_limit, State) ->
+handle_clear_alarm({resource_limit, Source, Node}, State, true) ->
+    {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
+handle_clear_alarm(file_descriptor_limit, State, false) ->
     rabbit_log:warning("file descriptor limit alarm cleared~n"),
     {ok, State};
-handle_clear_alarm(Alarm, State) ->
+handle_clear_alarm(file_descriptor_limit, State, true) ->
+    {ok, State};
+handle_clear_alarm(Alarm, State, _IsDuplicate) ->
     rabbit_log:warning("alarm '~p' cleared~n", [Alarm]),
     {ok, State}.
