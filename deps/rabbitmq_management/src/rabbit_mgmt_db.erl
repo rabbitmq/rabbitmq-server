@@ -110,7 +110,12 @@
 %% rates, in order to apportion simple / detailed stats into time
 %% slices as they come in. These instantaneous rates are not returned
 %% in response to any query, the rates shown in the API are calculated
-%% at query time.
+%% at query time. old_stats contains both coarse and fine
+%% entries. Coarse entries are pruned when the corresponding object is
+%% deleted, and fine entries are pruned when the emitting channel is
+%% closed, and whenever we receive new fine stats from a channel. So
+%% it's quite close to being a cache of "the previous stats we
+%% received".
 %%
 %% We also keep a timer going, in order to prune old samples from
 %% #state.aggregated_stats.
