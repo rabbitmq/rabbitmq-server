@@ -216,7 +216,7 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
 store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
                                    sync_slave_pids = SSPids}) ->
     %% TODO now that we clear sync_slave_pids in rabbit_durable_queue,
-    %% do we still need this?
+    %% do we still need this filtering?
     SSPids1 = [SSPid || SSPid <- SSPids, lists:member(SSPid, SPids)],
     Q1 = Q#amqqueue{sync_slave_pids = SSPids1},
     ok = rabbit_amqqueue:store_queue(Q1),
