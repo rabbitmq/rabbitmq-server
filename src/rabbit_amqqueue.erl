@@ -219,8 +219,10 @@ find_durable_queues() ->
     %% TODO: use dirty ops instead
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              qlc:e(qlc:q([Q || Q = #amqqueue{pid = Pid}
+              qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
+                                              pid  = Pid}
                                     <- mnesia:table(rabbit_durable_queue),
+                                mnesia:read(rabbit_queue, Name, read) =:= [],
                                 node(Pid) == Node]))
       end).
 
