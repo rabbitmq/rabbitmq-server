@@ -255,7 +255,9 @@ safe_call(Pid, Msg, ExitValue) ->
       fun () -> ExitValue end,
       fun () -> gen_server2:call(Pid, Msg, infinity) end).
 
-resume(L) -> L#qstate{state = active}.
+resume(L = #qstate{state = suspended}) ->
+    L#qstate{state = active};
+resume(L) -> L.
 
 deactivate(L = #qstate{state = dormant}) -> L;
 deactivate(L) ->
