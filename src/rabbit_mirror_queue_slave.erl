@@ -770,26 +770,12 @@ process_instruction({requeue, MsgIds},
     {ok, State #state { msg_id_ack          = MA1,
                         backing_queue_state = BQS1 }};
 process_instruction({sender_death, ChPid},
-                    State = #state { sender_queues = SQ,
-                                     msg_id_status = MS,
-                                     known_senders = KS }) ->
-    %% The channel will be monitored iff we have received a message
-    %% from it. In this case we just want to avoid doing work if we
-    %% never got any messages.
-    {ok, case pmon:is_monitored(ChPid, KS) of
-             false -> State;
-             true  -> MS1 = case dict:find(ChPid, SQ) of
-                                error ->
-                                    MS;
-                                {ok, {_MQ, PendingCh}} ->
-                                    lists:foldl(fun dict:erase/2, MS,
-                                                sets:to_list(PendingCh))
-                            end,
-                      credit_flow:peer_down(ChPid),
-                      State #state { sender_queues = dict:erase(ChPid, SQ),
-                                     msg_id_status = MS1,
-                                     known_senders = pmon:demonitor(ChPid, KS) }
-         end};
+                    State = #state { known_senders = KS }) ->
+    case pmon:is_monitored(ChPid, KS) of
+        true  -> credit_flow:peer_down(ChPid);
+        false -> ok
+    end,
+    {ok, State};
 process_instruction({depth, Depth},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
