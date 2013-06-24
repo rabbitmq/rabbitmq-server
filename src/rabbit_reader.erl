@@ -416,8 +416,9 @@ terminate(_Explanation, State) ->
     {force, State}.
 
 control_throttle(State = #v1{connection_state = CS, throttle = Throttle}) ->
-    case {CS, ((Throttle#throttle.conserve_resources =/= []) orelse
-               credit_flow:blocked())} of
+    IsThrottled = ((Throttle#throttle.conserve_resources =/= []) orelse
+               credit_flow:blocked()),
+    case {CS, IsThrottled} of
         {running,   true} -> State#v1{connection_state = blocking};
         {blocking, false} -> State#v1{connection_state = running};
         {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
