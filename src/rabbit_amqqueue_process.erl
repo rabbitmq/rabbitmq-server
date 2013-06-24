@@ -55,7 +55,7 @@
             status
            }).
 
--record(consumer, {tag, ack_required}).
+-record(consumer, {tag, ack_required, args}).
 
 %% These are held in our process dictionary
 -record(cr, {ch_pid,
@@ -198,6 +198,7 @@ declare(Recover, From, State = #q{q                   = Q,
                     recovery_barrier(Recover),
                     State1 = process_args(State#q{backing_queue       = BQ,
                                                   backing_queue_state = BQS}),
+                    rabbit_federation_queue:maybe_start(Q),
                     rabbit_event:notify(queue_created,
                                         infos(?CREATION_EVENT_KEYS, State1)),
                     rabbit_event:if_enabled(State1, #q.stats_timer,
@@ -264,7 +265,7 @@ init_dlx_routing_key(RoutingKey, State) ->
 
 init_max_length(MaxLen, State) -> State#q{max_length = MaxLen}.
 
-terminate_shutdown(Fun, State) ->
+terminate_shutdown(Fun, State = #q{q = Q}) ->
     State1 = #q{backing_queue_state = BQS} =
         lists:foldl(fun (F, S) -> F(S) end, State,
                     [fun stop_sync_timer/1,
@@ -275,6 +276,7 @@ terminate_shutdown(Fun, State) ->
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
                      QName = qname(State),
+                     rabbit_federation_queue:terminate(Q),
                      [emit_consumer_deleted(Ch, CTag, QName)
                       || {Ch, CTag, _} <- consumers(State1)],
                      State1#q{backing_queue_state = Fun(BQS)}
@@ -430,7 +432,7 @@ deliver_msgs_to_consumers(_DeliverFun, true, State) ->
     {true, State};
 deliver_msgs_to_consumers(DeliverFun, false,
                           State = #q{active_consumers = ActiveConsumers}) ->
-    case queue:out(ActiveConsumers) of
+    case pick_consumer(ActiveConsumers) of
         {empty, _} ->
             {false, State};
         {{value, QEntry}, Tail} ->
@@ -444,12 +446,14 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E),
+                 notify_federation(State),
                  {false, State};
         false -> case rabbit_limiter:can_send(C#cr.limiter,
                                               Consumer#consumer.ack_required,
                                               Consumer#consumer.tag) of
                      {suspend, Limiter} ->
                          block_consumer(C#cr{limiter = Limiter}, E),
+                         notify_federation(State),
                          {false, State};
                      {continue, Limiter} ->
                          AC1 = queue:in(E, State#q.active_consumers),
@@ -531,7 +535,41 @@ run_message_queue(State) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(
                             fun deliver_from_queue_deliver/2,
                             is_empty(State), State),
+    notify_federation(State1),
     State1.
+
+notify_federation(#q{q                   = Q,
+                     active_consumers    = ActiveConsumers,
+                     backing_queue       = BQ,
+                     backing_queue_state = BQS}) ->
+    IsEmpty = BQ:is_empty(BQS),
+    case IsEmpty andalso active_unfederated(ActiveConsumers) of
+        true  -> rabbit_federation_queue:run(Q);
+        false -> rabbit_federation_queue:stop(Q)
+    end.
+
+active_unfederated(Cs) ->
+    case queue:out(Cs) of
+        {empty, _}        -> false;
+        {{value, C}, Cs1} -> case federated_consumer(C) of
+                                 true  -> active_unfederated(Cs1);
+                                 false -> true
+                             end
+    end.
+
+%% TODO this could be more efficient. But we'd need another representation,
+%% and thus to abstract the representation of active_consumers.
+pick_consumer(Cs) ->
+    case lists:splitwith(fun federated_consumer/1, queue:to_list(Cs)) of
+        {_,    []}         -> queue:out(Cs);
+        {Feds, [UnFed|Tl]} -> queue:out(queue:from_list([UnFed | Feds ++ Tl]))
+    end.
+
+federated_consumer({_Pid, #consumer{args = Args}}) ->
+    case rabbit_misc:table_lookup(Args, <<"x-purpose">>) of
+        {longstr, <<"federation">>} -> true;
+        _                           -> false
+    end.
 
 attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
@@ -1114,11 +1152,12 @@ handle_call({notify_down, ChPid}, _From, State) ->
     end;
 
 handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
-            State = #q{q = #amqqueue{name = QName}}) ->
+            State = #q{q = Q = #amqqueue{name = QName}}) ->
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
     case fetch(AckRequired, State1) of
         {empty, State2} ->
+            rabbit_federation_queue:basic_get(Q),
             reply(empty, State2);
         {{Message, IsDelivered, AckTag}, State2} ->
             State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -1135,7 +1174,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg},
+             ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg},
             _From, State = #q{exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
         in_use ->
@@ -1159,7 +1198,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 false -> ok
             end,
             Consumer = #consumer{tag = ConsumerTag,
-                                 ack_required = not NoAck},
+                                 ack_required = not NoAck,
+                                 args         = OtherArgs},
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
                                    true             -> Holder
                                 end,
@@ -1199,6 +1239,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                        active_consumers   = remove_consumer(
                                               ChPid, ConsumerTag,
                                               State#q.active_consumers)},
+            notify_federation(State1),
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
                 true  -> stop(ok, State1)
