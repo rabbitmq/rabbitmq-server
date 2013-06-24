@@ -287,6 +287,9 @@ decode(Keys, Body) ->
         Else     -> Else
     end.
 
+decode(<<"">>) ->
+    {ok, []};
+
 decode(Body) ->
     try
         {struct, J} = mochijson2:decode(Body),
@@ -349,6 +352,7 @@ parse_bool(<<"true">>)  -> true;
 parse_bool(<<"false">>) -> false;
 parse_bool(true)        -> true;
 parse_bool(false)       -> false;
+parse_bool(undefined)   -> undefined;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
 parse_int(I) when is_integer(I) -> I;
