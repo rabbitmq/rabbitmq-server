@@ -27,7 +27,7 @@
 -export([register/0]).
 -export([name/1, get/2, set/1]).
 -export([validate/4, notify/4, notify_clear/3]).
--export([parse_set/5, set/5, delete/2, lookup/2, list/0, list/1,
+-export([parse_set/5, set/6, delete/2, lookup/2, list/0, list/1,
          list_formatted/1, info_keys/0]).
 
 -rabbit_boot_step({?MODULE,
@@ -88,16 +88,24 @@ parse_set0(VHost, Name, Pattern, Defn, Priority) ->
             {error_string, "JSON decoding error"}
     end.
 
-set(VHost, Name, Pattern, Definition, Priority) ->
+set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     PolicyProps = [{<<"pattern">>,    Pattern},
                    {<<"definition">>, Definition},
                    {<<"priority">>,   case Priority of
                                           undefined -> 0;
                                           _         -> Priority
+                                      end},
+                   {<<"apply-to">>,   case ApplyTo of
+                                          undefined -> 0;
+                                          _         -> ApplyTo
                                       end}],
     set0(VHost, Name, PolicyProps).
 
-set0(VHost, Name, Term) ->
+set0(VHost, Name, Term0) ->
+    Term = case pget(<<"apply-to">>, Term0) of
+               undefined -> [{<<"apply-to">>, <<"both">>} | Term0];
+               _         -> Term0
+           end,
     rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term).
 
 delete(VHost, Name) ->
@@ -130,6 +138,7 @@ p(Parameter, DefnFun) ->
     [{vhost,      pget(vhost, Parameter)},
      {name,       pget(name, Parameter)},
      {pattern,    pget(<<"pattern">>, Value)},
+     {'apply-to', pget(<<"apply-to">>, Value)},
      {definition, DefnFun(pget(<<"definition">>, Value))},
      {priority,   pget(<<"priority">>, Value)}].
 
@@ -202,8 +211,15 @@ match(Name, Policies) ->
         [Policy | _Rest] -> Policy
     end.
 
-matches(#resource{name = Name}, Policy) ->
-    match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]).
+matches(#resource{name = Name, kind = Kind}, Policy) ->
+    matches_type(Kind, pget('apply-to', Policy)) andalso
+        match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]).
+
+matches_type(exchange, <<"exchanges">>) -> true;
+matches_type(queue,    <<"queues">>)    -> true;
+matches_type(exchange, <<"both">>)      -> true;
+matches_type(queue,    <<"both">>)      -> true;
+matches_type(_,        _)               -> false.
 
 sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
 
@@ -212,6 +228,7 @@ sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
 policy_validation() ->
     [{<<"priority">>,   fun rabbit_parameter_validation:number/2, mandatory},
      {<<"pattern">>,    fun rabbit_parameter_validation:regex/2,  mandatory},
+     {<<"apply-to">>,   fun apply_to_validation/2,                optional},
      {<<"definition">>, fun validation/2,                         mandatory}].
 
 validation(_Name, []) ->
@@ -257,3 +274,10 @@ a2b(A) -> list_to_binary(atom_to_list(A)).
 dups(L) -> L -- lists:usort(L).
 
 is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).
+
+apply_to_validation(_Name, <<"both">>)      -> ok;
+apply_to_validation(_Name, <<"exchanges">>) -> ok;
+apply_to_validation(_Name, <<"queues">>)    -> ok;
+apply_to_validation(_Name, Term) ->
+    {error, "apply-to '~s' unrecognised; should be 'queues', 'exchanges' "
+     "or 'both'", [Term]}.
