@@ -89,7 +89,7 @@ DECLARABLE = {
     # Priority is 'json' to convert to int
     'policy':     {'mandatory': ['name', 'pattern', 'definition'],
                    'json':      ['definition', 'priority'],
-                   'optional':  {'priority' : 0}}
+                   'optional':  {'priority' : 0, 'apply-to': None}}
     }
 
 DELETABLE = {
