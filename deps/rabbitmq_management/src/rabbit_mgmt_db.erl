@@ -498,12 +498,17 @@ handle_event(#event{type = channel_created, props = Stats}, State) ->
     handle_created(channel_stats, Stats, [], State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
-             State) ->
+             State = #state{old_stats = OldTable}) ->
     handle_stats(channel_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
                  [], State),
-    [handle_fine_stats(Type, Stats, Timestamp, State) ||
-        Type <- ?FINE_STATS_TYPES],
+    ChPid = id(channel_stats, Stats),
+    AllStats = [old_fine_stats(Type, Stats, State)
+                || Type <- ?FINE_STATS_TYPES],
+    ets:match_delete(OldTable, {{fine, {ChPid, '_'}},      '_'}),
+    ets:match_delete(OldTable, {{fine, {ChPid, '_', '_'}}, '_'}),
+    [handle_fine_stats(Timestamp, AllStatsElem, State)
+     || AllStatsElem <- AllStats],
     {ok, State};
 
 handle_event(Event = #event{type = channel_closed,
@@ -599,21 +604,22 @@ delete_consumers(PrimId, PrimTableName, SecTableName,
     ets:match_delete(Table1, {{PrimId, '_', '_'}, '_'}),
     [ets:delete(Table2, {SecId, PrimId, CTag}) || [SecId, CTag] <- SecIdCTags].
 
-handle_fine_stats(Type, Props, Timestamp, State = #state{old_stats = Old}) ->
+old_fine_stats(Type, Props, #state{old_stats = Old}) ->
     case pget(Type, Props) of
-        unknown ->
-            ok;
-        AllFineStats0 ->
-            ChPid = id(channel_stats, Props),
-            AllFineStats = [begin
-                                Id = fine_stats_id(ChPid, Ids),
-                                {Id, Stats, lookup_element(Old, {fine, Id})}
-                            end || {Ids, Stats} <- AllFineStats0],
-            ets:match_delete(Old, {{fine, {ChPid, '_'}},      '_'}),
-            ets:match_delete(Old, {{fine, {ChPid, '_', '_'}}, '_'}),
-            [handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ||
-                {Id, Stats, OldStats} <- AllFineStats]
+        unknown       -> ignore;
+        AllFineStats0 -> ChPid = id(channel_stats, Props),
+                         [begin
+                              Id = fine_stats_id(ChPid, Ids),
+                              {Id, Stats, lookup_element(Old, {fine, Id})}
+                          end || {Ids, Stats} <- AllFineStats0]
     end.
+
+handle_fine_stats(_Timestamp, ignore, _State) ->
+    ok;
+
+handle_fine_stats(Timestamp, AllStats, State) ->
+    [handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ||
+        {Id, Stats, OldStats} <- AllStats].
 
 handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
     Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
