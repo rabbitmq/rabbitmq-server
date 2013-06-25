@@ -18,10 +18,13 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, invoke_no_result/2, invoke/2, call/2, cast/2]).
+-export([start_link/1, invoke_no_result/2, invoke/2, monitor/1, demonitor/2,
+         call/2, cast/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
+
+-record(state, {node, monitors}).
 
 %%----------------------------------------------------------------------------
 
@@ -35,6 +38,9 @@
                                           [{pid(), term()}]}).
 -spec(invoke_no_result/2 ::
         (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
+-spec(monitor/1 :: (pid()) -> reference()).
+-spec(demonitor/2 :: (pid(), reference()) -> 'true').
+
 -spec(call/2 ::
         ( pid(),  any()) -> any();
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), term()}]}).
@@ -78,7 +84,7 @@ invoke(Pids, Fun) when is_list(Pids) ->
         case orddict:fetch_keys(Grouped) of
             []          -> {[], []};
             RemoteNodes -> gen_server2:multi_call(
-                             RemoteNodes, delegate(RemoteNodes),
+                             RemoteNodes, delegate(self(), RemoteNodes),
                              {invoke, Fun, Grouped}, infinity)
         end,
     BadPids = [{Pid, {exit, {nodedown, BadNode}, []}} ||
@@ -106,11 +112,22 @@ invoke_no_result(Pids, Fun) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
     case orddict:fetch_keys(Grouped) of
         []          -> ok;
-        RemoteNodes -> gen_server2:abcast(RemoteNodes, delegate(RemoteNodes),
-                                          {invoke, Fun, Grouped})
+        RemoteNodes -> gen_server2:abcast(
+                         RemoteNodes, delegate(self(), RemoteNodes),
+                         {invoke, Fun, Grouped})
     end,
     safe_invoke(LocalPids, Fun), %% must not die
     ok.
+
+monitor(Pid) ->
+    Node = node(Pid),
+    Name = delegate(Pid, [Node]),
+    gen_server2:call({Name, Node}, {monitor, self(), Pid}, infinity).
+
+demonitor(Pid, Ref) ->
+    Node = node(Pid),
+    Name = delegate(Pid, [Node]),
+    gen_server2:call({Name, Node}, {demonitor, Ref}, infinity).
 
 call(PidOrPids, Msg) ->
     invoke(PidOrPids, fun (P) -> gen_server2:call(P, Msg, infinity) end).
@@ -134,10 +151,10 @@ group_pids_by_node(Pids) ->
 delegate_name(Hash) ->
     list_to_atom("delegate_" ++ integer_to_list(Hash)).
 
-delegate(RemoteNodes) ->
+delegate(Pid, RemoteNodes) ->
     case get(delegate) of
         undefined -> Name = delegate_name(
-                              erlang:phash2(self(),
+                              erlang:phash2(Pid,
                                             delegate_sup:count(RemoteNodes))),
                      put(delegate, Name),
                      Name;
@@ -156,21 +173,40 @@ safe_invoke(Pid, Fun) when is_pid(Pid) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, node(), hibernate,
+    {ok, #state{node = node(), monitors = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({invoke, Fun, Grouped}, _From, Node) ->
-    {reply, safe_invoke(orddict:fetch(Node, Grouped), Fun), Node, hibernate}.
+handle_call({invoke, Fun, Grouped}, _From, State = #state{node = Node}) ->
+    {reply, safe_invoke(orddict:fetch(Node, Grouped), Fun), State, hibernate};
 
-handle_cast({invoke, Fun, Grouped}, Node) ->
+handle_call({monitor, WantsMonitor, ToMonitor}, _From,
+            State = #state{monitors = Monitors}) ->
+    Ref = erlang:monitor(process, ToMonitor),
+    State1 = State#state{monitors = dict:store(Ref, WantsMonitor, Monitors)},
+    {reply, Ref, State1, hibernate};
+
+handle_call({demonitor, Ref}, _From, State = #state{monitors = Monitors}) ->
+    %% We need to ensure we don't then respond to a 'DOWN' that's
+    %% currently in our mailbox - if we did then our client might then
+    %% get a 'DOWN' after demonitor() returns.
+    State1 = State#state{monitors = dict:erase(Ref, Monitors)},
+    {reply, erlang:demonitor(Ref, [flush]), State1, hibernate}.
+
+handle_cast({invoke, Fun, Grouped}, State = #state{node = Node}) ->
     safe_invoke(orddict:fetch(Node, Grouped), Fun),
-    {noreply, Node, hibernate}.
+    {noreply, State, hibernate}.
 
-handle_info(_Info, Node) ->
-    {noreply, Node, hibernate}.
+handle_info({'DOWN', Ref, process, Object, Info},
+            State = #state{monitors = Monitors}) ->
+    WantsMonitor = dict:fetch(Ref, Monitors),
+    WantsMonitor ! {'DOWN', Ref, process, Object, Info},
+    {noreply, State#state{monitors = dict:erase(Ref, Monitors)}, hibernate};
+
+handle_info(_Info, State) ->
+    {noreply, State, hibernate}.
 
 terminate(_Reason, _State) ->
     ok.
 
-code_change(_OldVsn, Node, _Extra) ->
-    {ok, Node}.
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
