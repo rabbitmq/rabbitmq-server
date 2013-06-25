@@ -451,7 +451,10 @@ function postprocess() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
     $('input, select').die();
-    $('.multifield input').live('blur', function() {
+    $('.multifield input').live('keyup', function() {
+            update_multifields();
+        });
+    $('.multifield select').live('change', function() {
             update_multifields();
         });
     $('.controls-appearance').change(function() {
@@ -523,46 +526,84 @@ function postprocess_partial() {
 }
 
 function update_multifields() {
-    $('.multifield').each(function(index) {
-            var largest_id = 0;
-            var empty_found = false;
-            var name = $(this).attr('id');
-            $('#' + name + ' input[name$="_mfkey"]').each(function(index) {
-                    var match = $(this).attr('name').
-                        match(/[a-z]*_([0-9]*)_mfkey/);
-                    var id = parseInt(match[1]);
-                    largest_id = Math.max(id, largest_id);
-                    var key = $(this).val();
-                    var value = $(this).next('input').val();
-                    if (key == '' && value == '') {
-                        if (empty_found) {
-                            $(this).parent().remove();
-                        }
-                        else {
-                            empty_found = true;
-                        }
-                    }
-                });
-            if (!empty_found) {
-                var prefix = name + '_' + (largest_id + 1);
-                var type_part;
-                if ($(this).hasClass('string-only')) {
-                    type_part = '<input type="hidden" name="' + prefix +
-                        '_mftype" value="string"/>';
-                } else {
-                    type_part = '<select name="' + prefix +
-                        '_mftype">' +
-                        '<option value="string">String</option>' +
-                        '<option value="number">Number</option>' +
-                        '<option value="boolean">Boolean</option>' +
-                        '</select>';
-                }
-                $(this).append('<p><input type="text" name="' + prefix +
-                               '_mfkey" value=""/> = ' +
-                               '<input type="text" name="' + prefix +
-                               '_mfvalue" value=""/> ' + type_part + '</p>');
+    $('div.multifield').each(function(index) {
+        update_multifield($(this), true);
+    });
+}
+
+function update_multifield(multifield, dict) {
+    var largest_id = 0;
+    var empty_found = false;
+    var name = multifield.attr('id');
+    $('#' + name + ' *[name$="_mftype"]').each(function(index) {
+        var re = new RegExp(name + '_([0-9]*)_mftype');
+        var match = $(this).attr('name').match(re);
+        if (!match) return;
+        var id = parseInt(match[1]);
+        largest_id = Math.max(id, largest_id);
+        var prefix = name + '_' + id;
+        var type = $(this).val();
+        var input = $('#' + prefix + '_mfvalue');
+        if (type == 'list') {
+            if (input.size() == 1) {
+                input.replaceWith('<div class="multifield-sub" id="' + prefix +
+                                  '"></div>');
             }
-        });
+            update_multifield($('#' + prefix), false);
+        }
+        else {
+            if (input.size() == 1) {
+                var key = dict ? $('#' + prefix + '_mfkey').val() : '';
+                var value = input.val();
+                if (key == '' && value == '') {
+                    if (empty_found) {
+                        $(this).parent().remove();
+                    }
+                    empty_found = true;
+                }
+            }
+            else {
+                $('#' + prefix).replaceWith(multifield_input(prefix, 'value',
+                                                             'text'));
+            }
+        }
+    });
+    if (!empty_found) {
+        var prefix = name + '_' + (largest_id + 1);
+        var t = multifield.hasClass('string-only') ? 'hidden' : 'select';
+        var val_type = multifield_input(prefix, 'value', 'text') + ' ' +
+            multifield_input(prefix, 'type', t);
+
+        if (dict) {
+            multifield.append('<table><tr><td>' +
+                              multifield_input(prefix, 'key', 'text') +
+                              '</td><td class="equals"> = </td><td>' +
+                              val_type + '</td></tr></table>');
+        }
+        else {
+            multifield.append('<div>' + val_type + '</div>');
+        }
+    }
+}
+
+function multifield_input(prefix, suffix, type) {
+    if (type == 'hidden' ) {
+        return '<input type="hidden" id="' + prefix + '_mf' + suffix +
+            '" name="' + prefix + '_mf' + suffix + '" value="string"/>';
+    }
+    else if (type == 'text' ) {
+        return '<input type="text" id="' + prefix + '_mf' + suffix +
+            '" name="' + prefix + '_mf' + suffix + '" value=""/>';
+    }
+    else if (type == 'select' ) {
+        return '<select id="' + prefix + '_mf' + suffix + '" name="' + prefix +
+            '_mf' + suffix + '">' +
+            '<option value="string">String</option>' +
+            '<option value="number">Number</option>' +
+            '<option value="boolean">Boolean</option>' +
+            '<option value="list">List</option>' +
+            '</select>';
+    }
 }
 
 function update_filter() {
@@ -855,11 +896,16 @@ function params_magic(params) {
 }
 
 function collapse_multifields(params0) {
+    function set(x) { return x != '' && x != undefined }
+
     var params = {};
-    for (key in params0) {
-        var match = key.match(/([a-z]*)_([0-9]*)_mfkey/);
-        var match2 = key.match(/[a-z]*_[0-9]*_mfvalue/);
-        var match3 = key.match(/[a-z]*_[0-9]*_mftype/);
+    var ks = keys(params0);
+    var ids = [];
+    for (i in ks) {
+        var key = ks[i];
+        var match = key.match(/([a-z]*)_([0-9_]*)_mftype/);
+        var match2 = key.match(/[a-z]*_[0-9_]*_mfkey/);
+        var match3 = key.match(/[a-z]*_[0-9_]*_mfvalue/);
         if (match == null && match2 == null && match3 == null) {
             params[key] = params0[key];
         }
@@ -869,27 +915,50 @@ function collapse_multifields(params0) {
         else {
             var name = match[1];
             var id = match[2];
-            if (params[name] == undefined) {
-                params[name] = {};
+            ids.push([name, id]);
+        }
+    }
+    ids.sort();
+    var id_map = {};
+    for (i in ids) {
+        var name = ids[i][0];
+        var id = ids[i][1];
+        if (params[name] == undefined) {
+            params[name] = {};
+            id_map[name] = {};
+        }
+        var id_parts = id.split('_');
+        var k = params0[name + '_' + id_parts[0] + '_mfkey'];
+        var v = params0[name + '_' + id + '_mfvalue'];
+        var t = params0[name + '_' + id + '_mftype'];
+        var val = null;
+        if (t == 'list') {
+            val = [];
+            id_map[name][id] = val;
+        }
+        else if (set(k) || set(v)) {
+            if (t == 'boolean') {
+                if (v != 'true' && v != 'false')
+                    throw(k + ' must be "true" or "false"; got ' + v);
+                val = (v == 'true');
             }
-            if (params0[key] != "") {
-                var k = params0[key];
-                var v = params0[name + '_' + id + '_mfvalue'];
-                var t = params0[name + '_' + id + '_mftype'];
-                if (t == 'boolean') {
-                    if (v != 'true' && v != 'false')
-                        throw(k + ' must be "true" or "false"; got ' + v);
-                    params[name][k] = (v == 'true');
-                }
-                else if (t == 'number') {
-                    var n = parseFloat(v);
-                    if (isNaN(n))
-                        throw(k + ' must be a number; got ' + v);
-                    params[name][k] = n;
-                }
-                else {
-                    params[name][k] = v;
-                }
+            else if (t == 'number') {
+                var n = parseFloat(v);
+                if (isNaN(n))
+                    throw(k + ' must be a number; got ' + v);
+                val = n;
+            }
+            else {
+                val = v;
+            }
+        }
+        if (val != null) {
+            if (id_parts.length == 1) {
+                params[name][k] = val;
+            }
+            else {
+                var prefix = id_parts.slice(0, id_parts.length - 1).join('_');
+                id_map[name][prefix].push(val);
             }
         }
     }
@@ -906,9 +975,6 @@ function add_known_arguments(params) {
                 if (isNaN(v)) {
                     throw(k + " must be an integer.");
                 }
-            }
-            else if (type == 'array' && typeof(v) == 'string') {
-                v = v.split(' ');
             }
             params.arguments[k] = v;
         }

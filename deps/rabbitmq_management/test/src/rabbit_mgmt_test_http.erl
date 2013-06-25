@@ -68,9 +68,9 @@ auth_test() ->
 vhosts_test() ->
     assert_list([[{name, <<"/">>}]], http_get("/vhosts")),
     %% Create a new one
-    http_put("/vhosts/myvhost", [], ?NO_CONTENT),
+    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
     %% PUT should be idempotent
-    http_put("/vhosts/myvhost", [], ?NO_CONTENT),
+    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
     %% Check it's there
     assert_list([[{name, <<"/">>}], [{name, <<"myvhost">>}]],
                 http_get("/vhosts")),
@@ -82,6 +82,19 @@ vhosts_test() ->
     %% It's not there
     http_get("/vhosts/myvhost", ?NOT_FOUND),
     http_delete("/vhosts/myvhost", ?NOT_FOUND).
+
+vhosts_trace_test() ->
+    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
+    Disabled = [{name,  <<"myvhost">>}, {tracing, false}],
+    Enabled  = [{name,  <<"myvhost">>}, {tracing, true}],
+    Disabled = http_get("/vhosts/myvhost"),
+    http_put("/vhosts/myvhost", [{tracing, true}], ?NO_CONTENT),
+    Enabled = http_get("/vhosts/myvhost"),
+    http_put("/vhosts/myvhost", [{tracing, true}], ?NO_CONTENT),
+    Enabled = http_get("/vhosts/myvhost"),
+    http_put("/vhosts/myvhost", [{tracing, false}], ?NO_CONTENT),
+    Disabled = http_get("/vhosts/myvhost"),
+    http_delete("/vhosts/myvhost", ?NO_CONTENT).
 
 users_test() ->
     assert_item([{name, <<"guest">>}, {tags, <<"administrator">>}],
@@ -140,8 +153,8 @@ permissions_list_test() ->
              ?NO_CONTENT),
     http_put("/users/myuser2", [{password, <<"">>}, {tags, <<"administrator">>}],
              ?NO_CONTENT),
-    http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
-    http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
+    http_put("/vhosts/myvhost1", none, ?NO_CONTENT),
+    http_put("/vhosts/myvhost2", none, ?NO_CONTENT),
 
     Perms = [{configure, <<"foo">>}, {write, <<"foo">>}, {read, <<"foo">>}],
     http_put("/permissions/myvhost1/myuser1", Perms, ?NO_CONTENT),
@@ -161,7 +174,7 @@ permissions_list_test() ->
 permissions_test() ->
     http_put("/users/myuser", [{password, <<"myuser">>}, {tags, <<"administrator">>}],
              ?NO_CONTENT),
-    http_put("/vhosts/myvhost", [], ?NO_CONTENT),
+    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
 
     http_put("/permissions/myvhost/myuser",
              [{configure, <<"foo">>}, {write, <<"foo">>}, {read, <<"foo">>}],
@@ -207,7 +220,7 @@ test_auth(Code, Headers) ->
 exchanges_test() ->
     %% Can pass booleans or strings
     Good = [{type, <<"direct">>}, {durable, <<"true">>}],
-    http_put("/vhosts/myvhost", [], ?NO_CONTENT),
+    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
     http_put("/permissions/myvhost/guest",
@@ -420,8 +433,8 @@ permissions_vhost_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
                                {tags, <<"management">>}], ?NO_CONTENT),
-    http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
-    http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
+    http_put("/vhosts/myvhost1", none, ?NO_CONTENT),
+    http_put("/vhosts/myvhost2", none, ?NO_CONTENT),
     http_put("/permissions/myvhost1/myuser", PermArgs, ?NO_CONTENT),
     http_put("/permissions/myvhost1/guest", PermArgs, ?NO_CONTENT),
     http_put("/permissions/myvhost2/guest", PermArgs, ?NO_CONTENT),
@@ -572,7 +585,7 @@ defs_v(Key, URI, CreateMethod, Args) ->
     defs(Key, Rep1(URI, "%2f"), CreateMethod, Rep2(Args, <<"/">>)),
 
     %% Test against new vhost
-    http_put("/vhosts/test", [], ?NO_CONTENT),
+    http_put("/vhosts/test", none, ?NO_CONTENT),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/permissions/test/guest", PermArgs, ?NO_CONTENT),
     defs(Key, Rep1(URI, "test"), CreateMethod, Rep2(Args, <<"test">>),
@@ -793,7 +806,7 @@ exclusive_consumer_test() ->
 sorting_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put("/vhosts/vh1", [], ?NO_CONTENT),
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
     http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
     http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
     http_put("/queues/vh1/test1", QArgs, ?NO_CONTENT),
@@ -1078,6 +1091,8 @@ http_post(Path, List, CodeExp) ->
 http_post(Path, List, User, Pass, CodeExp) ->
     http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp).
 
+format_for_upload(none) ->
+    <<"">>;
 format_for_upload(List) ->
     iolist_to_binary(mochijson2:encode({struct, List})).
 
