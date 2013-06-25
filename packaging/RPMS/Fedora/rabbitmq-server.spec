@@ -118,6 +118,7 @@ done
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*
+%doc docs/rabbitmq.sample.config
 
 %clean
 rm -rf %{buildroot}
