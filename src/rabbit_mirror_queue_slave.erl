@@ -273,7 +273,12 @@ handle_info({'DOWN', _MonitorRef, process, MPid, _Reason},
     noreply(State);
 
 handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
-    noreply(local_sender_death(ChPid, State));
+    local_sender_death(ChPid, State),
+    noreply(State);
+
+handle_info({node_down, Node}, State) ->
+    local_sender_node_death(Node, State),
+    noreply(State);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -604,7 +609,7 @@ stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #state.rate_timer_ref).
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
     State #state { known_senders = dmon:monitor(ChPid, KS) }.
 
-local_sender_death(ChPid, State = #state { known_senders = KS }) ->
+local_sender_death(ChPid, #state { known_senders = KS }) ->
     %% The channel will be monitored iff we have received a delivery
     %% from it but not heard about its death from the master. So if it
     %% is monitored we need to point the death out to the master (see
@@ -612,8 +617,10 @@ local_sender_death(ChPid, State = #state { known_senders = KS }) ->
     ok = case dmon:is_monitored(ChPid, KS) of
              false -> ok;
              true  -> confirm_sender_death(ChPid)
-         end,
-    State.
+         end.
+
+local_sender_node_death(Node, State = #state { known_senders = KS }) ->
+    [local_sender_death(ChPid, State) || ChPid <- dmon:monitored(Node, KS)].
 
 confirm_sender_death(Pid) ->
     %% We have to deal with the possibility that we'll be promoted to
