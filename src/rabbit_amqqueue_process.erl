@@ -550,10 +550,7 @@ notify_federation(#q{q                   = Q,
         false -> rabbit_federation_queue:stop(Q)
     end.
 
-active_unfederated(Cs) ->
-    %% TODO could this be faster?
-    lists:any(fun ({Priority, _Consumer}) -> Priority < 0 end,
-              priority_queue:to_list(Cs)).
+active_unfederated(Cs) -> priority_queue:highest(Cs) >= 0.
 
 consumer_priority({_ChPid, #consumer{args = Args}}) ->
     case rabbit_misc:table_lookup(Args, <<"x-priority">>) of

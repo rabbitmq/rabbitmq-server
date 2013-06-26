@@ -41,7 +41,7 @@
 -module(priority_queue).
 
 -export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, from_list/1,
-         in/2, in/3, out/1, join/2, filter/2, fold/3]).
+         in/2, in/3, out/1, join/2, filter/2, fold/3, highest/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -66,6 +66,7 @@
 -spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
 -spec(filter/2 :: (fun ((any()) -> boolean()), pqueue()) -> pqueue()).
 -spec(fold/3 :: (fun ((any(), any()) -> any()), any(), pqueue()) -> any()).
+-spec(highest/1 :: (pqueue()) -> priority()).
 
 -endif.
 
@@ -210,6 +211,9 @@ fold(Fun, Init, Q) -> case out_p(Q) of
                           {empty, _Q}         -> Init;
                           {{value, V, P}, Q1} -> fold(Fun, Fun(V, P, Init), Q1)
                       end.
+
+highest({queue, _, _, _})       -> 0;
+highest({pqueue, [{P, _} | _]}) -> maybe_negate_priority(P).
 
 r2f([],      0) -> {queue, [], [], 0};
 r2f([_] = R, 1) -> {queue, [], R, 1};
