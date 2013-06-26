@@ -254,6 +254,9 @@ go(S0 = #not_started{run             = Run,
                                unacked         = Unacked}}
       end, Upstream, UParams, QName, S0).
 
+update_headers(UParams, Redelivered, undefined) ->
+    update_headers(UParams, Redelivered, []);
+
 update_headers(UParams, Redelivered, Headers) ->
     {table, Info} = rabbit_federation_upstream:params_to_table(UParams),
     {Headers1, Count} =
