@@ -145,7 +145,7 @@ init_state(Q) ->
     State = #q{q                   = Q,
                exclusive_consumer  = none,
                has_had_consumers   = false,
-               active_consumers    = queue:new(),
+               active_consumers    = priority_queue:new(),
                senders             = pmon:new(),
                msg_id_to_channel   = gb_trees:empty(),
                status              = running},
@@ -360,7 +360,7 @@ ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #q.stats_timer, emit_stats).
 
 assert_invariant(State = #q{active_consumers = AC}) ->
-    true = (queue:is_empty(AC) orelse is_empty(State)).
+    true = (priority_queue:is_empty(AC) orelse is_empty(State)).
 
 is_empty(#q{backing_queue = BQ, backing_queue_state = BQS}) -> BQ:is_empty(BQS).
 
@@ -379,7 +379,7 @@ ch_record(ChPid, LimiterPid) ->
                              monitor_ref          = MonitorRef,
                              acktags              = queue:new(),
                              consumer_count       = 0,
-                             blocked_consumers    = queue:new(),
+                             blocked_consumers    = priority_queue:new(),
                              limiter              = Limiter,
                              unsent_message_count = 0},
                      put(Key, C),
@@ -408,7 +408,8 @@ erase_ch_record(#cr{ch_pid = ChPid, monitor_ref = MonitorRef}) ->
 all_ch_record() -> [C || {{ch, _}, C} <- get()].
 
 block_consumer(C = #cr{blocked_consumers = Blocked}, QEntry) ->
-    update_ch_record(C#cr{blocked_consumers = queue:in(QEntry, Blocked)}).
+    Blocked1 = priority_queue:in(QEntry, consumer_priority(QEntry), Blocked),
+    update_ch_record(C#cr{blocked_consumers = Blocked1}).
 
 is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
     Count >= ?UNSENT_MESSAGE_LIMIT orelse rabbit_limiter:is_suspended(Limiter).
@@ -432,7 +433,7 @@ deliver_msgs_to_consumers(_DeliverFun, true, State) ->
     {true, State};
 deliver_msgs_to_consumers(DeliverFun, false,
                           State = #q{active_consumers = ActiveConsumers}) ->
-    case pick_consumer(ActiveConsumers) of
+    case priority_queue:out(ActiveConsumers) of
         {empty, _} ->
             {false, State};
         {{value, QEntry}, Tail} ->
@@ -456,7 +457,8 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
                          notify_federation(State),
                          {false, State};
                      {continue, Limiter} ->
-                         AC1 = queue:in(E, State#q.active_consumers),
+                         AC1 = priority_queue:in(E, consumer_priority(E),
+                                                 State#q.active_consumers),
                          deliver_msg_to_consumer(
                            DeliverFun, Consumer, C#cr{limiter = Limiter},
                            State#q{active_consumers = AC1})
@@ -549,26 +551,14 @@ notify_federation(#q{q                   = Q,
     end.
 
 active_unfederated(Cs) ->
-    case queue:out(Cs) of
-        {empty, _}        -> false;
-        {{value, C}, Cs1} -> case federated_consumer(C) of
-                                 true  -> active_unfederated(Cs1);
-                                 false -> true
-                             end
-    end.
+    %% TODO could this be faster?
+    lists:any(fun ({Priority, _Consumer}) -> Priority < 0 end,
+              priority_queue:to_list(Cs)).
 
-%% TODO this could be more efficient. But we'd need another representation,
-%% and thus to abstract the representation of active_consumers.
-pick_consumer(Cs) ->
-    case lists:splitwith(fun federated_consumer/1, queue:to_list(Cs)) of
-        {_,    []}         -> queue:out(Cs);
-        {Feds, [UnFed|Tl]} -> queue:out(queue:from_list([UnFed | Feds ++ Tl]))
-    end.
-
-federated_consumer({_Pid, #consumer{args = Args}}) ->
-    case rabbit_misc:table_lookup(Args, <<"x-purpose">>) of
-        {longstr, <<"federation">>} -> true;
-        _                           -> false
+consumer_priority({_ChPid, #consumer{args = Args}}) ->
+    case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
+        {_, Priority} -> Priority;
+        _             -> 0
     end.
 
 attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
@@ -668,17 +658,17 @@ requeue(AckTags, ChPid, State) ->
                   fun (State1) -> requeue_and_run(AckTags, State1) end).
 
 remove_consumer(ChPid, ConsumerTag, Queue) ->
-    queue:filter(fun ({CP, #consumer{tag = CTag}}) ->
-                         (CP /= ChPid) or (CTag /= ConsumerTag)
-                 end, Queue).
+    priority_queue:filter(fun ({CP, #consumer{tag = CTag}}) ->
+                                  (CP /= ChPid) or (CTag /= ConsumerTag)
+                          end, Queue).
 
 remove_consumers(ChPid, Queue, QName) ->
-    queue:filter(fun ({CP, #consumer{tag = CTag}}) when CP =:= ChPid ->
-                         emit_consumer_deleted(ChPid, CTag, QName),
-                         false;
-                     (_) ->
-                         true
-                 end, Queue).
+    priority_queue:filter(fun ({CP, #consumer{tag = CTag}}) when CP =:= ChPid ->
+                                  emit_consumer_deleted(ChPid, CTag, QName),
+                                  false;
+                              (_) ->
+                                  true
+                          end, Queue).
 
 possibly_unblock(State, ChPid, Update) ->
     case lookup_ch(ChPid) of
@@ -693,17 +683,17 @@ possibly_unblock(State, ChPid, Update) ->
 
 unblock(State, C = #cr{limiter = Limiter}) ->
     case lists:partition(
-           fun({_ChPid, #consumer{tag = CTag}}) ->
+           fun({_P, {_ChPid, #consumer{tag = CTag}}}) ->
                    rabbit_limiter:is_consumer_blocked(Limiter, CTag)
-           end, queue:to_list(C#cr.blocked_consumers)) of
+           end, priority_queue:to_list(C#cr.blocked_consumers)) of
         {_, []} ->
             update_ch_record(C),
             State;
         {Blocked, Unblocked} ->
-            BlockedQ   = queue:from_list(Blocked),
-            UnblockedQ = queue:from_list(Unblocked),
+            BlockedQ   = priority_queue:from_list(Blocked),
+            UnblockedQ = priority_queue:from_list(Unblocked),
             update_ch_record(C#cr{blocked_consumers = BlockedQ}),
-            AC1 = queue:join(State#q.active_consumers, UnblockedQ),
+            AC1 = priority_queue:join(State#q.active_consumers, UnblockedQ),
             run_message_queue(State#q{active_consumers = AC1})
     end.
 
@@ -1041,9 +1031,9 @@ consumers(#q{active_consumers = ActiveConsumers}) ->
                 consumers(ActiveConsumers, []), all_ch_record()).
 
 consumers(Consumers, Acc) ->
-    rabbit_misc:queue_fold(
-      fun ({ChPid, #consumer{tag = CTag, ack_required = AckRequired}}, Acc1) ->
-              [{ChPid, CTag, AckRequired} | Acc1]
+    priority_queue:fold(
+      fun ({ChPid, #consumer{tag = CTag, ack_required = AckReq}}, _P, Acc1) ->
+              [{ChPid, CTag, AckReq} | Acc1]
       end, Acc, Consumers).
 
 emit_stats(State) ->
@@ -1208,7 +1198,9 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             ok = maybe_send_reply(ChPid, OkMsg),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                   not NoAck, qname(State1)),
-            AC1 = queue:in({ChPid, Consumer}, State1#q.active_consumers),
+            AC1 = priority_queue:in({ChPid, Consumer},
+                                    consumer_priority({ChPid, Consumer}),
+                                    State1#q.active_consumers),
             reply(ok, run_message_queue(State1#q{active_consumers = AC1}))
     end;
 
