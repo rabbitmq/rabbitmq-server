@@ -229,9 +229,9 @@ go(S0 = #not_started{run             = Run,
                  true  -> ?CREDIT;
                  false -> 0
              end,
-    Args = [{<<"x-purpose">>, longstr, <<"federation">>},
-            {<<"x-credit">>,  table,   [{<<"credit">>, long, Credit},
-                                        {<<"drain">>,  bool, false}]}],
+    Args = [{<<"x-priority">>, long,  -1},
+            {<<"x-credit">>,   table, [{<<"credit">>, long, Credit},
+                                       {<<"drain">>,  bool, false}]}],
     Unacked = rabbit_federation_link_util:unacked_new(),
     NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
     rabbit_federation_link_util:start_conn_ch(
