@@ -119,15 +119,19 @@ invoke_no_result(Pids, Fun) when is_list(Pids) ->
     safe_invoke(LocalPids, Fun), %% must not die
     ok.
 
+monitor(Pid) when node(Pid) =:= node() ->
+    erlang:monitor(process, Pid);
 monitor(Pid) ->
     Node = node(Pid),
     Name = delegate(Pid, [Node]),
-    gen_server2:call({Name, Node}, {monitor, self(), Pid}, infinity).
+    gen_server2:call(Name, {monitor, self(), Pid}, infinity).
 
+demonitor(Pid, Ref) when node(Pid) =:= node() ->
+    erlang:demonitor(Ref, [flush]);
 demonitor(Pid, Ref) ->
     Node = node(Pid),
     Name = delegate(Pid, [Node]),
-    gen_server2:call({Name, Node}, {demonitor, Ref}, infinity).
+    gen_server2:call(Name, {demonitor, Ref}, infinity).
 
 call(PidOrPids, Msg) ->
     invoke(PidOrPids, fun (P) -> gen_server2:call(P, Msg, infinity) end).

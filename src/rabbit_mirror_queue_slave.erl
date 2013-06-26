@@ -276,10 +276,6 @@ handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
     local_sender_death(ChPid, State),
     noreply(State);
 
-handle_info({node_down, Node}, State) ->
-    local_sender_node_death(Node, State),
-    noreply(State);
-
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
@@ -618,9 +614,6 @@ local_sender_death(ChPid, #state { known_senders = KS }) ->
              false -> ok;
              true  -> confirm_sender_death(ChPid)
          end.
-
-local_sender_node_death(Node, State = #state { known_senders = KS }) ->
-    [local_sender_death(ChPid, State) || ChPid <- dmon:monitored(Node, KS)].
 
 confirm_sender_death(Pid) ->
     %% We have to deal with the possibility that we'll be promoted to
