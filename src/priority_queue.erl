@@ -154,7 +154,7 @@ out({pqueue, [{P, Q} | Queues]}) ->
     {R, NewQ}.
 
 out_p({queue, _, _, _}       = Q) -> add_p(out(Q), 0);
-out_p({pqueue, [{P, _} | _]} = Q) -> add_p(out(Q), P).
+out_p({pqueue, [{P, _} | _]} = Q) -> add_p(out(Q), maybe_negate_priority(P)).
 
 add_p(R, P) -> case R of
                    {empty, Q}      -> {empty, Q};
