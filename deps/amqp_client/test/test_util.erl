@@ -1036,6 +1036,44 @@ rpc_client_consume_loop(Channel) ->
 
 %%---------------------------------------------------------------------------
 
+%% connection.blocked, connection.unblocked
+
+connection_blocked_test() ->
+    {ok, Connection} = new_connection(),
+    X = <<"amq.direct">>,
+    K = Payload = <<"x">>,
+    memsup:set_sysmem_high_watermark(0.99),
+    timer:sleep(1000),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Parent = self(),
+    Child = spawn_link(
+              fun() ->
+                      receive
+                          #'connection.blocked'{} -> ok
+                      end,
+                      Publish = #'basic.publish'{exchange = X,
+                                                 routing_key = K},
+                      blocked =
+                        amqp_channel:call(Channel, Publish,
+                                          #amqp_msg{payload = Payload}),
+                      memsup:set_sysmem_high_watermark(5.0),
+                      receive
+                          #'connection.unblocked'{} -> ok
+                      end,
+                      Parent ! ok
+              end),
+    amqp_connection:register_blocked_handler(Channel, Child),
+    timer:sleep(1000),
+    memsup:set_sysmem_high_watermark(0.001),
+    receive
+        ok -> ok
+    after 10000 ->
+        ?LOG_DEBUG("Are you sure that you have waited 1 minute?~n"),
+        exit(did_not_receive_connection_blocked)
+    end.
+
+%%---------------------------------------------------------------------------
+
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
                        q = uuid(),
