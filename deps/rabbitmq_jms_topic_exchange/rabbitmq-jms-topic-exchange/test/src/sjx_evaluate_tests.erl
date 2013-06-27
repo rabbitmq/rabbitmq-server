@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2012, 2013 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2012, 2013 GoPivotal, Inc.  All rights reserved.
 %% -----------------------------------------------------------------------------
 %% Derived from works which were:
 %% Copyright (c) 2012, 2013 Steve Powell (Zteve.Powell@gmail.com)
