@@ -903,55 +903,6 @@ pc_consumer_loop(Channel, Payload, NReceived) ->
         NReceived
     end.
 
-
-%%----------------------------------------------------------------------------
-%% Unit test for the direct client
-%% This just relies on the fact that a fresh Rabbit VM must consume more than
-%% 0.1 pc of the system memory:
-%% 0. Wait 1 minute to let memsup do stuff
-%% 1. Make sure that the high watermark is set high
-%% 2. Start a process to receive the pause and resume commands from the broker
-%% 3. Register this as flow control notification handler
-%% 4. Let the system settle for a little bit
-%% 5. Set the threshold to the lowest possible value
-%% 6. When the flow handler receives the pause command, it sets the watermark
-%%    to a high value in order to get the broker to send the resume command
-%% 7. Allow 10 secs to receive the pause and resume, otherwise timeout and
-%%    fail
-channel_flow_test() ->
-    {ok, Connection} = new_connection(),
-    X = <<"amq.direct">>,
-    K = Payload = <<"x">>,
-    memsup:set_sysmem_high_watermark(0.99),
-    timer:sleep(1000),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    Parent = self(),
-    Child = spawn_link(
-              fun() ->
-                      receive
-                          #'channel.flow'{active = false} -> ok
-                      end,
-                      Publish = #'basic.publish'{exchange = X,
-                                                 routing_key = K},
-                      blocked =
-                        amqp_channel:call(Channel, Publish,
-                                          #amqp_msg{payload = Payload}),
-                      memsup:set_sysmem_high_watermark(0.99),
-                      receive
-                          #'channel.flow'{active = true} -> ok
-                      end,
-                      Parent ! ok
-              end),
-    amqp_channel:register_flow_handler(Channel, Child),
-    timer:sleep(1000),
-    memsup:set_sysmem_high_watermark(0.001),
-    receive
-        ok -> ok
-    after 10000 ->
-        ?LOG_DEBUG("Are you sure that you have waited 1 minute?~n"),
-        exit(did_not_receive_channel_flow)
-    end.
-
 %%---------------------------------------------------------------------------
 %% This tests whether RPC over AMQP produces the same result as invoking the
 %% same argument against the same underlying gen_server instance.
