@@ -540,6 +540,7 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
         {false, BQS1} ->
             deliver_msgs_to_consumers(
               fun (true, State1 = #q{backing_queue_state = BQS2}) ->
+                      0 = BQ:len(BQS2),
                       {AckTag, BQS3} = BQ:publish_delivered(
                                          Message, Props, SenderPid, BQS2),
                       {{Message, Delivered, AckTag},
