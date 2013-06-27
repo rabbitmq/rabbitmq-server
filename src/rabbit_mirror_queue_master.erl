@@ -225,18 +225,10 @@ discard(MsgId, ChPid, State = #state { gm                  = GM,
                                        backing_queue       = BQ,
                                        backing_queue_state = BQS,
                                        seen_status         = SS }) ->
-    %% It's a massive error if we get told to discard something that's
-    %% already been published or published-and-confirmed. To do that
-    %% would require non FIFO access. Hence we should not find
-    %% 'published' or 'confirmed' in this dict:find.
-    State1 = case dict:find(MsgId, SS) of
-                 error ->
-                     ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
-                     State #state { backing_queue_state =
-                                      BQ:discard(MsgId, ChPid, BQS) };
-                 {ok, discarded} ->
-                     State #state { seen_status = dict:erase(MsgId, SS) }
-             end,
+    false = dict:is_key(MsgId, SS), %% ASSERTION
+    ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
+    State1 = State #state { backing_queue_state =
+                                BQ:discard(MsgId, ChPid, BQS) },
     ensure_monitoring(ChPid, State1).
 
 dropwhile(Pred, State = #state{backing_queue       = BQ,
@@ -404,9 +396,9 @@ is_duplicate(Message = #basic_message { id = MsgId },
             {published, State #state { seen_status = dict:erase(MsgId, SS),
                                        confirmed = [MsgId | Confirmed] }};
         {ok, discarded} ->
-            %% Don't erase from SS here because discard/2 is about to
-            %% be called and we need to be able to detect this case
-            {discarded, State}
+            %% Message was discarded while we were a slave. Erase
+            %% and let amqqueue_process confirm if necessary.
+            {discarded, State #state { seen_status = dict:erase(MsgId, SS) }}
     end.
 
 %% ---------------------------------------------------------------------------
