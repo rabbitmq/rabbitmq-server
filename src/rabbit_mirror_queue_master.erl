@@ -229,17 +229,15 @@ discard(MsgId, ChPid, State = #state { gm                  = GM,
     %% already been published or published-and-confirmed. To do that
     %% would require non FIFO access. Hence we should not find
     %% 'published' or 'confirmed' in this dict:find.
-    case dict:find(MsgId, SS) of
-        error ->
-            ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
-            BQS1 = BQ:discard(MsgId, ChPid, BQS),
-            ensure_monitoring(
-              ChPid, State #state {
-                       backing_queue_state = BQS1,
-                       seen_status         = dict:erase(MsgId, SS) });
-        {ok, discarded} ->
-            State
-    end.
+    State1 = case dict:find(MsgId, SS) of
+                 error ->
+                     ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
+                     State #state { backing_queue_state =
+                                      BQ:discard(MsgId, ChPid, BQS) };
+                 {ok, discarded} ->
+                     State #state { seen_status = dict:erase(MsgId, SS) }
+             end,
+    ensure_monitoring(ChPid, State1).
 
 dropwhile(Pred, State = #state{backing_queue       = BQ,
                                backing_queue_state = BQS }) ->
