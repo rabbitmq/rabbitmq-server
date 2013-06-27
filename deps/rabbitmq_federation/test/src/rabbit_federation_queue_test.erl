@@ -24,10 +24,14 @@
 -import(rabbit_federation_util, [name/1]).
 
 -import(rabbit_federation_test_util, [expect/3, set_param/3, clear_param/2,
-         set_pol/3, clear_pol/1, policy/1]).
+         set_pol/3, clear_pol/1, policy/1, start_other_node/1,
+         stop_other_node/1]).
 
 -define(UPSTREAM_DOWNSTREAM, [q(<<"upstream">>),
                               q(<<"fed.downstream">>)]).
+
+%% Used in restart_upstream_test
+-define(HARE, {"hare", 5673}).
 
 simple_test() ->
     with_ch(
@@ -117,7 +121,37 @@ federate_unfederate_test() ->
             q(<<"upstream2">>),
             q(<<"downstream">>)]).
 
-%% TODO Multi-broker up/down tests
+
+%% Downstream: rabbit-test, port 5672
+%% Upstream:   hare,        port 5673
+
+restart_upstream_test() ->
+    with_ch(
+      fun (Downstream) ->
+              stop_other_node(?HARE),
+              Upstream = start_other_node(?HARE),
+
+              declare_queue(Upstream, q(<<"upstream">>)),
+              declare_queue(Downstream, q(<<"hare.downstream">>)),
+              Seq = lists:seq(1, 100),
+              [publish(Upstream, <<>>, <<"upstream">>, <<"bulk">>) || _ <- Seq],
+              expect(Upstream, <<"upstream">>, repeat(25, <<"bulk">>)),
+              expect(Downstream, <<"hare.downstream">>, repeat(25, <<"bulk">>)),
+
+              stop_other_node(?HARE),
+              Upstream2 = start_other_node(?HARE),
+
+              expect(Upstream2, <<"upstream">>, repeat(25, <<"bulk">>)),
+              expect(Downstream, <<"hare.downstream">>, repeat(25, <<"bulk">>)),
+              expect_empty(Upstream2, <<"upstream">>),
+              expect_empty(Downstream, <<"hare.downstream">>),
+
+              stop_other_node(?HARE)
+      end, []).
+
+upstream_has_no_federation_test() ->
+    %% TODO
+    ok.
 
 %%----------------------------------------------------------------------------
 
@@ -125,8 +159,7 @@ with_ch(Fun, Qs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_all(Ch, Qs),
-    %% TODO test status when we, umm, support status
-    %%assert_status(Qs),
+    rabbit_federation_test_util:assert_status(Qs),
     Fun(Ch),
     delete_all(Ch, Qs),
     amqp_connection:close(Conn),

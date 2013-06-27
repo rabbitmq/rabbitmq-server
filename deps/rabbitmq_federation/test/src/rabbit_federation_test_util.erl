@@ -22,6 +22,8 @@
 
 -compile(export_all).
 
+-import(rabbit_misc, [pget/2]).
+
 expect(Ch, Q, Fun) when is_function(Fun) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                 no_ack = true}, self()),
@@ -64,6 +66,31 @@ clear_pol(Name) ->
 fmt(Fmt, Args) ->
     string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
 
+start_other_node({Name, Port}) ->
+    start_other_node({Name, Port}, Name).
+
+start_other_node({Name, Port}, Config) ->
+    start_other_node({Name, Port}, Config,
+                     os:getenv("RABBITMQ_ENABLED_PLUGINS_FILE")).
+
+start_other_node({Name, Port}, Config, PluginsFile) ->
+    %% ?assertCmd seems to hang if you background anything. Bah!
+    Res = os:cmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                     " OTHER_PORT=" ++ integer_to_list(Port) ++
+                     " OTHER_CONFIG=" ++ Config ++
+                     " OTHER_PLUGINS=" ++ PluginsFile ++
+                     " start-other-node ; echo $?"),
+    LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
+    ?assertEqual("0", LastLine),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    Ch.
+
+stop_other_node({Name, _Port}) ->
+    ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                      " stop-other-node"),
+    timer:sleep(1000).
+
 rabbitmqctl(Args) ->
     ?assertCmd(
        plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
@@ -75,3 +102,44 @@ policy(UpstreamSet) ->
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),
     filename:dirname(filename:dirname(File)).
+
+%%----------------------------------------------------------------------------
+
+assert_status(XorQs) ->
+    Links = lists:append([links(XorQ) || XorQ <- XorQs]),
+    Remaining = lists:foldl(fun assert_link_status/2,
+                            rabbit_federation_status:status(), Links),
+    ?assertEqual([], Remaining),
+    ok.
+
+assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
+    {This, Rest} = lists:partition(
+                     fun(St) ->
+                             pget(connection, St) =:= ConnectionName andalso
+                                 pget(name, St) =:= DXNameBin andalso
+                                 pget(upstream_name, St) =:= UXNameBin
+                     end, Status),
+    ?assertMatch([_], This),
+    Rest.
+
+links(#'exchange.declare'{exchange = Name}) ->
+    case rabbit_policy:get(<<"federation-upstream-set">>, xr(Name)) of
+        {ok, Set} ->
+            X = #exchange{name = xr(Name)},
+            [{Name, U#upstream.name, U#upstream.exchange_name} ||
+                U <- rabbit_federation_upstream:from_set(Set, X)];
+        {error, not_found} ->
+            []
+    end;
+links(#'queue.declare'{queue = Name}) ->
+    case rabbit_policy:get(<<"federation-upstream-set">>, qr(Name)) of
+        {ok, Set} ->
+            Q = #amqqueue{name = qr(Name)},
+            [{Name, U#upstream.name, U#upstream.queue_name} ||
+                U <- rabbit_federation_upstream:from_set(Set, Q)];
+        {error, not_found} ->
+            []
+    end.
+
+xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
+qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
