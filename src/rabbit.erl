@@ -281,7 +281,8 @@ warn_if_hipe_compilation_failed(false) ->
 %% long time, so make an exception to our no-stdout policy and display
 %% progress via stdout.
 hipe_compile() ->
-    Count = length(?HIPE_WORTHY),
+    HipeWorthy = [HW || HW <- ?HIPE_WORTHY, code:which(HW) =/= non_existing],
+    Count = length(HipeWorthy),
     io:format("~nHiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
     T1 = erlang:now(),
@@ -290,7 +291,7 @@ hipe_compile() ->
                                              io:format("#")
                                          end || M <- Ms]
                               end) ||
-                   Ms <- split(?HIPE_WORTHY, ?HIPE_PROCESSES)],
+                   Ms <- split(HipeWorthy, ?HIPE_PROCESSES)],
     [receive
          {'DOWN', MRef, process, _, normal} -> ok;
          {'DOWN', MRef, process, _, Reason} -> exit(Reason)
