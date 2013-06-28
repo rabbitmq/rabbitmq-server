@@ -202,7 +202,10 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-terminate(_Reason, #not_started{}) ->
+terminate(Reason, #not_started{upstream        = Upstream,
+                               upstream_params = UParams,
+                               queue           = #amqqueue{name = QName}}) ->
+    rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
     ok;
 
 terminate(Reason, #state{dconn           = DConn,

@@ -29,10 +29,11 @@ maybe_start(Q) ->
         false -> ok
     end.
 
-terminate(Q) ->
+terminate(Q = #amqqueue{name = QName}) ->
     %% TODO naming of stop vs terminate not consistent with exchange
     case federate(Q) of
-        true  -> rabbit_federation_queue_link_sup_sup:stop_child(Q);
+        true  -> rabbit_federation_queue_link_sup_sup:stop_child(Q),
+                 rabbit_federation_status:remove_exchange(QName);
         false -> ok
     end.
 

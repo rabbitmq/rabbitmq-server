@@ -159,6 +159,7 @@ with_ch(Fun, Qs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_all(Ch, Qs),
+    timer:sleep(1000), %% Time for statuses to get updated
     rabbit_federation_test_util:assert_status(Qs),
     Fun(Ch),
     delete_all(Ch, Qs),
