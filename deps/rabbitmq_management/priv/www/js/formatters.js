@@ -192,6 +192,7 @@ function fmt_rate_num(num) {
 }
 
 function fmt_num_thousands(num) {
+    num = '' + num;
     if (num.length < 4) return num;
     return fmt_num_thousands(num.slice(0, -3)) + ',' + num.slice(-3);
 }
@@ -238,7 +239,7 @@ function fmt_msgs0(obj, name, mode) {
         obj[name + '_details'] == undefined) return '';
     var details = obj[name + '_details'];
     return mode == 'avg' ? fmt_rate_num(details.avg) :
-        fmt_num_thousands('' + obj[name]);
+        fmt_num_thousands(obj[name]);
 }
 
 function fmt_msgs_rate(num) {
