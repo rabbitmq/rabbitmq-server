@@ -40,16 +40,17 @@ queue_coarse_test() ->
     create_q(test2, 0),
     stats_q(test, 0, 10),
     stats_q(test2, 0, 1),
-    Exp = fun(N) -> simple_details(messages, N) end,
-    assert_item(Exp(10), get_q(test, range(0, 1, 1))),
-    assert_item(Exp(11), get_vhost(range(0, 1, 1))),
-    assert_item(Exp(11), get_overview_q(range(0, 1, 1))),
+    R = range(0, 1, 1),
+    Exp = fun(N) -> simple_details(messages, N, R) end,
+    assert_item(Exp(10), get_q(test, R)),
+    assert_item(Exp(11), get_vhost(R)),
+    assert_item(Exp(11), get_overview_q(R)),
     delete_q(test, 0),
-    assert_item(Exp(1), get_vhost(range(0, 1, 1))),
-    assert_item(Exp(1), get_overview_q(range(0, 1, 1))),
+    assert_item(Exp(1), get_vhost(R)),
+    assert_item(Exp(1), get_overview_q(R)),
     delete_q(test2, 0),
-    assert_item(Exp(0), get_vhost(range(0, 1, 1))),
-    assert_item(Exp(0), get_overview_q(range(0, 1, 1))),
+    assert_item(Exp(0), get_vhost(R)),
+    assert_item(Exp(0), get_overview_q(R)),
     rabbit_mgmt_db:reset_lookups(),
     ok.
 
@@ -58,12 +59,13 @@ connection_coarse_test() ->
     create_conn(test2, 0),
     stats_conn(test, 0, 10),
     stats_conn(test2, 0, 1),
-    Exp = fun(N) -> simple_details(recv_oct, N) end,
-    assert_item(Exp(10), get_conn(test, range(0, 1, 1))),
-    assert_item(Exp(1), get_conn(test2, range(0, 1, 1))),
+    R = range(0, 1, 1),
+    Exp = fun(N) -> simple_details(recv_oct, N, R) end,
+    assert_item(Exp(10), get_conn(test, R)),
+    assert_item(Exp(1), get_conn(test2, R)),
     delete_conn(test, 1),
     delete_conn(test2, 1),
-    assert_list([], rabbit_mgmt_db:get_all_connections(range(0, 1, 1))),
+    assert_list([], rabbit_mgmt_db:get_all_connections(R)),
     ok.
 
 fine_stats_aggregation_test() ->
@@ -71,14 +73,11 @@ fine_stats_aggregation_test() ->
                                      {queue,    fun dummy_lookup/1}]),
     create_ch(ch1, 0),
     create_ch(ch2, 0),
-    stats_ch_x  (ch1, 0, [{x, 100}]),
-    stats_ch_x  (ch2, 0, [{x, 10}]),
-    stats_ch_q_x(ch1, 0, [{q1, x, 100},
-                          {q2, x, 10}]),
-    stats_ch_q_x(ch2, 0, [{q1, x, 50},
-                          {q2, x, 5}]),
-    stats_ch_q  (ch1, 0, [{q1, 2},
-                          {q2, 1}]),
+    stats_ch(ch1, 0, [{x, 100}], [{q1, x, 100},
+                                  {q2, x, 10}], [{q1, 2},
+                                                 {q2, 1}]),
+    stats_ch(ch2, 0, [{x, 10}], [{q1, x, 50},
+                                 {q2, x, 5}], []),
     fine_stats_aggregation_test0(true),
     delete_q(q2, 0),
     fine_stats_aggregation_test0(false),
@@ -95,47 +94,69 @@ fine_stats_aggregation_test0(Q2Exists) ->
     Q1  = get_q(q1, R),
     V   = get_vhost(R),
     O   = get_overview(R),
-    Assert = fun (m, Type, N, Obj) ->
-                     Act = pget(message_stats, Obj),
-                     assert_item(simple_details(Type, N), Act);
-                 ({T2, Name}, Type, N, Obj) ->
-                     Act = find_detailed_stats(Name, pget(expand(T2), Obj)),
-                     assert_item(simple_details(Type, N), Act)
-             end,
-    AssertNegative = fun ({T2, Name}, Obj) ->
-                             detailed_stats_absent(Name, pget(expand(T2), Obj))
-                     end,
-    Assert(m, publish,     100, Ch1),
-    Assert(m, publish,     10,  Ch2),
-    Assert(m, publish_in,  110, X),
-    Assert(m, publish_out, 165, X),
-    Assert(m, publish,     150, Q1),
-    Assert(m, deliver_get, 2,   Q1),
-    Assert(m, deliver_get, 3,   Ch1),
-    Assert(m, publish,     110, V),
-    Assert(m, deliver_get, 3,   V),
-    Assert(m, publish,     110, O),
-    Assert(m, deliver_get, 3,   O),
-    Assert({pub, x},   publish, 100, Ch1),
-    Assert({pub, x},   publish, 10,  Ch2),
-    Assert({in,  ch1}, publish, 100, X),
-    Assert({in,  ch2}, publish, 10,  X),
-    Assert({out, q1},  publish, 150, X),
-    Assert({in,  x},   publish, 150, Q1),
-    Assert({del, ch1}, deliver_get, 2, Q1),
-    Assert({del, q1},  deliver_get, 2, Ch1),
+    assert_fine_stats(m, publish,     100, Ch1, R),
+    assert_fine_stats(m, publish,     10,  Ch2, R),
+    assert_fine_stats(m, publish_in,  110, X, R),
+    assert_fine_stats(m, publish_out, 165, X, R),
+    assert_fine_stats(m, publish,     150, Q1, R),
+    assert_fine_stats(m, deliver_get, 2,   Q1, R),
+    assert_fine_stats(m, deliver_get, 3,   Ch1, R),
+    assert_fine_stats(m, publish,     110, V, R),
+    assert_fine_stats(m, deliver_get, 3,   V, R),
+    assert_fine_stats(m, publish,     110, O, R),
+    assert_fine_stats(m, deliver_get, 3,   O, R),
+    assert_fine_stats({pub, x},   publish, 100, Ch1, R),
+    assert_fine_stats({pub, x},   publish, 10,  Ch2, R),
+    assert_fine_stats({in,  ch1}, publish, 100, X, R),
+    assert_fine_stats({in,  ch2}, publish, 10,  X, R),
+    assert_fine_stats({out, q1},  publish, 150, X, R),
+    assert_fine_stats({in,  x},   publish, 150, Q1, R),
+    assert_fine_stats({del, ch1}, deliver_get, 2, Q1, R),
+    assert_fine_stats({del, q1},  deliver_get, 2, Ch1, R),
     case Q2Exists of
         true  -> Q2  = get_q(q2, R),
-                 Assert(m, publish,     15,  Q2),
-                 Assert(m, deliver_get, 1,   Q2),
-                 Assert({out, q2},  publish, 15,  X),
-                 Assert({in,  x},   publish, 15,  Q2),
-                 Assert({del, ch1}, deliver_get, 1, Q2),
-                 Assert({del, q2},  deliver_get, 1, Ch1);
-        false -> AssertNegative({out, q2}, X),
-                 AssertNegative({del, q2}, Ch1)
+                 assert_fine_stats(m, publish,     15,  Q2, R),
+                 assert_fine_stats(m, deliver_get, 1,   Q2, R),
+                 assert_fine_stats({out, q2},  publish, 15,  X, R),
+                 assert_fine_stats({in,  x},   publish, 15,  Q2, R),
+                 assert_fine_stats({del, ch1}, deliver_get, 1, Q2, R),
+                 assert_fine_stats({del, q2},  deliver_get, 1, Ch1, R);
+        false -> assert_fine_stats_neg({out, q2}, X),
+                 assert_fine_stats_neg({del, q2}, Ch1)
     end,
     ok.
+
+fine_stats_aggregation_time_test() ->
+    rabbit_mgmt_db:override_lookups([{exchange, fun dummy_lookup/1},
+                                     {queue,    fun dummy_lookup/1}]),
+    create_ch(ch, 0),
+    stats_ch(ch, 0, [{x, 100}], [{q, x, 50}], [{q, 20}]),
+    stats_ch(ch, 5, [{x, 110}], [{q, x, 55}], [{q, 22}]),
+
+    R1 = range(0, 1, 1),
+    assert_fine_stats(m, publish,     100, get_ch(ch, R1), R1),
+    assert_fine_stats(m, publish,     50,  get_q(q, R1), R1),
+    assert_fine_stats(m, deliver_get, 20,  get_q(q, R1), R1),
+
+    R2 = range(5, 6, 1),
+    assert_fine_stats(m, publish,     110, get_ch(ch, R2), R2),
+    assert_fine_stats(m, publish,     55,  get_q(q, R2), R2),
+    assert_fine_stats(m, deliver_get, 22,  get_q(q, R2), R2),
+
+    delete_q(q, 0),
+    delete_ch(ch, 1),
+    rabbit_mgmt_db:reset_lookups(),
+    ok.
+
+assert_fine_stats(m, Type, N, Obj, R) ->
+    Act = pget(message_stats, Obj),
+    assert_item(simple_details(Type, N, R), Act);
+assert_fine_stats({T2, Name}, Type, N, Obj, R) ->
+    Act = find_detailed_stats(Name, pget(expand(T2), Obj)),
+    assert_item(simple_details(Type, N, R), Act).
+
+assert_fine_stats_neg({T2, Name}, Obj) ->
+    detailed_stats_absent(Name, pget(expand(T2), Obj)).
 
 %%----------------------------------------------------------------------------
 %% Events in
@@ -162,22 +183,16 @@ stats_conn(Name, Timestamp, Oct) ->
     event(connection_stats, [{pid ,     pid(Name)},
                              {recv_oct, Oct}], Timestamp).
 
-stats_ch_x(Name, Timestamp, Stats) ->
-    stats_ch(Name, Timestamp, channel_exchange_stats,
-             [{x(XName), [{publish, N}]} || {XName, N} <- Stats]).
-
-stats_ch_q(Name, Timestamp, Stats) ->
-    stats_ch(Name, Timestamp, channel_queue_stats,
-             [{q(QName), [{deliver_no_ack, N}]} || {QName, N} <- Stats]).
-
-stats_ch_q_x(Name, Timestamp, Stats) ->
-    stats_ch(
-      Name, Timestamp, channel_queue_exchange_stats,
-      [{{q(QName), x(XName)}, [{publish, N}]} || {QName, XName, N} <- Stats]).
-
-stats_ch(Name, Timestamp, Type, Stats) ->
-    event(channel_stats, [{pid,  pid(Name)},
-                          {Type, Stats}], Timestamp).
+stats_ch(Name, Timestamp, XStats, QXStats, QStats) ->
+    XStats1 = [{x(XName), [{publish, N}]} || {XName, N} <- XStats],
+    QXStats1 = [{{q(QName), x(XName)}, [{publish, N}]}
+                || {QName, XName, N} <- QXStats],
+    QStats1 = [{q(QName), [{deliver_no_ack, N}]} || {QName, N} <- QStats],
+    event(channel_stats,
+          [{pid,  pid(Name)},
+           {channel_exchange_stats, XStats1},
+           {channel_queue_exchange_stats, QXStats1},
+           {channel_queue_stats, QStats1}], Timestamp).
 
 delete_q(Name, Timestamp) ->
     event(queue_deleted, [{name, q(Name)}], Timestamp).
@@ -222,16 +237,16 @@ get_ch(Name, Range) -> rabbit_mgmt_db:get_channel(a2b(Name), Range).
 get_overview(Range) -> rabbit_mgmt_db:get_overview(Range).
 get_overview_q(Range) -> pget(queue_totals, get_overview(Range)).
 
-details(R, AR, A, L) ->
+details0(R, AR, A, L) ->
     [{rate,     R},
-     {samples,  [[{sample, S}, {timestamp, T * 1000}] || {T, S} <- L]},
+     {samples,  [[{sample, S}, {timestamp, T}] || {T, S} <- L]},
      {avg_rate, AR},
      {avg,      A}].
 
-simple_details(Thing, N) ->
+simple_details(Thing, N, {#range{first = First, last = Last}, _, _}) ->
     [{Thing, N},
      {atom_suffix(Thing, "_details"),
-      details(0.0, 0.0, N * 1.0, [{1, N}, {0, N}])}].
+      details0(0.0, 0.0, N * 1.0, [{Last, N}, {First, N}])}].
 
 atom_suffix(Atom, Suffix) ->
     list_to_atom(atom_to_list(Atom) ++ Suffix).

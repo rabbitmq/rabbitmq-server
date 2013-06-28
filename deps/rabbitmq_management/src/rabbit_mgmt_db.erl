@@ -54,7 +54,7 @@
 %% Connections and channels are identified by pids. Queues and
 %% exchanges are identified by names (which are #resource{}s). VHosts
 %% and nodes are identified by names which are binaries. And consumers
-%% are identified by {ChPid, QName}.
+%% are identified by {ChPid, QName, CTag}.
 %%
 %% The management database records the "created" events for
 %% connections, channels and consumers, and can thus be authoritative
@@ -110,7 +110,12 @@
 %% rates, in order to apportion simple / detailed stats into time
 %% slices as they come in. These instantaneous rates are not returned
 %% in response to any query, the rates shown in the API are calculated
-%% at query time.
+%% at query time. old_stats contains both coarse and fine
+%% entries. Coarse entries are pruned when the corresponding object is
+%% deleted, and fine entries are pruned when the emitting channel is
+%% closed, and whenever we receive new fine stats from a channel. So
+%% it's quite close to being a cache of "the previous stats we
+%% received".
 %%
 %% We also keep a timer going, in order to prune old samples from
 %% #state.aggregated_stats.
@@ -138,7 +143,8 @@
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
--define(TABLES, [queue_stats, connection_stats, channel_stats, consumers,
+-define(TABLES, [queue_stats, connection_stats, channel_stats,
+                 consumers_by_queue, consumers_by_channel,
                  node_stats]).
 
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
@@ -298,8 +304,8 @@ handle_call({get_overview, User, Ranges}, _From,
     %% Filtering out the user's consumers would be rather expensive so let's
     %% just not show it
     Consumers = case User of
-                    all -> [{consumers,
-                             ets:info(orddict:fetch(consumers, Tables), size)}];
+                    all -> Table = orddict:fetch(consumers_by_queue, Tables),
+                           [{consumers, ets:info(Table, size)}];
                     _   -> []
                 end,
     ObjectTotals = Consumers ++
@@ -414,14 +420,10 @@ lookup_element(Table, Key, Pos) ->
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
-floor(TS, State) -> floor0(rabbit_mgmt_format:timestamp_ms(TS), State).
-ceil (TS, State) -> ceil0 (rabbit_mgmt_format:timestamp_ms(TS), State).
-
-floor0(MS, #state{interval = Interval})        -> (MS div Interval) * Interval.
-ceil0(MS, State = #state{interval = Interval}) -> case floor0(MS, State) of
-                                                      MS    -> MS;
-                                                      Floor -> Floor + Interval
-                                                  end.
+floor(TS, #state{interval = Interval}) ->
+    rabbit_mgmt_util:floor(rabbit_mgmt_format:timestamp_ms(TS), Interval).
+ceil(TS, #state{interval = Interval}) ->
+    rabbit_mgmt_util:ceil (rabbit_mgmt_format:timestamp_ms(TS), Interval).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
@@ -441,6 +443,7 @@ handle_event(Event = #event{type = queue_deleted,
                             props = [{name, Name}],
                             timestamp = Timestamp},
              State = #state{old_stats = OldTable}) ->
+    delete_consumers(Name, consumers_by_queue, consumers_by_channel, State),
     %% This is fiddly. Unlike for connections and channels, we need to
     %% decrease any amalgamated coarse stats for [messages,
     %% messages_ready, messages_unacknowledged] for this queue - since
@@ -491,20 +494,29 @@ handle_event(#event{type = channel_created, props = Stats}, State) ->
     handle_created(channel_stats, Stats, [], State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
-             State) ->
+             State = #state{old_stats = OldTable}) ->
     handle_stats(channel_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
                  [], State),
-    [handle_fine_stats(Type, Stats, Timestamp, State) ||
-        Type <- ?FINE_STATS_TYPES],
+    ChPid = id(channel_stats, Stats),
+    AllStats = [old_fine_stats(Type, Stats, State)
+                || Type <- ?FINE_STATS_TYPES],
+    ets:match_delete(OldTable, {{fine, {ChPid, '_'}},      '_'}),
+    ets:match_delete(OldTable, {{fine, {ChPid, '_', '_'}}, '_'}),
+    [handle_fine_stats(Timestamp, AllStatsElem, State)
+     || AllStatsElem <- AllStats],
     {ok, State};
 
 handle_event(Event = #event{type = channel_closed,
-                            props = [{pid, Pid}]}, State) ->
+                            props = [{pid, Pid}]},
+             State = #state{old_stats = Old}) ->
+    delete_consumers(Pid, consumers_by_channel, consumers_by_queue, State),
     delete_samples(channel_queue_stats,    {Pid, '_'}, State),
     delete_samples(channel_exchange_stats, {Pid, '_'}, State),
     delete_samples(channel_stats,          Pid,        State),
-    handle_deleted(channel_stats, Event, State);
+    handle_deleted(channel_stats, Event, State),
+    ets:match_delete(Old, {{fine, {Pid, '_'}},      '_'}),
+    ets:match_delete(Old, {{fine, {Pid, '_', '_'}}, '_'});
 
 handle_event(#event{type = consumer_created, props = Props}, State) ->
     handle_consumer(fun(Table, Id, P) -> ets:insert(Table, {Id, P}) end,
@@ -513,14 +525,6 @@ handle_event(#event{type = consumer_created, props = Props}, State) ->
 handle_event(#event{type = consumer_deleted, props = Props}, State) ->
     handle_consumer(fun(Table, Id, _P) -> ets:delete(Table, Id) end,
                     Props, State);
-
-handle_event(#event{type = queue_mirror_deaths, props = Props},
-             #state{tables = Tables}) ->
-    Dead = pget(pids, Props),
-    Table = orddict:fetch(queue_stats, Tables),
-    %% Only the master can be in the DB, but it's easier just to
-    %% delete all of them
-    [ets:delete(Table, {Pid, stats}) || Pid <- Dead];
 
 %% TODO: we don't clear up after dead nodes here - this is a very tiny
 %% leak every time a node is permanently removed from the cluster. Do
@@ -543,9 +547,11 @@ handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
     {ok, State}.
 
 handle_stats(TName, Stats, Timestamp, Funs, RatesKeys,
-             State = #state{tables = Tables}) ->
+             State = #state{tables = Tables, old_stats = OldTable}) ->
     Id = id(TName, Stats),
-    append_samples(Stats, Timestamp, {coarse, {TName, Id}}, RatesKeys, State),
+    IdSamples = {coarse, {TName, Id}},
+    OldStats = lookup_element(OldTable, IdSamples),
+    append_samples(Stats, Timestamp, OldStats, IdSamples, RatesKeys, State),
     StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
     Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
@@ -561,35 +567,55 @@ handle_deleted(TName, #event{props = Props}, State = #state{tables    = Tables,
         error       -> ok
     end,
     ets:delete(Old, {coarse, {TName, Id}}),
-    ets:match_delete(Old, {{fine, {Id, '_'}},      '_'}),
-    ets:match_delete(Old, {{fine, {Id, '_', '_'}}, '_'}),
     {ok, State}.
 
-handle_consumer(Fun, Props,
-                State = #state{tables = Tables}) ->
+handle_consumer(Fun, Props, State = #state{tables = Tables}) ->
     P = rabbit_mgmt_format:format(Props, []),
-    Table = orddict:fetch(consumers, Tables),
-    Fun(Table, {pget(queue, P), pget(channel, P)}, P),
+    CTag = pget(consumer_tag, P),
+    Q    = pget(queue,        P),
+    Ch   = pget(channel,      P),
+    QTable  = orddict:fetch(consumers_by_queue,   Tables),
+    ChTable = orddict:fetch(consumers_by_channel, Tables),
+    Fun(QTable,  {Q, Ch, CTag}, P),
+    Fun(ChTable, {Ch, Q, CTag}, P),
     {ok, State}.
 
-handle_fine_stats(Type, Props, Timestamp, State) ->
+%% The consumer_deleted event is emitted by queues themselves -
+%% therefore in the event that a queue dies suddenly we may not get
+%% it. The best way to handle this is to make sure we also clean up
+%% consumers when we hear about any queue going down.
+delete_consumers(PrimId, PrimTableName, SecTableName,
+                 #state{tables = Tables}) ->
+    Table1 = orddict:fetch(PrimTableName, Tables),
+    Table2 = orddict:fetch(SecTableName, Tables),
+    SecIdCTags = ets:match(Table1, {{PrimId, '$1', '$2'}, '_'}),
+    ets:match_delete(Table1, {{PrimId, '_', '_'}, '_'}),
+    [ets:delete(Table2, {SecId, PrimId, CTag}) || [SecId, CTag] <- SecIdCTags].
+
+old_fine_stats(Type, Props, #state{old_stats = Old}) ->
     case pget(Type, Props) of
-        unknown ->
-            ok;
-        AllFineStats ->
-            ChPid = id(channel_stats, Props),
-            [handle_fine_stat(
-               fine_stats_id(ChPid, Ids), Stats, Timestamp, State) ||
-                {Ids, Stats} <- AllFineStats]
+        unknown       -> ignore;
+        AllFineStats0 -> ChPid = id(channel_stats, Props),
+                         [begin
+                              Id = fine_stats_id(ChPid, Ids),
+                              {Id, Stats, lookup_element(Old, {fine, Id})}
+                          end || {Ids, Stats} <- AllFineStats0]
     end.
 
-handle_fine_stat(Id, Stats, Timestamp, State) ->
+handle_fine_stats(_Timestamp, ignore, _State) ->
+    ok;
+
+handle_fine_stats(Timestamp, AllStats, State) ->
+    [handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ||
+        {Id, Stats, OldStats} <- AllStats].
+
+handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
     Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
     Stats1 = case Total of
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    append_samples(Stats1, Timestamp, {fine, Id}, all, State).
+    append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, State).
 
 delete_samples(Type, {Id, '_'}, State) ->
     delete_samples_with_index(Type, Id, fun forward/2, State);
@@ -601,11 +627,11 @@ delete_samples(Type, Id, #state{aggregated_stats = ETS}) ->
 delete_samples_with_index(Type, Id, Order,
                           #state{aggregated_stats       = ETS,
                                  aggregated_stats_index = ETSi}) ->
-    Ids2 = lists:append(ets:match(ETSi, {{Type, Id}, '$1'})),
-    ets:match_delete(ETSi, {{Type, Id}, '_'}),
+    Ids2 = lists:append(ets:match(ETSi, {{Type, Id, '$1'}})),
+    ets:match_delete(ETSi, {{Type, Id, '_'}}),
     [begin
          ets:match_delete(ETS, delete_match(Type, Order(Id, Id2))),
-         ets:match_delete(ETSi, {{Type, Id2}, Id})
+         ets:match_delete(ETSi, {{Type, Id2, Id}})
      end || Id2 <- Ids2].
 
 forward(A, B) -> {A, B}.
@@ -613,10 +639,10 @@ reverse(A, B) -> {B, A}.
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
-append_samples(Stats, TS, Id, Keys, State = #state{old_stats = OldTable}) ->
+append_samples(Stats, TS, OldStats, Id, Keys,
+               State = #state{old_stats = OldTable}) ->
     case ignore_coarse_sample(Id, State) of
         false ->
-            OldStats = lookup_element(OldTable, Id),
             %% This ceil must correspond to the ceil in handle_event
             %% queue_deleted
             NewMS = ceil(TS, State),
@@ -734,8 +760,8 @@ record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
     Old = case lookup_element(ETS, Id) of
               [] -> case Id0 of
                         {Type, {Id1, Id2}} ->
-                            ets:insert(ETSi, {{Type, Id2}, Id1}),
-                            ets:insert(ETSi, {{Type, Id1}, Id2});
+                            ets:insert(ETSi, {{Type, Id2, Id1}}),
+                            ets:insert(ETSi, {{Type, Id1, Id2}});
                         _ ->
                             ok
                     end,
@@ -770,9 +796,8 @@ list_queue_stats(Ranges, Objs, State) ->
 detail_queue_stats(Ranges, Objs, State) ->
     adjust_hibernated_memory_use(
       merge_stats(Objs, [consumer_details_fun(
-                           fun (Props) ->
-                                   {id_lookup(queue_stats, Props), '_'}
-                           end, State),
+                           fun (Props) -> id_lookup(queue_stats, Props) end,
+                           consumers_by_queue, State),
                          detail_stats_fun(Ranges, ?QUEUE_DETAILS, State)
                          | queue_funs(Ranges, State)])).
 
@@ -804,7 +829,8 @@ detail_channel_stats(Ranges, Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(channel_stats, State),
                        simple_stats_fun(Ranges, channel_stats, State),
                        consumer_details_fun(
-                         fun (Props) -> {'_', pget(pid, Props)} end, State),
+                         fun (Props) -> pget(pid, Props) end,
+                         consumers_by_channel, State),
                        detail_stats_fun(Ranges, ?CHANNEL_DETAILS, State),
                        augment_msg_stats_fun(State)]).
 
@@ -926,10 +952,10 @@ created_events(Type, Tables) ->
     [Facts || {{_, create}, Facts, _Name}
                   <- ets:tab2list(orddict:fetch(Type, Tables))].
 
-consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(consumers, Tables),
+consumer_details_fun(KeyFun, TableName, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(TableName, Tables),
     fun ([])    -> [];
-        (Props) -> Pattern = PatternFun(Props),
+        (Props) -> Pattern = {KeyFun(Props), '_', '_'},
                    [{consumer_details,
                      [augment_msg_stats(augment_consumer(Obj), State)
                       || Obj <- lists:append(

@@ -232,7 +232,8 @@ add_user(User) ->
 
 add_vhost(VHost) ->
     VHostName = pget(name, VHost),
-    rabbit_mgmt_wm_vhost:put_vhost(VHostName).
+    VHostTrace = pget(tracing, VHost),
+    rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostTrace).
 
 add_permission(Permission) ->
     rabbit_auth_backend_internal:set_permissions(pget(user,      Permission),
