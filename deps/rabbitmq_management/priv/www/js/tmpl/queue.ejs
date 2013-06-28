@@ -62,7 +62,7 @@
             <% if (queue.backing_queue_status.target_ram_count == 'infinity') { %>
               No limit
             <% } else { %>
-              <%= queue.backing_queue_status.target_ram_count %> msg limit
+              RAM target: <%= queue.backing_queue_status.target_ram_count %> msg
             <% } %>
           </sub>
         </td>
