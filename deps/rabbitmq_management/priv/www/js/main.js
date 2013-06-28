@@ -932,7 +932,6 @@ function collapse_multifields(params0) {
         var v = params0[name + '_' + id + '_mfvalue'];
         var t = params0[name + '_' + id + '_mftype'];
         var val = null;
-        debug(k + "|" + v + "|" + t);
         if (t == 'list') {
             val = [];
             id_map[name][id] = val;
