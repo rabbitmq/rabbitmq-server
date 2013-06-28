@@ -550,7 +550,8 @@ notify_federation(#q{q                   = Q,
         false -> rabbit_federation_queue:stop(Q)
     end.
 
-active_unfederated(Cs) -> priority_queue:highest(Cs) >= 0.
+active_unfederated(Cs) ->
+    not priority_queue:is_empty(Cs) andalso priority_queue:highest(Cs) >= 0.
 
 consumer_priority({_ChPid, #consumer{args = Args}}) ->
     case rabbit_misc:table_lookup(Args, <<"x-priority">>) of

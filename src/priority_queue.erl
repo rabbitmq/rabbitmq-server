@@ -212,6 +212,7 @@ fold(Fun, Init, Q) -> case out_p(Q) of
                           {{value, V, P}, Q1} -> fold(Fun, Fun(V, P, Init), Q1)
                       end.
 
+highest({queue, [], [], 0})     -> exit(highest_priority_of_empty_queue);
 highest({queue, _, _, _})       -> 0;
 highest({pqueue, [{P, _} | _]}) -> maybe_negate_priority(P).
 
