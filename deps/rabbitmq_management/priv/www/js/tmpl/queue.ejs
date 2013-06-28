@@ -56,13 +56,14 @@
           <% if (messages_ram == queue.messages) { %>
             No paging
           <% } else { %>
-            <%= messages_ram %> / <%= queue.messages %> msg (in RAM / total)
+            <%= fmt_num_thousands(messages_ram) %> /
+            <%= fmt_num_thousands(queue.messages) %> msg (in RAM / total)
           <% } %>
           <sub>
             <% if (queue.backing_queue_status.target_ram_count == 'infinity') { %>
               No limit
             <% } else { %>
-              RAM target: <%= queue.backing_queue_status.target_ram_count %> msg
+              RAM target: <%= fmt_num_thousands(queue.backing_queue_status.target_ram_count) %> msg
             <% } %>
           </sub>
         </td>
@@ -72,7 +73,7 @@
           Persistent <span class="help" id="queue-persistent"></span>
         </th>
         <td>
-          <%= queue.backing_queue_status.persistent_count %> msg
+          <%= fmt_num_thousands(queue.backing_queue_status.persistent_count) %> msg
         </td>
       </tr>
     </table>
