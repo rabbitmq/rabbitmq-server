@@ -37,7 +37,6 @@
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-%% TODO on restart we will lose stopped / started state!
 run(QName)       -> cast(QName, run).
 pause(QName)     -> cast(QName, pause).
 basic_get(QName) -> cast(QName, basic_get).
@@ -67,15 +66,21 @@ federation_up() ->
 %%----------------------------------------------------------------------------
 
 init({Upstream, Queue = #amqqueue{name = QName}}) ->
-    UParams = rabbit_federation_upstream:to_params(Upstream, Queue),
-    rabbit_federation_status:report(Upstream, UParams, QName, starting),
-    join(rabbit_federation_queues),
-    join({rabbit_federation_queue, QName}),
-    gen_server2:cast(self(), maybe_go),
-    {ok, #not_started{queue           = Queue,
-                      run             = false,
-                      upstream        = Upstream,
-                      upstream_params = UParams}}.
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            UParams = rabbit_federation_upstream:to_params(Upstream, Queue),
+            rabbit_federation_status:report(Upstream, UParams, QName, starting),
+            join(rabbit_federation_queues),
+            join({rabbit_federation_queue, QName}),
+            gen_server2:cast(self(), maybe_go),
+            rabbit_amqqueue:notify_federation(Q),
+            {ok, #not_started{queue           = Queue,
+                              run             = false,
+                              upstream        = Upstream,
+                              upstream_params = UParams}};
+        {error, not_found} ->
+            {stop, gone}
+    end.
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
