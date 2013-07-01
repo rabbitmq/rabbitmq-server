@@ -24,7 +24,7 @@ InstallDir "$PROGRAMFILES\RabbitMQ Server"
 
 ; Registry key to check for directory (so if you install again, it will
 ; overwrite the old one automatically)
-InstallDirRegKey HKLM "Software\VMware, Inc.\RabbitMQ Server" "Install_Dir"
+InstallDirRegKey HKLM "Software\GoPivotal, Inc.\RabbitMQ Server" "Install_Dir"
 
 ; Request application privileges for Windows Vista
 RequestExecutionLevel admin
@@ -35,9 +35,9 @@ VIProductVersion "%%VERSION%%.0"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductVersion" "%%VERSION%%"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "RabbitMQ Server"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "Comments" ""
-VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "VMware, Inc"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "GoPivotal, Inc"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalTrademarks" "" ; TODO ?
-VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (c) 2007-2013 VMware, Inc.  All rights reserved."
+VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved."
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "RabbitMQ Server"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "%%VERSION%%"
 
@@ -77,13 +77,13 @@ Section "RabbitMQ Server (required)" Rabbit
   File "rabbitmq.ico"
 
   ; Write the installation path into the registry
-  WriteRegStr HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server" "Install_Dir" "$INSTDIR"
+  WriteRegStr HKLM "SOFTWARE\GoPivotal, Inc.\RabbitMQ Server" "Install_Dir" "$INSTDIR"
 
   ; Write the uninstall keys for Windows
   WriteRegStr HKLM ${uninstall} "DisplayName" "RabbitMQ Server"
   WriteRegStr HKLM ${uninstall} "UninstallString" "$INSTDIR\uninstall.exe"
   WriteRegStr HKLM ${uninstall} "DisplayIcon" "$INSTDIR\uninstall.exe,0"
-  WriteRegStr HKLM ${uninstall} "Publisher" "VMware, Inc."
+  WriteRegStr HKLM ${uninstall} "Publisher" "GoPivotal, Inc."
   WriteRegStr HKLM ${uninstall} "DisplayVersion" "%%VERSION%%"
   WriteRegDWORD HKLM ${uninstall} "NoModify" 1
   WriteRegDWORD HKLM ${uninstall} "NoRepair" 1
@@ -151,7 +151,7 @@ Section "Uninstall"
 
   ; Remove registry keys
   DeleteRegKey HKLM ${uninstall}
-  DeleteRegKey HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server"
+  DeleteRegKey HKLM "SOFTWARE\GoPivotal, Inc.\RabbitMQ Server"
 
   ; TODO these will fail if the service is not installed - do we care?
   ExpandEnvStrings $0 %COMSPEC%

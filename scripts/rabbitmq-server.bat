@@ -11,8 +11,8 @@ REM  limitations under the License.
 REM
 REM  The Original Code is RabbitMQ.
 REM
-REM  The Initial Developer of the Original Code is VMware, Inc.
-REM  Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
+REM  The Initial Developer of the Original Code is GoPivotal, Inc.
+REM  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 REM
 
 setlocal
