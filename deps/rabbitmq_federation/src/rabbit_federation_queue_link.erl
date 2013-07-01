@@ -228,23 +228,30 @@ go(S0 = #not_started{run             = Run,
                      upstream        = Upstream,
                      upstream_params = UParams,
                      queue           = Queue = #amqqueue{name = QName}}) ->
-    #upstream_params{x_or_q = UQueue} = UParams,
+    #upstream_params{x_or_q = UQueue = #amqqueue{
+                                durable     = Durable,
+                                auto_delete = AutoDelete,
+                                arguments   = QArgs}} = UParams,
     Credit = case Run of
                  true  -> Upstream#upstream.prefetch_count;
                  false -> 0
              end,
-    Args = [{<<"x-priority">>, long,  -1},
-            {<<"x-credit">>,   table, [{<<"credit">>, long, Credit},
-                                       {<<"drain">>,  bool, false}]}],
+    CArgs = [{<<"x-priority">>, long,  -1},
+             {<<"x-credit">>,   table, [{<<"credit">>, long, Credit},
+                                        {<<"drain">>,  bool, false}]}],
     Unacked = rabbit_federation_link_util:unacked_new(),
     NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
+              amqp_channel:call(Ch, #'queue.declare'{queue       = name(UQueue),
+                                                     durable     = Durable,
+                                                     auto_delete = AutoDelete,
+                                                     arguments   = QArgs}),
               #'basic.consume_ok'{consumer_tag = CTag} =
                   amqp_channel:call(
                     Ch, #'basic.consume'{queue     = name(UQueue),
                                          no_ack    = NoAck,
-                                         arguments = Args}),
+                                         arguments = CArgs}),
               {noreply, #state{queue           = Queue,
                                run             = Run,
                                conn            = Conn,
