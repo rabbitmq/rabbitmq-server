@@ -53,7 +53,6 @@ run(#amqqueue{name = QName})       -> rabbit_federation_queue_link:run(QName).
 pause(#amqqueue{name = QName})     -> rabbit_federation_queue_link:pause(QName).
 basic_get(#amqqueue{name = QName}) -> rabbit_federation_queue_link:basic_get(QName).
 
-%% TODO dedup from _exchange (?)
 federate(Q) ->
     case rabbit_federation_upstream:set_for(Q) of
         {ok, _}    -> true;
