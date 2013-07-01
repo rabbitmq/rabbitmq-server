@@ -227,9 +227,8 @@ discard(MsgId, ChPid, State = #state { gm                  = GM,
                                        seen_status         = SS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
-    State1 = State #state { backing_queue_state =
-                                BQ:discard(MsgId, ChPid, BQS) },
-    ensure_monitoring(ChPid, State1).
+    ensure_monitoring(ChPid, State #state { backing_queue_state =
+                                                BQ:discard(MsgId, ChPid, BQS) }.
 
 dropwhile(Pred, State = #state{backing_queue       = BQ,
                                backing_queue_state = BQS }) ->

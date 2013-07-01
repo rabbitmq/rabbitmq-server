@@ -555,9 +555,9 @@ attempt_delivery(Delivery = #delivery{sender     = SenderPid,
         {discarded, BQS1} ->
             State1 = State#q{backing_queue_state = BQS1},
             {true, case MsgSeqNo of
-                       undefined -> State;
+                       undefined -> State1;
                        _         -> #basic_message{id = MsgId} = Message,
-                                    confirm_messages([MsgId], State)
+                                    confirm_messages([MsgId], State1)
                    end}
     end.
 
