@@ -10,8 +10,8 @@
 %%
 %%   The Original Code is RabbitMQ Management Console.
 %%
-%%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
+%%   The Initial Developer of the Original Code is GoPivotal, Inc.
+%%   Copyright (c) 2010-2012 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_test_util).
