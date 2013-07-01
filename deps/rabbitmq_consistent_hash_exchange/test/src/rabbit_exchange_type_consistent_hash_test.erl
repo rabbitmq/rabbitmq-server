@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ Consistent Hash Exchange.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011-2013 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_consistent_hash_test).
