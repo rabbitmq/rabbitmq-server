@@ -276,7 +276,7 @@ terminate_shutdown(Fun, State = #q{q = Q}) ->
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
                      QName = qname(State),
-                     rabbit_federation_queue:terminate(Q),
+                     rabbit_federation_queue:maybe_stop(Q),
                      [emit_consumer_deleted(Ch, CTag, QName)
                       || {Ch, CTag, _} <- consumers(State1)],
                      State1#q{backing_queue_state = Fun(BQS)}
@@ -547,7 +547,7 @@ notify_federation(#q{q                   = Q,
     IsEmpty = BQ:is_empty(BQS),
     case IsEmpty andalso active_unfederated(ActiveConsumers) of
         true  -> rabbit_federation_queue:run(Q);
-        false -> rabbit_federation_queue:stop(Q)
+        false -> rabbit_federation_queue:pause(Q)
     end.
 
 active_unfederated(Cs) ->
