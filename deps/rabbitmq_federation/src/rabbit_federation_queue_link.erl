@@ -21,7 +21,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, go/0, run/1, stop/1, basic_get/1]).
+-export([start_link/1, go/0, run/1, pause/1, basic_get/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -39,7 +39,7 @@ start_link(Args) ->
 
 %% TODO on restart we will lose stopped / started state!
 run(QName)       -> cast(QName, run).
-stop(QName)      -> cast(QName, stop).
+pause(QName)     -> cast(QName, pause).
 basic_get(QName) -> cast(QName, basic_get).
 go()             -> cast(go).
 
@@ -106,14 +106,14 @@ handle_cast(run, State) ->
     %% Already started
     {noreply, State};
 
-handle_cast(stop, State = #state{run = false}) ->
-    %% Already stopped
+handle_cast(pause, State = #state{run = false}) ->
+    %% Already paused
     {noreply, State};
 
-handle_cast(stop, State = #not_started{}) ->
+handle_cast(pause, State = #not_started{}) ->
     {noreply, State#not_started{run = false}};
 
-handle_cast(stop, State = #state{ch = Ch, ctag = CTag}) ->
+handle_cast(pause, State = #state{ch = Ch, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
                                           credit       = 0,
                                           drain        = false}),

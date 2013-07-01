@@ -19,9 +19,9 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([maybe_start/1, terminate/1, policy_changed/2]).
+-export([maybe_start/1, maybe_stop/1, policy_changed/2]).
 -export([policy_changed_local/2]).
--export([run/1, stop/1, basic_get/1]).
+-export([run/1, pause/1, basic_get/1]).
 
 maybe_start(Q) ->
     case federate(Q) of
@@ -29,11 +29,10 @@ maybe_start(Q) ->
         false -> ok
     end.
 
-terminate(Q = #amqqueue{name = QName}) ->
-    %% TODO naming of stop vs terminate not consistent with exchange
+maybe_stop(Q = #amqqueue{name = QName}) ->
     case federate(Q) of
         true  -> rabbit_federation_queue_link_sup_sup:stop_child(Q),
-                 rabbit_federation_status:remove_exchange(QName);
+                 rabbit_federation_status:remove_exchange_or_queue(QName);
         false -> ok
     end.
 
@@ -47,11 +46,11 @@ policy_changed(Q1 = #amqqueue{name = QName}, Q2) ->
     end.
 
 policy_changed_local(Q1, Q2) ->
-    terminate(Q1),
+    maybe_stop(Q1),
     maybe_start(Q2).
 
 run(#amqqueue{name = QName})       -> rabbit_federation_queue_link:run(QName).
-stop(#amqqueue{name = QName})      -> rabbit_federation_queue_link:stop(QName).
+pause(#amqqueue{name = QName})     -> rabbit_federation_queue_link:pause(QName).
 basic_get(#amqqueue{name = QName}) -> rabbit_federation_queue_link:basic_get(QName).
 
 %% TODO dedup from _exchange (?)

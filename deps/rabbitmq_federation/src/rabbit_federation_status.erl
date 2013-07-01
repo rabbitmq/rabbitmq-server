@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([report/4, remove_exchange/1, remove/2, status/0]).
+-export([report/4, remove_exchange_or_queue/1, remove/2, status/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -42,8 +42,8 @@ report(Upstream, UParams, XorQName, Status) ->
     gen_server:cast(?SERVER, {report, Upstream, UParams, XorQName, Status,
                               calendar:local_time()}).
 
-remove_exchange(XorQName) ->
-    gen_server:call(?SERVER, {remove_exchange, XorQName}, infinity).
+remove_exchange_or_queue(XorQName) ->
+    gen_server:call(?SERVER, {remove_exchange_or_queue, XorQName}, infinity).
 
 remove(Upstream, XorQName) ->
     gen_server:call(?SERVER, {remove, Upstream, XorQName}, infinity).
@@ -56,7 +56,7 @@ init([]) ->
                         [named_table, {keypos, #entry.key}, private]),
     {ok, #state{}}.
 
-handle_call({remove_exchange, XorQName}, _From, State) ->
+handle_call({remove_exchange_or_queue, XorQName}, _From, State) ->
     true = ets:match_delete(?ETS_NAME, match_entry(xorqkey(XorQName))),
     {reply, ok, State};
 
