@@ -43,17 +43,6 @@
 -define(DEFAULT_UPDATE_INTERVAL, 2500).
 -define(TABLE_NAME, ?MODULE).
 
-%% Because we have a feedback loop here, we need to ensure that we
-%% have some space for when the queues don't quite respond as fast as
-%% we would like, or when there is buffering going on in other parts
-%% of the system. In short, we aim to stay some distance away from
-%% when the memory alarms will go off, which cause backpressure (of
-%% some sort) on producers. Note that all other Thresholds are
-%% relative to this scaling.
--define(MEMORY_LIMIT_SCALING, 0.4).
-
--define(LIMIT_THRESHOLD, 0.5). %% don't limit queues when mem use is < this
-
 %% If all queues are pushed to disk (duration 0), then the sum of
 %% their reported lengths will be 0. If memory then becomes available,
 %% unless we manually intervene, the sum will remain 0, and the queues
@@ -207,7 +196,9 @@ internal_update(State = #state { queue_durations = Durations,
                                  desired_duration = DesiredDurationAvg,
                                  queue_duration_sum = Sum,
                                  queue_duration_count = Count }) ->
-    MemoryLimit = ?MEMORY_LIMIT_SCALING * vm_memory_monitor:get_memory_limit(),
+    {ok, LimitThreshold} =
+        application:get_env(rabbit, vm_memory_high_watermark_paging_ratio),
+    MemoryLimit = vm_memory_monitor:get_memory_limit(),
     MemoryRatio = case MemoryLimit > 0.0 of
                       true  -> erlang:memory(total) / MemoryLimit;
                       false -> infinity
@@ -215,7 +206,7 @@ internal_update(State = #state { queue_durations = Durations,
     DesiredDurationAvg1 =
         if MemoryRatio =:= infinity ->
                 0.0;
-           MemoryRatio < ?LIMIT_THRESHOLD orelse Count == 0 ->
+           MemoryRatio < LimitThreshold orelse Count == 0 ->
                 infinity;
            MemoryRatio < ?SUM_INC_THRESHOLD ->
                 ((Sum + ?SUM_INC_AMOUNT) / Count) / MemoryRatio;
