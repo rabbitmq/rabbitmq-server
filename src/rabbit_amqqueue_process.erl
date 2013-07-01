@@ -1406,6 +1406,10 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
                          end
             end);
 
+handle_cast(notify_federation, State) ->
+    notify_federation(State),
+    noreply(State);
+
 handle_cast(wake_up, State) ->
     noreply(State).
 
