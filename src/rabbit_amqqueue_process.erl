@@ -533,9 +533,7 @@ run_message_queue(State) ->
                             is_empty(State), State),
     State1.
 
-attempt_delivery(Delivery = #delivery{sender     = SenderPid,
-                                      msg_seq_no = MsgSeqNo,
-                                      message    = Message},
+attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
                                               backing_queue_state = BQS}) ->
     case BQ:is_duplicate(Message, BQS) of
@@ -551,14 +549,9 @@ attempt_delivery(Delivery = #delivery{sender     = SenderPid,
                        true, discard(Delivery, State1)}
               end, false, State#q{backing_queue_state = BQS1});
         {published, BQS1} ->
-            {true,  State#q{backing_queue_state = BQS1}};
+            {true, State#q{backing_queue_state = BQS1}};
         {discarded, BQS1} ->
-            State1 = State#q{backing_queue_state = BQS1},
-            {true, case MsgSeqNo of
-                       undefined -> State1;
-                       _         -> #basic_message{id = MsgId} = Message,
-                                    confirm_messages([MsgId], State1)
-                   end}
+            {true, State#q{backing_queue_state = BQS1}}
     end.
 
 deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},

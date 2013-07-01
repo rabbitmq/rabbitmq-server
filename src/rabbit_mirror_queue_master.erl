@@ -228,7 +228,7 @@ discard(MsgId, ChPid, State = #state { gm                  = GM,
     false = dict:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
     ensure_monitoring(ChPid, State #state { backing_queue_state =
-                                                BQ:discard(MsgId, ChPid, BQS) }.
+                                                BQ:discard(MsgId, ChPid, BQS) }).
 
 dropwhile(Pred, State = #state{backing_queue       = BQ,
                                backing_queue_state = BQS }) ->
@@ -395,9 +395,10 @@ is_duplicate(Message = #basic_message { id = MsgId },
             {published, State #state { seen_status = dict:erase(MsgId, SS),
                                        confirmed = [MsgId | Confirmed] }};
         {ok, discarded} ->
-            %% Message was discarded while we were a slave. Erase
-            %% and let amqqueue_process confirm if necessary.
-            {discarded, State #state { seen_status = dict:erase(MsgId, SS) }}
+            %% Message was discarded while we were a slave.
+            %% Erase and confirm.
+            {discarded, State #state { seen_status = dict:erase(MsgId, SS),
+                                       confirmed = [MsgId | Confirmed] }}
     end.
 
 %% ---------------------------------------------------------------------------
