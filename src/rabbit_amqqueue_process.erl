@@ -1145,7 +1145,6 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     State1 = ensure_expiry_timer(State),
     case fetch(AckRequired, State1) of
         {empty, State2} ->
-            rabbit_federation_queue:basic_get(Q),
             reply(empty, State2);
         {{Message, IsDelivered, AckTag}, State2} ->
             State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
