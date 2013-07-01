@@ -65,12 +65,14 @@
                          rabbit_binary_generator, rabbit_writer,
                          delegate, gb_sets, lqueue, sets, orddict,
                          rabbit_amqqueue, rabbit_limiter, gb_trees,
-                         rabbit_queue_index, gen, dict, ordsets,
-                         file_handle_cache, rabbit_msg_store, array,
+                         rabbit_queue_index, rabbit_exchange_decorator,
+                         gen, dict, ordsets, file_handle_cache,
+                         rabbit_msg_store, array,
                          rabbit_msg_store_ets_index, rabbit_msg_file,
                          rabbit_exchange_type_fanout,
                          rabbit_exchange_type_topic, mnesia,
                          mnesia_lib, rpc, mnesia_tm, qlc,
                          sofs, proplists, credit_flow, pmon,
-                         ssl_connection, ssl_record, gen_fsm, ssl]}
+                         ssl_connection, tls_connection,
+                         ssl_record, tls_record, gen_fsm, ssl]}
          ]}]}.
