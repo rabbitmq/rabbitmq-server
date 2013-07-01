@@ -32,9 +32,7 @@
 -record(state, {queue, run, conn, ch, dconn, dch, credit, ctag,
                 upstream, upstream_params, unacked}).
 
-%% TODO make this configurable
--define(CREDIT, 200).
--define(CREDIT_MORE_AT, 50).
+-define(CREDIT_MORE_AT_RATIO, 0.25).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
@@ -94,11 +92,12 @@ handle_cast(go, State = #not_started{}) ->
 handle_cast(go, State) ->
     {noreply, State};
 
-handle_cast(run, State = #state{ch = Ch, run = false, ctag = CTag}) ->
+handle_cast(run, State = #state{upstream = #upstream{prefetch_count = Prefetch},
+                                ch = Ch, run = false, ctag = CTag}) ->
     amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
-                                          credit       = ?CREDIT,
+                                          credit       = Prefetch,
                                           drain        = false}),
-    {noreply, State#state{run = true, credit = ?CREDIT}};
+    {noreply, State#state{run = true, credit = Prefetch}};
 
 handle_cast(run, State = #not_started{}) ->
     {noreply, State#not_started{run = true}};
@@ -157,6 +156,7 @@ handle_info({#'basic.deliver'{redelivered = Redelivered} = DeliverMethod, Msg},
                            ch              = Ch,
                            dch             = DCh,
                            unacked         = Unacked}) ->
+    #upstream{prefetch_count = Prefetch} = Upstream,
     PublishMethod = #'basic.publish'{exchange    = <<"">>,
                                      routing_key = QName#resource.name},
     HeadersFun = fun (H) -> update_headers(UParams, Redelivered, H) end,
@@ -166,11 +166,12 @@ handle_info({#'basic.deliver'{redelivered = Redelivered} = DeliverMethod, Msg},
                  HeadersFun, ForwardFun, Msg, Unacked),
     %% TODO we could also hook this up to internal credit
     %% TODO actually we could reject when 'stopped'
+    CreditMoreAt = trunc(Prefetch * ?CREDIT_MORE_AT_RATIO),
     Credit1 = case Run of
                   false -> Credit - 1;
                   true  -> case Credit of
-                               I when I < ?CREDIT_MORE_AT ->
-                                   More = ?CREDIT - ?CREDIT_MORE_AT,
+                               I when I < CreditMoreAt ->
+                                   More = Prefetch - CreditMoreAt,
                                    amqp_channel:cast(
                                      Ch, #'basic.credit'{consumer_tag = CTag,
                                                          credit       = More,
@@ -229,7 +230,7 @@ go(S0 = #not_started{run             = Run,
                      queue           = Queue = #amqqueue{name = QName}}) ->
     #upstream_params{x_or_q = UQueue} = UParams,
     Credit = case Run of
-                 true  -> ?CREDIT;
+                 true  -> Upstream#upstream.prefetch_count;
                  false -> 0
              end,
     Args = [{<<"x-priority">>, long,  -1},
