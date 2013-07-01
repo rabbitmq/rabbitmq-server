@@ -21,7 +21,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, go/0, run/1, pause/1, basic_get/1]).
+-export([start_link/1, go/0, run/1, pause/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -29,18 +29,15 @@
 -import(rabbit_federation_util, [name/1]).
 
 -record(not_started, {queue, run, upstream, upstream_params}).
--record(state, {queue, run, conn, ch, dconn, dch, credit, ctag,
-                upstream, upstream_params, unacked}).
-
--define(CREDIT_MORE_AT_RATIO, 0.25).
+-record(state, {queue, run, conn, ch, dconn, dch, upstream, upstream_params,
+                unacked}).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-run(QName)       -> cast(QName, run).
-pause(QName)     -> cast(QName, pause).
-basic_get(QName) -> cast(QName, basic_get).
-go()             -> cast(go).
+run(QName)   -> cast(QName, run).
+pause(QName) -> cast(QName, pause).
+go()         -> cast(go).
 
 %%----------------------------------------------------------------------------
 %%call(QName, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- q(QName)].
@@ -97,12 +94,12 @@ handle_cast(go, State = #not_started{}) ->
 handle_cast(go, State) ->
     {noreply, State};
 
-handle_cast(run, State = #state{upstream = #upstream{prefetch_count = Prefetch},
-                                ch = Ch, run = false, ctag = CTag}) ->
-    amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
-                                          credit       = Prefetch,
-                                          drain        = false}),
-    {noreply, State#state{run = true, credit = Prefetch}};
+handle_cast(run, State = #state{upstream        = Upstream,
+                                upstream_params = UParams,
+                                ch              = Ch,
+                                run             = false}) ->
+    consume(Ch, Upstream, UParams#upstream_params.x_or_q),
+    {noreply, State#state{run = true}};
 
 handle_cast(run, State = #not_started{}) ->
     {noreply, State#not_started{run = true}};
@@ -118,22 +115,9 @@ handle_cast(pause, State = #state{run = false}) ->
 handle_cast(pause, State = #not_started{}) ->
     {noreply, State#not_started{run = false}};
 
-handle_cast(pause, State = #state{ch = Ch, ctag = CTag}) ->
-    amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
-                                          credit       = 0,
-                                          drain        = false}),
-    {noreply, State#state{run = false, credit = 0}};
-
-handle_cast(basic_get, State = #not_started{}) ->
-    {noreply, State};
-
-handle_cast(basic_get, State = #state{ch = Ch, credit = Credit, ctag = CTag}) ->
-    Credit1 = Credit + 1,
-    amqp_channel:cast(
-      Ch, #'basic.credit'{consumer_tag = CTag,
-                          credit       = Credit1,
-                          drain        = false}),
-    {noreply, State#state{credit = Credit1}};
+handle_cast(pause, State = #state{ch = Ch}) ->
+    cancel(Ch),
+    {noreply, State#state{run = false}};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
@@ -155,13 +139,9 @@ handle_info({#'basic.deliver'{redelivered = Redelivered} = DeliverMethod, Msg},
             State = #state{queue           = #amqqueue{name = QName},
                            upstream        = Upstream,
                            upstream_params = UParams,
-                           run             = Run,
-                           credit          = Credit,
-                           ctag            = CTag,
                            ch              = Ch,
                            dch             = DCh,
                            unacked         = Unacked}) ->
-    #upstream{prefetch_count = Prefetch} = Upstream,
     PublishMethod = #'basic.publish'{exchange    = <<"">>,
                                      routing_key = QName#resource.name},
     HeadersFun = fun (H) -> update_headers(UParams, Redelivered, H) end,
@@ -169,25 +149,8 @@ handle_info({#'basic.deliver'{redelivered = Redelivered} = DeliverMethod, Msg},
     Unacked1 = rabbit_federation_link_util:forward(
                  Upstream, DeliverMethod, Ch, DCh, PublishMethod,
                  HeadersFun, ForwardFun, Msg, Unacked),
-    %% TODO we could also hook this up to internal credit
     %% TODO actually we could reject when 'stopped'
-    CreditMoreAt = trunc(Prefetch * ?CREDIT_MORE_AT_RATIO),
-    Credit1 = case Run of
-                  false -> Credit - 1;
-                  true  -> case Credit of
-                               I when I < CreditMoreAt ->
-                                   More = Prefetch - CreditMoreAt,
-                                   amqp_channel:cast(
-                                     Ch, #'basic.credit'{consumer_tag = CTag,
-                                                         credit       = More,
-                                                         drain        = false}),
-                                   I - 1 + More;
-                               I ->
-                                   I - 1
-                           end
-              end,
-    {noreply, State#state{credit  = Credit1,
-                          unacked = Unacked1}};
+    {noreply, State#state{unacked = Unacked1}};
 
 handle_info(#'basic.cancel'{},
             State = #state{queue           = #amqqueue{name = QName},
@@ -230,41 +193,33 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 go(S0 = #not_started{run             = Run,
-                     upstream        = Upstream,
+                     upstream        = Upstream = #upstream{
+                                         prefetch_count = Prefetch},
                      upstream_params = UParams,
                      queue           = Queue = #amqqueue{name = QName}}) ->
     #upstream_params{x_or_q = UQueue = #amqqueue{
                                 durable     = Durable,
                                 auto_delete = AutoDelete,
-                                arguments   = QArgs}} = UParams,
-    Credit = case Run of
-                 true  -> Upstream#upstream.prefetch_count;
-                 false -> 0
-             end,
-    CArgs = [{<<"x-priority">>, long,  -1},
-             {<<"x-credit">>,   table, [{<<"credit">>, long, Credit},
-                                        {<<"drain">>,  bool, false}]}],
+                                arguments   = Args}} = UParams,
     Unacked = rabbit_federation_link_util:unacked_new(),
-    NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
               amqp_channel:call(Ch, #'queue.declare'{queue       = name(UQueue),
                                                      durable     = Durable,
                                                      auto_delete = AutoDelete,
-                                                     arguments   = QArgs}),
-              #'basic.consume_ok'{consumer_tag = CTag} =
-                  amqp_channel:call(
-                    Ch, #'basic.consume'{queue     = name(UQueue),
-                                         no_ack    = NoAck,
-                                         arguments = CArgs}),
+                                                     arguments   = Args}),
+              amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch}),
+
+              case Run of
+                  true  -> consume(Ch, Upstream, UQueue);
+                  false -> ok
+              end,
               {noreply, #state{queue           = Queue,
                                run             = Run,
                                conn            = Conn,
                                ch              = Ch,
                                dconn           = DConn,
                                dch             = DCh,
-                               credit          = Credit,
-                               ctag            = CTag,
                                upstream        = Upstream,
                                upstream_params = UParams,
                                unacked         = Unacked}}
@@ -306,3 +261,16 @@ visit_match({table, T}, Info) ->
               end, [<<"uri">>, <<"virtual_host">>, <<"queue">>]);
 visit_match(_ ,_) ->
     false.
+
+consume(Ch, Upstream, UQueue) ->
+    NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
+    amqp_channel:cast(
+      Ch, #'basic.consume'{queue        = name(UQueue),
+                           no_ack       = NoAck,
+                           nowait       = true,
+                           consumer_tag = <<"consumer">>,
+                           arguments    = [{<<"x-priority">>, long, -1}]}).
+
+cancel(Ch) ->
+    amqp_channel:cast(Ch, #'basic.cancel'{nowait       = true,
+                                          consumer_tag = <<"consumer">>}).
