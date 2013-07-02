@@ -382,8 +382,9 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% immediately after calling is_duplicate). The msg is
             %% invalid. We will not see this again, nor will we be
             %% further involved in confirming this message, so erase.
-            {published, State #state { seen_status = dict:erase(MsgId, SS) }};
-        {ok, confirmed} ->
+            {true, State #state { seen_status = dict:erase(MsgId, SS) }};
+        {ok, Disposition}
+          when Disposition =:= confirmed
             %% It got published when we were a slave via gm, and
             %% confirmed some time after that (maybe even after
             %% promotion), but before we received the publish from the
@@ -392,13 +393,12 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% need to confirm now. As above, amqqueue_process will
             %% have the entry for the msg_id_to_channel mapping added
             %% immediately after calling is_duplicate/2.
-            {published, State #state { seen_status = dict:erase(MsgId, SS),
-                                       confirmed = [MsgId | Confirmed] }};
-        {ok, discarded} ->
-            %% Message was discarded while we were a slave.
-            %% Erase and confirm.
-            {discarded, State #state { seen_status = dict:erase(MsgId, SS),
-                                       confirmed = [MsgId | Confirmed] }}
+          orelse Disposition =:= discarded ->
+            %% Message was discarded while we were a slave. Confirm now.
+            %% As above, amqqueue_process will have the entry for the
+            %% msg_id_to_channel mapping.
+            {true, State #state { seen_status = dict:erase(MsgId, SS),
+                                  confirmed = [MsgId | Confirmed] }}
     end.
 
 %% ---------------------------------------------------------------------------
