@@ -120,7 +120,7 @@ init(Q = #amqqueue { name = QName }) ->
                              msg_id_ack          = dict:new(),
 
                              msg_id_status       = dict:new(),
-                             known_senders       = dmon:new(),
+                             known_senders       = pmon:new(delegate),
 
                              depth_delta         = undefined
                    },
@@ -489,7 +489,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
 
     %% Everything that we're monitoring, we need to ensure our new
     %% coordinator is monitoring.
-    MPids = dmon:monitored(KS),
+    MPids = pmon:monitored(KS),
     ok = rabbit_mirror_queue_coordinator:ensure_monitoring(CPid, MPids),
 
     %% We find all the messages that we've received from channels but
@@ -603,14 +603,14 @@ ensure_rate_timer(State) ->
 stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #state.rate_timer_ref).
 
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
-    State #state { known_senders = dmon:monitor(ChPid, KS) }.
+    State #state { known_senders = pmon:monitor(ChPid, KS) }.
 
 local_sender_death(ChPid, #state { known_senders = KS }) ->
     %% The channel will be monitored iff we have received a delivery
     %% from it but not heard about its death from the master. So if it
     %% is monitored we need to point the death out to the master (see
     %% essay).
-    ok = case dmon:is_monitored(ChPid, KS) of
+    ok = case pmon:is_monitored(ChPid, KS) of
              false -> ok;
              true  -> confirm_sender_death(ChPid)
          end.
@@ -628,7 +628,7 @@ confirm_sender_death(Pid) ->
                 %% See comment in local_sender_death/2; we might have
                 %% received a sender_death in the meanwhile so check
                 %% again.
-                ok = case dmon:is_monitored(Pid, KS) of
+                ok = case pmon:is_monitored(Pid, KS) of
                          false -> ok;
                          true  -> gm:broadcast(GM, {ensure_monitoring, [Pid]}),
                                   confirm_sender_death(Pid)
@@ -776,7 +776,7 @@ process_instruction({sender_death, ChPid},
     %% The channel will be monitored iff we have received a message
     %% from it. In this case we just want to avoid doing work if we
     %% never got any messages.
-    {ok, case dmon:is_monitored(ChPid, KS) of
+    {ok, case pmon:is_monitored(ChPid, KS) of
              false -> State;
              true  -> MS1 = case dict:find(ChPid, SQ) of
                                 error ->
@@ -788,7 +788,7 @@ process_instruction({sender_death, ChPid},
                       credit_flow:peer_down(ChPid),
                       State #state { sender_queues = dict:erase(ChPid, SQ),
                                      msg_id_status = MS1,
-                                     known_senders = dmon:demonitor(ChPid, KS) }
+                                     known_senders = pmon:demonitor(ChPid, KS) }
          end};
 process_instruction({depth, Depth},
                     State = #state { backing_queue       = BQ,
