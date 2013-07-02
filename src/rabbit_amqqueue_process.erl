@@ -549,10 +549,8 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                       {{Message, Delivered, undefined},
                        true, discard(Delivery, State1)}
               end, false, State#q{backing_queue_state = BQS1});
-        {published, BQS1} ->
-            {true,  State#q{backing_queue_state = BQS1}};
-        {discarded, BQS1} ->
-            {true, discard(Delivery, State#q{backing_queue_state = BQS1})}
+        {true, BQS1} ->
+            {true, State#q{backing_queue_state = BQS1}}
     end.
 
 deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
