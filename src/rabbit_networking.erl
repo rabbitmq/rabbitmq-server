@@ -421,8 +421,8 @@ resolve_family(_,                 F)    -> F.
 %% Unfortunately it seems there is no way to detect single vs dual stack
 %% apart from attempting to bind to the port.
 port_to_listeners(Port) ->
-    IPv4 = {"0.0.0.0", Port, inet},
-    IPv6 = {"::",      Port, inet6},
+    IPv4 = {"127.0.0.1", Port, inet},
+    IPv6 = {"::1" ,      Port, inet6},
     case ipv6_status(?FIRST_TEST_BIND_PORT) of
         single_stack -> [IPv6];
         ipv6_only    -> [IPv6];
