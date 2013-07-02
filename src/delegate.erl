@@ -204,9 +204,13 @@ handle_cast({invoke, Fun, Grouped}, State = #state{node = Node}) ->
 
 handle_info({'DOWN', Ref, process, Object, Info},
             State = #state{monitors = Monitors}) ->
-    WantsMonitor = dict:fetch(Ref, Monitors),
-    WantsMonitor ! {'DOWN', Ref, process, Object, Info},
-    {noreply, State#state{monitors = dict:erase(Ref, Monitors)}, hibernate};
+    {noreply, case dict:find(Ref, Monitors) of
+                  {ok, WantsMonitor} ->
+                      WantsMonitor ! {'DOWN', Ref, process, Object, Info},
+                      State#state{monitors = dict:erase(Ref, Monitors)};
+                  error ->
+                      State
+              end, hibernate};
 
 handle_info(_Info, State) ->
     {noreply, State, hibernate}.
