@@ -19,6 +19,7 @@ dist:
 	mv $(SOURCE_DIR) $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)
 	mv $(TARGET_DIR)/plugins/README $(TARGET_DIR)/plugins/README.txt
+	mv ../../docs/rabbit.sample.config $(TARGET_DIR)/rabbit.sample.config
 	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
@@ -26,6 +27,7 @@ dist:
 	todos $(TARGET_DIR)/INSTALL
 	todos $(TARGET_DIR)/LICENSE*
 	todos $(TARGET_DIR)/plugins/README.txt
+	todos $(TARGET_DIR)/rabbit.sample.config
 	rm -rf $(TARGET_DIR)/plugins-src
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR) rabbitmq-service.html
