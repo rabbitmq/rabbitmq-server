@@ -38,7 +38,7 @@
 %%--------------------------------------------------------------------------
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
-             connection_state, queue_collector, heartbeater, conn_sup_pid,
+             connection_state, queue_collector, heartbeater, ch_sup3_pid,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len, throttle}).
 
 -record(connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
@@ -54,7 +54,7 @@
 %%--------------------------------------------------------------------------
 
 unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv, QueueCollector,
-                   ConnSupPid, SHF, Buf, BufLen}) ->
+                   ChSup3Pid, SHF, Buf, BufLen}) ->
     #v1{parent              = Parent,
         sock                = Sock,
         callback            = handshake,
@@ -63,7 +63,7 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv, QueueCollector,
         connection_state    = pre_init,
         queue_collector     = QueueCollector,
         heartbeater         = none,
-        conn_sup_pid        = ConnSupPid,
+        ch_sup3_pid         = ChSup3Pid,
         start_heartbeat_fun = SHF,
         buf                 = Buf,
         buf_len             = BufLen,
@@ -575,13 +575,13 @@ start_1_0_connection(amqp,
     end.
 
 start_1_0_connection0(Mode, State = #v1{connection   = Connection,
-                                        conn_sup_pid = ConnSupPid}) ->
+                                        ch_sup3_pid  = ChSup3Pid}) ->
     ChannelSupSupPid =
         case Mode of
             sasl -> undefined;
             amqp -> {ok, Pid} =
                         supervisor2:start_child(
-                          ConnSupPid,
+                          ChSup3Pid,
                           {channel_sup_sup,
                            {rabbit_amqp1_0_session_sup_sup, start_link, []},
                            intrinsic, infinity, supervisor,
