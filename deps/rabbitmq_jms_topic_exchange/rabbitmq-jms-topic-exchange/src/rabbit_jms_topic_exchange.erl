@@ -31,6 +31,7 @@
         , validate/1
         , create/2
         , delete/3
+        , validate_binding/2
         , add_binding/3
         , remove_bindings/3
         , assert_args_equivalence/2
@@ -126,6 +127,9 @@ delete(transaction, #exchange{name = XName}, _Bs) ->
   ok;
 delete(_Tx, _X, _Bs) ->
   ok.
+
+% Before add binding
+validate_binding(_X, _B) -> ok.
 
 % A new binding has ben added or recovered
 add_binding( Tx
