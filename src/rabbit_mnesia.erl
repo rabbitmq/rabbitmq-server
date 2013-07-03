@@ -302,7 +302,8 @@ remove_node_offline_node(Node) ->
                 %% they are loaded.
                 rabbit_table:force_load(),
                 rabbit_table:wait_for_replicated(),
-                forget_cluster_node(Node, false)
+                forget_cluster_node(Node, false),
+                force_load_next_boot()
             after
                 stop_mnesia()
             end;
@@ -429,11 +430,13 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             ok = create_schema();
         {[], true, disc} ->
             %% First disc node up
+            maybe_force_load(),
             ok;
         {[AnotherNode | _], _, _} ->
             %% Subsequent node in cluster, catch up
             ensure_version_ok(
               rpc:call(AnotherNode, rabbit_version, recorded, [])),
+            maybe_force_load(),
             ok = rabbit_table:wait_for_replicated(),
             ok = rabbit_table:create_local_copy(NodeType)
     end,
@@ -512,6 +515,19 @@ ensure_schema_integrity() ->
 copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
     rabbit_file:recursive_copy(dir(), Destination).
+
+force_load_filename() ->
+    filename:join(rabbit_mnesia:dir(), "force_load").
+
+force_load_next_boot() ->
+    rabbit_file:write_file(force_load_filename(), <<"">>).
+
+maybe_force_load() ->
+    case rabbit_file:is_file(force_load_filename()) of
+        true  -> rabbit_table:force_load(),
+                 rabbit_file:delete(force_load_filename());
+        false -> ok
+    end.
 
 %% This does not guarantee us much, but it avoids some situations that
 %% will definitely end up badly
