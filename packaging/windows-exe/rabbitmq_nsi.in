@@ -24,7 +24,7 @@ InstallDir "$PROGRAMFILES\RabbitMQ Server"
 
 ; Registry key to check for directory (so if you install again, it will
 ; overwrite the old one automatically)
-InstallDirRegKey HKLM "Software\GoPivotal, Inc.\RabbitMQ Server" "Install_Dir"
+InstallDirRegKey HKLM "Software\VMware, Inc.\RabbitMQ Server" "Install_Dir"
 
 ; Request application privileges for Windows Vista
 RequestExecutionLevel admin
@@ -77,7 +77,7 @@ Section "RabbitMQ Server (required)" Rabbit
   File "rabbitmq.ico"
 
   ; Write the installation path into the registry
-  WriteRegStr HKLM "SOFTWARE\GoPivotal, Inc.\RabbitMQ Server" "Install_Dir" "$INSTDIR"
+  WriteRegStr HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server" "Install_Dir" "$INSTDIR"
 
   ; Write the uninstall keys for Windows
   WriteRegStr HKLM ${uninstall} "DisplayName" "RabbitMQ Server"
@@ -151,7 +151,7 @@ Section "Uninstall"
 
   ; Remove registry keys
   DeleteRegKey HKLM ${uninstall}
-  DeleteRegKey HKLM "SOFTWARE\GoPivotal, Inc.\RabbitMQ Server"
+  DeleteRegKey HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server"
 
   ; TODO these will fail if the service is not installed - do we care?
   ExpandEnvStrings $0 %COMSPEC%
