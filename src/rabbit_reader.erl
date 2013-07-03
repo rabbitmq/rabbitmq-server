@@ -37,7 +37,7 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
-             conn_sup_pid, channel_sup_sup_pid, start_heartbeat_fun,
+             ch_sup3_pid, channel_sup_sup_pid, start_heartbeat_fun,
              buf, buf_len, throttle}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
@@ -103,19 +103,19 @@
 
 %%--------------------------------------------------------------------------
 
-start_link(ChannelSupSupPid, Collector, StartHeartbeatFun) ->
-    {ok, proc_lib:spawn_link(?MODULE, init, [self(), ChannelSupSupPid,
+start_link(ChannelSup3Pid, Collector, StartHeartbeatFun) ->
+    {ok, proc_lib:spawn_link(?MODULE, init, [self(), ChannelSup3Pid,
                                              Collector, StartHeartbeatFun])}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
-init(Parent, ConnSupPid, Collector, StartHeartbeatFun) ->
+init(Parent, ChSup3Pid, Collector, StartHeartbeatFun) ->
     Deb = sys:debug_options([]),
     receive
         {go, Sock, SockTransform} ->
             start_connection(
-              Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb, Sock,
+              Parent, ChSup3Pid, Collector, StartHeartbeatFun, Deb, Sock,
               SockTransform)
     end.
 
@@ -201,7 +201,7 @@ socket_op(Sock, Fun) ->
                            exit(normal)
     end.
 
-start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
+start_connection(Parent, ChSup3Pid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
     Name = case rabbit_net:connection_string(Sock, inbound) of
@@ -240,7 +240,7 @@ start_connection(Parent, ConnSupPid, Collector, StartHeartbeatFun, Deb,
                 connection_state    = pre_init,
                 queue_collector     = Collector,
                 heartbeater         = none,
-                conn_sup_pid        = ConnSupPid,
+                ch_sup3_pid         = ChSup3Pid,
                 channel_sup_sup_pid = none,
                 start_heartbeat_fun = StartHeartbeatFun,
                 buf                 = [],
@@ -837,7 +837,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            connection       = Connection = #connection{
                                                 user = User,
                                                 protocol = Protocol},
-                           conn_sup_pid     = ConnSupPid,
+                           ch_sup3_pid      = ChSup3Pid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
@@ -847,7 +847,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     Throttle1 = Throttle#throttle{conserve_resources = Conserve},
     {ok, ChannelSupSupPid} =
         supervisor2:start_child(
-          ConnSupPid,
+          ChSup3Pid,
           {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
            intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
     State1 = control_throttle(
@@ -1048,9 +1048,9 @@ pack_for_1_0(#v1{parent              = Parent,
                  recv_len            = RecvLen,
                  pending_recv        = PendingRecv,
                  queue_collector     = QueueCollector,
-                 conn_sup_pid        = ConnSupPid,
+                 ch_sup3_pid         = ChSup3Pid,
                  start_heartbeat_fun = SHF,
                  buf                 = Buf,
                  buf_len             = BufLen}) ->
-    {Parent, Sock, RecvLen, PendingRecv, QueueCollector, ConnSupPid, SHF,
+    {Parent, Sock, RecvLen, PendingRecv, QueueCollector, ChSup3Pid, SHF,
      Buf, BufLen}.
