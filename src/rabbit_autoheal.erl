@@ -181,8 +181,8 @@ partition_value(Partition) ->
 all_partitions(PartitionedWith) ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     Partitions = [{node(), PartitionedWith} |
-                  [rpc:call(Node, rabbit_node_monitor, partitions, [])
-                   || Node <- Nodes -- [node()]]],
+                  lists:append(
+                    [rpc_partitions(Node) || Node <- Nodes -- [node()]])],
     all_partitions(Partitions, [Nodes]).
 
 all_partitions([], Partitions) ->
@@ -198,3 +198,9 @@ all_partitions([{Node, CantSee} | Rest], Partitions) ->
                       _        -> [A, B | Others]
                   end,
     all_partitions(Rest, Partitions1).
+
+rpc_partitions(Node) ->
+    case rpc:call(Node, rabbit_node_monitor, partitions, []) of
+        {ok, R} -> [R];
+        _       -> []
+    end.
