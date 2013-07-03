@@ -294,27 +294,17 @@ remove_node_offline_node(Node) ->
     %% this operation from disc nodes.
     case {mnesia:system_info(running_db_nodes) -- [Node], node_type()} of
         {[], disc} ->
-            %% Note that while we check if the nodes was the last to go down,
-            %% apart from the node we're removing from, this is still unsafe.
-            %% Consider the situation in which A and B are clustered. A goes
-            %% down, and records B as the running node. Then B gets clustered
-            %% with C, C goes down and B goes down. In this case, C is the
-            %% second-to-last, but we don't know that and we'll remove B from A
-            %% anyway, even if that will lead to bad things.
-            case cluster_nodes(running) -- [node(), Node] of
-                [] -> start_mnesia(),
-                      try
-                          %% What we want to do here is replace the last node to
-                          %% go down with the current node.  The way we do this
-                          %% is by force loading the table, and making sure that
-                          %% they are loaded.
-                          rabbit_table:force_load(),
-                          rabbit_table:wait_for_replicated(),
-                          forget_cluster_node(Node, false)
-                      after
-                          stop_mnesia()
-                      end;
-                _  -> e(not_last_node_to_go_down)
+            start_mnesia(),
+            try
+                %% What we want to do here is replace the last node to
+                %% go down with the current node.  The way we do this
+                %% is by force loading the table, and making sure that
+                %% they are loaded.
+                rabbit_table:force_load(),
+                rabbit_table:wait_for_replicated(),
+                forget_cluster_node(Node, false)
+            after
+                stop_mnesia()
             end;
         {_, _} ->
             e(removing_node_from_offline_node)
@@ -879,10 +869,6 @@ error_description(offline_node_no_offline_flag) ->
     "You are trying to remove a node from an offline node. That is dangerous, "
         "but can be done with the --offline flag. Please consult the manual "
         "for rabbitmqctl for more information.";
-error_description(not_last_node_to_go_down) ->
-    "The node you are trying to remove from was not the last to go down "
-        "(excluding the node you are removing). Please use the the last node "
-        "to go down to remove nodes when the cluster is offline.";
 error_description(removing_node_from_offline_node) ->
     "To remove a node remotely from an offline node, the node you are removing "
         "from must be a disc node and all the other nodes must be offline.";
