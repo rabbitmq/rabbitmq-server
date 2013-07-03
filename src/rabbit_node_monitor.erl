@@ -208,7 +208,7 @@ init([]) ->
                 autoheal    = rabbit_autoheal:init()}}.
 
 handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
-    {reply, {node(), Partitions}, State};
+    {reply, {ok, {node(), Partitions}}, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
