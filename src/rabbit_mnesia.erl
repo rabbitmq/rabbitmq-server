@@ -341,8 +341,7 @@ status() ->
         end.
 
 mnesia_partitions(Nodes) ->
-    {Replies, _BadNodes} = rpc:multicall(
-                             Nodes, rabbit_node_monitor, partitions, []),
+    Replies = rabbit_node_monitor:partitions(Nodes),
     [Reply || Reply = {_, R} <- Replies, R =/= []].
 
 is_running() -> mnesia:system_info(is_running) =:= yes.
