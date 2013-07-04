@@ -42,9 +42,9 @@
                                           [{pid(), term()}]}).
 -spec(invoke_no_result/2 ::
         (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
--spec(monitor/2 :: (any(), pid()) -> monitor_ref()).
+-spec(monitor/2 :: ('process', pid()) -> monitor_ref()).
 -spec(demonitor/1 :: (monitor_ref()) -> 'true').
--spec(demonitor/2 :: (monitor_ref(), [any()]) -> 'true').
+-spec(demonitor/2 :: (monitor_ref(), ['flush']) -> 'true').
 
 -spec(call/2 ::
         ( pid(),  any()) -> any();
