@@ -8,17 +8,24 @@
 
 -ifdef(use_specs).
 
+-callback startup(rabbit_types:amqqueue()) -> 'ok'.
+
+-callback shutdown(rabbit_types:amqqueue()) -> 'ok'.
+
 -callback policy_changed(rabbit_types:amqqueue(), rabbit_types:amqqueue()) ->
     'ok'.
 
 -callback active_for(rabbit_types:amqqueue()) -> boolean().
+
+-callback notify(rabbit_types:amqqueue(), atom(), any()) -> 'ok'.
 
 -else.
 
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {active_for, 1}, {policy_changed, 2}];
+    [{description, 0}, {startup, 1}, {shutdown, 1}, {policy_changed, 2},
+     {active_for, 1}, {notify, 3}];
 behaviour_info(_Other) ->
     undefined.
 
