@@ -1042,7 +1042,7 @@ connection_blocked_test() ->
     {ok, Connection} = new_connection(),
     X = <<"amq.direct">>,
     K = Payload = <<"x">>,
-    memsup:set_sysmem_high_watermark(0.99),
+    clear_resource_alarm(memory),
     timer:sleep(1000),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Parent = self(),
@@ -1051,24 +1051,28 @@ connection_blocked_test() ->
                       receive
                           #'connection.blocked'{} -> ok
                       end,
-                      Publish = #'basic.publish'{exchange = X,
-                                                 routing_key = K},
-                      blocked =
-                        amqp_channel:call(Channel, Publish,
-                                          #amqp_msg{payload = Payload}),
-                      memsup:set_sysmem_high_watermark(5.0),
+                      clear_resource_alarm(memory),
                       receive
                           #'connection.unblocked'{} -> ok
                       end,
                       Parent ! ok
               end),
-    amqp_connection:register_blocked_handler(Channel, Child),
+    amqp_connection:register_blocked_handler(Connection, Child),
+    set_resource_alarm(memory),
+    Publish = #'basic.publish'{exchange = X,
+			       routing_key = K},
+    amqp_channel:call(Channel, Publish,
+		      #amqp_msg{payload = Payload}),
     timer:sleep(1000),
-    memsup:set_sysmem_high_watermark(0.001),
     receive
-        ok -> ok
+        ok ->
+	    clear_resource_alarm(memory),
+	    clear_resource_alarm(disk),
+	    ok
     after 10000 ->
         ?LOG_DEBUG("Are you sure that you have waited 1 minute?~n"),
+	clear_resource_alarm(memory),
+	clear_resource_alarm(disk),
         exit(did_not_receive_connection_blocked)
     end.
 
@@ -1197,3 +1201,14 @@ make_direct_params(Props) ->
                         password     = Pgv(password, <<"guest">>),
                         virtual_host = Pgv(virtual_host, <<"/">>),
                         node         = Pgv(node, node())}.
+
+set_resource_alarm(memory) ->
+    os:cmd("cd ../rabbitmq-test; make set-resource-alarm SOURCE=memory");
+set_resource_alarm(disk) ->
+    os:cmd("cd ../rabbitmq-test; make set-resource-alarm SOURCE=disk").
+
+
+clear_resource_alarm(memory) ->
+    os:cmd("cd ../rabbitmq-test; make clear-resource-alarm SOURCE=memory");
+clear_resource_alarm(disk) ->
+    os:cmd("cd ../rabbitmq-test; make clear-resource-alarm SOURCE=disk").
