@@ -1139,7 +1139,7 @@ handle_call({notify_down, ChPid}, _From, State) ->
     end;
 
 handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
-            State = #q{q = Q = #amqqueue{name = QName}}) ->
+            State = #q{q = #amqqueue{name = QName}}) ->
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
     case fetch(AckRequired, State1) of

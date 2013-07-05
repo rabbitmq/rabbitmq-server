@@ -79,7 +79,8 @@
         -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).
 -spec(update/2 ::
         (name(),
-         fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue())) -> 'ok').
+         fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue()))
+         -> 'not_found' | rabbit_types:amqqueue()).
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found');
@@ -279,9 +280,10 @@ update(Name, Fun) ->
             case Durable of
                 true -> ok = mnesia:write(rabbit_durable_queue, Q1, write);
                 _    -> ok
-            end;
+            end,
+            Q1;
         [] ->
-            ok
+            not_found
     end.
 
 store_queue(Q = #amqqueue{durable = true}) ->
@@ -295,9 +297,12 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-policy_changed(Q1, Q2) ->
+policy_changed(Q1 = #amqqueue{decorators = Decorators1},
+               Q2 = #amqqueue{decorators = Decorators2}) ->
     rabbit_mirror_queue_misc:update_mirrors(Q1, Q2),
-    rabbit_federation_queue:policy_changed(Q1, Q2),
+    D1 = rabbit_queue_decorator:select(Decorators1),
+    D2 = rabbit_queue_decorator:select(Decorators2),
+    [ok = M:policy_changed(Q1, Q2) || M <- lists:usort(D1 ++ D2)],
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
     wake_up(Q1).
