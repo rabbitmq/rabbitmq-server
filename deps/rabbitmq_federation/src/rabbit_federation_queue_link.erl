@@ -70,7 +70,7 @@ init({Upstream, Queue = #amqqueue{name = QName}}) ->
             join(rabbit_federation_queues),
             join({rabbit_federation_queue, QName}),
             gen_server2:cast(self(), maybe_go),
-            rabbit_amqqueue:notify_federation(Q),
+            rabbit_amqqueue:notify_decorators(Q),
             {ok, #not_started{queue           = Queue,
                               run             = false,
                               upstream        = Upstream,

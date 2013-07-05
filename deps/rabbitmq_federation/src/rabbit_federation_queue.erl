@@ -28,11 +28,27 @@
 
 -behaviour(rabbit_queue_decorator).
 
--export([maybe_start/1, maybe_stop/1, policy_changed/2, active_for/1]).
+-export([startup/1, shutdown/1, policy_changed/2, active_for/1, notify/3]).
 -export([policy_changed_local/2]).
--export([run/1, pause/1, basic_get/1]).
+
+-import(rabbit_misc, [pget/2]).
 
 %%----------------------------------------------------------------------------
+
+startup(Q) ->
+    case active_for(Q) of
+        true  -> rabbit_federation_queue_link_sup_sup:start_child(Q);
+        false -> ok
+    end,
+    ok.
+
+shutdown(Q = #amqqueue{name = QName}) ->
+    case active_for(Q) of
+        true  -> rabbit_federation_queue_link_sup_sup:stop_child(Q),
+                 rabbit_federation_status:remove_exchange_or_queue(QName);
+        false -> ok
+    end,
+    ok.
 
 policy_changed(Q1 = #amqqueue{name = QName}, Q2) ->
     case rabbit_amqqueue:lookup(QName) of
@@ -44,8 +60,8 @@ policy_changed(Q1 = #amqqueue{name = QName}, Q2) ->
     end.
 
 policy_changed_local(Q1, Q2) ->
-    maybe_stop(Q1),
-    maybe_start(Q2).
+    shutdown(Q1),
+    startup(Q2).
 
 active_for(Q) ->
     case rabbit_federation_upstream:set_for(Q) of
@@ -53,21 +69,14 @@ active_for(Q) ->
         {error, _} -> false
     end.
 
-%%----------------------------------------------------------------------------
+notify(Q = #amqqueue{name = QName}, _Event, Props) ->
+    %% io:format(user, "Props: ~p~n", [Props]),
+    case pget(is_empty, Props) andalso
+        active_unfederated(pget(active_consumers, Props)) of
+        true  -> rabbit_federation_queue_link:run(QName);
+        false -> rabbit_federation_queue_link:pause(QName)
+    end,
+    ok.
 
-maybe_start(Q) ->
-    case active_for(Q) of
-        true  -> rabbit_federation_queue_link_sup_sup:start_child(Q);
-        false -> ok
-    end.
-
-maybe_stop(Q = #amqqueue{name = QName}) ->
-    case active_for(Q) of
-        true  -> rabbit_federation_queue_link_sup_sup:stop_child(Q),
-                 rabbit_federation_status:remove_exchange_or_queue(QName);
-        false -> ok
-    end.
-
-run(#amqqueue{name = QName})       -> rabbit_federation_queue_link:run(QName).
-pause(#amqqueue{name = QName})     -> rabbit_federation_queue_link:pause(QName).
-basic_get(#amqqueue{name = QName}) -> rabbit_federation_queue_link:basic_get(QName).
+active_unfederated(Cs) ->
+    not priority_queue:is_empty(Cs) andalso priority_queue:highest(Cs) >= 0.

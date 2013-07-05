@@ -27,8 +27,4 @@ tests(Module, Timeout) ->
     {foreach, fun() -> ok end,
      [{timeout, Timeout, fun Module:F/0} ||
          {F, _Arity} <- proplists:get_value(exports, Module:module_info()),
-         %% TODO currently this fails because queues explode because we
-         %% haven't abstracted the queue -> federation interface yet. Just
-         %% disable it until we do.
-         F =/= upstream_has_no_federation_test,
          string:right(atom_to_list(F), 5) =:= "_test"]}.
