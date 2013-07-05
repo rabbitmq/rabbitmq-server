@@ -26,7 +26,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, wake_up/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
--export([basic_get/4, basic_consume/9, basic_cancel/4]).
+-export([basic_get/4, basic_consume/10, basic_cancel/4, notify_federation/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2, flush_all/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
 -export([on_node_down/1]).
@@ -149,12 +149,13 @@
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(credit/5 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(),
                    non_neg_integer(), boolean()) -> 'ok').
--spec(basic_consume/9 ::
+-spec(basic_consume/10 ::
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
-         rabbit_types:ctag(), boolean(), {non_neg_integer(), boolean()} | 'none', any())
+         rabbit_types:ctag(), boolean(), {non_neg_integer(), boolean()} | 'none', any(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
+-spec(notify_federation/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(resume/2 :: (pid(), pid()) -> 'ok').
@@ -296,6 +297,7 @@ store_queue(Q = #amqqueue{durable = false}) ->
 
 policy_changed(Q1, Q2) ->
     rabbit_mirror_queue_misc:update_mirrors(Q1, Q2),
+    rabbit_federation_queue:policy_changed(Q1, Q2),
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
     wake_up(Q1).
@@ -554,12 +556,16 @@ basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck, LimiterPid}).
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid, LimiterActive,
-              ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg) ->
+              ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg) ->
     delegate:call(QPid, {basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-                         ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg}).
+                         ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs,
+                         OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     delegate:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
+
+notify_federation(#amqqueue{pid = QPid}) ->
+    delegate:cast(QPid, notify_federation).
 
 notify_sent(QPid, ChPid) ->
     Key = {consumer_credit_to, QPid},
