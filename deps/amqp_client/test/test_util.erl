@@ -1038,8 +1038,8 @@ rpc_client_consume_loop(Channel) ->
 
 %% connection.blocked, connection.unblocked
 
-connection_blocked_test() ->
-    {ok, Connection} = new_connection(),
+connection_blocked_network_test() ->
+    {ok, Connection} = new_connection(just_network),
     X = <<"amq.direct">>,
     K = Payload = <<"x">>,
     clear_resource_alarm(memory),
