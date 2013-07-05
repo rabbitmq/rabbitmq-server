@@ -211,9 +211,7 @@ x(XName) ->
 
 %%----------------------------------------------------------------------------
 
-federation_up() ->
-    proplists:is_defined(rabbitmq_federation,
-                         application:which_applications(infinity)).
+federation_up() -> is_pid(whereis(rabbit_federation_app)).
 
 handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
