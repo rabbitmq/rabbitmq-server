@@ -56,7 +56,8 @@
 
 %% Main interface
 -spec(init/0 :: () -> 'ok').
--spec(join_cluster/2 :: (node(), node_type()) -> 'ok').
+-spec(join_cluster/2 :: (node(), node_type())
+                        -> 'ok' | {'ok', 'already_member'}).
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(update_cluster_nodes/1 :: (node()) -> 'ok').
@@ -164,23 +165,24 @@ join_cluster(DiscoveryNode, NodeType) ->
                                {error, _} = E -> throw(E)
                            end,
     case me_in_nodes(ClusterNodes) of
-        true  -> e(already_clustered);
-        false -> ok
-    end,
+        false ->
+            %% reset the node. this simplifies things and it will be needed in
+            %% this case - we're joining a new cluster with new nodes which
+            %% are not in synch with the current node. I also lifts the burden
+            %% of reseting the node from the user.
+            reset_gracefully(),
 
-    %% reset the node. this simplifies things and it will be needed in
-    %% this case - we're joining a new cluster with new nodes which
-    %% are not in synch with the current node. I also lifts the burden
-    %% of reseting the node from the user.
-    reset_gracefully(),
-
-    %% Join the cluster
-    rabbit_misc:local_info_msg("Clustering with ~p as ~p node~n",
-                               [ClusterNodes, NodeType]),
-    ok = init_db_with_mnesia(ClusterNodes, NodeType, true, true),
-    rabbit_node_monitor:notify_joined_cluster(),
-
-    ok.
+            %% Join the cluster
+            rabbit_misc:local_info_msg("Clustering with ~p as ~p node~n",
+                                       [ClusterNodes, NodeType]),
+            ok = init_db_with_mnesia(ClusterNodes, NodeType, true, true),
+            rabbit_node_monitor:notify_joined_cluster(),
+            ok;
+        true ->
+            rabbit_misc:local_info_msg("Already member of cluster: ~p~n",
+                                       [ClusterNodes]),
+            {ok, already_member}
+    end.
 
 %% return node to its virgin state, where it is not member of any
 %% cluster, has no cluster configuration, no local database, and no
@@ -859,10 +861,6 @@ error_description(clustering_only_disc_node) ->
 error_description(resetting_only_disc_node) ->
     "You cannot reset a node when it is the only disc node in a cluster. "
         "Please convert another node of the cluster to a disc node first.";
-error_description(already_clustered) ->
-    "You are already clustered with the nodes you have selected.  If the "
-        "node you are trying to cluster with is not present in the current "
-        "node status, use 'update_cluster_nodes'.";
 error_description(not_clustered) ->
     "Non-clustered nodes can only be disc nodes.";
 error_description(cannot_connect_to_cluster) ->
