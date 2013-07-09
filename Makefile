@@ -262,6 +262,8 @@ srcdist: distclean
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
 	cp codegen.py Makefile generate_app generate_deps calculate-relative $(TARGET_SRC_DIR)
 
+	sed -i -e "s:^VERSION?=0.0.0:VERSION=${VERSION}:" $(TARGET_SRC_DIR)/Makefile
+
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
