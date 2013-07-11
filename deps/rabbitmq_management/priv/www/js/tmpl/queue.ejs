@@ -47,6 +47,38 @@
     </table>
 
     <table class="facts">
+      <tr>
+        <th>
+          Paging <span class="help" id="queue-memory-resident"></span>
+        </th>
+        <td>
+          <% var messages_ram = queue.backing_queue_status.ram_msg_count + queue.backing_queue_status.ram_ack_count; %>
+          <% if (messages_ram == queue.messages) { %>
+            No paging
+          <% } else { %>
+            <%= fmt_num_thousands(messages_ram) %> /
+            <%= fmt_num_thousands(queue.messages) %> msg (in RAM / total)
+          <% } %>
+          <sub>
+            <% if (queue.backing_queue_status.target_ram_count == 'infinity') { %>
+              No limit
+            <% } else { %>
+              RAM target: <%= fmt_num_thousands(queue.backing_queue_status.target_ram_count) %> msg
+            <% } %>
+          </sub>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Persistent <span class="help" id="queue-persistent"></span>
+        </th>
+        <td>
+          <%= fmt_num_thousands(queue.backing_queue_status.persistent_count) %> msg
+        </td>
+      </tr>
+    </table>
+
+    <table class="facts">
 <% if (vhosts_interesting) { %>
       <tr>
         <th>Virtual host</th>
