@@ -28,10 +28,27 @@
                                    , validate/1
                                    , create/2
                                    , delete/3
+                                   , validate_binding/2
                                    , add_binding/3
                                    , remove_bindings/3
-                                   , assert_args_equivalence/2]).
+                                   , assert_args_equivalence/2
+                                   , policy_changed/3 ]).
 
-dummy_test() ->
-    io:format("~n~ntest_dummy run~n~n"),
-    ?assertEqual(ok,ok).
+description_test() ->
+  ?assertMatch([{name, _}, {description, _}], description()).
+
+serialise_events_test() ->
+  ?assertMatch(false, serialise_events()).
+
+validate_test() ->
+  ?assertEqual(ok, validate(any_exchange)).
+
+create_test() ->
+  ?assertEqual(ok, create(none, any_exchange)).
+
+delete_test() ->
+  ?assertEqual(ok, delete(none, any_exchange, any_bindings)).
+
+validate_binding_test() ->
+  ?assertEqual(ok, validate_binding(any_exchange, any_bindings)).
+

@@ -118,7 +118,7 @@ validate(_X) -> ok.
 % After exchange declaration and recovery
 create(transaction, #exchange{name = XName}) ->
   add_initial_record(XName);
-create(_,_) ->
+create(_Tx, _X) ->
   ok.
 
 % Delete an exchange
