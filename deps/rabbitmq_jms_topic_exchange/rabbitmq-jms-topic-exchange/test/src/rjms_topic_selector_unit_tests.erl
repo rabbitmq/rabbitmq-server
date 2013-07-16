@@ -22,6 +22,9 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-include("rabbit_jms_topic_exchange.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+
 -import(rabbit_jms_topic_exchange, [ description/0
                                    , serialise_events/0
                                    , route/2
@@ -52,3 +55,11 @@ delete_test() ->
 validate_binding_test() ->
   ?assertEqual(ok, validate_binding(any_exchange, any_bindings)).
 
+add_binding_test() ->
+  ?assertEqual(ok, add_binding(none, dummy_exchange(), dummy_binding())).
+
+dummy_exchange() ->
+  #exchange{name = <<"XName">>, arguments = [{?RJMS_TYPE_INFO_ARG, none, none}]}.
+
+dummy_binding() ->
+  #binding{key = <<"BindingKey">>, destination = <<"DName">>, args = [{?RJMS_SELECTOR_ARG, longstr, <<"false">>}]}.
