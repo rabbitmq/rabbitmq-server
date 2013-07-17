@@ -14,7 +14,7 @@
 %% Copyright (c) 2012, 2013 GoPivotal, Inc.  All rights reserved.
 %% -----------------------------------------------------------------------------
 
-%% JMS on Rabbit Topic Selector Exchange plugin
+%% JMS on Rabbit Selector Exchange plugin
 
 %% -----------------------------------------------------------------------------
 -module(rabbit_jms_topic_exchange).
@@ -94,30 +94,26 @@ setup_db_schema() ->
 %% E X P O R T E D   E X C H A N G E   B E H A V I O U R
 
 % Exchange description
-description() -> [ {name, <<"jms-topic-selector">>}
-                 , {description, <<"JMS topic selector exchange">>} ].
+description() -> [ {name, <<"jms-selector">>}
+                 , {description, <<"JMS selector exchange">>} ].
 
 % Binding event serialisation
 serialise_events() -> false.
 
 % Route messages
 route( #exchange{name = XName}
-     , #delivery{message = #basic_message{content = Content}}
+     , #delivery{message = #basic_message{content = MessageContent, routing_keys = RKs}}
      ) ->
-  Headers = get_headers(Content),
-  BindingFuns = get_binding_funs_x(XName),
-  rabbit_router:match_bindings( XName
-                              , fun(#binding{key = Key, destination = DestName}) ->
-                                  binding_fun_match({Key, DestName}, Headers, BindingFuns)
-                                end
-                              ).
+  {XPol, BindingFuns} = get_policy_and_binding_funs_x(XName),
+  match_bindings_by_policy(XName, RKs, MessageContent, XPol, BindingFuns).
+
 
 % Before exchange declaration
 validate(_X) -> ok.
 
 % After exchange declaration and recovery
-create(transaction, #exchange{name = XName}) ->
-  add_initial_record(XName);
+create(transaction, #exchange{name = XName, arguments = XArgs}) ->
+  add_initial_record(XName, get_selection_policy_from_arguments(XArgs));
 create(_Tx, _X) ->
   ok.
 
@@ -134,15 +130,18 @@ validate_binding(_X, _B) -> ok.
 % A new binding has ben added or recovered
 add_binding( Tx
            , #exchange{name = XName, arguments = XArgs}
-           , #binding{key = BindingKey, destination = DestName, args = Args}
+           , #binding{key = BindingKey, destination = Dest = #resource{name = DestName}, args = Args}
            ) ->
   SQL = get_sql_from_args(Args),
-  TypeInfo = get_type_info_from_arguments(XArgs),
-  case {Tx, generate_binding_fun(SQL, TypeInfo)} of
+  BindGen = case {get_selection_policy_from_arguments(XArgs), DestName, BindingKey} of
+              {jms_queue, N, N} -> {ok, undefined};
+              _                 -> generate_binding_fun(SQL, get_type_info_from_arguments(XArgs))
+            end,
+  case {Tx, BindGen} of
     {transaction, {ok, BindFun}} ->
-      add_binding_fun(XName, {{BindingKey, DestName}, BindFun});
+      add_binding_fun(XName, {{BindingKey, Dest}, BindFun});
     {none, error} ->
-      parsing_error(XName, SQL, DestName);
+      parsing_error(XName, SQL, Dest);
     _ ->
       ok
   end,
@@ -168,9 +167,38 @@ policy_changed(_Tx, _X1, _X2) -> ok.
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
 
+% Match bindings for the current message under the appropriate policy
+match_bindings_by_policy(XName, _RoutingKeys, MessageContent, jms_topic, BindingFuns) ->
+  MessageHeaders = get_headers(MessageContent),
+  rabbit_router:match_bindings( XName
+                              , fun(#binding{key = Key, destination = Dest}) ->
+                                  binding_fun_match({Key, Dest}, MessageHeaders, BindingFuns)
+                                end
+                              );
+match_bindings_by_policy(XName, [RoutingKey | _], MessageContent, jms_queue, BindingFuns) ->
+  % assume exactly one routing key
+  % get base binding and first matching selector binding if there is one....
+  case get_base_and_selection(MessageContent, RoutingKey, BindingFuns) of
+    {undefined, undefined   } -> [];
+    {BaseDest , undefined   } -> [BaseDest];
+    {_        , SelectorDest} -> [SelectorDest]
+  end.
+
+get_base_and_selection(Content, RKey, Funs) ->
+  {BD, SD, _, _, _} = dict:fold(fun dict_scan/3, {undefined, undefined, Content, undefined, RKey}, Funs),
+  {BD, SD}.
+
+dict_scan({RKey, Dest = #resource{name = RKey}}, _BFun, {_       , SelDest  , Content, Headers  , RKey}) -> {Dest, SelDest, Content, Headers, RKey};
+dict_scan({RKey, Dest                         },  BFun, {BaseDest, undefined, Content, undefined, RKey}) -> dict_scan({RKey, Dest}, BFun, {BaseDest, undefined, Content, get_headers(Content), RKey});
+dict_scan({RKey, Dest                         },  BFun, {BaseDest, undefined, Content, Headers  , RKey}) -> case BFun(Headers) of
+                                                                                                              true -> {BaseDest, Dest, Content, Headers, RKey};
+                                                                                                              _    -> {BaseDest, undefined, Content, Headers, RKey}
+                                                                                                            end;
+dict_scan(_RKeyDest, _BFun, Acc) -> Acc.
+
 % Select binding function from Funs dictionary, apply it to Headers and return result (true|false)
-binding_fun_match(Key, Headers, FunsDict) ->
-  case dict:find(Key, FunsDict) of
+binding_fun_match(DictKey, Headers, FunsDict) ->
+  case dict:find(DictKey, FunsDict) of
     {ok, Fun} when is_function(Fun, 1) -> Fun(Headers);
     error                              -> false          % do not match if no function found
   end.
@@ -180,9 +208,8 @@ get_type_info_from_arguments(Args) ->
     {table, TypeInfoTable} -> TypeInfoTable;
     _                      -> [] %% not supplied or wrong type => ignored
   end.
-
 %% The rjms_type_info value has a slightly klunky format,
-%% due to the neccesity of tramsmitting this over the AMQP protocol.
+%% due to the neccesity of transmitting this over the AMQP protocol.
 %%
 %% In general it is a table:
 %%    type_info()   :: [ident_type()]
@@ -203,6 +230,21 @@ get_type_info_from_arguments(Args) ->
 %%   , {<<"JMSPriority">>,      longstr, <<"number">>}
 %%   , {<<"JMSTimestamp">>,     longstr, <<"number">>}
 %%   ]
+
+get_selection_policy_from_arguments(Args) ->
+  case rabbit_misc:table_lookup(Args, ?RJMS_POLICY_ARG) of
+    {longstr, <<"jms-topic">>} -> jms_topic;
+    {longstr, <<"jms-queue">>} -> jms_queue;
+    _                          -> jms_topic  %% not supplied or wrong type => default
+  end.
+%% The rjms_selection_policy value is a 'longstr' value either:
+%%    "jms-topic"   meaning topic selection policy, which sends the message to
+%%                  any destination bound with a satisfied SQL selector expression;
+%% or:
+%%    "jms-queue"   meaning queue selection policy, which sends the message to
+%%                  *one* of the destinations bound with a statisfied SQL selector,
+%%                  if there is one, and to the base queue (bound with a binding key
+%%                  equal to the destination resource name) otherwise.
 
 % get Headers from message content
 get_headers(Content) ->
@@ -242,29 +284,29 @@ sql_match(SQL, Headers) ->
     _    -> false
   end.
 
-% get binding funs from state (using dirty_reads)
-get_binding_funs_x(XName) ->
+% get policy and binding funs from state (using dirty_reads)
+get_policy_and_binding_funs_x(XName) ->
   mnesia:async_dirty(
     fun() ->
-      #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state(XName),
-      BindingFuns
+      #?JMS_TOPIC_RECORD{x_selection_policy = XPol, x_selector_funs = BindingFuns} = read_state(XName),
+      {XPol, BindingFuns}
     end,
     []
   ).
 
-add_initial_record(XName) ->
-  write_initial_state(XName).
+add_initial_record(XName, XPol) ->
+  write_state_fun(XName, dict:new(), XPol).
 
 % add binding fun to binding fun dictionary
 add_binding_fun(XName, BindingKeyAndFun) ->
-  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state_for_update(XName),
-  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun)).
+  #?JMS_TOPIC_RECORD{x_selection_policy = XPol, x_selector_funs = BindingFuns} = read_state_for_update(XName),
+  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun), XPol).
 
 % remove binding funs from binding fun dictionary
 remove_binding_funs(XName, Bindings) ->
   BindingKeys = [ {BindingKey, DestName} || #binding{key = BindingKey, destination = DestName} <- Bindings ],
-  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state_for_update(XName),
-  write_state_fun(XName, remove_items(BindingFuns, BindingKeys)).
+  #?JMS_TOPIC_RECORD{x_selection_policy = XPol, x_selector_funs = BindingFuns} = read_state_for_update(XName),
+  write_state_fun(XName, remove_items(BindingFuns, BindingKeys), XPol).
 
 % add an item to the dictionary of binding functions
 put_item(Dict, {Key, Item}) -> dict:store(Key, Item, Dict).
@@ -290,16 +332,10 @@ read_state(XName, Lock) ->
     _     -> exchange_state_corrupt_error(XName)
   end.
 
-% Basic write after read for update
-write_state_fun(XName, BFuns) ->
+% Basic write
+write_state_fun(XName, BFuns, XPol) ->
   mnesia:write( ?JMS_TOPIC_TABLE
-              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = BFuns}
-              , write ).
-
-% Write first record
-write_initial_state(XName) ->
-  mnesia:write( ?JMS_TOPIC_TABLE
-              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = dict:new()}
+              , #?JMS_TOPIC_RECORD{x_name = XName, x_selection_policy = XPol, x_selector_funs = BFuns}
               , write ).
 
 %%----------------------------------------------------------------------------

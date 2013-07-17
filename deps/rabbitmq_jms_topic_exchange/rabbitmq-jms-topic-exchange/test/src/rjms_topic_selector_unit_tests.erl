@@ -62,4 +62,4 @@ dummy_exchange() ->
   #exchange{name = <<"XName">>, arguments = [{?RJMS_TYPE_INFO_ARG, none, none}]}.
 
 dummy_binding() ->
-  #binding{key = <<"BindingKey">>, destination = <<"DName">>, args = [{?RJMS_SELECTOR_ARG, longstr, <<"false">>}]}.
+  #binding{key = <<"BindingKey">>, destination = #resource{name = <<"DName">>}, args = [{?RJMS_SELECTOR_ARG, longstr, <<"false">>}]}.
