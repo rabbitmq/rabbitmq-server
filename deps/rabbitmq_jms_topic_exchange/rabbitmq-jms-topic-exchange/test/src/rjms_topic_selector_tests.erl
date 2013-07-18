@@ -13,55 +13,29 @@
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2013 GoPivotal, Inc.  All rights reserved.
 %%
-%% Reference Type information
-%%
-%% -type(amqp_field_type() ::
-%%       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
-%%       'table' | 'byte' | 'double' | 'float' | 'long' |
-%%       'short' | 'bool' | 'binary' | 'void' | 'array').
-%% -type(amqp_table() :: [{binary(), amqp_field_type(), amqp_value()}]).
-%% -type(amqp_array() :: [{amqp_field_type(), amqp_value()}]).
-%% -type(amqp_value() :: binary() |    % longstr
-%%                       integer() |   % signedint
-%%                       {non_neg_integer(), non_neg_integer()} | % decimal
-%%                       amqp_table() |
-%%                       amqp_array() |
-%%                       byte() |      % byte
-%%                       float() |     % double
-%%                       integer() |   % long
-%%                       integer() |   % short
-%%                       boolean() |   % bool
-%%                       binary() |    % binary
-%%                       'undefined' | % void
-%%                       non_neg_integer() % timestamp
-%%      ).
+
 -module(rjms_topic_selector_tests).
+
 -export([all_tests/0]).
 -include_lib("amqp_client/include/amqp_client.hrl").
-
 -include("rabbit_jms_topic_exchange.hrl").
 
+%% Useful test constructors
 -define(XPOLICYARG(Policy), {?RJMS_POLICY_ARG, longstr, Policy}).
 -define(BSELECTARG(BinStr), {?RJMS_SELECTOR_ARG, longstr, BinStr}).
 -define(BASICMSG(Payload, Hdrs), #'amqp_msg'{props=#'P_basic'{headers=Hdrs}, payload=Payload}).
 
 all_tests() ->
+    test_default_topic_selection(),
     test_topic_selection(),
     test_queue_selection(),
+    test_multiple_queue_selection(),
     ok.
 
 test_topic_selection() ->
-    %% Start a network connection
-    {ok, Connection} = amqp_connection:start(#amqp_params_network{}),
+    {Connection, Channel} = open_connection_and_channel(),
 
-    %% Open a channel on the connection
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-
-    %% Declare a rjms_topic_selector exchange
-    Exchange = <<"rjms_test_topic_selector_exchange">>,
-    DeclareX = #'exchange.declare'{ exchange = Exchange
-                                  , type = <<"x-jms-topic">> },
-    #'exchange.declare_ok'{} = amqp_channel:call(Channel, DeclareX),
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", [?XPOLICYARG(<<"jms-topic">>)]),
 
     %% Declare a queue and bind it
     Q = declare_queue(Channel),
@@ -71,23 +45,29 @@ test_topic_selection() ->
 
     get_and_check(Channel, Q, 0, <<"true">>),
 
-    %% Close the channel
-    amqp_channel:close(Channel),
-    %% Close the connection
-    amqp_connection:close(Connection),
+    close_channel_and_connection(Connection, Channel),
+    ok.
+
+test_default_topic_selection() ->
+    {Connection, Channel} = open_connection_and_channel(),
+
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_default_selector_exchange", []),
+
+    %% Declare a queue and bind it
+    Q = declare_queue(Channel),
+    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"boolVal">>)]),
+
+    publish_two_messages(Channel, Exchange, <<"select-key">>),
+
+    get_and_check(Channel, Q, 0, <<"true">>),
+
+    close_channel_and_connection(Connection, Channel),
     ok.
 
 test_queue_selection() ->
-    %% Start a network connection, and open a channel
-    {ok, Connection} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
+    {Connection, Channel} = open_connection_and_channel(),
 
-    %% Declare a rjms_topic_selector exchange, policy 'jms_queue'
-    Exchange = <<"rjms_test_queue_selector_exchange">>,
-    DeclareX = #'exchange.declare'{ exchange = Exchange
-                                  , type = <<"x-jms-topic">>
-                                  , arguments = [?XPOLICYARG(<<"jms-queue">>)] },
-    #'exchange.declare_ok'{} = amqp_channel:call(Channel, DeclareX),
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_queue_selector_exchange", [?XPOLICYARG(<<"jms-queue">>)]),
 
     %% Declare a base queue and bind it
     Q = declare_queue(Channel),
@@ -107,15 +87,62 @@ test_queue_selection() ->
     get_and_check(Channel, SelQ, 0, <<"true">>),
     get_and_check(Channel, Q, 0, <<"false">>),
 
-    %% Close the channel
+    close_channel_and_connection(Connection, Channel),
+    ok.
+
+test_multiple_queue_selection() ->
+    {Connection, Channel} = open_connection_and_channel(),
+
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_queue_selector_exchange", [?XPOLICYARG(<<"jms-queue">>)]),
+
+    %% Declare a base queue and selector queue
+    Q1 = declare_queue(Channel),
+    SelQ1 = declare_queue(Channel),
+    bind_queue(Channel, Q1, Exchange),
+    bind_queue(Channel, SelQ1, Exchange, Q1, [?BSELECTARG(<<"boolVal">>)]),
+
+    %% Declare another base queue and selector queue
+    Q2 = declare_queue(Channel),
+    SelQ2 = declare_queue(Channel),
+    bind_queue(Channel, Q2, Exchange),
+    bind_queue(Channel, SelQ2, Exchange, Q2, [?BSELECTARG(<<"boolVal">>)]),
+
+    publish_two_messages(Channel, Exchange, Q1),
+    publish_two_messages(Channel, Exchange, Q2),
+
+    get_and_check(Channel, SelQ2, 0, <<"true">>),
+    get_and_check(Channel, SelQ1, 0, <<"true">>),
+
+    get_and_check(Channel, Q1, 0, <<"false">>),
+    get_and_check(Channel, Q2, 0, <<"false">>),
+
+    close_channel_and_connection(Connection, Channel),
+    ok.
+
+%% Close the channel and connection
+close_channel_and_connection(Connection, Channel) ->
     amqp_channel:close(Channel),
-    %% Close the connection
     amqp_connection:close(Connection),
     ok.
 
-%% Bind a base queue to an exchange
-bind_queue(Ch, Q, Ex) ->
-    bind_queue(Ch, Q, Ex, Q, []).
+%% Start a network connection, and open a channel
+open_connection_and_channel() ->
+    {ok, Connection} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    {Connection, Channel}.
+
+%% Declare a rjms_topic_selector exchange, with args
+declare_rjms_exchange(Ch, XNameStr, XArgs) ->
+    Exchange = list_to_binary(XNameStr),
+    Decl = #'exchange.declare'{ exchange = Exchange
+                              , type = <<"x-jms-topic">>
+                              , arguments = XArgs },
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, Decl),
+    Exchange.
+
+%% Bind a base queue to a 'jms-queue' policy exchange
+bind_queue(Ch, Q, Ex) -> bind_queue(Ch, Q, Ex, Q, []).
+
 %% Bind a selector queue to an exchange
 bind_queue(Ch, Q, Ex, RKey, Args) ->
     Binding = #'queue.bind'{ queue       = Q
@@ -123,12 +150,12 @@ bind_queue(Ch, Q, Ex, RKey, Args) ->
                            , routing_key = RKey
                            , arguments   = Args
                            },
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, Binding).
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, Binding),
+    ok.
 
-%% Declare a queue
+%% Declare a queue, return Q name (as binary)
 declare_queue(Ch) ->
-    #'queue.declare_ok'{queue = Q}
-      = amqp_channel:call(Ch, #'queue.declare'{}),
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, #'queue.declare'{}),
     Q.
 
 %% Get message from Q and check remaining and payload.
