@@ -1053,7 +1053,7 @@ prune_or_create_group(Self, GroupName, TxnFun) ->
               fun () ->
                       GroupNew = #gm_group { name    = GroupName,
                                              members = [Self],
-                                             version = ?VERSION_START },
+                                             version = get_version(Self) },
                       case mnesia:read({?GROUP_TABLE, GroupName}) of
                           [] ->
                               mnesia:write(GroupNew),
@@ -1293,6 +1293,8 @@ remove_erased_members(MembersState, View) ->
                     store_member(Id, find_member_or_blank(Id, MembersState),
                                  MembersState1)
                 end, blank_member_state(), all_known_members(View)).
+
+get_version({Version, _Pid}) -> Version.
 
 get_pid({_Version, Pid}) -> Pid.
 
