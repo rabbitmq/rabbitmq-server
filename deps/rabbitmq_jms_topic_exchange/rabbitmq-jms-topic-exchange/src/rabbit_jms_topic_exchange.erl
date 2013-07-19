@@ -184,23 +184,23 @@ match_bindings_by_policy(_XName, [RoutingKey | _], MessageContent, jms_queue, Bi
   end.
 
 get_base_and_selection(Content, RoutingKey, Funs) ->
-  {BD, SD, _, _} =
+  {BD, SD, _} =
     dict:fold(       % scan the dictionary of binding functions
-      fun ({RK, D = #resource{name = RK}}, _BFun, {_   , SelDest  , Hdrs, RK}) ->
-            {D, SelDest, Hdrs, RK};                                  % set base queue destination if detected
-          ({RK, D                       },  BFun, {Base, undefined, Hdrs, RK}) ->
-            acc_dest(BFun, get_headers(Hdrs, Content), Base, D, RK); % set first destination if selector matches
-          (_RKDest                       , _BFun, Accumulator                ) ->
-            Accumulator                                              % no-op if not RoutingKey
+      fun ({RK, D = #resource{name = RK}}, _BFun, {_   , SelDest  , Hdrs}) when RK == RoutingKey ->
+            {D, SelDest, Hdrs};                                  % set base queue destination if detected
+          ({RK, D                       },  BFun, {Base, undefined, Hdrs}) when RK == RoutingKey ->
+            acc_dest(BFun, get_headers(Hdrs, Content), Base, D); % set first destination if selector matches
+          (_RKDest                       , _BFun, Accumulator            ) ->
+            Accumulator                                          % skip if not RoutingKey or we know everything
       end
-    , {undefined, undefined, undefined, RoutingKey}  % match only this routing key for updates
+    , {undefined, undefined, undefined} % we know nothing to start with!
     , Funs ),
   {BD, SD}.
 
-acc_dest(BFun, Hdrs, BaseDest, Dest, RK) ->
+acc_dest(BFun, Hdrs, BaseDest, Dest) ->
   case BFun(Hdrs) of
-    true -> {BaseDest, Dest     , Hdrs, RK};
-    _    -> {BaseDest, undefined, Hdrs, RK}
+    true -> {BaseDest, Dest     , Hdrs};
+    _    -> {BaseDest, undefined, Hdrs}
   end.
 
 % Select binding function from Funs dictionary, apply it to Headers and return result (true|false)
