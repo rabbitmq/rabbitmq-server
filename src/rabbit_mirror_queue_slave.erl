@@ -100,7 +100,7 @@ init(Q = #amqqueue { name = QName }) ->
     Node = node(),
     case rabbit_misc:execute_mnesia_transaction(
            fun() -> init_it(Self, GM, Node, QName) end) of
-        {new, QPid} ->
+        {new, QPid, GMPids} ->
             erlang:monitor(process, QPid),
             ok = file_handle_cache:register_callback(
                    rabbit_amqqueue, set_maximum_since_use, [Self]),
@@ -127,6 +127,7 @@ init(Q = #amqqueue { name = QName }) ->
             rabbit_event:notify(queue_slave_created,
                                 infos(?CREATION_EVENT_KEYS, State)),
             ok = gm:broadcast(GM, request_depth),
+            ok = gm:validate_members(GM, [GM | [G || {G, _} <- GMPids]]),
             {ok, State, hibernate,
              {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
               ?DESIRED_HIBERNATE}};
@@ -144,7 +145,7 @@ init_it(Self, GM, Node, QName) ->
         mnesia:read({rabbit_queue, QName}),
     case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
         []     -> add_slave(Q, Self, GM),
-                  {new, QPid};
+                  {new, QPid, GMPids};
         [QPid] -> case rabbit_misc:is_process_alive(QPid) of
                       true  -> duplicate_live_master;
                       false -> {stale, QPid}
@@ -156,7 +157,7 @@ init_it(Self, GM, Node, QName) ->
                                       gm_pids    = [T || T = {_, S} <- GMPids,
                                                          S =/= SPid] },
                                add_slave(Q1, Self, GM),
-                               {new, QPid}
+                               {new, QPid, GMPids}
                   end
     end.
 
