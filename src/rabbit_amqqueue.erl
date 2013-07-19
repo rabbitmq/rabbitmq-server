@@ -650,7 +650,7 @@ on_node_down(Node) ->
       fun () -> QsDels =
                     qlc:e(qlc:q([{QName, delete_queue(QName)} ||
                                     #amqqueue{name = QName, pid = Pid,
-                                              slave_pids = []}
+                                              gm_pids = []}
                                         <- mnesia:table(rabbit_queue),
                                     node(Pid) == Node andalso
                                     not rabbit_misc:is_process_alive(Pid)])),
