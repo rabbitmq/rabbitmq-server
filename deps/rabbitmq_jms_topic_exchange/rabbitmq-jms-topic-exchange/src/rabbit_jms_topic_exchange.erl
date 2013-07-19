@@ -35,7 +35,7 @@
         , add_binding/3
         , remove_bindings/3
         , assert_args_equivalence/2
-        , policy_changed/3 ]).
+        , policy_changed/2 ]).
 
 %% Initialisation of database function:
 -export([setup_db_schema/0]).
@@ -132,16 +132,15 @@ add_binding( Tx
            , #exchange{name = XName, arguments = XArgs}
            , #binding{key = BindingKey, destination = Dest = #resource{name = DestName}, args = Args}
            ) ->
-  SQL = get_sql_from_args(Args),
   BindGen = case {get_selection_policy_from_arguments(XArgs), DestName, BindingKey} of
               {jms_queue, N, N} -> {ok, undefined};
-              _                 -> generate_binding_fun(SQL, get_type_info_from_arguments(XArgs))
+              _                 -> generate_binding_fun(get_sql_from_args(Args), get_type_info_from_arguments(XArgs))
             end,
   case {Tx, BindGen} of
     {transaction, {ok, BindFun}} ->
       add_binding_fun(XName, {{BindingKey, Dest}, BindFun});
     {none, error} ->
-      parsing_error(XName, SQL, Dest);
+      parsing_error(XName, get_sql_from_args(Args), Dest);
     _ ->
       ok
   end,
@@ -162,39 +161,47 @@ assert_args_equivalence(X, Args) ->
   rabbit_exchange:assert_args_equivalence(X, Args).
 
 % Policy change notifications ignored
-policy_changed(_Tx, _X1, _X2) -> ok.
+policy_changed(_X1, _X2) -> ok.
 
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
 
 % Match bindings for the current message under the appropriate policy
-match_bindings_by_policy(XName, _RoutingKeys, MessageContent, jms_topic, BindingFuns) ->
+match_bindings_by_policy( XName, _RoutingKeys    , MessageContent, jms_topic, BindingFuns) ->
   MessageHeaders = get_headers(MessageContent),
   rabbit_router:match_bindings( XName
                               , fun(#binding{key = Key, destination = Dest}) ->
                                   binding_fun_match({Key, Dest}, MessageHeaders, BindingFuns)
                                 end
                               );
-match_bindings_by_policy(XName, [RoutingKey | _], MessageContent, jms_queue, BindingFuns) ->
+match_bindings_by_policy(_XName, [RoutingKey | _], MessageContent, jms_queue, BindingFuns) ->
   % assume exactly one routing key
-  % get base binding and first matching selector binding if there is one....
+  % get first matching selector binding if there is one, or else base binding
   case get_base_and_selection(MessageContent, RoutingKey, BindingFuns) of
     {undefined, undefined   } -> [];
     {BaseDest , undefined   } -> [BaseDest];
     {_        , SelectorDest} -> [SelectorDest]
   end.
 
-get_base_and_selection(Content, RKey, Funs) ->
-  {BD, SD, _, _, _} = dict:fold(fun dict_scan/3, {undefined, undefined, Content, undefined, RKey}, Funs),
+get_base_and_selection(Content, RoutingKey, Funs) ->
+  {BD, SD, _, _} =
+    dict:fold(       % scan the dictionary of binding functions
+      fun ({RK, D = #resource{name = RK}}, _BFun, {_   , SelDest  , Hdrs, RK}) ->
+            {D, SelDest, Hdrs, RK};                                  % set base queue destination if detected
+          ({RK, D                       },  BFun, {Base, undefined, Hdrs, RK}) ->
+            acc_dest(BFun, get_headers(Hdrs, Content), Base, D, RK); % set first destination if selector matches
+          (_RKDest                       , _BFun, Accumulator                ) ->
+            Accumulator                                              % no-op if not RoutingKey
+      end
+    , {undefined, undefined, undefined, RoutingKey}  % match only this routing key for updates
+    , Funs ),
   {BD, SD}.
 
-dict_scan({RKey, Dest = #resource{name = RKey}}, _BFun, {_       , SelDest  , Content, Headers  , RKey}) -> {Dest, SelDest, Content, Headers, RKey};
-dict_scan({RKey, Dest                         },  BFun, {BaseDest, undefined, Content, undefined, RKey}) -> dict_scan({RKey, Dest}, BFun, {BaseDest, undefined, Content, get_headers(Content), RKey});
-dict_scan({RKey, Dest                         },  BFun, {BaseDest, undefined, Content, Headers  , RKey}) -> case BFun(Headers) of
-                                                                                                              true -> {BaseDest, Dest, Content, Headers, RKey};
-                                                                                                              _    -> {BaseDest, undefined, Content, Headers, RKey}
-                                                                                                            end;
-dict_scan(_RKeyDest, _BFun, Acc) -> Acc.
+acc_dest(BFun, Hdrs, BaseDest, Dest, RK) ->
+  case BFun(Hdrs) of
+    true -> {BaseDest, Dest     , Hdrs, RK};
+    _    -> {BaseDest, undefined, Hdrs, RK}
+  end.
 
 % Select binding function from Funs dictionary, apply it to Headers and return result (true|false)
 binding_fun_match(DictKey, Headers, FunsDict) ->
@@ -252,6 +259,10 @@ get_headers(Content) ->
     undefined -> [];
     H         -> rabbit_misc:sort_field_table(H)
   end.
+
+% get Headers unless we know them already
+get_headers(undefined,  Content) -> get_headers(Content);
+get_headers(Headers  , _Content) -> Headers.
 
 % generate the function that checks the message against the SQL expression
 generate_binding_fun(SQL, TypeInfo) ->
