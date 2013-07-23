@@ -146,7 +146,7 @@ mainloop1(Deb, State = #wstate{pending = []}) ->
         Message -> {Deb1, State1} = handle_message(Deb, Message, State),
                    ?MODULE:mainloop1(Deb1, State1)
     after ?HIBERNATE_AFTER ->
-            erlang:hibernate(?MODULE, mainloop, [State])
+            erlang:hibernate(?MODULE, mainloop, [Deb, State])
     end;
 mainloop1(Deb, State) ->
     receive
