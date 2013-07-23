@@ -9,7 +9,7 @@ var chart_colors = ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666
 var chart_chrome = {
     series: { lines: { show: true } },
     grid:   { borderWidth: 2, borderColor: "#aaa" },
-    xaxis:  { tickColor: "#fff", mode: "time" },
+    xaxis:  { tickColor: "#fff", mode: "time", timezone: "browser" },
     yaxis:  { tickColor: "#eee", min: 0 },
     legend: { show: false }
 };
