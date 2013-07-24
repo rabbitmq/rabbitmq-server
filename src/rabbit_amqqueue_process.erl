@@ -554,7 +554,7 @@ run_message_queue(State) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(
                             fun deliver_from_queue_deliver/2,
                             is_empty(State), State),
-    notify_decorators(queue_finished, [], State1),
+    notify_decorators(queue_run_finished, [], State1),
     State1.
 
 consumer_priority({_ChPid, #consumer{args = Args}}) ->
@@ -1410,7 +1410,7 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
             end);
 
 handle_cast(notify_decorators, State) ->
-    notify_decorators(on_demand, [], State),
+    notify_decorators(notification_requested, [], State),
     noreply(State);
 
 handle_cast(wake_up, State) ->
