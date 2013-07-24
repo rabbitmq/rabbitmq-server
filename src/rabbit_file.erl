@@ -147,36 +147,41 @@ write_file(Path, Data, Modes) ->
 
 write_file1(Path, Bin, Modes) ->
     try
-        with_copy(Path,
-                  fun (Copy) ->
-                          with_sync(Copy, Modes,
-                                    fun (CopyHdl) ->
-                                            ok = prim_file:write(CopyHdl, Bin)
-                                    end)
-                  end)
+        with_synced_copy(Path, Modes,
+                         fun (Hdl) ->
+                                 ok = prim_file:write(Hdl, Bin)
+                         end)
     catch
         error:{badmatch, Error} -> Error;
             _:{error, Error}    -> {error, Error}
     end.
 
-with_copy(Path, Fun) ->
+with_synced_copy(Path, Modes, Fun) ->
     Bak = Path ++ ?TMP_EXT,
-    Result = Fun(Bak),
-    file:rename(Bak, Path),
-    ok = with_sync(Path, [binary], fun (_Hdl) -> ok end),
-    Result.
-
-with_sync(Path, Modes, Fun) ->
-    case prim_file:open(Path, Modes) of
-        {ok, Hdl}      -> try
-                              Result = Fun(Hdl),
-                              ok = prim_file:sync(Hdl),
-                              Result
-                          after
-                              prim_file:close(Hdl)
-                          end;
-        {error, _} = E -> E
+    case lists:member(append, Modes) of
+        true ->
+            {error, append_not_supported, Path};
+        false ->
+            with_fhc_handle(
+              fun () ->
+                      case prim_file:open(Bak, Modes) of
+                          {ok, Hdl} ->
+                              try
+                                  Result = Fun(Hdl),
+                                  ok = prim_file:rename(Bak, Path),
+                                  ok = prim_file:sync(Hdl),
+                                  Result
+                              after
+                                  prim_file:close(Hdl)
+                              end;
+                          {error, _} = E -> E
+                      end
+              end)
     end.
+
+%% make_binary/1 is based on the corresponding function in the
+%% kernel/file.erl module of the Erlang R14B02 release, which is
+%% licensed under the EPL.
 
 make_binary(Bin) when is_binary(Bin) ->
     Bin;
