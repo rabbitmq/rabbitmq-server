@@ -136,10 +136,8 @@ handle_cancel(Cancel, State) ->
 %% @private
 %% We sent a basic.cancel and now receive the ok.
 handle_cancel_ok(CancelOk, _Cancel, State) ->
-    State1 = do_cancel(CancelOk, State),
-    %% Use old state
     deliver(CancelOk, State),
-    {ok, State1}.
+    {ok, State}.
 
 %% @private
 handle_deliver(Deliver, Message, State) ->
