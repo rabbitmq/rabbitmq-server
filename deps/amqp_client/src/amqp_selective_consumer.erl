@@ -127,8 +127,12 @@ handle_consume_ok(BasicConsumeOk, _BasicConsume,
 
 %% @private
 %% The server sent a basic.cancel.
-handle_cancel(Cancel, State) ->
-    State1 = do_cancel(Cancel, State),
+handle_cancel(Cancel = #'basic.cancel'{nowait = NoWait}, State) ->
+    %% NB: NoWait is always true on server-sent basic.cancel.
+    State1 = case NoWait of
+                 true  -> do_cancel(Cancel, State);
+                 false -> State
+             end,
     %% Use old state
     deliver(Cancel, State),
     {ok, State1}.
@@ -136,8 +140,10 @@ handle_cancel(Cancel, State) ->
 %% @private
 %% We sent a basic.cancel and now receive the ok.
 handle_cancel_ok(CancelOk, _Cancel, State) ->
+    State1 = do_cancel(CancelOk, State),
+    %% Use old state
     deliver(CancelOk, State),
-    {ok, State}.
+    {ok, State1}.
 
 %% @private
 handle_deliver(Deliver, Message, State) ->
