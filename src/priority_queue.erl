@@ -66,7 +66,7 @@
 -spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
 -spec(filter/2 :: (fun ((any()) -> boolean()), pqueue()) -> pqueue()).
 -spec(fold/3 :: (fun ((any(), any()) -> any()), any(), pqueue()) -> any()).
--spec(highest/1 :: (pqueue()) -> priority()).
+-spec(highest/1 :: (pqueue()) -> priority() | 'empty').
 
 -endif.
 
@@ -212,7 +212,7 @@ fold(Fun, Init, Q) -> case out_p(Q) of
                           {{value, V, P}, Q1} -> fold(Fun, Fun(V, P, Init), Q1)
                       end.
 
-highest({queue, [], [], 0})     -> exit(highest_priority_of_empty_queue);
+highest({queue, [], [], 0})     -> empty;
 highest({queue, _, _, _})       -> 0;
 highest({pqueue, [{P, _} | _]}) -> maybe_negate_priority(P).
 

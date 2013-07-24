@@ -236,8 +236,9 @@ notify_decorators(Event, Props, State = #q{active_consumers    = ACs,
                                            backing_queue       = BQ,
                                            backing_queue_state = BQS}) ->
     callback(qname(State), notify,
-             [Event, [{active_consumers, ACs},
-                      {is_empty,         BQ:is_empty(BQS)} | Props]]).
+             [Event,
+              [{max_active_consumer_priority, priority_queue:highest(ACs)},
+               {is_empty,                     BQ:is_empty(BQS)} | Props]]).
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
@@ -423,10 +424,11 @@ erase_ch_record(#cr{ch_pid = ChPid, monitor_ref = MonitorRef}) ->
 
 all_ch_record() -> [C || {{ch, _}, C} <- get()].
 
-block_consumer(C = #cr{blocked_consumers = Blocked}, QEntry, State) ->
+block_consumer(C = #cr{blocked_consumers = Blocked},
+               {_ChPid, #consumer{tag = CTag}} = QEntry, State) ->
     Blocked1 = priority_queue:in(QEntry, consumer_priority(QEntry), Blocked),
     update_ch_record(C#cr{blocked_consumers = Blocked1}),
-    notify_decorators(consumer_blocked, [{q_entry, QEntry}], State).
+    notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State).
 
 is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
     Count >= ?UNSENT_MESSAGE_LIMIT orelse rabbit_limiter:is_suspended(Limiter).
