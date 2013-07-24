@@ -24,6 +24,8 @@
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
 -export([lock_file/1]).
 
+-define(TMP_EXT, ".tmp").
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -136,26 +138,43 @@ write_term_file(File, Terms) ->
 
 write_file(Path, Data) -> write_file(Path, Data, []).
 
-%% write_file/3 and make_binary/1 are both based on corresponding
-%% functions in the kernel/file.erl module of the Erlang R14B02
-%% release, which is licensed under the EPL. That implementation of
-%% write_file/3 does not do an fsync prior to closing the file, hence
-%% the existence of this version. APIs are otherwise identical.
 write_file(Path, Data, Modes) ->
     Modes1 = [binary, write | (Modes -- [binary, write])],
     case make_binary(Data) of
-        Bin when is_binary(Bin) ->
-            with_fhc_handle(
-              fun () -> case prim_file:open(Path, Modes1) of
-                            {ok, Hdl}      -> try prim_file:write(Hdl, Bin) of
-                                                  ok -> prim_file:sync(Hdl);
-                                                  {error, _} = E -> E
-                                              after
-                                                  prim_file:close(Hdl)
-                                              end;
-                            {error, _} = E -> E
-                        end
-              end);
+        Bin when is_binary(Bin) -> write_file1(Path, Bin, Modes1);
+        {error, _} = E          -> E
+    end.
+
+write_file1(Path, Bin, Modes) ->
+    try
+        with_copy(Path,
+                  fun (Copy) ->
+                          with_sync(Copy, Modes,
+                                    fun (CopyHdl) ->
+                                            ok = prim_file:write(CopyHdl, Bin)
+                                    end)
+                  end)
+    catch
+        error:{badmatch, Error} -> Error;
+            _:{error, Error}    -> {error, Error}
+    end.
+
+with_copy(Path, Fun) ->
+    Bak = Path ++ ?TMP_EXT,
+    Result = Fun(Bak),
+    file:rename(Bak, Path),
+    ok = with_sync(Path, [binary], fun (_Hdl) -> ok end),
+    Result.
+
+with_sync(Path, Modes, Fun) ->
+    case prim_file:open(Path, Modes) of
+        {ok, Hdl}      -> try
+                              Result = Fun(Hdl),
+                              ok = prim_file:sync(Hdl),
+                              Result
+                          after
+                              prim_file:close(Hdl)
+                          end;
         {error, _} = E -> E
     end.
 
