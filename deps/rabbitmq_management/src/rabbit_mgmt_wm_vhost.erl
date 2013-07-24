@@ -19,7 +19,9 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, put_vhost/1]).
+         delete_resource/2, put_vhost/2]).
+
+-import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -47,8 +49,14 @@ to_json(ReqData, Context) ->
       ReqData, Context).
 
 accept_content(ReqData, Context) ->
-    put_vhost(id(ReqData)),
-    {true, ReqData, Context}.
+    Name = id(ReqData),
+    rabbit_mgmt_util:with_decode(
+      [], ReqData, Context,
+      fun(_, VHost) ->
+              put_vhost(Name, rabbit_mgmt_util:parse_bool(
+                                pget(tracing, VHost))),
+              {true, ReqData, Context}
+      end).
 
 delete_resource(ReqData, Context) ->
     VHost = id(ReqData),
@@ -63,8 +71,13 @@ is_authorized(ReqData, Context) ->
 id(ReqData) ->
     rabbit_mgmt_util:id(vhost, ReqData).
 
-put_vhost(VHost) ->
-    case rabbit_vhost:exists(VHost) of
+put_vhost(Name, Trace) ->
+    case rabbit_vhost:exists(Name) of
         true  -> ok;
-        false -> rabbit_vhost:add(VHost)
+        false -> rabbit_vhost:add(Name)
+    end,
+    case Trace of
+        true      -> rabbit_trace:start(Name);
+        false     -> rabbit_trace:stop(Name);
+        undefined -> ok
     end.

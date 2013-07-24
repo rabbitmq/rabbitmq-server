@@ -14,17 +14,23 @@ function fmt_string(str, unknown) {
 
 function fmt_bytes(bytes) {
     if (bytes == undefined) return UNKNOWN_REPR;
+    return fmt_si_prefix(bytes, bytes, 1024) + 'B';
+}
 
-    function f(n, p) {
-        if (n > 1024) return f(n / 1024, p + 1);
+function fmt_si_prefix(num, max, thousand) {
+    if (num == 0) return 0;
+
+    function f(n, m, p) {
+        if (m > thousand) return f(n / thousand, m / thousand, p + 1);
         else return [n, p];
     }
 
-    var num_power = f(bytes, 0);
+    var num_power = f(num, max, 0);
     var num = num_power[0];
     var power = num_power[1];
-    var powers = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-    return (power == 0 ? num.toFixed(0) : num.toFixed(1)) + powers[power];
+    var powers = ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
+    return ((power == 0 || num > 10) ? num.toFixed(0) :
+            num.toFixed(1)) + powers[power];
 }
 
 function fmt_memory(memory, key) {
@@ -182,7 +188,13 @@ function fmt_rate_num(num) {
     if (num == undefined) return UNKNOWN_REPR;
     else if (num < 1)     return num.toFixed(2);
     else if (num < 10)    return num.toFixed(1);
-    else                  return num.toFixed(0);
+    else                  return fmt_num_thousands(num.toFixed(0));
+}
+
+function fmt_num_thousands(num) {
+    num = '' + num;
+    if (num.length < 4) return num;
+    return fmt_num_thousands(num.slice(0, -3)) + ',' + num.slice(-3);
 }
 
 function fmt_rate(obj, name, mode) {
@@ -226,7 +238,8 @@ function fmt_msgs0(obj, name, mode) {
     if (obj == undefined || obj[name] == undefined ||
         obj[name + '_details'] == undefined) return '';
     var details = obj[name + '_details'];
-    return mode == 'avg' ? fmt_rate_num(details.avg) : obj[name];
+    return mode == 'avg' ? fmt_rate_num(details.avg) :
+        fmt_num_thousands(obj[name]);
 }
 
 function fmt_msgs_rate(num) {
@@ -235,15 +248,15 @@ function fmt_msgs_rate(num) {
     else              return '&nbsp;';
 }
 
-function fmt_rate_axis(num) {
-    return num + '/s';
+function fmt_rate_axis(num, max) {
+    return fmt_si_prefix(num, max, 1000) + '/s';
 }
 
-function fmt_msgs_axis(num) {
-    return num;
+function fmt_msgs_axis(num, max) {
+    return fmt_si_prefix(num, max, 1000);
 }
 
-function fmt_rate_bytes_axis(num) {
+function fmt_rate_bytes_axis(num, max) {
     num = parseInt(num);
     return fmt_bytes(isNaN(num) ? 0 : num) + '/s';
 }
