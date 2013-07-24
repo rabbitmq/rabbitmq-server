@@ -80,32 +80,31 @@ init([]) ->
     {ok, #state{}}.
 
 %% @private
-handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
-                                                 monitors = Monitors}) ->
-    Tag = tag(BasicConsume),
-    Ok =
-        case BasicConsume of
-            #'basic.consume'{nowait = true}
-                    when Tag =:= undefined orelse size(Tag) == 0 ->
-                false; %% Async and undefined tag
-            _ when is_binary(Tag) andalso size(Tag) >= 0 ->
-                case resolve_consumer(Tag, State) of
-                    {consumer, _} -> false; %% Tag already in use
-                    _             -> true
-                end;
-           _ ->
-               true
-        end,
-    case {Ok, BasicConsume} of
-        {true, #'basic.consume'{nowait = true}} ->
+handle_consume(#'basic.consume'{consumer_tag = Tag,
+                                nowait       = NoWait},
+               Pid, State = #state{consumers = Consumers,
+                                   monitors = Monitors}) ->
+    Result = case NoWait of
+                 true when Tag =:= undefined orelse size(Tag) == 0 ->
+                     no_consumer_tag_specified;
+                 _ when is_binary(Tag) andalso size(Tag) >= 0 ->
+                     case resolve_consumer(Tag, State) of
+                         {consumer, _} -> consumer_tag_in_use;
+                         _             -> ok
+                     end;
+                 _ ->
+                     ok
+             end,
+    case {Result, NoWait} of
+        {ok, true} ->
             {ok, State#state
-             {consumers = dict:store(Tag, Pid, Consumers),
-              monitors  = add_to_monitor_dict(Pid, Monitors)}};
-        {true, #'basic.consume'{nowait = false}} ->
+                   {consumers = dict:store(Tag, Pid, Consumers),
+                    monitors  = add_to_monitor_dict(Pid, Monitors)}};
+        {ok, false} ->
             {ok, State#state{unassigned = Pid}};
-        {false, #'basic.consume'{nowait = true}} ->
-            {error, 'no_consumer_tag_specified', State};
-        {false, #'basic.consume'{nowait = false}} ->
+        {Err, true} ->
+            {error, Err, State};
+        {_Err, false} ->
             %% Don't do anything (don't override existing
             %% consumers), the server will close the channel with an error.
             {ok, State}
