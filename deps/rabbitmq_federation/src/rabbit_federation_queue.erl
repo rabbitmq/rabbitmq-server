@@ -69,14 +69,15 @@ active_for(Q) ->
         {error, _} -> false
     end.
 
-notify(Q = #amqqueue{name = QName}, _Event, Props) ->
-    %% io:format(user, "Props: ~p~n", [Props]),
+notify(#amqqueue{name = QName}, Event, Props) ->
+    %% io:format(user, "~p: ~p~n", [Event, Props]),
     case pget(is_empty, Props) andalso
-        active_unfederated(pget(active_consumers, Props)) of
+        active_unfederated(pget(max_active_consumer_priority, Props)) of
         true  -> rabbit_federation_queue_link:run(QName);
         false -> rabbit_federation_queue_link:pause(QName)
     end,
     ok.
 
-active_unfederated(Cs) ->
-    not priority_queue:is_empty(Cs) andalso priority_queue:highest(Cs) >= 0.
+active_unfederated(empty)         -> false;
+active_unfederated(P) when P >= 0 -> true;
+active_unfederated(_P)            -> false.
