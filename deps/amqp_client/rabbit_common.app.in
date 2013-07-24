@@ -30,6 +30,7 @@
              rabbit_writer,
              rabbit_event,
              rabbit_queue_collector,
+             rabbit_queue_decorator,
              rabbit_amqqueue,
              supervisor2
   ]},
