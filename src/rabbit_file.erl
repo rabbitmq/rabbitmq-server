@@ -145,6 +145,19 @@ write_file(Path, Data, Modes) ->
         {error, _} = E          -> E
     end.
 
+%% make_binary/1 is based on the corresponding function in the
+%% kernel/file.erl module of the Erlang R14B02 release, which is
+%% licensed under the EPL.
+
+make_binary(Bin) when is_binary(Bin) ->
+    Bin;
+make_binary(List) ->
+    try
+        iolist_to_binary(List)
+    catch error:Reason ->
+            {error, Reason}
+    end.
+
 write_file1(Path, Bin, Modes) ->
     try
         with_synced_copy(Path, Modes,
@@ -157,13 +170,13 @@ write_file1(Path, Bin, Modes) ->
     end.
 
 with_synced_copy(Path, Modes, Fun) ->
-    Bak = Path ++ ?TMP_EXT,
     case lists:member(append, Modes) of
         true ->
             {error, append_not_supported, Path};
         false ->
             with_fhc_handle(
               fun () ->
+                      Bak = Path ++ ?TMP_EXT,
                       case prim_file:open(Bak, Modes) of
                           {ok, Hdl} ->
                               try
@@ -177,19 +190,6 @@ with_synced_copy(Path, Modes, Fun) ->
                           {error, _} = E -> E
                       end
               end)
-    end.
-
-%% make_binary/1 is based on the corresponding function in the
-%% kernel/file.erl module of the Erlang R14B02 release, which is
-%% licensed under the EPL.
-
-make_binary(Bin) when is_binary(Bin) ->
-    Bin;
-make_binary(List) ->
-    try
-        iolist_to_binary(List)
-    catch error:Reason ->
-            {error, Reason}
     end.
 
 %% TODO the semantics of this function are rather odd. But see bug 25021.
