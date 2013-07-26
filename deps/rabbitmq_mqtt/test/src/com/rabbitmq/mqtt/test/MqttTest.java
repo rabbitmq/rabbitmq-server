@@ -247,12 +247,10 @@ public class MqttTest extends TestCase implements MqttCallback {
 
         client.connect(conOpt);
         client.setCallback(this);
-        client.subscribe(topic, 1);
 
         Thread.sleep(testDelay);
         Assert.assertEquals(1, receivedMessages.size());
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
-        client.unsubscribe(topic);
         client.disconnect();
     }
 
