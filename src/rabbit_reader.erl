@@ -756,6 +756,9 @@ refuse_connection(Sock, Exception, {A, B, C, D}) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",A,B,C,D>>) end),
     throw(Exception).
 
+-ifdef(use_specs).
+-spec(refuse_connection/2 :: (rabbit_net:socket(), any()) -> no_return()).
+-endif.
 refuse_connection(Sock, Exception) ->
     refuse_connection(Sock, Exception, {0, 0, 9, 1}).
 
