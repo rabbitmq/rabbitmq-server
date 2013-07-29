@@ -49,8 +49,9 @@ start_link_worker(SupName, Callback) ->
     supervisor2:start_link(SupName, ?MODULE, {Callback, worker}).
 
 init({M,F,A}) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}};
 init({{M,F,A}, worker}) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{client, {M,F,A}, temporary, ?MAX_WAIT, worker, [M]}]}}.
+
