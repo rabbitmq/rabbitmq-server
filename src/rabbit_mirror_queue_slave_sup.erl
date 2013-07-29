@@ -31,7 +31,7 @@ start_link() -> supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 start_child(Node, Args) -> supervisor2:start_child({?SERVER, Node}, Args).
 
 init([]) ->
-    {ok, {{simple_one_for_one_terminate, 10, 10},
+    {ok, {{simple_one_for_one, 10, 10},
           [{rabbit_mirror_queue_slave,
             {rabbit_mirror_queue_slave, start_link, []},
             temporary, ?MAX_WAIT, worker, [rabbit_mirror_queue_slave]}]}}.

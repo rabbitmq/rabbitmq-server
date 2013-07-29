@@ -41,14 +41,12 @@
 
 %%----------------------------------------------------------------------------
 
--define(CREATION_EVENT_KEYS,
+-define(INFO_KEYS,
         [pid,
          name,
          master_pid,
          is_synchronised
         ]).
-
--define(INFO_KEYS, ?CREATION_EVENT_KEYS).
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
@@ -124,8 +122,6 @@ init(Q = #amqqueue { name = QName }) ->
 
                              depth_delta         = undefined
                    },
-            rabbit_event:notify(queue_slave_created,
-                                infos(?CREATION_EVENT_KEYS, State)),
             ok = gm:broadcast(GM, request_depth),
             {ok, State, hibernate,
              {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
