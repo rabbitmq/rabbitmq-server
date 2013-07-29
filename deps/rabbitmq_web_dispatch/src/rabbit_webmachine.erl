@@ -19,27 +19,10 @@
 %% We hardwire the "error handler" and use a "logging module" if
 %% supplied.
 
--export([makeloop/1, setup/1, setup/2]).
+-export([makeloop/1, setup/0]).
 
--define(WM, webmachine).
--define(LOGGER_KEY, webmachine_logger_module).
--define(HANDLER_KEY, error_handler).
-
-setup(defaults) ->
-    setup(none);
-setup(LogModule) ->
-    setup(LogModule, webmachine_error_handler).
-
-setup(LogModule, ErrorHandler) ->
-    %% Many internal procedures in webmachine check the application
-    %% env for the error_handler.  The best we can do in the presence
-    %% of more than one application using webmachine is "last one
-    %% to use setup, wins".
-    application:set_env(?WM, ?HANDLER_KEY, ErrorHandler),
-    case LogModule of
-        none -> application:unset_env(?WM, ?LOGGER_KEY);
-        Mod  -> application:set_env(?WM, ?LOGGER_KEY, Mod)
-    end.
+setup() ->
+    application:set_env(webmachine, error_handler, webmachine_error_handler).
 
 makeloop(Dispatch) ->
     fun (MochiReq) ->
@@ -79,10 +62,6 @@ makeloop(Dispatch) ->
     end.
 
 maybe_log_access(ReqState) ->
-    maybe_log_access(application:get_env(?WM, ?LOGGER_KEY), ReqState).
-
-maybe_log_access(undefined, _) -> ok;
-maybe_log_access({ok, Mod}, ReqState) ->
     Req = {webmachine_request, ReqState},
     {LogData, _ReqState1} = Req:log_data(),
-    Mod:log_access(LogData).
+    webmachine_log:log_access(LogData).
