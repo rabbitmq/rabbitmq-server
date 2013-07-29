@@ -120,7 +120,7 @@ init(Q = #amqqueue { name = QName }) ->
                              msg_id_ack          = dict:new(),
 
                              msg_id_status       = dict:new(),
-                             known_senders       = pmon:new(),
+                             known_senders       = pmon:new(delegate),
 
                              depth_delta         = undefined
                    },
@@ -274,7 +274,8 @@ handle_info({'DOWN', _MonitorRef, process, MPid, _Reason},
     noreply(State);
 
 handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
-    noreply(local_sender_death(ChPid, State));
+    local_sender_death(ChPid, State),
+    noreply(State);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -605,7 +606,7 @@ stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #state.rate_timer_ref).
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
     State #state { known_senders = pmon:monitor(ChPid, KS) }.
 
-local_sender_death(ChPid, State = #state { known_senders = KS }) ->
+local_sender_death(ChPid, #state { known_senders = KS }) ->
     %% The channel will be monitored iff we have received a delivery
     %% from it but not heard about its death from the master. So if it
     %% is monitored we need to point the death out to the master (see
@@ -613,8 +614,7 @@ local_sender_death(ChPid, State = #state { known_senders = KS }) ->
     ok = case pmon:is_monitored(ChPid, KS) of
              false -> ok;
              true  -> confirm_sender_death(ChPid)
-         end,
-    State.
+         end.
 
 confirm_sender_death(Pid) ->
     %% We have to deal with the possibility that we'll be promoted to

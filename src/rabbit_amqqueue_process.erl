@@ -146,7 +146,7 @@ init_state(Q) ->
                exclusive_consumer  = none,
                has_had_consumers   = false,
                active_consumers    = queue:new(),
-               senders             = pmon:new(),
+               senders             = pmon:new(delegate),
                msg_id_to_channel   = gb_trees:empty(),
                status              = running},
     rabbit_event:init_stats_timer(State, #q.stats_timer).
