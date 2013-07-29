@@ -69,7 +69,5 @@
            mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow,
            pmon, ssl_connection, tls_connection, ssl_record, tls_record,
            gen_fsm, ssl]},
-         %% see bug 25668 about why we need these
-         {ssl_apps,
-          [asn1, crypto, public_key, ssl]}
+         {ssl_apps, [asn1, crypto, public_key, ssl]}
         ]}]}.
