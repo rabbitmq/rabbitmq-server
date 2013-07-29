@@ -65,6 +65,6 @@ init([Timeout]) ->
                        [{local, ?MODULE}, ?MODULE, []]},
             transient, Timeout, supervisor, [?MODULE]}]}};
 init([]) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{test_worker, {?MODULE, start_link, []},
             temporary, 1000, worker, [?MODULE]}]}}.
