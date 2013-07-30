@@ -104,24 +104,18 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
-    IsDuplicate = lists:member(Alarm, Alarms),
-    case IsDuplicate of
-        true  ->
-            {ok, State};
-        false ->
-            UpdatedAlarms = lists:usort([Alarm|Alarms]),
-            handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms})
+    case lists:member(Alarm, Alarms) of
+        true  -> {ok, State};
+        false -> UpdatedAlarms = lists:usort([Alarm|Alarms]),
+                 handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms})
     end;
 
 handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
-    ExistingAlarm = lists:keymember(Alarm, 1, Alarms),
-    case ExistingAlarm of
-        true ->
-            handle_clear_alarm(Alarm,
-                               State#alarms{alarms = lists:keydelete(Alarm, 1,
-                                                                     Alarms)});
-        false ->
-            {ok, State}
+    case lists:keymember(Alarm, 1, Alarms) of
+        true  -> handle_clear_alarm(
+                   Alarm, State#alarms{alarms = lists:keydelete(
+                                                  Alarm, 1, Alarms)});
+        false -> {ok, State}
 
     end;
 
@@ -192,10 +186,8 @@ maybe_alert(UpdateFun, Node, Source, Event,
            ok
     end,
     case Event of
-        clear ->
-            ok = alert_local(false, Alertees, Source);
-        set   ->
-            ok = alert_local(true, Alertees, Source)
+        clear -> ok = alert_local(false, Alertees, Source);
+        set   -> ok = alert_local(true, Alertees, Source)
     end,
     State#alarms{alarmed_nodes = AN1}.
 
