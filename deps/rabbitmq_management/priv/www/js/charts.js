@@ -9,7 +9,7 @@ var chart_colors = ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666
 var chart_chrome = {
     series: { lines: { show: true } },
     grid:   { borderWidth: 2, borderColor: "#aaa" },
-    xaxis:  { tickColor: "#fff", mode: "time" },
+    xaxis:  { tickColor: "#fff", mode: "time", timezone: "browser" },
     yaxis:  { tickColor: "#eee", min: 0 },
     legend: { show: false }
 };
@@ -54,7 +54,12 @@ function render_chart(div) {
 
 function fmt_y_axis(fmt) {
     return function (val, axis) {
-        return fmt(val.toFixed(axis.tickDecimals));
+        // axis.ticks seems to include the bottom value but not the top
+        if (axis.max == 1 && axis.ticks.length > 1) {
+            var newTicks = [axis.ticks[0]];
+            axis.ticks = newTicks;
+        }
+        return fmt(val, axis.max);
     }
 }
 

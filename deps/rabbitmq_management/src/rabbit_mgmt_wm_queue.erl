@@ -45,7 +45,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     [Q] = rabbit_mgmt_db:augment_queues(
-            [queue(ReqData)], rabbit_mgmt_util:range(ReqData), full),
+            [queue(ReqData)], rabbit_mgmt_util:range_ceil(ReqData), full),
     rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q), ReqData, Context).
 
 accept_content(ReqData, Context) ->
