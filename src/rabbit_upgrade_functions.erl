@@ -305,11 +305,21 @@ policy_apply_to() ->
     transform(
       rabbit_runtime_parameters,
       fun ({runtime_parameters, Key = {_VHost, <<"policy">>, _Name}, Value}) ->
-              {runtime_parameters, Key, [{<<"apply-to">>, <<"both">>} | Value]};
+              ApplyTo = apply_to(proplists:get_value(<<"definition">>, Value)),
+              {runtime_parameters, Key, [{<<"apply-to">>, ApplyTo} | Value]};
           ({runtime_parameters, Key, Value}) ->
               {runtime_parameters, Key, Value}
       end,
       [key, value]).
+
+apply_to(Def) ->
+    case [proplists:get_value(K, Def) ||
+             K <- [<<"federation-upstream-set">>, <<"ha-mode">>]] of
+        [undefined, undefined] -> <<"both">>;
+        [_,         undefined] -> <<"exchanges">>;
+        [undefined, _]         -> <<"queues">>;
+        [_,         _]         -> <<"both">>
+    end.
 
 %%--------------------------------------------------------------------
 
