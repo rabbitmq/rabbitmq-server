@@ -44,6 +44,7 @@
 -rabbit_upgrade({no_mirror_nodes,       mnesia, [sync_slave_pids]}).
 -rabbit_upgrade({gm_pids,               mnesia, [no_mirror_nodes]}).
 -rabbit_upgrade({exchange_decorators,   mnesia, [policy]}).
+-rabbit_upgrade({policy_apply_to,       mnesia, [runtime_parameters]}).
 
 %% -------------------------------------------------------------------
 
@@ -70,6 +71,7 @@
 -spec(no_mirror_nodes/0       :: () -> 'ok').
 -spec(gm_pids/0               :: () -> 'ok').
 -spec(exchange_decorators/0   :: () -> 'ok').
+-spec(policy_apply_to/0       :: () -> 'ok').
 
 -endif.
 
@@ -299,6 +301,25 @@ exchange_decorators(Table) ->
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        decorators]).
 
+policy_apply_to() ->
+    transform(
+      rabbit_runtime_parameters,
+      fun ({runtime_parameters, Key = {_VHost, <<"policy">>, _Name}, Value}) ->
+              ApplyTo = apply_to(proplists:get_value(<<"definition">>, Value)),
+              {runtime_parameters, Key, [{<<"apply-to">>, ApplyTo} | Value]};
+          ({runtime_parameters, Key, Value}) ->
+              {runtime_parameters, Key, Value}
+      end,
+      [key, value]).
+
+apply_to(Def) ->
+    case [proplists:get_value(K, Def) ||
+             K <- [<<"federation-upstream-set">>, <<"ha-mode">>]] of
+        [undefined, undefined] -> <<"both">>;
+        [_,         undefined] -> <<"exchanges">>;
+        [undefined, _]         -> <<"queues">>;
+        [_,         _]         -> <<"both">>
+    end.
 
 %%--------------------------------------------------------------------
 
