@@ -258,7 +258,7 @@ id(Key, ReqData) ->
     id0(Key, ReqData).
 
 id0(Key, ReqData) ->
-    case dict:find(Key, wrq:path_info(ReqData)) of
+    case orddict:find(Key, wrq:path_info(ReqData)) of
         {ok, Id} -> list_to_binary(mochiweb_util:unquote(Id));
         error    -> none
     end.
