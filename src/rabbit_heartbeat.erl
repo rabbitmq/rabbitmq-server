@@ -21,9 +21,6 @@
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
-%% internal
--export([heartbeater/3]).
-
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -98,7 +95,7 @@ resume_monitor({_Sender,     none}) -> ok;
 resume_monitor({_Sender, Receiver}) -> Receiver ! resume, ok.
 
 system_continue(_Parent, Deb, {Params, State}) ->
-    ?MODULE:heartbeater(Params, Deb, State).
+    heartbeater(Params, Deb, State).
 
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).

@@ -124,7 +124,7 @@ initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
           #wstate.stats_timer).
 
 system_continue(Parent, Deb, State) ->
-    ?MODULE:mainloop(Deb, State#wstate{reader = Parent}).
+    mainloop(Deb, State#wstate{reader = Parent}).
 
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
