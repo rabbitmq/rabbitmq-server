@@ -106,22 +106,22 @@ handle_call(_Request, State) ->
 handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
     IsDuplicate = lists:member(Alarm, Alarms),
     case IsDuplicate of
-	true  ->
-	    {ok, State};
-	false ->
-	    UpdatedAlarms = lists:usort([Alarm|Alarms]),
-	    handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms})
+        true  ->
+            {ok, State};
+        false ->
+            UpdatedAlarms = lists:usort([Alarm|Alarms]),
+            handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms})
     end;
 
 handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
     ExistingAlarm = lists:keymember(Alarm, 1, Alarms),
     case ExistingAlarm of
-	true ->
-	    handle_clear_alarm(Alarm,
-			       State#alarms{alarms = lists:keydelete(Alarm, 1,
-								     Alarms)});
-	false ->
-	    {ok, State}
+        true ->
+            handle_clear_alarm(Alarm,
+                               State#alarms{alarms = lists:keydelete(Alarm, 1,
+                                                                     Alarms)});
+        false ->
+            {ok, State}
 
     end;
 
@@ -158,9 +158,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 dict_append(Key, Val, Dict) ->
     L = case dict:find(Key, Dict) of
-	    {ok, V} -> V;
-	    error   -> []
-	end,
+            {ok, V} -> V;
+            error   -> []
+        end,
     dict:store(Key, lists:usort([Val|L]), Dict).
 
 dict_unappend_all(Key, _Val, Dict) ->
@@ -168,9 +168,9 @@ dict_unappend_all(Key, _Val, Dict) ->
 
 dict_unappend(Key, Val, Dict) ->
     L = case dict:find(Key, Dict) of
-	    {ok, V} -> V;
-	    error   -> []
-	end,
+            {ok, V} -> V;
+            error   -> []
+        end,
 
     case lists:delete(Val, L) of
         [] -> dict:erase(Key, Dict);
@@ -192,10 +192,10 @@ maybe_alert(UpdateFun, Node, Source, Event,
            ok
     end,
     case Event of
-	clear ->
-	    ok = alert_local(false, Alertees, Source);
-	set   ->
-	    ok = alert_local(true, Alertees, Source)
+        clear ->
+            ok = alert_local(false, Alertees, Source);
+        set   ->
+            ok = alert_local(true, Alertees, Source)
     end,
     State#alarms{alarmed_nodes = AN1}.
 
