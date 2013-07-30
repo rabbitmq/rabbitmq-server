@@ -602,7 +602,7 @@ process_up(Pid) ->
                             run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
-                             Res = os:cmd("tasklist /nh /fi \"pid eq " ++
+                             Res = os:cmd(" tasklist /nh /fi \"pid eq " ++
                                           Pid ++ "\" 2>&1"),
                              case re:run(Res, "erl\\.exe", [{capture, none}]) of
                                  match -> true;
