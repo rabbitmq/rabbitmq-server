@@ -289,6 +289,8 @@ handshake_recv(Expecting) ->
             case {Expecting, element(1, Method)} of
                 {E, M} when E =:= M ->
                     Method;
+                {'connection.tune', 'connection.secure'} ->
+                    Method;
                 {'connection.open_ok', _} ->
                     {closing,
                      #amqp_error{name        = command_invalid,
