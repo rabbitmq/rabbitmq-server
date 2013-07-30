@@ -127,7 +127,7 @@ handle_event({node_up, Node}, State) ->
     {ok, State};
 
 handle_event({node_down, Node}, State) ->
-    {ok, maybe_alert(fun dict_unappend_all/3, Node, [], clear, State)};
+    {ok, maybe_alert(fun dict_unappend_all/3, Node, [], false, State)};
 
 handle_event({register, Pid, AlertMFA}, State) ->
     {ok, internal_register(Pid, AlertMFA, State)};
@@ -171,24 +171,15 @@ dict_unappend(Key, Val, Dict) ->
         X  -> dict:store(Key, X, Dict)
     end.
 
-maybe_alert(UpdateFun, Node, Source, Event,
+maybe_alert(UpdateFun, Node, Source, Alert,
             State = #alarms{alarmed_nodes = AN,
                             alertees      = Alertees}) ->
     AN1 = UpdateFun(Node, Source, AN),
-
-    %% If we have changed our alarm state, inform the remotes.
-    IsLocal = Node =:= node(),
-    if IsLocal andalso Event =:= set   ->
-           ok = alert_remote(true,  Alertees, Source);
-       IsLocal andalso Event =:= clear ->
-           ok = alert_remote(false, Alertees, Source);
-       true                            ->
-           ok
+    case node() of
+        Node -> ok = alert_remote(Alert,  Alertees, Source);
+        _    -> ok
     end,
-    case Event of
-        clear -> ok = alert_local(false, Alertees, Source);
-        set   -> ok = alert_local(true, Alertees, Source)
-    end,
+    ok = alert_local(Alert, Alertees, Source),
     State#alarms{alarmed_nodes = AN1}.
 
 alert_local(Alert, Alertees, Source) ->
@@ -223,7 +214,7 @@ handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
       "*** Publishers will be blocked until this alarm clears ***~n"
       "**********************************************************~n",
       [Source, Node]),
-    {ok, maybe_alert(fun dict_append/3, Node, Source, set, State)};
+    {ok, maybe_alert(fun dict_append/3, Node, Source, true, State)};
 handle_set_alarm({file_descriptor_limit, []}, State) ->
     rabbit_log:warning(
       "file descriptor limit alarm set.~n~n"
@@ -238,7 +229,7 @@ handle_set_alarm(Alarm, State) ->
 handle_clear_alarm({resource_limit, Source, Node}, State) ->
     rabbit_log:warning("~s resource limit alarm cleared on node ~p~n",
                        [Source, Node]),
-    {ok, maybe_alert(fun dict_unappend/3, Node, Source, clear, State)};
+    {ok, maybe_alert(fun dict_unappend/3, Node, Source, false, State)};
 handle_clear_alarm(file_descriptor_limit, State) ->
     rabbit_log:warning("file descriptor limit alarm cleared~n"),
     {ok, State};
