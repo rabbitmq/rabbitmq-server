@@ -116,7 +116,7 @@ behaviour_info(callbacks) ->
      %%      State = state()
      %%
      %% This callback is invoked by the channel every time a basic.cancel
-     %% is received from the server.
+     %% is sent to or received from the server.
      {handle_cancel, 2},
 
      %% handle_cancel_ok(CancelOk, Cancel, State) -> ok_error()

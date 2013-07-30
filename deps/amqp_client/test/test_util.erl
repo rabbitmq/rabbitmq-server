@@ -798,21 +798,25 @@ default_consumer_test() ->
     teardown(Connection, Channel).
 
 subscribe_nowait_test() ->
-    {ok, Connection} = new_connection(),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    {ok, Q} = setup_publish(Channel),
-    ok = amqp_channel:call(Channel,
-                           #'basic.consume'{queue = Q,
-                                            consumer_tag = uuid(),
-                                            nowait = true}),
-    receive #'basic.consume_ok'{} -> exit(unexpected_consume_ok)
-    after 0 -> ok
-    end,
+    {ok, Conn} = new_connection(),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {ok, Q} = setup_publish(Ch),
+    CTag = uuid(),
+    ok = amqp_channel:call(Ch, #'basic.consume'{queue        = Q,
+                                                consumer_tag = CTag,
+                                                nowait       = true}),
+    ok = amqp_channel:call(Ch, #'basic.cancel' {consumer_tag = CTag,
+                                                nowait       = true}),
+    ok = amqp_channel:call(Ch, #'basic.consume'{queue        = Q,
+                                                consumer_tag = CTag,
+                                                nowait       = true}),
     receive
+        #'basic.consume_ok'{} ->
+            exit(unexpected_consume_ok);
         {#'basic.deliver'{delivery_tag = DTag}, _Content} ->
-            amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DTag})
+            amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag})
     end,
-    teardown(Connection, Channel).
+    teardown(Conn, Ch).
 
 basic_nack_test() ->
     {ok, Connection} = new_connection(),
