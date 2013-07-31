@@ -98,7 +98,7 @@ init(Q = #amqqueue { name = QName }) ->
     Node = node(),
     case rabbit_misc:execute_mnesia_transaction(
            fun() -> init_it(Self, GM, Node, QName) end) of
-        {new, QPid} ->
+        {new, QPid, GMPids} ->
             erlang:monitor(process, QPid),
             ok = file_handle_cache:register_callback(
                    rabbit_amqqueue, set_maximum_since_use, [Self]),
@@ -118,11 +118,12 @@ init(Q = #amqqueue { name = QName }) ->
                              msg_id_ack          = dict:new(),
 
                              msg_id_status       = dict:new(),
-                             known_senders       = pmon:new(),
+                             known_senders       = pmon:new(delegate),
 
                              depth_delta         = undefined
                    },
             ok = gm:broadcast(GM, request_depth),
+            ok = gm:validate_members(GM, [GM | [G || {G, _} <- GMPids]]),
             {ok, State, hibernate,
              {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
               ?DESIRED_HIBERNATE}};
@@ -140,7 +141,7 @@ init_it(Self, GM, Node, QName) ->
         mnesia:read({rabbit_queue, QName}),
     case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
         []     -> add_slave(Q, Self, GM),
-                  {new, QPid};
+                  {new, QPid, GMPids};
         [QPid] -> case rabbit_misc:is_process_alive(QPid) of
                       true  -> duplicate_live_master;
                       false -> {stale, QPid}
@@ -152,7 +153,7 @@ init_it(Self, GM, Node, QName) ->
                                       gm_pids    = [T || T = {_, S} <- GMPids,
                                                          S =/= SPid] },
                                add_slave(Q1, Self, GM),
-                               {new, QPid}
+                               {new, QPid, GMPids}
                   end
     end.
 
@@ -269,7 +270,8 @@ handle_info({'DOWN', _MonitorRef, process, MPid, _Reason},
     noreply(State);
 
 handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
-    noreply(local_sender_death(ChPid, State));
+    local_sender_death(ChPid, State),
+    noreply(State);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -600,7 +602,7 @@ stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #state.rate_timer_ref).
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
     State #state { known_senders = pmon:monitor(ChPid, KS) }.
 
-local_sender_death(ChPid, State = #state { known_senders = KS }) ->
+local_sender_death(ChPid, #state { known_senders = KS }) ->
     %% The channel will be monitored iff we have received a delivery
     %% from it but not heard about its death from the master. So if it
     %% is monitored we need to point the death out to the master (see
@@ -608,8 +610,7 @@ local_sender_death(ChPid, State = #state { known_senders = KS }) ->
     ok = case pmon:is_monitored(ChPid, KS) of
              false -> ok;
              true  -> confirm_sender_death(ChPid)
-         end,
-    State.
+         end.
 
 confirm_sender_death(Pid) ->
     %% We have to deal with the possibility that we'll be promoted to
