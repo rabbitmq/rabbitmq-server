@@ -986,6 +986,13 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
                                     ConsumerCount, State);
         {error, not_found} ->
+            case rabbit_misc:r_arg(VHostPath, exchange, Args,
+                                   <<"x-dead-letter-exchange">>) of
+               undefined -> ok;
+               DLX       -> check_read_permitted(QueueName, State),
+                            check_write_permitted(DLX, State),
+                            ok
+            end,
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                          Args, Owner) of
                 {new, #amqqueue{pid = QPid}} ->
