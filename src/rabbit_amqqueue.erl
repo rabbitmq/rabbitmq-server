@@ -412,7 +412,6 @@ check_declare_arguments(QueueName, Args) ->
 args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
-     {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_max_length_arg/2}].
 

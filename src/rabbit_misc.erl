@@ -370,7 +370,9 @@ r_arg(#resource{virtual_host = VHostPath}, Kind, Table, Key) ->
 r_arg(VHostPath, Kind, Table, Key) ->
     case table_lookup(Table, Key) of
         {longstr, NameBin} -> r(VHostPath, Kind, NameBin);
-        undefined          -> undefined
+        undefined          -> undefined;
+        Other              -> protocol_error(precondition_failed,
+                                             "invalid arg: ~p", [Other])
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
