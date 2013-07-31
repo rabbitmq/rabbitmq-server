@@ -106,13 +106,11 @@ index(Req, Path, LocalPath, Redirect) ->
     end.
 
 setup_wm_logging() ->
+    rabbit_webmachine:setup(),
     {ok, LogDir} = application:get_env(rabbitmq_management, http_log_dir),
     case LogDir of
-        none ->
-            rabbit_webmachine:setup(none);
-        _ ->
-            rabbit_webmachine:setup(webmachine_logger),
-            webmachine_sup:start_logger(LogDir)
+        none -> ok;
+        _    -> webmachine_log:add_handler(webmachine_log_handler, [LogDir])
     end.
 
 log_startup(Listener) ->

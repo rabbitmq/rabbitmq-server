@@ -54,13 +54,18 @@
     list of subfields separated by dots. See the example below.</p>
 
     <p>URIs which return some forms of numerical data (such as message
-    rates and queue lengths) can return historical samples. Set
-    the <code>sample_age</code> and <code>sample_incr</code>
-    parameters to do this. Both of these parameters should be
-    integers, specifying seconds. The end of the range returned will
-    always correspond to the present. For example,
-    appending <code>?sample_age=3600&sample_incr=60</code> will return
-    the last hour's data, with a sample for every minute.</p>
+    rates and queue lengths) can return historical samples. To return
+    samples you need to set an age and an increment for the samples
+    you want. The end of the range returned will always correspond to
+    the present. Use <code>msg_rates_age</code>
+    and <code>msg_rates_incr</code> to return samples for messages
+    sent and received, <code>data_rates_age</code>
+    and <code>data_rates_incr</code> to return samples for bytes sent
+    and received, and <code>lengths_age</code>
+    and <code>lengths_incr</code> to return samples for queue
+    lengths. For example,
+    appending <code>?lengths_age=3600&lengths_incr=60</code> will return
+    the last hour's data on queue lengths, with a sample for every minute.</p>
 
     <h2>Examples</h2>
 
