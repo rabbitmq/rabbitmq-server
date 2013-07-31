@@ -90,10 +90,7 @@
                            -> {ack(), state()}.
 
 %% Called to inform the BQ about messages which have reached the
-%% queue, but are not going to be further passed to BQ for some
-%% reason. Note that this may be invoked for messages for which
-%% BQ:is_duplicate/2 has already returned {'published' | 'discarded',
-%% BQS}.
+%% queue, but are not going to be further passed to BQ.
 -callback discard(rabbit_types:msg_id(), pid(), state()) -> state().
 
 %% Return ids of messages which have been confirmed since the last
@@ -216,11 +213,10 @@
 -callback invoke(atom(), fun ((atom(), A) -> A), state()) -> state().
 
 %% Called prior to a publish or publish_delivered call. Allows the BQ
-%% to signal that it's already seen this message (and in what capacity
-%% - i.e. was it published previously or discarded previously) and
-%% thus the message should be dropped.
+%% to signal that it's already seen this message, (e.g. it was published
+%% or discarded previously) and thus the message should be dropped.
 -callback is_duplicate(rabbit_types:basic_message(), state())
-                      -> {'false'|'published'|'discarded', state()}.
+                      -> {boolean(), state()}.
 
 -else.
 

@@ -14,8 +14,7 @@
 %% we also depend on crypto, public_key and ssl but they shouldn't be
 %% in here as we don't actually want to start it
   {mod, {rabbit, []}},
-  {env, [{hipe_compile, false},
-         {tcp_listeners, [5672]},
+  {env, [{tcp_listeners, [5672]},
          {ssl_listeners, []},
          {ssl_options, []},
          {vm_memory_high_watermark, 0.4},
@@ -51,5 +50,24 @@
                                {backlog,       128},
                                {nodelay,       true},
                                {linger,        {true, 0}},
-                               {exit_on_close, false}]}
-         ]}]}.
+                               {exit_on_close, false}]},
+         {hipe_compile, false},
+         %% see bug 24513 for how this list was created
+         {hipe_modules,
+          [rabbit_reader, rabbit_channel, gen_server2, rabbit_exchange,
+           rabbit_command_assembler, rabbit_framing_amqp_0_9_1, rabbit_basic,
+           rabbit_event, lists, queue, priority_queue, rabbit_router,
+           rabbit_trace, rabbit_misc, rabbit_binary_parser,
+           rabbit_exchange_type_direct, rabbit_guid, rabbit_net,
+           rabbit_amqqueue_process, rabbit_variable_queue,
+           rabbit_binary_generator, rabbit_writer, delegate, gb_sets, lqueue,
+           sets, orddict, rabbit_amqqueue, rabbit_limiter, gb_trees,
+           rabbit_queue_index, rabbit_exchange_decorator, gen, dict, ordsets,
+           file_handle_cache, rabbit_msg_store, array,
+           rabbit_msg_store_ets_index, rabbit_msg_file,
+           rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
+           mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow,
+           pmon, ssl_connection, tls_connection, ssl_record, tls_record,
+           gen_fsm, ssl]},
+         {ssl_apps, [asn1, crypto, public_key, ssl]}
+        ]}]}.

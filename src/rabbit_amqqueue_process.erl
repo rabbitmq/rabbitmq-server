@@ -146,7 +146,7 @@ init_state(Q) ->
                exclusive_consumer  = none,
                has_had_consumers   = false,
                active_consumers    = queue:new(),
-               senders             = pmon:new(),
+               senders             = pmon:new(delegate),
                msg_id_to_channel   = gb_trees:empty(),
                status              = running},
     rabbit_event:init_stats_timer(State, #q.stats_timer).
@@ -549,10 +549,8 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                       {{Message, Delivered, undefined},
                        true, discard(Delivery, State1)}
               end, false, State#q{backing_queue_state = BQS1});
-        {published, BQS1} ->
-            {true,  State#q{backing_queue_state = BQS1}};
-        {discarded, BQS1} ->
-            {true, discard(Delivery, State#q{backing_queue_state = BQS1})}
+        {true, BQS1} ->
+            {true, State#q{backing_queue_state = BQS1}}
     end.
 
 deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},

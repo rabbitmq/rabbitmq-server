@@ -192,22 +192,6 @@
 
 -define(APPS, [os_mon, mnesia, rabbit]).
 
-%% see bug 24513 for how this list was created
--define(HIPE_WORTHY,
-        [rabbit_reader, rabbit_channel, gen_server2,
-         rabbit_exchange, rabbit_command_assembler, rabbit_framing_amqp_0_9_1,
-         rabbit_basic, rabbit_event, lists, queue, priority_queue,
-         rabbit_router, rabbit_trace, rabbit_misc, rabbit_binary_parser,
-         rabbit_exchange_type_direct, rabbit_guid, rabbit_net,
-         rabbit_amqqueue_process, rabbit_variable_queue,
-         rabbit_binary_generator, rabbit_writer, delegate, gb_sets, lqueue,
-         sets, orddict, rabbit_amqqueue, rabbit_limiter, gb_trees,
-         rabbit_queue_index, gen, dict, ordsets, file_handle_cache,
-         rabbit_msg_store, array, rabbit_msg_store_ets_index, rabbit_msg_file,
-         rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
-         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow, pmon,
-         ssl_connection, ssl_record, gen_fsm, ssl]).
-
 %% HiPE compilation uses multiple cores anyway, but some bits are
 %% IO-bound so we can go faster if we parallelise a bit more. In
 %% practice 2 processes seems just as fast as any other number > 1,
@@ -281,7 +265,9 @@ warn_if_hipe_compilation_failed(false) ->
 %% long time, so make an exception to our no-stdout policy and display
 %% progress via stdout.
 hipe_compile() ->
-    Count = length(?HIPE_WORTHY),
+    {ok, HipeModulesAll} = application:get_env(rabbit, hipe_modules),
+    HipeModules = [HM || HM <- HipeModulesAll, code:which(HM) =/= non_existing],
+    Count = length(HipeModules),
     io:format("~nHiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
     T1 = erlang:now(),
@@ -290,7 +276,7 @@ hipe_compile() ->
                                              io:format("#")
                                          end || M <- Ms]
                               end) ||
-                   Ms <- split(?HIPE_WORTHY, ?HIPE_PROCESSES)],
+                   Ms <- split(HipeModules, ?HIPE_PROCESSES)],
     [receive
          {'DOWN', MRef, process, _, normal} -> ok;
          {'DOWN', MRef, process, _, Reason} -> exit(Reason)

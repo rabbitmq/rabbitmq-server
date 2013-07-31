@@ -54,7 +54,9 @@ start() ->
               end,
 
     %% we need a list of ERTS apps we need to ship with rabbit
-    BaseApps = AllApps -- PluginAppNames,
+    {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
+
+    BaseApps = SslAppsConfig ++ AllApps -- PluginAppNames,
 
     AppVersions = [determine_version(App) || App <- BaseApps],
     RabbitVersion = proplists:get_value(rabbit, AppVersions),

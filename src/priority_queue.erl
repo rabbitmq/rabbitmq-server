@@ -51,7 +51,7 @@
 
 -type(q() :: pqueue()).
 -type(priority() :: integer() | 'infinity').
--type(squeue() :: {queue, [any()], [any()]}).
+-type(squeue() :: {queue, [any()], [any()], non_neg_integer()}).
 -type(pqueue() ::  squeue() | {pqueue, [{priority(), squeue()}]}).
 
 -spec(new/0 :: () -> pqueue()).

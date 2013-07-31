@@ -405,6 +405,13 @@
               must be offline, while the node we are removing from must be
               online, except when using the <command>--offline</command> flag.
             </para>
+            <para>
+              When using the <command>--offline</command> flag the node you
+              connect to will become the canonical source for cluster metadata
+              (e.g. which queues exist), even if it was not before. Therefore
+              you should use this command on the latest node to shut down if
+              at all possible.
+            </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl -n hare@mcnulty forget_cluster_node rabbit@stringer</screen>
             <para role="example">

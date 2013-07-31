@@ -24,7 +24,7 @@
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
--export([partitions/0, subscribe/1]).
+-export([partitions/0, partitions/1, subscribe/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -57,7 +57,8 @@
 -spec(notify_joined_cluster/0 :: () -> 'ok').
 -spec(notify_left_cluster/1 :: (node()) -> 'ok').
 
--spec(partitions/0 :: () -> {node(), [node()]}).
+-spec(partitions/0 :: () -> [node()]).
+-spec(partitions/1 :: ([node()]) -> [{node(), [node()]}]).
 -spec(subscribe/1 :: (pid()) -> 'ok').
 
 -spec(all_rabbit_nodes_up/0 :: () -> boolean()).
@@ -187,6 +188,10 @@ notify_left_cluster(Node) ->
 partitions() ->
     gen_server:call(?SERVER, partitions, infinity).
 
+partitions(Nodes) ->
+    {Replies, _} = gen_server:multi_call(Nodes, ?SERVER, partitions, infinity),
+    Replies.
+
 subscribe(Pid) ->
     gen_server:cast(?SERVER, {subscribe, Pid}).
 
@@ -208,7 +213,7 @@ init([]) ->
                 autoheal    = rabbit_autoheal:init()}}.
 
 handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
-    {reply, {node(), Partitions}, State};
+    {reply, Partitions, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
