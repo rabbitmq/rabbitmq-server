@@ -245,8 +245,8 @@ public class MqttTest extends TestCase implements MqttCallback {
         publish(client2, topic, 1, payload);
         client2.disconnect();
 
-        client.connect(conOpt);
         client.setCallback(this);
+        client.connect(conOpt);
 
         Thread.sleep(testDelay);
         Assert.assertEquals(1, receivedMessages.size());
