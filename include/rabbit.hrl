@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -record(user, {username,
@@ -86,7 +86,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2013 VMware, Inc.").
+-define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2013 GoPivotal, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
 -define(ERTS_MINIMUM, "5.6.3").
 

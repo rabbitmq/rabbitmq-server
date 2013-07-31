@@ -82,7 +82,7 @@
 %% can be invoked on the state, get back the result. The state is not
 %% modified.
 
-%% All modifications are (C) 2009-2013 VMware, Inc.
+%% All modifications are (C) 2009-2013 GoPivotal, Inc.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
