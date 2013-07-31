@@ -168,8 +168,7 @@ get_disk_free(Dir, {unix, Sun})
 get_disk_free(Dir, {unix, _}) ->
     parse_free_unix(rabbit_misc:os_cmd("/bin/df -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
-    Cmd = "dir /-C /W \"" ++ Dir ++ [$"],
-    parse_free_win32(os:cmd(rabbit_misc:win32_cmd(Cmd)));
+    parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ Dir ++ [$"]));
 get_disk_free(_, Platform) ->
     {unknown, Platform}.
 
