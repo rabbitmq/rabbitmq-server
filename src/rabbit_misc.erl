@@ -60,6 +60,7 @@
 -export([append_rpc_all_nodes/4]).
 -export([multi_call/2]).
 -export([os_cmd/1]).
+-export([win32_cmd/1]).
 -export([gb_sets_difference/2]).
 -export([version/0, which_applications/0]).
 -export([sequence_error/1]).
@@ -230,6 +231,7 @@
 -spec(multi_call/2 ::
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(os_cmd/1 :: (string()) -> string()).
+-spec(win32_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 -spec(version/0 :: () -> string()).
 -spec(which_applications/0 :: () -> [{atom(), string(), string()}]).
@@ -978,6 +980,9 @@ os_cmd(Command) ->
         false -> throw({command_not_found, Exec});
         _     -> os:cmd(Command)
     end.
+
+%% Clink workaround: http://code.google.com/p/clink/issues/detail?id=141
+win32_cmd(Command) -> " " ++ Command.
 
 gb_sets_difference(S1, S2) ->
     gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).
