@@ -140,6 +140,7 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
     end.
 
 get_part(Name, Parts) ->
+    %% TODO any reason not to use lists:keyfind instead?
     Filtered = [Value || {N, _Meta, Value} <- Parts, N == Name],
     case Filtered of
         []  -> unknown;
@@ -150,10 +151,10 @@ export_queue(Queue) ->
     pget(owner_pid, Queue) == none.
 
 export_binding(Binding, Qs) ->
-    Src      = pget(source, Binding),
-    Dest     = pget(destination, Binding),
+    Src      = pget(source,           Binding),
+    Dest     = pget(destination,      Binding),
     DestType = pget(destination_type, Binding),
-    VHost    = pget(vhost, Binding),
+    VHost    = pget(vhost,            Binding),
     Src =/= <<"">>
         andalso
           ( (DestType =:= queue andalso lists:member({Dest, VHost}, Qs))
@@ -193,22 +194,19 @@ filter_item(Item, Allowed) ->
 
 for_all(Name, All, Fun) ->
     case pget(Name, All) of
-        undefined ->
-            ok;
-        List ->
-            [Fun([{atomise_name(K), V} || {K, V} <- I]) ||
-                {struct, I} <- List]
+        undefined -> ok;
+        List      -> [Fun([{atomise_name(K), V} || {K, V} <- I]) ||
+                         {struct, I} <- List]
     end.
 
-atomise_name(N) ->
-    list_to_atom(binary_to_list(N)).
+atomise_name(N) -> list_to_atom(binary_to_list(N)).
 
 %%--------------------------------------------------------------------
 
 add_parameter(Param) ->
-    VHost = pget(vhost, Param),
-    Comp = pget(component, Param),
-    Key = pget(name, Param),
+    VHost = pget(vhost,     Param),
+    Comp  = pget(component, Param),
+    Key   = pget(name,      Param),
     case rabbit_runtime_parameters:set(
            VHost, Comp, Key, rabbit_misc:json_to_term(pget(value, Param))) of
         ok                -> ok;
@@ -219,7 +217,7 @@ add_parameter(Param) ->
 
 add_policy(Param) ->
     VHost = pget(vhost, Param),
-    Key = pget(name, Param),
+    Key   = pget(name,  Param),
     case rabbit_policy:set(
            VHost, Key, pget(pattern, Param),
            rabbit_misc:json_to_term(pget(definition, Param)),
@@ -234,7 +232,8 @@ add_user(User) ->
 
 add_vhost(VHost) ->
     VHostName = pget(name, VHost),
-    rabbit_mgmt_wm_vhost:put_vhost(VHostName).
+    VHostTrace = pget(tracing, VHost),
+    rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostTrace).
 
 add_permission(Permission) ->
     rabbit_auth_backend_internal:set_permissions(pget(user,      Permission),
@@ -270,8 +269,7 @@ add_binding(Binding) ->
                key          = pget(routing_key,                     Binding),
                args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
 
-r(Type, Props) ->
-    r(Type, name, Props).
+r(Type, Props) -> r(Type, name, Props).
 
 r(Type, Name, Props) ->
     rabbit_misc:r(pget(vhost, Props), Type, pget(Name, Props)).

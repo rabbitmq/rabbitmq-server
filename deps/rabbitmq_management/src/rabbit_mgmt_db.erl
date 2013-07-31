@@ -420,14 +420,10 @@ lookup_element(Table, Key, Pos) ->
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
-floor(TS, State) -> floor0(rabbit_mgmt_format:timestamp_ms(TS), State).
-ceil (TS, State) -> ceil0 (rabbit_mgmt_format:timestamp_ms(TS), State).
-
-floor0(MS, #state{interval = Interval})        -> (MS div Interval) * Interval.
-ceil0(MS, State = #state{interval = Interval}) -> case floor0(MS, State) of
-                                                      MS    -> MS;
-                                                      Floor -> Floor + Interval
-                                                  end.
+floor(TS, #state{interval = Interval}) ->
+    rabbit_mgmt_util:floor(rabbit_mgmt_format:timestamp_ms(TS), Interval).
+ceil(TS, #state{interval = Interval}) ->
+    rabbit_mgmt_util:ceil (rabbit_mgmt_format:timestamp_ms(TS), Interval).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
@@ -529,14 +525,6 @@ handle_event(#event{type = consumer_created, props = Props}, State) ->
 handle_event(#event{type = consumer_deleted, props = Props}, State) ->
     handle_consumer(fun(Table, Id, _P) -> ets:delete(Table, Id) end,
                     Props, State);
-
-handle_event(#event{type = queue_mirror_deaths, props = Props},
-             #state{tables = Tables}) ->
-    Dead = pget(pids, Props),
-    Table = orddict:fetch(queue_stats, Tables),
-    %% Only the master can be in the DB, but it's easier just to
-    %% delete all of them
-    [ets:delete(Table, {Pid, stats}) || Pid <- Dead];
 
 %% TODO: we don't clear up after dead nodes here - this is a very tiny
 %% leak every time a node is permanently removed from the cluster. Do

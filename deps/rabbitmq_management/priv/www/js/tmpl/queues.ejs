@@ -70,9 +70,9 @@
    <td class="c"><%= fmt_parameters_short(queue) %></td>
    <td class="c"><%= fmt_string(queue.policy, '') %></td>
    <td class="c"><%= fmt_idle(queue) %></td>
-   <td class="r"><%= fmt_string(queue.messages_ready) %></td>
-   <td class="r"><%= fmt_string(queue.messages_unacknowledged) %></td>
-   <td class="r"><%= fmt_string(queue.messages) %></td>
+   <td class="r"><%= fmt_num_thousands(queue.messages_ready) %></td>
+   <td class="r"><%= fmt_num_thousands(queue.messages_unacknowledged) %></td>
+   <td class="r"><%= fmt_num_thousands(queue.messages) %></td>
 <% if (statistics_level == 'fine') { %>
     <td class="r"><%= fmt_rate(queue.message_stats, 'publish') %></td>
     <td class="r"><%= fmt_deliver_rate(queue.message_stats, col_redeliver) %></td>
@@ -167,7 +167,7 @@
         </tr>
         <tr>
           <th><label>Arguments:</label></th>
-          <td><span class="multifield" id="arguments"></span></td>
+          <td><div class="multifield" id="arguments"></div></td>
         </tr>
       </table>
       <input type="submit" value="Add queue"/>
