@@ -45,8 +45,8 @@
 
 -export([register_default_consumer/2]).
 -export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,
-         handle_cancel/2, handle_deliver/3, handle_info/2, handle_call/3,
-         terminate/2]).
+         handle_cancel/2, handle_server_cancel/2, handle_deliver/3,
+         handle_info/2, handle_call/3, terminate/2]).
 
 -record(state, {consumers             = dict:new(), %% Tag -> ConsumerPid
                 unassigned            = undefined,  %% Pid
@@ -125,15 +125,12 @@ handle_consume_ok(BasicConsumeOk, _BasicConsume,
     {ok, State1}.
 
 %% @private
-%% The server sent a basic.cancel.
+%% We sent a basic.cancel.
 handle_cancel(Cancel = #'basic.cancel'{nowait = NoWait}, State) ->
-    %% NB: NoWait is always true on server-sent basic.cancel.
     State1 = case NoWait of
                  true  -> do_cancel(Cancel, State);
                  false -> State
              end,
-    %% Use old state
-    deliver(Cancel, State),
     {ok, State1}.
 
 %% @private
@@ -142,6 +139,14 @@ handle_cancel_ok(CancelOk, _Cancel, State) ->
     State1 = do_cancel(CancelOk, State),
     %% Use old state
     deliver(CancelOk, State),
+    {ok, State1}.
+
+%% @private
+%% The server sent a basic.cancel.
+handle_server_cancel(Cancel = #'basic.cancel'{nowait = true}, State) ->
+    State1 = do_cancel(Cancel, State),
+    %% Use old state
+    deliver(Cancel, State),
     {ok, State1}.
 
 %% @private
