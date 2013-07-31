@@ -349,7 +349,6 @@ ack_action(Command, Frame,
 %%----------------------------------------------------------------------------
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
-
 server_cancel_consumer(ConsumerTag, State = #state{subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
