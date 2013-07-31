@@ -143,8 +143,7 @@ get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(name,            _State) -> node();
-i(partitions,      _State) -> {_Node, Parts} = rabbit_node_monitor:partitions(),
-                              Parts;
+i(partitions,      _State) -> rabbit_node_monitor:partitions();
 i(fd_used,         _State) -> get_used_fd();
 i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
 i(sockets_used,    _State) ->
