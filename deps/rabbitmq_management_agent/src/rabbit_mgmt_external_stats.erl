@@ -108,8 +108,8 @@ get_used_fd({unix, _}) ->
 %% shown as file handles to \Device\Afd.
 
 get_used_fd({win32, _}) ->
-    Cmd = "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul",
-    Handle = os:cmd(rabbit_misc:win32_cmd(Cmd)),
+    Handle = rabbit_misc:os_cmd(
+               "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
     case Handle of
         [] -> install_handle_from_sysinternals;
         _  -> find_files_line(string:tokens(Handle, "\r\n"))
