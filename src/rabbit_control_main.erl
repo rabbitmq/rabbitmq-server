@@ -602,8 +602,8 @@ process_up(Pid) ->
                             run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
-                             Res = os:cmd("tasklist /nh /fi \"pid eq " ++
-                                          Pid ++ "\" 2>&1"),
+                             Cmd = "tasklist /nh /fi \"pid eq " ++ Pid ++ "\" ",
+                             Res = rabbit_misc:os_cmd(Cmd ++ "2>&1"),
                              case re:run(Res, "erl\\.exe", [{capture, none}]) of
                                  match -> true;
                                  _     -> false

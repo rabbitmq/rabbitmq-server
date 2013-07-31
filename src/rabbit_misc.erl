@@ -973,10 +973,18 @@ receive_multi_call([{Mref, Pid} | MonitorPids], Good, Bad) ->
     end.
 
 os_cmd(Command) ->
-    Exec = hd(string:tokens(Command, " ")),
-    case os:find_executable(Exec) of
-        false -> throw({command_not_found, Exec});
-        _     -> os:cmd(Command)
+    case os:type() of
+        {win32, _} ->
+            %% Clink workaround; see
+            %% http://code.google.com/p/clink/issues/detail?id=141
+            os:cmd(" " + Command);
+        _ ->
+            %% Don't just return "/bin/sh: <cmd>: not found" if not found
+            Exec = hd(string:tokens(Command, " ")),
+            case os:find_executable(Exec) of
+                false -> throw({command_not_found, Exec});
+                _     -> os:cmd(Command)
+            end
     end.
 
 gb_sets_difference(S1, S2) ->
