@@ -193,8 +193,8 @@ process_connect(Implicit, Frame,
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
                       {Username, Passwd} = creds(Frame1, SSLLoginName, Config),
-                      {ok, DefaultVHost} =
-                          application:get_env(rabbit, default_vhost),
+                      {ok, DefaultVHost} = application:get_env(
+                                             rabbitmq_stomp, default_vhost),
                       {ProtoName, _} = AdapterInfo#amqp_adapter_info.protocol,
                       Res = do_login(
                               Username, Passwd,
