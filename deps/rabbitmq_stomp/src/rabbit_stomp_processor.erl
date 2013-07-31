@@ -138,7 +138,8 @@ handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
-    {noreply, server_cancel_consumer(Ctag, State), hibernate};
+    process_request(
+      fun(StateN) -> server_cancel_consumer(Ctag, StateN) end, State);
 handle_info({'EXIT', Conn,
              {shutdown, {server_initiated_close, Code, Explanation}}},
             State = #state{connection = Conn}) ->
@@ -153,6 +154,9 @@ handle_info({bump_credit, Msg}, State) ->
     {noreply, State, hibernate};
 handle_info({inet_reply, _, Status}, State) ->
     {stop, Status, State}.
+
+process_request(ProcessFun, State) ->
+    process_request(ProcessFun, fun (StateM) -> StateM end, State).
 
 process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
@@ -214,7 +218,6 @@ process_connect(Implicit, Frame,
                             StateN)
               end
       end,
-      fun(StateM) -> StateM end,
       State).
 
 creds(Frame, SSLLoginName,
@@ -346,6 +349,7 @@ ack_action(Command, Frame,
 %%----------------------------------------------------------------------------
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
+
 server_cancel_consumer(ConsumerTag, State = #state{subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
