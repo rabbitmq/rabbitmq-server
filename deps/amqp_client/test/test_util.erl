@@ -991,6 +991,48 @@ rpc_client_consume_loop(Channel) ->
 
 %%---------------------------------------------------------------------------
 
+%% connection.blocked, connection.unblocked
+
+connection_blocked_network_test() ->
+    {ok, Connection} = new_connection(just_network),
+    X = <<"amq.direct">>,
+    K = Payload = <<"x">>,
+    clear_resource_alarm(memory),
+    timer:sleep(1000),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Parent = self(),
+    Child = spawn_link(
+              fun() ->
+                      receive
+                          #'connection.blocked'{} -> ok
+                      end,
+                      clear_resource_alarm(memory),
+                      receive
+                          #'connection.unblocked'{} -> ok
+                      end,
+                      Parent ! ok
+              end),
+    amqp_connection:register_blocked_handler(Connection, Child),
+    set_resource_alarm(memory),
+    Publish = #'basic.publish'{exchange = X,
+			       routing_key = K},
+    amqp_channel:call(Channel, Publish,
+		      #amqp_msg{payload = Payload}),
+    timer:sleep(1000),
+    receive
+        ok ->
+	    clear_resource_alarm(memory),
+	    clear_resource_alarm(disk),
+	    ok
+    after 10000 ->
+        ?LOG_DEBUG("Are you sure that you have waited 1 minute?~n"),
+	clear_resource_alarm(memory),
+	clear_resource_alarm(disk),
+        exit(did_not_receive_connection_blocked)
+    end.
+
+%%---------------------------------------------------------------------------
+
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
                        q = uuid(),
@@ -1114,3 +1156,14 @@ make_direct_params(Props) ->
                         password     = Pgv(password, <<"guest">>),
                         virtual_host = Pgv(virtual_host, <<"/">>),
                         node         = Pgv(node, node())}.
+
+set_resource_alarm(memory) ->
+    os:cmd("cd ../rabbitmq-test; make set-resource-alarm SOURCE=memory");
+set_resource_alarm(disk) ->
+    os:cmd("cd ../rabbitmq-test; make set-resource-alarm SOURCE=disk").
+
+
+clear_resource_alarm(memory) ->
+    os:cmd("cd ../rabbitmq-test; make clear-resource-alarm SOURCE=memory");
+clear_resource_alarm(disk) ->
+    os:cmd("cd ../rabbitmq-test; make clear-resource-alarm SOURCE=disk").
