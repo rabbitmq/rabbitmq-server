@@ -894,9 +894,14 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
                 check_name('exchange', ExchangeNameBin),
-                case rabbit_misc:r_arg(VHostPath, exchange, Args,
-                                       <<"alternate-exchange">>) of
+                AeKey = <<"alternate-exchange">>,
+                case rabbit_misc:r_arg(VHostPath, exchange, Args, AeKey) of
                     undefined -> ok;
+                    {error, {invalid_type, Type}} ->
+                        rabbit_misc:protocol_error(
+                          precondition_failed,
+                          "invalid type '~s' for arg '~s' in ~s",
+                          [Type, AeKey, rabbit_misc:rs(ExchangeName)]);
                     AName     -> check_read_permitted(ExchangeName, State),
                                  check_write_permitted(AName, State),
                                  ok
