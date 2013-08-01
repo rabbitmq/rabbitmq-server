@@ -310,7 +310,9 @@ policy_apply_to() ->
           ({runtime_parameters, Key, Value}) ->
               {runtime_parameters, Key, Value}
       end,
-      [key, value]).
+      [key, value]),
+    rabbit_policy:invalidate(),
+    ok.
 
 apply_to(Def) ->
     case [proplists:get_value(K, Def) ||

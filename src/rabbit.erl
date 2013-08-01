@@ -581,6 +581,7 @@ boot_delegate() ->
     rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
 recover() ->
+    rabbit_policy:recover(),
     Qs = rabbit_amqqueue:recover(),
     ok = rabbit_binding:recover(rabbit_exchange:recover(),
                                 [QName || #amqqueue{name = QName} <- Qs]),

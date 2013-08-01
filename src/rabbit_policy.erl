@@ -25,6 +25,7 @@
 -import(rabbit_misc, [pget/2]).
 
 -export([register/0]).
+-export([invalidate/0, recover/0]).
 -export([name/1, get/2, set/1]).
 -export([validate/4, notify/4, notify_clear/3]).
 -export([parse_set/5, set/6, delete/2, lookup/2, list/0, list/1,
@@ -51,6 +52,10 @@ set(X = #exchange{name = Name}) -> rabbit_exchange_decorator:set(
 
 set0(Name = #resource{virtual_host = VHost}) -> match(Name, list(VHost)).
 
+set(Q = #amqqueue{name = Name}, Ps) -> Q#amqqueue{policy = match(Name, Ps)};
+set(X = #exchange{name = Name}, Ps) -> rabbit_exchange_decorator:set(
+                                         X#exchange{policy = match(Name, Ps)}).
+
 get(Name, #amqqueue{policy = Policy}) -> get0(Name, Policy);
 get(Name, #exchange{policy = Policy}) -> get0(Name, Policy);
 %% Caution - SLOW.
@@ -65,6 +70,41 @@ get0(Name, List)       -> case pget(definition, List) of
                                                Value    -> {ok, Value}
                                            end
                           end.
+
+%%----------------------------------------------------------------------------
+
+%% Gets called during upgrades - therefore must not assume anything about the
+%% state of Mnesia
+invalidate() ->
+    rabbit_file:write_file(invalid_file(), <<"">>).
+
+recover() ->
+    case rabbit_file:is_file(invalid_file()) of
+        true  -> recover0(),
+                 rabbit_file:delete(invalid_file());
+        false -> ok
+    end.
+
+%% To get here we have to have just completed an Mnesia upgrade - i.e. we are
+%% the first node starting. So we can rewrite the whole database.  Note that
+%% recovery has not yet happened; we must work with the rabbit_durable_<thing>
+%% variants.
+recover0() ->
+    Xs = mnesia:dirty_match_object(rabbit_durable_exchange, #exchange{_ = '_'}),
+    Qs = mnesia:dirty_match_object(rabbit_durable_queue,    #amqqueue{_ = '_'}),
+    Policies = list(),
+    [rabbit_misc:execute_mnesia_transaction(
+       fun () ->
+               mnesia:write(rabbit_durable_exchange, set(X, Policies), write)
+       end) || X <- Xs],
+    [rabbit_misc:execute_mnesia_transaction(
+       fun () ->
+               mnesia:write(rabbit_durable_queue, set(Q, Policies), write)
+       end) || Q <- Qs],
+    ok.
+
+invalid_file() ->
+    filename:join(rabbit_mnesia:dir(), "policies_are_invalid").
 
 %%----------------------------------------------------------------------------
 
@@ -211,9 +251,10 @@ match(Name, Policies) ->
         [Policy | _Rest] -> Policy
     end.
 
-matches(#resource{name = Name, kind = Kind}, Policy) ->
+matches(#resource{name = Name, kind = Kind, virtual_host = VHost}, Policy) ->
     matches_type(Kind, pget('apply-to', Policy)) andalso
-        match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]).
+        match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
+        VHost =:= pget(vhost, Policy).
 
 matches_type(exchange, <<"exchanges">>) -> true;
 matches_type(queue,    <<"queues">>)    -> true;
