@@ -22,7 +22,7 @@
 
 -behaviour(gen_event).
 
--export([boot/0]).
+-export([start/0, stop/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2,
          handle_info/2]).
@@ -31,15 +31,22 @@
 
 -ifdef(use_specs).
 
--spec(boot/0 :: () -> 'ok').
+-spec(start/0 :: () -> 'ok').
+-spec(stop/0  :: () -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-boot() ->
+start() ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
     ok = error_logger:add_report_handler(?MODULE, [DefaultVHost]).
+
+stop() ->
+    terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
+    ok.
+
+%%----------------------------------------------------------------------------
 
 init([DefaultVHost]) ->
     #exchange{} = rabbit_exchange:declare(

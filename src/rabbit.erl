@@ -161,7 +161,12 @@
 
 -rabbit_boot_step({log_relay,
                    [{description, "error log relay"},
-                    {mfa,         {rabbit_error_logger, boot, []}},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_error_logger_lifecycle,
+                                    supervised_lifecycle,
+                                    [rabbit_error_logger_lifecycle,
+                                     {rabbit_error_logger, start, []},
+                                     {rabbit_error_logger, stop,  []}]]}},
                     {requires,    routing_ready},
                     {enables,     networking}]}).
 
@@ -443,7 +448,6 @@ start(normal, []) ->
     end.
 
 stop(_State) ->
-    terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
              true  -> rabbit_amqqueue:on_node_down(node());
