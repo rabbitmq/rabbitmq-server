@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -274,7 +274,7 @@ client_properties(UserProperties) ->
                {<<"version">>,   longstr, list_to_binary(Vsn)},
                {<<"platform">>,  longstr, <<"Erlang">>},
                {<<"copyright">>, longstr,
-                <<"Copyright (c) 2007-2013 VMware, Inc.">>},
+                <<"Copyright (c) 2007-2013 GoPivotal, Inc.">>},
                {<<"information">>, longstr,
                 <<"Licensed under the MPL.  "
                   "See http://www.rabbitmq.com/">>},
@@ -288,6 +288,8 @@ handshake_recv(Expecting) ->
         {'$gen_cast', {method, Method, none, noflow}} ->
             case {Expecting, element(1, Method)} of
                 {E, M} when E =:= M ->
+                    Method;
+                {'connection.tune', 'connection.secure'} ->
                     Method;
                 {'connection.open_ok', _} ->
                     {closing,

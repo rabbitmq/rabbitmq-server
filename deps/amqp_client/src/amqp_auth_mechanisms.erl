@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -19,7 +19,7 @@
 
 -include("amqp_client.hrl").
 
--export([plain/3, amqplain/3, external/3]).
+-export([plain/3, amqplain/3, external/3, crdemo/3]).
 
 %%---------------------------------------------------------------------------
 
@@ -41,3 +41,11 @@ external(none, _, init) ->
     {<<"EXTERNAL">>, []};
 external(none, _, _State) ->
     {<<"">>, _State}.
+
+crdemo(none, _, init) ->
+    {<<"RABBIT-CR-DEMO">>, 0};
+crdemo(none, #amqp_params_network{username = Username}, 0) ->
+    {Username, 1};
+crdemo(<<"Please tell me your password">>,
+       #amqp_params_network{password = Password}, 1) ->
+    {<<"My password is ", Password/binary>>, 2}.
