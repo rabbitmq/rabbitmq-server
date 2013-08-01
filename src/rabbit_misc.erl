@@ -142,9 +142,9 @@
                when is_subtype(K, atom())).
 -spec(r_arg/4 ::
         (rabbit_types:vhost() | rabbit_types:r(atom()), K,
-         rabbit_framing:amqp_table(), binary())
-        -> undefined | rabbit_types:r(K)
-               when is_subtype(K, atom())).
+         rabbit_framing:amqp_table(), binary()) -> undefined |
+           {error, {invalid_type, rabbit_framing:amqp_field_type()}} |
+           rabbit_types:r(K) when is_subtype(K, atom())).
 -spec(rs/1 :: (rabbit_types:r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
@@ -371,8 +371,7 @@ r_arg(VHostPath, Kind, Table, Key) ->
     case table_lookup(Table, Key) of
         {longstr, NameBin} -> r(VHostPath, Kind, NameBin);
         undefined          -> undefined;
-        Other              -> protocol_error(precondition_failed,
-                                             "invalid arg: ~p", [Other])
+        {Type, _}          -> {error, {invalid_type, Type}}
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->

@@ -986,12 +986,19 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
                                     ConsumerCount, State);
         {error, not_found} ->
-            case rabbit_misc:r_arg(VHostPath, exchange, Args,
-                                   <<"x-dead-letter-exchange">>) of
-               undefined -> ok;
-               DLX       -> check_read_permitted(QueueName, State),
-                            check_write_permitted(DLX, State),
-                            ok
+            DlxKey = <<"x-dead-letter-exchange">>,
+            case rabbit_misc:r_arg(VHostPath, exchange, Args, DlxKey) of
+               undefined ->
+                   ok;
+               {error, {invalid_type, Type}} ->
+                   rabbit_misc:protocol_error(
+                     precondition_failed,
+                     "invalid type '~s' for arg '~s' in ~s",
+                     [Type, DlxKey, rabbit_misc:rs(QueueName)]);
+               DLX ->
+                   check_read_permitted(QueueName, State),
+                   check_write_permitted(DLX, State),
+                   ok
             end,
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                          Args, Owner) of
