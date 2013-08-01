@@ -34,7 +34,7 @@
 %%----------------------------------------------------------------------------
 
 test_supervisor_delayed_restart() ->
-    passed = with_sup(simple_one_for_one_terminate,
+    passed = with_sup(simple_one_for_one,
                       fun (SupPid) ->
                               {ok, _ChildPid} =
                                   supervisor2:start_child(SupPid, []),

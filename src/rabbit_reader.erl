@@ -120,7 +120,7 @@ init(Parent, ChSup3Pid, Collector, StartHeartbeatFun) ->
     end.
 
 system_continue(Parent, Deb, State) ->
-    ?MODULE:mainloop(Deb, State#v1{parent = Parent}).
+    mainloop(Deb, State#v1{parent = Parent}).
 
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
