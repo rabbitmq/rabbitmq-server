@@ -1025,7 +1025,6 @@ connection_blocked_network_test() ->
             clear_resource_alarm(disk),
             ok
     after 10000 ->
-        ?LOG_DEBUG("Did not receive connection.unblocked in 10 seconds~n"),
         clear_resource_alarm(memory),
         clear_resource_alarm(disk),
         exit(did_not_receive_connection_blocked)
