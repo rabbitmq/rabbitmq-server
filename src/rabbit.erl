@@ -472,6 +472,9 @@ run_boot_step({_StepName, Attributes}) ->
         MFAs ->
             [try
                  apply(M,F,A)
+             of
+                 ok ->              ok;
+                 {error, Reason} -> boot_error(Reason, not_available)
              catch
                  _:Reason -> boot_error(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
