@@ -108,12 +108,12 @@
     <repository>
       <id>vmware-release</id>
       <name>VMware Release repository</name>
-      <url>http://s3.amazonaws.com/private.maven.vmware.com/release</url>
+      <url>http://private.maven.vmware.com.s3.amazonaws.com/release</url>
     </repository>
     <repository>
       <id>vmware-snapshot</id>
       <name>VMware Snapshot repository</name>
-      <url>http://s3.amazonaws.com/private.maven.vmware.com/snapshot</url>
+      <url>http://private.maven.vmware.com.s3.amazonaws.com/snapshot</url>
     </repository>
   </repositories>
 
