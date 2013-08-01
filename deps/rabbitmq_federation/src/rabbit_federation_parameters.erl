@@ -34,7 +34,8 @@ register() ->
         {Class, Name} <- [{runtime_parameter, <<"federation">>},
                           {runtime_parameter, <<"federation-upstream">>},
                           {runtime_parameter, <<"federation-upstream-set">>},
-                          {policy_validator,  <<"federation-upstream-set">>}]].
+                          {policy_validator,  <<"federation-upstream-set">>}]],
+    ok.
 
 validate(_VHost, <<"federation-upstream-set">>, Name, Term) ->
     [rabbit_parameter_validation:proplist(
