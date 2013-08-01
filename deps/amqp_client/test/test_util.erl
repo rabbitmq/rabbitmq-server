@@ -1015,19 +1015,19 @@ connection_blocked_network_test() ->
     amqp_connection:register_blocked_handler(Connection, Child),
     set_resource_alarm(memory),
     Publish = #'basic.publish'{exchange = X,
-			       routing_key = K},
+                               routing_key = K},
     amqp_channel:call(Channel, Publish,
-		      #amqp_msg{payload = Payload}),
+                      #amqp_msg{payload = Payload}),
     timer:sleep(1000),
     receive
         ok ->
-	    clear_resource_alarm(memory),
-	    clear_resource_alarm(disk),
-	    ok
+            clear_resource_alarm(memory),
+            clear_resource_alarm(disk),
+            ok
     after 10000 ->
-        ?LOG_DEBUG("Are you sure that you have waited 1 minute?~n"),
-	clear_resource_alarm(memory),
-	clear_resource_alarm(disk),
+        ?LOG_DEBUG("Did not receive connection.unblocked in 10 seconds~n"),
+        clear_resource_alarm(memory),
+        clear_resource_alarm(disk),
         exit(did_not_receive_connection_blocked)
     end.
 

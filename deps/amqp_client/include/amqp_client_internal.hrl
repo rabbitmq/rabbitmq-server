@@ -32,4 +32,4 @@
                               {<<"exchange_exchange_bindings">>, bool, true},
                               {<<"basic.nack">>,                 bool, true},
                               {<<"consumer_cancel_notify">>,     bool, true},
-			       {<<"connection.blocked">>,         bool, true}]).
+                              {<<"connection.blocked">>,         bool, true}]).

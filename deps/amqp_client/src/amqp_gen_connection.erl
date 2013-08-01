@@ -24,7 +24,7 @@
 -export([start_link/5, connect/1, open_channel/3, hard_error_in_channel/3,
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
          close/3, server_close/2, info/2, info_keys/0, info_keys/1,
-	 register_blocked_handler/2]).
+         register_blocked_handler/2]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -41,8 +41,8 @@
                 server_properties,
                 start_infrastructure_fun,
                 start_channels_manager_fun,
-		%% connection.block, connection.unblock handler
-		block_handler,
+                %% connection.block, connection.unblock handler
+                block_handler,
                 closing = false %% #closing{} | false
                }).
 
@@ -168,7 +168,7 @@ init([Mod, Sup, AmqpParams, SIF, SChMF, ExtraParams]) ->
                 amqp_params = AmqpParams,
                 start_infrastructure_fun = SIF,
                 start_channels_manager_fun = SChMF,
-	        block_handler = none}}.
+                block_handler = none}}.
 
 handle_call(connect, _From,
             State0 = #state{module = Mod,
