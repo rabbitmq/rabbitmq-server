@@ -102,7 +102,7 @@ table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px;
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
-table.facts-fixed-width th, table.facts-fixed-width td { width: 100px; }
+table.facts-fixed-width th, table.facts-fixed-width td { width: 130px; }
 
 table.mini th { border: none; padding: 0 2px 2px 2px; text-align: right; }
 table.mini td { border: none; padding: 0 2px 2px 2px; }
@@ -182,9 +182,13 @@ table.form input[type=text].wide, table.form input[type=password].wide { width: 
 table.form select { width: 200px; }
 table.form select.narrow { width: 110px; }
 table.form .multifield { margin: 0; padding: 0; }
-table.form .multifield p { margin: 0; padding: 0; }
-table.form .multifield p select { width: 70px; }
+table.form .multifield td { margin: 0; padding: 0; vertical-align: top; }
+table.form .multifield td.equals { padding: 3px; }
+table.form .multifield td input { float: left; }
+table.form .multifield td select { width: 70px; display: block; float: left; margin-left: 5px; }
 table.form label { margin-top: 5px; display: block; }
+
+.multifield-sub { border: 1px solid #ddd; background: #f8f8f8; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; float: left; margin-bottom: 10px; }
 
 label.radio { padding: 5px; border: 1px solid #eee; cursor: pointer; border-radius: 5px; -moz-border-radius: 5px; }
 
