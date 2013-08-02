@@ -136,7 +136,7 @@ set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
                                           _         -> Priority
                                       end},
                    {<<"apply-to">>,   case ApplyTo of
-                                          undefined -> 0;
+                                          undefined -> <<"all">>;
                                           _         -> ApplyTo
                                       end}],
     set0(VHost, Name, PolicyProps).
