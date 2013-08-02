@@ -317,10 +317,10 @@ policy_apply_to() ->
 apply_to(Def) ->
     case [proplists:get_value(K, Def) ||
              K <- [<<"federation-upstream-set">>, <<"ha-mode">>]] of
-        [undefined, undefined] -> <<"both">>;
+        [undefined, undefined] -> <<"all">>;
         [_,         undefined] -> <<"exchanges">>;
         [undefined, _]         -> <<"queues">>;
-        [_,         _]         -> <<"both">>
+        [_,         _]         -> <<"all">>
     end.
 
 %%--------------------------------------------------------------------

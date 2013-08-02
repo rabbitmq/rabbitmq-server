@@ -143,7 +143,7 @@ set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
 
 set0(VHost, Name, Term0) ->
     Term = case pget(<<"apply-to">>, Term0) of
-               undefined -> [{<<"apply-to">>, <<"both">>} | Term0];
+               undefined -> [{<<"apply-to">>, <<"all">>} | Term0];
                _         -> Term0
            end,
     rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term).
@@ -258,8 +258,8 @@ matches(#resource{name = Name, kind = Kind, virtual_host = VHost}, Policy) ->
 
 matches_type(exchange, <<"exchanges">>) -> true;
 matches_type(queue,    <<"queues">>)    -> true;
-matches_type(exchange, <<"both">>)      -> true;
-matches_type(queue,    <<"both">>)      -> true;
+matches_type(exchange, <<"all">>)       -> true;
+matches_type(queue,    <<"all">>)       -> true;
 matches_type(_,        _)               -> false.
 
 sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
@@ -316,9 +316,9 @@ dups(L) -> L -- lists:usort(L).
 
 is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).
 
-apply_to_validation(_Name, <<"both">>)      -> ok;
+apply_to_validation(_Name, <<"all">>)       -> ok;
 apply_to_validation(_Name, <<"exchanges">>) -> ok;
 apply_to_validation(_Name, <<"queues">>)    -> ok;
 apply_to_validation(_Name, Term) ->
     {error, "apply-to '~s' unrecognised; should be 'queues', 'exchanges' "
-     "or 'both'", [Term]}.
+     "or 'all'", [Term]}.
