@@ -188,7 +188,7 @@ format(Term) ->
 
 ident(X) -> X.
 
-info_keys() -> [vhost, name, pattern, definition, priority].
+info_keys() -> [vhost, name, 'apply-to', pattern, definition, priority].
 
 %%----------------------------------------------------------------------------
 
