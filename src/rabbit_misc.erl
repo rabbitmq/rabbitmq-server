@@ -900,13 +900,8 @@ ntoab(IP) ->
         _ -> "[" ++ Str ++ "]"
     end.
 
-is_process_alive(Pid) when node(Pid) =:= node() ->
-    erlang:is_process_alive(Pid);
 is_process_alive(Pid) ->
-    case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
-        true -> true;
-        _    -> false
-    end.
+    rpc:call(node(Pid), erlang, is_process_alive, [Pid]) =:= true.
 
 pget(K, P) -> proplists:get_value(K, P).
 pget(K, P, D) -> proplists:get_value(K, P, D).
