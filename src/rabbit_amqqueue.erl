@@ -415,9 +415,6 @@ args() ->
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_max_length_arg/2}].
 
-check_string_arg({longstr, _}, _Args) -> ok;
-check_string_arg({Type,    _}, _Args) -> {error, {unacceptable_type, Type}}.
-
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
