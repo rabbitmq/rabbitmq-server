@@ -898,8 +898,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                 case rabbit_misc:r_arg(VHostPath, exchange, Args, AeKey) of
                     undefined -> ok;
                     {error, {invalid_type, Type}} ->
-                        rabbit_misc:protocol_error(
-                          precondition_failed,
+                        precondition_failed(
                           "invalid type '~s' for arg '~s' in ~s",
                           [Type, AeKey, rabbit_misc:rs(ExchangeName)]);
                     AName     -> check_read_permitted(ExchangeName, State),
@@ -996,10 +995,9 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                undefined ->
                    ok;
                {error, {invalid_type, Type}} ->
-                   rabbit_misc:protocol_error(
-                     precondition_failed,
-                     "invalid type '~s' for arg '~s' in ~s",
-                     [Type, DlxKey, rabbit_misc:rs(QueueName)]);
+                    precondition_failed(
+                      "invalid type '~s' for arg '~s' in ~s",
+                      [Type, DlxKey, rabbit_misc:rs(QueueName)]);
                DLX ->
                    check_read_permitted(QueueName, State),
                    check_write_permitted(DLX, State),
