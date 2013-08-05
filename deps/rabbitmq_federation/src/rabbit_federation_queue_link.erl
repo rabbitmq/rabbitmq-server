@@ -209,7 +209,7 @@ go(S0 = #not_started{run             = Run,
                                                      auto_delete = AutoDelete,
                                                      arguments   = Args}),
               amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch}),
-
+              amqp_selective_consumer:register_default_consumer(Ch, self()),
               case Run of
                   true  -> consume(Ch, Upstream, UQueue);
                   false -> ok
