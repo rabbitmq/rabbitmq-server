@@ -25,7 +25,7 @@
 
 -behaviour(gen_server).
 
--export([start/2, stop/1]).
+-export([start/2, start_link/2, stop/1]).
 -export([call/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3,
          handle_cast/2, handle_info/2]).
@@ -51,6 +51,18 @@
 %% that can be used to invoke RPCs and stop the client.
 start(Connection, Queue) ->
     {ok, Pid} = gen_server:start(?MODULE, [Connection, Queue], []),
+    Pid.
+
+%% @spec (Connection, Queue) -> RpcClient
+%% where
+%%      Connection = pid()
+%%      Queue = binary()
+%%      RpcClient = pid()
+%% @doc Starts, and links to, a new RPC client instance that sends requests
+%% to a specified queue. This function returns the pid of the RPC client
+%% process that can be used to invoke RPCs and stop the client.
+start_link(Connection, Queue) ->
+    {ok, Pid} = gen_server:start_link(?MODULE, [Connection, Queue], []),
     Pid.
 
 %% @spec (RpcClient) -> ok

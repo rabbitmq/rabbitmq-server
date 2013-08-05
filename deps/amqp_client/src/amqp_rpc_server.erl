@@ -27,7 +27,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3,
          handle_cast/2, handle_info/2]).
--export([start/3]).
+-export([start/3, start_link/3]).
 -export([stop/1]).
 
 -record(state, {channel,
@@ -49,6 +49,20 @@
 %% server.
 start(Connection, Queue, Fun) ->
     {ok, Pid} = gen_server:start(?MODULE, [Connection, Queue, Fun], []),
+    Pid.
+
+%% @spec (Connection, Queue, RpcHandler) -> RpcServer
+%% where
+%%      Connection = pid()
+%%      Queue = binary()
+%%      RpcHandler = function()
+%%      RpcServer = pid()
+%% @doc Starts, and links to, a new RPC server instance that receives
+%% requests via a specified queue and dispatches them to a specified
+%% handler function. This function returns the pid of the RPC server that
+%% can be used to stop the server.
+start_link(Connection, Queue, Fun) ->
+    {ok, Pid} = gen_server:start_link(?MODULE, [Connection, Queue, Fun], []),
     Pid.
 
 %% @spec (RpcServer) -> ok
