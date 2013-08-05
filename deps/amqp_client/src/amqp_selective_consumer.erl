@@ -126,6 +126,10 @@ handle_consume_ok(BasicConsumeOk, _BasicConsume,
 
 %% @private
 %% We sent a basic.cancel.
+handle_cancel(#'basic.cancel'{nowait = true},
+              #state{default_consumer = none}) ->
+    exit(cancel_nowait_requires_default_consumer);
+
 handle_cancel(Cancel = #'basic.cancel'{nowait = NoWait}, State) ->
     State1 = case NoWait of
                  true  -> do_cancel(Cancel, State);

@@ -802,6 +802,7 @@ subscribe_nowait_test() ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, Q} = setup_publish(Ch),
     CTag = uuid(),
+    amqp_selective_consumer:register_default_consumer(Ch, self()),
     ok = amqp_channel:call(Ch, #'basic.consume'{queue        = Q,
                                                 consumer_tag = CTag,
                                                 nowait       = true}),
