@@ -977,7 +977,7 @@ os_cmd(Command) ->
         {win32, _} ->
             %% Clink workaround; see
             %% http://code.google.com/p/clink/issues/detail?id=141
-            os:cmd(" " + Command);
+            os:cmd(" " ++ Command);
         _ ->
             %% Don't just return "/bin/sh: <cmd>: not found" if not found
             Exec = hd(string:tokens(Command, " ")),
