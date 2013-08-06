@@ -3,6 +3,7 @@ syntax: glob
 *~
 *.swp
 *.patch
+*.orig
 erl_crash.dump
 deps.mk
 
