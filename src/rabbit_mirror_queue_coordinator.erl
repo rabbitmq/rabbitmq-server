@@ -222,20 +222,19 @@
 %% sender_death message to all the slaves, saying the sender has
 %% died. Once the slaves receive the sender_death message, they know
 %% that they're not going to receive any more instructions from the gm
-%% regarding that sender, thus they throw away any publications from
-%% the sender pending publication instructions. However, it is
-%% possible that the coordinator receives the DOWN and communicates
-%% that to the master before the master has finished receiving and
-%% processing publishes from the sender. This turns out not to be a
-%% problem: the sender has actually died, and so will not need to
-%% receive confirms or other feedback, and should further messages be
-%% "received" from the sender, the master will ask the coordinator to
-%% set up a new monitor, and will continue to process the messages
-%% normally. Slaves may thus receive publishes via gm from previously
-%% declared "dead" senders, but again, this is fine: should the slave
-%% have just thrown out the message it had received directly from the
-%% sender (due to receiving a sender_death message via gm), it will be
-%% able to cope with the publication purely from the master via gm.
+%% regarding that sender. However, it is possible that the coordinator
+%% receives the DOWN and communicates that to the master before the
+%% master has finished receiving and processing publishes from the
+%% sender. This turns out not to be a problem: the sender has actually
+%% died, and so will not need to receive confirms or other feedback,
+%% and should further messages be "received" from the sender, the
+%% master will ask the coordinator to set up a new monitor, and
+%% will continue to process the messages normally. Slaves may thus
+%% receive publishes via gm from previously declared "dead" senders,
+%% but again, this is fine: should the slave have just thrown out the
+%% message it had received directly from the sender (due to receiving
+%% a sender_death message via gm), it will be able to cope with the
+%% publication purely from the master via gm.
 %%
 %% When a slave receives a DOWN message for a sender, if it has not
 %% received the sender_death message from the master via gm already,
