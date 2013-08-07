@@ -59,6 +59,16 @@ string_match_test_() ->
                 {?SIMON, B(<<"abc123">>),                     fail},
                 {?SIMON, B(<<"xch-Someone Else-abc123">>),    fail}]].
 
+boolean_logic_test_() ->
+    Q1 = [#'queue.declare'{queue = <<"test1">>},
+          #'basic.consume'{queue = <<"test1">>}],
+    Q2 = [#'queue.declare'{queue = <<"test2">>},
+          #'basic.consume'{queue = <<"test2">>}],
+    [test_resource_fun(PTR) || PTR <- [{?SIMON, Q1, ok},
+                                       {?SIMON, Q2, ok},
+                                       {?MIKEB, Q1, fail},
+                                       {?MIKEB, Q2, fail}]].
+
 test_resource_fun({Person, Things, Result}) ->
     fun() ->
             {ok, Conn} = amqp_connection:start(Person),
@@ -66,6 +76,7 @@ test_resource_fun({Person, Things, Result}) ->
             ?assertEqual(Result,
                          try
                              [amqp_channel:call(Ch, T) || T <- Things],
+                             amqp_connection:close(Conn),
                              ok
                          catch exit:_ -> fail
                          end)
