@@ -28,7 +28,7 @@ start_link() ->
     supervisor2:start_link({local, ?SUP_NAME}, ?MODULE, []).
 
 init([]) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{client, {rabbit_ws_client_sup, start_client, []},
             temporary, infinity, supervisor, [rabbit_ws_client_sup]}]}}.
 
