@@ -46,6 +46,6 @@ start_session(Pid, Args) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{session_sup, {rabbit_amqp1_0_session_sup, start_link, []},
             temporary, infinity, supervisor, [rabbit_amqp1_0_session_sup]}]}}.

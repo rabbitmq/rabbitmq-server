@@ -680,7 +680,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
 vhost({utf8, <<"vhost:", VHost/binary>>}) ->
     VHost;
 vhost(_) ->
-    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
+    {ok, DefaultVHost} = application:get_env(default_vhost),
     DefaultVHost.
 
 %% End 1-0

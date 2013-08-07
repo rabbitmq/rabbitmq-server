@@ -4,5 +4,6 @@
   {modules, []},
   {registered, []},
   {env, [{default_user, "guest"},
+         {default_vhost, <<"/">>},
          {protocol_strict_mode, false}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
