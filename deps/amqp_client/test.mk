@@ -45,7 +45,7 @@ run_test_in_broker:
 	$(MAKE) start_test_broker_node
 	$(MAKE) unboot_broker
 	OK=true && \
-	TMPFILE=$(MKTEMP) && \
+	TMPFILE=$(MKTEMP) && echo "Redirecting output to $$TMPFILE" && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
 		RABBITMQ_SERVER_START_ARGS="$(PA_LOAD_PATH) $(SSL_BROKER_ARGS) \
 		-noshell -s rabbit $(RUN_TEST_ARGS) -s init stop" 2>&1 | \
@@ -59,12 +59,21 @@ run_test_in_broker:
 ## Starts a broker, configures users and runs the tests from a different node
 run_test_detached: start_test_broker_node
 	OK=true && \
-	TMPFILE=$(MKTEMP) && \
+	TMPFILE=$(MKTEMP) && echo "Redirecting output to $$TMPFILE" && \
 	{ $(RUN) -noinput $(TESTING_MESSAGE) \
 	   $(SSL_CLIENT_ARGS) $(RUN_TEST_ARGS) \
 	    -s init stop 2>&1 | tee $$TMPFILE || OK=false; } && \
 	{ $(IS_SUCCESS) $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
+	$(MAKE) stop_test_broker_node && \
+	$$OK
+
+## Starts a broker, configures users and runs the tests from a different node
+run_test_foreground: start_test_broker_node
+	OK=true && \
+	{ $(RUN) -noinput $(TESTING_MESSAGE) \
+	   $(SSL_CLIENT_ARGS) $(RUN_TEST_ARGS) \
+	    -s init stop || OK=false; } && \
 	$(MAKE) stop_test_broker_node && \
 	$$OK
 
@@ -119,4 +128,3 @@ test_remote_direct_coverage: prepare_tests
 
 test_direct_coverage: prepare_tests
 	$(MAKE) run_test_in_broker AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
-

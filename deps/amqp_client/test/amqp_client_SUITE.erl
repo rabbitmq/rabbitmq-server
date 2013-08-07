@@ -72,6 +72,7 @@ confirm_barrier_timeout_test_()         -> ?RUN([]).
 confirm_barrier_die_timeout_test_()     -> ?RUN([]).
 default_consumer_test_()                -> ?RUN([]).
 subscribe_nowait_test_()                -> ?RUN([]).
+connection_blocked_network_test_()      -> ?RUN([]).
 
 non_existent_exchange_test_()           -> ?RUN([negative]).
 bogus_rpc_test_()                    -> ?RUN([negative, repeat]).
@@ -121,4 +122,3 @@ test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
-
