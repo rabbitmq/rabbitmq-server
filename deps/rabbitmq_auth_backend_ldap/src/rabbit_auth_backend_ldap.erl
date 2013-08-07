@@ -133,14 +133,17 @@ evaluate0({in_group, DNPattern, Desc}, Args,
     R;
 
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP, State) ->
-    String = evaluate(StringQuery, Args, User, LDAP, State),
-    RE = evaluate(REQuery, Args, User, LDAP, State),
-    R = case re:run(String, RE) of
-            {match, _} -> true;
-            nomatch    -> false
-        end,
-    ?L1("evaluated match \"~s\" against RE \"~s\": ~s", [String, RE, R], State),
-    R;
+    safe_eval(fun (String, RE) ->
+                      R = case re:run(String, RE) of
+                              {match, _} -> true;
+                              nomatch    -> false
+                          end,
+                      ?L1("evaluated match \"~s\" against RE \"~s\": ~s",
+                          [String, RE, R], State),
+                      R
+              end,
+              evaluate(StringQuery, Args, User, LDAP, State),
+              evaluate(REQuery, Args, User, LDAP, State));
 
 evaluate0({string, StringPattern}, Args, _User, _LDAP, State) ->
     R = fill(StringPattern, Args, State),
@@ -156,6 +159,10 @@ evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP, State) ->
 
 evaluate0(Q, Args, _User, _LDAP, _State) ->
     {error, {unrecognised_query, Q, Args}}.
+
+safe_eval(_F, {error, _}, _)          -> false;
+safe_eval(_F, _,          {error, _}) -> false;
+safe_eval(F,  V1,         V2)         -> F(V1, V2).
 
 object_exists(DN, Filter, LDAP) ->
     case eldap:search(LDAP,
@@ -175,10 +182,12 @@ attribute(DN, AttributeName, LDAP) ->
                        {filter, eldap:present("objectClass")},
                        {attributes, [AttributeName]}]) of
         {ok, #eldap_search_result{entries = [#eldap_entry{attributes = A}]}} ->
-            [Attr] = pget(AttributeName, A),
-            Attr;
+            case pget(AttributeName, A) of
+                [Attr] -> Attr;
+                _      -> {error, not_found}
+            end;
         {ok, #eldap_search_result{entries = _}} ->
-            false;
+            {error, not_found};
         {error, _} = E ->
             E
     end.
