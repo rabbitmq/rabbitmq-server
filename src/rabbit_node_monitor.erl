@@ -378,7 +378,8 @@ await_cluster_recovery() ->
     run_outside_applications(fun () ->
                                      rabbit:stop(),
                                      wait_for_cluster_recovery(Nodes)
-                             end).
+                             end),
+    ok.
 
 run_outside_applications(Fun) ->
     spawn(fun () ->
