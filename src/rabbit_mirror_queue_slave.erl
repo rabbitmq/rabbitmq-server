@@ -275,7 +275,7 @@ handle_info({'DOWN', _MonitorRef, process, MPid, _Reason},
 
 handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
     local_sender_death(ChPid, State),
-    noreply(sender_lifetime(ChPid, down_from_ch, State));
+    noreply(maybe_forget_sender(ChPid, down_from_ch, State));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -660,9 +660,9 @@ forget_sender(Down1, Down2) when Down1 =/= Down2 -> true.
 
 %% Record and process lifetime events from channels. Forget all about a channel
 %% only when down notifications are received from both the channel and from gm.
-sender_lifetime(ChPid, ChState, State = #state { sender_queues = SQ,
-                                                 msg_id_status = MS,
-                                                 known_senders = KS }) ->
+maybe_forget_sender(ChPid, ChState, State = #state { sender_queues = SQ,
+                                                     msg_id_status = MS,
+                                                     known_senders = KS }) ->
     case dict:find(ChPid, SQ) of
         error ->
             State;
@@ -811,8 +811,7 @@ process_instruction({sender_death, ChPid},
     %% never got any messages.
     {ok, case pmon:is_monitored(ChPid, KS) of
              false -> State;
-             true  -> credit_flow:peer_down(ChPid),
-                      sender_lifetime(ChPid, down_from_gm, State)
+             true  -> maybe_forget_sender(ChPid, down_from_gm, State)
          end};
 process_instruction({depth, Depth},
                     State = #state { backing_queue       = BQ,
