@@ -109,8 +109,7 @@ maybe_start(X = #exchange{name = XName})->
 
 maybe_stop(X = #exchange{name = XName}) ->
     case federate(X) of
-        true  -> rabbit_federation_link:stop(XName),
-                 ok = rabbit_federation_link_sup_sup:stop_child(X),
+        true  -> ok = rabbit_federation_link_sup_sup:stop_child(X),
                  rabbit_federation_status:remove_exchange(XName);
         false -> ok
     end.

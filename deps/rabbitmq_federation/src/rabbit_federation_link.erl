@@ -21,7 +21,7 @@
 
 -behaviour(gen_server2).
 
--export([go/0, add_binding/3, remove_bindings/3, stop/1]).
+-export([go/0, add_binding/3, remove_bindings/3]).
 -export([list_routing_keys/1]). %% For testing
 
 -export([start_link/1]).
@@ -61,11 +61,6 @@ go() -> cast(go).
 add_binding(S, XN, B)      -> cast(XN, {enqueue, S, {add_binding, B}}).
 remove_bindings(S, XN, Bs) -> cast(XN, {enqueue, S, {remove_bindings, Bs}}).
 
-%% This doesn't just correspond to the link being killed by its
-%% supervisor since this means "the exchange is going away, please
-%% remove upstream resources associated with it".
-stop(XN) -> call(XN, stop).
-
 list_routing_keys(XN) -> call(XN, list_routing_keys).
 
 %%----------------------------------------------------------------------------
@@ -92,10 +87,6 @@ init({Upstream, XName}) ->
 
 handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
     {reply, lists:sort([K || {K, _} <- dict:fetch_keys(Bindings)]), State};
-
-handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
-    disposable_channel_call(Conn, #'queue.delete'{queue = Q}),
-    {stop, normal, ok, State};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
