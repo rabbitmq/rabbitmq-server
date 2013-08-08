@@ -67,8 +67,9 @@
     <script>
       var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
       var client = Stomp.over(ws);
-      // SockJS does not support heart-beat: disable incoming heart-beats
+      // SockJS does not support heart-beat: disable heart-beats
       client.heartbeat.incoming = 0;
+      client.heartbeat.outgoing = 0;
 
       client.debug = function(e) {
         $('#second div').append($("<code>").text(e));
