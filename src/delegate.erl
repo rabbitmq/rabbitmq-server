@@ -139,10 +139,10 @@ demonitor({Name, Pid}, Options) ->
     gen_server2:cast(Name, {demonitor, Pid, Options}).
 
 call(PidOrPids, Msg) ->
-    invoke(PidOrPids, fun (P) -> gen_server2:call(P, Msg, infinity) end).
+    invoke(PidOrPids, {gen_server2, call, [Msg, infinity]}).
 
 cast(PidOrPids, Msg) ->
-    invoke_no_result(PidOrPids, fun (P) -> gen_server2:cast(P, Msg) end).
+    invoke_no_result(PidOrPids, {gen_server2, cast, [Msg]}).
 
 %%----------------------------------------------------------------------------
 
