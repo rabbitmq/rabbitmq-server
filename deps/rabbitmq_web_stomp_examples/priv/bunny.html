@@ -108,12 +108,9 @@ else {
 }
 
 // Stomp.js boilerplate
-Stomp.WebSocketClass = SockJS;
-
 var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
 var client = Stomp.over(ws);
-
-client.heartbeat.outgoing = 0;
+// SockJS does not support heart-beat: disable incoming heart-beats
 client.heartbeat.incoming = 0;
 
 client.debug = function() {
