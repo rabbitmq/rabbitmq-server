@@ -25,12 +25,16 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+-define(PRIORITY_OPT, "--priority").
+-define(APPLY_TO_OPT, "--apply-to").
 -define(RAM_OPT, "--ram").
 -define(OFFLINE_OPT, "--offline").
 
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+-define(PRIORITY_DEF, {?PRIORITY_OPT, {option, "0"}}).
+-define(APPLY_TO_DEF, {?APPLY_TO_OPT, {option, "all"}}).
 -define(RAM_DEF, {?RAM_OPT, flag}).
 -define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
 
@@ -72,7 +76,7 @@
          {clear_parameter, [?VHOST_DEF]},
          {list_parameters, [?VHOST_DEF]},
 
-         {set_policy, [?VHOST_DEF]},
+         {set_policy, [?VHOST_DEF, ?PRIORITY_DEF, ?APPLY_TO_DEF]},
          {clear_policy, [?VHOST_DEF]},
          {list_policies, [?VHOST_DEF]},
 
@@ -484,16 +488,15 @@ action(list_parameters, Node, [], Opts, Inform) ->
       rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg]),
       rabbit_runtime_parameters:info_keys());
 
-action(set_policy, Node, [Key, Pattern, Defn | Prio], Opts, Inform)
-  when Prio == [] orelse length(Prio) == 1 ->
-    Msg = "Setting policy ~p for pattern ~p to ~p",
-    {InformMsg, Prio1} = case Prio of []  -> {Msg, undefined};
-                                      [P] -> {Msg ++ " with priority ~s", P}
-                         end,
+action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
+    Msg = "Setting policy ~p for pattern ~p to ~p with priority ~p",
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    Inform(InformMsg, [Key, Pattern, Defn] ++ Prio),
-    rpc_call(Node, rabbit_policy, parse_set,
-             [VHostArg, list_to_binary(Key), Pattern, Defn, Prio1]);
+    PriorityArg = proplists:get_value(?PRIORITY_OPT, Opts),
+    ApplyToArg = list_to_binary(proplists:get_value(?APPLY_TO_OPT, Opts)),
+    Inform(Msg, [Key, Pattern, Defn, PriorityArg]),
+    rpc_call(
+      Node, rabbit_policy, parse_set,
+      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]);
 
 action(clear_policy, Node, [Key], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),

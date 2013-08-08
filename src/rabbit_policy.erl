@@ -28,7 +28,7 @@
 -export([invalidate/0, recover/0]).
 -export([name/1, get/2, set/1]).
 -export([validate/4, notify/4, notify_clear/3]).
--export([parse_set/5, set/6, delete/2, lookup/2, list/0, list/1,
+-export([parse_set/6, set/6, delete/2, lookup/2, list/0, list/1,
          list_formatted/1, info_keys/0]).
 
 -rabbit_boot_step({?MODULE,
@@ -108,22 +108,21 @@ invalid_file() ->
 
 %%----------------------------------------------------------------------------
 
-parse_set(VHost, Name, Pattern, Definition, undefined) ->
-    parse_set0(VHost, Name, Pattern, Definition, 0);
-parse_set(VHost, Name, Pattern, Definition, Priority) ->
+parse_set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     try list_to_integer(Priority) of
-        Num -> parse_set0(VHost, Name, Pattern, Definition, Num)
+        Num -> parse_set0(VHost, Name, Pattern, Definition, Num, ApplyTo)
     catch
         error:badarg -> {error, "~p priority must be a number", [Priority]}
     end.
 
-parse_set0(VHost, Name, Pattern, Defn, Priority) ->
+parse_set0(VHost, Name, Pattern, Defn, Priority, ApplyTo) ->
     case rabbit_misc:json_decode(Defn) of
         {ok, JSON} ->
             set0(VHost, Name,
                  [{<<"pattern">>,    list_to_binary(Pattern)},
                   {<<"definition">>, rabbit_misc:json_to_term(JSON)},
-                  {<<"priority">>,   Priority}]);
+                  {<<"priority">>,   Priority},
+                  {<<"apply-to">>,   ApplyTo}]);
         error ->
             {error_string, "JSON decoding error"}
     end.
@@ -141,11 +140,7 @@ set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
                                       end}],
     set0(VHost, Name, PolicyProps).
 
-set0(VHost, Name, Term0) ->
-    Term = case pget(<<"apply-to">>, Term0) of
-               undefined -> [{<<"apply-to">>, <<"all">>} | Term0];
-               _         -> Term0
-           end,
+set0(VHost, Name, Term) ->
     rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term).
 
 delete(VHost, Name) ->
