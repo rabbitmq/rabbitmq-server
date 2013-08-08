@@ -33,14 +33,14 @@
 -export_type([monitor_ref/0]).
 
 -type(monitor_ref() :: reference() | {atom(), pid()}).
--type(fun_or_mfa() :: fun ((pid()) -> any()) | {atom(), atom(), [any()]}).
+-type(fun_or_mfa(A) :: fun ((pid()) -> A) | {atom(), atom(), [any()]}).
 
 -spec(start_link/1 ::
         (non_neg_integer()) -> {'ok', pid()} | ignore | {'error', any()}).
--spec(invoke/2 :: ( pid(),  fun_or_mfa()) -> any();
-                  ([pid()], fun_or_mfa()) -> {[{pid(), any()}],
-                                              [{pid(), term()}]}).
--spec(invoke_no_result/2 :: (pid() | [pid()], fun_or_mfa()) -> 'ok').
+-spec(invoke/2 :: ( pid(),  fun_or_mfa(A)) -> A;
+                  ([pid()], fun_or_mfa(A)) -> {[{pid(), A}],
+                                               [{pid(), term()}]}).
+-spec(invoke_no_result/2 :: (pid() | [pid()], fun_or_mfa(any())) -> 'ok').
 -spec(monitor/2 :: ('process', pid()) -> monitor_ref()).
 -spec(demonitor/1 :: (monitor_ref()) -> 'true').
 -spec(demonitor/2 :: (monitor_ref(), ['flush']) -> 'true').
