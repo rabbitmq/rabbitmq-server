@@ -62,8 +62,6 @@
       <div></div>
     </div>
 
-
-    
     <script>
       var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
       var client = Stomp.over(ws);
@@ -74,7 +72,7 @@
       client.debug = function(e) {
         $('#second div').append($("<code>").text(e));
       };
-      
+
       // default receive callback to get message from temporary queues
       client.onreceive = function(m) {
         $('#first div').append($("<code>").text(m.body));
@@ -101,5 +99,4 @@
           return false;
       });
     </script>
-      
 </body></html>

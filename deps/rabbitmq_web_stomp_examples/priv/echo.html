@@ -82,10 +82,10 @@
       // Stomp.js boilerplate
       var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
       var client = Stomp.over(ws);
-      // SockJS does not support heart-beat: disable heart-beats
-      client.heartbeat.incoming = 0;
-      client.heartbeat.outgoing = 0;
 
+      // SockJS does not support heart-beat: disable heart-beats
+      client.heartbeat.outgoing = 0;
+      client.heartbeat.incoming = 0;
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {
