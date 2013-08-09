@@ -64,7 +64,7 @@ start_link(Num) ->
     gen_server2:start_link({local, Name}, ?MODULE, [Name], []).
 
 invoke(Pid, FunOrMFA) when is_pid(Pid) andalso node(Pid) =:= node() ->
-    fun_or_mfa(FunOrMFA, Pid);
+    apply1(FunOrMFA, Pid);
 invoke(Pid, FunOrMFA) when is_pid(Pid) ->
     case invoke([Pid], FunOrMFA) of
         {[{Pid, Result}], []} ->
@@ -174,15 +174,13 @@ safe_invoke(Pids, FunOrMFA) when is_list(Pids) ->
     [safe_invoke(Pid, FunOrMFA) || Pid <- Pids];
 safe_invoke(Pid, FunOrMFA) when is_pid(Pid) ->
     try
-        {ok, Pid, fun_or_mfa(FunOrMFA, Pid)}
+        {ok, Pid, apply1(FunOrMFA, Pid)}
     catch Class:Reason ->
             {error, Pid, {Class, Reason, erlang:get_stacktrace()}}
     end.
 
-fun_or_mfa(Fun, Pid) when is_function(Fun) ->
-    Fun(Pid);
-fun_or_mfa({M, F, A}, Pid) ->
-    apply(M, F, [Pid | A]).
+apply1({M, F, A}, Arg) -> apply(M, F, [Arg | A]);
+apply1(Fun,       Arg) -> Fun(Arg).
 
 %%----------------------------------------------------------------------------
 
