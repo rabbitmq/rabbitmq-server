@@ -17,7 +17,8 @@
 -module(rabbit_control_main).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, sync_queue/1, cancel_sync_queue/1]).
+-export([start/0, stop/0, parse_arguments/2, action/5,
+         sync_queue/1, cancel_sync_queue/1]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -131,19 +132,13 @@
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
-        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr),
-                                         init:get_plain_arguments())
-        of
+        case parse_arguments(init:get_plain_arguments(), NodeStr) of
             {ok, Res}  -> Res;
             no_command -> print_error("could not recognise command", []),
                           usage()
         end,
-    Opts1 = [case K of
-                 ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
-                 _         -> {K, V}
-             end || {K, V} <- Opts],
-    Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
-    Node = proplists:get_value(?NODE_OPT, Opts1),
+    Quiet = proplists:get_bool(?QUIET_OPT, Opts),
+    Node = proplists:get_value(?NODE_OPT, Opts),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -233,6 +228,18 @@ stop() ->
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
     rabbit_misc:quit(1).
+
+parse_arguments(Args, NodeStr) ->
+    case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr), Args) of
+        {ok, {Cmd, Opts0, Args}} ->
+            Opts = [case K of
+                        ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
+                        _         -> {K, V}
+                    end || {K, V} <- Opts0],
+            {ok, {Cmd, Opts, Args}};
+        E ->
+            E
+    end.
 
 %%----------------------------------------------------------------------------
 
