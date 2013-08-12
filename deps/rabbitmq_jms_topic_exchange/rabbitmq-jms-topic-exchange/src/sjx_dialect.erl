@@ -113,8 +113,8 @@ check_type_arith( TypeInfo, { Op, LHS, RHS }) -> check_arith_op(Op) andalso chec
 check_type_arith( TypeInfo, { Op, Exp }) -> check_sign_op(Op) andalso check_type_arith(TypeInfo, Exp);
 check_type_arith(_,_) -> false.
 
-check_eq_op( 'eq' ) -> true;
-check_eq_op( 'neq' ) -> true;
+check_eq_op( '='  ) -> true;
+check_eq_op( '<>' ) -> true;
 check_eq_op(_) -> false.
 
 check_sign_op( '+' ) -> true;
@@ -127,10 +127,10 @@ check_arith_op( '*' ) -> true;
 check_arith_op( '/' ) -> true;
 check_arith_op(_) -> false.
 
-check_cmp_op( 'lt' ) -> true;
-check_cmp_op( 'gt' ) -> true;
-check_cmp_op( 'lteq' ) -> true;
-check_cmp_op( 'gteq' ) -> true;
+check_cmp_op( '<'  ) -> true;
+check_cmp_op( '>'  ) -> true;
+check_cmp_op( '<=' ) -> true;
+check_cmp_op( '>=' ) -> true;
 check_cmp_op(_) -> false.
 
 check_type_range( TypeInfo, {'range', From, To }) -> check_type_arith(TypeInfo, From) andalso check_type_arith(TypeInfo, To);

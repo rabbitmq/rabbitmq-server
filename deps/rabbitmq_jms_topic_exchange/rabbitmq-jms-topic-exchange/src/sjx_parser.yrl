@@ -40,8 +40,24 @@
 %%
 %% -----------------------------------------------------------------------------
 
-Nonterminals or_expr and_expr identifier bool_literal cmp_expr list
-plus_expr mult_expr atom arith_literal number list_items string expression.
+Nonterminals
+expression
+or_expr
+and_expr
+not_expr
+cmp_expr
+arith_expr
+plus_expr
+mult_expr
+sign_expr
+simple
+bool_literal
+identifier
+stringlist
+strings
+string
+pattern
+number      .
 
 Terminals
 '(' ')' ',' op_like op_in op_and op_or op_not op_null op_between escape true
@@ -49,52 +65,61 @@ false op_cmp op_plus op_mult ident lit_string lit_flt lit_int lit_hex.
 
 Rootsymbol expression.
 
-expression -> or_expr                      : '$1'.
+expression   -> or_expr                                            : '$1'.
 
-or_expr -> and_expr                        : '$1'.
-or_expr -> and_expr op_or or_expr          : disjunction('$1', '$3').
+or_expr      -> and_expr                                           : '$1'.
+or_expr      -> and_expr op_or or_expr                             : disjunction('$1', '$3').
 
-and_expr -> cmp_expr                       : '$1'.
-and_expr -> cmp_expr op_and and_expr       : conjunction('$1', '$3').
+and_expr     -> not_expr                                           : '$1'.
+and_expr     -> not_expr op_and and_expr                           : conjunction('$1', '$3').
 
-cmp_expr -> plus_expr                      : '$1'.
-cmp_expr -> plus_expr op_between plus_expr op_and plus_expr : binary_op(value_of('$2'), '$1', to_range('$3', '$5')).
-cmp_expr -> plus_expr op_cmp plus_expr     : binary_op(op_name(value_of('$2')), '$1', '$3').
+not_expr     -> cmp_expr                                           : '$1'.
+not_expr     -> op_not cmp_expr                                    : negation('$2').
 
-plus_expr -> mult_expr                     : '$1'.
-plus_expr -> mult_expr op_plus plus_expr   : binary_op(value_of('$2'), '$1', '$3').
+cmp_expr     -> arith_expr                                         : '$1'.
+cmp_expr     -> arith_expr op_cmp arith_expr                       : binary_op(value_of('$2'), '$1', '$3').
+cmp_expr     -> arith_expr op_between arith_expr op_and arith_expr : binary_op(value_of('$2'), '$1', to_range('$3', '$5')).
 
-mult_expr -> atom                          : '$1'.
-mult_expr -> atom op_mult mult_expr        : binary_op(value_of('$2'), '$1', '$3').
+arith_expr   -> plus_expr                                          : '$1'.
 
-atom -> '(' expression ')'                 : '$2'.
-atom -> bool_literal                       : '$1'.
-atom -> arith_literal                      : '$1'.
-atom -> op_not atom                        : negation('$2').
-atom -> identifier op_null                 : unary_op(value_of('$2'), '$1').
-atom -> identifier op_in list              : binary_op(value_of('$2'), '$1', '$3').
-atom -> identifier op_like string escape string : binary_op(value_of('$2'), '$1', pattern_of('$3', '$5')).
-atom -> identifier op_like string          : binary_op(value_of('$2'), '$1', pattern_of('$3')).
-atom -> identifier                         : '$1'.
-atom -> string                             : '$1'.
-atom -> op_plus atom                       : unary_op(value_of('$1'), '$2').
+plus_expr    -> mult_expr                                          : '$1'.
+plus_expr    -> mult_expr op_plus plus_expr                        : binary_op(value_of('$2'), '$1', '$3').
 
-identifier  -> ident                       : {'ident', bin_value_of('$1')}.
+mult_expr    -> sign_expr                                          : '$1'.
+mult_expr    -> sign_expr op_mult mult_expr                        : binary_op(value_of('$2'), '$1', '$3').
 
-arith_literal -> number                    : '$1'.
+sign_expr    -> simple                                             : '$1'.
+sign_expr    -> op_plus simple                                     : unary_op(value_of('$1'), '$2').
 
-bool_literal -> true                       : true.
-bool_literal -> false                      : false.
+simple       -> '(' expression ')'                                 : '$2'.
+simple       -> bool_literal                                       : '$1'.
+simple       -> string                                             : '$1'.
+simple       -> number                                             : '$1'.
+simple       -> identifier                                         : '$1'.
+simple       -> identifier op_null                                 : unary_op(value_of('$2'), '$1').
+simple       -> identifier op_in stringlist                        : binary_op(value_of('$2'), '$1', '$3').
+simple       -> identifier op_like pattern                         : binary_op(value_of('$2'), '$1', '$3').
 
-list        -> '(' list_items ')'          : '$2'.
-list_items  -> string                      : [value_of('$1')].
-list_items  -> string ',' list_items       : [value_of('$1')|'$3'].
+bool_literal -> true                                               : true.
+bool_literal -> false                                              : false.
 
-number      -> lit_int                     : value_of('$1').
-number      -> lit_flt                     : value_of('$1').
-number      -> lit_hex                     : value_of('$1').
+identifier   -> ident                                              : {'ident', bin_value_of('$1')}.
 
-string      -> lit_string                  : bin_value_of('$1').
+stringlist   -> '(' strings ')'                                    : '$2'.
+
+strings      -> string                                             : [value_of('$1')].
+strings      -> string ',' strings                                 : [value_of('$1') | '$3'].
+
+string       -> lit_string                                         : bin_value_of('$1').
+
+pattern      -> string                                             : pattern_of('$1').
+pattern      -> string escape string                               : pattern_of('$1', '$3').
+
+number       -> lit_hex                                            : value_of('$1').
+number       -> lit_flt                                            : value_of('$1').
+number       -> lit_int                                            : value_of('$1').
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Erlang code.
 %% -----------------------------------------------------------------------------
@@ -190,11 +215,3 @@ compile_re(MatchMany) ->
     of  {ok, Rx} -> {regex, Rx};
         _        -> error
     end.
-
-op_name('='  ) -> eq;
-op_name('<>' ) -> neq;
-op_name('<'  ) -> lt;
-op_name('<=' ) -> lteq;
-op_name('>'  ) -> gt;
-op_name('>=' ) -> gteq;
-op_name(CmpOp) when is_atom(CmpOp) -> CmpOp.

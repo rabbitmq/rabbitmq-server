@@ -43,7 +43,7 @@ STRING  = '([^']|'')*'
 % COMMENT = /\*([^\*]|\*[^/])*\*/       % Do not (need to) support comments
 % WS      = ([\000-\s]|%.*)             % Do not (need to) support line comments
 
-% IDENT to allow periods in names (not starting)
+% IDENT to allow periods in names (not first char)
 
 % All keywords are case insensitive
 LIKE    = [Ll][Ii][Kk][Ee]
@@ -118,19 +118,19 @@ stripquotes(Cs, L) -> undouble(lists:sublist(Cs, 2, L-2), []).
 
 undouble([],           Acc) -> lists:reverse(Acc);
 undouble([$', $'| Cs], Acc) -> undouble(Cs, [$'| Acc]);
-undouble([Ch| Cs],     Acc) -> undouble(Cs, [Ch|Acc]).
+undouble([Ch    | Cs], Acc) -> undouble(Cs, [Ch|Acc]).
 
+%% only applied to floats {F2} and {F3} which do not have a decimal point or else no following digit
 to_float(List) -> list_to_float(insertPointNought(List, [])).
 
-insertPointNought([], Acc) -> lists:reverse(Acc);
-insertPointNought([$f], Acc) -> lists:reverse(Acc) ++ [$., $0];
-insertPointNought([$F], Acc) -> lists:reverse(Acc) ++ [$., $0];
-insertPointNought([$d], Acc) -> lists:reverse(Acc) ++ [$., $0];
-insertPointNought([$D], Acc) -> lists:reverse(Acc) ++ [$., $0];
+insertPointNought([],       Acc) -> lists:reverse(Acc);
+insertPointNought([$f],     Acc) -> lists:reverse(Acc) ++ [$., $0];
+insertPointNought([$F],     Acc) -> lists:reverse(Acc) ++ [$., $0];
+insertPointNought([$d],     Acc) -> lists:reverse(Acc) ++ [$., $0];
+insertPointNought([$D],     Acc) -> lists:reverse(Acc) ++ [$., $0];
 insertPointNought([$.| Cs], Acc) -> lists:reverse(Acc) ++ [$., $0| Cs];
 insertPointNought([$e| Cs], Acc) -> lists:reverse(Acc) ++ [$., $0, $e| Cs];
 insertPointNought([$E| Cs], Acc) -> lists:reverse(Acc) ++ [$., $0, $e| Cs];
 insertPointNought([Ch| Cs], Acc) -> insertPointNought(Cs, [Ch| Acc]).
 
-atomize(TokenChars) ->
-    list_to_atom(TokenChars).
+atomize(TokenChars) -> list_to_atom(TokenChars).

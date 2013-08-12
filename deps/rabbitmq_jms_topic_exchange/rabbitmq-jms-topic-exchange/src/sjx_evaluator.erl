@@ -84,20 +84,20 @@ do_una_op(_,   _) -> error.
 
 do_bin_op(_, undefined, _)  -> undefined;
 do_bin_op(_, _, undefined ) -> undefined;
-do_bin_op('eq' ,   L, R) -> L == R;
-do_bin_op('neq',   L, R) -> L /= R;
-do_bin_op('gt',    L, R) -> L > R;
-do_bin_op('lt',    L, R) -> L < R;
-do_bin_op('gteq',  L, R) -> L >= R;
-do_bin_op('lteq',  L, R) -> L =< R;
-do_bin_op('in',    L, R) -> isIn(L,R);
-do_bin_op('+',     L, R) -> L + R;
-do_bin_op('-',     L, R) -> L - R;
-do_bin_op('*',     L, R) -> L * R;
-do_bin_op('/',     L, R) when R /= 0 -> L / R;
-do_bin_op('/',     L, R) when L > 0 andalso R == 0 -> plus_infinity;
-do_bin_op('/',     L, R) when L < 0 andalso R == 0 -> minus_infinity;
-do_bin_op('/',     L, R) when L == 0 andalso R == 0 -> nan;
+do_bin_op('=' , L, R) -> L == R;
+do_bin_op('<>', L, R) -> L /= R;
+do_bin_op('>' , L, R) -> L > R;
+do_bin_op('<' , L, R) -> L < R;
+do_bin_op('>=', L, R) -> L >= R;
+do_bin_op('<=', L, R) -> L =< R;
+do_bin_op('in', L, R) -> isIn(L, R);
+do_bin_op('+' , L, R) -> L + R;
+do_bin_op('-' , L, R) -> L - R;
+do_bin_op('*' , L, R) -> L * R;
+do_bin_op('/' , L, R) when R /= 0 -> L / R;
+do_bin_op('/' , L, R) when L > 0 andalso R == 0 -> plus_infinity;
+do_bin_op('/' , L, R) when L < 0 andalso R == 0 -> minus_infinity;
+do_bin_op('/' , L, R) when L == 0 andalso R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
 isLike(L, MP) ->
@@ -108,9 +108,9 @@ isLike(L, MP) ->
     _                  -> false
   end.
 
-isIn(_L, []  ) -> false;
-isIn(L, [L|_]) -> true;
-isIn(L, [_|R]) -> isIn(L,R).
+isIn(_L, []   ) -> false;
+isIn( L, [L|_]) -> true;
+isIn( L, [_|R]) -> isIn(L,R).
 
 val_of({'ident', Ident}, Hs) -> lookup_value(Hs, Ident);
 val_of(Value,           _Hs) -> Value.
