@@ -32,7 +32,7 @@ DIG     = [0-9]
 HEXDIG  = [0-9a-fA-F]
 F       = {DIG}+{PERIOD}{DIG}+([Ee][-+]?{DIG}+)?
 F2      = {DIG}+({PERIOD}([Ee][-+]?{DIG}+)?|[Ee][-+]?{DIG}+)
-F3      = {DIG}+(f|F|d|D)
+F3      = {DIG}+({PERIOD}{DIG}*)?(f|F|d|D)
 HEX     = 0x{HEXDIG}+
 WS      = [\000-\s]+
 CMP     = (>=|<=|<>|[=><])
@@ -85,8 +85,8 @@ Rules.
 {LP}                    : {token, {'(',         TokenLine}}.
 {RP}                    : {token, {')',         TokenLine}}.
 {F}                     : {token, {lit_flt,     TokenLine, list_to_float(TokenChars)}}.
-{F2}                    : {token, {lit_flt,     TokenLine, to_float(TokenChars)}}.
-{F3}                    : {token, {lit_flt,     TokenLine, to_float(TokenChars)}}.
+{F2}                    : {token, {lit_flt,     TokenLine, to_float2(TokenChars)}}.
+{F3}                    : {token, {lit_flt,     TokenLine, to_float3(TokenChars)}}.
 {DIG}+                  : {token, {lit_int,     TokenLine, list_to_integer(TokenChars)}}.
 {HEX}                   : {token, {lit_hex,     TokenLine, list_to_integer(lists:nthtail(2,TokenChars),16)}}.
 {WS}                    : skip_token.
@@ -125,13 +125,24 @@ undouble([$', $'| Cs], Acc) -> undouble(Cs, [$'| Acc]);
 undouble([Ch    | Cs], Acc) -> undouble(Cs, [Ch|Acc]).
 
 %% only applied to floats {F2} and {F3} which do not have a decimal point or else no following digit
-to_float(List) -> list_to_float(insertPointNought(List, [])).
+to_float2(List) -> list_to_float(insertPointNought(List, [])).
+
+to_float3(List) -> list_to_float(removeFs(List, [], false)).
+
+removeFs([],       Acc, false) -> lists:reverse(Acc) ++ [$., $0];
+removeFs([],       Acc, true ) -> lists:reverse(Acc);
+removeFs([$., $f], Acc,_Seen ) -> lists:reverse(Acc) ++ [$., $0];
+removeFs([$., $F], Acc,_Seen ) -> lists:reverse(Acc) ++ [$., $0];
+removeFs([$., $d], Acc,_Seen ) -> lists:reverse(Acc) ++ [$., $0];
+removeFs([$., $D], Acc,_Seen ) -> lists:reverse(Acc) ++ [$., $0];
+removeFs([$f],     Acc, Seen ) -> removeFs([], Acc,       Seen);
+removeFs([$F],     Acc, Seen ) -> removeFs([], Acc,       Seen);
+removeFs([$d],     Acc, Seen ) -> removeFs([], Acc,       Seen);
+removeFs([$D],     Acc, Seen ) -> removeFs([], Acc,       Seen);
+removeFs([$.| Cs], Acc,_Seen ) -> removeFs(Cs, [$.| Acc], true);
+removeFs([Ch| Cs], Acc, Seen ) -> removeFs(Cs, [Ch| Acc], Seen).
 
 insertPointNought([],       Acc) -> lists:reverse(Acc);
-insertPointNought([$f],     Acc) -> lists:reverse(Acc) ++ [$., $0];
-insertPointNought([$F],     Acc) -> lists:reverse(Acc) ++ [$., $0];
-insertPointNought([$d],     Acc) -> lists:reverse(Acc) ++ [$., $0];
-insertPointNought([$D],     Acc) -> lists:reverse(Acc) ++ [$., $0];
 insertPointNought([$.| Cs], Acc) -> lists:reverse(Acc) ++ [$., $0| Cs];
 insertPointNought([$e| Cs], Acc) -> lists:reverse(Acc) ++ [$., $0, $e| Cs];
 insertPointNought([$E| Cs], Acc) -> lists:reverse(Acc) ++ [$., $0, $e| Cs];

@@ -31,6 +31,7 @@ basic_scan_test_() ->
     , ?_assertEqual( [t(4.0e2), t(0.0), t(','), t(1), t(3.0), h(57005)]  ,  scan(" 4e2  0e-1,1 3. 0xdead   "))
     , ?_assertEqual( [t(','), t('('), t(')')]  ,  scan("   ,   (  \t  )   \r"))
     , ?_assertEqual( [t('-'), t('-'), t(1.0), t('='), t(1.0)]  ,  scan(" --1.0 = 1.0"))
+    , ?_assertEqual( [t(4.0), t(4.0), t(4.1)],  scan(" 4f 4.D 4.1f "))
     ].
 
 % Produces a list of tokens from a string
