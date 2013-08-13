@@ -137,18 +137,12 @@ evaluate0({'not', SubQuery}, Args, User, LDAP, State) ->
     ?L1("negated result to ~s", [R], State),
     not R;
 
-evaluate0({'and', SubQuery1, SubQuery2}, Args, User, LDAP, State) ->
-    evaluate0({'and', [SubQuery1, SubQuery2]}, Args, User, LDAP, State);
-
 evaluate0({'and', Queries}, Args, User, LDAP, State) when is_list(Queries) ->
     R = lists:foldl(fun (Q,  true)  -> evaluate(Q, Args, User, LDAP, State);
                         (_Q, false) -> false
                     end, true, Queries),
     ?L1("'and' result: ~s", [R], State),
     R;
-
-evaluate0({'or', SubQuery1, SubQuery2}, Args, User, LDAP, State) ->
-    evaluate0({'or', [SubQuery1, SubQuery2]}, Args, User, LDAP, State);
 
 evaluate0({'or', Queries}, Args, User, LDAP, State) when is_list(Queries) ->
     R = lists:foldl(fun (_Q, true)  -> true;
