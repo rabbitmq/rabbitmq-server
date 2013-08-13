@@ -229,8 +229,9 @@ usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
     rabbit_misc:quit(1).
 
-parse_arguments(Args, NodeStr) ->
-    case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr), Args) of
+parse_arguments(CmdLine, NodeStr) ->
+    case rabbit_misc:parse_arguments(
+           ?COMMANDS, ?GLOBAL_DEFS(NodeStr), CmdLine) of
         {ok, {Cmd, Opts0, Args}} ->
             Opts = [case K of
                         ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
