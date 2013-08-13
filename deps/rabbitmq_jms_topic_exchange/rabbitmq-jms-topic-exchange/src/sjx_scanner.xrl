@@ -31,8 +31,9 @@ LET     = [A-Za-z_\$]
 DIG     = [0-9]
 HEXDIG  = [0-9a-fA-F]
 F       = {DIG}+{PERIOD}{DIG}+([Ee][-+]?{DIG}+)?
-F2      = {DIG}+({PERIOD}([Ee][-+]?{DIG}+)?|[Ee][-+]?{DIG}+)
-F3      = {DIG}+({PERIOD}{DIG}*)?(f|F|d|D)
+F2      = {DIG}+({PERIOD}[Ee][-+]?{DIG}+|[Ee][-+]?{DIG}+)
+F3      = {DIG}+({PERIOD}{DIG}*)?[fFdD]
+F4      = {DIG}+{PERIOD}{DIG}*
 HEX     = 0x{HEXDIG}+
 WS      = [\000-\s]+
 CMP     = (>=|<=|<>|[=><])
@@ -87,6 +88,7 @@ Rules.
 {F}                     : {token, {lit_flt,     TokenLine, list_to_float(TokenChars)}}.
 {F2}                    : {token, {lit_flt,     TokenLine, to_float2(TokenChars)}}.
 {F3}                    : {token, {lit_flt,     TokenLine, to_float3(TokenChars)}}.
+{F4}                    : {token, {lit_flt,     TokenLine, to_float3(TokenChars)}}.
 {DIG}+                  : {token, {lit_int,     TokenLine, list_to_integer(TokenChars)}}.
 {HEX}                   : {token, {lit_hex,     TokenLine, list_to_integer(lists:nthtail(2,TokenChars),16)}}.
 {WS}                    : skip_token.
@@ -131,6 +133,7 @@ to_float3(List) -> list_to_float(removeFs(List, [], false)).
 
 removeFs([],       Acc, false) -> lists:reverse(Acc) ++ [$., $0];
 removeFs([],       Acc, true ) -> lists:reverse(Acc);
+removeFs([$.],     Acc,_Seen ) -> lists:reverse(Acc) ++ [$., $0];
 removeFs([$., $f], Acc,_Seen ) -> lists:reverse(Acc) ++ [$., $0];
 removeFs([$., $F], Acc,_Seen ) -> lists:reverse(Acc) ++ [$., $0];
 removeFs([$., $d], Acc,_Seen ) -> lists:reverse(Acc) ++ [$., $0];
