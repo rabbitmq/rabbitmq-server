@@ -22,7 +22,7 @@
 
 -export([apply_defs/3]).
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -174,7 +174,7 @@ rw_state() ->
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
      {parameters,  [vhost, component, name, value]},
-     {policies,    [vhost, name, pattern, definition, priority]},
+     {policies,    [vhost, name, pattern, definition, priority, 'apply-to']},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
      {exchanges,   [name, vhost, type, durable, auto_delete, internal,
                     arguments]},
@@ -221,7 +221,8 @@ add_policy(Param) ->
     case rabbit_policy:set(
            VHost, Key, pget(pattern, Param),
            rabbit_misc:json_to_term(pget(definition, Param)),
-           pget(priority, Param)) of
+           pget(priority, Param),
+           pget('apply-to', Param, <<"all">>)) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [VHost, Key]),
                              exit(list_to_binary(E ++ S))
