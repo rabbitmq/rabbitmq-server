@@ -89,7 +89,7 @@ mult_expr    -> sign_expr                                          : '$1'.
 mult_expr    -> sign_expr op_mult mult_expr                        : binary_op(value_of('$2'), '$1', '$3').
 
 sign_expr    -> simple                                             : '$1'.
-sign_expr    -> op_plus simple                                     : unary_op(value_of('$1'), '$2').
+sign_expr    -> op_plus sign_expr                                  : unary_op(value_of('$1'), '$2').
 
 simple       -> '(' expression ')'                                 : '$2'.
 simple       -> bool_literal                                       : '$1'.

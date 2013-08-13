@@ -48,6 +48,7 @@ basic_parse_test_() ->
     , ?_assertMatch( {'=', 3.0, 3.3},                                   analyze(?TEST_TYPE_INFO, "3D = 3.3                     "))
     , ?_assertMatch( {'=', 3.0, 3.3},                                   analyze(?TEST_TYPE_INFO, "3f = 3.3                     "))
     , ?_assertMatch( {'=', 3.0, 3.3},                                   analyze(?TEST_TYPE_INFO, "3F = 3.3                     "))
+    , ?_assertMatch( {'=', {'-', {'-', 1.0}}, 1.0},                     analyze(?TEST_TYPE_INFO, "--1.0=1.0                    "))
     , ?_assertMatch( {'=', {'ident', <<"JMSType">>}, <<"car">>},        analyze(?TEST_TYPE_INFO, "JMSType = 'car'              "))
     , ?_assertMatch( {'=', {'ident', <<"colour">>}, <<"blue">>},        analyze(?TEST_TYPE_INFO, "colour = 'blue'              "))
     , ?_assertMatch( false,                                             analyze(?TEST_TYPE_INFO, "false                        "))

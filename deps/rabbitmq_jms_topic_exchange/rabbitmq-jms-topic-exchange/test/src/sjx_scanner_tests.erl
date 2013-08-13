@@ -30,6 +30,7 @@ basic_scan_test_() ->
     , ?_assertEqual( [i("car"), t(not_between), t(1), t('and'), t(21.5)]  ,  scan("car not   between 1   and 21.5"))
     , ?_assertEqual( [t(4.0e2), t(0.0), t(','), t(1), t(3.0), h(57005)]  ,  scan(" 4e2  0e-1,1 3. 0xdead   "))
     , ?_assertEqual( [t(','), t('('), t(')')]  ,  scan("   ,   (  \t  )   \r"))
+    , ?_assertEqual( [t('-'), t('-'), t(1.0), t('='), t(1.0)]  ,  scan(" --1.0 = 1.0"))
     ].
 
 % Produces a list of tokens from a string
