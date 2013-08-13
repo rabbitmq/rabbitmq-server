@@ -386,10 +386,12 @@ run_outside_applications(Fun) ->
                   %% If our group leader is inside an application we are about
                   %% to stop, application:stop/1 does not return.
                   group_leader(whereis(init), self()),
-                  %% Ensure only one such process at a time, will
-                  %% exit(badarg) (harmlessly) if one is already running
-                  register(rabbit_outside_app_process, self()),
-                  Fun()
+                  %% Ensure only one such process at a time, the
+                  %% exit(badarg) is harmless if one is already running
+                  try register(rabbit_outside_app_process, self()) of
+                      true           -> Fun()
+                  catch error:badarg -> ok
+                  end
           end).
 
 wait_for_cluster_recovery(Nodes) ->
