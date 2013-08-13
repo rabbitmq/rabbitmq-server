@@ -960,7 +960,7 @@
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg> <arg choice="opt"><replaceable>priority</replaceable></arg> </cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">--priority <replaceable>priority</replaceable></arg> <arg choice="opt">--apply-to <replaceable>apply-to</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Sets a policy.
@@ -989,7 +989,13 @@
               <varlistentry>
                 <term>priority</term>
                 <listitem><para>
-                    The priority of the policy as an integer, defaulting to 0. Higher numbers indicate greater precedence.
+                    The priority of the policy as an integer. Higher numbers indicate greater precedence. The default is 0.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>apply-to</term>
+                <listitem><para>
+                    Which types of object this policy should apply to - "queues", "exchanges" or "all". The default is "all".
                 </para></listitem>
               </varlistentry>
             </variablelist>
