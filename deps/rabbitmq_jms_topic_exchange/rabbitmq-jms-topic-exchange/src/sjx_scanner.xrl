@@ -23,18 +23,20 @@
 %% -----------------------------------------------------------------------------
 Definitions.
 
-COMMA   = [,]
-PARENS  = [\(\)]
-L       = [A-Za-z_\$]
-D       = [0-9]
-F       = [-+]?[0-9]+\.[0-9]+([Ee][-+]?[0-9]+)?
-F2      = [-+]?[0-9]+(\.([Ee][-+]?[0-9]+)?|[Ee][-+]?[0-9]+)
-F3      = {D}+(f|F|d|D)
-HEX     = 0x[0-9a-fA-F]+
-WS      = ([\000-\s])
-S       = ({COMMA}|{PARENS})
+COMMA   = ,
+LP      = \(
+RP      = \)
+PERIOD  = \.
+LET     = [A-Za-z_\$]
+DIG     = [0-9]
+HEXDIG  = [0-9a-fA-F]
+F       = [-+]?{DIG}+{PERIOD}{DIG}+([Ee][-+]?{DIG}+)?
+F2      = [-+]?{DIG}+({PERIOD}([Ee][-+]?{DIG}+)?|[Ee][-+]?{DIG}+)
+F3      = {DIG}+(f|F|d|D)
+HEX     = 0x{HEXDIG}+
+WS      = [\000-\s]+
 CMP     = (>=|<=|<>|[=><])
-IDENT   = {L}({L}|{D}|\.)*
+IDENT   = {LET}({LET}|{DIG}|{PERIOD})*
 APLUS   = [-+]
 AMULT   = [*/]
 STRING  = '([^']|'')*'
@@ -60,32 +62,34 @@ FALSE   = [Ff][Aa][Ll][Ss][Ee]
 
 Rules.
 
-{LIKE}                  : {token, {op_like,             TokenLine, like}}.
-{NOT}{WS}{LIKE}         : {token, {op_like,             TokenLine, not_like}}.
-{IN}                    : {token, {op_in,               TokenLine, in}}.
-{NOT}{WS}{IN}           : {token, {op_in,               TokenLine, not_in}}.
-{AND}                   : {token, {op_and,              TokenLine, conjunction}}.
-{OR}                    : {token, {op_or,               TokenLine, disjunction}}.
-{NOT}                   : {token, {op_not,              TokenLine, negation}}.
-{IS}{WS}{NULL}          : {token, {op_null,             TokenLine, is_null}}.
-{IS}{WS}{NOT}{WS}{NULL} : {token, {op_null,             TokenLine, not_null}}.
-{BETWEEN}               : {token, {op_between,          TokenLine, between}}.
-{NOT}{WS}{BETWEEN}      : {token, {op_between,          TokenLine, not_between}}.
-{ESCAPE}                : {token, {escape,              TokenLine, escape}}.
-{TRUE}                  : {token, {true,                TokenLine}}.
-{FALSE}                 : {token, {false,               TokenLine}}.
-{CMP}                   : {token, {op_cmp,              TokenLine, atomize(TokenChars)}}.
-{APLUS}                 : {token, {op_plus,             TokenLine, atomize(TokenChars)}}.
-{AMULT}                 : {token, {op_mult,             TokenLine, atomize(TokenChars)}}.
-{IDENT}                 : {token, {ident,               TokenLine, TokenChars}}.
-{STRING}                : {token, {lit_string,          TokenLine, stripquotes(TokenChars,TokenLen)}}.
-{S}                     : {token, {atomize(TokenChars), TokenLine}}.
-{F}                     : {token, {lit_flt,             TokenLine, list_to_float(TokenChars)}}.
-{F2}                    : {token, {lit_flt,             TokenLine, to_float(TokenChars)}}.
-{F3}                    : {token, {lit_flt,             TokenLine, to_float(TokenChars)}}.
-{D}+                    : {token, {lit_int,             TokenLine, list_to_integer(TokenChars)}}.
-{HEX}                   : {token, {lit_hex,             TokenLine, list_to_integer(lists:nthtail(2,TokenChars),16)}}.
-{WS}+                   : skip_token.
+{LIKE}                  : {token, {op_like,     TokenLine, like}}.
+{NOT}{WS}{LIKE}         : {token, {op_like,     TokenLine, not_like}}.
+{IN}                    : {token, {op_in,       TokenLine, in}}.
+{NOT}{WS}{IN}           : {token, {op_in,       TokenLine, not_in}}.
+{AND}                   : {token, {op_and,      TokenLine, conjunction}}.
+{OR}                    : {token, {op_or,       TokenLine, disjunction}}.
+{NOT}                   : {token, {op_not,      TokenLine, negation}}.
+{IS}{WS}{NULL}          : {token, {op_null,     TokenLine, is_null}}.
+{IS}{WS}{NOT}{WS}{NULL} : {token, {op_null,     TokenLine, not_null}}.
+{BETWEEN}               : {token, {op_between,  TokenLine, between}}.
+{NOT}{WS}{BETWEEN}      : {token, {op_between,  TokenLine, not_between}}.
+{ESCAPE}                : {token, {escape,      TokenLine, escape}}.
+{TRUE}                  : {token, {true,        TokenLine}}.
+{FALSE}                 : {token, {false,       TokenLine}}.
+{CMP}                   : {token, {op_cmp,      TokenLine, atomize(TokenChars)}}.
+{APLUS}                 : {token, {op_plus,     TokenLine, atomize(TokenChars)}}.
+{AMULT}                 : {token, {op_mult,     TokenLine, atomize(TokenChars)}}.
+{IDENT}                 : {token, {ident,       TokenLine, TokenChars}}.
+{STRING}                : {token, {lit_string,  TokenLine, stripquotes(TokenChars,TokenLen)}}.
+{COMMA}                 : {token, {',',         TokenLine}}.
+{LP}                    : {token, {'(',         TokenLine}}.
+{RP}                    : {token, {')',         TokenLine}}.
+{F}                     : {token, {lit_flt,     TokenLine, list_to_float(TokenChars)}}.
+{F2}                    : {token, {lit_flt,     TokenLine, to_float(TokenChars)}}.
+{F3}                    : {token, {lit_flt,     TokenLine, to_float(TokenChars)}}.
+{DIG}+                  : {token, {lit_int,     TokenLine, list_to_integer(TokenChars)}}.
+{HEX}                   : {token, {lit_hex,     TokenLine, list_to_integer(lists:nthtail(2,TokenChars),16)}}.
+{WS}                    : skip_token.
 
 % {COMMENT}               : skip_token.             % Do not (need to) support comments
 
