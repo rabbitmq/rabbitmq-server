@@ -74,7 +74,7 @@ and_expr     -> not_expr                                           : '$1'.
 and_expr     -> not_expr op_and and_expr                           : conjunction('$1', '$3').
 
 not_expr     -> cmp_expr                                           : '$1'.
-not_expr     -> op_not cmp_expr                                    : negation('$2').
+not_expr     -> op_not not_expr                                    : negation('$2').
 
 cmp_expr     -> arith_expr                                         : '$1'.
 cmp_expr     -> arith_expr op_cmp arith_expr                       : binary_op(value_of('$2'), '$1', '$3').

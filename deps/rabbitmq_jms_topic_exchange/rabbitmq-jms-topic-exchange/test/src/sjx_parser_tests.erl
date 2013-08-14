@@ -86,6 +86,7 @@ basic_parse_test_() ->
     , ?_assertMatch( error,                                             analyze(?TEST_TYPE_INFO, "TestBoolean >= 0             "))
     , ?_assertMatch( error,                                             analyze(?TEST_TYPE_INFO, "not JMSPriority              "))
     , ?_assertMatch( {'not', {'ident', <<"TestBoolean">>}},             analyze(?TEST_TYPE_INFO, "not TestBoolean              "))
+    , ?_assertMatch( {'ident', <<"TestBoolean">>},                      analyze(?TEST_TYPE_INFO, "not not TestBoolean          "))
 
     , ?_assertMatch( {'ident', <<"dummy">> },                           analyze(?TEST_TYPE_INFO, "true and dummy               "))
     , ?_assertMatch( false,                                             analyze(?TEST_TYPE_INFO, "false and dummy              "))
