@@ -16,12 +16,10 @@
 
 -module(pmon).
 
--export([new/0, new/1, monitor/2, monitor_all/2, demonitor/2,
-         is_monitored/2, erase/2, monitored/1, is_empty/1]).
+-export([new/0, monitor/2, monitor_all/2, demonitor/2, is_monitored/2, erase/2,
+         monitored/1, is_empty/1]).
 
 -compile({no_auto_import, [monitor/2]}).
-
--record(state, {dict, module}).
 
 -ifdef(use_specs).
 
@@ -29,13 +27,11 @@
 
 -export_type([?MODULE/0]).
 
--opaque(?MODULE() :: #state{dict   :: dict(),
-                            module :: atom()}).
+-opaque(?MODULE()    :: dict()).
 
 -type(item()         :: pid() | {atom(), node()}).
 
 -spec(new/0          :: () -> ?MODULE()).
--spec(new/1          :: ('erlang' | 'delegate') -> ?MODULE()).
 -spec(monitor/2      :: (item(), ?MODULE()) -> ?MODULE()).
 -spec(monitor_all/2  :: ([item()], ?MODULE()) -> ?MODULE()).
 -spec(demonitor/2    :: (item(), ?MODULE()) -> ?MODULE()).
@@ -46,33 +42,29 @@
 
 -endif.
 
-new() -> new(erlang).
+new() -> dict:new().
 
-new(Module) -> #state{dict   = dict:new(),
-                      module = Module}.
-
-monitor(Item, S = #state{dict = M, module = Module}) ->
+monitor(Item, M) ->
     case dict:is_key(Item, M) of
-        true  -> S;
-        false -> S#state{dict = dict:store(
-                                  Item, Module:monitor(process, Item), M)}
+        true  -> M;
+        false -> dict:store(Item, erlang:monitor(process, Item), M)
     end.
 
-monitor_all([],     S) -> S;                %% optimisation
-monitor_all([Item], S) -> monitor(Item, S); %% optimisation
-monitor_all(Items,  S) -> lists:foldl(fun monitor/2, S, Items).
+monitor_all([],     M) -> M;                %% optimisation
+monitor_all([Item], M) -> monitor(Item, M); %% optimisation
+monitor_all(Items,  M) -> lists:foldl(fun monitor/2, M, Items).
 
-demonitor(Item, S = #state{dict = M, module = Module}) ->
+demonitor(Item, M) ->
     case dict:find(Item, M) of
-        {ok, MRef} -> Module:demonitor(MRef),
-                      S#state{dict = dict:erase(Item, M)};
+        {ok, MRef} -> erlang:demonitor(MRef),
+                      dict:erase(Item, M);
         error      -> M
     end.
 
-is_monitored(Item, #state{dict = M}) -> dict:is_key(Item, M).
+is_monitored(Item, M) -> dict:is_key(Item, M).
 
-erase(Item, S = #state{dict = M}) -> S#state{dict = dict:erase(Item, M)}.
+erase(Item, M) -> dict:erase(Item, M).
 
-monitored(#state{dict = M}) -> dict:fetch_keys(M).
+monitored(M) -> dict:fetch_keys(M).
 
-is_empty(#state{dict = M}) -> dict:size(M) == 0.
+is_empty(M) -> dict:size(M) == 0.
