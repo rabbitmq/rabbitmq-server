@@ -234,6 +234,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+%% A two level nested dictionary, with the second level being
+%% bidirectional. i.e. we map A->B->C and A->C->B.
+
 ddict_new() -> dict:new().
 
 ddict_store(Key, Val1, Val2, Dict) ->
