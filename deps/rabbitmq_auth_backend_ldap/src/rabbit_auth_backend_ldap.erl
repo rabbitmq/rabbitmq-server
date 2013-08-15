@@ -132,6 +132,35 @@ evaluate0({in_group, DNPattern, Desc}, Args,
     ?L1("evaluated in_group for \"~s\": ~p", [DN, R], State),
     R;
 
+evaluate0({'not', SubQuery}, Args, User, LDAP, State) ->
+    R = evaluate(SubQuery, Args, User, LDAP, State),
+    ?L1("negated result to ~s", [R], State),
+    not R;
+
+evaluate0({'and', Queries}, Args, User, LDAP, State) when is_list(Queries) ->
+    R = lists:foldl(fun (Q,  true)  -> evaluate(Q, Args, User, LDAP, State);
+                        (_Q, false) -> false
+                    end, true, Queries),
+    ?L1("'and' result: ~s", [R], State),
+    R;
+
+evaluate0({'or', Queries}, Args, User, LDAP, State) when is_list(Queries) ->
+    R = lists:foldl(fun (_Q, true)  -> true;
+                        (Q,  false) -> evaluate(Q, Args, User, LDAP, State)
+                    end, false, Queries),
+    ?L1("'or' result: ~s", [R], State),
+    R;
+
+evaluate0({equals, StringQuery1, StringQuery2}, Args, User, LDAP, State) ->
+    safe_eval(fun (String1, String2) ->
+                      R = String1 =:= String2,
+                      ?L1("evaluated equals \"~s\", \"~s\": ~s",
+                          [String1, String2, R], State),
+                      R
+              end,
+              evaluate(StringQuery1, Args, User, LDAP, State),
+              evaluate(StringQuery2, Args, User, LDAP, State));
+
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP, State) ->
     safe_eval(fun (String, RE) ->
                       R = case re:run(String, RE) of
@@ -144,6 +173,9 @@ evaluate0({match, StringQuery, REQuery}, Args, User, LDAP, State) ->
               end,
               evaluate(StringQuery, Args, User, LDAP, State),
               evaluate(REQuery, Args, User, LDAP, State));
+
+evaluate0(StringPattern, Args, User, LDAP, State) when is_list(StringPattern) ->
+    evaluate0({string, StringPattern}, Args, User, LDAP, State);
 
 evaluate0({string, StringPattern}, Args, _User, _LDAP, State) ->
     R = fill(StringPattern, Args, State),
