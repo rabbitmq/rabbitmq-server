@@ -934,7 +934,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
-            rabbit_misc:not_found(ExchangeName);
+            return_ok(State, NoWait,  #'exchange.delete_ok'{});
         {error, in_use} ->
             precondition_failed("~s in use", [rabbit_misc:rs(ExchangeName)]);
         ok ->
@@ -1047,9 +1047,15 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
               _, State = #ch{conn_pid = ConnPid}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_configure_permitted(QueueName, State),
-    case rabbit_amqqueue:with_exclusive_access_or_die(
-           QueueName, ConnPid,
-           fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
+    case rabbit_amqqueue:with(
+           QueueName,
+           fun (Q) ->
+                   rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
+                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty)
+           end,
+           fun (not_found)   -> {ok, 0};
+               ({absent, Q}) -> rabbit_misc:absent(Q)
+           end) of
         {error, in_use} ->
             precondition_failed("~s in use", [rabbit_misc:rs(QueueName)]);
         {error, not_empty} ->
