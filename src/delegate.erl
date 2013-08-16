@@ -185,7 +185,7 @@ apply1(Fun,       Arg) -> Fun(Arg).
 %%----------------------------------------------------------------------------
 
 init([Name]) ->
-    {ok, #state{node = node(), monitors = ddict_new(), name = Name}, hibernate,
+    {ok, #state{node = node(), monitors = dict:new(), name = Name}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({invoke, FunOrMFA, Grouped}, _From, State = #state{node = Node}) ->
@@ -194,20 +194,31 @@ handle_call({invoke, FunOrMFA, Grouped}, _From, State = #state{node = Node}) ->
 
 handle_cast({monitor, Type, WantsMonitor, Pid},
             State = #state{monitors = Monitors}) ->
-    Ref = erlang:monitor(Type, Pid),
-    Monitors1 = ddict_store(Pid, WantsMonitor, Ref, Monitors),
+    Monitors1 = case dict:find(Pid, Monitors) of
+                    {ok, {Ref, Set}} ->
+                        Set1 = sets:add_element(WantsMonitor, Set),
+                        dict:store(Pid, {Ref, Set1}, Monitors);
+                    error ->
+                        Ref = erlang:monitor(Type, Pid),
+                        Set = sets:from_list([WantsMonitor]),
+                        dict:store(Pid, {Ref, Set}, Monitors)
+                end,
     {noreply, State#state{monitors = Monitors1}, hibernate};
 
 handle_cast({demonitor, WantsMonitor, Pid, Options},
             State = #state{monitors = Monitors}) ->
-    {noreply, case ddict_find_f(Pid, WantsMonitor, Monitors) of
-                  {ok, Ref} ->
-                      erlang:demonitor(Ref, Options),
-                      State#state{monitors = ddict_erase_f(
-                                               Pid, WantsMonitor, Monitors)};
+    Monitors1 = case dict:find(Pid, Monitors) of
+                  {ok, {Ref, Set}} ->
+                      Set1 = sets:del_element(WantsMonitor, Set),
+                      case sets:size(Set1) of
+                          0 -> erlang:demonitor(Ref, Options),
+                               dict:erase(Pid, Monitors);
+                          _ -> dict:store(Pid, {Ref, Set1}, Monitors)
+                      end;
                   error ->
-                      State
-              end, hibernate};
+                      Monitors
+                end,
+    {noreply, State#state{monitors = Monitors1}, hibernate};
 
 handle_cast({invoke, FunOrMFA, Grouped}, State = #state{node = Node}) ->
     safe_invoke(orddict:fetch(Node, Grouped), FunOrMFA),
@@ -215,13 +226,17 @@ handle_cast({invoke, FunOrMFA, Grouped}, State = #state{node = Node}) ->
 
 handle_info({'DOWN', Ref, process, Pid, Info},
             State = #state{monitors = Monitors, name = Name}) ->
-    {noreply, case ddict_find_r(Pid, Ref, Monitors) of
-                  {ok, WantsMonitor} ->
-                      WantsMonitor ! {'DOWN', {Name, Pid}, process, Pid, Info},
-                      State#state{monitors = ddict_erase_r(Pid, Ref, Monitors)};
-                  error ->
-                      State
-              end, hibernate};
+    {noreply,
+     case dict:find(Pid, Monitors) of
+         {ok, {Ref, Set}} ->
+             sets:fold(
+               fun (WantsMonitor, none) ->
+                       WantsMonitor ! {'DOWN', {Name, Pid}, process, Pid, Info}
+               end, none, Set),
+             State#state{monitors = dict:erase(Pid, Monitors)};
+         error ->
+             State
+     end, hibernate};
 
 handle_info(_Info, State) ->
     {noreply, State, hibernate}.
@@ -231,52 +246,3 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-%%----------------------------------------------------------------------------
-
-%% A two level nested dictionary, with the second level being
-%% bidirectional. i.e. we map A->B->C and A->C->B.
-
-ddict_new() -> dict:new().
-
-ddict_store(Key, Val1, Val2, Dict) ->
-    V = case dict:find(Key, Dict) of
-            {ok, {DictF, DictR}} -> {dict:store(Val1, Val2, DictF),
-                                     dict:store(Val2, Val1, DictR)};
-            error                -> {dict:new(), dict:new()}
-        end,
-    dict:store(Key, V, Dict).
-
-ddict_find_f(Key, Val1, Dict) -> ddict_find(Key, Val1, Dict, fun select_f/1).
-ddict_find_r(Key, Val2, Dict) -> ddict_find(Key, Val2, Dict, fun select_r/1).
-
-ddict_find(Key, ValX, Dict, Select) ->
-    case dict:find(Key, Dict) of
-        {ok, Dicts} -> {DictX, _} = Select(Dicts),
-                       dict:find(ValX, DictX);
-        error       -> error
-    end.
-
-ddict_erase_f(Key, Val1, Dict) -> ddict_erase(Key, Val1, Dict, fun select_f/1).
-ddict_erase_r(Key, Val2, Dict) -> ddict_erase(Key, Val2, Dict, fun select_r/1).
-
-ddict_erase(Key, ValX, Dict, Select) ->
-    case dict:find(Key, Dict) of
-        {ok, Dicts} ->
-            {DictX, DictY} = Select(Dicts),
-            Dicts1 = {D, _} =
-                case dict:find(ValX, DictX) of
-                    {ok, ValY} -> Select({dict:erase(ValX, DictX),
-                                          dict:erase(ValY, DictY)});
-                    error      -> Dicts
-                end,
-            case dict:size(D) of
-                0 -> dict:erase(Key, Dict);
-                _ -> dict:store(Key, Dicts1, Dict)
-            end;
-        error ->
-            Dict
-    end.
-
-select_f({A, B}) -> {A, B}.
-select_r({A, B}) -> {B, A}.
