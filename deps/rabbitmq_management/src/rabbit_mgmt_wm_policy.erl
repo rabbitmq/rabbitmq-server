@@ -60,7 +60,8 @@ accept_content(ReqData, Context) ->
                       case rabbit_policy:set(
                              VHost, name(ReqData), Pattern,
                              rabbit_misc:json_to_term(Definition),
-                             proplists:get_value(priority, Body)) of
+                             proplists:get_value(priority, Body),
+                             proplists:get_value('apply-to', Body)) of
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->

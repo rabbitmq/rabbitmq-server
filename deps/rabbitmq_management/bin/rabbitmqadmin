@@ -78,7 +78,7 @@ DECLARABLE = {
                    'optional':  {'destination_type': 'queue',
                                  'routing_key': '', 'arguments': {}}},
     'vhost':      {'mandatory': ['name'],
-                   'optional':  {}},
+                   'optional':  {'tracing': None}},
     'user':       {'mandatory': ['name', 'password', 'tags'],
                    'optional':  {}},
     'permission': {'mandatory': ['vhost', 'user', 'configure', 'write', 'read'],
@@ -89,7 +89,7 @@ DECLARABLE = {
     # Priority is 'json' to convert to int
     'policy':     {'mandatory': ['name', 'pattern', 'definition'],
                    'json':      ['definition', 'priority'],
-                   'optional':  {'priority' : 0}}
+                   'optional':  {'priority' : 0, 'apply-to': None}}
     }
 
 DELETABLE = {

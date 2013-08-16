@@ -483,9 +483,10 @@ Content-Length: 0</pre>
         <td>X</td>
         <td></td>
         <td class="path">/api/vhosts/<i>name</i></td>
-        <td>An individual virtual host. As a virtual host only has a
-        name, you do not need an HTTP body when PUTing one of
-        these.</td>
+        <td>An individual virtual host. As a virtual host usually only
+        has a name, you do not need an HTTP body when PUTing one of
+        these. To enable / disable tracing, provide a body looking like:
+          <pre>{"tracing":true}</pre></td>
       </tr>
       <tr>
         <td>X</td>
@@ -611,9 +612,11 @@ or:
         <td>X</td>
         <td></td>
         <td class="path">/api/policies/<i>vhost</i>/<i>name</i></td>
-        <td>An individual policy. To PUT a policy, you will need a body looking something like this:
-<pre>{"pattern":"^amq.", "definition": {"federation-upstream-set":"all"}, "priority":0}</pre>
-</td>
+        <td>
+          An individual policy. To PUT a policy, you will need a body looking something like this:
+<pre>{"pattern":"^amq.", "definition": {"federation-upstream-set":"all"}, "priority":0, "apply-to": "all"}</pre>
+          <code>pattern</code> and <code>definition</code> are mandatory, <code>priority</code> and <code>apply-to</code> are optional.
+        </td>
       </tr>
       <tr>
         <td>X</td>
