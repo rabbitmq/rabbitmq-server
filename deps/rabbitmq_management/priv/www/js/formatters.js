@@ -7,7 +7,7 @@ PROCESS_THRESHOLDS=[[0.75, 'red'],
                     [0.5, 'yellow']];
 
 function fmt_string(str, unknown) {
-    if (unknown == undefined) unkown = UNKNOWN_REPR;
+    if (unknown == undefined) unknown = UNKNOWN_REPR;
     if (str == undefined) return unknown;
     return fmt_escape_html("" + str);
 }
