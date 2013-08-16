@@ -230,7 +230,7 @@ handle_info({'DOWN', Ref, process, Pid, Info},
      case dict:find(Pid, Monitors) of
          {ok, {Ref, Set}} ->
              sets:fold(
-               fun (WantsMonitor, none) ->
+               fun (WantsMonitor, _) ->
                        WantsMonitor ! {'DOWN', {Name, Pid}, process, Pid, Info}
                end, none, Set),
              State#state{monitors = dict:erase(Pid, Monitors)};
