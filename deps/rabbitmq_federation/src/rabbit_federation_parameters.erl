@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_parameters).
@@ -34,7 +34,8 @@ register() ->
         {Class, Name} <- [{runtime_parameter, <<"federation">>},
                           {runtime_parameter, <<"federation-upstream">>},
                           {runtime_parameter, <<"federation-upstream-set">>},
-                          {policy_validator,  <<"federation-upstream-set">>}]].
+                          {policy_validator,  <<"federation-upstream-set">>}]],
+    ok.
 
 validate(_VHost, <<"federation-upstream-set">>, Name, Term) ->
     [rabbit_parameter_validation:proplist(
