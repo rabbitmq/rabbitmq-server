@@ -192,6 +192,7 @@ function fmt_rate_num(num) {
 }
 
 function fmt_num_thousands(num) {
+    if (num == undefined) return UNKNOWN_REPR;
     num = '' + num;
     if (num.length < 4) return num;
     return fmt_num_thousands(num.slice(0, -3)) + ',' + num.slice(-3);
