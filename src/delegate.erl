@@ -124,11 +124,11 @@ invoke_no_result(Pids, FunOrMFA) when is_list(Pids) ->
     safe_invoke(LocalPids, FunOrMFA), %% must not die
     ok.
 
-monitor(Type, Pid) when node(Pid) =:= node() ->
-    erlang:monitor(Type, Pid);
-monitor(Type, Pid) ->
+monitor(process, Pid) when node(Pid) =:= node() ->
+    erlang:monitor(process, Pid);
+monitor(process, Pid) ->
     Name = delegate(Pid, [node(Pid)]),
-    gen_server2:cast(Name, {monitor, Type, self(), Pid}),
+    gen_server2:cast(Name, {monitor, self(), Pid}),
     {Name, Pid}.
 
 demonitor(Ref) -> ?MODULE:demonitor(Ref, []).
@@ -192,14 +192,14 @@ handle_call({invoke, FunOrMFA, Grouped}, _From, State = #state{node = Node}) ->
     {reply, safe_invoke(orddict:fetch(Node, Grouped), FunOrMFA), State,
      hibernate}.
 
-handle_cast({monitor, Type, WantsMonitor, Pid},
+handle_cast({monitor, WantsMonitor, Pid},
             State = #state{monitors = Monitors}) ->
     Monitors1 = case dict:find(Pid, Monitors) of
                     {ok, {Ref, Set}} ->
                         Set1 = sets:add_element(WantsMonitor, Set),
                         dict:store(Pid, {Ref, Set1}, Monitors);
                     error ->
-                        Ref = erlang:monitor(Type, Pid),
+                        Ref = erlang:monitor(process, Pid),
                         Set = sets:from_list([WantsMonitor]),
                         dict:store(Pid, {Ref, Set}, Monitors)
                 end,
