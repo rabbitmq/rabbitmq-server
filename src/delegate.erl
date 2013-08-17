@@ -18,8 +18,8 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, invoke_no_result/2, invoke/2, monitor/2,
-         demonitor/1, demonitor/2, call/2, cast/2]).
+-export([start_link/1, invoke_no_result/2, invoke/2,
+         monitor/2, demonitor/1, call/2, cast/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -43,7 +43,6 @@
 -spec(invoke_no_result/2 :: (pid() | [pid()], fun_or_mfa(any())) -> 'ok').
 -spec(monitor/2 :: ('process', pid()) -> monitor_ref()).
 -spec(demonitor/1 :: (monitor_ref()) -> 'true').
--spec(demonitor/2 :: (monitor_ref(), ['flush']) -> 'true').
 
 -spec(call/2 ::
         ( pid(),  any()) -> any();
@@ -131,12 +130,10 @@ monitor(process, Pid) ->
     gen_server2:cast(Name, {monitor, self(), Pid}),
     {Name, Pid}.
 
-demonitor(Ref) -> ?MODULE:demonitor(Ref, []).
-
-demonitor(Ref, Options) when is_reference(Ref) ->
-    erlang:demonitor(Ref, Options);
-demonitor({Name, Pid}, Options) ->
-    gen_server2:cast(Name, {demonitor, self(), Pid, Options}).
+demonitor(Ref) when is_reference(Ref) ->
+    erlang:demonitor(Ref);
+demonitor({Name, Pid}) ->
+    gen_server2:cast(Name, {demonitor, self(), Pid}).
 
 call(PidOrPids, Msg) ->
     invoke(PidOrPids, {gen_server2, call, [Msg, infinity]}).
@@ -205,13 +202,13 @@ handle_cast({monitor, WantsMonitor, Pid},
                 end,
     {noreply, State#state{monitors = Monitors1}, hibernate};
 
-handle_cast({demonitor, WantsMonitor, Pid, Options},
+handle_cast({demonitor, WantsMonitor, Pid},
             State = #state{monitors = Monitors}) ->
     Monitors1 = case dict:find(Pid, Monitors) of
                   {ok, {Ref, Set}} ->
                       Set1 = sets:del_element(WantsMonitor, Set),
                       case sets:size(Set1) of
-                          0 -> erlang:demonitor(Ref, Options),
+                          0 -> erlang:demonitor(Ref),
                                dict:erase(Pid, Monitors);
                           _ -> dict:store(Pid, {Ref, Set1}, Monitors)
                       end;
