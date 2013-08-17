@@ -189,31 +189,31 @@ handle_call({invoke, FunOrMFA, Grouped}, _From, State = #state{node = Node}) ->
     {reply, safe_invoke(orddict:fetch(Node, Grouped), FunOrMFA), State,
      hibernate}.
 
-handle_cast({monitor, WantsMonitor, Pid},
+handle_cast({monitor, MonitoringPid, Pid},
             State = #state{monitors = Monitors}) ->
     Monitors1 = case dict:find(Pid, Monitors) of
-                    {ok, {Ref, Set}} ->
-                        Set1 = sets:add_element(WantsMonitor, Set),
-                        dict:store(Pid, {Ref, Set1}, Monitors);
+                    {ok, {Ref, Pids}} ->
+                        Pids1 = sets:add_element(MonitoringPid, Pids),
+                        dict:store(Pid, {Ref, Pids1}, Monitors);
                     error ->
                         Ref = erlang:monitor(process, Pid),
-                        Set = sets:from_list([WantsMonitor]),
-                        dict:store(Pid, {Ref, Set}, Monitors)
+                        Pids = sets:from_list([MonitoringPid]),
+                        dict:store(Pid, {Ref, Pids}, Monitors)
                 end,
     {noreply, State#state{monitors = Monitors1}, hibernate};
 
-handle_cast({demonitor, WantsMonitor, Pid},
+handle_cast({demonitor, MonitoringPid, Pid},
             State = #state{monitors = Monitors}) ->
     Monitors1 = case dict:find(Pid, Monitors) of
-                  {ok, {Ref, Set}} ->
-                      Set1 = sets:del_element(WantsMonitor, Set),
-                      case sets:size(Set1) of
-                          0 -> erlang:demonitor(Ref),
-                               dict:erase(Pid, Monitors);
-                          _ -> dict:store(Pid, {Ref, Set1}, Monitors)
-                      end;
-                  error ->
-                      Monitors
+                    {ok, {Ref, Pids}} ->
+                        Pids1 = sets:del_element(MonitoringPid, Pids),
+                        case sets:size(Pids1) of
+                            0 -> erlang:demonitor(Ref),
+                                 dict:erase(Pid, Monitors);
+                            _ -> dict:store(Pid, {Ref, Pids1}, Monitors)
+                        end;
+                    error ->
+                        Monitors
                 end,
     {noreply, State#state{monitors = Monitors1}, hibernate};
 
@@ -225,11 +225,10 @@ handle_info({'DOWN', Ref, process, Pid, Info},
             State = #state{monitors = Monitors, name = Name}) ->
     {noreply,
      case dict:find(Pid, Monitors) of
-         {ok, {Ref, Set}} ->
-             sets:fold(
-               fun (WantsMonitor, _) ->
-                       WantsMonitor ! {'DOWN', {Name, Pid}, process, Pid, Info}
-               end, none, Set),
+         {ok, {Ref, Pids}} ->
+             Msg = {'DOWN', {Name, Pid}, process, Pid, Info},
+             sets:fold(fun (MonitoringPid, _) -> MonitoringPid ! Msg end,
+                       none, Pids),
              State#state{monitors = dict:erase(Pid, Monitors)};
          error ->
              State
