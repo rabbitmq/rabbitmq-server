@@ -65,7 +65,8 @@
 -spec(out/1 :: (pqueue()) -> {empty | {value, any()}, pqueue()}).
 -spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
 -spec(filter/2 :: (fun ((any()) -> boolean()), pqueue()) -> pqueue()).
--spec(fold/3 :: (fun ((any(), any()) -> any()), any(), pqueue()) -> any()).
+-spec(fold/3 ::
+        (fun ((any(), priority(), any()) -> any()), any(), pqueue()) -> any()).
 -spec(highest/1 :: (pqueue()) -> priority() | 'empty').
 
 -endif.
