@@ -748,7 +748,7 @@ log_banner() ->
                     {"config file(s)" = K, []} ->
                         Format(K, "(none)");
                     {"config file(s)" = K, [V0 | Vs]} ->
-                        Format(K, V0), [Format("", V) || V <- Vs];
+                        [Format(K, V0) | [Format("", V) || V <- Vs]];
                     {K, V} ->
                         Format(K, V)
                 end || S <- Settings]),
