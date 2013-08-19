@@ -193,11 +193,11 @@ handle_cast({monitor, MonitoringPid, Pid},
             State = #state{monitors = Monitors}) ->
     Monitors1 = case dict:find(Pid, Monitors) of
                     {ok, {Ref, Pids}} ->
-                        Pids1 = sets:add_element(MonitoringPid, Pids),
+                        Pids1 = gb_sets:add_element(MonitoringPid, Pids),
                         dict:store(Pid, {Ref, Pids1}, Monitors);
                     error ->
                         Ref = erlang:monitor(process, Pid),
-                        Pids = sets:from_list([MonitoringPid]),
+                        Pids = gb_sets:from_list([MonitoringPid]),
                         dict:store(Pid, {Ref, Pids}, Monitors)
                 end,
     {noreply, State#state{monitors = Monitors1}, hibernate};
@@ -206,8 +206,8 @@ handle_cast({demonitor, MonitoringPid, Pid},
             State = #state{monitors = Monitors}) ->
     Monitors1 = case dict:find(Pid, Monitors) of
                     {ok, {Ref, Pids}} ->
-                        Pids1 = sets:del_element(MonitoringPid, Pids),
-                        case sets:size(Pids1) of
+                        Pids1 = gb_sets:del_element(MonitoringPid, Pids),
+                        case gb_sets:size(Pids1) of
                             0 -> erlang:demonitor(Ref),
                                  dict:erase(Pid, Monitors);
                             _ -> dict:store(Pid, {Ref, Pids1}, Monitors)
@@ -227,8 +227,8 @@ handle_info({'DOWN', Ref, process, Pid, Info},
      case dict:find(Pid, Monitors) of
          {ok, {Ref, Pids}} ->
              Msg = {'DOWN', {Name, Pid}, process, Pid, Info},
-             sets:fold(fun (MonitoringPid, _) -> MonitoringPid ! Msg end,
-                       none, Pids),
+             gb_sets:fold(fun (MonitoringPid, _) -> MonitoringPid ! Msg end,
+                          none, Pids),
              State#state{monitors = dict:erase(Pid, Monitors)};
          error ->
              State
