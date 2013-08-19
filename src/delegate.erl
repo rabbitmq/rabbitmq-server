@@ -197,7 +197,7 @@ handle_cast({monitor, MonitoringPid, Pid},
                         dict:store(Pid, {Ref, Pids1}, Monitors);
                     error ->
                         Ref = erlang:monitor(process, Pid),
-                        Pids = gb_sets:from_list([MonitoringPid]),
+                        Pids = gb_sets:singleton(MonitoringPid),
                         dict:store(Pid, {Ref, Pids}, Monitors)
                 end,
     {noreply, State#state{monitors = Monitors1}, hibernate};
@@ -207,10 +207,10 @@ handle_cast({demonitor, MonitoringPid, Pid},
     Monitors1 = case dict:find(Pid, Monitors) of
                     {ok, {Ref, Pids}} ->
                         Pids1 = gb_sets:del_element(MonitoringPid, Pids),
-                        case gb_sets:size(Pids1) of
-                            0 -> erlang:demonitor(Ref),
-                                 dict:erase(Pid, Monitors);
-                            _ -> dict:store(Pid, {Ref, Pids1}, Monitors)
+                        case gb_sets:is_empty(Pids1) of
+                            true  -> erlang:demonitor(Ref),
+                                     dict:erase(Pid, Monitors);
+                            false -> dict:store(Pid, {Ref, Pids1}, Monitors)
                         end;
                     error ->
                         Monitors
