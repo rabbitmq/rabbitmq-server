@@ -25,9 +25,10 @@
 -import(rabbit_misc, [pget/2]).
 
 -export([register/0]).
+-export([invalidate/0, recover/0]).
 -export([name/1, get/2, set/1]).
 -export([validate/4, notify/4, notify_clear/3]).
--export([parse_set/5, set/5, delete/2, lookup/2, list/0, list/1,
+-export([parse_set/6, set/6, delete/2, lookup/2, list/0, list/1,
          list_formatted/1, info_keys/0]).
 
 -rabbit_boot_step({?MODULE,
@@ -51,6 +52,10 @@ set(X = #exchange{name = Name}) -> rabbit_exchange_decorator:set(
 
 set0(Name = #resource{virtual_host = VHost}) -> match(Name, list(VHost)).
 
+set(Q = #amqqueue{name = Name}, Ps) -> Q#amqqueue{policy = match(Name, Ps)};
+set(X = #exchange{name = Name}, Ps) -> rabbit_exchange_decorator:set(
+                                         X#exchange{policy = match(Name, Ps)}).
+
 get(Name, #amqqueue{policy = Policy}) -> get0(Name, Policy);
 get(Name, #exchange{policy = Policy}) -> get0(Name, Policy);
 %% Caution - SLOW.
@@ -68,32 +73,70 @@ get0(Name, List)       -> case pget(definition, List) of
 
 %%----------------------------------------------------------------------------
 
-parse_set(VHost, Name, Pattern, Definition, undefined) ->
-    parse_set0(VHost, Name, Pattern, Definition, 0);
-parse_set(VHost, Name, Pattern, Definition, Priority) ->
+%% Gets called during upgrades - therefore must not assume anything about the
+%% state of Mnesia
+invalidate() ->
+    rabbit_file:write_file(invalid_file(), <<"">>).
+
+recover() ->
+    case rabbit_file:is_file(invalid_file()) of
+        true  -> recover0(),
+                 rabbit_file:delete(invalid_file());
+        false -> ok
+    end.
+
+%% To get here we have to have just completed an Mnesia upgrade - i.e. we are
+%% the first node starting. So we can rewrite the whole database.  Note that
+%% recovery has not yet happened; we must work with the rabbit_durable_<thing>
+%% variants.
+recover0() ->
+    Xs = mnesia:dirty_match_object(rabbit_durable_exchange, #exchange{_ = '_'}),
+    Qs = mnesia:dirty_match_object(rabbit_durable_queue,    #amqqueue{_ = '_'}),
+    Policies = list(),
+    [rabbit_misc:execute_mnesia_transaction(
+       fun () ->
+               mnesia:write(rabbit_durable_exchange, set(X, Policies), write)
+       end) || X <- Xs],
+    [rabbit_misc:execute_mnesia_transaction(
+       fun () ->
+               mnesia:write(rabbit_durable_queue, set(Q, Policies), write)
+       end) || Q <- Qs],
+    ok.
+
+invalid_file() ->
+    filename:join(rabbit_mnesia:dir(), "policies_are_invalid").
+
+%%----------------------------------------------------------------------------
+
+parse_set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     try list_to_integer(Priority) of
-        Num -> parse_set0(VHost, Name, Pattern, Definition, Num)
+        Num -> parse_set0(VHost, Name, Pattern, Definition, Num, ApplyTo)
     catch
         error:badarg -> {error, "~p priority must be a number", [Priority]}
     end.
 
-parse_set0(VHost, Name, Pattern, Defn, Priority) ->
+parse_set0(VHost, Name, Pattern, Defn, Priority, ApplyTo) ->
     case rabbit_misc:json_decode(Defn) of
         {ok, JSON} ->
             set0(VHost, Name,
                  [{<<"pattern">>,    list_to_binary(Pattern)},
                   {<<"definition">>, rabbit_misc:json_to_term(JSON)},
-                  {<<"priority">>,   Priority}]);
+                  {<<"priority">>,   Priority},
+                  {<<"apply-to">>,   ApplyTo}]);
         error ->
             {error_string, "JSON decoding error"}
     end.
 
-set(VHost, Name, Pattern, Definition, Priority) ->
+set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     PolicyProps = [{<<"pattern">>,    Pattern},
                    {<<"definition">>, Definition},
                    {<<"priority">>,   case Priority of
                                           undefined -> 0;
                                           _         -> Priority
+                                      end},
+                   {<<"apply-to">>,   case ApplyTo of
+                                          undefined -> <<"all">>;
+                                          _         -> ApplyTo
                                       end}],
     set0(VHost, Name, PolicyProps).
 
@@ -130,6 +173,7 @@ p(Parameter, DefnFun) ->
     [{vhost,      pget(vhost, Parameter)},
      {name,       pget(name, Parameter)},
      {pattern,    pget(<<"pattern">>, Value)},
+     {'apply-to', pget(<<"apply-to">>, Value)},
      {definition, DefnFun(pget(<<"definition">>, Value))},
      {priority,   pget(<<"priority">>, Value)}].
 
@@ -139,7 +183,7 @@ format(Term) ->
 
 ident(X) -> X.
 
-info_keys() -> [vhost, name, pattern, definition, priority].
+info_keys() -> [vhost, name, 'apply-to', pattern, definition, priority].
 
 %%----------------------------------------------------------------------------
 
@@ -202,8 +246,16 @@ match(Name, Policies) ->
         [Policy | _Rest] -> Policy
     end.
 
-matches(#resource{name = Name}, Policy) ->
-    match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]).
+matches(#resource{name = Name, kind = Kind, virtual_host = VHost}, Policy) ->
+    matches_type(Kind, pget('apply-to', Policy)) andalso
+        match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
+        VHost =:= pget(vhost, Policy).
+
+matches_type(exchange, <<"exchanges">>) -> true;
+matches_type(queue,    <<"queues">>)    -> true;
+matches_type(exchange, <<"all">>)       -> true;
+matches_type(queue,    <<"all">>)       -> true;
+matches_type(_,        _)               -> false.
 
 sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
 
@@ -212,6 +264,7 @@ sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
 policy_validation() ->
     [{<<"priority">>,   fun rabbit_parameter_validation:number/2, mandatory},
      {<<"pattern">>,    fun rabbit_parameter_validation:regex/2,  mandatory},
+     {<<"apply-to">>,   fun apply_to_validation/2,                optional},
      {<<"definition">>, fun validation/2,                         mandatory}].
 
 validation(_Name, []) ->
@@ -257,3 +310,10 @@ a2b(A) -> list_to_binary(atom_to_list(A)).
 dups(L) -> L -- lists:usort(L).
 
 is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).
+
+apply_to_validation(_Name, <<"all">>)       -> ok;
+apply_to_validation(_Name, <<"exchanges">>) -> ok;
+apply_to_validation(_Name, <<"queues">>)    -> ok;
+apply_to_validation(_Name, Term) ->
+    {error, "apply-to '~s' unrecognised; should be 'queues', 'exchanges' "
+     "or 'all'", [Term]}.

@@ -19,6 +19,8 @@
 -export([start_heartbeat_sender/3, start_heartbeat_receiver/3,
          start_heartbeat_fun/1, pause_monitor/1, resume_monitor/1]).
 
+-export([system_continue/3, system_terminate/4, system_code_change/4]).
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -50,6 +52,10 @@
 
 -spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
 -spec(resume_monitor/1 :: (heartbeaters()) -> 'ok').
+
+-spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
+-spec(system_continue/3 :: (_,_,{_, _}) -> any()).
+-spec(system_terminate/4 :: (_,_,_,_) -> none()).
 
 -endif.
 
@@ -88,6 +94,15 @@ pause_monitor({_Sender, Receiver}) -> Receiver ! pause, ok.
 resume_monitor({_Sender,     none}) -> ok;
 resume_monitor({_Sender, Receiver}) -> Receiver ! resume, ok.
 
+system_continue(_Parent, Deb, {Params, State}) ->
+    heartbeater(Params, Deb, State).
+
+system_terminate(Reason, _Parent, _Deb, _State) ->
+    exit(Reason).
+
+system_code_change(Misc, _Module, _OldVsn, _Extra) ->
+    {ok, Misc}.
+
 %%----------------------------------------------------------------------------
 start_heartbeater(0, _SupPid, _Sock, _TimeoutFun, _Name, _Callback) ->
     {ok, none};
@@ -98,17 +113,27 @@ start_heartbeater(TimeoutSec, SupPid, Sock, TimeoutFun, Name, Callback) ->
                transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}).
 
 heartbeater(Params) ->
-    {ok, proc_lib:spawn_link(fun () -> heartbeater(Params, {0, 0}) end)}.
+    Deb = sys:debug_options([]),
+    {ok, proc_lib:spawn_link(fun () -> heartbeater(Params, Deb, {0, 0}) end)}.
 
 heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
-            {StatVal, SameCount}) ->
-    Recurse = fun (V) -> heartbeater(Params, V) end,
+            Deb, {StatVal, SameCount} = State) ->
+    Recurse = fun (State1) -> heartbeater(Params, Deb, State1) end,
+    System  = fun (From, Req) ->
+                      sys:handle_system_msg(
+                        Req, From, self(), ?MODULE, Deb, {Params, State})
+              end,
     receive
-        pause -> receive
-                     resume -> Recurse({0, 0});
-                     Other  -> exit({unexpected_message, Other})
-                 end;
-        Other -> exit({unexpected_message, Other})
+        pause ->
+            receive
+                resume              -> Recurse({0, 0});
+                {system, From, Req} -> System(From, Req);
+                Other               -> exit({unexpected_message, Other})
+            end;
+        {system, From, Req} ->
+            System(From, Req);
+        Other ->
+            exit({unexpected_message, Other})
     after TimeoutMillisec ->
             case rabbit_net:getstat(Sock, [StatName]) of
                 {ok, [{StatName, NewStatVal}]} ->

@@ -17,7 +17,8 @@
 -module(rabbit_control_main).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, sync_queue/1, cancel_sync_queue/1]).
+-export([start/0, stop/0, parse_arguments/2, action/5,
+         sync_queue/1, cancel_sync_queue/1]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -25,12 +26,16 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+-define(PRIORITY_OPT, "--priority").
+-define(APPLY_TO_OPT, "--apply-to").
 -define(RAM_OPT, "--ram").
 -define(OFFLINE_OPT, "--offline").
 
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+-define(PRIORITY_DEF, {?PRIORITY_OPT, {option, "0"}}).
+-define(APPLY_TO_DEF, {?APPLY_TO_OPT, {option, "all"}}).
 -define(RAM_DEF, {?RAM_OPT, flag}).
 -define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
 
@@ -72,7 +77,7 @@
          {clear_parameter, [?VHOST_DEF]},
          {list_parameters, [?VHOST_DEF]},
 
-         {set_policy, [?VHOST_DEF]},
+         {set_policy, [?VHOST_DEF, ?PRIORITY_DEF, ?APPLY_TO_DEF]},
          {clear_policy, [?VHOST_DEF]},
          {list_policies, [?VHOST_DEF]},
 
@@ -127,19 +132,13 @@
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
-        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr),
-                                         init:get_plain_arguments())
-        of
+        case parse_arguments(init:get_plain_arguments(), NodeStr) of
             {ok, Res}  -> Res;
             no_command -> print_error("could not recognise command", []),
                           usage()
         end,
-    Opts1 = [case K of
-                 ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
-                 _         -> {K, V}
-             end || {K, V} <- Opts],
-    Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
-    Node = proplists:get_value(?NODE_OPT, Opts1),
+    Quiet = proplists:get_bool(?QUIET_OPT, Opts),
+    Node = proplists:get_value(?NODE_OPT, Opts),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -229,6 +228,19 @@ stop() ->
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
     rabbit_misc:quit(1).
+
+parse_arguments(CmdLine, NodeStr) ->
+    case rabbit_misc:parse_arguments(
+           ?COMMANDS, ?GLOBAL_DEFS(NodeStr), CmdLine) of
+        {ok, {Cmd, Opts0, Args}} ->
+            Opts = [case K of
+                        ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
+                        _         -> {K, V}
+                    end || {K, V} <- Opts0],
+            {ok, {Cmd, Opts, Args}};
+        E ->
+            E
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -484,16 +496,15 @@ action(list_parameters, Node, [], Opts, Inform) ->
       rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg]),
       rabbit_runtime_parameters:info_keys());
 
-action(set_policy, Node, [Key, Pattern, Defn | Prio], Opts, Inform)
-  when Prio == [] orelse length(Prio) == 1 ->
-    Msg = "Setting policy ~p for pattern ~p to ~p",
-    {InformMsg, Prio1} = case Prio of []  -> {Msg, undefined};
-                                      [P] -> {Msg ++ " with priority ~s", P}
-                         end,
+action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
+    Msg = "Setting policy ~p for pattern ~p to ~p with priority ~p",
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    Inform(InformMsg, [Key, Pattern, Defn] ++ Prio),
-    rpc_call(Node, rabbit_policy, parse_set,
-             [VHostArg, list_to_binary(Key), Pattern, Defn, Prio1]);
+    PriorityArg = proplists:get_value(?PRIORITY_OPT, Opts),
+    ApplyToArg = list_to_binary(proplists:get_value(?APPLY_TO_OPT, Opts)),
+    Inform(Msg, [Key, Pattern, Defn, PriorityArg]),
+    rpc_call(
+      Node, rabbit_policy, parse_set,
+      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]);
 
 action(clear_policy, Node, [Key], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
