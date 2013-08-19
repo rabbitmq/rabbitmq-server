@@ -961,7 +961,7 @@ handle_method(#'exchange.unbind'{destination = DestinationNameBin,
 
 handle_method(#'queue.declare'{queue       = QueueNameBin,
                                passive     = false,
-                               durable     = Durable,
+                               durable     = DurableDeclare,
                                exclusive   = ExclusiveDeclare,
                                auto_delete = AutoDelete,
                                nowait      = NoWait,
@@ -973,6 +973,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 true  -> ConnPid;
                 false -> none
             end,
+    Durable = DurableDeclare andalso not ExclusiveDeclare,
     ActualNameBin = case QueueNameBin of
                         <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
                                                     "amq.gen");

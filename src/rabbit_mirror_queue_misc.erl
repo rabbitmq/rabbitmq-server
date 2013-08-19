@@ -237,16 +237,20 @@ suggested_queue_nodes(Q) ->
 %% This variant exists so we can pull a call to
 %% rabbit_mnesia:cluster_nodes(running) out of a loop or
 %% transaction or both.
-suggested_queue_nodes(Q, All) ->
+suggested_queue_nodes(Q = #amqqueue{exclusive_owner = Owner}, All) ->
     {MNode0, SNodes, SSNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
                 none -> node();
                 _    -> MNode0
             end,
-    Params = policy(<<"ha-params">>, Q),
-    case module(Q) of
-        {ok, M} -> M:suggested_queue_nodes(Params, MNode, SNodes, SSNodes, All);
-        _       -> {MNode, []}
+    case Owner of
+        none -> Params = policy(<<"ha-params">>, Q),
+                case module(Q) of
+                    {ok, M} -> M:suggested_queue_nodes(
+                                 Params, MNode, SNodes, SSNodes, All);
+                    _       -> {MNode, []}
+                end;
+        _    -> {MNode, []}
     end.
 
 policy(Policy, Q) ->
