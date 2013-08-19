@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_channel_sup).
@@ -58,7 +58,7 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
           {channel, {rabbit_channel, start_link,
                      [Channel, ReaderPid, WriterPid, ReaderPid, ConnName,
                       Protocol, User, VHost, Capabilities, Collector,
-                      rabbit_limiter:make_token(LimiterPid)]},
+                      LimiterPid]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
@@ -72,7 +72,7 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
           {channel, {rabbit_channel, start_link,
                      [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
                       ConnName, Protocol, User, VHost, Capabilities, Collector,
-                      rabbit_limiter:make_token(LimiterPid)]},
+                      LimiterPid]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, SupPid, {ChannelPid, none}}.
 
@@ -83,7 +83,7 @@ init(Type) ->
 
 child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol}) ->
     [{writer, {rabbit_writer, start_link,
-               [Sock, Channel, FrameMax, Protocol, ReaderPid]},
+               [Sock, Channel, FrameMax, Protocol, ReaderPid, true]},
       intrinsic, ?MAX_WAIT, worker, [rabbit_writer]} | child_specs(direct)];
 child_specs(direct) ->
     [{limiter, {rabbit_limiter, start_link, []},

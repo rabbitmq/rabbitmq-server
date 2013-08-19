@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_disk_monitor).
@@ -27,10 +27,11 @@
          set_check_interval/1, get_disk_free/0]).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_DISK_CHECK_INTERVAL, 60000).
+-define(DEFAULT_DISK_CHECK_INTERVAL, 10000).
 
 -record(state, {dir,
                 limit,
+                actual,
                 timeout,
                 timer,
                 alarmed
@@ -106,8 +107,8 @@ handle_call({set_check_interval, Timeout}, _From, State) ->
     {ok, cancel} = timer:cancel(State#state.timer),
     {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
 
-handle_call(get_disk_free, _From, State = #state { dir = Dir }) ->
-    {reply, get_disk_free(Dir), State};
+handle_call(get_disk_free, _From, State = #state { actual = Actual }) ->
+    {reply, Actual, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -137,7 +138,7 @@ dir() -> rabbit_mnesia:dir().
 set_disk_limits(State, Limit) ->
     State1 = State#state { limit = Limit },
     rabbit_log:info("Disk free limit set to ~pMB~n",
-                    [trunc(interpret_limit(Limit) / 1048576)]),
+                    [trunc(interpret_limit(Limit) / 1000000)]),
     internal_update(State1).
 
 internal_update(State = #state { limit   = Limit,
@@ -148,15 +149,15 @@ internal_update(State = #state { limit   = Limit,
     NewAlarmed = CurrentFreeBytes < LimitBytes,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
-            emit_update_info("exceeded", CurrentFreeBytes, LimitBytes),
-            alarm_handler:set_alarm({{resource_limit, disk, node()}, []});
+            emit_update_info("insufficient", CurrentFreeBytes, LimitBytes),
+            rabbit_alarm:set_alarm({{resource_limit, disk, node()}, []});
         {true, false} ->
-            emit_update_info("below limit", CurrentFreeBytes, LimitBytes),
-            alarm_handler:clear_alarm({resource_limit, disk, node()});
+            emit_update_info("sufficient", CurrentFreeBytes, LimitBytes),
+            rabbit_alarm:clear_alarm({resource_limit, disk, node()});
         _ ->
             ok
     end,
-    State #state {alarmed = NewAlarmed}.
+    State #state {alarmed = NewAlarmed, actual = CurrentFreeBytes}.
 
 get_disk_free(Dir) ->
     get_disk_free(Dir, os:type()).
@@ -167,9 +168,9 @@ get_disk_free(Dir, {unix, Sun})
 get_disk_free(Dir, {unix, _}) ->
     parse_free_unix(rabbit_misc:os_cmd("/bin/df -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
-    parse_free_win32(os:cmd("dir /-C /W \"" ++ Dir ++ [$"]));
-get_disk_free(_, _) ->
-    unknown.
+    parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ Dir ++ [$"]));
+get_disk_free(_, Platform) ->
+    {unknown, Platform}.
 
 parse_free_unix(CommandResult) ->
     [_, Stats | _] = string:tokens(CommandResult, "\n"),
@@ -187,10 +188,10 @@ interpret_limit({mem_relative, R}) ->
 interpret_limit(L) ->
     L.
 
-emit_update_info(State, CurrentFree, Limit) ->
+emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
-      "Disk free space limit now ~s. Free bytes:~p Limit:~p~n",
-      [State, CurrentFree, Limit]).
+      "Disk free space ~s. Free bytes:~p Limit:~p~n",
+      [StateStr, CurrentFree, Limit]).
 
 start_timer(Timeout) ->
     {ok, TRef} = timer:send_interval(Timeout, update),

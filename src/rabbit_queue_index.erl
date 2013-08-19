@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_queue_index).
@@ -23,7 +23,7 @@
 
 -export([scan/3]).
 
--export([add_queue_ttl/0]).
+-export([add_queue_ttl/0, avoid_zeroes/0]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -123,9 +123,9 @@
 -define(REL_SEQ_BITS, 14).
 -define(SEGMENT_ENTRY_COUNT, 16384). %% trunc(math:pow(2,?REL_SEQ_BITS))).
 
-%% seq only is binary 00 followed by 14 bits of rel seq id
+%% seq only is binary 01 followed by 14 bits of rel seq id
 %% (range: 0 - 16383)
--define(REL_SEQ_ONLY_PREFIX, 00).
+-define(REL_SEQ_ONLY_PREFIX, 01).
 -define(REL_SEQ_ONLY_PREFIX_BITS, 2).
 -define(REL_SEQ_ONLY_RECORD_BYTES, 2).
 
@@ -162,7 +162,7 @@
 %%----------------------------------------------------------------------------
 
 -record(qistate, { dir, segments, journal_handle, dirty_count,
-                   max_journal_entries, on_sync, unsynced_msg_ids }).
+                   max_journal_entries, on_sync, unconfirmed }).
 
 -record(segment, { num, path, journal_entries, unacked }).
 
@@ -171,6 +171,7 @@
 %%----------------------------------------------------------------------------
 
 -rabbit_upgrade({add_queue_ttl, local, []}).
+-rabbit_upgrade({avoid_zeroes,  local, [add_queue_ttl]}).
 
 -ifdef(use_specs).
 
@@ -190,7 +191,7 @@
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
-                              unsynced_msg_ids    :: gb_set()
+                              unconfirmed         :: gb_set()
                             }).
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
@@ -210,7 +211,7 @@
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/1 :: (qistate()) -> qistate()).
--spec(needs_sync/1 :: (qistate()) -> boolean()).
+-spec(needs_sync/1 :: (qistate()) -> 'confirms' | 'other' | 'false').
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_types:msg_id(), seq_id(),
@@ -269,13 +270,16 @@ delete_and_terminate(State) ->
     State1.
 
 publish(MsgId, SeqId, MsgProps, IsPersistent,
-        State = #qistate { unsynced_msg_ids = UnsyncedMsgIds })
+        State = #qistate { unconfirmed = Unconfirmed })
   when is_binary(MsgId) ->
     ?MSG_ID_BYTES = size(MsgId),
     {JournalHdl, State1} =
         get_journal_handle(
-          State #qistate {
-            unsynced_msg_ids = gb_sets:add_element(MsgId, UnsyncedMsgIds) }),
+          case MsgProps#message_properties.needs_confirming of
+              true  -> Unconfirmed1 = gb_sets:add_element(MsgId, Unconfirmed),
+                       State #qistate { unconfirmed = Unconfirmed1 };
+              false -> State
+          end),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
@@ -302,8 +306,14 @@ sync(State = #qistate { journal_handle = JournalHdl }) ->
 
 needs_sync(#qistate { journal_handle = undefined }) ->
     false;
-needs_sync(#qistate { journal_handle = JournalHdl }) ->
-    file_handle_cache:needs_sync(JournalHdl).
+needs_sync(#qistate { journal_handle = JournalHdl, unconfirmed = UC }) ->
+    case gb_sets:is_empty(UC) of
+        true  -> case file_handle_cache:needs_sync(JournalHdl) of
+                     true  -> other;
+                     false -> false
+                 end;
+        false -> confirms
+    end.
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
@@ -398,21 +408,21 @@ blank_state_dir(Dir) ->
                dirty_count         = 0,
                max_journal_entries = MaxJournal,
                on_sync             = fun (_) -> ok end,
-               unsynced_msg_ids    = gb_sets:new() }.
+               unconfirmed         = gb_sets:new() }.
 
-clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
+clean_filename(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
 detect_clean_shutdown(Dir) ->
-    case rabbit_file:delete(clean_file_name(Dir)) of
+    case rabbit_file:delete(clean_filename(Dir)) of
         ok              -> true;
         {error, enoent} -> false
     end.
 
 read_shutdown_terms(Dir) ->
-    rabbit_file:read_term_file(clean_file_name(Dir)).
+    rabbit_file:read_term_file(clean_filename(Dir)).
 
 store_clean_shutdown(Terms, Dir) ->
-    CleanFileName = clean_file_name(Dir),
+    CleanFileName = clean_filename(Dir),
     ok = rabbit_file:ensure_dir(CleanFileName),
     rabbit_file:write_term_file(CleanFileName, Terms).
 
@@ -537,7 +547,7 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     State = blank_state(QueueName),
     ok = scan_segments(
            fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok) ->
-                   gatherer:in(Gatherer, {MsgId, 1});
+                   gatherer:sync_in(Gatherer, {MsgId, 1});
                (_SeqId, _MsgId, _MsgProps, _IsPersistent, _IsDelivered,
                 _IsAcked, Acc) ->
                    Acc
@@ -607,19 +617,21 @@ add_to_journal(RelSeq, Action,
                                end};
 
 add_to_journal(RelSeq, Action, JEntries) ->
-    Val = case array:get(RelSeq, JEntries) of
-              undefined ->
-                  case Action of
-                      ?PUB -> {Action, no_del, no_ack};
-                      del  -> {no_pub,    del, no_ack};
-                      ack  -> {no_pub, no_del,    ack}
-                  end;
-              ({Pub, no_del, no_ack}) when Action == del ->
-                  {Pub, del, no_ack};
-              ({Pub,    Del, no_ack}) when Action == ack ->
-                  {Pub, Del,    ack}
-          end,
-    array:set(RelSeq, Val, JEntries).
+    case array:get(RelSeq, JEntries) of
+        undefined ->
+            array:set(RelSeq,
+                      case Action of
+                          ?PUB -> {Action, no_del, no_ack};
+                          del  -> {no_pub,    del, no_ack};
+                          ack  -> {no_pub, no_del,    ack}
+                      end, JEntries);
+        ({Pub,    no_del, no_ack}) when Action == del ->
+            array:set(RelSeq, {Pub,    del, no_ack}, JEntries);
+        ({no_pub,    del, no_ack}) when Action == ack ->
+            array:set(RelSeq, {no_pub, del,    ack}, JEntries);
+        ({?PUB,      del, no_ack}) when Action == ack ->
+            array:reset(RelSeq, JEntries)
+    end.
 
 maybe_flush_journal(State = #qistate { dirty_count = DCount,
                                        max_journal_entries = MaxJournal })
@@ -704,7 +716,11 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                     load_journal_entries(add_to_journal(SeqId, ack, State));
                 _ ->
                     case file_handle_cache:read(Hdl, ?PUB_RECORD_BODY_BYTES) of
-                        {ok, Bin} ->
+                        %% Journal entry composed only of zeroes was probably
+                        %% produced during a dirty shutdown so stop reading
+                        {ok, <<0:?PUB_RECORD_BODY_BYTES/unit:8>>} ->
+                            State;
+                        {ok, <<Bin:?PUB_RECORD_BODY_BYTES/binary>>} ->
                             {MsgId, MsgProps} = parse_pub_record_body(Bin),
                             IsPersistent = case Prefix of
                                                ?PUB_PERSIST_JPREFIX -> true;
@@ -732,9 +748,12 @@ deliver_or_ack(Kind, SeqIds, State) ->
                                             add_to_journal(SeqId, Kind, StateN)
                                     end, State1, SeqIds)).
 
-notify_sync(State = #qistate { unsynced_msg_ids = UG, on_sync = OnSyncFun }) ->
-    OnSyncFun(UG),
-    State #qistate { unsynced_msg_ids = gb_sets:new() }.
+notify_sync(State = #qistate { unconfirmed = UC, on_sync = OnSyncFun }) ->
+    case gb_sets:is_empty(UC) of
+        true  -> State;
+        false -> OnSyncFun(UC),
+                 State #qistate { unconfirmed = gb_sets:new() }
+    end.
 
 %%----------------------------------------------------------------------------
 %% segment manipulation
@@ -1008,7 +1027,18 @@ journal_minus_segment1({no_pub, del, ack},         {?PUB, no_del, no_ack}) ->
 journal_minus_segment1({no_pub, del, ack},         {?PUB, del, no_ack}) ->
     {{no_pub, no_del, ack}, 0};
 journal_minus_segment1({no_pub, del, ack},         {?PUB, del, ack}) ->
-    {undefined, -1}.
+    {undefined, -1};
+
+%% Missing segment. If flush_journal/1 is interrupted after deleting
+%% the segment but before truncating the journal we can get these
+%% cases: a delivery and an acknowledgement in the journal, or just an
+%% acknowledgement in the journal, but with no segment. In both cases
+%% we have really forgotten the message; so ignore what's in the
+%% journal.
+journal_minus_segment1({no_pub, no_del, ack},      undefined) ->
+    {undefined, 0};
+journal_minus_segment1({no_pub, del, ack},         undefined) ->
+    {undefined, 0}.
 
 %%----------------------------------------------------------------------------
 %% upgrade
@@ -1043,6 +1073,21 @@ add_queue_ttl_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
 add_queue_ttl_segment(_) ->
     stop.
 
+avoid_zeroes() ->
+    foreach_queue_index({none, fun avoid_zeroes_segment/1}).
+
+avoid_zeroes_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS,  IsPersistentNum:1,
+                       RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BITS,
+                       Expiry:?EXPIRY_BITS, Rest/binary>>) ->
+    {<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
+       MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS>>, Rest};
+avoid_zeroes_segment(<<0:?REL_SEQ_ONLY_PREFIX_BITS,
+                       RelSeq:?REL_SEQ_BITS, Rest/binary>>) ->
+    {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
+     Rest};
+avoid_zeroes_segment(_) ->
+    stop.
+
 %%----------------------------------------------------------------------------
 
 foreach_queue_index(Funs) ->
@@ -1067,7 +1112,9 @@ transform_queue(Dir, Gatherer, {JournalFun, SegmentFun}) ->
      || Seg <- rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir)],
     ok = gatherer:finish(Gatherer).
 
-transform_file(Path, Fun) ->
+transform_file(_Path, none) ->
+    ok;
+transform_file(Path, Fun) when is_function(Fun)->
     PathTmp = Path ++ ".upgrade",
     case rabbit_file:file_size(Path) of
         0    -> ok;

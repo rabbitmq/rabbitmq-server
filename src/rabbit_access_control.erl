@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_access_control).
@@ -68,12 +68,13 @@ check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->
     check_access(
       fun() ->
-              rabbit_vhost:exists(VHostPath) andalso
-                  Module:check_vhost_access(User, VHostPath)
+              %% TODO this could be an andalso shortcut under >R13A
+              case rabbit_vhost:exists(VHostPath) of
+                  false -> false;
+                  true  -> Module:check_vhost_access(User, VHostPath)
+              end
       end,
-      "~s failed checking vhost access to ~s for ~s: ~p~n",
-      [Module, VHostPath, Username],
-      "access to vhost '~s' refused for user '~s'",
+      Module, "access to vhost '~s' refused for user '~s'",
       [VHostPath, Username]).
 
 check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
@@ -84,15 +85,14 @@ check_resource_access(User = #user{username = Username, auth_backend = Module},
                       Resource, Permission) ->
     check_access(
       fun() -> Module:check_resource_access(User, Resource, Permission) end,
-      "~s failed checking resource access to ~p for ~s: ~p~n",
-      [Module, Resource, Username],
-      "access to ~s refused for user '~s'",
+      Module, "access to ~s refused for user '~s'",
       [rabbit_misc:rs(Resource), Username]).
 
-check_access(Fun, ErrStr, ErrArgs, RefStr, RefArgs) ->
+check_access(Fun, Module, ErrStr, ErrArgs) ->
     Allow = case Fun() of
-                {error, _} = E ->
-                    rabbit_log:error(ErrStr, ErrArgs ++ [E]),
+                {error, E}  ->
+                    rabbit_log:error(ErrStr ++ " by ~s: ~p~n",
+                                     ErrArgs ++ [Module, E]),
                     false;
                 Else ->
                     Else
@@ -101,5 +101,5 @@ check_access(Fun, ErrStr, ErrArgs, RefStr, RefArgs) ->
         true ->
             ok;
         false ->
-            rabbit_misc:protocol_error(access_refused, RefStr, RefArgs)
+            rabbit_misc:protocol_error(access_refused, ErrStr, ErrArgs)
     end.

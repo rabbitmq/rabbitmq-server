@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_upgrade).
@@ -66,11 +66,11 @@
 %% into the boot process by prelaunch before the mnesia application is
 %% started. By the time Mnesia is started the upgrades have happened
 %% (on the primary), or Mnesia has been reset (on the secondary) and
-%% rabbit_mnesia:init_db/3 can then make the node rejoin the cluster
+%% rabbit_mnesia:init_db_unchecked/2 can then make the node rejoin the cluster
 %% in the normal way.
 %%
 %% The non-mnesia upgrades are then triggered by
-%% rabbit_mnesia:init_db/3. Of course, it's possible for a given
+%% rabbit_mnesia:init_db_unchecked/2. Of course, it's possible for a given
 %% upgrade process to only require Mnesia upgrades, or only require
 %% non-Mnesia upgrades. In the latter case no Mnesia resets and
 %% reclusterings occur.
@@ -121,19 +121,16 @@ remove_backup() ->
     info("upgrades: Mnesia backup removed~n", []).
 
 maybe_upgrade_mnesia() ->
-    %% rabbit_mnesia:all_clustered_nodes/0 will return [] at this point
-    %% if we are a RAM node since Mnesia has not started yet.
-    AllNodes = lists:usort(rabbit_mnesia:all_clustered_nodes() ++
-                               rabbit_mnesia:read_cluster_nodes_config()),
+    AllNodes = rabbit_mnesia:cluster_nodes(all),
     case rabbit_version:upgrades_required(mnesia) of
         {error, starting_from_scratch} ->
             ok;
         {error, version_not_available} ->
             case AllNodes of
-                [_] -> ok;
-                _   -> die("Cluster upgrade needed but upgrading from "
-                           "< 2.1.1.~nUnfortunately you will need to "
-                           "rebuild the cluster.", [])
+                [] -> die("Cluster upgrade needed but upgrading from "
+                          "< 2.1.1.~nUnfortunately you will need to "
+                          "rebuild the cluster.", []);
+                _  -> ok
             end;
         {error, _} = Err ->
             throw(Err);
@@ -150,12 +147,12 @@ maybe_upgrade_mnesia() ->
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
-            AfterUs = rabbit_mnesia:read_previously_running_nodes(),
-            case {is_disc_node_legacy(), AfterUs} of
-                {true, []}  ->
+            AfterUs = rabbit_mnesia:cluster_nodes(running) -- [node()],
+            case {node_type_legacy(), AfterUs} of
+                {disc, []}  ->
                     primary;
-                {true, _}  ->
-                    Filename = rabbit_mnesia:running_nodes_filename(),
+                {disc, _}  ->
+                    Filename = rabbit_node_monitor:running_nodes_filename(),
                     die("Cluster upgrade needed but other disc nodes shut "
                         "down after this one.~nPlease first start the last "
                         "disc node to shut down.~n~nNote: if several disc "
@@ -163,7 +160,7 @@ upgrade_mode(AllNodes) ->
                         "all~nshow this message. In which case, remove "
                         "the lock file on one of them and~nstart that node. "
                         "The lock file on this node is:~n~n ~s ", [Filename]);
-                {false, _} ->
+                {ram, _} ->
                     die("Cluster upgrade needed but this is a ram node.~n"
                         "Please first start the last disc node to shut down.",
                         [])
@@ -204,7 +201,7 @@ primary_upgrade(Upgrades, Nodes) ->
            mnesia,
            Upgrades,
            fun () ->
-                   force_tables(),
+                   rabbit_table:force_load(),
                    case Others of
                        [] -> ok;
                        _  -> info("mnesia upgrades: Breaking cluster~n", []),
@@ -214,23 +211,13 @@ primary_upgrade(Upgrades, Nodes) ->
            end),
     ok.
 
-force_tables() ->
-    [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()].
-
 secondary_upgrade(AllNodes) ->
     %% must do this before we wipe out schema
-    IsDiscNode = is_disc_node_legacy(),
+    NodeType = node_type_legacy(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
-    %% Note that we cluster with all nodes, rather than all disc nodes
-    %% (as we can't know all disc nodes at this point). This is safe as
-    %% we're not writing the cluster config, just setting up Mnesia.
-    ClusterNodes = case IsDiscNode of
-                       true  -> AllNodes;
-                       false -> AllNodes -- [node()]
-                   end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    ok = rabbit_mnesia:init_db(ClusterNodes, true, fun () -> ok end),
+    ok = rabbit_mnesia:init_db_unchecked(AllNodes, NodeType),
     ok = rabbit_version:record_desired_for_scope(mnesia),
     ok.
 
@@ -278,13 +265,16 @@ lock_filename() -> lock_filename(dir()).
 lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 backup_dir() -> dir() ++ "-upgrade-backup".
 
-is_disc_node_legacy() ->
+node_type_legacy() ->
     %% This is pretty ugly but we can't start Mnesia and ask it (will
     %% hang), we can't look at the config file (may not include us
     %% even if we're a disc node).  We also can't use
-    %% rabbit_mnesia:is_disc_node/0 because that will give false
+    %% rabbit_mnesia:node_type/0 because that will give false
     %% postivies on Rabbit up to 2.5.1.
-    filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")).
+    case filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")) of
+        true  -> disc;
+        false -> ram
+    end.
 
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet

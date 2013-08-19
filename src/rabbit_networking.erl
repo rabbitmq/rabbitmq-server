@@ -10,18 +10,19 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_networking).
 
 -export([boot/0, start/0, start_tcp_listener/1, start_ssl_listener/2,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
-         node_listeners/1, connections/0, connection_info_keys/0,
+         node_listeners/1, register_connection/1, unregister_connection/1,
+         connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
-         close_connection/2, force_connection_event_refresh/0]).
+         close_connection/2, force_connection_event_refresh/0, tcp_host/1]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/6,
@@ -65,6 +66,8 @@
 -spec(stop_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
+-spec(register_connection/1 :: (pid()) -> ok).
+-spec(unregister_connection/1 :: (pid()) -> ok).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
 -spec(connections_local/0 :: () -> [rabbit_types:connection()]).
 -spec(connection_info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -142,7 +145,8 @@ start() -> rabbit_sup:start_supervisor_child(
               {rabbit_connection_sup,start_link,[]}]).
 
 ensure_ssl() ->
-    ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
+    {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
+    ok = app_utils:start_applications(SslAppsConfig),
     {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
 
     % unknown_ca errors are silently ignored prior to R14B unless we
@@ -160,7 +164,19 @@ ssl_transform_fun(SslOpts) ->
             case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
                 {ok, SslSock} ->
                     {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
+                {error, timeout} ->
+                    {error, {ssl_upgrade_error, timeout}};
                 {error, Reason} ->
+                    %% We have no idea what state the ssl_connection
+                    %% process is in - it could still be happily
+                    %% going, it might be stuck, or it could be just
+                    %% about to fail. There is little that our caller
+                    %% can do but close the TCP socket, but this could
+                    %% cause ssl alerts to get dropped (which is bad
+                    %% form, according to the TLS spec). So we give
+                    %% the ssl_connection a little bit of time to send
+                    %% such alerts.
+                    timer:sleep(?SSL_TIMEOUT * 1000),
                     {error, {ssl_upgrade_error, Reason}};
                 {'EXIT', Reason} ->
                     {error, {ssl_upgrade_failure, Reason}}
@@ -282,20 +298,15 @@ start_client(Sock) ->
 start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
+register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
+
+unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
+
 connections() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
-connections_local() ->
-    [Reader ||
-        {_, ConnSup, supervisor, _}
-            <- supervisor:which_children(rabbit_tcp_client_sup),
-        Reader <- [try
-                       rabbit_connection_sup:reader(ConnSup)
-                   catch exit:{noproc, _} ->
-                           noproc
-                   end],
-        Reader =/= noproc].
+connections_local() -> pg_local:get_members(rabbit_connections).
 
 connection_info_keys() -> rabbit_reader:info_keys().
 

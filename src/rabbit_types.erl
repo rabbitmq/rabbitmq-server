@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_types).
@@ -64,12 +64,11 @@
         #basic_message{exchange_name  :: rabbit_exchange:name(),
                        routing_keys   :: [rabbit_router:routing_key()],
                        content        :: content(),
-                     id             :: msg_id(),
+                       id             :: msg_id(),
                        is_persistent  :: boolean()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
         #delivery{mandatory :: boolean(),
-                  immediate :: boolean(),
                   sender    :: pid(),
                   message   :: message()}).
 -type(message_properties() ::
@@ -118,8 +117,7 @@
                   exclusive_owner :: rabbit_types:maybe(pid()),
                   arguments       :: rabbit_framing:amqp_table(),
                   pid             :: rabbit_types:maybe(pid()),
-                  slave_pids      :: [pid()],
-                  mirror_nodes    :: [node()] | 'undefined' | 'all'}).
+                  slave_pids      :: [pid()]}).
 
 -type(exchange() ::
         #exchange{name        :: rabbit_exchange:name(),

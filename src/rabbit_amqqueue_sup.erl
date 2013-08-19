@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue_sup).
@@ -47,6 +47,6 @@ start_child(Node, Args) ->
     supervisor2:start_child({?SERVER, Node}, Args).
 
 init([]) ->
-    {ok, {{simple_one_for_one_terminate, 10, 10},
+    {ok, {{simple_one_for_one, 10, 10},
           [{rabbit_amqqueue, {rabbit_amqqueue_process, start_link, []},
             temporary, ?MAX_WAIT, worker, [rabbit_amqqueue_process]}]}}.

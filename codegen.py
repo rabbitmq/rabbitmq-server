@@ -10,8 +10,8 @@
 ##
 ##  The Original Code is RabbitMQ.
 ##
-##  The Initial Developer of the Original Code is VMware, Inc.
-##  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+##  The Initial Developer of the Original Code is GoPivotal, Inc.
+##  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 ##
 
 from __future__ import nested_scopes
@@ -23,18 +23,6 @@ sys.path.append("codegen")              # in case we're building from a distribu
 from amqp_codegen import *
 import string
 import re
-
-erlangTypeMap = {
-    'octet': 'octet',
-    'shortstr': 'shortstr',
-    'longstr': 'longstr',
-    'short': 'shortint',
-    'long': 'longint',
-    'longlong': 'longlongint',
-    'bit': 'bit',
-    'table': 'table',
-    'timestamp': 'timestamp',
-}
 
 # Coming up with a proper encoding of AMQP tables in JSON is too much
 # hassle at this stage. Given that the only default value we are
@@ -117,13 +105,13 @@ def printFileHeader():
 %%
 %%  The Original Code is RabbitMQ.
 %%
-%%  The Initial Developer of the Original Code is VMware, Inc.
-%%  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%%  The Initial Developer of the Original Code is GoPivotal, Inc.
+%%  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%"""
 
 def genErl(spec):
     def erlType(domain):
-        return erlangTypeMap[spec.resolveDomain(domain)]
+        return erlangize(spec.resolveDomain(domain))
 
     def fieldTypeList(fields):
         return '[' + ', '.join([erlType(f.domain) for f in fields]) + ']'
@@ -186,11 +174,11 @@ def genErl(spec):
             return p+'Len:32/unsigned, '+p+':'+p+'Len/binary'
         elif type == 'octet':
             return p+':8/unsigned'
-        elif type == 'shortint':
+        elif type == 'short':
             return p+':16/unsigned'
-        elif type == 'longint':
+        elif type == 'long':
             return p+':32/unsigned'
-        elif type == 'longlongint':
+        elif type == 'longlong':
             return p+':64/unsigned'
         elif type == 'timestamp':
             return p+':64/unsigned'
@@ -233,29 +221,23 @@ def genErl(spec):
         def presentBin(fields):
             ps = ', '.join(['P' + str(f.index) + ':1' for f in fields])
             return '<<' + ps + ', _:%d, R0/binary>>' % (16 - len(fields),)
-        def mkMacroName(field):
-            return '?' + field.domain.upper() + '_PROP'
-        def writePropFieldLine(field, bin_next = None):
+        def writePropFieldLine(field):
             i = str(field.index)
-            if not bin_next:
-                bin_next = 'R' + str(field.index + 1)
-            if field.domain in ['octet', 'timestamp']:
-                print ("  {%s, %s} = %s(%s, %s, %s, %s)," %
-                       ('F' + i, bin_next, mkMacroName(field), 'P' + i,
-                        'R' + i, 'I' + i, 'X' + i))
+            if field.domain == 'bit':
+                print "  {F%s, R%s} = {P%s =/= 0, R%s}," % \
+                    (i, str(field.index + 1), i, i)
             else:
-                print ("  {%s, %s} = %s(%s, %s, %s, %s, %s)," %
-                       ('F' + i, bin_next, mkMacroName(field), 'P' + i,
-                        'R' + i, 'L' + i, 'S' + i, 'X' + i))
+                print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> ?%s_VAL(R%s, L%s, V%s, X%s) end," % \
+                    (i, str(field.index + 1), i, i, erlType(field.domain).upper(), i, i, i, i)
 
         if len(c.fields) == 0:
-            print "decode_properties(%d, _) ->" % (c.index,)
+            print "decode_properties(%d, <<>>) ->" % (c.index,)
         else:
             print ("decode_properties(%d, %s) ->" %
                    (c.index, presentBin(c.fields)))
-            for field in c.fields[:-1]:
+            for field in c.fields:
                 writePropFieldLine(field)
-            writePropFieldLine(c.fields[-1], "<<>>")
+            print "  <<>> = %s," % ('R' + str(len(c.fields)))
         print "  #'P_%s'{%s};" % (erlangize(c.name), fieldMapList(c.fields))
 
     def genFieldPreprocessing(packed):
@@ -283,9 +265,27 @@ def genErl(spec):
         print "  <<%s>>;" % (', '.join([methodFieldFragment(f) for f in packedFields]))
 
     def genEncodeProperties(c):
+        def presentBin(fields):
+            ps = ', '.join(['P' + str(f.index) + ':1' for f in fields])
+            return '<<' + ps + ', 0:%d>>' % (16 - len(fields),)
+        def writePropFieldLine(field):
+            i = str(field.index)
+            if field.domain == 'bit':
+                print "  {P%s, R%s} = {F%s =:= 1, R%s}," % \
+                    (i, str(field.index + 1), i, i)
+            else:
+                print "  {P%s, R%s} = if F%s =:= undefined -> {0, R%s}; true -> {1, [?%s_PROP(F%s, L%s) | R%s]} end," % \
+                    (i, str(field.index + 1), i, i, erlType(field.domain).upper(), i, i, i)
+
         print "encode_properties(#'P_%s'{%s}) ->" % (erlangize(c.name), fieldMapList(c.fields))
-        print "  rabbit_binary_generator:encode_properties(%s, %s);" % \
-              (fieldTypeList(c.fields), fieldTempList(c.fields))
+        if len(c.fields) == 0:
+            print "  <<>>;"
+        else:
+            print "  R0 = [<<>>],"
+            for field in c.fields:
+                writePropFieldLine(field)
+            print "  list_to_binary([%s | lists:reverse(R%s)]);" % \
+                (presentBin(c.fields), str(len(c.fields)))
 
     def messageConstantClass(cls):
         # We do this because 0.8 uses "soft error" and 8.1 uses "soft-error".
@@ -350,8 +350,8 @@ def genErl(spec):
       'table' | 'byte' | 'double' | 'float' | 'long' |
       'short' | 'bool' | 'binary' | 'void' | 'array').
 -type(amqp_property_type() ::
-      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
-      'longlongint' | 'timestamp' | 'bit' | 'table').
+      'shortstr' | 'longstr' | 'octet' | 'short' | 'long' |
+      'longlong' | 'timestamp' | 'bit' | 'table').
 
 -type(amqp_table() :: [{binary(), amqp_field_type(), amqp_value()}]).
 -type(amqp_array() :: [{amqp_field_type(), amqp_value()}]).
@@ -429,25 +429,78 @@ shortstr_size(S) ->
         _                   -> exit(method_field_shortstr_overflow)
     end.
 
--define(SHORTSTR_PROP(P, R, L, S, X),
-        if P =:= 0 -> {undefined, R};
-           true    -> <<L:8/unsigned, S:L/binary, X/binary>> = R,
-                      {S, X}
+-define(SHORTSTR_VAL(R, L, V, X),
+        begin
+            <<L:8/unsigned, V:L/binary, X/binary>> = R,
+            {V, X}
         end).
--define(TABLE_PROP(P, R, L, T, X),
-        if P =:= 0 -> {undefined, R};
-           true    -> <<L:32/unsigned, T:L/binary, X/binary>> = R,
-                      {rabbit_binary_parser:parse_table(T), X}
+
+-define(LONGSTR_VAL(R, L, V, X),
+        begin
+            <<L:32/unsigned, V:L/binary, X/binary>> = R,
+            {V, X}
         end).
--define(OCTET_PROP(P, R, I, X),
-        if P =:= 0 -> {undefined, R};
-           true    -> <<I:8/unsigned, X/binary>> = R,
-                      {I, X}
+
+-define(SHORT_VAL(R, L, V, X),
+        begin
+            <<V:8/unsigned, X/binary>> = R,
+            {V, X}
         end).
--define(TIMESTAMP_PROP(P, R, I, X),
-        if P =:= 0 -> {undefined, R};
-           true    -> <<I:64/unsigned, X/binary>> = R,
-                      {I, X}
+
+-define(LONG_VAL(R, L, V, X),
+        begin
+            <<V:32/unsigned, X/binary>> = R,
+            {V, X}
+        end).
+
+-define(LONGLONG_VAL(R, L, V, X),
+        begin
+            <<V:64/unsigned, X/binary>> = R,
+            {V, X}
+        end).
+
+-define(OCTET_VAL(R, L, V, X),
+        begin
+            <<V:8/unsigned, X/binary>> = R,
+            {V, X}
+        end).
+
+-define(TABLE_VAL(R, L, V, X),
+        begin
+            <<L:32/unsigned, V:L/binary, X/binary>> = R,
+            {rabbit_binary_parser:parse_table(V), X}
+        end).
+
+-define(TIMESTAMP_VAL(R, L, V, X),
+        begin
+            <<V:64/unsigned, X/binary>> = R,
+            {V, X}
+        end).
+
+-define(SHORTSTR_PROP(X, L),
+        begin
+            L = size(X),
+            if L < 256 -> <<L:8, X:L/binary>>;
+               true    -> exit(content_properties_shortstr_overflow)
+            end
+        end).
+
+-define(LONGSTR_PROP(X, L),
+        begin
+            L = size(X),
+            <<L:32, X:L/binary>>
+        end).
+
+-define(OCTET_PROP(X, L),     <<X:8/unsigned>>).
+-define(SHORT_PROP(X, L),     <<X:16/unsigned>>).
+-define(LONG_PROP(X, L),      <<X:32/unsigned>>).
+-define(LONGLONG_PROP(X, L),  <<X:64/unsigned>>).
+-define(TIMESTAMP_PROP(X, L), <<X:64/unsigned>>).
+
+-define(TABLE_PROP(X, T),
+        begin
+            T = rabbit_binary_generator:generate_table(X),
+            <<(size(T)):32, T/binary>>
         end).
 """
     version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
@@ -497,9 +550,6 @@ shortstr_size(S) ->
     print "amqp_exception(_Code) -> undefined."
 
 def genHrl(spec):
-    def erlType(domain):
-        return erlangTypeMap[spec.resolveDomain(domain)]
-
     def fieldNameList(fields):
         return ', '.join([erlangize(f.name) for f in fields])
 

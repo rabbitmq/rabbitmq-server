@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_msg_store_gc).
@@ -23,7 +23,7 @@
 -export([set_maximum_since_use/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, prioritise_cast/2]).
+         terminate/2, code_change/3, prioritise_cast/3]).
 
 -record(state,
         { pending_no_readers,
@@ -79,8 +79,8 @@ init([MsgStoreState]) ->
                   msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-prioritise_cast({set_maximum_since_use, _Age}, _State) -> 8;
-prioritise_cast(_Msg,                          _State) -> 0.
+prioritise_cast({set_maximum_since_use, _Age}, _Len, _State) -> 8;
+prioritise_cast(_Msg,                          _Len, _State) -> 0.
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.

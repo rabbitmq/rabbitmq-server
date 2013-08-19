@@ -10,14 +10,15 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_control).
+-module(rabbit_control_main).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5]).
+-export([start/0, stop/0, parse_arguments/2, action/5,
+         sync_queue/1, cancel_sync_queue/1]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -25,10 +26,18 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+-define(PRIORITY_OPT, "--priority").
+-define(APPLY_TO_OPT, "--apply-to").
+-define(RAM_OPT, "--ram").
+-define(OFFLINE_OPT, "--offline").
 
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+-define(PRIORITY_DEF, {?PRIORITY_OPT, {option, "0"}}).
+-define(APPLY_TO_DEF, {?APPLY_TO_OPT, {option, "all"}}).
+-define(RAM_DEF, {?RAM_OPT, flag}).
+-define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
 
@@ -41,9 +50,13 @@
          force_reset,
          rotate_logs,
 
-         cluster,
-         force_cluster,
+         {join_cluster, [?RAM_DEF]},
+         change_cluster_node_type,
+         update_cluster_nodes,
+         {forget_cluster_node, [?OFFLINE_DEF]},
          cluster_status,
+         {sync_queue, [?VHOST_DEF]},
+         {cancel_sync_queue, [?VHOST_DEF]},
 
          add_user,
          delete_user,
@@ -60,9 +73,13 @@
          {list_permissions, [?VHOST_DEF]},
          list_user_permissions,
 
-         set_parameter,
-         clear_parameter,
-         list_parameters,
+         {set_parameter, [?VHOST_DEF]},
+         {clear_parameter, [?VHOST_DEF]},
+         {list_parameters, [?VHOST_DEF]},
+
+         {set_policy, [?VHOST_DEF, ?PRIORITY_DEF, ?APPLY_TO_DEF]},
+         {clear_policy, [?VHOST_DEF]},
+         {list_policies, [?VHOST_DEF]},
 
          {list_queues, [?VHOST_DEF]},
          {list_exchanges, [?VHOST_DEF]},
@@ -92,7 +109,9 @@
          {"Bindings",  rabbit_binding,  info_all, info_keys},
          {"Consumers", rabbit_amqqueue, consumers_all, consumer_info_keys},
          {"Permissions", rabbit_auth_backend_internal, list_vhost_permissions,
-          vhost_perms_info_keys}]).
+          vhost_perms_info_keys},
+         {"Policies",   rabbit_policy,             list_formatted, info_keys},
+         {"Parameters", rabbit_runtime_parameters, list_formatted, info_keys}]).
 
 %%----------------------------------------------------------------------------
 
@@ -113,19 +132,13 @@
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
-        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr),
-                                         init:get_plain_arguments())
-        of
+        case parse_arguments(init:get_plain_arguments(), NodeStr) of
             {ok, Res}  -> Res;
             no_command -> print_error("could not recognise command", []),
                           usage()
         end,
-    Opts1 = [case K of
-                 ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
-                 _         -> {K, V}
-             end || {K, V} <- Opts],
-    Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
-    Node = proplists:get_value(?NODE_OPT, Opts1),
+    Quiet = proplists:get_bool(?QUIET_OPT, Opts),
+    Node = proplists:get_value(?NODE_OPT, Opts),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -147,6 +160,12 @@ start() ->
                 false -> io:format("...done.~n")
             end,
             rabbit_misc:quit(0);
+        {ok, Info} ->
+            case Quiet of
+                true  -> ok;
+                false -> io:format("...done (~p).~n", [Info])
+            end,
+            rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
             PrintInvalidCommandError(),
             usage();
@@ -156,6 +175,11 @@ start() ->
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
             usage();
+        {error, {Problem, Reason}} when is_atom(Problem), is_binary(Reason) ->
+            %% We handle this common case specially to avoid ~p since
+            %% that has i18n issues
+            print_error("~s: ~s", [Problem, Reason]),
+            rabbit_misc:quit(2);
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
@@ -185,11 +209,11 @@ print_report(Node, {Descr, Module, InfoFun, KeysFun}, VHostArg) ->
     print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg).
 
 print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
-    case Results = rpc_call(Node, Module, InfoFun, VHostArg) of
-        [_|_] -> InfoItems = rpc_call(Node, Module, KeysFun, []),
-                 display_row([atom_to_list(I) || I <- InfoItems]),
-                 display_info_list(Results, InfoItems);
-        _     -> ok
+    case rpc_call(Node, Module, InfoFun, VHostArg) of
+        [_|_] = Results -> InfoItems = rpc_call(Node, Module, KeysFun, []),
+                           display_row([atom_to_list(I) || I <- InfoItems]),
+                           display_info_list(Results, InfoItems);
+        _               -> ok
     end,
     io:nl().
 
@@ -204,6 +228,19 @@ stop() ->
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
     rabbit_misc:quit(1).
+
+parse_arguments(CmdLine, NodeStr) ->
+    case rabbit_misc:parse_arguments(
+           ?COMMANDS, ?GLOBAL_DEFS(NodeStr), CmdLine) of
+        {ok, {Cmd, Opts0, Args}} ->
+            Opts = [case K of
+                        ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
+                        _         -> {K, V}
+                    end || {K, V} <- Opts0],
+            {ok, {Cmd, Opts, Args}};
+        E ->
+            E
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -234,21 +271,50 @@ action(force_reset, Node, [], _Opts, Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
     call(Node, {rabbit_mnesia, force_reset, []});
 
-action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    Inform("Clustering node ~p with ~p",
-           [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
+action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
+    NodeType = case proplists:get_bool(?RAM_OPT, Opts) of
+                   true  -> ram;
+                   false -> disc
+               end,
+    Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, NodeType]);
 
-action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
-           [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
+action(change_cluster_node_type, Node, ["ram"], _Opts, Inform) ->
+    Inform("Turning ~p into a ram node", [Node]),
+    rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [ram]);
+action(change_cluster_node_type, Node, [Type], _Opts, Inform)
+  when Type =:= "disc" orelse Type =:= "disk" ->
+    Inform("Turning ~p into a disc node", [Node]),
+    rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc]);
+
+action(update_cluster_nodes, Node, [ClusterNodeS], _Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
+    Inform("Updating cluster nodes for ~p from ~p", [Node, ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode]);
+
+action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
+    RemoveWhenOffline = proplists:get_bool(?OFFLINE_OPT, Opts),
+    Inform("Removing node ~p from cluster", [ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, forget_cluster_node,
+             [ClusterNode, RemoveWhenOffline]);
+
+action(sync_queue, Node, [Q], Opts, Inform) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    QName = rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
+    Inform("Synchronising ~s", [rabbit_misc:rs(QName)]),
+    rpc_call(Node, rabbit_control_main, sync_queue, [QName]);
+
+action(cancel_sync_queue, Node, [Q], Opts, Inform) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    QName = rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
+    Inform("Stopping synchronising ~s", [rabbit_misc:rs(QName)]),
+    rpc_call(Node, rabbit_control_main, cancel_sync_queue, [QName]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, PidFile, rabbit, Inform);
+    wait_for_application(Node, PidFile, rabbit_and_plugins, Inform);
 action(wait, Node, [PidFile, App], _Opts, Inform) ->
     Inform("Waiting for ~p on ~p", [App, Node]),
     wait_for_application(Node, PidFile, list_to_atom(App), Inform);
@@ -352,7 +418,7 @@ action(list_bindings, Node, Args, Opts, Inform) ->
 
 action(list_connections, Node, Args, _Opts, Inform) ->
     Inform("Listing connections", []),
-    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port, state]),
+    ArgAtoms = default_if_empty(Args, [user, peer_host, peer_port, state]),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
@@ -409,49 +475,84 @@ action(list_permissions, Node, [], Opts, Inform) ->
                              list_vhost_permissions, [VHost]}),
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
 
-action(set_parameter, Node, [Component, Key, Value], _Opts, Inform) ->
+action(set_parameter, Node, [Component, Key, Value], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Setting runtime parameter ~p for component ~p to ~p",
            [Key, Component, Value]),
     rpc_call(Node, rabbit_runtime_parameters, parse_set,
-             [list_to_binary(Component), list_to_binary(Key), Value]);
+             [VHostArg, list_to_binary(Component), list_to_binary(Key), Value]);
 
-action(clear_parameter, Node, [Component, Key], _Opts, Inform) ->
+action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Clearing runtime parameter ~p for component ~p", [Key, Component]),
-    rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(Component),
+    rpc_call(Node, rabbit_runtime_parameters, clear, [VHostArg,
+                                                      list_to_binary(Component),
                                                       list_to_binary(Key)]);
 
-action(list_parameters, Node, Args = [], _Opts, Inform) ->
+action(list_parameters, Node, [], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Listing runtime parameters", []),
     display_info_list(
-      rpc_call(Node, rabbit_runtime_parameters, list_formatted, Args),
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg]),
       rabbit_runtime_parameters:info_keys());
 
+action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
+    Msg = "Setting policy ~p for pattern ~p to ~p with priority ~p",
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    PriorityArg = proplists:get_value(?PRIORITY_OPT, Opts),
+    ApplyToArg = list_to_binary(proplists:get_value(?APPLY_TO_OPT, Opts)),
+    Inform(Msg, [Key, Pattern, Defn, PriorityArg]),
+    rpc_call(
+      Node, rabbit_policy, parse_set,
+      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]);
+
+action(clear_policy, Node, [Key], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Clearing policy ~p", [Key]),
+    rpc_call(Node, rabbit_policy, delete, [VHostArg, list_to_binary(Key)]);
+
+action(list_policies, Node, [], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Listing policies", []),
+    display_info_list(rpc_call(Node, rabbit_policy, list_formatted, [VHostArg]),
+                      rabbit_policy:info_keys());
+
 action(report, Node, _Args, _Opts, Inform) ->
-    io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
+    Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),
     [begin ok = action(Action, N, [], [], Inform), io:nl() end ||
-        N      <- unsafe_rpc(Node, rabbit_mnesia, running_clustered_nodes, []),
+        N      <- unsafe_rpc(Node, rabbit_mnesia, cluster_nodes, [running]),
         Action <- [status, cluster_status, environment]],
     VHosts = unsafe_rpc(Node, rabbit_vhost, list, []),
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
-    io:format("End of server status report~n"),
     ok;
 
 action(eval, Node, [Expr], _Opts, _Inform) ->
     case erl_scan:string(Expr) of
         {ok, Scanned, _} ->
             case erl_parse:parse_exprs(Scanned) of
-                {ok, Parsed} ->
-                    {value, Value, _} = unsafe_rpc(
-                                          Node, erl_eval, exprs, [Parsed, []]),
-                    io:format("~p~n", [Value]),
-                    ok;
-                {error, E} ->
-                    {error_string, format_parse_error(E)}
+                {ok, Parsed} -> {value, Value, _} =
+                                    unsafe_rpc(
+                                      Node, erl_eval, exprs, [Parsed, []]),
+                                io:format("~p~n", [Value]),
+                                ok;
+                {error, E}   -> {error_string, format_parse_error(E)}
             end;
         {error, E, _} ->
             {error_string, format_parse_error(E)}
     end.
+
+format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
+
+sync_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(#amqqueue{pid = QPid}) -> rabbit_amqqueue:sync_mirrors(QPid) end).
+
+cancel_sync_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(#amqqueue{pid = QPid}) ->
+                 rabbit_amqqueue:cancel_sync_mirrors(QPid)
+         end).
 
 %%----------------------------------------------------------------------------
 
@@ -460,12 +561,22 @@ wait_for_application(Node, PidFile, Application, Inform) ->
     Inform("pid is ~s", [Pid]),
     wait_for_application(Node, Pid, Application).
 
+wait_for_application(Node, Pid, rabbit_and_plugins) ->
+    wait_for_startup(Node, Pid);
 wait_for_application(Node, Pid, Application) ->
+    while_process_is_alive(
+      Node, Pid, fun() -> rabbit_nodes:is_running(Node, Application) end).
+
+wait_for_startup(Node, Pid) ->
+    while_process_is_alive(
+      Node, Pid, fun() -> rpc:call(Node, rabbit, await_startup, []) =:= ok end).
+
+while_process_is_alive(Node, Pid, Activity) ->
     case process_up(Pid) of
-        true  -> case rabbit_nodes:is_running(Node, Application) of
+        true  -> case Activity() of
                      true  -> ok;
                      false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                              wait_for_application(Node, Pid, Application)
+                              while_process_is_alive(Node, Pid, Activity)
                  end;
         false -> {error, process_not_running}
     end.
@@ -480,12 +591,14 @@ wait_for_process_death(Pid) ->
 read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
         {{ok, Bin}, _} ->
-            S = string:strip(binary_to_list(Bin), right, $\n),
-            try list_to_integer(S)
+            S = binary_to_list(Bin),
+            {match, [PidS]} = re:run(S, "[^\\s]+",
+                                     [{capture, all, list}]),
+            try list_to_integer(PidS)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})
             end,
-            S;
+            PidS;
         {{error, enoent}, true} ->
             timer:sleep(?EXTERNAL_CHECK_INTERVAL),
             read_pid_file(PidFile, Wait);
@@ -497,12 +610,11 @@ read_pid_file(PidFile, Wait) ->
 % rpc:call(os, getpid, []) at this point
 process_up(Pid) ->
     with_os([{unix, fun () ->
-                            system("ps -p " ++ Pid
-                                   ++ " >/dev/null 2>&1") =:= 0
+                            run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
-                             Res = os:cmd("tasklist /nh /fi \"pid eq " ++
-                                          Pid ++ "\" 2>&1"),
+                             Cmd = "tasklist /nh /fi \"pid eq " ++ Pid ++ "\" ",
+                             Res = rabbit_misc:os_cmd(Cmd ++ "2>&1"),
                              case re:run(Res, "erl\\.exe", [{capture, none}]) of
                                  match -> true;
                                  _     -> false
@@ -516,18 +628,17 @@ with_os(Handlers) ->
         Handler   -> Handler()
     end.
 
-% Like system(3)
-system(Cmd) ->
-    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
-    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
-    receive {Port, {exit_status, Status}} -> Status end.
+run_ps(Pid) ->
+    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
+                            [exit_status, {line, 16384},
+                             use_stdio, stderr_to_stdout]),
+    exit_loop(Port).
 
-% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
-escape_quotes(Cmd) ->
-    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
-
-format_parse_error({_Line, Mod, Err}) ->
-    lists:flatten(Mod:format_error(Err)).
+exit_loop(Port) ->
+    receive
+        {Port, {exit_status, Rc}} -> Rc;
+        {Port, _}                 -> exit_loop(Port)
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -541,7 +652,7 @@ display_info_list(Results, InfoItemKeys) when is_list(Results) ->
       fun (Result) -> display_row(
                         [format_info_item(proplists:get_value(X, Result)) ||
                             X <- InfoItemKeys])
-      end, Results),
+      end, lists:sort(Results)),
     ok;
 display_info_list(Other, _) ->
     Other.

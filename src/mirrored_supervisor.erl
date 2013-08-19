@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(mirrored_supervisor).
@@ -174,7 +174,7 @@
 -spec start_internal(Group, ChildSpecs) -> Result when
       Group :: group_name(),
       ChildSpecs :: [supervisor2:child_spec()],
-      Result :: supervisor2:startlink_ret().
+      Result :: {'ok', pid()} | {'error', term()}.
 
 -spec create_tables() -> Result when
       Result :: 'ok'.
@@ -212,9 +212,8 @@ start_link0(Prefix, Group, Init) ->
 init(Mod, Args) ->
     case Mod:init(Args) of
         {ok, {{Bad, _, _}, _ChildSpecs}} when
-              Bad =:= simple_one_for_one orelse
-              Bad =:= simple_one_for_one_terminate -> erlang:error(badarg);
-        Init                                       -> Init
+              Bad =:= simple_one_for_one -> erlang:error(badarg);
+        Init                             -> Init
     end.
 
 start_child(Sup, ChildSpec) -> call(Sup, {start_child,  ChildSpec}).

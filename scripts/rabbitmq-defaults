@@ -11,12 +11,18 @@
 ##
 ##  The Original Code is RabbitMQ.
 ##
-##  The Initial Developer of the Original Code is VMware, Inc.
-##  Copyright (c) 2012 VMware, Inc.  All rights reserved.
+##  The Initial Developer of the Original Code is GoPivotal, Inc.
+##  Copyright (c) 2012-2013 GoPivotal, Inc.  All rights reserved.
 ##
 
 ### next line potentially updated in package install steps
 SYS_PREFIX=
+
+### next line will be updated when generating a standalone release
+ERL_DIR=
+
+CLEAN_BOOT_FILE=start_clean
+SASL_BOOT_FILE=start_sasl
 
 ## Set default values
 

@@ -11,8 +11,8 @@
 ##
 ##  The Original Code is RabbitMQ.
 ##
-##  The Initial Developer of the Original Code is VMware, Inc.
-##  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+##  The Initial Developer of the Original Code is GoPivotal, Inc.
+##  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 ##
 
 # Escape spaces and quotes, because shell is revolting.
@@ -29,7 +29,9 @@ cd /var/lib/rabbitmq
 
 SCRIPT=`basename $0`
 
-if [ `id -u` = `id -u rabbitmq` -o "$SCRIPT" = "rabbitmq-plugins" ] ; then
+if [ `id -u` = `id -u rabbitmq` -a "$SCRIPT" = "rabbitmq-server" ] ; then
+    /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
+elif [ `id -u` = `id -u rabbitmq` -o "$SCRIPT" = "rabbitmq-plugins" ] ; then
     /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
 elif [ `id -u` = 0 ] ; then
     @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"

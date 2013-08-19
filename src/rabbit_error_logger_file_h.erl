@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_error_logger_file_h).
@@ -76,6 +76,9 @@ init_file(File, PrevHandler) ->
         Error   -> Error
     end.
 
+%% filter out "application: foo; exited: stopped; type: temporary"
+handle_event({info_report, _, {_, std_info, _}}, State) ->
+    {ok, State};
 handle_event(Event, State) ->
     error_logger_file_h:handle_event(Event, State).
 

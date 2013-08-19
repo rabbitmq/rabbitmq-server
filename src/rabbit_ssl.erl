@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_ssl).
@@ -162,15 +162,16 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
             {?'id-at-pseudonym'              , "PSEUDONYM"},
             {?'id-domainComponent'           , "DC"},
             {?'id-emailAddress'              , "EMAILADDRESS"},
-            {?'street-address'               , "STREET"}],
+            {?'street-address'               , "STREET"},
+            {{0,9,2342,19200300,100,1,1}     , "UID"}], %% Not in public_key.hrl
     case proplists:lookup(T, Fmts) of
         {_, Fmt} ->
-            io_lib:format(Fmt ++ "=~s", [FV]);
+            rabbit_misc:format(Fmt ++ "=~s", [FV]);
         none when is_tuple(T) ->
-            TypeL = [io_lib:format("~w", [X]) || X <- tuple_to_list(T)],
-            io_lib:format("~s:~s", [string:join(TypeL, "."), FV]);
+            TypeL = [rabbit_misc:format("~w", [X]) || X <- tuple_to_list(T)],
+            rabbit_misc:format("~s=~s", [string:join(TypeL, "."), FV]);
         none ->
-            io_lib:format("~p:~s", [T, FV])
+            rabbit_misc:format("~p=~s", [T, FV])
     end.
 
 %% Escape a string as per RFC4514.
@@ -204,14 +205,26 @@ format_asn1_value({ST, S}) when ST =:= teletexString; ST =:= printableString;
     format_directory_string(ST, S);
 format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                              Min1, Min2, S1, S2, $Z]}) ->
-    io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
-                  [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
+    rabbit_misc:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
+                       [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
 %% We appear to get an untagged value back for an ia5string
 %% (e.g. domainComponent).
 format_asn1_value(V) when is_list(V) ->
     V;
+format_asn1_value(V) when is_binary(V) ->
+    %% OTP does not decode some values when combined with an unknown
+    %% type. That's probably wrong, so as a last ditch effort let's
+    %% try manually decoding. 'DirectoryString' is semi-arbitrary -
+    %% but it is the type which covers the various string types we
+    %% handle below.
+    try
+        {ST, S} = public_key:der_decode('DirectoryString', V),
+        format_directory_string(ST, S)
+    catch _:_ ->
+            rabbit_misc:format("~p", [V])
+    end;
 format_asn1_value(V) ->
-    io_lib:format("~p", [V]).
+    rabbit_misc:format("~p", [V]).
 
 %% DirectoryString { INTEGER : maxSize } ::= CHOICE {
 %%     teletexString     TeletexString (SIZE (1..maxSize)),

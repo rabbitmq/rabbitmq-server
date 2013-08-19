@@ -10,59 +10,67 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_master).
 
 -export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
-         requeue/2, len/1, is_empty/1, drain_confirmed/1, dropwhile/3,
-         set_ram_duration_target/2, ram_duration/1,
+         purge/1, purge_acks/1, publish/5, publish_delivered/4,
+         discard/3, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
+         len/1, is_empty/1, depth/1, drain_confirmed/1,
+         dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3, fold/3]).
+         status/1, invoke/3, is_duplicate/2]).
 
 -export([start/1, stop/0]).
 
--export([promote_backing_queue_state/6, sender_death_fun/0, length_fun/0]).
+-export([promote_backing_queue_state/8, sender_death_fun/0, depth_fun/0]).
+
+-export([init_with_existing_bq/3, stop_mirroring/1, sync_mirrors/3]).
 
 -behaviour(rabbit_backing_queue).
 
 -include("rabbit.hrl").
 
--record(state, { gm,
+-record(state, { name,
+                 gm,
                  coordinator,
                  backing_queue,
                  backing_queue_state,
-                 set_delivered,
                  seen_status,
                  confirmed,
-                 ack_msg_id,
                  known_senders
                }).
 
 -ifdef(use_specs).
 
--export_type([death_fun/0, length_fun/0]).
+-export_type([death_fun/0, depth_fun/0, stats_fun/0]).
 
 -type(death_fun() :: fun ((pid()) -> 'ok')).
--type(length_fun() :: fun (() -> 'ok')).
--type(master_state() :: #state { gm                  :: pid(),
+-type(depth_fun() :: fun (() -> 'ok')).
+-type(stats_fun() :: fun ((any()) -> 'ok')).
+-type(master_state() :: #state { name                :: rabbit_amqqueue:name(),
+                                 gm                  :: pid(),
                                  coordinator         :: pid(),
                                  backing_queue       :: atom(),
                                  backing_queue_state :: any(),
-                                 set_delivered       :: non_neg_integer(),
                                  seen_status         :: dict(),
                                  confirmed           :: [rabbit_guid:guid()],
-                                 ack_msg_id          :: dict(),
                                  known_senders       :: set()
                                }).
 
--spec(promote_backing_queue_state/6 ::
-        (pid(), atom(), any(), pid(), dict(), [pid()]) -> master_state()).
+-spec(promote_backing_queue_state/8 ::
+        (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()], dict(),
+         [pid()]) -> master_state()).
 -spec(sender_death_fun/0 :: () -> death_fun()).
--spec(length_fun/0 :: () -> length_fun()).
+-spec(depth_fun/0 :: () -> depth_fun()).
+-spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->
+                                      master_state()).
+-spec(stop_mirroring/1 :: (master_state()) -> {atom(), any()}).
+-spec(sync_mirrors/3 :: (stats_fun(), stats_fun(), master_state()) ->
+    {'ok', master_state()} | {stop, any(), master_state()}).
 
 -endif.
 
@@ -82,41 +90,79 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
-     AsyncCallback) ->
-    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
-                   Q, undefined, sender_death_fun(), length_fun()),
-    GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-    MNodes1 =
-        (case MNodes of
-             all       -> rabbit_mnesia:all_clustered_nodes();
-             undefined -> [];
-             _         -> MNodes
-         end) -- [node()],
-    [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
+init(Q, Recover, AsyncCallback) ->
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),
-    ok = gm:broadcast(GM, {length, BQ:len(BQS)}),
-    #state { gm                  = GM,
+    State = #state{gm = GM} = init_with_existing_bq(Q, BQ, BQS),
+    ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
+    State.
+
+init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
+    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
+                   Q, undefined, sender_death_fun(), depth_fun()),
+    GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
+    Self = self(),
+    ok = rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   [Q1 = #amqqueue{gm_pids = GMPids}]
+                       = mnesia:read({rabbit_queue, QName}),
+                   ok = rabbit_amqqueue:store_queue(
+                          Q1#amqqueue{gm_pids = [{GM, Self} | GMPids]})
+           end),
+    {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
+    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
+    #state { name                = QName,
+             gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
              backing_queue_state = BQS,
-             set_delivered       = 0,
              seen_status         = dict:new(),
              confirmed           = [],
-             ack_msg_id          = dict:new(),
              known_senders       = sets:new() }.
 
+stop_mirroring(State = #state { coordinator         = CPid,
+                                backing_queue       = BQ,
+                                backing_queue_state = BQS }) ->
+    unlink(CPid),
+    stop_all_slaves(shutdown, State),
+    {BQ, BQS}.
+
+sync_mirrors(HandleInfo, EmitStats,
+             State = #state { name                = QName,
+                              gm                  = GM,
+                              backing_queue       = BQ,
+                              backing_queue_state = BQS }) ->
+    Log = fun (Fmt, Params) ->
+                  rabbit_log:info("Synchronising ~s: " ++ Fmt ++ "~n",
+                                  [rabbit_misc:rs(QName) | Params])
+          end,
+    Log("~p messages to synchronise", [BQ:len(BQS)]),
+    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
+    Ref = make_ref(),
+    Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, Log, SPids),
+    gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
+    S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
+    case rabbit_mirror_queue_sync:master_go(
+           Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) of
+        {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
+        {sync_died, R, BQS1}   -> Log("~p", [R]),
+                                  {ok, S(BQS1)};
+        {already_synced, BQS1} -> {ok, S(BQS1)};
+        {ok, BQS1}             -> Log("complete", []),
+                                  {ok, S(BQS1)}
+    end.
+
 terminate({shutdown, dropped} = Reason,
-          State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+          State = #state { backing_queue       = BQ,
+                           backing_queue_state = BQS }) ->
     %% Backing queue termination - this node has been explicitly
     %% dropped. Normally, non-durable queues would be tidied up on
     %% startup, but there's a possibility that we will be added back
     %% in without this node being restarted. Thus we must do the full
     %% blown delete_and_terminate now, but only locally: we do not
     %% broadcast delete_and_terminate.
-    State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
-                   set_delivered       = 0 };
+    State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)};
+
 terminate(Reason,
           State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     %% Backing queue termination. The queue is going down but
@@ -124,63 +170,77 @@ terminate(Reason,
     %% node. Thus just let some other slave take over.
     State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
 
-delete_and_terminate(Reason, State = #state { gm                  = GM,
-                                              backing_queue       = BQ,
+delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
                                               backing_queue_state = BQS }) ->
+    stop_all_slaves(Reason, State),
+    State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
+
+stop_all_slaves(Reason, #state{name = QName, gm   = GM}) ->
+    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
+    MRefs = [erlang:monitor(process, SPid) || SPid <- SPids],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
-    State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
-                   set_delivered       = 0 }.
+    [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
+    %% Normally when we remove a slave another slave or master will
+    %% notice and update Mnesia. But we just removed them all, and
+    %% have stopped listening ourselves. So manually clean up.
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              [Q] = mnesia:read({rabbit_queue, QName}),
+              rabbit_mirror_queue_misc:store_updated_slaves(
+                Q #amqqueue { gm_pids = [], slave_pids = [] })
+      end),
+    ok = gm:forget_group(QName).
 
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
                        backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {set_length, 0, false}),
+    ok = gm:broadcast(GM, {drop, 0, BQ:len(BQS), false}),
     {Count, BQS1} = BQ:purge(BQS),
-    {Count, State #state { backing_queue_state = BQS1,
-                           set_delivered       = 0 }}.
+    {Count, State #state { backing_queue_state = BQS1 }}.
 
-publish(Msg = #basic_message { id = MsgId }, MsgProps, ChPid,
+purge_acks(_State) -> exit({not_implemented, {?MODULE, purge_acks}}).
+
+publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid,
         State = #state { gm                  = GM,
                          seen_status         = SS,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish, false, ChPid, MsgProps, Msg}),
-    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
+    ok = gm:broadcast(GM, {publish, ChPid, MsgProps, Msg}),
+    BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
-publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
+publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, State = #state { gm                  = GM,
                                           seen_status         = SS,
                                           backing_queue       = BQ,
-                                          backing_queue_state = BQS,
-                                          ack_msg_id          = AM }) ->
+                                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    %% Must use confirmed_broadcast here in order to guarantee that
-    %% all slaves are forced to interpret this publish_delivered at
-    %% the same point, especially if we die and a slave is promoted.
-    ok = gm:confirmed_broadcast(
-           GM, {publish, {true, AckRequired}, ChPid, MsgProps, Msg}),
-    {AckTag, BQS1} =
-        BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
-    AM1 = maybe_store_acktag(AckTag, MsgId, AM),
-    {AckTag,
-     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1,
-                                             ack_msg_id          = AM1 })}.
+    ok = gm:broadcast(GM, {publish_delivered, ChPid, MsgProps, Msg}),
+    {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, BQS),
+    State1 = State #state { backing_queue_state = BQS1 },
+    {AckTag, ensure_monitoring(ChPid, State1)}.
 
-dropwhile(Pred, AckRequired,
-          State = #state{gm                  = GM,
-                         backing_queue       = BQ,
-                         set_delivered       = SetDelivered,
-                         backing_queue_state = BQS }) ->
+discard(MsgId, ChPid, State = #state { gm                  = GM,
+                                       backing_queue       = BQ,
+                                       backing_queue_state = BQS,
+                                       seen_status         = SS }) ->
+    false = dict:is_key(MsgId, SS), %% ASSERTION
+    ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
+    ensure_monitoring(ChPid, State #state { backing_queue_state =
+                                                BQ:discard(MsgId, ChPid, BQS) }).
+
+dropwhile(Pred, State = #state{backing_queue       = BQ,
+                               backing_queue_state = BQS }) ->
     Len  = BQ:len(BQS),
-    {Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
-    Len1 = BQ:len(BQS1),
-    ok = gm:broadcast(GM, {set_length, Len1, AckRequired}),
-    Dropped = Len - Len1,
-    SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
-    {Msgs, State #state { backing_queue_state = BQS1,
-                          set_delivered       = SetDelivered1 } }.
+    {Next, BQS1} = BQ:dropwhile(Pred, BQS),
+    {Next, drop(Len, false, State #state { backing_queue_state = BQS1 })}.
+
+fetchwhile(Pred, Fun, Acc, State = #state{backing_queue       = BQ,
+                                          backing_queue_state = BQS }) ->
+    Len  = BQ:len(BQS),
+    {Next, Acc1, BQS1} = BQ:fetchwhile(Pred, Fun, Acc, BQS),
+    {Next, Acc1, drop(Len, true, State #state { backing_queue_state = BQS1 })}.
 
 drain_confirmed(State = #state { backing_queue       = BQ,
                                  backing_queue_state = BQS,
@@ -212,43 +272,33 @@ drain_confirmed(State = #state { backing_queue       = BQ,
                                           seen_status         = SS1,
                                           confirmed           = [] }}.
 
-fetch(AckRequired, State = #state { gm                  = GM,
-                                    backing_queue       = BQ,
-                                    backing_queue_state = BQS,
-                                    set_delivered       = SetDelivered,
-                                    ack_msg_id          = AM }) ->
+fetch(AckRequired, State = #state { backing_queue       = BQ,
+                                    backing_queue_state = BQS }) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
-    case Result of
-        empty ->
-            {Result, State1};
-        {#basic_message { id = MsgId } = Message, IsDelivered, AckTag,
-         Remaining} ->
-            ok = gm:broadcast(GM, {fetch, AckRequired, MsgId, Remaining}),
-            IsDelivered1 = IsDelivered orelse SetDelivered > 0,
-            SetDelivered1 = lists:max([0, SetDelivered - 1]),
-            AM1 = maybe_store_acktag(AckTag, MsgId, AM),
-            {{Message, IsDelivered1, AckTag, Remaining},
-             State1 #state { set_delivered = SetDelivered1,
-                             ack_msg_id    = AM1 }}
-    end.
+    {Result, case Result of
+                 empty                          -> State1;
+                 {_MsgId, _IsDelivered, AckTag} -> drop_one(AckTag, State1)
+             end}.
+
+drop(AckRequired, State = #state { backing_queue       = BQ,
+                                   backing_queue_state = BQS }) ->
+    {Result, BQS1} = BQ:drop(AckRequired, BQS),
+    State1 = State #state { backing_queue_state = BQS1 },
+    {Result, case Result of
+                 empty            -> State1;
+                 {_MsgId, AckTag} -> drop_one(AckTag, State1)
+             end}.
 
 ack(AckTags, State = #state { gm                  = GM,
                               backing_queue       = BQ,
-                              backing_queue_state = BQS,
-                              ack_msg_id          = AM }) ->
+                              backing_queue_state = BQS }) ->
     {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
     case MsgIds of
         [] -> ok;
         _  -> ok = gm:broadcast(GM, {ack, MsgIds})
     end,
-    AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
-    {MsgIds, State #state { backing_queue_state = BQS1,
-                            ack_msg_id          = AM1 }}.
-
-fold(MsgFun, State = #state { backing_queue       = BQ,
-                              backing_queue_state = BQS }, AckTags) ->
-    State #state { backing_queue_state = BQ:fold(MsgFun, BQS, AckTags) }.
+    {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
 requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,
@@ -257,11 +307,24 @@ requeue(AckTags, State = #state { gm                  = GM,
     ok = gm:broadcast(GM, {requeue, MsgIds}),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
+ackfold(MsgFun, Acc, State = #state { backing_queue       = BQ,
+                                      backing_queue_state = BQS }, AckTags) ->
+    {Acc1, BQS1} = BQ:ackfold(MsgFun, Acc, BQS, AckTags),
+    {Acc1, State #state { backing_queue_state =  BQS1 }}.
+
+fold(Fun, Acc, State = #state { backing_queue = BQ,
+                                backing_queue_state = BQS }) ->
+    {Result, BQS1} = BQ:fold(Fun, Acc, BQS),
+    {Result, State #state { backing_queue_state = BQS1 }}.
+
 len(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:len(BQS).
 
 is_empty(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:is_empty(BQS).
+
+depth(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:depth(BQS).
 
 set_ram_duration_target(Target, State = #state { backing_queue       = BQ,
                                                  backing_queue_state = BQS }) ->
@@ -319,8 +382,9 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% immediately after calling is_duplicate). The msg is
             %% invalid. We will not see this again, nor will we be
             %% further involved in confirming this message, so erase.
-            {published, State #state { seen_status = dict:erase(MsgId, SS) }};
-        {ok, confirmed} ->
+            {true, State #state { seen_status = dict:erase(MsgId, SS) }};
+        {ok, Disposition}
+          when Disposition =:= confirmed
             %% It got published when we were a slave via gm, and
             %% confirmed some time after that (maybe even after
             %% promotion), but before we received the publish from the
@@ -329,47 +393,31 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% need to confirm now. As above, amqqueue_process will
             %% have the entry for the msg_id_to_channel mapping added
             %% immediately after calling is_duplicate/2.
-            {published, State #state { seen_status = dict:erase(MsgId, SS),
-                                       confirmed = [MsgId | Confirmed] }};
-        {ok, discarded} ->
-            %% Don't erase from SS here because discard/2 is about to
-            %% be called and we need to be able to detect this case
-            {discarded, State}
-    end.
-
-discard(Msg = #basic_message { id = MsgId }, ChPid,
-        State = #state { gm                  = GM,
-                         backing_queue       = BQ,
-                         backing_queue_state = BQS,
-                         seen_status         = SS }) ->
-    %% It's a massive error if we get told to discard something that's
-    %% already been published or published-and-confirmed. To do that
-    %% would require non FIFO access. Hence we should not find
-    %% 'published' or 'confirmed' in this dict:find.
-    case dict:find(MsgId, SS) of
-        error ->
-            ok = gm:broadcast(GM, {discard, ChPid, Msg}),
-            State #state { backing_queue_state = BQ:discard(Msg, ChPid, BQS),
-                           seen_status         = dict:erase(MsgId, SS) };
-        {ok, discarded} ->
-            State
+          orelse Disposition =:= discarded ->
+            %% Message was discarded while we were a slave. Confirm now.
+            %% As above, amqqueue_process will have the entry for the
+            %% msg_id_to_channel mapping.
+            {true, State #state { seen_status = dict:erase(MsgId, SS),
+                                  confirmed = [MsgId | Confirmed] }}
     end.
 
 %% ---------------------------------------------------------------------------
 %% Other exported functions
 %% ---------------------------------------------------------------------------
 
-promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
-    Len = BQ:len(BQS),
-    ok = gm:broadcast(GM, {length, Len}),
-    #state { gm                  = GM,
+promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
+    {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
+    Len   = BQ:len(BQS1),
+    Depth = BQ:depth(BQS1),
+    true = Len == Depth, %% ASSERTION: everything must have been requeued
+    ok = gm:broadcast(GM, {depth, Depth}),
+    #state { name                = QName,
+             gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
-             backing_queue_state = BQS,
-             set_delivered       = Len,
-             seen_status         = SeenStatus,
+             backing_queue_state = BQS1,
+             seen_status         = Seen,
              confirmed           = [],
-             ack_msg_id          = dict:new(),
              known_senders       = sets:from_list(KS) }.
 
 sender_death_fun() ->
@@ -384,7 +432,7 @@ sender_death_fun() ->
               end)
     end.
 
-length_fun() ->
+depth_fun() ->
     Self = self(),
     fun () ->
             rabbit_amqqueue:run_backing_queue(
@@ -392,15 +440,30 @@ length_fun() ->
               fun (?MODULE, State = #state { gm                  = GM,
                                              backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
-                      ok = gm:broadcast(GM, {length, BQ:len(BQS)}),
+                      ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
                       State
               end)
     end.
 
-maybe_store_acktag(undefined, _MsgId, AM) ->
-    AM;
-maybe_store_acktag(AckTag, MsgId, AM) ->
-    dict:store(AckTag, MsgId, AM).
+%% ---------------------------------------------------------------------------
+%% Helpers
+%% ---------------------------------------------------------------------------
+
+drop_one(AckTag, State = #state { gm                  = GM,
+                                  backing_queue       = BQ,
+                                  backing_queue_state = BQS }) ->
+    ok = gm:broadcast(GM, {drop, BQ:len(BQS), 1, AckTag =/= undefined}),
+    State.
+
+drop(PrevLen, AckRequired, State = #state { gm                  = GM,
+                                            backing_queue       = BQ,
+                                            backing_queue_state = BQS }) ->
+    Len = BQ:len(BQS),
+    case PrevLen - Len of
+        0       -> State;
+        Dropped -> ok = gm:broadcast(GM, {drop, Len, Dropped, AckRequired}),
+                   State
+    end.
 
 ensure_monitoring(ChPid, State = #state { coordinator = CPid,
                                           known_senders = KS }) ->

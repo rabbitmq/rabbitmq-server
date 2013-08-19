@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_runtime_parameter).
@@ -21,10 +21,10 @@
 -type(validate_results() ::
         'ok' | {error, string(), [term()]} | [validate_results()]).
 
--callback validate(binary(), binary(), term()) -> validate_results().
--callback validate_clear(binary(), binary()) -> validate_results().
--callback notify(binary(), binary(), term()) -> 'ok'.
--callback notify_clear(binary(), binary()) -> 'ok'.
+-callback validate(rabbit_types:vhost(), binary(), binary(),
+                   term()) -> validate_results().
+-callback notify(rabbit_types:vhost(), binary(), binary(), term()) -> 'ok'.
+-callback notify_clear(rabbit_types:vhost(), binary(), binary()) -> 'ok'.
 
 -else.
 
@@ -32,10 +32,9 @@
 
 behaviour_info(callbacks) ->
     [
-     {validate, 3},
-     {validate_clear, 2},
-     {notify, 3},
-     {notify_clear, 2}
+     {validate, 4},
+     {notify, 4},
+     {notify_clear, 3}
     ];
 behaviour_info(_Other) ->
     undefined.

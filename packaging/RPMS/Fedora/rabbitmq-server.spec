@@ -3,8 +3,8 @@
 Name: rabbitmq-server
 Version: %%VERSION%%
 Release: 1%{?dist}
-License: MPLv1.1
-Group: Development/Libraries
+License: MPLv1.1 and MIT and ASL 2.0 and BSD
+Group: %{group_tag}
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
 Source1: rabbitmq-server.init
 Source2: rabbitmq-script-wrapper
@@ -12,8 +12,8 @@ Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-server.ocf
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= R12B-3, python-simplejson, xmlto, libxslt
-Requires: erlang >= R12B-3, logrotate
+BuildRequires: erlang >= R13B03, python-simplejson, xmlto, libxslt
+Requires: erlang >= R13B03, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): %%REQUIRES%%
@@ -31,7 +31,9 @@ scalable implementation of an AMQP broker.
 %define _rabbit_server_ocf %{_builddir}/`basename %{S:4}`
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 
+
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
+
 
 %prep
 %setup -q
@@ -110,8 +112,8 @@ done
 
 %files -f ../%{name}.files
 %defattr(-,root,root,-)
-%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
-%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
+%attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
+%attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
@@ -121,6 +123,27 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Thu Aug 15 2013 simon@rabbitmq.com 3.1.5-1
+- New Upstream Release
+
+* Tue Jun 25 2013 tim@rabbitmq.com 3.1.3-1
+- New Upstream Release
+
+* Mon Jun 24 2013 tim@rabbitmq.com 3.1.2-1
+- New Upstream Release
+
+* Mon May 20 2013 tim@rabbitmq.com 3.1.1-1
+- Test release
+
+* Wed May 1 2013 simon@rabbitmq.com 3.1.0-1
+- New Upstream Release
+
+* Tue Dec 11 2012 simon@rabbitmq.com 3.0.1-1
+- New Upstream Release
+
+* Fri Nov 16 2012 simon@rabbitmq.com 3.0.0-1
+- New Upstream Release
+
 * Fri Dec 16 2011 steve@rabbitmq.com 2.7.1-1
 - New Upstream Release
 

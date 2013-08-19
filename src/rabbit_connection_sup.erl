@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_connection_sup).
@@ -42,16 +42,20 @@ start_link() ->
           SupPid,
           {collector, {rabbit_queue_collector, start_link, []},
            intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
-    {ok, ChannelSupSupPid} =
+    %% We need to get channels in the hierarchy here so they close
+    %% before the reader. But for 1.0 readers we can't start the real
+    %% ch_sup_sup (because we don't know if we will be 0-9-1 or 1.0) -
+    %% so we add another supervisor into the hierarchy.
+    {ok, ChannelSup3Pid} =
         supervisor2:start_child(
           SupPid,
-          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
+          {channel_sup3, {rabbit_intermediate_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_intermediate_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
           {reader, {rabbit_reader, start_link,
-                    [ChannelSupSupPid, Collector,
+                    [ChannelSup3Pid, Collector,
                      rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.

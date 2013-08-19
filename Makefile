@@ -56,7 +56,8 @@ endif
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
-VERSION?=0.0.0
+include version.mk
+
 PLUGINS_SRC_DIR?=$(shell [ -d "plugins-src" ] && echo "plugins-src" || echo )
 PLUGINS_DIR=plugins
 TARBALL_NAME=rabbitmq-server-$(VERSION)
@@ -64,7 +65,7 @@ TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
 SIBLING_CODEGEN_DIR=../rabbitmq-codegen/
 AMQP_CODEGEN_DIR=$(shell [ -d $(SIBLING_CODEGEN_DIR) ] && echo $(SIBLING_CODEGEN_DIR) || echo codegen)
-AMQP_SPEC_JSON_FILES_0_9_1=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.9.1.json
+AMQP_SPEC_JSON_FILES_0_9_1=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.9.1.json $(AMQP_CODEGEN_DIR)/credit_extension.json
 AMQP_SPEC_JSON_FILES_0_8=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
@@ -103,7 +104,7 @@ endif
 
 all: $(TARGETS)
 
-.PHONY: plugins
+.PHONY: plugins check-xref
 ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
 	[ -d "$(PLUGINS_SRC_DIR)/rabbitmq-server" ] || ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
@@ -111,9 +112,19 @@ plugins:
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIR)" VERSION=$(VERSION)
 	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIR)/README
 	rm -f $(PLUGINS_DIR)/rabbit_common*.ez
+
+# add -q to remove printout of warnings....
+check-xref: $(BEAM_TARGETS) $(PLUGINS_DIR)
+	rm -rf lib
+	./check_xref $(PLUGINS_DIR) -q
+
 else
 plugins:
 # Not building plugins
+
+check-xref:
+	$(info xref checks are disabled)
+
 endif
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -137,7 +148,7 @@ $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_c
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	dialyzer --plt $(BASIC_PLT) --no_native --fullpath \
-	  -Wrace_conditions $(BEAM_TARGETS)
+	   $(BEAM_TARGETS)
 
 # rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
 create-plt: $(RABBIT_PLT)
@@ -152,7 +163,7 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 	else \
 	    dialyzer --output_plt $@ --build_plt \
 		--apps erts kernel stdlib compiler sasl os_mon mnesia tools \
-		  public_key crypto ssl; \
+		  public_key crypto ssl xmerl; \
 	fi
 
 clean:
@@ -206,7 +217,7 @@ run-qc: all
 start-background-node: all
 	-rm -f $(RABBITMQ_MNESIA_DIR).pid
 	mkdir -p $(RABBITMQ_MNESIA_DIR)
-	setsid sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" &
+	nohup sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" > /dev/null &
 	./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_MNESIA_DIR).pid kernel
 
 start-rabbit-on-node: all
@@ -217,11 +228,11 @@ stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
 set-resource-alarm: all
-	echo "alarm_handler:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
+	echo "rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
 	$(ERL_CALL)
 
 clear-resource-alarm: all
-	echo "alarm_handler:clear_alarm({resource_limit, $(SOURCE), node()})." | \
+	echo "rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()})." | \
 	$(ERL_CALL)
 
 stop-node:
@@ -251,6 +262,8 @@ srcdist: distclean
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
 	cp codegen.py Makefile generate_app generate_deps calculate-relative $(TARGET_SRC_DIR)
+
+	echo "VERSION?=${VERSION}" > $(TARGET_SRC_DIR)/version.mk
 
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
@@ -359,7 +372,7 @@ TESTABLEGOALS:=$(MAKECMDGOALS)
 endif
 
 ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
--include $(DEPS_FILE)
+include $(DEPS_FILE)
 endif
 
 .PHONY: run-qc

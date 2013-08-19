@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_invalid).
@@ -20,17 +20,21 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, serialise_events/0, route/2]).
--export([validate/1, create/2, delete/3,
-         add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
+-export([validate/1, validate_binding/2,
+         create/2, delete/3, policy_changed/2, add_binding/3,
+         remove_bindings/3, assert_args_equivalence/2]).
 
 description() ->
-    [{name, <<"invalid">>},
-     {description,
+    [{description,
       <<"Dummy exchange type, to be used when the intended one is not found.">>
      }].
 
 serialise_events() -> false.
 
+-ifdef(use_specs).
+-spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                 -> no_return()).
+-endif.
 route(#exchange{name = Name, type = Type}, _) ->
     rabbit_misc:protocol_error(
       precondition_failed,
@@ -38,8 +42,10 @@ route(#exchange{name = Name, type = Type}, _) ->
       [rabbit_misc:rs(Name), Type]).
 
 validate(_X) -> ok.
+validate_binding(_X, _B) -> ok.
 create(_Tx, _X) -> ok.
 delete(_Tx, _X, _Bs) -> ok.
+policy_changed(_X1, _X2) -> ok.
 add_binding(_Tx, _X, _B) -> ok.
 remove_bindings(_Tx, _X, _Bs) -> ok.
 assert_args_equivalence(X, Args) ->

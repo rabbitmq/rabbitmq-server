@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -record(user, {username,
@@ -27,9 +27,6 @@
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {protocol, user, timeout_sec, frame_max, vhost,
-                     client_properties, capabilities}).
-
 -record(content,
         {class_id,
          properties, %% either 'none', or a decoded record/tuple
@@ -43,11 +40,12 @@
 -record(resource, {virtual_host, kind, name}).
 
 -record(exchange, {name, type, durable, auto_delete, internal, arguments,
-                   scratch}).
+                   scratches, policy, decorators}).
 -record(exchange_serial, {name, next}).
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
-                   arguments, pid, slave_pids, mirror_nodes}).
+                   arguments, pid, slave_pids, sync_slave_pids, policy,
+                   gm_pids}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).
@@ -72,7 +70,7 @@
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
--record(delivery, {mandatory, immediate, sender, message, msg_seq_no}).
+-record(delivery, {mandatory, sender, message, msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
 -record(event, {type, props, timestamp}).
@@ -88,10 +86,18 @@
 
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2012 VMware, Inc.").
+-define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2013 GoPivotal, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
--define(PROTOCOL_VERSION, "AMQP 0-9-1 / 0-9 / 0-8").
 -define(ERTS_MINIMUM, "5.6.3").
+
+%% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
+%%  - 1 byte of frame type
+%%  - 2 bytes of channel number
+%%  - 4 bytes of frame payload length
+%%  - 1 byte of payload trailer FRAME_END byte
+%% See rabbit_binary_generator:check_empty_frame_size/0, an assertion
+%% called at startup.
+-define(EMPTY_FRAME_SIZE, 8).
 
 -define(MAX_WAIT, 16#ffffffff).
 
@@ -99,5 +105,6 @@
 -define(DESIRED_HIBERNATE,         10000).
 -define(CREDIT_DISC_BOUND,   {2000, 500}).
 
+-define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
 -define(DELETED_HEADER, <<"BCC">>).

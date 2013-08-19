@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_mechanism).
@@ -19,7 +19,7 @@
 -ifdef(use_specs).
 
 %% A description.
--callback description() -> [proplist:property()].
+-callback description() -> [proplists:property()].
 
 %% If this mechanism is enabled, should it be offered for a given socket?
 %% (primarily so EXTERNAL can be SSL-only)

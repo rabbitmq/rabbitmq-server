@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_file).
@@ -23,6 +23,8 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
 -export([lock_file/1]).
+
+-define(TMP_EXT, ".tmp").
 
 %%----------------------------------------------------------------------------
 
@@ -102,9 +104,12 @@ read_file_info(File) ->
     with_fhc_handle(fun () -> prim_file:read_file_info(File) end).
 
 with_fhc_handle(Fun) ->
-    ok = file_handle_cache:obtain(),
+    with_fhc_handle(1, Fun).
+
+with_fhc_handle(N, Fun) ->
+    ok = file_handle_cache:obtain(N),
     try Fun()
-    after ok = file_handle_cache:release()
+    after ok = file_handle_cache:release(N)
     end.
 
 read_term_file(File) ->
@@ -133,28 +138,16 @@ write_term_file(File, Terms) ->
 
 write_file(Path, Data) -> write_file(Path, Data, []).
 
-%% write_file/3 and make_binary/1 are both based on corresponding
-%% functions in the kernel/file.erl module of the Erlang R14B02
-%% release, which is licensed under the EPL. That implementation of
-%% write_file/3 does not do an fsync prior to closing the file, hence
-%% the existence of this version. APIs are otherwise identical.
 write_file(Path, Data, Modes) ->
     Modes1 = [binary, write | (Modes -- [binary, write])],
     case make_binary(Data) of
-        Bin when is_binary(Bin) ->
-            with_fhc_handle(
-              fun () -> case prim_file:open(Path, Modes1) of
-                            {ok, Hdl}      -> try prim_file:write(Hdl, Bin) of
-                                                  ok -> prim_file:sync(Hdl);
-                                                  {error, _} = E -> E
-                                              after
-                                                  prim_file:close(Hdl)
-                                              end;
-                            {error, _} = E -> E
-                        end
-              end);
-        {error, _} = E -> E
+        Bin when is_binary(Bin) -> write_file1(Path, Bin, Modes1);
+        {error, _} = E          -> E
     end.
+
+%% make_binary/1 is based on the corresponding function in the
+%% kernel/file.erl module of the Erlang R14B02 release, which is
+%% licensed under the EPL.
 
 make_binary(Bin) when is_binary(Bin) ->
     Bin;
@@ -165,7 +158,41 @@ make_binary(List) ->
             {error, Reason}
     end.
 
+write_file1(Path, Bin, Modes) ->
+    try
+        with_synced_copy(Path, Modes,
+                         fun (Hdl) ->
+                                 ok = prim_file:write(Hdl, Bin)
+                         end)
+    catch
+        error:{badmatch, Error} -> Error;
+            _:{error, Error}    -> {error, Error}
+    end.
 
+with_synced_copy(Path, Modes, Fun) ->
+    case lists:member(append, Modes) of
+        true ->
+            {error, append_not_supported, Path};
+        false ->
+            with_fhc_handle(
+              fun () ->
+                      Bak = Path ++ ?TMP_EXT,
+                      case prim_file:open(Bak, Modes) of
+                          {ok, Hdl} ->
+                              try
+                                  Result = Fun(Hdl),
+                                  ok = prim_file:rename(Bak, Path),
+                                  ok = prim_file:sync(Hdl),
+                                  Result
+                              after
+                                  prim_file:close(Hdl)
+                              end;
+                          {error, _} = E -> E
+                      end
+              end)
+    end.
+
+%% TODO the semantics of this function are rather odd. But see bug 25021.
 append_file(File, Suffix) ->
     case read_file_info(File) of
         {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
@@ -183,9 +210,11 @@ append_file(File, 0, Suffix) ->
                             end
                     end);
 append_file(File, _, Suffix) ->
-    case with_fhc_handle(fun () -> prim_file:read_file(File) end) of
-        {ok, Data} -> write_file([File, Suffix], Data, [append]);
-        Error      -> Error
+    case with_fhc_handle(2, fun () ->
+                                file:copy(File, {[File, Suffix], [append]})
+                            end) of
+        {ok, _BytesCopied} -> ok;
+        Error              -> Error
     end.
 
 ensure_parent_dirs_exist(Filename) ->

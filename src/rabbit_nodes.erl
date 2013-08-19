@@ -10,13 +10,14 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_nodes).
 
--export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0, is_running/2]).
+-export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
+         is_running/2, is_process_running/2]).
 
 -define(EPMD_TIMEOUT, 30000).
 
@@ -33,6 +34,7 @@
 -spec(parts/1 :: (node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
 -spec(is_running/2 :: (node(), atom()) -> boolean()).
+-spec(is_process_running/2 :: (node(), atom()) -> boolean()).
 
 -endif.
 
@@ -70,8 +72,8 @@ diagnostics0() ->
 diagnostics_host(Host) ->
     case names(Host) of
         {error, EpmdReason} ->
-            {"- unable to connect to epmd on ~s: ~w",
-             [Host, EpmdReason]};
+            {"- unable to connect to epmd on ~s: ~w (~s)",
+             [Host, EpmdReason, rabbit_misc:format_inet_error(EpmdReason)]};
         {ok, NamePorts} ->
             {"- ~s: ~p",
              [Host, [{list_to_atom(Name), Port} ||
@@ -94,7 +96,14 @@ cookie_hash() ->
     base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
 
 is_running(Node, Application) ->
-    case rpc:call(Node, application, which_applications, [infinity]) of
+    case rpc:call(Node, rabbit_misc, which_applications, []) of
         {badrpc, _} -> false;
         Apps        -> proplists:is_defined(Application, Apps)
+    end.
+
+is_process_running(Node, Process) ->
+    case rpc:call(Node, erlang, whereis, [Process]) of
+        {badrpc, _}      -> false;
+        undefined        -> false;
+        P when is_pid(P) -> true
     end.

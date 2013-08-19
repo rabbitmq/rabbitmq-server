@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(gm_soak_test).
@@ -105,7 +105,9 @@ spawn_member() ->
               random:seed(MegaSecs, Secs, MicroSecs),
               %% start up delay of no more than 10 seconds
               timer:sleep(random:uniform(10000)),
-              {ok, Pid} = gm:start_link(?MODULE, ?MODULE, []),
+              {ok, Pid} = gm:start_link(
+                            ?MODULE, ?MODULE, [],
+                            fun rabbit_misc:execute_mnesia_transaction/1),
               Start = random:uniform(10000),
               send_loop(Pid, Start, Start + random:uniform(10000)),
               gm:leave(Pid),

@@ -10,15 +10,20 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_runtime_parameters_test).
 -behaviour(rabbit_runtime_parameter).
+-behaviour(rabbit_policy_validator).
 
--export([validate/3, validate_clear/2, notify/3, notify_clear/2]).
+-export([validate/4, notify/4, notify_clear/3]).
 -export([register/0, unregister/0]).
+-export([validate_policy/1]).
+-export([register_policy_validator/0, unregister_policy_validator/0]).
+
+%----------------------------------------------------------------------------
 
 register() ->
     rabbit_registry:register(runtime_parameter, <<"test">>, ?MODULE).
@@ -26,13 +31,34 @@ register() ->
 unregister() ->
     rabbit_registry:unregister(runtime_parameter, <<"test">>).
 
-validate(<<"test">>, <<"good">>,  _Term)      -> ok;
-validate(<<"test">>, <<"maybe">>, <<"good">>) -> ok;
-validate(<<"test">>, _, _)                    -> {error, "meh", []}.
+validate(_, <<"test">>, <<"good">>,  _Term)      -> ok;
+validate(_, <<"test">>, <<"maybe">>, <<"good">>) -> ok;
+validate(_, <<"test">>, _, _)                    -> {error, "meh", []}.
 
-validate_clear(<<"test">>, <<"good">>)  -> ok;
-validate_clear(<<"test">>, <<"maybe">>) -> ok;
-validate_clear(<<"test">>, _)           -> {error, "meh", []}.
+notify(_, _, _, _) -> ok.
+notify_clear(_, _, _) -> ok.
 
-notify(_, _, _) -> ok.
-notify_clear(_, _) -> ok.
+%----------------------------------------------------------------------------
+
+register_policy_validator() ->
+    rabbit_registry:register(policy_validator, <<"testeven">>, ?MODULE),
+    rabbit_registry:register(policy_validator, <<"testpos">>,  ?MODULE).
+
+unregister_policy_validator() ->
+    rabbit_registry:unregister(policy_validator, <<"testeven">>),
+    rabbit_registry:unregister(policy_validator, <<"testpos">>).
+
+validate_policy([{<<"testeven">>, Terms}]) when is_list(Terms) ->
+    case  length(Terms) rem 2 =:= 0 of
+        true  -> ok;
+        false -> {error, "meh", []}
+    end;
+
+validate_policy([{<<"testpos">>, Terms}]) when is_list(Terms) ->
+    case lists:all(fun (N) -> is_integer(N) andalso N > 0 end, Terms) of
+        true  -> ok;
+        false -> {error, "meh", []}
+    end;
+
+validate_policy(_) ->
+    {error, "meh", []}.

@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_mechanism_plain).
@@ -31,13 +31,11 @@
 %% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
 %% apparently, by OpenAMQ.
 
-%% TODO: once the minimum erlang becomes R13B03, reimplement this
-%% using the binary module - that makes use of BIFs to do binary
-%% matching and will thus be much faster.
+%% TODO: reimplement this using the binary module? - that makes use of
+%% BIFs to do binary matching and will thus be much faster.
 
 description() ->
-    [{name, <<"PLAIN">>},
-     {description, <<"SASL PLAIN authentication mechanism">>}].
+    [{description, <<"SASL PLAIN authentication mechanism">>}].
 
 should_offer(_Sock) ->
     true.

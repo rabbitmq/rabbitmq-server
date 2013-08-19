@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_log).
@@ -40,18 +40,20 @@
 
 -spec(log/3 :: (category(), level(), string()) -> 'ok').
 -spec(log/4 :: (category(), level(), string(), [any()]) -> 'ok').
--spec(info/1 :: (string()) -> 'ok').
--spec(info/2 :: (string(), [any()]) -> 'ok').
+
+-spec(info/1    :: (string()) -> 'ok').
+-spec(info/2    :: (string(), [any()]) -> 'ok').
 -spec(warning/1 :: (string()) -> 'ok').
 -spec(warning/2 :: (string(), [any()]) -> 'ok').
--spec(error/1 :: (string()) -> 'ok').
--spec(error/2 :: (string(), [any()]) -> 'ok').
+-spec(error/1   :: (string()) -> 'ok').
+-spec(error/2   :: (string(), [any()]) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
 log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
 log(Category, Level, Fmt, Args) when is_list(Args) ->

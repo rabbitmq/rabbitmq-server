@@ -11,8 +11,8 @@
 ##
 ##  The Original Code is RabbitMQ.
 ##
-##  The Initial Developer of the Original Code is VMware, Inc.
-##  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+##  The Initial Developer of the Original Code is GoPivotal, Inc.
+##  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 ##
 
 # Get default settings with user overrides for (RABBITMQ_)<var_name>
@@ -58,36 +58,41 @@ DEFAULT_NODE_PORT=5672
 ##--- End of overridden <var_name> variables
 
 RABBITMQ_START_RABBIT=
-[ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput'
+[ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
+[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s rabbit boot "
 
 case "$(uname -s)" in
   CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
            # will not be able to make sense of it anyway
            ;;
-  *)       mkdir -p $(dirname ${RABBITMQ_PID_FILE});
-           echo $$ > ${RABBITMQ_PID_FILE}
-           ;;
+  *)       # When -detached is passed, we don't write the pid, since it'd be the
+           # wrong one
+           detached=""
+           for opt in "$@"; do
+               if [ "$opt" = "-detached" ]; then
+                   detached="true"
+               fi
+           done
+           if [ $detached ]; then
+               echo "Warning: PID file not written; -detached was passed." 1>&2
+           else
+               mkdir -p $(dirname ${RABBITMQ_PID_FILE});
+               echo $$ > ${RABBITMQ_PID_FILE}
+           fi
 esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
-    if erl \
-	-pa "$RABBITMQ_EBIN_ROOT" \
-	-noinput \
-	-hidden \
-	-s rabbit_prelaunch \
-	-sname rabbitmqprelaunch$$ \
-	-extra "$RABBITMQ_ENABLED_PLUGINS_FILE" "$RABBITMQ_PLUGINS_DIR" "${RABBITMQ_PLUGINS_EXPAND_DIR}" "${RABBITMQ_NODENAME}"
+if ! ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+            -boot "${CLEAN_BOOT_FILE}" \
+	    -noinput \
+	    -hidden \
+	    -s rabbit_prelaunch \
+	    -sname rabbitmqprelaunch$$ \
+	    -extra "${RABBITMQ_NODENAME}";
     then
-	RABBITMQ_BOOT_FILE="${RABBITMQ_PLUGINS_EXPAND_DIR}/rabbit"
-	RABBITMQ_EBIN_PATH=""
-    else
-	exit 1
-    fi
-else
-    RABBITMQ_BOOT_FILE=start_sasl
-    RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
+        exit 1;
 fi
+
 RABBITMQ_CONFIG_ARG=
 [ -f "${RABBITMQ_CONFIG_FILE}.config" ] && RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
 
@@ -99,11 +104,11 @@ RABBITMQ_LISTEN_ARG=
 # there is no other way of preventing their expansion.
 set -f
 
-exec erl \
-    ${RABBITMQ_EBIN_PATH} \
+exec ${ERL_DIR}erl \
+    -pa ${RABBITMQ_EBIN_ROOT} \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
-    -boot ${RABBITMQ_BOOT_FILE} \
+    -boot "${SASL_BOOT_FILE}" \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
@@ -112,6 +117,9 @@ exec erl \
     -sasl sasl_error_logger false \
     -rabbit error_logger '{file,"'${RABBITMQ_LOGS}'"}' \
     -rabbit sasl_error_logger '{file,"'${RABBITMQ_SASL_LOGS}'"}' \
+    -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
+    -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
+    -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
     -os_mon start_cpu_sup false \
     -os_mon start_disksup false \
     -os_mon start_memsup false \

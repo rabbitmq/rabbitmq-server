@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_error_logger).
@@ -22,7 +22,7 @@
 
 -behaviour(gen_event).
 
--export([boot/0]).
+-export([start/0, stop/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2,
          handle_info/2]).
@@ -31,15 +31,22 @@
 
 -ifdef(use_specs).
 
--spec(boot/0 :: () -> 'ok').
+-spec(start/0 :: () -> 'ok').
+-spec(stop/0  :: () -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-boot() ->
+start() ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
     ok = error_logger:add_report_handler(?MODULE, [DefaultVHost]).
+
+stop() ->
+    terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
+    ok.
+
+%%----------------------------------------------------------------------------
 
 init([DefaultVHost]) ->
     #exchange{} = rabbit_exchange:declare(
@@ -81,7 +88,7 @@ publish1(RoutingKey, Format, Data, LogExch) ->
     %% second resolution, not millisecond.
     Timestamp = rabbit_misc:now_ms() div 1000,
     {ok, _RoutingRes, _DeliveredQPids} =
-        rabbit_basic:publish(LogExch, RoutingKey, false, false,
+        rabbit_basic:publish(LogExch, RoutingKey,
                              #'P_basic'{content_type = <<"text/plain">>,
                                         timestamp    = Timestamp},
                              list_to_binary(io_lib:format(Format, Data))),

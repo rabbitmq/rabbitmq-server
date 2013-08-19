@@ -109,7 +109,8 @@ Defaults to 5672.
           <term>-detached</term>
           <listitem>
             <para>
-              start the server process in the background
+              Start the server process in the background. Note that this will
+              cause the pid not to be written to the pid file.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmq-server -detached</screen>

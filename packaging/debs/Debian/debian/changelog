@@ -1,3 +1,45 @@
+rabbitmq-server (3.1.5-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Simon MacMullen <simon@rabbitmq.com>  Thu, 15 Aug 2013 11:03:13 +0100
+
+rabbitmq-server (3.1.3-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Tim Watson <tim@rabbitmq.com>  Tue, 25 Jun 2013 15:01:12 +0100
+
+rabbitmq-server (3.1.2-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Tim Watson <tim@rabbitmq.com>  Mon, 24 Jun 2013 11:16:41 +0100
+
+rabbitmq-server (3.1.1-1) unstable; urgency=low
+
+  * Test release
+
+ -- Tim Watson <tim@rabbitmq.com>  Mon, 20 May 2013 16:21:20 +0100
+
+rabbitmq-server (3.1.0-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Simon MacMullen <simon@rabbitmq.com>  Wed, 01 May 2013 11:57:58 +0100
+
+rabbitmq-server (3.0.1-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Simon MacMullen <simon@rabbitmq.com>  Tue, 11 Dec 2012 11:29:55 +0000
+
+rabbitmq-server (3.0.0-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Simon MacMullen <simon@rabbitmq.com>  Fri, 16 Nov 2012 14:15:29 +0000
+
 rabbitmq-server (2.7.1-1) natty; urgency=low
 
   * New Upstream Release

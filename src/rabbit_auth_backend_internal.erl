@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_internal).
@@ -49,7 +49,7 @@
 -spec(hash_password/1 :: (rabbit_types:password())
                          -> rabbit_types:password_hash()).
 -spec(set_tags/2 :: (rabbit_types:username(), [atom()]) -> 'ok').
--spec(list_users/0 :: () -> rabbit_types:infos()).
+-spec(list_users/0 :: () -> [rabbit_types:infos()]).
 -spec(user_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(lookup_user/1 :: (rabbit_types:username())
                        -> rabbit_types:ok(rabbit_types:internal_user())
@@ -58,14 +58,14 @@
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (rabbit_types:username(), rabbit_types:vhost())
                              -> 'ok').
--spec(list_permissions/0 :: () -> rabbit_types:infos()).
+-spec(list_permissions/0 :: () -> [rabbit_types:infos()]).
 -spec(list_vhost_permissions/1 ::
-        (rabbit_types:vhost()) -> rabbit_types:infos()).
+        (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(list_user_permissions/1 ::
-        (rabbit_types:username()) -> rabbit_types:infos()).
+        (rabbit_types:username()) -> [rabbit_types:infos()]).
 -spec(list_user_vhost_permissions/2 ::
         (rabbit_types:username(), rabbit_types:vhost())
-        -> rabbit_types:infos()).
+        -> [rabbit_types:infos()]).
 -spec(perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(user_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -203,7 +203,9 @@ hash_password(Cleartext) ->
     <<Salt/binary, Hash/binary>>.
 
 check_password(Cleartext, <<Salt:4/binary, Hash/binary>>) ->
-    Hash =:= salted_md5(Salt, Cleartext).
+    Hash =:= salted_md5(Salt, Cleartext);
+check_password(_Cleartext, _Any) ->
+    false.
 
 make_salt() ->
     {A1,A2,A3} = now(),

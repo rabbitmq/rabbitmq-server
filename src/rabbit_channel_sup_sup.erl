@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_channel_sup_sup).
@@ -43,6 +43,6 @@ start_channel(Pid, Args) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{channel_sup, {rabbit_channel_sup, start_link, []},
             temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.

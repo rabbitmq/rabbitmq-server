@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_guid).
@@ -63,6 +63,7 @@ update_disk_serial() ->
     Filename = filename(),
     Serial = case rabbit_file:read_term_file(Filename) of
                  {ok, [Num]}     -> Num;
+                 {ok, []}        -> 0; %% [1]
                  {error, enoent} -> 0;
                  {error, Reason} ->
                      throw({error, {cannot_read_serial_file, Filename, Reason}})
@@ -73,6 +74,10 @@ update_disk_serial() ->
             throw({error, {cannot_write_serial_file, Filename, Reason1}})
     end,
     Serial.
+%% [1] a couple of users have reported startup failures due to the
+%% file being empty, presumably as a result of filesystem
+%% corruption. While rabbit doesn't cope with that in general, in this
+%% specific case we can be more accommodating.
 
 %% Generate an un-hashed guid.
 fresh() ->
@@ -104,8 +109,6 @@ advance_blocks({B1, B2, B3, B4}, I) ->
     B5 = erlang:phash2({B1, I}, 4294967296),
     {{(B2 bxor B5), (B3 bxor B5), (B4 bxor B5), B5}, I+1}.
 
-blocks_to_binary({B1, B2, B3, B4}) -> <<B1:32, B2:32, B3:32, B4:32>>.
-
 %% generate a GUID. This function should be used when performance is a
 %% priority and predictability is not an issue. Otherwise use
 %% gen_secure/0.
@@ -114,14 +117,15 @@ gen() ->
     %% time we need a new guid we rotate them producing a new hash
     %% with the aid of the counter. Look at the comments in
     %% advance_blocks/2 for details.
-    {BS, I} = case get(guid) of
-                  undefined -> <<B1:32, B2:32, B3:32, B4:32>> =
-                                   erlang:md5(term_to_binary(fresh())),
-                               {{B1,B2,B3,B4}, 0};
-                  {BS0, I0} -> advance_blocks(BS0, I0)
-              end,
-    put(guid, {BS, I}),
-    blocks_to_binary(BS).
+    case get(guid) of
+        undefined -> <<B1:32, B2:32, B3:32, B4:32>> = Res =
+                         erlang:md5(term_to_binary(fresh())),
+                     put(guid, {{B1, B2, B3, B4}, 0}),
+                     Res;
+        {BS, I}   -> {{B1, B2, B3, B4}, _} = S = advance_blocks(BS, I),
+                     put(guid, S),
+                     <<B1:32, B2:32, B3:32, B4:32>>
+    end.
 
 %% generate a non-predictable GUID.
 %%
@@ -144,11 +148,7 @@ gen_secure() ->
 %% employs base64url encoding, which is safer in more contexts than
 %% plain base64.
 string(G, Prefix) ->
-    Prefix ++ "-" ++ lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
-                                     ($\/, Acc) -> [$\_ | Acc];
-                                     ($\=, Acc) -> Acc;
-                                     (Chr, Acc) -> [Chr | Acc]
-                                 end, [], base64:encode_to_string(G)).
+    Prefix ++ "-" ++ rabbit_misc:base64url(G).
 
 binary(G, Prefix) ->
     list_to_binary(string(G, Prefix)).

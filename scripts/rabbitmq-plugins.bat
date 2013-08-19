@@ -11,8 +11,8 @@ REM  limitations under the License.
 REM
 REM  The Original Code is RabbitMQ.
 REM
-REM  The Initial Developer of the Original Code is VMware, Inc.
-REM  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+REM  The Initial Developer of the Original Code is GoPivotal, Inc.
+REM  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 REM
 
 setlocal
@@ -23,8 +23,12 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
+if "!RABBITMQ_SERVICENAME!"=="" (
+    set RABBITMQ_SERVICENAME=RabbitMQ
+)
+
 if "!RABBITMQ_BASE!"=="" (
-    set RABBITMQ_BASE=!APPDATA!\RabbitMQ
+    set RABBITMQ_BASE=!APPDATA!\!RABBITMQ_SERVICENAME!
 )
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
@@ -43,9 +47,11 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
     set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
 )
 
-set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
+if "!RABBITMQ_PLUGINS_DIR!"=="" (
+    set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
+)
 
-"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugins!RANDOM! -s rabbit_plugins -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -extra !STAR!
+"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugins!RANDOM!!TIME:~9! -s rabbit_plugins_main -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -extra !STAR!
 
 endlocal
 endlocal

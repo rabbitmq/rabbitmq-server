@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type).
@@ -21,7 +21,7 @@
 -type(tx() :: 'transaction' | 'none').
 -type(serial() :: pos_integer() | tx()).
 
--callback description() -> [proplist:property()].
+-callback description() -> [proplists:property()].
 
 %% Should Rabbit ensure that all binding events that are
 %% delivered to an individual exchange can be serialised? (they
@@ -37,11 +37,19 @@
 %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
 -callback validate(rabbit_types:exchange()) -> 'ok'.
 
+%% called BEFORE declaration, to check args etc
+-callback validate_binding(rabbit_types:exchange(), rabbit_types:binding()) ->
+    rabbit_types:ok_or_error({'binding_invalid', string(), [any()]}).
+
 %% called after declaration and recovery
 -callback create(tx(), rabbit_types:exchange()) -> 'ok'.
 
 %% called after exchange (auto)deletion.
 -callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
+    'ok'.
+
+%% called when the policy attached to this exchange changes.
+-callback policy_changed(rabbit_types:exchange(), rabbit_types:exchange()) ->
     'ok'.
 
 %% called after a binding has been added or recovered
@@ -54,8 +62,8 @@
 
 %% called when comparing exchanges for equivalence - should return ok or
 %% exit with #amqp_error{}
--callback assert_args_equivalence (rabbit_types:exchange(),
-                                   rabbit_framing:amqp_table()) ->
+-callback assert_args_equivalence(rabbit_types:exchange(),
+                                  rabbit_framing:amqp_table()) ->
     'ok' | rabbit_types:connection_exit().
 
 -else.
@@ -63,7 +71,8 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {serialise_events, 0}, {route, 2}, {validate, 1},
+    [{description, 0}, {serialise_events, 0}, {route, 2},
+     {validate, 1}, {validate_binding, 2}, {policy_changed, 2},
      {create, 2}, {delete, 3}, {add_binding, 3}, {remove_bindings, 3},
      {assert_args_equivalence, 2}];
 behaviour_info(_Other) ->

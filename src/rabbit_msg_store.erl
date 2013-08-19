@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_msg_store).
@@ -29,8 +29,8 @@
 -export([transform_dir/3, force_recovery/2]). %% upgrade
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, prioritise_call/3, prioritise_cast/2,
-         prioritise_info/2, format_message_queue/2]).
+         code_change/3, prioritise_call/4, prioritise_cast/3,
+         prioritise_info/3, format_message_queue/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -50,6 +50,9 @@
 -define(FILE_EXTENSION_TMP,    ".rdt").
 
 -define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB
+
+ %% i.e. two pairs, so GC does not go idle when busy
+-define(MAXIMUM_SIMULTANEOUS_GC_FILES, 4).
 
 %%----------------------------------------------------------------------------
 
@@ -624,7 +627,10 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
     Key = {MsgId, CRef},
     case ets:insert_new(FlyingEts, {Key, Diff}) of
         true  -> ok;
-        false -> try ets:update_counter(FlyingEts, Key, {2, Diff})
+        false -> try ets:update_counter(FlyingEts, Key, {2, Diff}) of
+                     0    -> ok;
+                     Diff -> ok;
+                     Err  -> throw({bad_flying_ets_update, Diff, Err, Key})
                  catch error:badarg ->
                          %% this is guaranteed to succeed since the
                          %% server only removes and updates flying_ets
@@ -738,7 +744,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-prioritise_call(Msg, _From, _State) ->
+prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         successfully_recovered_state                        -> 7;
         {new_client_state, _Ref, _Pid, _MODC, _CloseFDsFun} -> 7;
@@ -746,7 +752,7 @@ prioritise_call(Msg, _From, _State) ->
         _                                                   -> 0
     end.
 
-prioritise_cast(Msg, _State) ->
+prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {combine_files, _Source, _Destination, _Reclaimed} -> 8;
         {delete_file, _File, _Reclaimed}                   -> 8;
@@ -755,7 +761,7 @@ prioritise_cast(Msg, _State) ->
         _                                                  -> 0
     end.
 
-prioritise_info(Msg, _State) ->
+prioritise_info(Msg, _Len, _State) ->
     case Msg of
         sync                                               -> 8;
         _                                                  -> 0
@@ -943,15 +949,12 @@ next_state(State = #msstate { cref_to_msg_ids = CTM }) ->
         _ -> {State, 0}
     end.
 
-start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync),
-    State #msstate { sync_timer_ref = TRef }.
+start_sync_timer(State) ->
+    rabbit_misc:ensure_timer(State, #msstate.sync_timer_ref,
+                             ?SYNC_INTERVAL, sync).
 
-stop_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    State;
-stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
-    erlang:cancel_timer(TRef),
-    State #msstate { sync_timer_ref = undefined }.
+stop_sync_timer(State) ->
+    rabbit_misc:stop_timer(State, #msstate.sync_timer_ref).
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,
                                  cref_to_msg_ids     = CTM }) ->
@@ -975,13 +978,21 @@ update_flying(Diff, MsgId, CRef, #msstate { flying_ets = FlyingEts }) ->
     NDiff = -Diff,
     case ets:lookup(FlyingEts, Key) of
         []           -> ignore;
-        [{_,  Diff}] -> ignore;
+        [{_,  Diff}] -> ignore; %% [1]
         [{_, NDiff}] -> ets:update_counter(FlyingEts, Key, {2, Diff}),
                         true = ets:delete_object(FlyingEts, {Key, 0}),
                         process;
         [{_, 0}]     -> true = ets:delete_object(FlyingEts, {Key, 0}),
-                        ignore
+                        ignore;
+        [{_, Err}]   -> throw({bad_flying_ets_record, Diff, Err, Key})
     end.
+%% [1] We can get here, for example, in the following scenario: There
+%% is a write followed by a remove in flight. The counter will be 0,
+%% so on processing the write the server attempts to delete the
+%% entry. If at that point the client injects another write it will
+%% either insert a new entry, containing +1, or increment the existing
+%% entry to +1, thus preventing its removal. Either way therefore when
+%% the server processes the read, the counter will be +1.
 
 write_action({true, not_found}, _MsgId, State) ->
     {ignore, undefined, State};
@@ -1394,7 +1405,7 @@ filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 
 filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 
-list_sorted_file_names(Dir, Ext) ->
+list_sorted_filenames(Dir, Ext) ->
     lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
                filelib:wildcard("*" ++ Ext, Dir)).
 
@@ -1531,8 +1542,8 @@ count_msg_refs(Gen, Seed, State) ->
     end.
 
 recover_crashed_compactions(Dir) ->
-    FileNames =    list_sorted_file_names(Dir, ?FILE_EXTENSION),
-    TmpFileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP),
+    FileNames =    list_sorted_filenames(Dir, ?FILE_EXTENSION),
+    TmpFileNames = list_sorted_filenames(Dir, ?FILE_EXTENSION_TMP),
     lists:foreach(
       fun (TmpFileName) ->
               NonTmpRelatedFileName =
@@ -1609,7 +1620,7 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     {ok, Pid} = gatherer:start_link(),
     case [filename_to_num(FileName) ||
-             FileName <- list_sorted_file_names(Dir, ?FILE_EXTENSION)] of
+             FileName <- list_sorted_filenames(Dir, ?FILE_EXTENSION)] of
         []     -> build_index(Pid, undefined, [State #msstate.current_file],
                               State);
         Files  -> {Offset, State1} = build_index(Pid, undefined, Files, State),
@@ -1731,10 +1742,12 @@ maybe_compact(State = #msstate { sum_valid_data        = SumValid,
        (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     %% TODO: the algorithm here is sub-optimal - it may result in a
     %% complete traversal of FileSummaryEts.
-    case ets:first(FileSummaryEts) of
-        '$end_of_table' ->
+    First = ets:first(FileSummaryEts),
+    case First =:= '$end_of_table' orelse
+        orddict:size(Pending) >= ?MAXIMUM_SIMULTANEOUS_GC_FILES of
+        true ->
             State;
-        First ->
+        false ->
             case find_files_to_combine(FileSummaryEts, FileSizeLimit,
                                        ets:lookup(FileSummaryEts, First)) of
                 not_found ->
@@ -2023,7 +2036,7 @@ transform_dir(BaseDir, Store, TransformFun) ->
     CopyFile = fun (Src, Dst) -> {ok, _Bytes} = file:copy(Src, Dst), ok end,
     case filelib:is_dir(TmpDir) of
         true  -> throw({error, transform_failed_previously});
-        false -> FileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+        false -> FileList = list_sorted_filenames(Dir, ?FILE_EXTENSION),
                  foreach_file(Dir, TmpDir, TransformFile,     FileList),
                  foreach_file(Dir,         fun file:delete/1, FileList),
                  foreach_file(TmpDir, Dir, CopyFile,          FileList),

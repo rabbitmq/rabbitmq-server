@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(test_sup).
@@ -34,7 +34,7 @@
 %%----------------------------------------------------------------------------
 
 test_supervisor_delayed_restart() ->
-    passed = with_sup(simple_one_for_one_terminate,
+    passed = with_sup(simple_one_for_one,
                       fun (SupPid) ->
                               {ok, _ChildPid} =
                                   supervisor2:start_child(SupPid, []),
