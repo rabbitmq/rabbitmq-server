@@ -198,7 +198,7 @@ declare(Recover, From, State = #q{q                   = Q,
                     recovery_barrier(Recover),
                     State1 = process_args(State#q{backing_queue       = BQ,
                                                   backing_queue_state = BQS}),
-                    callback(qname(State), startup, []),
+                    notify_decorators(startup, [], State),
                     rabbit_event:notify(queue_created,
                                         infos(?CREATION_EVENT_KEYS, State1)),
                     rabbit_event:if_enabled(State1, #q.stats_timer,
@@ -223,7 +223,19 @@ matches(new, Q1, Q2) ->
 matches(_,  Q,   Q) -> true;
 matches(_, _Q, _Q1) -> false.
 
-callback(QName, F, A) ->
+notify_decorators(Event, Props, State) when Event =:= startup;
+                                            Event =:= shutdown ->
+    decorator_callback(qname(State), Event, Props);
+
+notify_decorators(Event, Props, State = #q{active_consumers    = ACs,
+                                           backing_queue       = BQ,
+                                           backing_queue_state = BQS}) ->
+    decorator_callback(
+      qname(State), notify,
+      [Event, [{max_active_consumer_priority, priority_queue:highest(ACs)},
+               {is_empty,                     BQ:is_empty(BQS)} | Props]]).
+
+decorator_callback(QName, F, A) ->
     %% Look up again in case policy and hence decorators have changed
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q = #amqqueue{decorators = Ds}} ->
@@ -231,14 +243,6 @@ callback(QName, F, A) ->
         {error, not_found} ->
             ok
     end.
-
-notify_decorators(Event, Props, State = #q{active_consumers    = ACs,
-                                           backing_queue       = BQ,
-                                           backing_queue_state = BQS}) ->
-    callback(qname(State), notify,
-             [Event,
-              [{max_active_consumer_priority, priority_queue:highest(ACs)},
-               {is_empty,                     BQ:is_empty(BQS)} | Props]]).
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
@@ -293,7 +297,7 @@ terminate_shutdown(Fun, State) ->
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
                      QName = qname(State),
-                     callback(QName, shutdown, []),
+                     notify_decorators(shutdown, [], State),
                      [emit_consumer_deleted(Ch, CTag, QName)
                       || {Ch, CTag, _} <- consumers(State1)],
                      State1#q{backing_queue_state = Fun(BQS)}
