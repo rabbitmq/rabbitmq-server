@@ -8,6 +8,13 @@
 
 -ifdef(use_specs).
 
+-type(notify_event() :: 'consumer_blocked'   |
+                        'consumer_unblocked' |
+                        'queue_run_finished' |
+                        'basic_consume'      |
+                        'basic_cancel'       |
+                        'notification_requested').
+
 -callback startup(rabbit_types:amqqueue()) -> 'ok'.
 
 -callback shutdown(rabbit_types:amqqueue()) -> 'ok'.
@@ -17,7 +24,7 @@
 
 -callback active_for(rabbit_types:amqqueue()) -> boolean().
 
--callback notify(rabbit_types:amqqueue(), atom(), any()) -> 'ok'.
+-callback notify(rabbit_types:amqqueue(), notify_event(), any()) -> 'ok'.
 
 -else.
 
