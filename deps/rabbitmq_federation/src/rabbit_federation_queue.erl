@@ -69,8 +69,33 @@ active_for(Q) ->
         {error, _} -> false
     end.
 
-notify(#amqqueue{name = QName}, Event, Props) ->
-    %% io:format(user, "~p: ~p~n", [Event, Props]),
+%% We need to reconsider whether we need to run or pause every time
+%% something significant changes in the queue. In theory we don't need
+%% to respond to absolutely every event the queue emits, but in
+%% practice we need to respond to most of them and it doesn't really
+%% cost much to respond to all of them. So that's why we ignore the
+%% Event parameter.
+%%
+%% For the record, the events, and why we care about them:
+%%
+%% consumer_blocked       | We may have no more active consumers, and thus
+%%                        | need to pause
+%%                        |
+%% consumer_unblocked     | We don't care
+%%                        |
+%% queue_run_finished     | The queue may have become empty therefore we need
+%%                        | to run to get more messages
+%%                        |
+%% basic_consume          | We don't care
+%%                        |
+%% basic_cancel           | We may have no more active consumers, and thus
+%%                        | need to pause
+%%                        |
+%% notification_requested | We asked for it (we have started a new link after
+%%                        | failover and need something to prod us into action
+%%                        | (or not)).
+
+notify(#amqqueue{name = QName}, _Event, Props) ->
     case pget(is_empty, Props) andalso
         active_unfederated(pget(max_active_consumer_priority, Props)) of
         true  -> rabbit_federation_queue_link:run(QName);
