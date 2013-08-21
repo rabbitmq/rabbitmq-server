@@ -461,12 +461,12 @@ deliver_msgs_to_consumers(DeliverFun, false,
             {false, State};
         {{value, QEntry, Priority}, Tail} ->
             {Stop, State1} = deliver_msg_to_consumer(
-                               DeliverFun, {QEntry, Priority},
+                               DeliverFun, QEntry, Priority,
                                State#q{active_consumers = Tail}),
             deliver_msgs_to_consumers(DeliverFun, Stop, State1)
     end.
 
-deliver_msg_to_consumer(DeliverFun, {E = {ChPid, Consumer}, Priority}, State) ->
+deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, Priority, State) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E, State),
@@ -480,19 +480,19 @@ deliver_msg_to_consumer(DeliverFun, {E = {ChPid, Consumer}, Priority}, State) ->
                      {continue, Limiter} ->
                          AC1 = priority_queue:in(E, Priority,
                                                  State#q.active_consumers),
-                         deliver_msg_to_consumer(
+                         deliver_msg_to_consumer0(
                            DeliverFun, Consumer, C#cr{limiter = Limiter},
                            State#q{active_consumers = AC1})
                  end
     end.
 
-deliver_msg_to_consumer(DeliverFun,
-                        #consumer{tag          = ConsumerTag,
-                                  ack_required = AckRequired},
-                        C = #cr{ch_pid               = ChPid,
-                                acktags              = ChAckTags,
-                                unsent_message_count = Count},
-                        State = #q{q = #amqqueue{name = QName}}) ->
+deliver_msg_to_consumer0(DeliverFun,
+                         #consumer{tag          = ConsumerTag,
+                                   ack_required = AckRequired},
+                         C = #cr{ch_pid               = ChPid,
+                                 acktags              = ChAckTags,
+                                 unsent_message_count = Count},
+                         State = #q{q = #amqqueue{name = QName}}) ->
     {{Message, IsDelivered, AckTag}, Stop, State1} =
         DeliverFun(AckRequired, State),
     rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
