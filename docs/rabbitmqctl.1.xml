@@ -1618,14 +1618,10 @@
               characters, the name of the queue subscribed to, the id of
               the channel process via which the subscription was created
               and is managed, the consumer tag which uniquely identifies
-              the subscription within a channel, and a boolean
+              the subscription within a channel, a boolean
               indicating whether acknowledgements are expected for
-              messages delivered to this consumer.
-            </para>
-            <para>
-              The output is a list of rows containing, in order, the queue name,
-              channel process id, consumer tag, and a boolean indicating whether
-              acknowledgements are expected from the consumer.
+              messages delivered to this consumer, and any arguments for this
+              consumer.
             </para>
           </listitem>
         </varlistentry>

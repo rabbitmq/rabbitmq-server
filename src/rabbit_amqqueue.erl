@@ -184,7 +184,7 @@
 %%----------------------------------------------------------------------------
 
 -define(CONSUMER_INFO_KEYS,
-        [queue_name, channel_pid, consumer_tag, ack_required]).
+        [queue_name, channel_pid, consumer_tag, ack_required, arguments]).
 
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
@@ -512,8 +512,8 @@ consumers_all(VHostPath) ->
       map(VHostPath,
           fun (Q) ->
               [lists:zip(ConsumerInfoKeys,
-                         [Q#amqqueue.name, ChPid, ConsumerTag, AckRequired]) ||
-                         {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
+                         [Q#amqqueue.name, ChPid, CTag, AckRequired, Args]) ||
+                         {ChPid, CTag, AckRequired, Args} <- consumers(Q)]
           end)).
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).

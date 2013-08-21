@@ -1012,8 +1012,9 @@ consumers(#q{active_consumers = ActiveConsumers}) ->
 
 consumers(Consumers, Acc) ->
     priority_queue:fold(
-      fun ({ChPid, #consumer{tag = CTag, ack_required = AckReq}}, _P, Acc1) ->
-              [{ChPid, CTag, AckReq} | Acc1]
+      fun ({ChPid, Consumer}, _P, Acc1) ->
+              #consumer{tag = CTag, ack_required = Ack, args = Args} = Consumer,
+              [{ChPid, CTag, Ack, Args} | Acc1]
       end, Acc, Consumers).
 
 emit_stats(State) ->
@@ -1022,13 +1023,14 @@ emit_stats(State) ->
 emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
-emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired, QName) ->
+emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, Args) ->
     rabbit_event:notify(consumer_created,
-                        [{consumer_tag, ConsumerTag},
+                        [{consumer_tag, CTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
                          {channel,      ChPid},
-                         {queue,        QName}]).
+                         {queue,        QName},
+                         {arguments,    Args}]).
 
 emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
     rabbit_event:notify(consumer_deleted,
@@ -1176,7 +1178,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                              exclusive_consumer = ExclusiveConsumer},
             ok = maybe_send_reply(ChPid, OkMsg),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  not NoAck, qname(State1)),
+                                  not NoAck, qname(State1), OtherArgs),
             AC1 = add_consumer({ChPid, Consumer}, State1#q.active_consumers),
             State2 = State1#q{active_consumers = AC1},
             reply(ok, run_message_queue(State2))
@@ -1275,10 +1277,11 @@ handle_call(force_event_refresh, _From,
     QName = qname(State),
     case Exclusive of
         none       -> [emit_consumer_created(
-                         Ch, CTag, false, AckRequired, QName) ||
-                          {Ch, CTag, AckRequired} <- consumers(State)];
-        {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
-                      emit_consumer_created(Ch, CTag, true, AckRequired, QName)
+                         Ch, CTag, false, AckRequired, QName, Args) ||
+                          {Ch, CTag, AckRequired, Args} <- consumers(State)];
+        {Ch, CTag} -> [{Ch, CTag, AckRequired, Args}] = consumers(State),
+                      emit_consumer_created(
+                        Ch, CTag, true, AckRequired, QName, Args)
     end,
     reply(ok, State).
 
