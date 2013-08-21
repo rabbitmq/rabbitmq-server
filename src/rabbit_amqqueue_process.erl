@@ -137,9 +137,11 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                      senders             = Senders,
                      msg_id_to_channel   = MTC},
     State2 = process_args(State1),
-    lists:foldl(fun (Delivery, StateN) ->
-                        deliver_or_enqueue(Delivery, true, StateN)
-                end, State2, Deliveries).
+    State3 = lists:foldl(fun (Delivery, StateN) ->
+                                 deliver_or_enqueue(Delivery, true, StateN)
+                         end, State2, Deliveries),
+    notify_decorators(startup, [], State3),
+    State3.
 
 init_state(Q) ->
     State = #q{q                   = Q,
