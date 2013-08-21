@@ -41,7 +41,7 @@
 -module(priority_queue).
 
 -export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, from_list/1,
-         in/2, in/3, out/1, join/2, filter/2, fold/3, highest/1]).
+         in/2, in/3, out/1, out_p/1, join/2, filter/2, fold/3, highest/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -63,10 +63,11 @@
 -spec(in/2 :: (any(), pqueue()) -> pqueue()).
 -spec(in/3 :: (any(), priority(), pqueue()) -> pqueue()).
 -spec(out/1 :: (pqueue()) -> {empty | {value, any()}, pqueue()}).
+-spec(out_p/1 :: (pqueue()) -> {empty | {value, any(), priority()}, pqueue()}).
 -spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
 -spec(filter/2 :: (fun ((any()) -> boolean()), pqueue()) -> pqueue()).
 -spec(fold/3 ::
-        (fun ((any(), priority(), any()) -> any()), any(), pqueue()) -> any()).
+        (fun ((any(), priority(), A) -> A), A, pqueue()) -> A).
 -spec(highest/1 :: (pqueue()) -> priority() | 'empty').
 
 -endif.

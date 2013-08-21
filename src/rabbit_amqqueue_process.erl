@@ -430,7 +430,7 @@ all_ch_record() -> [C || {{ch, _}, C} <- get()].
 
 block_consumer(C = #cr{blocked_consumers = Blocked},
                {_ChPid, #consumer{tag = CTag}} = QEntry, State) ->
-    Blocked1 = priority_queue:in(QEntry, consumer_priority(QEntry), Blocked),
+    Blocked1 = add_consumer(QEntry, Blocked),
     update_ch_record(C#cr{blocked_consumers = Blocked1}),
     notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State).
 
@@ -456,17 +456,17 @@ deliver_msgs_to_consumers(_DeliverFun, true, State) ->
     {true, State};
 deliver_msgs_to_consumers(DeliverFun, false,
                           State = #q{active_consumers = ActiveConsumers}) ->
-    case priority_queue:out(ActiveConsumers) of
+    case priority_queue:out_p(ActiveConsumers) of
         {empty, _} ->
             {false, State};
-        {{value, QEntry}, Tail} ->
+        {{value, QEntry, Priority}, Tail} ->
             {Stop, State1} = deliver_msg_to_consumer(
-                               DeliverFun, QEntry,
+                               DeliverFun, {QEntry, Priority},
                                State#q{active_consumers = Tail}),
             deliver_msgs_to_consumers(DeliverFun, Stop, State1)
     end.
 
-deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
+deliver_msg_to_consumer(DeliverFun, {E = {ChPid, Consumer}, Priority}, State) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E, State),
@@ -478,7 +478,7 @@ deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
                          block_consumer(C#cr{limiter = Limiter}, E, State),
                          {false, State};
                      {continue, Limiter} ->
-                         AC1 = priority_queue:in(E, consumer_priority(E),
+                         AC1 = priority_queue:in(E, Priority,
                                                  State#q.active_consumers),
                          deliver_msg_to_consumer(
                            DeliverFun, Consumer, C#cr{limiter = Limiter},
@@ -561,11 +561,12 @@ run_message_queue(State) ->
     notify_decorators(queue_run_finished, [], State1),
     State1.
 
-consumer_priority({_ChPid, #consumer{args = Args}}) ->
-    case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
-        {_, Priority} -> Priority;
-        _             -> 0
-    end.
+add_consumer({ChPid, Consumer = #consumer{args = Args}}, ActiveConsumers) ->
+    Priority = case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
+                   {_, P} -> P;
+                   _      -> 0
+               end,
+    priority_queue:in({ChPid, Consumer}, Priority, ActiveConsumers).
 
 attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
@@ -1195,7 +1196,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 true  -> send_drained(C1);
                 false -> ok
             end,
-            Consumer = #consumer{tag = ConsumerTag,
+            Consumer = #consumer{tag          = ConsumerTag,
                                  ack_required = not NoAck,
                                  args         = OtherArgs},
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
@@ -1206,9 +1207,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             ok = maybe_send_reply(ChPid, OkMsg),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                   not NoAck, qname(State1)),
-            AC1 = priority_queue:in({ChPid, Consumer},
-                                    consumer_priority({ChPid, Consumer}),
-                                    State1#q.active_consumers),
+            AC1 = add_consumer({ChPid, Consumer}, State1#q.active_consumers),
             State2 = State1#q{active_consumers = AC1},
             notify_decorators(
               basic_consume, [{consumer_tag, ConsumerTag}], State2),
