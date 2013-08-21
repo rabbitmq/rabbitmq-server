@@ -519,7 +519,11 @@ handle_event(Event = #event{type = channel_closed,
     ets:match_delete(Old, {{fine, {Pid, '_', '_'}}, '_'});
 
 handle_event(#event{type = consumer_created, props = Props}, State) ->
-    handle_consumer(fun(Table, Id, P) -> ets:insert(Table, {Id, P}) end,
+    Fmt = [{fun rabbit_mgmt_format:amqp_table/1, [arguments]}],
+    handle_consumer(fun(Table, Id, P0) ->
+                            P = rabbit_mgmt_format:format(P0, Fmt),
+                            ets:insert(Table, {Id, P})
+                    end,
                     Props, State);
 
 handle_event(#event{type = consumer_deleted, props = Props}, State) ->

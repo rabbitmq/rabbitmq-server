@@ -11,6 +11,7 @@
 <% } %>
           <th>Ack required</th>
           <th>Exclusive</th>
+          <th>Arguments</th>
         </tr>
       </thead>
 <%
@@ -27,6 +28,7 @@
 <% } %>
         <td class="c"><%= fmt_boolean(consumer.ack_required) %></td>
         <td class="c"><%= fmt_boolean(consumer.exclusive) %></td>
+        <td class="c"><%= fmt_table_short(consumer.arguments) %></td>
       </tr>
 <% } %>
     </table>
