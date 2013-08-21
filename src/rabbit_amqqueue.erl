@@ -393,9 +393,15 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
-                                        [Key || {Key, _Fun} <- args()]).
+                                        [Key || {Key, _Fun} <- declare_args()]).
 
 check_declare_arguments(QueueName, Args) ->
+    check_arguments(QueueName, Args, declare_args()).
+
+check_consume_arguments(QueueName, Args) ->
+    check_arguments(QueueName, Args, consume_args()).
+
+check_arguments(QueueName, Args, Validators) ->
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;
          TypeVal   -> case Fun(TypeVal, Args) of
@@ -406,14 +412,16 @@ check_declare_arguments(QueueName, Args) ->
                                               [Key, rabbit_misc:rs(QueueName),
                                                Error])
                       end
-     end || {Key, Fun} <- args()],
+     end || {Key, Fun} <- Validators],
     ok.
 
-args() ->
+declare_args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_max_length_arg/2}].
+
+consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
@@ -549,8 +557,10 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck, LimiterPid}).
 
-basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid, LimiterActive,
+basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid,
+              LimiterPid, LimiterActive,
               ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg) ->
+    ok = check_consume_arguments(QName, OtherArgs),
     delegate:call(QPid, {basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                          ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs,
                          OkMsg}).
