@@ -441,7 +441,8 @@ is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
 
 maybe_send_drained(WasEmpty, State) ->
     case (not WasEmpty) andalso is_empty(State) of
-        true  -> [send_drained(C) || C <- all_ch_record()];
+        true  -> notify_decorators(queue_empty, [], State),
+                 [send_drained(C) || C <- all_ch_record()];
         false -> ok
     end,
     State.
@@ -560,7 +561,6 @@ run_message_queue(State) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(
                             fun deliver_from_queue_deliver/2,
                             is_empty(State), State),
-    notify_decorators(queue_run_finished, [], State1),
     State1.
 
 add_consumer({ChPid, Consumer = #consumer{args = Args}}, ActiveConsumers) ->
@@ -1422,7 +1422,7 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
             end);
 
 handle_cast(notify_decorators, State) ->
-    notify_decorators(notification_requested, [], State),
+    notify_decorators(refresh, [], State),
     noreply(State);
 
 handle_cast(wake_up, State) ->

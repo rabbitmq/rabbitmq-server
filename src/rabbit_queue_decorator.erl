@@ -10,10 +10,10 @@
 
 -type(notify_event() :: 'consumer_blocked'   |
                         'consumer_unblocked' |
-                        'queue_run_finished' |
+                        'queue_empty'        |
                         'basic_consume'      |
                         'basic_cancel'       |
-                        'notification_requested').
+                        'refresh').
 
 -callback startup(rabbit_types:amqqueue()) -> 'ok'.
 
