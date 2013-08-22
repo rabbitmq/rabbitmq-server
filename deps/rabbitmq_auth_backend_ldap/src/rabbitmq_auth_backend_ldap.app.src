@@ -5,7 +5,7 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_auth_backend_ldap_app, []}},
-  {env, [ {servers,               ["ldap"]},
+  {env, [ {servers,               undefined},
           {user_dn_pattern,       "${username}"},
           {dn_lookup_attribute,   none},
           {dn_lookup_base,        none},

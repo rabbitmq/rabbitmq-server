@@ -230,6 +230,9 @@ evaluate_ldap(Q, Args, User, State) ->
 
 %%--------------------------------------------------------------------
 
+with_ldap(_Creds, _Fun, #state{servers = undefined}) ->
+    {error, no_ldap_servers_defined};
+
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
 with_ldap(Creds, Fun, State = #state{servers = Servers,
