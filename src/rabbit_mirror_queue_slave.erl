@@ -80,7 +80,7 @@ set_maximum_since_use(QPid, Age) ->
 
 info(QPid) -> gen_server2:call(QPid, info, infinity).
 
-init(Q = #amqqueue { name = QName }) ->
+init(Q = #amqqueue { name = QName, pid = MPid }) ->
     %% We join the GM group before we add ourselves to the amqqueue
     %% record. As a result:
     %% 1. We can receive msgs from GM that correspond to messages we will
@@ -139,6 +139,8 @@ init(Q = #amqqueue { name = QName }) ->
             gm:leave(GM),
             ignore;
         master_recovery_detected ->
+            rabbit_log:info("Restarting to prevent conflict with ~p on ~p~n",
+                            [node(MPid), rabbit_misc:rs(QName)]),
             init:restart(),
             ignore
     end.
