@@ -937,8 +937,10 @@ pick_range(K, {RangeL, RangeM, RangeD}) ->
 adjust_hibernated_memory_use(Qs) ->
     Pids = [pget(pid, Q) ||
                Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
-    {Mem, _BadNodes} = delegate:invoke(
-                         Pids, fun (Pid) -> process_info(Pid, memory) end),
+    %% We use delegate here not for ordering reasons but because we
+    %% want to get the right amount of parallelism and minimise
+    %% cross-cluster communication.
+    {Mem, _BadNodes} = delegate:invoke(Pids, {erlang, process_info, [memory]}),
     MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
     [case dict:find(pget(pid, Q), MemDict) of
          error        -> Q;
