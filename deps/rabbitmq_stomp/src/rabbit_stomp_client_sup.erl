@@ -18,32 +18,31 @@
 -behaviour(supervisor2).
 
 -define(MAX_WAIT, 16#ffffffff).
--export([start_link/1, start_processor/2, init/1]).
+-export([start_link/1, init/1]).
 
 start_link(Configuration) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    %% The processor is intrinsic. When it exits, the supervisor goes too.
+    {ok, ProcessorPid} =
+        supervisor2:start_child(SupPid,
+                                {rabbit_stomp_processor,
+                                 {rabbit_stomp_processor, start_link,
+                                  [Configuration]},
+                                 intrinsic, ?MAX_WAIT, worker,
+                                 [rabbit_stomp_processor]}),
     %% We want the reader to be transient since when it exits normally
     %% the processor may have some work still to do (and the reader
     %% tells the processor to exit). However, if the reader terminates
     %% abnormally then we want to take everything down.
-    %%
-    %% The *processor* however is intrinsic, so when it exits, the
-    %% supervisor goes too.
-    {ok, ReaderPid} =
-        supervisor2:start_child(SupPid,
-                               {rabbit_stomp_reader,
-                                {rabbit_stomp_reader,
-                                 start_link, [SupPid, Configuration]},
-                                transient, ?MAX_WAIT, worker,
-                                [rabbit_stomp_reader]}),
-    {ok, SupPid, ReaderPid}.
+    {ok, ReaderPid} = supervisor2:start_child(
+                        SupPid,
+                        {rabbit_stomp_reader,
+                         {rabbit_stomp_reader,
+                          start_link, [SupPid, ProcessorPid, Configuration]},
+                         transient, ?MAX_WAIT, worker,
+                         [rabbit_stomp_reader]}),
 
-start_processor(SupPid, Args) ->
-    supervisor2:start_child(SupPid,
-                            {rabbit_stomp_processor,
-                             {rabbit_stomp_processor, start_link, [Args]},
-                             intrinsic, ?MAX_WAIT, worker,
-                             [rabbit_stomp_processor]}).
+    {ok, SupPid, {ReaderPid, ProcessorPid}}.
 
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.

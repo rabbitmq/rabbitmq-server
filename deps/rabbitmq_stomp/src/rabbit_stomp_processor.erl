@@ -55,7 +55,7 @@ flush_and_die(Pid) ->
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, Configuration]) ->
+init(Configuration) ->
     process_flag(trap_exit, true),
     {ok,
      #state {
@@ -64,21 +64,24 @@ init([SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, Configuration]) ->
        connection          = none,
        subscriptions       = dict:new(),
        version             = none,
-       start_heartbeat_fun = StartHeartbeatFun,
        pending_receipts    = undefined,
        config              = Configuration,
        route_state         = rabbit_routing_util:init_state(),
        reply_queues        = dict:new(),
-       frame_transformer   = undefined,
-       adapter_info        = AdapterInfo,
-       send_fun            = SendFun,
-       ssl_login_name      = SSLLoginName},
+       frame_transformer   = undefined},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
 
 terminate(_Reason, State) ->
     close_connection(State).
+
+handle_cast({init, [SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName]},
+            State) ->
+    {noreply, State #state { send_fun = SendFun,
+                             adapter_info = AdapterInfo,
+                             start_heartbeat_fun = StartHeartbeatFun,
+                             ssl_login_name = SSLLoginName }};
 
 handle_cast(flush_and_die, State) ->
     {stop, normal, close_connection(State)};
