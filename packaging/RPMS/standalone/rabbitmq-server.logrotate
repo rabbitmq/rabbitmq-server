@@ -1,0 +1,12 @@
+/var/log/rabbitmq/*.log {
+        weekly
+        missingok
+        rotate 20
+        compress
+        delaycompress
+        notifempty
+        sharedscripts
+        postrotate
+            /sbin/service rabbitmq-server rotate-logs > /dev/null
+        endscript
+}
