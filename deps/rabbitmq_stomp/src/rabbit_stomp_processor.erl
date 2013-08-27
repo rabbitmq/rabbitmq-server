@@ -78,10 +78,10 @@ terminate(_Reason, State) ->
 
 handle_cast({init, [SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName]},
             State) ->
-    {noreply, State #state { send_fun = SendFun,
-                             adapter_info = AdapterInfo,
+    {noreply, State #state { send_fun            = SendFun,
+                             adapter_info        = AdapterInfo,
                              start_heartbeat_fun = StartHeartbeatFun,
-                             ssl_login_name = SSLLoginName }};
+                             ssl_login_name      = SSLLoginName }};
 
 handle_cast(flush_and_die, State) ->
     {stop, normal, close_connection(State)};

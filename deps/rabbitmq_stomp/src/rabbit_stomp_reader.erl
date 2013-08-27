@@ -41,9 +41,8 @@ init(SupPid, ProcessorPid, Configuration) ->
             {ok, Sock} = SockTransform(Sock0),
             case rabbit_net:connection_string(Sock, inbound) of
                 {ok, ConnStr} ->
-                    gen_server2:cast(ProcessorPid,
-                                     {init, processor_init(
-                                              SupPid, Configuration, Sock)}),
+                    ProcInitArgs = processor_init(SupPid, Configuration, Sock),
+                    gen_server2:cast(ProcessorPid, {init, ProcInitArgs}),
                     log(info, "accepting STOMP connection ~p (~s)~n",
                         [self(), ConnStr]),
 
