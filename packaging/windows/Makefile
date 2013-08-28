@@ -9,6 +9,8 @@ dist:
 
 	mkdir $(SOURCE_DIR)/sbin
 	mv $(SOURCE_DIR)/scripts/*.bat $(SOURCE_DIR)/sbin
+	mkdir $(SOURCE_DIR)/etc
+	cp $(SOURCE_DIR)/docs/rabbitmq.sample.config $(SOURCE_DIR)/etc/rabbitmq.sample.config
 	rm -rf $(SOURCE_DIR)/scripts
 	rm -rf $(SOURCE_DIR)/codegen* $(SOURCE_DIR)/Makefile $(SOURCE_DIR)/*mk
 	rm -f $(SOURCE_DIR)/README
@@ -19,7 +21,6 @@ dist:
 	mv $(SOURCE_DIR) $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)
 	mv $(TARGET_DIR)/plugins/README $(TARGET_DIR)/plugins/README.txt
-	mv ../../docs/rabbit.sample.config $(TARGET_DIR)/rabbit.sample.config
 	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
@@ -27,7 +28,7 @@ dist:
 	todos $(TARGET_DIR)/INSTALL
 	todos $(TARGET_DIR)/LICENSE*
 	todos $(TARGET_DIR)/plugins/README.txt
-	todos $(TARGET_DIR)/rabbit.sample.config
+	todos $(TARGET_DIR)/etc/rabbit.sample.config
 	rm -rf $(TARGET_DIR)/plugins-src
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR) rabbitmq-service.html
