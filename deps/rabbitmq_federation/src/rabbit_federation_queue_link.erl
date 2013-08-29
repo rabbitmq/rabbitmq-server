@@ -26,6 +26,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1]).
 
 -record(not_started, {queue, run, upstream, upstream_params}).
@@ -204,6 +205,7 @@ go(S0 = #not_started{run             = Run,
     Unacked = rabbit_federation_link_util:unacked_new(),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
+              check_upstream_suitable(Conn),
               amqp_channel:call(Ch, #'queue.declare'{queue       = name(UQueue),
                                                      durable     = Durable,
                                                      auto_delete = AutoDelete,
@@ -224,6 +226,15 @@ go(S0 = #not_started{run             = Run,
                                upstream_params = UParams,
                                unacked         = Unacked}}
       end, Upstream, UParams, QName, S0).
+
+check_upstream_suitable(Conn) ->
+    Props = pget(server_properties,
+                 amqp_connection:info(Conn, [server_properties])),
+    {table, Caps} = rabbit_misc:table_lookup(Props, <<"capabilities">>),
+    case rabbit_misc:table_lookup(Caps, <<"consumer_priorities">>) of
+        {bool, true} -> ok;
+        _            -> exit({error, upstream_lacks_consumer_priorities})
+    end.
 
 update_headers(UParams, Redelivered, undefined) ->
     update_headers(UParams, Redelivered, []);
