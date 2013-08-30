@@ -42,7 +42,7 @@ start_link(Configuration) ->
                          transient, ?MAX_WAIT, worker,
                          [rabbit_stomp_reader]}),
 
-    {ok, SupPid, {ReaderPid, ProcessorPid}}.
+    {ok, SupPid, ReaderPid}.
 
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.

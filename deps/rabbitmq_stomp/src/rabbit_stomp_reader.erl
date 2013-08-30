@@ -41,8 +41,8 @@ init(SupPid, ProcessorPid, Configuration) ->
             {ok, Sock} = SockTransform(Sock0),
             case rabbit_net:connection_string(Sock, inbound) of
                 {ok, ConnStr} ->
-                    ProcInitArgs = processor_init(SupPid, Configuration, Sock),
-                    gen_server2:cast(ProcessorPid, {init, ProcInitArgs}),
+                    ProcInitArgs = processor_args(SupPid, Configuration, Sock),
+                    rabbit_stomp_processor:init_arg(ProcessorPid, ProcInitArgs),
                     log(info, "accepting STOMP connection ~p (~s)~n",
                         [self(), ConnStr]),
 
@@ -141,7 +141,7 @@ run_socket(State = #reader_state{socket = Sock}) ->
 
 %%----------------------------------------------------------------------------
 
-processor_init(SupPid, Configuration, Sock) ->
+processor_args(SupPid, Configuration, Sock) ->
     SendFun = fun (sync, IoData) ->
                       %% no messages emitted
                       catch rabbit_net:send(Sock, IoData);

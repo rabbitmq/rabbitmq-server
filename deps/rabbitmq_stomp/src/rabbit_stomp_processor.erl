@@ -17,7 +17,7 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server2).
 
--export([start_link/1, process_frame/2, flush_and_die/1]).
+-export([start_link/1, init_arg/2, process_frame/2, flush_and_die/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -41,6 +41,9 @@
 %%----------------------------------------------------------------------------
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, []).
+
+init_arg(ProcessorPid, InitArgs) ->
+    gen_server2:cast(ProcessorPid, {init, InitArgs}).
 
 process_frame(Pid, Frame = #stomp_frame{command = "SEND"}) ->
     credit_flow:send(Pid),
