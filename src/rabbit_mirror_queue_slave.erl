@@ -30,7 +30,7 @@
          code_change/3, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 
--export([joined/2, members_changed/3, handle_msg/3]).
+-export([joined/2, members_changed/4, handle_msg/3]).
 
 -behaviour(gen_server2).
 -behaviour(gm).
@@ -172,10 +172,10 @@ handle_call({deliver, Delivery, true}, From, State) ->
     gen_server2:reply(From, ok),
     noreply(maybe_enqueue_message(Delivery, State));
 
-handle_call({gm_deaths, Deaths}, From,
+handle_call({gm_deaths, Members}, From,
             State = #state { q = Q = #amqqueue { name = QName, pid = MPid }}) ->
     Self = self(),
-    case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, Deaths) of
+    case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, Members) of
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
@@ -327,7 +327,7 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         info                                 -> 9;
-        {gm_deaths, _Deaths}                 -> 5;
+        {gm_deaths, _Members}                -> 5;
         _                                    -> 0
     end.
 
@@ -355,8 +355,10 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 joined([SPid], _Members) -> SPid ! {joined, self()}, ok.
 
-members_changed([_SPid], _Births,     []) -> ok;
-members_changed([ SPid], _Births, Deaths) -> inform_deaths(SPid, Deaths).
+members_changed([_SPid], _Births, [], _Members) ->
+    ok;
+members_changed([ SPid], _Births, _Deaths, Members) ->
+    inform_deaths(SPid, Members).
 
 handle_msg([_SPid], _From, request_depth) ->
     %% This is only of value to the master
@@ -384,8 +386,8 @@ handle_msg([SPid], _From, {sync_start, Ref, Syncer, SPids}) ->
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
-inform_deaths(SPid, Deaths) ->
-    case gen_server2:call(SPid, {gm_deaths, Deaths}, infinity) of
+inform_deaths(SPid, Members) ->
+    case gen_server2:call(SPid, {gm_deaths, Members}, infinity) of
         ok              -> ok;
         {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
     end.

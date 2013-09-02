@@ -475,7 +475,7 @@
 %% see members die that we have not seen born (or supplied in the
 %% members to joined/2).
 -callback members_changed(Args :: term(), Births :: [pid()],
-                          Deaths :: [pid()]) ->
+                          Deaths :: [pid()], Current :: [pid()]) ->
     ok | {stop, Reason :: term()} | {become, Module :: atom(), Args :: any()}.
 
 %% Supplied with Args provided in start_link, the sender, and the
@@ -494,7 +494,7 @@
 -else.
 
 behaviour_info(callbacks) ->
-    [{joined, 2}, {members_changed, 3}, {handle_msg, 3}, {terminate, 2}];
+    [{joined, 2}, {members_changed, 4}, {handle_msg, 3}, {terminate, 2}];
 behaviour_info(_Other) ->
     undefined.
 
@@ -678,7 +678,8 @@ handle_cast({validate_members, OldMembers},
     Deaths = OldMembers -- NewMembers,
     case {Births, Deaths} of
         {[], []}  -> noreply(State);
-        _         -> Result = Module:members_changed(Args, Births, Deaths),
+        _         -> Result = Module:members_changed(
+                                Args, Births, Deaths, NewMembers),
                      handle_callback_result({Result, State})
     end;
 
@@ -1377,8 +1378,9 @@ callback_view_changed(Args, Module, OldView, NewView) ->
     Deaths = OldMembers -- NewMembers,
     case {Births, Deaths} of
         {[], []} -> ok;
-        _        -> Module:members_changed(Args, get_pids(Births),
-                                                 get_pids(Deaths))
+        _        -> Module:members_changed(
+                      Args, get_pids(Births), get_pids(Deaths),
+                      get_pids(NewMembers))
     end.
 
 handle_callback_result({Result, State}) ->
