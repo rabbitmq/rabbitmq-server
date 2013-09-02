@@ -23,6 +23,12 @@
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1]).
 
+-import(rabbit_federation_test_util,
+        [expect/3, expect_empty/2, set_param/3, clear_param/2,
+         set_pol/3, clear_pol/1, plugin_dir/0, policy/1,
+         start_other_node/1, start_other_node/2, start_other_node/3,
+         stop_other_node/1]).
+
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               x(<<"fed.downstream">>)]).
 
@@ -496,7 +502,7 @@ with_ch(Fun, Xs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_all(Ch, Xs),
-    assert_status(Xs),
+    rabbit_federation_test_util:assert_status(Xs),
     Fun(Ch),
     delete_all(Ch, Xs),
     amqp_connection:close(Conn),
@@ -505,58 +511,6 @@ with_ch(Fun, Xs) ->
 declare_all(Ch, Xs) -> [declare_exchange(Ch, X) || X <- Xs].
 delete_all(Ch, Xs) ->
     [delete_exchange(Ch, X) || #'exchange.declare'{exchange = X} <- Xs].
-
-start_other_node({Name, Port}) ->
-    start_other_node({Name, Port}, Name).
-
-start_other_node({Name, Port}, Config) ->
-    start_other_node({Name, Port}, Config,
-                     os:getenv("RABBITMQ_ENABLED_PLUGINS_FILE")).
-
-start_other_node({Name, Port}, Config, PluginsFile) ->
-    %% ?assertCmd seems to hang if you background anything. Bah!
-    Res = os:cmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                     " OTHER_PORT=" ++ integer_to_list(Port) ++
-                     " OTHER_CONFIG=" ++ Config ++
-                     " OTHER_PLUGINS=" ++ PluginsFile ++
-                     " start-other-node ; echo $?"),
-    LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
-    ?assertEqual("0", LastLine),
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    Ch.
-
-stop_other_node({Name, _Port}) ->
-    ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                      " stop-other-node"),
-    timer:sleep(1000).
-
-set_param(Component, Name, Value) ->
-    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).
-
-clear_param(Component, Name) ->
-    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Name])).
-
-set_pol(Name, Pattern, Defn) ->
-    rabbitmqctl(fmt("set_policy ~s \"~s\" '~s'", [Name, Pattern, Defn])).
-
-clear_pol(Name) ->
-    rabbitmqctl(fmt("clear_policy ~s ", [Name])).
-
-fmt(Fmt, Args) ->
-    string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
-
-rabbitmqctl(Args) ->
-    ?assertCmd(
-       plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
-    timer:sleep(100).
-
-policy(UpstreamSet) ->
-    rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
-
-plugin_dir() ->
-    {ok, [[File]]} = init:get_argument(config),
-    filename:dirname(filename:dirname(File)).
 
 declare_exchange(Ch, X) ->
     amqp_channel:call(Ch, X).
@@ -610,37 +564,9 @@ publish(Ch, X, Key, Msg = #amqp_msg{}) ->
     amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
                                            routing_key = Key}, Msg).
 
-
-expect(Ch, Q, Fun) when is_function(Fun) ->
-    amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
-                                                no_ack = true}, self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = CTag} -> ok
-    end,
-    Fun(),
-    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag});
-
-expect(Ch, Q, Payloads) ->
-    expect(Ch, Q, fun() -> expect(Payloads) end).
-
-expect([]) ->
-    ok;
-expect(Payloads) ->
-    receive
-        {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
-            case lists:member(Payload, Payloads) of
-                true  -> expect(Payloads -- [Payload]);
-                false -> throw({expected, Payloads, actual, Payload})
-            end
-    end.
-
 publish_expect(Ch, X, Key, Q, Payload) ->
     publish(Ch, X, Key, Payload),
     expect(Ch, Q, [Payload]).
-
-expect_empty(Ch, Q) ->
-    ?assertMatch(#'basic.get_empty'{},
-                 amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
 assert_bindings(Nodename, X, BindingsExp) ->
     Bindings0 = rpc:call(n(Nodename), rabbit_binding, list_for_source, [r(X)]),
@@ -663,39 +589,13 @@ assert_list0(Exp, [H | T]) -> case lists:member(H, Exp) of
 
 %%----------------------------------------------------------------------------
 
-assert_status(Xs) ->
-    Links = lists:append([links(X) || X <- Xs]),
-    Remaining = lists:foldl(fun assert_link_status/2,
-                            rabbit_federation_status:status(), Links),
-    ?assertEqual([], Remaining),
-    ok.
-
-assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
-    {This, Rest} = lists:partition(
-                     fun(St) ->
-                             pget(connection, St) =:= ConnectionName andalso
-                                 pget(exchange, St) =:= DXNameBin andalso
-                                 pget(upstream_exchange, St) =:= UXNameBin
-                     end, Status),
-    ?assertMatch([_], This),
-    Rest.
-
-links(#'exchange.declare'{exchange = Name}) ->
-    case rabbit_policy:get(<<"federation-upstream-set">>, r(Name)) of
-        {ok, Set} ->
-            X = #exchange{name = r(Name)},
-            [{Name, U#upstream.name, U#upstream.exchange_name} ||
-                U <- rabbit_federation_upstream:from_set(Set, X)];
-        {error, not_found} ->
-            []
-    end.
-
 assert_connections(Xs, Conns) ->
     Links = [{X, C, X} ||
                 X <- Xs,
                 C <- Conns],
-    Remaining = lists:foldl(fun assert_link_status/2,
-                            rabbit_federation_status:status(), Links),
+    Remaining = lists:foldl(
+                  fun rabbit_federation_test_util:assert_link_status/2,
+                  rabbit_federation_status:status(), Links),
     ?assertEqual([], Remaining),
     ok.
 

@@ -60,33 +60,38 @@ validate(_VHost, _Component, Name, _Term) ->
     {error, "name not recognised: ~p", [Name]}.
 
 notify(_VHost, <<"federation-upstream-set">>, Name, _Term) ->
-    rabbit_federation_link_sup_sup:adjust({upstream_set, Name});
+    adjust({upstream_set, Name});
 
 notify(_VHost, <<"federation-upstream">>, Name, _Term) ->
-    rabbit_federation_link_sup_sup:adjust({upstream, Name});
+    adjust({upstream, Name});
 
 notify(_VHost, <<"federation">>, <<"local-nodename">>, _Term) ->
-    rabbit_federation_link_sup_sup:adjust(everything);
+    adjust(everything);
 
 notify(_VHost, <<"federation">>, <<"local-username">>, _Term) ->
-    rabbit_federation_link_sup_sup:adjust(everything).
+    adjust(everything).
 
 notify_clear(_VHost, <<"federation-upstream-set">>, Name) ->
-    rabbit_federation_link_sup_sup:adjust({clear_upstream_set, Name});
+    adjust({clear_upstream_set, Name});
 
 notify_clear(_VHost, <<"federation-upstream">>, Name) ->
-    rabbit_federation_link_sup_sup:adjust({clear_upstream, Name});
+    adjust({clear_upstream, Name});
 
 notify_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
-    rabbit_federation_link_sup_sup:adjust(everything);
+    adjust(everything);
 
 notify_clear(_VHost, <<"federation">>, <<"local-username">>) ->
-    rabbit_federation_link_sup_sup:adjust(everything).
+    adjust(everything).
+
+adjust(Thing) ->
+    rabbit_federation_link_sup_sup:adjust(Thing),
+    rabbit_federation_queue_link_sup_sup:adjust(Thing).
 
 %%----------------------------------------------------------------------------
 
 shared_validation() ->
     [{<<"exchange">>,       fun rabbit_parameter_validation:binary/2, optional},
+     {<<"queue">>,          fun rabbit_parameter_validation:binary/2, optional},
      {<<"prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"reconnect-delay">>,fun rabbit_parameter_validation:number/2, optional},
      {<<"max-hops">>,       fun rabbit_parameter_validation:number/2, optional},
