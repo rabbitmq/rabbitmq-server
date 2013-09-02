@@ -116,17 +116,6 @@ e2e_test() ->
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>)
       end, ?UPSTREAM_DOWNSTREAM ++ [x(<<"downstream2">>)]).
 
-delete_upstream_queue_on_delete_test() ->
-    with_ch(
-      fun (Ch) ->
-              bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
-              delete_exchange(Ch, <<"fed.downstream">>),
-              publish(Ch, <<"upstream">>, <<"key">>, <<"lost">>),
-              declare_exchange(Ch, x(<<"fed.downstream">>)),
-              Q = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
-              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"delivered">>)
-      end, ?UPSTREAM_DOWNSTREAM).
-
 unbind_on_delete_test() ->
     with_ch(
       fun (Ch) ->
