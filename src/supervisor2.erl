@@ -85,7 +85,7 @@
 
 %%--------------------------------------------------------------------------
 -ifdef(use_specs).
--export_type([child_spec/0, startchild_ret/0, strategy/0]).
+-export_type([child_spec/0, startchild_ret/0, strategy/0, sup_name/0]).
 -endif.
 %%--------------------------------------------------------------------------
 
