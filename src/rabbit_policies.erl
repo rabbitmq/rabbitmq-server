@@ -29,12 +29,25 @@
 
 register() ->
     [rabbit_registry:register(Class, Name, ?MODULE) ||
-        {Class, Name} <- [{policy_validator,  <<"alternate-exchange">>}]],
+        {Class, Name} <- [{policy_validator, <<"alternate-exchange">>},
+                          {policy_validator, <<"dead-letter-exchange">>},
+                          {policy_validator, <<"dead-letter-routing-key">>}]],
     ok.
 
 validate_policy([{<<"alternate-exchange">>, Value}])
   when is_binary(Value) ->
     ok;
 validate_policy([{<<"alternate-exchange">>, Value}]) ->
-    {error, "~p is not a valid alternate exchange name", [Value]}.
+    {error, "~p is not a valid alternate exchange name", [Value]};
 
+validate_policy([{<<"dead-letter-exchange">>, Value}])
+  when is_binary(Value) ->
+    ok;
+validate_policy([{<<"dead-letter-exchange">>, Value}]) ->
+    {error, "~p is not a valid dead letter exchange name", [Value]};
+
+validate_policy([{<<"dead-letter-routing-key">>, Value}])
+  when is_binary(Value) ->
+    ok;
+validate_policy([{<<"dead-letter-routing-key">>, Value}]) ->
+    {error, "~p is not a valid dead letter routing key", [Value]}.

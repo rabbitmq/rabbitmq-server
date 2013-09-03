@@ -221,7 +221,7 @@ store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
     Q1 = Q#amqqueue{sync_slave_pids = SSPids1},
     ok = rabbit_amqqueue:store_queue(Q1),
     %% Wake it up so that we emit a stats event
-    rabbit_amqqueue:wake_up(Q1),
+    rabbit_amqqueue:notify_policy_changed(Q1),
     Q1.
 
 %%----------------------------------------------------------------------------

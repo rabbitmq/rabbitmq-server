@@ -24,7 +24,7 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
--export([force_event_refresh/0, wake_up/1]).
+-export([force_event_refresh/0, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/10, basic_cancel/4]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2, flush_all/2]).
@@ -111,7 +111,7 @@
 -spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
                     -> [rabbit_types:infos()]).
 -spec(force_event_refresh/0 :: () -> 'ok').
--spec(wake_up/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(consumers/1 ::
         (rabbit_types:amqqueue())
         -> [{pid(), rabbit_types:ctag(), boolean()}]).
@@ -298,7 +298,7 @@ policy_changed(Q1, Q2) ->
     rabbit_mirror_queue_misc:update_mirrors(Q1, Q2),
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
-    wake_up(Q1).
+    notify_policy_changed(Q1).
 
 start_queue_process(Node, Q) ->
     {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
@@ -500,7 +500,8 @@ force_event_refresh(QNames) ->
               force_event_refresh(Failed)
     end.
 
-wake_up(#amqqueue{pid = QPid}) -> gen_server2:cast(QPid, wake_up).
+notify_policy_changed(#amqqueue{pid = QPid}) ->
+    gen_server2:cast(QPid, policy_changed).
 
 consumers(#amqqueue{ pid = QPid }) -> delegate:call(QPid, consumers).
 

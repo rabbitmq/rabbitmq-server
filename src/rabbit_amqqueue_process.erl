@@ -136,7 +136,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                      rate_timer_ref      = RateTRef,
                      senders             = Senders,
                      msg_id_to_channel   = MTC},
-    State2 = process_args(State1),
+    State2 = process_args_policy(State1),
     lists:foldl(fun (Delivery, StateN) ->
                         deliver_or_enqueue(Delivery, true, StateN)
                 end, State2, Deliveries).
@@ -196,8 +196,9 @@ declare(Recover, From, State = #q{q                   = Q,
                     BQ = backing_queue_module(Q1),
                     BQS = bq_init(BQ, Q, Recover),
                     recovery_barrier(Recover),
-                    State1 = process_args(State#q{backing_queue       = BQ,
-                                                  backing_queue_state = BQS}),
+                    State1 = process_args_policy(
+                               State#q{backing_queue       = BQ,
+                                       backing_queue_state = BQS}),
                     rabbit_event:notify(queue_created,
                                         infos(?CREATION_EVENT_KEYS, State1)),
                     rabbit_event:if_enabled(State1, #q.stats_timer,
@@ -238,14 +239,23 @@ recovery_barrier(BarrierPid) ->
         {'DOWN', MRef, process, _, _} -> ok
     end.
 
-process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
+process_args_policy(State0 = #q{q = Q = #amqqueue{arguments = Arguments}}) ->
+    State1 = lists:foldl(
+               fun({Arg, Fun}, StateN) ->
+                       case rabbit_policy:get(Arg, Q) of
+                           undefined -> StateN;
+                           Val       -> Fun(Val, StateN)
+                       end
+               end, State0,
+               [{<<"dead-letter-exchange">>,    fun init_dlx/2},
+                {<<"dead-letter-routing-key">>, fun init_dlx_routing_key/2}]),
     lists:foldl(
-      fun({Arg, Fun}, State1) ->
+      fun({Arg, Fun}, StateN) ->
               case rabbit_misc:table_lookup(Arguments, Arg) of
-                  {_Type, Val} -> Fun(Val, State1);
-                  undefined    -> State1
+                  {_Type, Val} -> Fun(Val, StateN);
+                  undefined    -> StateN
               end
-      end, State,
+      end, State1,
       [{<<"x-expires">>,                 fun init_expires/2},
        {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
        {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
@@ -959,8 +969,7 @@ i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
 i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
     ExclusiveOwner;
-i(policy,    #q{q = #amqqueue{name = Name}}) ->
-    {ok, Q} = rabbit_amqqueue:lookup(Name),
+i(policy,    #q{q = Q}) ->
     case rabbit_policy:name(Q) of
         none   -> '';
         Policy -> Policy
@@ -1388,8 +1397,15 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
                          end
             end);
 
-handle_cast(wake_up, State) ->
-    noreply(State).
+handle_cast(policy_changed, State = #q{q = #amqqueue{name = Name}}) ->
+    %% We depend on the #q.q field being up to date at least WRT
+    %% policy (but not slave pids) in various places, so when it
+    %% changes we go and read it from Mnesia again.
+    %%
+    %% This also has the side effect of waking us up so we emit a
+    %% stats event - so event consumers see the changed policy.
+    {ok, Q} = rabbit_amqqueue:lookup(Name),
+    noreply(process_args_policy(State#q{q = Q})).
 
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
