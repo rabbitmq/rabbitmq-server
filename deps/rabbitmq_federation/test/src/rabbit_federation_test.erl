@@ -520,8 +520,10 @@ start_other_node({Name, Port}, Config, PluginsFile) ->
                      " OTHER_CONFIG=" ++ Config ++
                      " OTHER_PLUGINS=" ++ PluginsFile ++
                      " start-other-node ; echo $?"),
-    LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
-    ?assertEqual("0", LastLine),
+    case lists:reverse(string:tokens(Res, "\n")) of
+        ["0" | _] -> ok;
+        _         -> exit(broker_start_failed, Res)
+    end,
     {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Ch.
