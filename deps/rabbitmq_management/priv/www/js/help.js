@@ -212,6 +212,18 @@ HELP = {
   <dd>\
     One of <code>manual</code> or <code>automatic</code>.\
   </dd>\
+  <dt><code>alternate-exchange</code></dt>\
+  <dd>\
+    The name of an alternate exchange.\
+  </dd>\
+  <dt><code>dead-letter-exchange</code></dt>\
+  <dd>\
+    The name of a dead letter exchange.\
+  </dd>\
+  <dt><code>dead-letter-routing-key</code></dt>\
+  <dd>\
+    Key to use when dead-lettering.\
+  </dd>\
   <dt><code>federation-upstream-set</code></dt>\
   <dd>\
     A string; only if the federation plugin is enabled.\
