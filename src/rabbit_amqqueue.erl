@@ -631,8 +631,7 @@ forget_all_durable(Node) ->
                      internal_delete1(Name)) ||
                       #amqqueue{name = Name, pid = Pid} = Q <- Qs,
                       node(Pid) =:= Node,
-                      rabbit_policy:get(<<"ha-mode">>, Q)
-                          =:= {error, not_found}],
+                      rabbit_policy:get(<<"ha-mode">>, Q) =:= undefined],
                   ok
           end),
     ok.

@@ -26,7 +26,7 @@
 
 -export([register/0]).
 -export([invalidate/0, recover/0]).
--export([name/1, get/2, set/1]).
+-export([name/1, get/2, get_arg/3, set/1]).
 -export([validate/4, notify/4, notify_clear/3]).
 -export([parse_set/6, set/6, delete/2, lookup/2, list/0, list/1,
          list_formatted/1, info_keys/0]).
@@ -62,14 +62,24 @@ get(Name, #exchange{policy = Policy}) -> get0(Name, Policy);
 get(Name, EntityName = #resource{virtual_host = VHost}) ->
     get0(Name, match(EntityName, list(VHost))).
 
-get0(_Name, undefined) -> {error, not_found};
+get0(_Name, undefined) -> undefined;
 get0(Name, List)       -> case pget(definition, List) of
-                              undefined -> {error, not_found};
-                              Policy    -> case pget(Name, Policy) of
-                                               undefined -> {error, not_found};
-                                               Value    -> {ok, Value}
-                                           end
+                              undefined -> undefined;
+                              Policy    -> pget(Name, Policy)
                           end.
+
+%% Many heads for optimisation
+get_arg(_AName, _PName,     #exchange{arguments = [], policy = undefined}) ->
+    undefined;
+get_arg(_AName,  PName, X = #exchange{arguments = []}) ->
+    get(PName, X);
+get_arg(AName,  _PName,     #exchange{arguments = Args, policy = undefined}) ->
+    rabbit_misc:table_lookup(Args, AName);
+get_arg(AName,   PName, X = #exchange{arguments = Args}) ->
+    case rabbit_misc:table_lookup(Args, AName) of
+        undefined -> get(PName, X);
+        Arg       -> Arg
+    end.
 
 %%----------------------------------------------------------------------------
 
