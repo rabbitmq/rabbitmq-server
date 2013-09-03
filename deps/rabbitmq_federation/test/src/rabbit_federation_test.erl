@@ -684,12 +684,10 @@ assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
 
 links(#'exchange.declare'{exchange = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, r(Name)) of
-        {ok, Set} ->
-            X = #exchange{name = r(Name)},
-            [{Name, U#upstream.name, U#upstream.exchange_name} ||
-                U <- rabbit_federation_upstream:from_set(Set, X)];
-        {error, not_found} ->
-            []
+        undefined -> [];
+        Set       -> X = #exchange{name = r(Name)},
+                     [{Name, U#upstream.name, U#upstream.exchange_name} ||
+                         U <- rabbit_federation_upstream:from_set(Set, X)]
     end.
 
 assert_connections(Xs, Conns) ->
