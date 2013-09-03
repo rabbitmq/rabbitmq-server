@@ -77,8 +77,8 @@ get_arg(AName,  _PName,     #exchange{arguments = Args, policy = undefined}) ->
     rabbit_misc:table_lookup(Args, AName);
 get_arg(AName,   PName, X = #exchange{arguments = Args}) ->
     case rabbit_misc:table_lookup(Args, AName) of
-        undefined -> get(PName, X);
-        Arg       -> Arg
+        undefined    -> get(PName, X);
+        {_Type, Arg} -> Arg
     end.
 
 %%----------------------------------------------------------------------------
