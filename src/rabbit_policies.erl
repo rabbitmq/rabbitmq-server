@@ -34,20 +34,25 @@ register() ->
                           {policy_validator, <<"dead-letter-routing-key">>}]],
     ok.
 
-validate_policy([{<<"alternate-exchange">>, Value}])
+validate_policy(Terms) ->
+    lists:foldl(fun ({Key, Value}, ok) -> validate_policy0(Key, Value);
+                    (_, Error)         -> Error
+                end, ok, Terms).
+
+validate_policy0(<<"alternate-exchange">>, Value)
   when is_binary(Value) ->
     ok;
-validate_policy([{<<"alternate-exchange">>, Value}]) ->
+validate_policy0(<<"alternate-exchange">>, Value) ->
     {error, "~p is not a valid alternate exchange name", [Value]};
 
-validate_policy([{<<"dead-letter-exchange">>, Value}])
+validate_policy0(<<"dead-letter-exchange">>, Value)
   when is_binary(Value) ->
     ok;
-validate_policy([{<<"dead-letter-exchange">>, Value}]) ->
+validate_policy0(<<"dead-letter-exchange">>, Value) ->
     {error, "~p is not a valid dead letter exchange name", [Value]};
 
-validate_policy([{<<"dead-letter-routing-key">>, Value}])
+validate_policy0(<<"dead-letter-routing-key">>, Value)
   when is_binary(Value) ->
     ok;
-validate_policy([{<<"dead-letter-routing-key">>, Value}]) ->
+validate_policy0(<<"dead-letter-routing-key">>, Value) ->
     {error, "~p is not a valid dead letter routing key", [Value]}.
