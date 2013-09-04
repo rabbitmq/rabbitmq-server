@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([report/4, remove_exchange/1, remove/2, status/0]).
+-export([report/4, remove_exchange_or_queue/1, remove/2, status/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -38,15 +38,15 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-report(Upstream, UParams, XName, Status) ->
-    gen_server:cast(?SERVER, {report, Upstream, UParams, XName, Status,
+report(Upstream, UParams, XorQName, Status) ->
+    gen_server:cast(?SERVER, {report, Upstream, UParams, XorQName, Status,
                               calendar:local_time()}).
 
-remove_exchange(XName) ->
-    gen_server:call(?SERVER, {remove_exchange, XName}, infinity).
+remove_exchange_or_queue(XorQName) ->
+    gen_server:call(?SERVER, {remove_exchange_or_queue, XorQName}, infinity).
 
-remove(Upstream, XName) ->
-    gen_server:call(?SERVER, {remove, Upstream, XName}, infinity).
+remove(Upstream, XorQName) ->
+    gen_server:call(?SERVER, {remove, Upstream, XorQName}, infinity).
 
 status() ->
     gen_server:call(?SERVER, status, infinity).
@@ -56,12 +56,12 @@ init([]) ->
                         [named_table, {keypos, #entry.key}, private]),
     {ok, #state{}}.
 
-handle_call({remove_exchange, XName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, match_entry(xkey(XName))),
+handle_call({remove_exchange_or_queue, XorQName}, _From, State) ->
+    true = ets:match_delete(?ETS_NAME, match_entry(xorqkey(XorQName))),
     {reply, ok, State};
 
-handle_call({remove, Upstream, XName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, match_entry(key(XName, Upstream))),
+handle_call({remove, Upstream, XorQName}, _From, State) ->
+    true = ets:match_delete(?ETS_NAME, match_entry(key(XorQName, Upstream))),
     {reply, ok, State};
 
 handle_call(status, _From, State) ->
@@ -69,10 +69,10 @@ handle_call(status, _From, State) ->
     {reply, [format(Entry) || Entry <- Entries], State}.
 
 handle_cast({report, Upstream, #upstream_params{uri = URI0},
-             XName, Status, Timestamp}, State) ->
+             XorQName, Status, Timestamp}, State) ->
     URI = rabbit_federation_upstream:remove_credentials(URI0),
     true = ets:insert(?ETS_NAME,
-                      #entry{key        = key(XName, Upstream),
+                      #entry{key        = key(XorQName, Upstream),
                              status     = Status,
                              uri        = URI,
                              timestamp  = Timestamp}),
@@ -88,27 +88,32 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 format(#entry{key       = {#resource{virtual_host = VHost,
-                                     kind         = exchange,
-                                     name         = XNameBin},
-                           Connection, UXNameBin},
+                                     kind         = Type,
+                                     name         = XorQNameBin},
+                           Connection, UXorQNameBin},
               status    = Status,
               uri       = URI,
               timestamp = Timestamp}) ->
-        [{exchange,          XNameBin},
-         {vhost,             VHost},
-         {connection,        Connection},
-         {uri,               URI},
-         {upstream_exchange, UXNameBin},
-         {status,            Status},
-         {timestamp,         Timestamp}].
+    [{type,          Type},
+     {name,          XorQNameBin},
+     {upstream_name, UXorQNameBin},
+     {vhost,         VHost},
+     {connection,    Connection},
+     {uri,           URI},
+     {status,        Status},
+     {timestamp,     Timestamp}].
 
 %% We don't want to key off the entire upstream, bits of it may change
-key(XName, #upstream{name          = UpstreamName,
-                     exchange_name = UXNameBin}) ->
-    {XName, UpstreamName, UXNameBin}.
+key(XName = #resource{kind = exchange}, #upstream{name          = UpstreamName,
+                                                  exchange_name = UXNameBin}) ->
+    {XName, UpstreamName, UXNameBin};
 
-xkey(XName) ->
-    {XName, '_', '_'}.
+key(QName = #resource{kind = queue}, #upstream{name       = UpstreamName,
+                                               queue_name = UQNameBin}) ->
+    {QName, UpstreamName, UQNameBin}.
+
+xorqkey(XorQName) ->
+    {XorQName, '_', '_'}.
 
 match_entry(Key) ->
     #entry{key               = Key,
