@@ -164,7 +164,7 @@ socket_adapter_info(Sock, Protocol) ->
         end,
     Name = case rabbit_net:connection_string(Sock, inbound) of
                {ok, Res1} -> Res1;
-               Error      -> throw({connection_string_lookup_failed, Error})
+               Error      -> "(unknown)"
            end,
     #amqp_adapter_info{protocol        = Protocol,
                        name            = list_to_binary(Name),
