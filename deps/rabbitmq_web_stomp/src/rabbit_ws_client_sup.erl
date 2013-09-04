@@ -27,12 +27,12 @@
 
 start_client({Conn}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, Processor} = supervisor2:start_child(SupPid, proc_spec(Conn)),
+    {ok, Processor} = start_proc(SupPid, Conn),
     {ok, Client} = supervisor2:start_child(
                      SupPid, client_spec(Processor, Conn)),
     {ok, SupPid, Client}.
 
-proc_spec(Conn) ->
+start_proc(SupPid, Conn) ->
     StompConfig = #stomp_configuration{implicit_connect = false},
 
     SendFun = fun (_Sync, Data) ->
@@ -53,11 +53,15 @@ proc_spec(Conn) ->
                                      name            = list_to_binary(Name),
                                      additional_info = [{ssl, false}]},
 
-    {rabbit_stomp_processor,
-     {rabbit_stomp_processor, start_link,
-      [[SendFun, AdapterInfo, fun (_, _, _, _) -> ok end, none, StompConfig]]},
-     intrinsic, ?MAX_WAIT, worker,
-     [rabbit_stomp_processor]}.
+    {ok, Processor} =
+        supervisor2:start_child(
+          SupPid, {rabbit_stomp_processor,
+                   {rabbit_stomp_processor, start_link, [StompConfig]},
+                   intrinsic, ?MAX_WAIT, worker,
+                   [rabbit_stomp_processor]}),
+    rabbit_stomp_processor:init_arg(
+      Processor, [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end, none]),
+    {ok, Processor}.
 
 client_spec(Processor, Conn) ->
     {rabbit_ws_client, {rabbit_ws_client, start_link, [{Processor, Conn}]},
