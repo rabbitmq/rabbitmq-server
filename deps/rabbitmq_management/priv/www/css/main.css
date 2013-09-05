@@ -68,6 +68,8 @@ table.list th a.sort .arrow { color: #888; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }
 table.list td p.warning { margin: 0; padding: 5px; }
 
+#main .internal-purpose, #main .internal-purpose * { color: #aaa; }
+
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
 div.memory-bar { margin: 10px 0 5px 0; border-radius: 5px; border: 1px solid #ddd; float: left; }

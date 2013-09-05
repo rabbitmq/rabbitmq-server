@@ -48,11 +48,11 @@
   for (var i = 0; i < queues.length; i++) {
     var queue = queues[i];
 %>
-  <tr<%= alt_rows(i) %>>
+  <tr<%= alt_rows(i, queue.arguments) %>>
 <% if (vhosts_interesting) { %>
    <td><%= fmt_string(queue.vhost) %></td>
 <% } %>
-   <td><%= link_queue(queue.vhost, queue.name) %></td>
+   <td><%= link_queue(queue.vhost, queue.name, queue.arguments) %></td>
 <% if (nodes_interesting) { %>
    <td>
      <%= fmt_node(queue.node) %>
