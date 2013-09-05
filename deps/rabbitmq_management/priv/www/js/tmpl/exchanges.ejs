@@ -26,11 +26,11 @@
   for (var i = 0; i < exchanges.length; i++) {
     var exchange = exchanges[i];
 %>
-  <tr<%= alt_rows(i)%>>
+  <tr<%= alt_rows(i, exchange.arguments)%>>
 <% if (vhosts_interesting) { %>
    <td><%= fmt_string(exchange.vhost) %></td>
 <% } %>
-   <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
+   <td><%= link_exchange(exchange.vhost, exchange.name, exchange.arguments) %></td>
    <td class="c"><%= fmt_exchange_type(exchange.type) %></td>
    <td class="c"><%= fmt_string(exchange.policy, '') %></td>
    <td class="c"><%= fmt_parameters_short(exchange) %></td>
@@ -74,9 +74,12 @@
           <th><label>Type:</label></th>
           <td>
             <select name="type">
-              <% for (var i = 0; i < exchange_types.length; i++) { %>
-              <option value="<%= fmt_string(exchange_types[i].name) %>"><%= fmt_string(exchange_types[i].name) %></option>
-              <% } %>
+              <% for (var i = 0; i < exchange_types.length; i++) {
+                   var type = exchange_types[i];
+                   if (type.internal_purpose != undefined) { %>
+              <option value="<%= fmt_string(type.name) %>"><%= fmt_string(type.name) %></option>
+              <%   }
+                 } %>
             </select>
           </td>
         </tr>

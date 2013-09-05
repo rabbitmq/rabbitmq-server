@@ -575,8 +575,12 @@ function fmt_trunc(str, max_length) {
          str.substring(0, max_length) + '...</acronym>') : str;
 }
 
-function alt_rows(i) {
-    return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
+function alt_rows(i, args) {
+    var css = [(i % 2 == 0) ? 'alt1' : 'alt2'];
+    if (args != undefined && args['x-internal-purpose'] != undefined) {
+        css.push('internal-purpose');
+    }
+    return ' class="' + css.join(' ') + '"';
 }
 
 function esc(str) {
@@ -596,13 +600,13 @@ function link_channel(name) {
     return _link_to(short_chan(name), '#/channels/' + esc(name))
 }
 
-function link_exchange(vhost, name) {
+function link_exchange(vhost, name, args) {
     var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
-    return _link_to(fmt_exchange0(name), '#/exchanges/' + url)
+    return _link_to(fmt_exchange0(name), '#/exchanges/' + url, true, args);
 }
 
-function link_queue(vhost, name) {
-    return _link_to(name, '#/queues/' + esc(vhost) + '/' + esc(name))
+function link_queue(vhost, name, args) {
+    return _link_to(name, '#/queues/' + esc(vhost) + '/' + esc(name), true, args);
 }
 
 function link_vhost(name) {
@@ -621,9 +625,15 @@ function link_policy(vhost, name) {
     return _link_to(name, '#/policies/' + esc(vhost) + '/' + esc(name))
 }
 
-function _link_to(name, url, highlight) {
+function _link_to(name, url, highlight, args) {
     if (highlight == undefined) highlight = true;
-    return '<a href="' + url + '">' +
+    var title = null;
+    if (args != undefined && args['x-internal-purpose'] != undefined) {
+        var purpose = args['x-internal-purpose'];
+        title = 'This is used internally by the ' + purpose + ' mechanism.';
+    }
+    return '<a href="' + url + '"' +
+        (title ? ' title="' + title + '"' : '') + '>' +
         (highlight ? fmt_highlight_filter(name) : fmt_escape_html(name)) +
         '</a>';
 }
