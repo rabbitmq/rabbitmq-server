@@ -410,9 +410,11 @@ consume_from_upstream_queue(
     #upstream_params{x_or_q = X,
                      params = Params} = UParams,
     Q = upstream_queue_name(name(X), vhost(Params), DownXName),
-    Args = [Arg || {_K, _T, V} = Arg <- [{<<"x-expires">>,     long,    Expiry},
-                                         {<<"x-message-ttl">>, long,    TTL},
-                                         {<<"x-ha-policy">>,   longstr, HA}],
+    Args = [A || {_K, _T, V} = A
+                     <- [{<<"x-expires">>,          long,    Expiry},
+                         {<<"x-message-ttl">>,      long,    TTL},
+                         {<<"x-ha-policy">>,        longstr, HA},
+                         {<<"x-internal-purpose">>, longstr, <<"federation">>}],
                    V =/= none],
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
@@ -483,9 +485,12 @@ ensure_internal_exchange(IntXNameBin,
                                durable     = true,
                                internal    = true,
                                auto_delete = true},
+    Purpose = [{<<"x-internal-purpose">>, longstr, <<"federation">>}],
     XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
-                                  arguments = [{?MAX_HOPS_ARG, long, MaxHops}]},
-    Fan = Base#'exchange.declare'{type = <<"fanout">>},
+                                  arguments = [{?MAX_HOPS_ARG, long, MaxHops} |
+                                               Purpose]},
+    Fan = Base#'exchange.declare'{type      = <<"fanout">>,
+                                  arguments = Purpose},
     rabbit_federation_link_util:disposable_connection_call(
       Params, XFU, fun(?COMMAND_INVALID, _Text) ->
                            amqp_channel:call(Ch, Fan)

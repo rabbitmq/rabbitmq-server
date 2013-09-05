@@ -36,7 +36,8 @@
 %%----------------------------------------------------------------------------
 
 description() ->
-    [{description, <<"Federation upstream helper exchange">>}].
+    [{description,      <<"Federation upstream helper exchange">>},
+     {internal_purpose, federation}].
 
 serialise_events() -> false.
 
