@@ -14,23 +14,24 @@ function fmt_string(str, unknown) {
 
 function fmt_bytes(bytes) {
     if (bytes == undefined) return UNKNOWN_REPR;
-    return fmt_si_prefix(bytes, bytes, 1024) + 'B';
+    return fmt_si_prefix(bytes, bytes, 1024, false) + 'B';
 }
 
-function fmt_si_prefix(num, max, thousand) {
+function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
     if (num == 0) return 0;
 
     function f(n, m, p) {
         if (m > thousand) return f(n / thousand, m / thousand, p + 1);
-        else return [n, p];
+        else return [n, m, p];
     }
 
-    var num_power = f(num, max, 0);
+    var num_power = f(num0, max0, 0);
     var num = num_power[0];
-    var power = num_power[1];
+    var max = num_power[1];
+    var power = num_power[2];
     var powers = ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
-    return ((power == 0 || num > 10) ? num.toFixed(0) :
-            num.toFixed(1)) + powers[power];
+    return (((power != 0 || allow_fractions) && max <= 10) ? num.toFixed(1) :
+            num.toFixed(0)) + powers[power];
 }
 
 function fmt_memory(memory, key) {
@@ -250,11 +251,11 @@ function fmt_msgs_rate(num) {
 }
 
 function fmt_rate_axis(num, max) {
-    return fmt_si_prefix(num, max, 1000) + '/s';
+    return fmt_si_prefix(num, max, 1000, true) + '/s';
 }
 
 function fmt_msgs_axis(num, max) {
-    return fmt_si_prefix(num, max, 1000);
+    return fmt_si_prefix(num, max, 1000, true);
 }
 
 function fmt_rate_bytes_axis(num, max) {
