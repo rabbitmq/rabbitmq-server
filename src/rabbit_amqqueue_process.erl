@@ -263,40 +263,45 @@ recovery_barrier(BarrierPid) ->
         {'DOWN', MRef, process, _, _} -> ok
     end.
 
-process_args_policy(State0 = #q{q = Q = #amqqueue{arguments = Arguments}}) ->
-    State1 = lists:foldl(
-               fun({Arg, Fun}, StateN) ->
-                       case rabbit_policy:get(Arg, Q) of
-                           undefined -> StateN;
-                           Val       -> Fun(Val, StateN)
-                       end
-               end, State0,
-               [{<<"dead-letter-exchange">>,    fun init_dlx/2},
-                {<<"dead-letter-routing-key">>, fun init_dlx_routing_key/2}]),
+process_args_policy(State = #q{q = Q}) ->
     lists:foldl(
-      fun({Arg, Fun}, StateN) ->
-              case rabbit_misc:table_lookup(Arguments, Arg) of
-                  {_Type, Val} -> Fun(Val, StateN);
-                  undefined    -> StateN
-              end
-      end, State1,
-      [{<<"x-expires">>,                 fun init_expires/2},
-       {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
-       {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
-       {<<"x-message-ttl">>,             fun init_ttl/2},
-       {<<"x-max-length">>,              fun init_max_length/2}]).
+      fun({Name, Resolve, Fun}, StateN) ->
+              Fun(args_policy_lookup(Name, Resolve, Q), StateN)
+      end, State,
+      [{<<"expires">>,                 fun res_min/2, fun init_exp/2},
+       {<<"dead-letter-exchange">>,    fun res_arg/2, fun init_dlx/2},
+       {<<"dead-letter-routing-key">>, fun res_arg/2, fun init_dlx_rkey/2},
+       {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
+       {<<"max-length">>,              fun res_min/2, fun init_max_length/2}]).
 
-init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
+args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
+    AName = <<"x-", Name/binary>>,
+    case {rabbit_policy:get(Name, Q), rabbit_misc:table_lookup(Args, AName)} of
+        {undefined, undefined}       -> undefined;
+        {undefined, {_Type, Val}}    -> Val;
+        {Val,       undefined}       -> Val;
+        {PolVal,    {_Type, ArgVal}} -> Resolve(PolVal, ArgVal)
+    end.
 
-init_ttl(TTL, State) -> drop_expired_msgs(State#q{ttl = TTL}).
+res_arg(_PolVal, ArgVal) -> ArgVal.
+res_min(PolVal, ArgVal)  -> erlang:min(PolVal, ArgVal).
 
+init_exp(undefined, State) -> stop_expiry_timer(State#q{expires = undefined});
+init_exp(Expires,   State) -> ensure_expiry_timer(State#q{expires = Expires}).
+
+init_ttl(undefined, State) -> stop_ttl_timer(State#q{ttl = undefined});
+init_ttl(TTL,       State) -> drop_expired_msgs(State#q{ttl = TTL}).
+
+init_dlx(undefined, State) ->
+    State#q{dlx = undefined};
 init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
     State#q{dlx = rabbit_misc:r(QName, exchange, DLX)}.
 
-init_dlx_routing_key(RoutingKey, State) ->
-    State#q{dlx_routing_key = RoutingKey}.
+init_dlx_rkey(RoutingKey, State) -> State#q{dlx_routing_key = RoutingKey}.
 
-init_max_length(MaxLen, State) -> State#q{max_length = MaxLen}.
+init_max_length(MaxLen, State) ->
+    {_Dropped, State1} = maybe_drop_head(State#q{max_length = MaxLen}),
+    State1.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue_state = BQS} =
