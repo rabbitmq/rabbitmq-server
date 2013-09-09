@@ -72,8 +72,8 @@
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
-        -> {'new' | 'existing' | 'absent', rabbit_types:amqqueue()} |
-           rabbit_types:channel_exit()).
+        -> {'new' | 'existing' | 'absent' | 'owner_died',
+            rabbit_types:amqqueue()} | rabbit_types:channel_exit()).
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
         -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).

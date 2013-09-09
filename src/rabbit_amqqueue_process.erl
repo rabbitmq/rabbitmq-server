@@ -1070,11 +1070,7 @@ handle_call({init, Recover}, From,
         false -> #q{backing_queue       = undefined,
                     backing_queue_state = undefined,
                     q                   = #amqqueue{name = QName} = Q} = State,
-                 %% If the connection has died then what we reply is somewhat
-                 %% moot. But it seems reasonable to act as though the queue
-                 %% was declared and then the connection died - we're only a
-                 %% small timing difference away from that case anyway.
-                 gen_server2:reply(From, {new, Q}),
+                 gen_server2:reply(From, {owner_died, Q}),
                  case Recover of
                      new -> rabbit_log:warning(
                               "exclusive owner for ~s went away~n",
