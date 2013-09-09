@@ -103,17 +103,15 @@ headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
 headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
               AllMatch, AnyMatch, MatchKind) when PK == DK ->
     {AllMatch1, AnyMatch1} =
-        if
+        case rabbit_misc:type_class(PT) == rabbit_misc:type_class(DT) of
             %% It's not properly specified, but a "no value" in a
             %% pattern field is supposed to mean simple presence of
             %% the corresponding data field. I've interpreted that to
             %% mean a type of "void" for the pattern field.
-            PT == void -> {AllMatch, true};
-            %% Similarly, it's not specified, but I assume that a
-            %% mismatched type causes a mismatched value.
-            PT =/= DT  -> {false, AnyMatch};
-            PV == DV   -> {AllMatch, true};
-            true       -> {false, AnyMatch}
+            _ when PT == void -> {AllMatch, true};
+            false             -> {false, AnyMatch};
+            _ when PV == DV   -> {AllMatch, true};
+            _                 -> {false, AnyMatch}
         end,
     headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
 

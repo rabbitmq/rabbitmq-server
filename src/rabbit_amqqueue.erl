@@ -26,7 +26,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, wake_up/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
--export([basic_get/4, basic_consume/9, basic_cancel/4]).
+-export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2, flush_all/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
 -export([on_node_down/1]).
@@ -79,7 +79,8 @@
         -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).
 -spec(update/2 ::
         (name(),
-         fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue())) -> 'ok').
+         fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue()))
+         -> 'not_found' | rabbit_types:amqqueue()).
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found');
@@ -149,12 +150,13 @@
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(credit/5 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(),
                    non_neg_integer(), boolean()) -> 'ok').
--spec(basic_consume/9 ::
+-spec(basic_consume/10 ::
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
-         rabbit_types:ctag(), boolean(), {non_neg_integer(), boolean()} | 'none', any())
+         rabbit_types:ctag(), boolean(), {non_neg_integer(), boolean()} | 'none', any(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
+-spec(notify_decorators/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(resume/2 :: (pid(), pid()) -> 'ok').
@@ -184,7 +186,7 @@
 %%----------------------------------------------------------------------------
 
 -define(CONSUMER_INFO_KEYS,
-        [queue_name, channel_pid, consumer_tag, ack_required]).
+        [queue_name, channel_pid, consumer_tag, ack_required, arguments]).
 
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
@@ -278,9 +280,10 @@ update(Name, Fun) ->
             case Durable of
                 true -> ok = mnesia:write(rabbit_durable_queue, Q1, write);
                 _    -> ok
-            end;
+            end,
+            Q1;
         [] ->
-            ok
+            not_found
     end.
 
 store_queue(Q = #amqqueue{durable = true}) ->
@@ -294,8 +297,12 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-policy_changed(Q1, Q2) ->
+policy_changed(Q1 = #amqqueue{decorators = Decorators1},
+               Q2 = #amqqueue{decorators = Decorators2}) ->
     rabbit_mirror_queue_misc:update_mirrors(Q1, Q2),
+    D1 = rabbit_queue_decorator:select(Decorators1),
+    D2 = rabbit_queue_decorator:select(Decorators2),
+    [ok = M:policy_changed(Q1, Q2) || M <- lists:usort(D1 ++ D2)],
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
     wake_up(Q1).
@@ -393,9 +400,15 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
-                                        [Key || {Key, _Fun} <- args()]).
+                                        [Key || {Key, _Fun} <- declare_args()]).
 
 check_declare_arguments(QueueName, Args) ->
+    check_arguments(QueueName, Args, declare_args()).
+
+check_consume_arguments(QueueName, Args) ->
+    check_arguments(QueueName, Args, consume_args()).
+
+check_arguments(QueueName, Args, Validators) ->
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;
          TypeVal   -> case Fun(TypeVal, Args) of
@@ -406,14 +419,16 @@ check_declare_arguments(QueueName, Args) ->
                                               [Key, rabbit_misc:rs(QueueName),
                                                Error])
                       end
-     end || {Key, Fun} <- args()],
+     end || {Key, Fun} <- Validators],
     ok.
 
-args() ->
+declare_args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_max_length_arg/2}].
+
+consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
@@ -504,8 +519,8 @@ consumers_all(VHostPath) ->
       map(VHostPath,
           fun (Q) ->
               [lists:zip(ConsumerInfoKeys,
-                         [Q#amqqueue.name, ChPid, ConsumerTag, AckRequired]) ||
-                         {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
+                         [Q#amqqueue.name, ChPid, CTag, AckRequired, Args]) ||
+                         {ChPid, CTag, AckRequired, Args} <- consumers(Q)]
           end)).
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).
@@ -549,13 +564,19 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck, LimiterPid}).
 
-basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid, LimiterActive,
-              ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg) ->
+basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid,
+              LimiterPid, LimiterActive,
+              ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg) ->
+    ok = check_consume_arguments(QName, OtherArgs),
     delegate:call(QPid, {basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-                         ConsumerTag, ExclusiveConsume, CreditArgs, OkMsg}).
+                         ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs,
+                         OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     delegate:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
+
+notify_decorators(#amqqueue{pid = QPid}) ->
+    delegate:cast(QPid, notify_decorators).
 
 notify_sent(QPid, ChPid) ->
     Key = {consumer_credit_to, QPid},
