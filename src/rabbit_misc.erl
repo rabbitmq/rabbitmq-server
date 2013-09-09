@@ -76,9 +76,6 @@
         R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
             R =:= shutdown).
 
-%% This is dictated by `erlang:send_after' on which we depend to implement TTL.
--define(MAX_EXPIRY_TIMER, 4294967295).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
