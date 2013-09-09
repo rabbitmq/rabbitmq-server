@@ -67,7 +67,7 @@ validate_policy0(<<"message-ttl">>, Value) ->
     {error, "~p is not a valid message TTL", [Value]};
 
 validate_policy0(<<"expires">>, Value)
-  when is_integer(Value), Value >= 0, Value =< ?MAX_EXPIRY_TIMER ->
+  when is_integer(Value), Value >= 1, Value =< ?MAX_EXPIRY_TIMER ->
     ok;
 validate_policy0(<<"expires">>, Value) ->
     {error, "~p is not a valid queue expiry", [Value]};
