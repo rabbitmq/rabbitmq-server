@@ -266,10 +266,7 @@ recovery_barrier(BarrierPid) ->
 process_args_policy(State0 = #q{q = Q = #amqqueue{arguments = Arguments}}) ->
     State1 = lists:foldl(
                fun({Arg, Fun}, StateN) ->
-                       case rabbit_policy:get(Arg, Q) of
-                           undefined -> StateN;
-                           Val       -> Fun(Val, StateN)
-                       end
+                       Fun(rabbit_policy:get(Arg, Q), StateN)
                end, State0,
                [{<<"dead-letter-exchange">>,    fun init_dlx/2},
                 {<<"dead-letter-routing-key">>, fun init_dlx_routing_key/2}]),
@@ -290,6 +287,8 @@ init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
 init_ttl(TTL, State) -> drop_expired_msgs(State#q{ttl = TTL}).
 
+init_dlx(undefined, State) ->
+    State#q{dlx = undefined};
 init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
     State#q{dlx = rabbit_misc:r(QName, exchange, DLX)}.
 
