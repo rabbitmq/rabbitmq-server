@@ -224,6 +224,18 @@ HELP = {
   <dd>\
     Key to use when dead-lettering.\
   </dd>\
+  <dt><code>message-ttl</code></dt>\
+  <dd>\
+    Per-queue message TTL, in milliseconds.\
+  </dd>\
+  <dt><code>expires</code></dt>\
+  <dd>\
+    Queue TTL, in milliseconds.\
+  </dd>\
+  <dt><code>max-length</code></dt>\
+  <dd>\
+    Maximum queue length, in messages.\
+  </dd>\
   <dt><code>federation-upstream-set</code></dt>\
   <dd>\
     A string; only if the federation plugin is enabled.\
