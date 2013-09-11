@@ -40,7 +40,7 @@ joined(Pid, Members) ->
     Pid ! {joined, self(), Members},
     ok.
 
-members_changed(Pid, Births, Deaths, _Members) ->
+members_changed(Pid, Births, Deaths, _Live) ->
     Pid ! {members_changed, self(), Births, Deaths},
     ok.
 

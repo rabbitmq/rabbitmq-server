@@ -172,10 +172,10 @@ handle_call({deliver, Delivery, true}, From, State) ->
     gen_server2:reply(From, ok),
     noreply(maybe_enqueue_message(Delivery, State));
 
-handle_call({gm_deaths, Members}, From,
+handle_call({gm_deaths, LiveGMPids}, From,
             State = #state { q = Q = #amqqueue { name = QName, pid = MPid }}) ->
     Self = self(),
-    case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, Members) of
+    case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, LiveGMPids) of
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
@@ -355,10 +355,10 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 joined([SPid], _Members) -> SPid ! {joined, self()}, ok.
 
-members_changed([_SPid], _Births, [], _Members) ->
+members_changed([_SPid], _Births, [], _Live) ->
     ok;
-members_changed([ SPid], _Births, _Deaths, Members) ->
-    inform_deaths(SPid, Members).
+members_changed([ SPid], _Births, _Deaths, Live) ->
+    inform_deaths(SPid, Live).
 
 handle_msg([_SPid], _From, request_depth) ->
     %% This is only of value to the master
@@ -386,8 +386,8 @@ handle_msg([SPid], _From, {sync_start, Ref, Syncer, SPids}) ->
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
-inform_deaths(SPid, Members) ->
-    case gen_server2:call(SPid, {gm_deaths, Members}, infinity) of
+inform_deaths(SPid, Live) ->
+    case gen_server2:call(SPid, {gm_deaths, Live}, infinity) of
         ok              -> ok;
         {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
     end.

@@ -30,7 +30,7 @@ joined(Owner, _Members) ->
     Owner ! joined,
     ok.
 
-members_changed(_Owner, _Births, _Deaths, _Members) ->
+members_changed(_Owner, _Births, _Deaths, _Live) ->
     ok.
 
 handle_msg(Owner, _From, ping) ->

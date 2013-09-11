@@ -51,7 +51,7 @@ joined([], Members) ->
     put(ts, now()),
     ok.
 
-members_changed([], Births, Deaths, _Members) ->
+members_changed([], Births, Deaths, _Live) ->
     with_state(
       fun (State) ->
               State1 =

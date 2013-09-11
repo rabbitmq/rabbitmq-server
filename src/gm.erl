@@ -475,7 +475,7 @@
 %% see members die that we have not seen born (or supplied in the
 %% members to joined/2).
 -callback members_changed(Args :: term(), Births :: [pid()],
-                          Deaths :: [pid()], Current :: [pid()]) ->
+                          Deaths :: [pid()], Live :: [pid()]) ->
     ok | {stop, Reason :: term()} | {become, Module :: atom(), Args :: any()}.
 
 %% Supplied with Args provided in start_link, the sender, and the
