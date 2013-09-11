@@ -327,7 +327,7 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         info                                 -> 9;
-        {gm_deaths, _Members}                -> 5;
+        {gm_deaths, _Live}                   -> 5;
         _                                    -> 0
     end.
 
