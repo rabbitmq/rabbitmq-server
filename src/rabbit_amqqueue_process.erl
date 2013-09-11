@@ -1069,14 +1069,8 @@ handle_call({init, Recover}, From,
                  declare(Recover, From, State);
         false -> #q{backing_queue       = undefined,
                     backing_queue_state = undefined,
-                    q                   = #amqqueue{name = QName} = Q} = State,
-                 gen_server2:reply(From, not_found),
-                 case Recover of
-                     new -> rabbit_log:warning(
-                              "exclusive owner for ~s went away~n",
-                              [rabbit_misc:rs(QName)]);
-                     _   -> ok
-                 end,
+                    q                   = Q} = State,
+                 gen_server2:reply(From, {owner_died, Q}),
                  BQ = backing_queue_module(Q),
                  BQS = bq_init(BQ, Q, Recover),
                  %% Rely on terminate to delete the queue.
