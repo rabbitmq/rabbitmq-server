@@ -69,7 +69,7 @@
 %% slave (now master) receives messages it's not ready for (for
 %% example, new consumers).
 %% Returns {ok, NewMPid, DeadPids}
-remove_from_queue(QueueName, Self, DeadGMPids) ->
+remove_from_queue(QueueName, Self, LiveGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -79,9 +79,9 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                   [Q = #amqqueue { pid        = QPid,
                                    slave_pids = SPids,
                                    gm_pids    = GMPids }] ->
-                      {Dead, GMPids1} = lists:partition(
+                      {GMPids1, Dead} = lists:partition(
                                           fun ({GM, _}) ->
-                                                  lists:member(GM, DeadGMPids)
+                                                  lists:member(GM, LiveGMPids)
                                           end, GMPids),
                       DeadPids = [Pid || {_GM, Pid} <- Dead],
                       Alive = [QPid | SPids] -- DeadPids,

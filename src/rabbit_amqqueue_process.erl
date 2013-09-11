@@ -1104,6 +1104,10 @@ handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->
     declare(Recover, From, State);
 
+%% You used to be able to declare an exclusive durable queue. Sadly we
+%% need to still tidy up after that case, there could be the remnants
+%% of one left over from an upgrade. So that's why we don't enforce
+%% Recover = false here.
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
     case rabbit_misc:is_process_alive(Owner) of
@@ -1111,24 +1115,14 @@ handle_call({init, Recover}, From,
                  declare(Recover, From, State);
         false -> #q{backing_queue       = undefined,
                     backing_queue_state = undefined,
-                    q                   = #amqqueue{name = QName} = Q} = State,
-                 gen_server2:reply(From, not_found),
-                 case Recover of
-                     new -> rabbit_log:warning(
-                              "exclusive owner for ~s went away~n",
-                              [rabbit_misc:rs(QName)]);
-                     _   -> ok %% [1]
-                 end,
+                    q                   = Q} = State,
+                 gen_server2:reply(From, {owner_died, Q}),
                  BQ = backing_queue_module(Q),
                  BQS = bq_init(BQ, Q, Recover),
                  %% Rely on terminate to delete the queue.
                  {stop, {shutdown, missing_owner},
                   State#q{backing_queue = BQ, backing_queue_state = BQS}}
     end;
-
-%% [1] You used to be able to declare an exclusive durable queue. Sadly we
-%% need to still tidy up after that case, there could be the remnants of one
-%% left over from an upgrade.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
