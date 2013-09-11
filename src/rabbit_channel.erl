@@ -1022,7 +1022,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     %% declare. Loop around again.
                     handle_method(Declare, none, State);
                 {absent, Q} ->
-                    rabbit_misc:absent(Q)
+                    rabbit_misc:absent(Q);
+                {owner_died, _Q} ->
+                    %% Presumably our own days are numbered since the
+                    %% connection has died. Pretend the queue exists though,
+                    %% just so nothing fails.
+                    return_queue_declare_ok(QueueName, NoWait, 0, 0, State)
             end;
         {error, {absent, Q}} ->
             rabbit_misc:absent(Q)

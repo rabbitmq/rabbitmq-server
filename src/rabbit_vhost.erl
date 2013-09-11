@@ -122,7 +122,7 @@ with(VHostPath, Thunk) ->
     end.
 
 %% Like with/2 but outside an Mnesia tx
-assert(VHostPath) -> case rabbit_vhost:exists(VHostPath) of
+assert(VHostPath) -> case exists(VHostPath) of
                          true  -> ok;
                          false -> throw({error, {no_such_vhost, VHostPath}})
                      end.
