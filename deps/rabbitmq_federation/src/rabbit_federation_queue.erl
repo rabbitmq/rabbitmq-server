@@ -65,8 +65,8 @@ policy_changed_local(Q1, Q2) ->
 
 active_for(Q) ->
     case rabbit_federation_upstream:set_for(Q) of
-        {ok, _}    -> true;
-        {error, _} -> false
+        undefined -> false;
+        _         -> true
     end.
 
 %% We need to reconsider whether we need to run or pause every time

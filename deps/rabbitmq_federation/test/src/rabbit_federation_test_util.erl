@@ -126,21 +126,17 @@ assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
 
 links(#'exchange.declare'{exchange = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, xr(Name)) of
-        {ok, Set} ->
-            X = #exchange{name = xr(Name)},
-            [{Name, U#upstream.name, U#upstream.exchange_name} ||
-                U <- rabbit_federation_upstream:from_set(Set, X)];
-        {error, not_found} ->
-            []
+        undefined -> [];
+        Set       -> X = #exchange{name = xr(Name)},
+                     [{Name, U#upstream.name, U#upstream.exchange_name} ||
+                         U <- rabbit_federation_upstream:from_set(Set, X)]
     end;
 links(#'queue.declare'{queue = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, qr(Name)) of
-        {ok, Set} ->
-            Q = #amqqueue{name = qr(Name)},
-            [{Name, U#upstream.name, U#upstream.queue_name} ||
-                U <- rabbit_federation_upstream:from_set(Set, Q)];
-        {error, not_found} ->
-            []
+        undefined -> [];
+        Set       -> Q = #amqqueue{name = qr(Name)},
+                     [{Name, U#upstream.name, U#upstream.queue_name} ||
+                         U <- rabbit_federation_upstream:from_set(Set, Q)]
     end.
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).

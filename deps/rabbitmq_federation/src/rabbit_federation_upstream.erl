@@ -33,14 +33,14 @@ set_for(XorQ) -> rabbit_policy:get(<<"federation-upstream-set">>, XorQ).
 
 for(XorQ) ->
     case set_for(XorQ) of
-        {ok, UpstreamSet}  -> from_set(UpstreamSet, XorQ);
-        {error, not_found} -> []
+        undefined   -> [];
+        UpstreamSet -> from_set(UpstreamSet, XorQ)
     end.
 
 for(XorQ, UpstreamName) ->
     case set_for(XorQ) of
-        {ok, UpstreamSet}  -> from_set(UpstreamSet, XorQ, UpstreamName);
-        {error, not_found} -> []
+        undefined   -> [];
+        UpstreamSet -> from_set(UpstreamSet, XorQ, UpstreamName)
     end.
 
 params_to_table(#upstream_params{uri    = URI,
