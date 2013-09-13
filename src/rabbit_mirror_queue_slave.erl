@@ -652,7 +652,6 @@ confirm_sender_death(Pid) ->
                     [self(), rabbit_mirror_queue_master, Fun]),
     ok.
 
-forget_sender(running, _)                        -> false;
 forget_sender(_, running)                        -> false;
 forget_sender(Down1, Down2) when Down1 =/= Down2 -> true.
 
