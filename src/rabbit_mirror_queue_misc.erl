@@ -257,8 +257,8 @@ policy(Policy, Q) ->
 
 module(#amqqueue{} = Q) ->
     case rabbit_policy:get(<<"ha-mode">>, Q) of
-        {ok, Mode} -> module(Mode);
-        _          -> not_mirrored
+        undefined -> not_mirrored;
+        Mode      -> module(Mode)
     end;
 
 module(Mode) when is_binary(Mode) ->
