@@ -48,8 +48,7 @@ rm -rf %{buildroot}
 
 make install TARGET_DIR=%{_maindir} \
              SBIN_DIR=%{buildroot}%{_rabbit_libdir}/bin \
-             MAN_DIR=%{buildroot}%{_mandir} \
-             DOC_INSTALL_DIR=%{buildroot}/etc
+             MAN_DIR=%{buildroot}%{_mandir}
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
