@@ -255,8 +255,8 @@ suggested_queue_nodes(Q = #amqqueue{exclusive_owner = Owner}, All) ->
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
-        {ok, P} -> P;
-        _       -> none
+        undefined -> none;
+        P         -> P
     end.
 
 module(#amqqueue{} = Q) ->
