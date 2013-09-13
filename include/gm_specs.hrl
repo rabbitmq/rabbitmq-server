@@ -20,9 +20,10 @@
 -type(args() :: any()).
 -type(members() :: [pid()]).
 
--spec(joined/2          :: (args(), members())            -> callback_result()).
--spec(members_changed/3 :: (args(), members(), members()) -> callback_result()).
--spec(handle_msg/3      :: (args(), pid(), any())         -> callback_result()).
--spec(terminate/2       :: (args(), term())               -> any()).
+-spec(joined/2          :: (args(), members())    -> callback_result()).
+-spec(members_changed/4 :: (args(), members(),
+                            members(), members()) -> callback_result()).
+-spec(handle_msg/3      :: (args(), pid(), any()) -> callback_result()).
+-spec(terminate/2       :: (args(), term())       -> any()).
 
 -endif.
