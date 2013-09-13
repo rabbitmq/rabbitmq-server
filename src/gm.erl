@@ -612,14 +612,21 @@ handle_call({add_on_right, NewMember}, _From,
                 MembersState1
         end, TxnFun),
     View2 = group_to_view(Group),
-    State1 = check_neighbours(State #state { view          = View2,
-                                             members_state = MembersState1 }),
-    Result = callback_view_changed(Args, Module, View, View2),
-    handle_callback_result({Result, {ok, Group}, State1}).
+    case validate_view(Self, View2) of
+        ok ->
+            State1 = State #state { view          = View2,
+                                    members_state = MembersState1 },
+            State2 = check_neighbours(State1),
+            Result = callback_view_changed(Args, Module, View, View2),
+            handle_callback_result({Result, {ok, Group}, State2});
+        Err ->
+            {{stop, Err}, State}
+    end.
 
 
 handle_cast({?TAG, ReqVer, Msg},
-            State = #state { view          = View,
+            State = #state { self          = Self,
+                             view          = View,
                              members_state = MembersState,
                              group_name    = GroupName,
                              module        = Module,
@@ -627,11 +634,17 @@ handle_cast({?TAG, ReqVer, Msg},
     {Result, State1} =
         case needs_view_update(ReqVer, View) of
             true  -> View1 = group_to_view(read_group(GroupName)),
-                     MemberState1 = remove_erased_members(MembersState, View1),
-                     {callback_view_changed(Args, Module, View, View1),
-                      check_neighbours(
-                        State #state { view          = View1,
-                                       members_state = MemberState1 })};
+                     case validate_view(Self, View1) of
+                         ok ->
+                             MemberState1 = remove_erased_members(MembersState,
+                                                                  View1),
+                             {callback_view_changed(Args, Module, View, View1),
+                              check_neighbours(
+                                State #state { view          = View1,
+                                               members_state = MemberState1 })};
+                         Err ->
+                            {{stop, Err}, State}
+                    end;
             false -> {ok, State}
         end,
     handle_callback_result(
@@ -726,11 +739,18 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
                             members_state = blank_member_state(),
                             confirms      = purge_confirms(Confirms) }};
                     _ ->
-                        %% here we won't be pointing out any deaths:
-                        %% the concern is that there maybe births
-                        %% which we'd otherwise miss.
-                        {callback_view_changed(Args, Module, View, View1),
-                         check_neighbours(State #state { view = View1 })}
+                        State1 = State #state { view = View1 },
+                        case validate_view(Self, View1) of
+                            ok ->
+                                %% here we won't be pointing out any deaths:
+                                %% the concern is that there maybe births
+                                %% which we'd otherwise miss.
+                                {callback_view_changed(
+                                   Args, Module, View, View1),
+                                 check_neighbours(State1)};
+                            Err ->
+                                {{stop, Err}, State1}
+                         end
                 end,
             handle_callback_result({Result, State2})
     end.
@@ -984,6 +1004,17 @@ link_view([Left, Middle, Right | Rest], View) ->
     end;
 link_view(_, View) ->
     View.
+
+validate_view(Self, View) ->
+    case lists:member(Self, alive_view_members(View)) of
+        true  -> ok;
+        false -> %% Another node removed us from the view. No safe
+                 %% recovery is possible so we shut the node down
+                 rabbit_log:info("Fatal network partition detected.~n"
+                                 "Node committing suicide.~n"),
+                 init:stop(),
+                 {shutdown, partial_partition_detected}
+    end.
 
 add_aliases(View, Members) ->
     Members1 = ensure_alive_suffix(Members),
