@@ -69,7 +69,7 @@
 %% slave (now master) receives messages it's not ready for (for
 %% example, new consumers).
 %% Returns {ok, NewMPid, DeadPids}
-remove_from_queue(QueueName, Self, DeadGMPids) ->
+remove_from_queue(QueueName, Self, LiveGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -79,9 +79,9 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                   [Q = #amqqueue { pid        = QPid,
                                    slave_pids = SPids,
                                    gm_pids    = GMPids }] ->
-                      {Dead, GMPids1} = lists:partition(
+                      {GMPids1, Dead} = lists:partition(
                                           fun ({GM, _}) ->
-                                                  lists:member(GM, DeadGMPids)
+                                                  lists:member(GM, LiveGMPids)
                                           end, GMPids),
                       DeadPids = [Pid || {_GM, Pid} <- Dead],
                       Alive = [QPid | SPids] -- DeadPids,
@@ -237,16 +237,20 @@ suggested_queue_nodes(Q) ->
 %% This variant exists so we can pull a call to
 %% rabbit_mnesia:cluster_nodes(running) out of a loop or
 %% transaction or both.
-suggested_queue_nodes(Q, All) ->
+suggested_queue_nodes(Q = #amqqueue{exclusive_owner = Owner}, All) ->
     {MNode0, SNodes, SSNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
                 none -> node();
                 _    -> MNode0
             end,
-    Params = policy(<<"ha-params">>, Q),
-    case module(Q) of
-        {ok, M} -> M:suggested_queue_nodes(Params, MNode, SNodes, SSNodes, All);
-        _       -> {MNode, []}
+    case Owner of
+        none -> Params = policy(<<"ha-params">>, Q),
+                case module(Q) of
+                    {ok, M} -> M:suggested_queue_nodes(
+                                 Params, MNode, SNodes, SSNodes, All);
+                    _       -> {MNode, []}
+                end;
+        _    -> {MNode, []}
     end.
 
 policy(Policy, Q) ->
