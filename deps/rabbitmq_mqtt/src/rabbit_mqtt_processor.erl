@@ -71,7 +71,6 @@ process_request(?CONNECT,
                         case process_login(UserBin, PassBin, PState) of
                             {?CONNACK_ACCEPT, Conn} ->
                                 link(Conn),
-                                maybe_clean_sess(CleanSess, Conn, ClientId),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
                                 ok = rabbit_mqtt_collector:register(
                                   ClientId, self()),
@@ -79,11 +78,12 @@ process_request(?CONNECT,
                                 #'basic.qos_ok'{} = amqp_channel:call(
                                   Ch, #'basic.qos'{prefetch_count = Prefetch}),
                                 {?CONNACK_ACCEPT,
-                                 PState #proc_state{ will_msg   = make_will_msg(Var),
-                                                     clean_sess = CleanSess,
-                                                     channels   = {Ch, undefined},
-                                                     connection = Conn,
-                                                     client_id  = ClientId }};
+                                 maybe_clean_sess(
+                                   PState #proc_state{ will_msg   = make_will_msg(Var),
+                                                       clean_sess = CleanSess,
+                                                       channels   = {Ch, undefined},
+                                                       connection = Conn,
+                                                       client_id  = ClientId })};
                             ConnAck ->
                                 {ConnAck, PState}
                         end
@@ -288,17 +288,20 @@ delivery_qos(Tag, Headers,   #proc_state{ consumer_tags = {_, Tag} }) ->
         undefined   -> {?QOS_1, ?QOS_1}
     end.
 
-maybe_clean_sess(false, _Conn, _ClientId) ->
-    % todo: establish subscription to deliver old unacknowledged messages
-    ok;
-maybe_clean_sess(true, Conn, ClientId) ->
+maybe_clean_sess(PState = #proc_state { clean_sess = false }) ->
+    {_Queue, PState1} = ensure_queue(?QOS_1, PState),
+    PState1;
+maybe_clean_sess(PState = #proc_state { clean_sess = true,
+                                        connection = Conn,
+                                        client_id  = ClientId }) ->
     {_, Queue} = rabbit_mqtt_util:subcription_queue_name(ClientId),
     {ok, Channel} = amqp_connection:open_channel(Conn),
     try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue }) of
         #'queue.delete_ok'{} -> ok = amqp_channel:close(Channel)
     catch
         exit:_Error -> ok
-    end.
+    end,
+    PState.
 
 %%----------------------------------------------------------------------------
 
