@@ -150,26 +150,22 @@ init_it(Self, GM, Node, QName) ->
     case mnesia:read({rabbit_queue, QName}) of
         [Q = #amqqueue { pid = QPid, slave_pids = SPids, gm_pids = GMPids }] ->
             case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
-                [] ->
-                    add_slave(Q, Self, GM),
-                    {new, QPid, GMPids};
-                [QPid] ->
-                    case rabbit_misc:is_process_alive(QPid) of
-                        true  -> duplicate_live_master;
-                        false -> {stale, QPid}
-                    end;
-                [SPid] ->
-                    case rabbit_misc:is_process_alive(SPid) of
-                        true ->
-                            existing;
-                        false ->
-                            Q1 = Q#amqqueue {
-                                   slave_pids = SPids -- [SPid],
-                                   gm_pids    = [T || T = {_, S} <- GMPids,
-                                                      S =/= SPid] },
-                            add_slave(Q1, Self, GM),
-                            {new, QPid, GMPids}
-                    end
+                []     -> add_slave(Q, Self, GM),
+                          {new, QPid, GMPids};
+                [QPid] -> case rabbit_misc:is_process_alive(QPid) of
+                              true  -> duplicate_live_master;
+                              false -> {stale, QPid}
+                          end;
+                [SPid] -> case rabbit_misc:is_process_alive(SPid) of
+                              true  -> existing;
+                              false -> GMPids = [T || T = {_, S} <- GMPids,
+                                                      S =/= SPid],
+                                       Q1 = Q#amqqueue{
+                                              slave_pids = SPids -- [SPid],
+                                              gm_pids    = GMPids},
+                                       add_slave(Q1, Self, GM),
+                                       {new, QPid, GMPids}
+                          end
             end;
         [] ->
             master_in_recovery
