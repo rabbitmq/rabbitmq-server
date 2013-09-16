@@ -80,7 +80,7 @@ set_maximum_since_use(QPid, Age) ->
 
 info(QPid) -> gen_server2:call(QPid, info, infinity).
 
-init(Q = #amqqueue { name = QName, pid = MPid }) ->
+init(Q = #amqqueue { name = QName }) ->
     %% We join the GM group before we add ourselves to the amqqueue
     %% record. As a result:
     %% 1. We can receive msgs from GM that correspond to messages we will
@@ -138,10 +138,11 @@ init(Q = #amqqueue { name = QName, pid = MPid }) ->
         existing ->
             gm:leave(GM),
             ignore;
-        master_recovery_detected ->
-            rabbit_log:info("Restarting to prevent conflict with ~p on ~p~n",
-                            [node(MPid), rabbit_misc:rs(QName)]),
-            init:restart(),
+        master_in_recovery ->
+            %% The queue record vanished - we must have a master starting
+            %% concurrently with us. In that case we can safely decide to do
+            %% nothing here, and the master will start us in
+            %% master:init_with_existing_bq/3
             ignore
     end.
 
@@ -171,7 +172,7 @@ init_it(Self, GM, Node, QName) ->
                     end
             end;
         [] ->
-            master_recovery_detected
+            master_in_recovery
     end.
 
 %% Add to the end, so they are in descending order of age, see
