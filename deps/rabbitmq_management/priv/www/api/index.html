@@ -69,41 +69,58 @@
 
     <h2>Examples</h2>
 
-    <p>A few quick examples, using the Unix command line
+    <p>A few quick examples for Windows and Unix, using the command line
     tool <code>curl</code>:</p>
 
     <ul>
       <li>
         Get a list of vhosts:
-<pre>$ curl -i -u guest:guest http://localhost:15672/api/vhosts
-HTTP/1.1 200 OK
-Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
-Date: Tue, 31 Aug 2010 15:46:59 GMT
-Content-Type: application/json
-Content-Length: 5
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest http://localhost:15672/api/vhosts
 
-[{"name":"/"}]</pre>
+# Unix
+$ curl -i -u guest:guest http://localhost:15672/api/vhosts
+
+HTTP/1.1 200 OK
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:00:02 GMT
+Content-Type: application/json
+Content-Length: 30
+
+[{"name":"/","tracing":false}]
+</pre>
       </li>
       <li>
         Get a list of channels, fast publishers first, restricting the info
         items we get back:
-<pre>$ curl -i -u guest:guest 'http://localhost:15672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate'
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest "http://localhost:15672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate"
+
+# Unix
+$ curl -i -u guest:guest 'http://localhost:15672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate'
+
 HTTP/1.1 200 OK
-Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
-Date: Tue, 12 Oct 2010 10:03:21 GMT
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:01:17 GMT
 Content-Type: application/json
-Content-Length: 6078
+Content-Length: 219
 Cache-Control: no-cache
 
-[{"connection_details":{"peer_address":"127.0.0.1","peer_port":47340<i>... (remainder elided)</i></pre>
+[{"message_stats":{"publish_details":{"rate" <i>... (remainder elided)</i></pre>
       </li>
       <li>
         Create a new vhost:
-<pre>$ curl -i -u guest:guest -H "content-type:application/json" \
-  -XPUT http://localhost:15672/api/vhosts/foo
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
+      -XPUT http://localhost:15672/api/vhosts/foo
+
+# Unix
+$ curl -i -u guest:guest -H "content-type:application/json" \
+   -XPUT http://localhost:15672/api/vhosts/foo
+
 HTTP/1.1 204 No Content
-Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
-Date: Fri, 27 Aug 2010 16:56:00 GMT
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:03:00 GMT
 Content-Type: application/json
 Content-Length: 0</pre>
         <p>Note: you must specify <code>application/json</code> as the
@@ -115,12 +132,19 @@ Content-Length: 0</pre>
       </li>
       <li>
         Create a new exchange in the default virtual host:
-<pre>$ curl -i -u guest:guest -H "content-type:application/json" \
-  -XPUT -d'{"type":"direct","durable":true}' \
-  http://localhost:15672/api/exchanges/%2f/my-new-exchange
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
+       -XPUT -d"{""type"":""direct"",""durable"":true}" ^
+       http://localhost:15672/api/exchanges/%2f/my-new-exchange
+
+# Unix
+$ curl -i -u guest:guest -H "content-type:application/json" \
+    -XPUT -d'{"type":"direct","durable":true}' \
+    http://localhost:15672/api/exchanges/%2f/my-new-exchange
+
 HTTP/1.1 204 No Content
-Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
-Date: Fri, 27 Aug 2010 17:04:29 GMT
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:04:00 GMT
 Content-Type: application/json
 Content-Length: 0</pre>
         <p>Note: we never return a body in response to a PUT or
@@ -128,11 +152,17 @@ Content-Length: 0</pre>
       </li>
       <li>
         And delete it again:
-<pre>$ curl -i -u guest:guest -H "content-type:application/json" \
-  -XDELETE http://localhost:15672/api/exchanges/%2f/my-new-exchange
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
+       -XDELETE http://localhost:15672/api/exchanges/%2f/my-new-exchange
+
+# Unix
+$ curl -i -u guest:guest -H "content-type:application/json" \
+    -XDELETE http://localhost:15672/api/exchanges/%2f/my-new-exchange
+
 HTTP/1.1 204 No Content
-Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
-Date: Fri, 27 Aug 2010 17:05:30 GMT
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:05:30 GMT
 Content-Type: application/json
 Content-Length: 0</pre>
       </li>
