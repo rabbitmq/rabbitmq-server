@@ -461,7 +461,13 @@ send_client(Frame, #proc_state{ socket = Sock }) ->
 
 close_connection(PState = #proc_state{ connection = undefined }) ->
     PState;
-close_connection(PState = #proc_state{ connection = Connection }) ->
+close_connection(PState = #proc_state{ connection = Connection,
+                                       client_id  = ClientId }) ->
+    % todo: maybe clean session
+    case ClientId of
+        undefined -> ok;
+        _         -> ok = rabbit_mqtt_collector:unregister(ClientId)
+    end,
     %% ignore noproc or other exceptions to avoid debris
     catch amqp_connection:close(Connection),
     PState #proc_state{ channels   = {undefined, undefined},
