@@ -35,7 +35,8 @@ serialisation_test() ->
               add_binding(2, X, B2),
               add_binding(3, X, B3),
               %% List of lists because one for each link
-              Keys = rabbit_federation_link:list_routing_keys(X#exchange.name),
+              Keys = rabbit_federation_exchange_link:list_routing_keys(
+                       X#exchange.name),
               ?assertEqual([[<<"1">>, <<"2">>]], Keys)
       end).
 

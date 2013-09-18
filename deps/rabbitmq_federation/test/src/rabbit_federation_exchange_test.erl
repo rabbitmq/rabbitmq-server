@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_test).
+-module(rabbit_federation_exchange_test).
 
 -include("rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").

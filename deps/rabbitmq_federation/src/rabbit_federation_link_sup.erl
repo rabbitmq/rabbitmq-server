@@ -98,8 +98,8 @@ init(XorQ) ->
 specs(XorQ) ->
     [spec(Upstream, XorQ) || Upstream <- rabbit_federation_upstream:for(XorQ)].
 
-spec(Upstream = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
-    {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},
+spec(U = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
+    {U, {rabbit_federation_exchange_link, start_link, [{U, XName}]},
      {permanent, Delay}, ?MAX_WAIT, worker,
      [rabbit_federation_link]};
 

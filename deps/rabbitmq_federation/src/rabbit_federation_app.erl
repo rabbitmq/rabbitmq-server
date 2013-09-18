@@ -39,7 +39,7 @@
 -import(rabbit_misc, [pget/3]).
 
 start(_Type, _StartArgs) ->
-    rabbit_federation_link:go(),
+    rabbit_federation_exchange_link:go(),
     rabbit_federation_queue_link:go(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 

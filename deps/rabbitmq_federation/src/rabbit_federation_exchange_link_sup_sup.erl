@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_link_sup_sup).
+-module(rabbit_federation_exchange_link_sup_sup).
 
 -behaviour(mirrored_supervisor).
 
