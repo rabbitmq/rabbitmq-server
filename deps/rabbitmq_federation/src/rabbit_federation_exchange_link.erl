@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_link).
+-module(rabbit_federation_exchange_link).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").

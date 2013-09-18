@@ -57,7 +57,7 @@ add_binding(transaction, _X, _B) ->
     ok;
 add_binding(Serial, X = #exchange{name = XName}, B) ->
     case federate(X) of
-        true  -> rabbit_federation_link:add_binding(Serial, XName, B),
+        true  -> rabbit_federation_exchange_link:add_binding(Serial, XName, B),
                  ok;
         false -> ok
     end.
@@ -66,7 +66,7 @@ remove_bindings(transaction, _X, _Bs) ->
     ok;
 remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
     case federate(X) of
-        true  -> rabbit_federation_link:remove_bindings(Serial, XName, Bs),
+        true  -> rabbit_federation_exchange_link:remove_bindings(Serial, XName, Bs),
                  ok;
         false -> ok
     end.
@@ -102,14 +102,14 @@ maybe_start(X = #exchange{name = XName})->
     case federate(X) of
         true  -> ok = rabbit_federation_db:prune_scratch(
                         XName, rabbit_federation_upstream:for(X)),
-                 ok = rabbit_federation_link_sup_sup:start_child(X),
+                 ok = rabbit_federation_exchange_link_sup_sup:start_child(X),
                  ok;
         false -> ok
     end.
 
 maybe_stop(X = #exchange{name = XName}) ->
     case federate(X) of
-        true  -> ok = rabbit_federation_link_sup_sup:stop_child(X),
+        true  -> ok = rabbit_federation_exchange_link_sup_sup:stop_child(X),
                  rabbit_federation_status:remove_exchange_or_queue(XName);
         false -> ok
     end.

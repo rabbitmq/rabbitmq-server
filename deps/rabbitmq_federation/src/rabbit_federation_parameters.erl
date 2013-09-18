@@ -84,7 +84,7 @@ notify_clear(_VHost, <<"federation">>, <<"local-username">>) ->
     adjust(everything).
 
 adjust(Thing) ->
-    rabbit_federation_link_sup_sup:adjust(Thing),
+    rabbit_federation_exchange_link_sup_sup:adjust(Thing),
     rabbit_federation_queue_link_sup_sup:adjust(Thing).
 
 %%----------------------------------------------------------------------------
