@@ -1044,6 +1044,53 @@ policy_test() ->
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     ok.
 
+policy_permissions_test() ->
+    http_put("/users/admin",  [{password, <<"admin">>},
+                               {tags, <<"administrator">>}], ?NO_CONTENT),
+    http_put("/users/mon",    [{password, <<"monitor">>},
+                               {tags, <<"monitoring">>}], ?NO_CONTENT),
+    http_put("/users/policy", [{password, <<"policy">>},
+                               {tags, <<"policymaker">>}], ?NO_CONTENT),
+    http_put("/users/mgmt",   [{password, <<"mgmt">>},
+                               {tags, <<"management">>}], ?NO_CONTENT),
+    Perms = [{configure, <<".*">>},
+             {write,     <<".*">>},
+             {read,      <<".*">>}],
+    http_put("/vhosts/new-vhost", none, ?NO_CONTENT),
+    http_put("/permissions/new-vhost/admin",  Perms, ?NO_CONTENT),
+    http_put("/permissions/new-vhost/mon",    Perms, ?NO_CONTENT),
+    http_put("/permissions/new-vhost/policy", Perms, ?NO_CONTENT),
+    http_put("/permissions/new-vhost/mgmt",   Perms, ?NO_CONTENT),
+
+    http_get("/policies/new-vhost", "admin",  "admin",  ?OK),
+    http_get("/policies/new-vhost", "policy", "policy", ?OK),
+    http_get("/policies/new-vhost", "mon",    "mon",    ?NOT_AUTHORISED),
+    http_get("/policies/new-vhost", "mgmt",   "mgmt",   ?NOT_AUTHORISED),
+
+    P = [{pattern,    <<".*">>},
+         {definition, [{<<"ha-mode">>, <<"all">>}]}],
+
+    http_put("/policies/new-vhost/HA", P, "mon", "mon", ?NOT_AUTHORISED),
+    http_put("/policies/new-vhost/HA", P, "mgmt", "mgmt", ?NOT_AUTHORISED),
+    http_put("/policies/new-vhost/HA", P, "policy", "policy", ?NO_CONTENT),
+    http_put("/policies/%2f/HA", P, "policy", "policy", ?NOT_AUTHORISED),
+    http_put("/policies/%2f/HA", P, "admin", "admin", ?NOT_AUTHORISED),
+    http_put("/policies/%2f/HA", P, ?NO_CONTENT),
+
+    1 = length(http_get("/policies", "admin",  "admin",  ?OK)),
+    1 = length(http_get("/policies", "policy", "policy", ?OK)),
+    http_get("/policies", "mon",  "mon",  ?NOT_AUTHORISED),
+    http_get("/policies", "mgmt", "mgmt", ?NOT_AUTHORISED),
+
+    http_delete("/vhosts/new-vhost", ?NO_CONTENT),
+    http_delete("/users/admin", ?NO_CONTENT),
+    http_delete("/users/mon", ?NO_CONTENT),
+    http_delete("/users/policy", ?NO_CONTENT),
+    http_delete("/users/mgmt", ?NO_CONTENT),
+    http_delete("/policies/%2f/HA", ?NO_CONTENT),
+    ok.
+
+
 extensions_test() ->
     [[{javascript,<<"dispatcher.js">>}]] = http_get("/extensions", ?OK),
     ok.

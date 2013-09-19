@@ -37,7 +37,9 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(basic(ReqData), ["priority"], ReqData, Context).
+    rabbit_mgmt_util:reply_list(
+      rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
+      ["priority"], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_policies(ReqData, Context).

@@ -89,15 +89,14 @@ is_authorized_user(ReqData, Context, Item) ->
                           end orelse Username == pget(user, Item)
                   end).
 
-%% For policies / parameters. Normal users can't do anything, policymakers can
-%% manage for their own vhosts, admins can do everything
+%% For policies / parameters. Like is_authorized_vhost but you have to
+%% be a policymaker.
 is_authorized_policies(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access object">>,
                   fun(User = #user{tags = Tags}) ->
-                          is_admin(Tags) orelse
-                              (is_policymaker(Tags) andalso
-                               user_matches_vhost(ReqData, User))
+                          is_policymaker(Tags) andalso
+                              user_matches_vhost(ReqData, User)
                   end).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
@@ -482,7 +481,7 @@ post_respond({JSON, ReqData, Context}) ->
              wrq:append_to_response_body(JSON, ReqData)), Context}.
 
 is_admin(T)       -> intersects(T, [administrator]).
-is_policymaker(T) -> intersects(T, [policymaker]).
+is_policymaker(T) -> intersects(T, [administrator, policymaker]).
 is_monitor(T)     -> intersects(T, [administrator, monitoring]).
 is_mgmt_user(T)   -> intersects(T, [administrator, monitoring, policymaker,
                                     management]).
