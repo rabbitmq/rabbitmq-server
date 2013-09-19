@@ -38,8 +38,8 @@ dispatcher_add(function(sammy) {
         });
 });
 
-NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', true];
-NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', true];
+NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', "administrator"];
+NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', "administrator"];
 
 HELP['federation-explicit-identity'] =
     'Each broker in a federated set of brokers needs a name. If you leave this blank RabbitMQ will generate one. If you set this, ensure that each broker has a unique name. Note that you <b>must</b> set this when using federation combined with clustering.';
