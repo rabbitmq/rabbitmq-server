@@ -31,14 +31,16 @@ var ALL_ARGS = {};
 for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
 for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
 
-var NAVIGATION = {'Overview':    ['#/',                            false],
-                  'Connections': ['#/connections',                 false],
-                  'Channels':    ['#/channels',                    false],
-                  'Exchanges':   ['#/exchanges',                   false],
-                  'Queues':      ['#/queues',                      false],
-                  'Admin':       [{'Users':         ['#/users',    true],
-                                   'Virtual Hosts': ['#/vhosts',   true],
-                                   'Policies':      ['#/policies', true]}, true]
+var NAVIGATION = {'Overview':    ['#/',            "management"],
+                  'Connections': ['#/connections', "management"],
+                  'Channels':    ['#/channels',    "management"],
+                  'Exchanges':   ['#/exchanges',   "management"],
+                  'Queues':      ['#/queues',      "management"],
+                  'Admin':
+                    [{'Users':         ['#/users',    "administrator"],
+                      'Virtual Hosts': ['#/vhosts',   "administrator"],
+                      'Policies':      ['#/policies', "policymaker"]},
+                     "policymaker"]
                  };
 
 var CHART_PERIODS = {'60|5':       'Last minute',
@@ -73,6 +75,9 @@ var app;
 // Used for the new exchange form, and to display broken exchange types
 var exchange_types;
 
+// Used for access control to the menu
+var user_tags;
+
 // Set up the above vars
 function setup_global_vars(user) {
     var overview = JSON.parse(sync_get('/overview'));
@@ -83,10 +88,9 @@ function setup_global_vars(user) {
                     ', <acronym class="normal" title="' +
                     overview.erlang_full_version + '">Erlang ' +
                     overview.erlang_version + '</acronym></p>');
-    var tags = user.tags.split(",");
-    user_administrator = jQuery.inArray("administrator", tags) != -1;
-    user_monitor = user_administrator ||
-        jQuery.inArray("monitoring", tags) != -1;
+    user_tags = expand_user_tags(user.tags.split(","));
+    user_administrator = jQuery.inArray("administrator", user_tags) != -1;
+    user_monitor = jQuery.inArray("monitoring", user_tags) != -1;
     nodes_interesting = false;
     rabbit_versions_interesting = false;
     if (user_monitor) {
@@ -106,6 +110,23 @@ function setup_global_vars(user) {
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     current_vhost = get_pref('vhost');
     exchange_types = overview.exchange_types;
+}
+
+function expand_user_tags(tags) {
+    var new_tags = [];
+    for (var i = 0; i < tags.length; i++) {
+        var tag = tags[i];
+        new_tags.push(tag);
+        switch (tag) { // Note deliberate fall-through
+            case "administrator": new_tags.push("monitoring");
+                                  new_tags.push("policymaker");
+            case "monitoring":    new_tags.push("management");
+                                  break;
+            case "policymaker":   new_tags.push("management");
+            default:              break;
+        }
+    }
+    return new_tags;
 }
 
 ////////////////////////////////////////////////////

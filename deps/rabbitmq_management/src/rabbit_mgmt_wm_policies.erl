@@ -40,7 +40,7 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(basic(ReqData), ["priority"], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_policies(ReqData, Context).
 
 %%--------------------------------------------------------------------
 

@@ -235,7 +235,7 @@ function update_navigation() {
         var val = NAVIGATION[k];
         var path = val;
         while (!leaf(path)) {
-            path = path[keys(path)[0]];
+            path = first_showable_child(path);
         }
         var selected = false;
         if (contains_current_highlight(val)) {
@@ -267,11 +267,21 @@ function nav(pair) {
 }
 
 function show(pair) {
-    return !pair[1] || user_administrator;
+    return jQuery.inArray(pair[1], user_tags) != -1;
 }
 
 function leaf(pair) {
     return typeof(nav(pair)) == 'string';
+}
+
+function first_showable_child(pair) {
+    var items = pair[0];
+    var ks = keys(items);
+    for (var i = 0; i < ks.length; i++) {
+        var child = items[ks[i]];
+        if (show(child)) return child;
+    }
+    return items[ks[0]]; // We'll end up not showing it anyway
 }
 
 function contains_current_highlight(val) {
@@ -290,17 +300,19 @@ function contains_current_highlight(val) {
 function obj_to_ul(val) {
     var res = '<ul>';
     for (var k in val) {
-        res += '<li>';
         var obj = val[k];
-        if (leaf(obj) && show(obj)) {
-            res += '<a href="' + nav(obj) + '"' +
-                (current_highlight == nav(obj) ? ' class="selected"' : '') +
-                '>' + k + '</a>';
+        if (show(obj)) {
+            res += '<li>';
+            if (leaf(obj)) {
+                res += '<a href="' + nav(obj) + '"' +
+                    (current_highlight == nav(obj) ? ' class="selected"' : '') +
+                    '>' + k + '</a>';
+            }
+            else {
+                res += obj_to_ul(nav(obj));
+            }
+            res += '</li>';
         }
-        else {
-            res += obj_to_ul(nav(obj));
-        }
-        res += '</li>';
     }
     return res + '</ul>';
 }

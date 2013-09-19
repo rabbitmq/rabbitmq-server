@@ -139,6 +139,11 @@ HELP = {
         <dd> \
           User can access the management plugin \
         </dd> \
+        <dt>policymaker</dt> \
+        <dd> \
+          User can access the management plugin and manage policies and \
+          parameters for the vhosts they have access to. \
+        </dd> \
         <dt>monitoring</dt> \
         <dd> \
           User can access the management plugin and see all connections and \
@@ -147,11 +152,12 @@ HELP = {
         <dt>administrator</dt> \
         <dd> \
           User can do everything monitoring can do, manage users, \
-          vhosts and permissions, and close other user\'s connections. \
+          vhosts and permissions, close other user\'s connections, and manage \
+          policies and parameters for all vhosts. \
         </dd> \
       </dl> \
       <p> \
-        Note that you can set any tag here; the links for the above three \
+        Note that you can set any tag here; the links for the above four \
         tags are just for convenience. \
       </p>',
 

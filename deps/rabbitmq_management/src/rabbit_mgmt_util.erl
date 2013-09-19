@@ -21,7 +21,7 @@
 -export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
          vhost/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
-         is_authorized_monitor/2]).
+         is_authorized_monitor/2, is_authorized_policies/2]).
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
          parse_int/1]).
 -export([with_decode/4, not_found/3, amqp_request/4]).
@@ -66,13 +66,15 @@ is_authorized_vhost(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access virtual host">>,
                   fun(User) ->
-                          case vhost(ReqData) of
-                              not_found -> true;
-                              none      -> true;
-                              V         -> lists:member(
-                                             V, list_login_vhosts(User))
-                          end
+                          user_matches_vhost(ReqData, User)
                   end).
+
+user_matches_vhost(ReqData, User) ->
+    case vhost(ReqData) of
+        not_found -> true;
+        none      -> true;
+        V         -> lists:member(V, list_login_vhosts(User))
+    end.
 
 %% Used for connections / channels. A normal user can only see / delete
 %% their own stuff. Monitors can see other users' and delete their
@@ -85,6 +87,17 @@ is_authorized_user(ReqData, Context, Item) ->
                               'DELETE' -> is_admin(Tags);
                               _        -> is_monitor(Tags)
                           end orelse Username == pget(user, Item)
+                  end).
+
+%% For policies / parameters. Normal users can't do anything, policymakers can
+%% manage for their own vhosts, admins can do everything
+is_authorized_policies(ReqData, Context) ->
+    is_authorized(ReqData, Context,
+                  <<"User not authorised to access object">>,
+                  fun(User = #user{tags = Tags}) ->
+                          is_admin(Tags) orelse
+                              (is_policymaker(Tags) andalso
+                               user_matches_vhost(ReqData, User))
                   end).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
@@ -468,9 +481,11 @@ post_respond({JSON, ReqData, Context}) ->
              "content-type", "application/json",
              wrq:append_to_response_body(JSON, ReqData)), Context}.
 
-is_admin(T)     -> intersects(T, [administrator]).
-is_monitor(T)   -> intersects(T, [administrator, monitoring]).
-is_mgmt_user(T) -> intersects(T, [administrator, monitoring, management]).
+is_admin(T)       -> intersects(T, [administrator]).
+is_policymaker(T) -> intersects(T, [policymaker]).
+is_monitor(T)     -> intersects(T, [administrator, monitoring]).
+is_mgmt_user(T)   -> intersects(T, [administrator, monitoring, policymaker,
+                                    management]).
 
 intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 
