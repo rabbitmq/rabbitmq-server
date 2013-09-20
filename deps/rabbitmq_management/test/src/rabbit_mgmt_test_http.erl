@@ -1045,6 +1045,8 @@ policy_test() ->
     ok.
 
 policy_permissions_test() ->
+    rabbit_runtime_parameters_test:register(),
+
     http_put("/users/admin",  [{password, <<"admin">>},
                                {tags, <<"administrator">>}], ?NO_CONTENT),
     http_put("/users/mon",    [{password, <<"monitor">>},
@@ -1056,38 +1058,64 @@ policy_permissions_test() ->
     Perms = [{configure, <<".*">>},
              {write,     <<".*">>},
              {read,      <<".*">>}],
-    http_put("/vhosts/new-vhost", none, ?NO_CONTENT),
-    http_put("/permissions/new-vhost/admin",  Perms, ?NO_CONTENT),
-    http_put("/permissions/new-vhost/mon",    Perms, ?NO_CONTENT),
-    http_put("/permissions/new-vhost/policy", Perms, ?NO_CONTENT),
-    http_put("/permissions/new-vhost/mgmt",   Perms, ?NO_CONTENT),
+    http_put("/vhosts/v", none, ?NO_CONTENT),
+    http_put("/permissions/v/admin",  Perms, ?NO_CONTENT),
+    http_put("/permissions/v/mon",    Perms, ?NO_CONTENT),
+    http_put("/permissions/v/policy", Perms, ?NO_CONTENT),
+    http_put("/permissions/v/mgmt",   Perms, ?NO_CONTENT),
 
-    http_get("/policies/new-vhost", "admin",  "admin",  ?OK),
-    http_get("/policies/new-vhost", "policy", "policy", ?OK),
-    http_get("/policies/new-vhost", "mon",    "mon",    ?NOT_AUTHORISED),
-    http_get("/policies/new-vhost", "mgmt",   "mgmt",   ?NOT_AUTHORISED),
+    Policy = [{pattern,    <<".*">>},
+              {definition, [{<<"ha-mode">>, <<"all">>}]}],
+    Param = [{value, <<"">>}],
 
-    P = [{pattern,    <<".*">>},
-         {definition, [{<<"ha-mode">>, <<"all">>}]}],
+    http_put("/policies/%2f/HA", Policy, ?NO_CONTENT),
+    http_put("/parameters/test/%2f/good", Param, ?NO_CONTENT),
 
-    http_put("/policies/new-vhost/HA", P, "mon", "mon", ?NOT_AUTHORISED),
-    http_put("/policies/new-vhost/HA", P, "mgmt", "mgmt", ?NOT_AUTHORISED),
-    http_put("/policies/new-vhost/HA", P, "policy", "policy", ?NO_CONTENT),
-    http_put("/policies/%2f/HA", P, "policy", "policy", ?NOT_AUTHORISED),
-    http_put("/policies/%2f/HA", P, "admin", "admin", ?NOT_AUTHORISED),
-    http_put("/policies/%2f/HA", P, ?NO_CONTENT),
+    Pos = fun (U) ->
+                  http_put("/policies/v/HA",        Policy, U, U, ?NO_CONTENT),
+                  http_put(
+                    "/parameters/test/v/good",       Param, U, U, ?NO_CONTENT),
+                  1 = length(http_get("/policies",          U, U, ?OK)),
+                  1 = length(http_get("/parameters/test",   U, U, ?OK)),
+                  1 = length(http_get("/parameters",        U, U, ?OK)),
+                  1 = length(http_get("/policies/v",        U, U, ?OK)),
+                  1 = length(http_get("/parameters/test/v", U, U, ?OK)),
+                  http_get("/policies/v/HA",                U, U, ?OK),
+                  http_get("/parameters/test/v/good",       U, U, ?OK)
+          end,
+    Neg = fun (U) ->
+                  http_put("/policies/v/HA",    Policy, U, U, ?NOT_AUTHORISED),
+                  http_put(
+                    "/parameters/test/v/good",   Param, U, U, ?NOT_AUTHORISED),
+                  http_get("/policies",                 U, U, ?NOT_AUTHORISED),
+                  http_get("/policies/v",               U, U, ?NOT_AUTHORISED),
+                  http_get("/parameters",               U, U, ?NOT_AUTHORISED),
+                  http_get("/parameters/test",          U, U, ?NOT_AUTHORISED),
+                  http_get("/parameters/test/v",        U, U, ?NOT_AUTHORISED),
+                  http_get("/policies/v/HA",            U, U, ?NOT_AUTHORISED),
+                  http_get("/parameters/test/v/good",   U, U, ?NOT_AUTHORISED)
+          end,
+    AlwaysNeg =
+        fun (U) ->
+                http_put("/policies/%2f/HA",  Policy, U, U, ?NOT_AUTHORISED),
+                http_put(
+                  "/parameters/test/%2f/good", Param, U, U, ?NOT_AUTHORISED),
+                http_get("/policies/%2f/HA",          U, U, ?NOT_AUTHORISED),
+                http_get("/parameters/test/%2f/good", U, U, ?NOT_AUTHORISED)
+        end,
 
-    1 = length(http_get("/policies", "admin",  "admin",  ?OK)),
-    1 = length(http_get("/policies", "policy", "policy", ?OK)),
-    http_get("/policies", "mon",  "mon",  ?NOT_AUTHORISED),
-    http_get("/policies", "mgmt", "mgmt", ?NOT_AUTHORISED),
+    [Neg(U) || U <- ["mon", "mgmt"]],
+    [Pos(U) || U <- ["admin", "policy"]],
+    [AlwaysNeg(U) || U <- ["mon", "mgmt", "admin", "policy"]],
 
-    http_delete("/vhosts/new-vhost", ?NO_CONTENT),
+    http_delete("/vhosts/v", ?NO_CONTENT),
     http_delete("/users/admin", ?NO_CONTENT),
     http_delete("/users/mon", ?NO_CONTENT),
     http_delete("/users/policy", ?NO_CONTENT),
     http_delete("/users/mgmt", ?NO_CONTENT),
     http_delete("/policies/%2f/HA", ?NO_CONTENT),
+
+    rabbit_runtime_parameters_test:unregister(),
     ok.
 
 
