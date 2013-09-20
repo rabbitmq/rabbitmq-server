@@ -184,3 +184,67 @@
     </ul>
   </div>
 </div>
+
+<div class="section-hidden">
+  <h2>Parameters</h2>
+  <div class="hider">
+    <table class="list">
+      <thead>
+        <tr>
+<% if (vhosts_interesting) { %>
+          <th>Virtual Host</th>
+<% } %>
+          <th>
+            Local username
+            <span class="help" id="federation-local-username"></span>
+          </th>
+          <th>
+            Explicit identity for this cluster / node
+            <span class="help" id="federation-explicit-identity"></span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<%
+       for (var i = 0; i < vhosts.length; i++) {
+         var vhost = vhosts[i];
+         if (current_vhost != '' && current_vhost != vhost.name) continue;
+
+         var username = null;
+         var nodename = null;
+
+         for (var j in globals) {
+           if (globals[j].vhost == vhost.name) {
+             if (globals[j].name == 'local-username') username = globals[j].value;
+             if (globals[j].name == 'local-nodename') nodename = globals[j].value;
+           }
+         }
+%>
+        <tr<%= alt_rows(i)%>>
+<% if (vhosts_interesting) { %>
+          <td><%= fmt_string(vhost.name) %></td>
+<% } %>
+          <td>
+            <form action="#/fed-globals" method="put">
+              <input type="hidden" name="component" value="federation"/>
+              <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
+              <input type="hidden" name="name" value="local-username"/>
+              <input type="text" name="value" value="<%= username %>" />
+              <input type="submit" value="Update"/>
+            </form>
+          </td>
+          <td>
+            <form action="#/fed-globals" method="put">
+              <input type="hidden" name="component" value="federation"/>
+              <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
+              <input type="hidden" name="name" value="local-nodename"/>
+              <input type="text" name="value" value="<%= nodename %>" />
+              <input type="submit" value="Update"/>
+            </form>
+          </td>
+        </tr>
+<% } %>
+      </tbody>
+    </table>
+  </div>
+</div>

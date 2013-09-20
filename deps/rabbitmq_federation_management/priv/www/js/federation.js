@@ -2,14 +2,14 @@ dispatcher_add(function(sammy) {
     sammy.get('#/federation', function() {
             render({'links':     {path:   '/federation-links',
                                   options:{vhost:true}},
-                    'vhosts':    '/vhosts',
-                    'globals':   '/parameters/federation'},
+                    'vhosts':    '/vhosts'},
                 'federation', '#/federation');
         });
     sammy.get('#/federation-upstreams', function() {
             render({'upstreams': {path:   '/parameters/federation-upstream',
                                   options:{vhost:true}},
-                    'vhosts': '/vhosts'},
+                    'vhosts': '/vhosts',
+                    'globals':   '/parameters/federation'},
                    'federation-upstreams', '#/federation-upstreams');
         });
     sammy.get('#/federation-upstreams/:vhost/:id', function() {
@@ -38,8 +38,8 @@ dispatcher_add(function(sammy) {
         });
 });
 
-NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', "administrator"];
-NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', "administrator"];
+NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', "monitoring"];
+NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', "policymaker"];
 
 HELP['federation-explicit-identity'] =
     'Each broker in a federated set of brokers needs a name. If you leave this blank RabbitMQ will generate one. If you set this, ensure that each broker has a unique name. Note that you <b>must</b> set this when using federation combined with clustering.';
