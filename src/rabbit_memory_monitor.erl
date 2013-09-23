@@ -236,10 +236,10 @@ desired_duration_average(#state{queue_duration_sum   = Sum,
             (Sum / Count) / MemoryRatio
     end.
 
+%% In normal use, we only inform queues immediately if the desired
+%% duration has decreased, we want to ensure timely paging.
 maybe_inform_queues(false, DesiredDurationAvg, DesiredDurationAvg1,
                     Durations) ->
-    %% only inform queues immediately if the desired duration has
-    %% decreased
     case DesiredDurationAvg1 == infinity orelse
         (DesiredDurationAvg /= infinity andalso
          DesiredDurationAvg1 >= DesiredDurationAvg) of
@@ -247,6 +247,9 @@ maybe_inform_queues(false, DesiredDurationAvg, DesiredDurationAvg1,
         false -> inform_queues(DesiredDurationAvg1, Durations,
                                fun should_send/3)
     end;
+%% When the disk alarm has gone off though, we want to inform queues
+%% immediately if the desired duration has *increased* - we want to
+%% ensure timely stopping paging.
 maybe_inform_queues(true, DesiredDurationAvg, DesiredDurationAvg1,
                     Durations) ->
     case DesiredDurationAvg1 == infinity andalso
