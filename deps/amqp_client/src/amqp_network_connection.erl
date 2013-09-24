@@ -183,15 +183,20 @@ network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
                                 mechanisms = Mechanisms} =
         handshake_recv('connection.start'),
     ok = check_version(Start),
-    Tune = login(AmqpParams, Mechanisms, State0),
-    {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, SHF, State0),
-    do2(TuneOk, State1),
-    do2(#'connection.open'{virtual_host = VHost}, State1),
-    Params = {ServerProperties, ChannelMax, State1},
-    case handshake_recv('connection.open_ok') of
-        #'connection.open_ok'{}                     -> {ok, Params};
-        {closing, #amqp_error{} = AmqpError, Error} -> {closing, Params,
-                                                        AmqpError, Error}
+    case login(AmqpParams, Mechanisms, State0) of
+        {closing, #amqp_error{}, _Error} = Err ->
+            do(#'connection.close_ok'{}, State0),
+            Err;
+        Tune ->
+            {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, SHF, State0),
+            do2(TuneOk, State1),
+            do2(#'connection.open'{virtual_host = VHost}, State1),
+            Params = {ServerProperties, ChannelMax, State1},
+            case handshake_recv('connection.open_ok') of
+                #'connection.open_ok'{}                     -> {ok, Params};
+                {closing, #amqp_error{} = AmqpError, Error} -> {closing, Params,
+                                                                AmqpError, Error}
+            end
     end.
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
@@ -265,7 +270,14 @@ login_loop(Mech, MState0, Params, State) ->
         #'connection.secure'{challenge = Challenge} ->
             {Resp, MState1} = Mech(Challenge, Params, MState0),
             do2(#'connection.secure_ok'{response = Resp}, State),
-            login_loop(Mech, MState1, Params, State)
+            login_loop(Mech, MState1, Params, State);
+        #'connection.close'{reply_code = ?ACCESS_REFUSED,
+                            reply_text = ExplanationBin} ->
+            Explanation = binary_to_list(ExplanationBin),
+            {closing,
+             #amqp_error{name        = access_refused,
+                         explanation = Explanation},
+             {error, {auth_failure, Explanation}}}
     end.
 
 client_properties(UserProperties) ->
@@ -291,6 +303,8 @@ handshake_recv(Expecting) ->
                     Method;
                 {'connection.tune', 'connection.secure'} ->
                     Method;
+                {'connection.tune', 'connection.close'} ->
+                    Method;
                 {'connection.open_ok', _} ->
                     {closing,
                      #amqp_error{name        = command_invalid,
@@ -304,7 +318,7 @@ handshake_recv(Expecting) ->
             end;
         socket_closed ->
             case Expecting of
-                'connection.tune'    -> exit(auth_failure);
+                'connection.tune'    -> exit({auth_failure, "Disconnected"});
                 'connection.open_ok' -> exit(access_refused);
                 _                    -> exit({socket_closed_unexpectedly,
                                               Expecting})
