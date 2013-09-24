@@ -325,16 +325,17 @@ process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
                                   password     = PassBin,
                                   virtual_host = VHost,
                                   adapter_info = adapter_info(Sock)}) of
-         {ok, Connection}        -> {?CONNACK_ACCEPT, Connection};
-         {error, auth_failure}   -> rabbit_log:error(
-                                      "MQTT login failed for ~p auth_failure~n",
-                                      [binary_to_list(UserBin)]),
-                                    ?CONNACK_CREDENTIALS;
-         {error, access_refused} -> rabbit_log:warning(
-                                      "MQTT login failed for ~p access_refused "
-                                      "(vhost access not allowed)~n",
-                                      [binary_to_list(UserBin)]),
-                                    ?CONNACK_AUTH
+         {ok, Connection} ->
+             {?CONNACK_ACCEPT, Connection};
+         {error, {auth_failure, Explanation}} ->
+             rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
+                              [binary_to_list(UserBin), Explanation]),
+             ?CONNACK_CREDENTIALS;
+         {error, access_refused} ->
+             rabbit_log:warning("MQTT login failed for ~p access_refused "
+                                "(vhost access not allowed)~n",
+                                [binary_to_list(UserBin)]),
+             ?CONNACK_AUTH
       end.
 
 creds(User, Pass) ->
