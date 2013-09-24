@@ -409,7 +409,7 @@ with_channel(VHost, ReqData,
             catch amqp_channel:close(Ch),
             catch amqp_connection:close(Conn)
             end;
-        {error, auth_failure} ->
+        {error, {auth_failure, _Msg}} ->
             not_authorised(<<"">>, ReqData, Context);
         {error, {nodedown, N}} ->
             bad_request(
