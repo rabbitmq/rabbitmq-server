@@ -522,7 +522,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                             channel    = Channel,
                             connection = Connection,
                             version    = Version});
-        {error, auth_failure} ->
+        {error, {auth_failure, _}} ->
             rabbit_log:warning("STOMP login failed for user ~p~n",
                                [binary_to_list(Username)]),
             error("Bad CONNECT", "Access refused for user '" ++
