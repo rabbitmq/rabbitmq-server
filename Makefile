@@ -11,6 +11,7 @@ SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 DOCS_DIR=docs
+DOC_INSTALL_DIR ?=
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
@@ -341,7 +342,6 @@ install_docs: docs_all install_dirs
 			cp $$manpage $(MAN_DIR)/man$$section; \
 		done; \
 	done
-	$(ifneq $(DOC_INSTALL_DIR),,$(shell cp $(DOCS_DIR)/rabbitmq.sample.config $(DOC_INSTALL_DIR)/rabbitmq.sample.config))
 
 install_dirs:
 	@ OK=true && \

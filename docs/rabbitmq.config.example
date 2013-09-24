@@ -10,10 +10,120 @@
    %% Network Connectivity
    %%
 
-   %% Configure AMQP to listen on specific ports.
-   %% {tcp_listeners, [5672, 5673]},
+   %% By default, RabbitMQ will listen on all interfaces, using
+   %% the standard (reserved) AMQP port.
+   %%
+   %% {tcp_listeners, [5672]},
 
-   %% Socket options.
+   %% To listen on a specific interface, provide a tuple of {IpAddress, Port}.
+   %% For example, to listen only on localhost for both IPv4 and IPv6:
+   %%
+   %% {tcp_listeners, [{"127.0.0.1", 5673},
+   %%                  {"::1",       5673}]},
+
+   %% SSL listeners are configured in the same fashion as TCP listeners,
+   %% including the option to control the choice of interface.
+   %%
+   %% {ssl_listeners, [{"0.0.0.0", 5672}]},
+
+   %% Log levels (currently just used for connection logging).
+   %% One of 'info', 'warning', 'error' or 'none', in decreasing order
+   %% of verbosity. Defaults to 'info'.
+   %%
+   %% {log_levels, [{connection, info}]},
+
+   %%
+   %% Security/AAA & Default VHost/User
+   %%
+
+   %% Configuring SSL.
+   %% See http://www.rabbitmq.com/ssl.html for full documentation.
+   %%
+   %% {ssl_options, [{cacertfile,"/path/to/testca/cacert.pem"},
+   %%                {certfile,"/path/to/server/cert.pem"},
+   %%                {keyfile,"/path/to/server/key.pem"},
+   %%                {verify, verify_peer},
+   %%                {fail_if_no_peer_cert, true}]},
+
+   %% Choose the available SASL mechanism(s) to expose.
+   %% The two default (built in) mechanisms are 'PLAIN' and
+   %% 'AMQPLAIN'. Additional mechanisms can be added via
+   %% plugins.
+   %%
+   %% See http://www.rabbitmq.com/authentication.html for more details.
+   %% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+
+   %% Select an authentication database to use. RabbitMQ comes bundled
+   %% with a built-in auth-database, based on mnesia.
+   %% {auth_backends, [rabbit_auth_backend_internal]},
+
+   %%
+   %% Configurations supporting the rabbitmq-auth-mechanism-ssl and
+   %% rabbitmq-ldap plugins.
+   %%
+   %% NB: These options require that the relevant plugin is enabled.
+   %% See http://www.rabbitmq.com/plugins.html for further details.
+   %%
+
+   %% The rabbimq-auth-mechanism-ssl plugin makes it possible to
+   %% authenticate a user based on the client's SSL certificate.
+   %%
+   %% To use auth-mechanism-ssl, add to or replace the auth_mechanisms
+   %% list with the entry 'EXTERNAL'.
+   %%
+   %% {auth_mechanisms, ['EXTERNAL']},
+
+   %% The rabbitmq-auth-backend_ldap allows the broker to perform
+   %% authentication and authorisation by deferring to an external LDAP server.
+   %%
+   %% For more information about configuring the LDAP backend, see
+   %% http://www.rabbitmq.com/ldap.html.
+   %%
+   %% Enable the LDAP auth backend by adding to or replacing the
+   %% auth_backends entry:
+   %%
+   %% {auth_backends, [rabbit_auth_backend_ldap]},
+
+   %% Name of the virtual host to create on first start. See
+   %% http://www.rabbitmq.com/access-control.html for further information
+   %% about vhosts and access control.
+   %%
+   %% {default_vhost, <<"/">>},
+
+   %% User name to create on first start.
+   %% {default_user, <<"guest">>},
+
+   %% Password for the default user.
+   %% {default_pass, <<"guest">>},
+
+   %% Tags for default user.
+   %%
+   %% For more details about tags, see the documentation for the
+   %% Management Plugin at http://www.rabbitmq.com/management.html.
+   %%
+   %% {default_user_tags, [administrator]},
+
+   %% Set up access control (permissions) for the default user.
+   %%
+   %% The permissions list consists of rules for configure, write and read
+   %% permissions. See http://www.rabbitmq.com/access-control.html for
+   %% further details.
+   %%
+   %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+
+   %%
+   %% Misc/Advanced Options:
+   %%
+   %% NB: Change these only if you understand what you are doing!
+   %%
+
+   %% Set the default AMQP heartbeat delay (in seconds).
+   %% {heartbeat, 600},
+
+   %% Set the max permissible size of an AMQP frame (in bytes).
+   %% {frame_max, 131072},
+
+   %% Socket configuration.
    %%
    %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
    %% further documentation.
@@ -25,57 +135,6 @@
    %%                       {nodelay,       true},
    %%                       {exit_on_close, false}]},
 
-   %% Configure SSL to listen on specific ports.
-   %% {ssl_listeners, [5674, 5675]},
-
-   %% SSL options (see http://www.rabbitmq.com/ssl.html).
-   %% {ssl_options, [{cacertfile,"/path/to/testca/cacert.pem"},
-   %%                {certfile,"/path/to/server/cert.pem"},
-   %%                {keyfile,"/path/to/server/key.pem"},
-   %%                {verify, verify_peer},
-   %%                {fail_if_no_peer_cert, true}]},
-
-   %% Set the max permissible size of an AMQP frame (in bytes).
-   %% {frame_max, 131072},
-
-   %% Set the default AMQP heartbeat delay (in seconds).
-   %% {heartbeat, 600},
-
-   %% Set the level for connection logging.
-   %% {log_levels, [{connection, info}]},
-
-   %%
-   %% Security/AAA & Default VHost/User
-   %%
-
-   %% Set available auth mechanisms.
-   %% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
-
-   %% To enable auth-mechanism-ssl, add or replace the above with
-   %% {auth_mechanisms, ['EXTERNAL']},
-
-   %% Set the authentication database to use.
-   %% {auth_backends, [rabbit_auth_backend_internal]},
-
-   %% Or to enable the LDAP backend.
-   %% {auth_backends, [rabbit_auth_backend_ldap]},
-
-   %% Virtual host to create on first start.
-   %% {default_vhost, <<"/">>},
-
-   %% User name to create on first start.
-   %% {default_user, <<"guest">>},
-
-   %% Password for the default user.
-   %% {default_pass, <<"guest">>},
-
-   %% Tags for default user.
-   %% {default_user_tags, [administrator]},
-
-   %% Set up access control (permissions) for the default user.
-   %% See http://www.rabbitmq.com/access-control.html for more details.
-   %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-
    %%
    %% Resource Limits & Flow Control.
    %%
@@ -85,20 +144,23 @@
    %% Memory-based Flow Control threshold.
    %% {vm_memory_high_watermark, 0.4},
 
-   %% Set disk free limit (in bytes).
+   %% Fraction of the high watermark limit at which queues start to
+   %% page message out to disc in order to free up memory.
+   %% {vm_memory_high_watermark_paging_ratio, 0.5},
+
+   %% Set disk free limit (in bytes). Once free disk space reaches this
+   %% lower bound, a disk alarm will be set - see the documentation
+   %% listed above for more details.
+   %%
    %% {disk_free_limit, 1000000000},
 
-   %% Alternatively, set disk free limit relative to total RAM.
+   %% Alternatively, we can set a limit relative to total available RAM.
+   %%
    %% {disk_free_limit, {mem_relative, 1.0}},
 
    %% Override the file handle limit.
+   %%
    %% {file_handles_high_watermark, 10000000},
-
-   %%
-   %% Misc/Advanced Options:
-   %%
-   %% NB: Change these only if you understand what you are doing!
-   %%
 
    %% How to respond to cluster partitions.
    %% See http://www.rabbitmq.com/partitions.html for further details.
@@ -131,12 +193,12 @@
   [%% Pre-Load schema definitions from the following JSON file.
    %% {load_definitions, "/path/to/schema.json"},
 
-   %% Log HTTP requests to a file.
+   %% Log all requests to the management HTTP API to a file.
    %% {http_log_dir, "/path/to/access.log"},
 
    %% Change the port on which the HTTP listener listens,
    %% specifying an interface for the web server to bind to.
-   %% Also set the listener to use SSL.
+   %% Also set the listener to use SSL and provide SSL options.
    %%
    %% {listener, [{port, 12345},
    %%             {ip, "127.0.0.1"},
@@ -148,7 +210,12 @@
   ]},
 
  {rabbitmq_management_agent,
-  [%% Force fine-grained statistics.
+  [%%
+   %% Misc/Advanced Options:
+   %%
+   %% NB: Change these only if you understand what you are doing!
+   %%
+
    %% {force_fine_statistics, true}
   ]},
 
@@ -181,7 +248,7 @@
      %%    ]},
 
      %% Name of the queue to shovel messages from.
-     %%   {queue, <<>>},
+     %%   {queue, <<"your-queue-name-goes-here">>},
 
      %% Optional prefetch count.
      %%   {prefetch_count, 10},
