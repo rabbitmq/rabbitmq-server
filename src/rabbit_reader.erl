@@ -176,12 +176,13 @@ server_properties(Protocol) ->
                 NormalizedConfigServerProps).
 
 server_capabilities(rabbit_framing_amqp_0_9_1) ->
-    [{<<"publisher_confirms">>,         bool, true},
-     {<<"exchange_exchange_bindings">>, bool, true},
-     {<<"basic.nack">>,                 bool, true},
-     {<<"consumer_cancel_notify">>,     bool, true},
-     {<<"connection.blocked">>,         bool, true},
-     {<<"consumer_priorities">>,        bool, true}];
+    [{<<"publisher_confirms">>,           bool, true},
+     {<<"exchange_exchange_bindings">>,   bool, true},
+     {<<"basic.nack">>,                   bool, true},
+     {<<"consumer_cancel_notify">>,       bool, true},
+     {<<"connection.blocked">>,           bool, true},
+     {<<"consumer_priorities">>,          bool, true},
+     {<<"authentication_failure_close">>, bool, true}];
 server_capabilities(_) ->
     [].
 
@@ -965,14 +966,24 @@ auth_mechanisms_binary(Sock) ->
 auth_phase(Response,
            State = #v1{connection = Connection =
                            #connection{protocol       = Protocol,
+                                       capabilities   = Capabilities,
                                        auth_mechanism = {Name, AuthMechanism},
                                        auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Msg, Args} ->
-            rabbit_misc:protocol_error(
-              access_refused, "~s login refused: ~s",
-              [Name, io_lib:format(Msg, Args)]);
+            AmqpError = rabbit_misc:amqp_error(
+                          access_refused, "~s login refused: ~s",
+                          [Name, io_lib:format(Msg, Args)], none),
+            case rabbit_misc:table_lookup(Capabilities,
+                                          <<"authentication_failure_close">>) of
+                {bool, true} ->
+                    {0, CloseMethod} = rabbit_binary_generator:map_exception(
+                                         0, AmqpError, Protocol),
+                    ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol);
+                _ -> ok
+            end,
+            rabbit_misc:protocol_error(AmqpError);
         {protocol_error, Msg, Args} ->
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
