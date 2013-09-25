@@ -92,9 +92,8 @@ connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
         true  -> case AuthFun() of
                      {ok, User} ->
                          connect(User, VHost, Protocol, Pid, Infos);
-                     {refused, Msg, Args} ->
-                         Reason = io_lib:format(Msg, Args),
-                         {error, {auth_failure, Reason}}
+                     {refused, _M, _A} ->
+                         {error, {auth_failure, "Refused"}}
                  end;
         false -> {error, broker_not_found_on_node}
     end.
