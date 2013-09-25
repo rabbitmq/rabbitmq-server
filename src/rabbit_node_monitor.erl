@@ -113,7 +113,8 @@ prepare_cluster_status_files() ->
             {ok, Files} ->
                 Corrupt(Files);
             {error, enoent} ->
-                {legacy_cluster_nodes([]), true}
+                LegacyNodes = legacy_cluster_nodes([]),
+                {LegacyNodes, LegacyNodes}
         end,
     AllNodes2 = lists:usort(AllNodes1 ++ RunningNodes2),
     ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
