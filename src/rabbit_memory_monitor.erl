@@ -263,16 +263,13 @@ inform_queues(ShouldInform, DesiredDurationAvg, Durations) ->
 
 %% In normal use, we only inform queues immediately if the desired
 %% duration has decreased, we want to ensure timely paging.
-should_inform_predicate(false) -> fun (infinity, infinity) -> false;
-                                      (infinity, _D2)      -> true;
-                                      (_D1,      infinity) -> false;
-                                      (D1,       D2)       -> D1 > D2
-                                  end;
+should_inform_predicate(false) -> fun greater_than/2;
 %% When the disk alarm has gone off though, we want to inform queues
 %% immediately if the desired duration has *increased* - we want to
 %% ensure timely stopping paging.
-should_inform_predicate(true) ->  fun (infinity, infinity) -> false;
-                                      (infinity, _D2)      -> false;
-                                      (_D1,      infinity) -> true;
-                                      (D1,       D2)       -> D1 < D2
-                                  end.
+should_inform_predicate(true) ->  fun (D1, D2) -> greater_than(D2, D1) end.
+
+greater_than(infinity, infinity) -> false;
+greater_than(infinity, _D2)      -> true;
+greater_than(_D1,      infinity) -> false;
+greater_than(D1,       D2)       -> D1 > D2.
