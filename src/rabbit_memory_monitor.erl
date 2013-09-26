@@ -209,11 +209,12 @@ internal_update(State = #state{queue_durations  = Durations,
                                desired_duration = DesiredDurationAvg,
                                disk_alarm       = DiskAlarm}) ->
     DesiredDurationAvg1 = desired_duration_average(State),
-    State1 = State#state{desired_duration = DesiredDurationAvg1},
-    maybe_inform_queues(
-      should_inform_predicate(DiskAlarm),
-      DesiredDurationAvg, DesiredDurationAvg1, Durations),
-    State1.
+    ShouldInform = should_inform_predicate(DiskAlarm),
+    case ShouldInform(DesiredDurationAvg, DesiredDurationAvg1) of
+        true  -> inform_queues(ShouldInform, DesiredDurationAvg1, Durations);
+        false -> ok
+    end,
+    State#state{desired_duration = DesiredDurationAvg1}.
 
 desired_duration_average(#state{queue_duration_sum   = Sum,
                                 queue_duration_count = Count,
@@ -235,13 +236,6 @@ desired_duration_average(#state{queue_duration_sum   = Sum,
             ((Sum + ?SUM_INC_AMOUNT) / Count) / MemoryRatio;
        true ->
             (Sum / Count) / MemoryRatio
-    end.
-
-maybe_inform_queues(ShouldInform, DesiredDurationAvg, DesiredDurationAvg1,
-                    Durations) ->
-    case ShouldInform(DesiredDurationAvg, DesiredDurationAvg1) of
-        true  -> inform_queues(ShouldInform, DesiredDurationAvg1, Durations);
-        false -> ok
     end.
 
 inform_queues(ShouldInform, DesiredDurationAvg, Durations) ->
