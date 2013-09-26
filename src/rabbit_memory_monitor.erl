@@ -250,8 +250,8 @@ inform_queues(ShouldInform, DesiredDurationAvg, Durations) ->
           fun (Proc = #process{reported = QueueDuration,
                                sent     = PrevSendDuration,
                                callback = {M, F, A}}, true) ->
-                  case ShouldInform(PrevSendDuration, DesiredDurationAvg) orelse
-                      ShouldInform(QueueDuration, DesiredDurationAvg) of
+                  case ShouldInform(PrevSendDuration, DesiredDurationAvg)
+                      andalso ShouldInform(QueueDuration, DesiredDurationAvg) of
                       true  -> ok = erlang:apply(
                                       M, F, A ++ [DesiredDurationAvg]),
                                ets:insert(
