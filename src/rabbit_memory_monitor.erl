@@ -216,9 +216,11 @@ internal_update(State = #state{queue_durations  = Durations,
     end,
     State#state{desired_duration = DesiredDurationAvg1}.
 
-desired_duration_average(#state{queue_duration_sum   = Sum,
-                                queue_duration_count = Count,
-                                disk_alarm           = DiskAlarm}) ->
+desired_duration_average(#state{disk_alarm           = true}) ->
+    infinity;
+desired_duration_average(#state{disk_alarm           = false,
+                                queue_duration_sum   = Sum,
+                                queue_duration_count = Count}) ->
     {ok, LimitThreshold} =
         application:get_env(rabbit, vm_memory_high_watermark_paging_ratio),
     MemoryLimit = vm_memory_monitor:get_memory_limit(),
@@ -226,9 +228,7 @@ desired_duration_average(#state{queue_duration_sum   = Sum,
                       true  -> erlang:memory(total) / MemoryLimit;
                       false -> infinity
                   end,
-    if DiskAlarm ->
-            infinity;
-       MemoryRatio =:= infinity ->
+    if MemoryRatio =:= infinity ->
             0.0;
        MemoryRatio < LimitThreshold orelse Count == 0 ->
             infinity;
