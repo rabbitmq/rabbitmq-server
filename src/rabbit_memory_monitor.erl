@@ -211,7 +211,8 @@ internal_update(State = #state{queue_durations  = Durations,
     DesiredDurationAvg1 = desired_duration_average(State),
     State1 = State#state{desired_duration = DesiredDurationAvg1},
     maybe_inform_queues(
-      DiskAlarm, DesiredDurationAvg, DesiredDurationAvg1, Durations),
+      should_inform_predicate(DiskAlarm),
+      DesiredDurationAvg, DesiredDurationAvg1, Durations),
     State1.
 
 desired_duration_average(#state{queue_duration_sum   = Sum,
@@ -236,51 +237,42 @@ desired_duration_average(#state{queue_duration_sum   = Sum,
             (Sum / Count) / MemoryRatio
     end.
 
-%% In normal use, we only inform queues immediately if the desired
-%% duration has decreased, we want to ensure timely paging.
-maybe_inform_queues(false, DesiredDurationAvg, DesiredDurationAvg1,
+maybe_inform_queues(ShouldInform, DesiredDurationAvg, DesiredDurationAvg1,
                     Durations) ->
-    case DesiredDurationAvg1 == infinity orelse
-        (DesiredDurationAvg /= infinity andalso
-         DesiredDurationAvg1 >= DesiredDurationAvg) of
-        true  -> ok;
-        false -> inform_queues(DesiredDurationAvg1, Durations,
-                               fun should_send/3)
-    end;
-%% When the disk alarm has gone off though, we want to inform queues
-%% immediately if the desired duration has *increased* - we want to
-%% ensure timely stopping paging.
-maybe_inform_queues(true, DesiredDurationAvg, DesiredDurationAvg1,
-                    Durations) ->
-    case DesiredDurationAvg1 == infinity andalso
-        DesiredDurationAvg /= infinity of
-        true  -> inform_queues(DesiredDurationAvg1, Durations,
-                               fun should_send_disk_alarm/3);
+    case ShouldInform(DesiredDurationAvg, DesiredDurationAvg1) of
+        true  -> inform_queues(ShouldInform, DesiredDurationAvg1, Durations);
         false -> ok
     end.
 
-inform_queues(DesiredDurationAvg1, Durations, If) ->
+inform_queues(ShouldInform, DesiredDurationAvg, Durations) ->
     true =
         ets:foldl(
           fun (Proc = #process{reported = QueueDuration,
                                sent     = PrevSendDuration,
                                callback = {M, F, A}}, true) ->
-                  case If(QueueDuration, PrevSendDuration,
-                          DesiredDurationAvg1) of
+                  case ShouldInform(PrevSendDuration, DesiredDurationAvg) orelse
+                      ShouldInform(QueueDuration, DesiredDurationAvg) of
                       true  -> ok = erlang:apply(
-                                      M, F, A ++ [DesiredDurationAvg1]),
+                                      M, F, A ++ [DesiredDurationAvg]),
                                ets:insert(
                                  Durations,
-                                 Proc#process{sent = DesiredDurationAvg1});
+                                 Proc#process{sent = DesiredDurationAvg});
                       false -> true
                   end
           end, true, Durations).
 
-should_send(infinity, infinity,  _) -> true;
-should_send(infinity,        D, DD) -> DD < D;
-should_send(D,        infinity, DD) -> DD < D;
-should_send(D1,             D2, DD) -> DD < lists:min([D1, D2]).
-
-should_send_disk_alarm(_, infinity,        _) -> false;
-should_send_disk_alarm(_,        _, infinity) -> true;
-should_send_disk_alarm(_,        _,        _) -> false.
+%% In normal use, we only inform queues immediately if the desired
+%% duration has decreased, we want to ensure timely paging.
+should_inform_predicate(false) -> fun (infinity, infinity) -> false;
+                                      (infinity, _D2)      -> false;
+                                      (_D1,      infinity) -> true;
+                                      (D1,       D2)       -> D1 < D2
+                                  end;
+%% When the disk alarm has gone off though, we want to inform queues
+%% immediately if the desired duration has *increased* - we want to
+%% ensure timely stopping paging.
+should_inform_predicate(true) ->  fun (infinity, infinity) -> false;
+                                      (infinity, _D2)      -> true;
+                                      (_D1,      infinity) -> false;
+                                      (D1,       D2)       -> D1 > D2
+                                  end.
