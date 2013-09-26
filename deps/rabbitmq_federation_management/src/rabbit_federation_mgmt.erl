@@ -48,7 +48,7 @@ to_json(ReqData, Context) ->
     Chs = rabbit_mgmt_db:get_all_channels(
             rabbit_mgmt_util:range(ReqData)),
     rabbit_mgmt_util:reply_list(
-      filter_vhost(status(Chs), ReqData), ReqData, Context).
+      filter_vhost(status(Chs, ReqData, Context), ReqData), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
@@ -60,8 +60,10 @@ filter_vhost(List, ReqData) ->
       ReqData,
       fun(V) -> lists:filter(fun(I) -> pget(vhost, I) =:= V end, List) end).
 
-status(Chs) ->
-    lists:append([status(Node, Chs) || Node <- [node() | nodes()]]).
+status(Chs, ReqData, Context) ->
+    rabbit_mgmt_util:filter_vhost(
+      lists:append([status(Node, Chs) || Node <- [node() | nodes()]]),
+      ReqData, Context).
 
 status(Node, Chs) ->
     case rpc:call(Node, rabbit_federation_status, status, [], infinity) of
