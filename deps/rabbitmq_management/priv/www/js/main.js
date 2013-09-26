@@ -742,9 +742,16 @@ function replace_content(id, html) {
     $("#" + id).html(html);
 }
 
+var ejs_cached = {};
+
 function format(template, json) {
     try {
-        var tmpl = new EJS({url: 'js/tmpl/' + template + '.ejs'});
+        var cache = true;
+        if (!(template in ejs_cached)) {
+            ejs_cached[template] = true;
+            cache = false;
+        }
+        var tmpl = new EJS({url: 'js/tmpl/' + template + '.ejs', cache: cache});
         return tmpl.render(json);
     } catch (err) {
         clearInterval(timer);

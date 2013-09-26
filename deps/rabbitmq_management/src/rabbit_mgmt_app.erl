@@ -71,7 +71,7 @@ module_path(Module) ->
     filename:dirname(filename:dirname(Here)).
 
 respond(Req, LocalPaths, WMLoop) ->
-    Path = Req:get(raw_path),
+    Path = Req:get(path),
     Redirect = fun(L) -> {301, [{"Location", L}], ""} end,
     case Path of
         "/api/" ++ Rest when length(Rest) > 0 ->
