@@ -276,12 +276,11 @@ inform_queues(DesiredDurationAvg1, Durations, If) ->
                   end
           end, true, Durations).
 
-
 should_send(infinity, infinity,  _) -> true;
 should_send(infinity,        D, DD) -> DD < D;
 should_send(D,        infinity, DD) -> DD < D;
 should_send(D1,             D2, DD) -> DD < lists:min([D1, D2]).
 
-should_send_disk_alarm(_, infinity,  _)        -> false;
-should_send_disk_alarm(_, _,         infinity) -> true;
-should_send_disk_alarm(_, _,         _)        -> false.
+should_send_disk_alarm(_, infinity,        _) -> false;
+should_send_disk_alarm(_,        _, infinity) -> true;
+should_send_disk_alarm(_,        _,        _) -> false.
