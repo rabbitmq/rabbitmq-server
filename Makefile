@@ -341,6 +341,7 @@ install_docs: docs_all install_dirs
 			cp $$manpage $(MAN_DIR)/man$$section; \
 		done; \
 	done
+	cp $(DOCS_DIR)/rabbitmq.config.example $(DOC_INSTALL_DIR)/rabbitmq.config.example
 
 install_dirs:
 	@ OK=true && \
@@ -351,6 +352,7 @@ install_dirs:
 	mkdir -p $(TARGET_DIR)/sbin
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(MAN_DIR)
+	mkdir -p $(DOC_INSTALL_DIR)
 
 $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
