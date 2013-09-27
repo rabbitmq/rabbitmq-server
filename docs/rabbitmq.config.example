@@ -201,9 +201,16 @@
  {kernel,
   [%% Provide an explicit port-range for inter-node communications.
    %% See http://www.rabbitmq.com/clustering.html#firewall for further details.
-   %%
+   
+   %% Sets the minimum port number.
    {inet_dist_listen_min, 10000},
-   {inet_dist_listen_max, 10005}
+
+   %% Sets the maximum port number.
+   {inet_dist_listen_max, 10005},
+
+   %% Sets the net_kernel tick time. This is an advanced option.
+   %% Please see http://erlang.org/doc/man/kernel_app.html for further details.
+   {net_ticktime, 60}
   ]}
 
  %% ----------------------------------------------------------------------------
