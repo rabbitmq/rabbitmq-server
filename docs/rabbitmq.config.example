@@ -65,7 +65,7 @@
    %% See http://www.rabbitmq.com/plugins.html for further details.
    %%
 
-   %% The rabbimq-auth-mechanism-ssl plugin makes it possible to
+   %% The RabbitMQ-auth-mechanism-ssl plugin makes it possible to
    %% authenticate a user based on the client's SSL certificate.
    %%
    %% To use auth-mechanism-ssl, add to or replace the auth_mechanisms
@@ -186,7 +186,20 @@
   ]},
 
  %% ----------------------------------------------------------------------------
- %% RabbiMQ Management Plugin
+ %% Advanced Erlang Networking/Clustering Options.
+ %%
+ %% See http://www.rabbitmq.com/clustering.html for details
+ %% ----------------------------------------------------------------------------
+ {kernel,
+  [%% Provide an explicit port-range for inter-node communications.
+   %% See http://www.rabbitmq.com/clustering.html#firewall for further details.
+   %%
+   {inet_dist_listen_min, 10000},
+   {inet_dist_listen_max, 10005}
+  ]}
+
+ %% ----------------------------------------------------------------------------
+ %% RabbitMQ Management Plugin
  %%
  %% See http://www.rabbitmq.com/management.html for details
  %% ----------------------------------------------------------------------------
@@ -222,7 +235,7 @@
   ]},
 
  %% ----------------------------------------------------------------------------
- %% RabbiMQ Shovel Plugin
+ %% RabbitMQ Shovel Plugin
  %%
  %% See http://www.rabbitmq.com/shovel.html for details
  %% ----------------------------------------------------------------------------
@@ -274,7 +287,7 @@
   ]},
 
  %% ----------------------------------------------------------------------------
- %% RabbiMQ Stomp Adapter
+ %% RabbitMQ Stomp Adapter
  %%
  %% See http://www.rabbitmq.com/stomp.html for details
  %% ----------------------------------------------------------------------------
@@ -293,19 +306,23 @@
    %% Use cn instead of dn when reading from the SSL cert.
    %% {ssl_cert_login_from, common_name},
 
-   %% Set a default user name and password.
+   %% Set a default user name and password. This is used as the default login
+   %% whenever a CONNECT frame omits the login and passcode headers.
+   %%
    %% {default_user, [{login, "guest"},
    %%                 {passcode, "guest"}]}
   ]},
 
  %% ----------------------------------------------------------------------------
- %% RabbiMQ MQTT Adapter
+ %% RabbitMQ MQTT Adapter
  %%
  %% See http://hg.rabbitmq.com/rabbitmq-mqtt/file/stable/README.md for details
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_mqtt,
-  [%% Set the default user name and password.
+  [%% Set the default user name and password. Will be used as the default login
+   %% if a connecting client provides no other login details.
+   %%
    %% {default_user, <<"guest">>},
    %% {default_pass, <<"guest">>},
 
@@ -338,14 +355,15 @@
   ]},
 
  %% ----------------------------------------------------------------------------
- %% RabbiMQ AMQP 1.0 Support
+ %% RabbitMQ AMQP 1.0 Support
  %%
  %% See http://hg.rabbitmq.com/rabbitmq-amqp1.0/file/default/README.md
  %% for details
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_amqp1_0,
-  [%% Set the default user.
+  [%% Connections that are not authenticated with SASL, will connect as this
+   %% account. See the README for more information.
    %% {default_user, "guest"},
 
    %% Enable protocol strict mode. See the README for more information.
