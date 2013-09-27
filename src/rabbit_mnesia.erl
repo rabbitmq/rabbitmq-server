@@ -519,7 +519,7 @@ copy_db(Destination) ->
     rabbit_file:recursive_copy(dir(), Destination).
 
 force_load_filename() ->
-    filename:join(rabbit_mnesia:dir(), "force_load").
+    filename:join(dir(), "force_load").
 
 force_load_next_boot() ->
     rabbit_file:write_file(force_load_filename(), <<"">>).
