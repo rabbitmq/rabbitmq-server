@@ -10,7 +10,7 @@ dist:
 	mkdir $(SOURCE_DIR)/sbin
 	mv $(SOURCE_DIR)/scripts/*.bat $(SOURCE_DIR)/sbin
 	mkdir $(SOURCE_DIR)/etc
-	cp $(SOURCE_DIR)/docs/rabbitmq.sample.config $(SOURCE_DIR)/etc/rabbitmq.sample.config
+	cp $(SOURCE_DIR)/docs/rabbitmq.config.example $(SOURCE_DIR)/etc/rabbitmq.config.example
 	rm -rf $(SOURCE_DIR)/scripts
 	rm -rf $(SOURCE_DIR)/codegen* $(SOURCE_DIR)/Makefile $(SOURCE_DIR)/*mk
 	rm -f $(SOURCE_DIR)/README
@@ -28,7 +28,7 @@ dist:
 	todos $(TARGET_DIR)/INSTALL
 	todos $(TARGET_DIR)/LICENSE*
 	todos $(TARGET_DIR)/plugins/README.txt
-	todos $(TARGET_DIR)/etc/rabbit.sample.config
+	todos $(TARGET_DIR)/etc/rabbitmq.config.example
 	rm -rf $(TARGET_DIR)/plugins-src
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR) rabbitmq-service.html

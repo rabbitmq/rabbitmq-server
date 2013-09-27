@@ -301,14 +301,18 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_stomp,
-  [%% Listen only on localhost (ipv4 & ipv6) on a specific port.
+  [%% Network Configuration - the format is generally the same as for the broker.
+
+   %% Listen only on localhost (ipv4 & ipv6) on a specific port.
    %% {tcp_listeners, [{"127.0.0.1", 61612},
    %%                  {"::1",       61612}]},
 
    %% Listen for SSL connections on a specific port.
    %% {ssl_listeners, [61613]},
 
-   %% Extract name from client certificate when using SSL.
+   %% Additional SSL options
+
+   %% Extract a name from the client's certificate when using SSL.
    %% {ssl_cert_login, true},
 
    %% Use cn instead of dn when reading from the SSL cert.
@@ -334,10 +338,12 @@
    %% {default_user, <<"guest">>},
    %% {default_pass, <<"guest">>},
 
-   %% Enable anonymous access.
+   %% Enable anonymous access. If this is set to false, clients MUST provide
+   %% login information in order to connect.
+   %%
    %% {allow_anonymous, true},
 
-   %% Specify the vhost to which the adapter connects.
+   %% If you have multiple chosts, specify the one to which the adapter connects.
    %% {vhost, <<"/">>},
 
    %% Specify the exchange to which messages from MQTT clients are published.
@@ -347,10 +353,10 @@
    %% {subscription_ttl, 1800000},
 
    %% Set the prefetch count (governing the maximum number of unacknowledged
-   %%  messages that will be delivered).
+   %% messages that will be delivered).
    %% {prefetch, 10},
 
-   %% TCP/SSL Configuration (as per the broker configuration)
+   %% TCP/SSL Configuration (as per the broker configuration). 
    %% {ssl_listeners, []},
    %% {tcp_listeners, [1883]},
 
