@@ -51,6 +51,7 @@
    %% plugins.
    %%
    %% See http://www.rabbitmq.com/authentication.html for more details.
+   %%
    %% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
 
    %% Select an authentication database to use. RabbitMQ comes bundled
@@ -84,16 +85,25 @@
    %%
    %% {auth_backends, [rabbit_auth_backend_ldap]},
 
-   %% Name of the virtual host to create on first start. See
-   %% http://www.rabbitmq.com/access-control.html for further information
+   %%
+   %% Misc/Advanced Options:
+   %%
+   %% NB: Change these only if you understand what you are doing!
+   %%
+
+   %% When the broker first starts, it will create a default virtual host
+   %% and default user. These can be customised using the settings below.
+
+   %% Name of the default virtual host.
+   %% See http://www.rabbitmq.com/access-control.html for further information
    %% about vhosts and access control.
    %%
    %% {default_vhost, <<"/">>},
 
-   %% User name to create on first start.
+   %% The default user's name.
    %% {default_user, <<"guest">>},
 
-   %% Password for the default user.
+   %% The default user's password.
    %% {default_pass, <<"guest">>},
 
    %% Tags for default user.
@@ -103,7 +113,7 @@
    %%
    %% {default_user_tags, [administrator]},
 
-   %% Set up access control (permissions) for the default user.
+   %% Access control (permissions) for the default user.
    %%
    %% The permissions list consists of rules for configure, write and read
    %% permissions. See http://www.rabbitmq.com/access-control.html for
@@ -112,9 +122,7 @@
    %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
 
    %%
-   %% Misc/Advanced Options:
-   %%
-   %% NB: Change these only if you understand what you are doing!
+   %% Additional network and protocol related configuration.
    %%
 
    %% Set the default AMQP heartbeat delay (in seconds).
@@ -123,7 +131,7 @@
    %% Set the max permissible size of an AMQP frame (in bytes).
    %% {frame_max, 131072},
 
-   %% Socket configuration.
+   %% Customising Socket Options.
    %%
    %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
    %% further documentation.
@@ -138,7 +146,7 @@
    %%
    %% Resource Limits & Flow Control.
    %%
-   %% See http://www.rabbitmq.com/memory.html for more details.
+   %% See http://www.rabbitmq.com/memory.html for full details.
    %%
 
    %% Memory-based Flow Control threshold.

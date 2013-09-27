@@ -11,7 +11,6 @@ SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 DOCS_DIR=docs
-DOC_INSTALL_DIR ?=
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
@@ -352,7 +351,6 @@ install_dirs:
 	mkdir -p $(TARGET_DIR)/sbin
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(MAN_DIR)
-	$(ifneq $(DOC_INSTALL_DIR),,$(shell mkdir -p $(DOC_INSTALL_DIR)))
 
 $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
