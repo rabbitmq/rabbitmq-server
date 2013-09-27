@@ -167,8 +167,10 @@
    %%
    %% {cluster_partition_handling, ignore},
 
-   %% Make clustering happen *automatically* at startup.
-   %% See http://www.rabbitmq.com/clustering.html for further details.
+   %% Make clustering happen *automatically* at startup - only applied
+   %% to nodes that have just been reset or started for the first time.
+   %% See http://www.rabbitmq.com/clustering.html#auto-config for
+   %% further details.
    %%
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
