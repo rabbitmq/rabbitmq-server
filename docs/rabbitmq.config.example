@@ -45,16 +45,6 @@
    %%                {verify, verify_peer},
    %%                {fail_if_no_peer_cert, true}]},
 
-   %% This pertains to the rabbitmq_auth_mechanism_ssl plugin and
-   %% STOMP ssl_cert_login configuration settings. See the rabbitmq_stomp
-   %% configuration section and the README in
-   %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
-   %% details.
-   %%
-   %% To use the cn instead of dn, when reading from the SSL cert:
-   %%
-   %% {ssl_cert_login_from, common_name},
-
    %% Choose the available SASL mechanism(s) to expose.
    %% The two default (built in) mechanisms are 'PLAIN' and
    %% 'AMQPLAIN'. Additional mechanisms can be added via
@@ -94,6 +84,16 @@
    %% auth_backends entry:
    %%
    %% {auth_backends, [rabbit_auth_backend_ldap]},
+
+   %% This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
+   %% STOMP ssl_cert_login configurations. See the rabbitmq_stomp
+   %% configuration section later in this fail and the README in
+   %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
+   %% details.
+   %%
+   %% To use the cn instead of dn, when reading from the SSL cert:
+   %%
+   %% {ssl_cert_login_from, common_name},
 
    %%
    %% Misc/Advanced Options:
