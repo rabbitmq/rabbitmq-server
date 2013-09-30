@@ -474,7 +474,31 @@
    %%
    %% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
 
-   %% Enable SSL.
+   %% Alternatively, you can convert a username to a Distinguished Name via an
+   %% LDAP lookup after binding. See the documentation for full details.
+   %%
+
+   %% When converting a username to a dn via a lookup, set this to the name of
+   %% the attribute that represents the user name.
+   %%
+   %% {dn_lookup_attribute,   "userPrincipalName"},
+
+   %% Set this to the base DN for the lookup query.
+   %%
+   %% {dn_lookup_base,        "DC=gopivotal,DC=com"},
+
+   %% Controls how to bind for authorisation queries and to retrieve the details
+   %% of a user logging in without presenting a password (e.g., SASL EXTERNAL).
+   %% One of
+   %%  - as_user (to bind as the authenticated user - requires a password)
+   %%  - anon    (to bind anonymously)
+   %%  - {UserDN, Password} (to bind with a specified user name and password)
+   %%
+   %% Defaults to 'as_user'.
+   %%
+   %% {other_bind, as_user},
+
+   %% Enable SSL. Uses the same SSL configuration as elsewhere in RabbitMQ.
    %%
    %% {use_ssl, false},
 
@@ -483,6 +507,12 @@
    %% {port, 389},
 
    %% Enable logging of LDAP queries.
+   %% One of
+   %%   - false (no logging is performed)
+   %%   - true (verbose logging of the logic used by the plugin)
+   %%   - network (as true, but additionally logs LDAP network traffic)
+   %%
+   %% Defaults to false.
    %%
    %% {log, false},
 
