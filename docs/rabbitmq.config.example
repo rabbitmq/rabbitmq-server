@@ -8,6 +8,7 @@
  {rabbit,
   [%%
    %% Network Connectivity
+   %% ====================
    %%
 
    %% By default, RabbitMQ will listen on all interfaces, using
@@ -33,7 +34,8 @@
    %% {log_levels, [{connection, info}]},
 
    %%
-   %% Security/AAA & Default VHost/User
+   %% Security / AAA
+   %% ==============
    %%
 
    %% Configuring SSL.
@@ -59,13 +61,11 @@
    %%
    %% {auth_backends, [rabbit_auth_backend_internal]},
 
-   %%
-   %% Configurations supporting the rabbitmq-auth-mechanism-ssl and
-   %% rabbitmq-ldap plugins.
+   %% Configurations supporting the rabbitmq_auth_mechanism_ssl and
+   %% rabbitmq_auth_backend_ldap plugins.
    %%
    %% NB: These options require that the relevant plugin is enabled.
    %% See http://www.rabbitmq.com/plugins.html for further details.
-   %%
 
    %% The RabbitMQ-auth-mechanism-ssl plugin makes it possible to
    %% authenticate a user based on the client's SSL certificate.
@@ -75,8 +75,9 @@
    %%
    %% {auth_mechanisms, ['EXTERNAL']},
 
-   %% The rabbitmq-auth-backend_ldap allows the broker to perform
-   %% authentication and authorisation by deferring to an external LDAP server.
+   %% The rabbitmq_auth_backend_ldap plugin allows the broker to
+   %% perform authentication and authorisation by deferring to an
+   %% external LDAP server.
    %%
    %% For more information about configuring the LDAP backend, see
    %% http://www.rabbitmq.com/ldap.html.
@@ -92,9 +93,14 @@
    %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
    %% details.
    %%
-   %% To use the CN instead of DN, when reading from the SSL cert:
+   %% To use the SSL cert's CN instead of its DN as the username
    %%
    %% {ssl_cert_login_from, common_name},
+
+   %%
+   %% Default User / VHost
+   %% ====================
+   %%
 
    %% On first start RabbitMQ will create a vhost and a user. These
    %% config items control what gets created. See
@@ -113,7 +119,9 @@
    %%
    %% {default_user_tags, [administrator]},
 
-   %% Additional network and protocol related configuration.
+   %%
+   %% Additional network and protocol related configuration
+   %% =====================================================
    %%
 
    %% Set the default AMQP heartbeat delay (in seconds).
@@ -136,7 +144,9 @@
    %%                       {nodelay,       true},
    %%                       {exit_on_close, false}]},
 
-   %% Resource Limits & Flow Control.
+   %%
+   %% Resource Limits & Flow Control
+   %% ==============================
    %%
    %% See http://www.rabbitmq.com/memory.html for full details.
 
@@ -158,6 +168,13 @@
    %% Alternatively, we can set a limit relative to total available RAM.
    %%
    %% {disk_free_limit, {mem_relative, 1.0}},
+
+   %%
+   %% Misc/Advanced Options
+   %% =====================
+   %%
+   %% NB: Change these only if you understand what you are doing!
+   %%
 
    %% To announce custom properties to clients on connection:
    %%
@@ -198,18 +215,16 @@
   [%% Provide an explicit port-range for inter-node communications.
    %% See http://www.rabbitmq.com/clustering.html#firewall for further details.
 
-   %% Sets the minimum port number.
+   %% Sets the minimum / maximum port numbers
    %%
-   {inet_dist_listen_min, 10000},
+   %% {inet_dist_listen_min, 10000},
+   %% {inet_dist_listen_max, 10005},
 
-   %% Sets the maximum port number.
+   %% Sets the net_kernel tick time.
+   %% Please see http://erlang.org/doc/man/kernel_app.html and
+   %% http://www.rabbitmq.com/nettick.html for further details.
    %%
-   {inet_dist_listen_max, 10005},
-
-   %% Sets the net_kernel tick time. This is an advanced option.
-   %% Please see http://erlang.org/doc/man/kernel_app.html for further details.
-   %%
-   {net_ticktime, 60}
+   %% {net_ticktime, 60}
   ]}
 
  %% ----------------------------------------------------------------------------
@@ -322,7 +337,7 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_stomp,
-  [%% Network Configuration - the format is generally the same as for the broker.
+  [%% Network Configuration - the format is generally the same as for the broker
 
    %% Listen only on localhost (ipv4 & ipv6) on a specific port.
    %% {tcp_listeners, [{"127.0.0.1", 61613},
@@ -378,7 +393,8 @@
    %%
    %% {allow_anonymous, true},
 
-   %% If you have multiple chosts, specify the one to which the adapter connects.
+   %% If you have multiple chosts, specify the one to which the
+   %% adapter connects.
    %%
    %% {vhost, <<"/">>},
 
@@ -395,10 +411,10 @@
    %%
    %% {prefetch, 10},
 
-   %% TCP/SSL Configuration (as per the broker configuration). 
+   %% TCP/SSL Configuration (as per the broker configuration).
    %%
-   %% {ssl_listeners, []},
    %% {tcp_listeners, [1883]},
+   %% {ssl_listeners, []},
 
    %% TCP/Socket options (as per the broker configuration).
    %%
@@ -417,7 +433,7 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_amqp1_0,
-  [%% Connections that are not authenticated with SASL, will connect as this
+  [%% Connections that are not authenticated with SASL will connect as this
    %% account. See the README for more information.
    %%
    %% Please note that setting this will allow clients to connect without
@@ -438,10 +454,38 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_auth_backend_ldap,
-  [%% Specify servers to bind to. You *must* set this in order for the plugin
+  [%%
+   %% Connecting to the LDAP server(s)
+   %% ================================
+   %%
+
+   %% Specify servers to bind to. You *must* set this in order for the plugin
    %% to work properly.
    %%
    %% {servers, ["your-server-name-goes-here"]}
+
+   %% Connect to the LDAP server using SSL
+   %%
+   %% {use_ssl, false},
+
+   %% Specify the LDAP port to connect to
+   %%
+   %% {port, 389},
+
+   %% Enable logging of LDAP queries.
+   %% One of
+   %%   - false (no logging is performed)
+   %%   - true (verbose logging of the logic used by the plugin)
+   %%   - network (as true, but additionally logs LDAP network traffic)
+   %%
+   %% Defaults to false.
+   %%
+   %% {log, false},
+
+   %%
+   %% Authentication
+   %% ==============
+   %%
 
    %% Pattern to convert the username given through AMQP to a DN before
    %% binding
@@ -452,13 +496,11 @@
    %% Name via an LDAP lookup after binding. See the documentation for
    %% full details.
 
-   %% When converting a username to a dn via a lookup, set this to the
-   %% name of the attribute that represents the user name.
+   %% When converting a username to a dn via a lookup, set these to
+   %% the name of the attribute that represents the user name, and the
+   %% base DN for the lookup query.
    %%
    %% {dn_lookup_attribute,   "userPrincipalName"},
-
-   %% Set this to the base DN for the lookup query.
-   %%
    %% {dn_lookup_base,        "DC=gopivotal,DC=com"},
 
    %% Controls how to bind for authorisation queries and also to
@@ -473,26 +515,11 @@
    %%
    %% {other_bind, as_user},
 
-   %% Connect to the LDAP server using SSL.
    %%
-   %% {use_ssl, false},
+   %% Authorisation
+   %% =============
+   %%
 
-   %% Specify the LDAP port.
-   %%
-   %% {port, 389},
-
-   %% Enable logging of LDAP queries.
-   %% One of
-   %%   - false (no logging is performed)
-   %%   - true (verbose logging of the logic used by the plugin)
-   %%   - network (as true, but additionally logs LDAP network traffic)
-   %%
-   %% Defaults to false.
-   %%
-   %% {log, false},
-
-   %% Configuring authorisation
-   %%
    %% The LDAP plugin can perform a variety of queries against your
    %% LDAP server to determine questions of authorisation. See
    %% http://www.rabbitmq.com/ldap.html#authorisation for more
