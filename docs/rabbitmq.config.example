@@ -56,6 +56,7 @@
 
    %% Select an authentication database to use. RabbitMQ comes bundled
    %% with a built-in auth-database, based on mnesia.
+   %%
    %% {auth_backends, [rabbit_auth_backend_internal]},
 
    %%
@@ -111,9 +112,11 @@
    %% {default_vhost, <<"/">>},
 
    %% The default user's name.
+   %%
    %% {default_user, <<"guest">>},
 
    %% The default user's password.
+   %%
    %% {default_pass, <<"guest">>},
 
    %% Tags for default user.
@@ -136,9 +139,11 @@
    %%
 
    %% Set the default AMQP heartbeat delay (in seconds).
+   %%
    %% {heartbeat, 600},
 
    %% Set the max permissible size of an AMQP frame (in bytes).
+   %%
    %% {frame_max, 131072},
 
    %% Customising Socket Options.
@@ -160,10 +165,12 @@
    %%
 
    %% Memory-based Flow Control threshold.
+   %%
    %% {vm_memory_high_watermark, 0.4},
 
    %% Fraction of the high watermark limit at which queues start to
    %% page message out to disc in order to free up memory.
+   %%
    %% {vm_memory_high_watermark_paging_ratio, 0.5},
 
    %% Set disk free limit (in bytes). Once free disk space reaches this
@@ -189,12 +196,15 @@
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
    %% Set (internal) statistics collection granularity.
+   %%
    %% {collect_statistics, none},
 
    %% Statistics collection interval (in milliseconds).
+   %%
    %% {collect_statistics_interval, 5000},
 
    %% Explicitly enable/disable hipe compilation.
+   %%
    %% {hipe_compile, true},
 
   ]},
@@ -209,13 +219,16 @@
    %% See http://www.rabbitmq.com/clustering.html#firewall for further details.
    
    %% Sets the minimum port number.
+   %%
    {inet_dist_listen_min, 10000},
 
    %% Sets the maximum port number.
+   %%
    {inet_dist_listen_max, 10005},
 
    %% Sets the net_kernel tick time. This is an advanced option.
    %% Please see http://erlang.org/doc/man/kernel_app.html for further details.
+   %%
    {net_ticktime, 60}
   ]}
 
@@ -227,9 +240,11 @@
 
  {rabbitmq_management,
   [%% Pre-Load schema definitions from the following JSON file.
+   %%
    %% {load_definitions, "/path/to/schema.json"},
 
    %% Log all requests to the management HTTP API to a file.
+   %%
    %% {http_log_dir, "/path/to/access.log"},
 
    %% Change the port on which the HTTP listener listens,
@@ -268,7 +283,7 @@
      %%  [
 
      %% List the source broker(s) from which to consume.
-
+     %%
      %%   {sources,
      %%    [%% URI(s) and pre-declarations for all source broker(s).
      %%     {brokers, ["amqp://user:password@host.domain/my_vhost"]},
@@ -276,7 +291,6 @@
      %%    ]},
 
      %% List the destination broker(s) to publish to.
-
      %%   {destinations,
      %%    [%% A singular version of the 'brokers' element.
      %%     {broker, "amqp://"},
@@ -284,26 +298,32 @@
      %%    ]},
 
      %% Name of the queue to shovel messages from.
-     %%   {queue, <<"your-queue-name-goes-here">>},
+     %%
+     %% {queue, <<"your-queue-name-goes-here">>},
 
      %% Optional prefetch count.
-     %%   {prefetch_count, 10},
+     %%
+     %% {prefetch_count, 10},
 
      %% when to acknowledge messages:
      %% - no_ack: never (auto)
      %% - on_publish: after each message is republished
      %% - on_confirm: when the destination broker confirms receipt
-     %%   {ack_mode, on_confirm},
+     %%
+     %% {ack_mode, on_confirm},
 
      %% Static list of basic.properties to set on re-publication.
-     %%   {publish_properties, [{delivery_mode, 2}]},
+     %%
+     %% {publish_properties, [{delivery_mode, 2}]},
 
      %% Overwrite fields of the outbound basic.publish.
-     %%   {publish_fields, []},
+     %%
+     %% {publish_fields, []},
 
      %% The number of seconds to wait before attempting to
      %% reconnect in the event of a connection failure.
-     %%   {reconnect_delay, 2.5}
+     %%
+     %% {reconnect_delay, 2.5}
     ]}
   ]},
 
@@ -317,15 +337,18 @@
   [%% Network Configuration - the format is generally the same as for the broker.
 
    %% Listen only on localhost (ipv4 & ipv6) on a specific port.
+   %%
    %% {tcp_listeners, [{"127.0.0.1", 61612},
    %%                  {"::1",       61612}]},
 
    %% Listen for SSL connections on a specific port.
+   %%
    %% {ssl_listeners, [61613]},
 
    %% Additional SSL options
 
    %% Extract a name from the client's certificate when using SSL.
+   %%
    %% {ssl_cert_login, true},
 
    %% Set a default user name and password. This is used as the default login
@@ -370,23 +393,29 @@
    %% {allow_anonymous, true},
 
    %% If you have multiple chosts, specify the one to which the adapter connects.
+   %%
    %% {vhost, <<"/">>},
 
    %% Specify the exchange to which messages from MQTT clients are published.
+   %%
    %% {exchange, <<"amq.topic">>},
 
    %% Specify TTL (time to live) to control the lifetime of non-clean sessions.
+   %%
    %% {subscription_ttl, 1800000},
 
    %% Set the prefetch count (governing the maximum number of unacknowledged
    %% messages that will be delivered).
+   %%
    %% {prefetch, 10},
 
    %% TCP/SSL Configuration (as per the broker configuration). 
+   %%
    %% {ssl_listeners, []},
    %% {tcp_listeners, [1883]},
 
    %% TCP/Socket options (as per the broker configuration).
+   %%
    %% {tcp_listen_options, [binary,
    %%                       {packet,    raw},
    %%                       {reuseaddr, true},
@@ -411,6 +440,7 @@
    %% {default_user, "guest"},
 
    %% Enable protocol strict mode. See the README for more information.
+   %%
    %% {protocol_strict_mode, false}
   ]},
 
@@ -424,30 +454,38 @@
  {rabbitmq_auth_backend_ldap,
   [%% Specify server's to bind to. You *must* set this in order for the plugin
    %% to work properly.
-   {servers, ["your-server-name-goes-here"]}
+   %%
+   %% {servers, ["your-server-name-goes-here"]}
 
    %% Set user DN pattern.
+   %%
    %% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
 
    %% Enable SSL.
+   %%
    %% {use_ssl, false},
 
    %% Specify the LDAP port.
+   %%
    %% {port, 389},
 
    %% Enable logging of LDAP queries.
+   %%
    %% {log, false},
 
    %% Set the query to use when determining vhost access.
+   %%
    %% {vhost_access_query, {in_group
    %%                        "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
 
    %% Set the query to use when determining resource (e.g., queue) access.
+   %%
    %% {resource_access_query, {constant, true}},
 
    %% Set queries to determine which tags a user has.
    %% See https://www.rabbitmq.com/management.html#permissions for a detailed
    %% explanation of tags/permissions.
+   %%
    %% {tag_queries, []}
   ]}
 ].
