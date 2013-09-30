@@ -1,10 +1,10 @@
+%% -*- mode: erlang -*-
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Sample Configuration File.
+%%
+%% See http://www.rabbitmq.com/configure.html for details.
+%% ----------------------------------------------------------------------------
 [
- %% ----------------------------------------------------------------------------
- %% RabbitMQ Sample Configuration File.
- %%
- %% See http://www.rabbitmq.com/configure.html for details.
- %% ----------------------------------------------------------------------------
-
  {rabbit,
   [%%
    %% Network Connectivity
@@ -18,13 +18,13 @@
    %% To listen on a specific interface, provide a tuple of {IpAddress, Port}.
    %% For example, to listen only on localhost for both IPv4 and IPv6:
    %%
-   %% {tcp_listeners, [{"127.0.0.1", 5673},
-   %%                  {"::1",       5673}]},
+   %% {tcp_listeners, [{"127.0.0.1", 5672},
+   %%                  {"::1",       5672}]},
 
    %% SSL listeners are configured in the same fashion as TCP listeners,
    %% including the option to control the choice of interface.
    %%
-   %% {ssl_listeners, [{"0.0.0.0", 5672}]},
+   %% {ssl_listeners, [5671]},
 
    %% Log levels (currently just used for connection logging).
    %% One of 'info', 'warning', 'error' or 'none', in decreasing order
@@ -39,11 +39,11 @@
    %% Configuring SSL.
    %% See http://www.rabbitmq.com/ssl.html for full documentation.
    %%
-   %% {ssl_options, [{cacertfile,"/path/to/testca/cacert.pem"},
-   %%                {certfile,"/path/to/server/cert.pem"},
-   %%                {keyfile,"/path/to/server/key.pem"},
-   %%                {verify, verify_peer},
-   %%                {fail_if_no_peer_cert, true}]},
+   %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
+   %%                {certfile,             "/path/to/server/cert.pem"},
+   %%                {keyfile,              "/path/to/server/key.pem"},
+   %%                {verify,               verify_peer},
+   %%                {fail_if_no_peer_cert, false}]},
 
    %% Choose the available SASL mechanism(s) to expose.
    %% The two default (built in) mechanisms are 'PLAIN' and
@@ -84,35 +84,25 @@
    %%
    %% {auth_backends, [rabbit_auth_backend_ldap]},
 
-   %% Name of the virtual host to create on first start. See
-   %% http://www.rabbitmq.com/access-control.html for further information
-   %% about vhosts and access control.
+   %% On first start RabbitMQ will create a vhost and a user. These
+   %% config items control what gets created. See
+   %% http://www.rabbitmq.com/access-control.html for further
+   %% information about vhosts and access control.
    %%
-   %% {default_vhost, <<"/">>},
+   %% {default_vhost,       <<"/">>},
+   %% {default_user,        <<"guest">>},
+   %% {default_pass,        <<"guest">>},
+   %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
 
-   %% User name to create on first start.
-   %% {default_user, <<"guest">>},
-
-   %% Password for the default user.
-   %% {default_pass, <<"guest">>},
-
-   %% Tags for default user.
+   %% Tags for default user
    %%
    %% For more details about tags, see the documentation for the
    %% Management Plugin at http://www.rabbitmq.com/management.html.
    %%
    %% {default_user_tags, [administrator]},
 
-   %% Set up access control (permissions) for the default user.
    %%
-   %% The permissions list consists of rules for configure, write and read
-   %% permissions. See http://www.rabbitmq.com/access-control.html for
-   %% further details.
-   %%
-   %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-
-   %%
-   %% Misc/Advanced Options:
+   %% Advanced Options
    %%
    %% NB: Change these only if you understand what you are doing!
    %%
@@ -135,11 +125,9 @@
    %%                       {nodelay,       true},
    %%                       {exit_on_close, false}]},
 
-   %%
    %% Resource Limits & Flow Control.
    %%
    %% See http://www.rabbitmq.com/memory.html for more details.
-   %%
 
    %% Memory-based Flow Control threshold.
    %% {vm_memory_high_watermark, 0.4},
@@ -179,7 +167,7 @@
    %% {collect_statistics_interval, 5000},
 
    %% Explicitly enable/disable hipe compilation.
-   %% {hipe_compile, true},
+   %% {hipe_compile, true}
 
   ]},
 
@@ -190,7 +178,8 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_management,
-  [%% Pre-Load schema definitions from the following JSON file.
+  [%% Pre-Load schema definitions from the following JSON file. See
+   %% http://www.rabbitmq.com/management.html#load-definitions
    %% {load_definitions, "/path/to/schema.json"},
 
    %% Log all requests to the management HTTP API to a file.
@@ -200,21 +189,19 @@
    %% specifying an interface for the web server to bind to.
    %% Also set the listener to use SSL and provide SSL options.
    %%
-   %% {listener, [{port, 12345},
-   %%             {ip, "127.0.0.1"},
-   %%             {ssl, true},
+   %% {listener, [{port,     12345},
+   %%             {ip,       "127.0.0.1"},
+   %%             {ssl,      true},
    %%             {ssl_opts, [{cacertfile, "/path/to/cacert.pem"},
    %%                         {certfile,   "/path/to/cert.pem"},
-   %%                         {keyfile,    "/path/to/key.pem"}]}]},
+   %%                         {keyfile,    "/path/to/key.pem"}]}]}
 
   ]},
 
  {rabbitmq_management_agent,
-  [%%
-   %% Misc/Advanced Options:
+  [%% Misc/Advanced Options
    %%
    %% NB: Change these only if you understand what you are doing!
-   %%
 
    %% {force_fine_statistics, true}
   ]},
@@ -279,20 +266,21 @@
 
  {rabbitmq_stomp,
   [%% Listen only on localhost (ipv4 & ipv6) on a specific port.
-   %% {tcp_listeners, [{"127.0.0.1", 61612},
-   %%                  {"::1",       61612}]},
+   %% {tcp_listeners, [{"127.0.0.1", 61613},
+   %%                  {"::1",       61613}]},
 
    %% Listen for SSL connections on a specific port.
-   %% {ssl_listeners, [61613]},
+   %% {ssl_listeners, [61614]},
 
-   %% Extract name from client certificate when using SSL.
+   %% Extract name from client certificate when using SSL. Equivalent
+   %% of using rabbitmq_auth_mechanism_ssl for AMQP.
    %% {ssl_cert_login, true},
 
    %% Use cn instead of dn when reading from the SSL cert.
    %% {ssl_cert_login_from, common_name},
 
    %% Set a default user name and password.
-   %% {default_user, [{login, "guest"},
+   %% {default_user, [{login,    "guest"},
    %%                 {passcode, "guest"}]}
   ]},
 
@@ -303,7 +291,7 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_mqtt,
-  [%% Set the default user name and password.
+  [%% Set a default user name and password.
    %% {default_user, <<"guest">>},
    %% {default_pass, <<"guest">>},
 
@@ -358,33 +346,50 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_auth_backend_ldap,
-  [%% Specify server's to bind to. You *must* set this in order for the plugin
+  [%% Specify servers to bind to. You *must* set this in order for the plugin
    %% to work properly.
-   {servers, ["your-server-name-goes-here"]}
+   %% {servers, ["your-server-name-goes-here"]},
 
-   %% Set user DN pattern.
+   %% Pattern to convert the username given through AMQP to a DN before
+   %% binding
    %% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
 
-   %% Enable SSL.
+   %% Alternatively, the unadorned username can be used for binding
+   %% and the DN looked up afterwards
+   %% {dn_lookup_attribute,   "userPrincipalName"},
+   %% {dn_lookup_base,        "ou=People,dc=example,dc=com"}
+
+   %% After authenticating, how shall we bind to make authorisation
+   %% queries? The default is to use the same credentials, aka 'as_user'
+   %% {other_bind, as_user}
+   %% {other_bind, anon}
+   %% {other_bind, {"cn=Another User,ou=People,dc=example,dc=com", "password"}}
+
+   %% Connect to the LDAP server using SSL.
    %% {use_ssl, false},
 
    %% Specify the LDAP port.
    %% {port, 389},
 
-   %% Enable logging of LDAP queries.
+   %% Enable logging of LDAP queries. Values can be 'false', 'true' or
+   %% 'network' to enable additional debugging.
    %% {log, false},
 
-   %% Set the query to use when determining vhost access.
-   %% {vhost_access_query, {in_group
-   %%                        "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+   %% Configuring authorisation
+   %%
+   %% The LDAP plugin can perform a variety of queries against your
+   %% LDAP server to determine questions of authorisation. See
+   %% http://www.rabbitmq.com/ldap.html#authorisation for more
+   %% information.
 
-   %% Set the query to use when determining resource (e.g., queue) access.
+   %% Set the query to use when determining vhost access
+   %% {vhost_access_query, {in_group,
+   %%                       ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+
+   %% Set the query to use when determining resource (e.g., queue) access
    %% {resource_access_query, {constant, true}},
 
-   %% Set queries to determine which tags a user has.
-   %% See https://www.rabbitmq.com/management.html#permissions for a detailed
-   %% explanation of tags/permissions.
+   %% Set queries to determine which tags a user has
    %% {tag_queries, []}
   ]}
 ].
-
