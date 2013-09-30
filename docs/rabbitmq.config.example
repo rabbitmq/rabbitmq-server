@@ -331,6 +331,9 @@
    %% Set a default user name and password. This is used as the default login
    %% whenever a CONNECT frame omits the login and passcode headers.
    %%
+   %% Please note that setting this will allow clients to connect without
+   %% authenticating!
+   %%
    %% {default_user, [{login, "guest"},
    %%                 {passcode, "guest"}]}
   ]},
@@ -345,11 +348,15 @@
   [%% Set the default user name and password. Will be used as the default login
    %% if a connecting client provides no other login details.
    %%
+   %% Please note that setting this will allow clients to connect without
+   %% authenticating!
+   %%
    %% {default_user, <<"guest">>},
    %% {default_pass, <<"guest">>},
 
    %% Enable anonymous access. If this is set to false, clients MUST provide
-   %% login information in order to connect.
+   %% login information in order to connect. See the default_user/default_pass
+   %% configuration elements for managing logins without authentication.
    %%
    %% {allow_anonymous, true},
 
@@ -388,6 +395,10 @@
  {rabbitmq_amqp1_0,
   [%% Connections that are not authenticated with SASL, will connect as this
    %% account. See the README for more information.
+   %%
+   %% Please note that setting this will allow clients to connect without
+   %% authenticating!
+   %%
    %% {default_user, "guest"},
 
    %% Enable protocol strict mode. See the README for more information.
