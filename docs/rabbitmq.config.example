@@ -1,10 +1,10 @@
+%% -*- mode: erlang -*-
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Sample Configuration File.
+%%
+%% See http://www.rabbitmq.com/configure.html for details.
+%% ----------------------------------------------------------------------------
 [
- %% ----------------------------------------------------------------------------
- %% RabbitMQ Sample Configuration File.
- %%
- %% See http://www.rabbitmq.com/configure.html for details.
- %% ----------------------------------------------------------------------------
-
  {rabbit,
   [%%
    %% Network Connectivity
@@ -18,13 +18,13 @@
    %% To listen on a specific interface, provide a tuple of {IpAddress, Port}.
    %% For example, to listen only on localhost for both IPv4 and IPv6:
    %%
-   %% {tcp_listeners, [{"127.0.0.1", 5673},
-   %%                  {"::1",       5673}]},
+   %% {tcp_listeners, [{"127.0.0.1", 5672},
+   %%                  {"::1",       5672}]},
 
    %% SSL listeners are configured in the same fashion as TCP listeners,
    %% including the option to control the choice of interface.
    %%
-   %% {ssl_listeners, [{"0.0.0.0", 5672}]},
+   %% {ssl_listeners, [5671]},
 
    %% Log levels (currently just used for connection logging).
    %% One of 'info', 'warning', 'error' or 'none', in decreasing order
@@ -39,11 +39,11 @@
    %% Configuring SSL.
    %% See http://www.rabbitmq.com/ssl.html for full documentation.
    %%
-   %% {ssl_options, [{cacertfile,"/path/to/testca/cacert.pem"},
-   %%                {certfile,"/path/to/server/cert.pem"},
-   %%                {keyfile,"/path/to/server/key.pem"},
-   %%                {verify, verify_peer},
-   %%                {fail_if_no_peer_cert, true}]},
+   %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
+   %%                {certfile,             "/path/to/server/cert.pem"},
+   %%                {keyfile,              "/path/to/server/key.pem"},
+   %%                {verify,               verify_peer},
+   %%                {fail_if_no_peer_cert, false}]},
 
    %% Choose the available SASL mechanism(s) to expose.
    %% The two default (built in) mechanisms are 'PLAIN' and
@@ -92,49 +92,27 @@
    %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
    %% details.
    %%
-   %% To use the cn instead of dn, when reading from the SSL cert:
+   %% To use the CN instead of DN, when reading from the SSL cert:
    %%
    %% {ssl_cert_login_from, common_name},
 
+   %% On first start RabbitMQ will create a vhost and a user. These
+   %% config items control what gets created. See
+   %% http://www.rabbitmq.com/access-control.html for further
+   %% information about vhosts and access control.
    %%
-   %% Misc/Advanced Options:
-   %%
-   %% NB: Change these only if you understand what you are doing!
-   %%
+   %% {default_vhost,       <<"/">>},
+   %% {default_user,        <<"guest">>},
+   %% {default_pass,        <<"guest">>},
+   %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
 
-   %% When the broker first starts, it will create a default virtual host
-   %% and default user. These can be customised using the settings below.
-
-   %% Name of the default virtual host.
-   %% See http://www.rabbitmq.com/access-control.html for further information
-   %% about vhosts and access control.
-   %%
-   %% {default_vhost, <<"/">>},
-
-   %% The default user's name.
-   %%
-   %% {default_user, <<"guest">>},
-
-   %% The default user's password.
-   %%
-   %% {default_pass, <<"guest">>},
-
-   %% Tags for default user.
+   %% Tags for default user
    %%
    %% For more details about tags, see the documentation for the
    %% Management Plugin at http://www.rabbitmq.com/management.html.
    %%
    %% {default_user_tags, [administrator]},
 
-   %% Access control (permissions) for the default user.
-   %%
-   %% The permissions list consists of rules for configure, write and read
-   %% permissions. See http://www.rabbitmq.com/access-control.html for
-   %% further details.
-   %%
-   %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-
-   %%
    %% Additional network and protocol related configuration.
    %%
 
@@ -158,11 +136,9 @@
    %%                       {nodelay,       true},
    %%                       {exit_on_close, false}]},
 
-   %%
    %% Resource Limits & Flow Control.
    %%
    %% See http://www.rabbitmq.com/memory.html for full details.
-   %%
 
    %% Memory-based Flow Control threshold.
    %%
@@ -209,7 +185,7 @@
 
    %% Explicitly enable/disable hipe compilation.
    %%
-   %% {hipe_compile, true},
+   %% {hipe_compile, true}
 
   ]},
 
@@ -221,7 +197,7 @@
  {kernel,
   [%% Provide an explicit port-range for inter-node communications.
    %% See http://www.rabbitmq.com/clustering.html#firewall for further details.
-   
+
    %% Sets the minimum port number.
    %%
    {inet_dist_listen_min, 10000},
@@ -243,7 +219,8 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_management,
-  [%% Pre-Load schema definitions from the following JSON file.
+  [%% Pre-Load schema definitions from the following JSON file. See
+   %% http://www.rabbitmq.com/management.html#load-definitions
    %%
    %% {load_definitions, "/path/to/schema.json"},
 
@@ -255,12 +232,12 @@
    %% specifying an interface for the web server to bind to.
    %% Also set the listener to use SSL and provide SSL options.
    %%
-   %% {listener, [{port, 12345},
-   %%             {ip, "127.0.0.1"},
-   %%             {ssl, true},
+   %% {listener, [{port,     12345},
+   %%             {ip,       "127.0.0.1"},
+   %%             {ssl,      true},
    %%             {ssl_opts, [{cacertfile, "/path/to/cacert.pem"},
    %%                         {certfile,   "/path/to/cert.pem"},
-   %%                         {keyfile,    "/path/to/key.pem"}]}]},
+   %%                         {keyfile,    "/path/to/key.pem"}]}]}
 
    %% Configure how long aggregated data (such as message rates and queue
    %% lengths) is retained. Please read the plugin's documentation in
@@ -274,12 +251,10 @@
   ]},
 
  {rabbitmq_management_agent,
-  [%%
-   %% Misc/Advanced Options:
+  [%% Misc/Advanced Options
    %%
    %% NB: Change these only if you understand what you are doing!
    %%
-
    %% {force_fine_statistics, true}
   ]},
 
@@ -350,13 +325,11 @@
   [%% Network Configuration - the format is generally the same as for the broker.
 
    %% Listen only on localhost (ipv4 & ipv6) on a specific port.
-   %%
-   %% {tcp_listeners, [{"127.0.0.1", 61612},
-   %%                  {"::1",       61612}]},
+   %% {tcp_listeners, [{"127.0.0.1", 61613},
+   %%                  {"::1",       61613}]},
 
    %% Listen for SSL connections on a specific port.
-   %%
-   %% {ssl_listeners, [61613]},
+   %% {ssl_listeners, [61614]},
 
    %% Additional SSL options
 
@@ -370,7 +343,7 @@
    %% Please note that setting this will allow clients to connect without
    %% authenticating!
    %%
-   %% {default_user, [{login, "guest"},
+   %% {default_user, [{login,    "guest"},
    %%                 {passcode, "guest"}]},
 
    %% If a default user is configured, or you have configured use SSL client
@@ -465,21 +438,22 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_auth_backend_ldap,
-  [%% Specify server's to bind to. You *must* set this in order for the plugin
+  [%% Specify servers to bind to. You *must* set this in order for the plugin
    %% to work properly.
    %%
    %% {servers, ["your-server-name-goes-here"]}
 
-   %% Set user DN pattern.
+   %% Pattern to convert the username given through AMQP to a DN before
+   %% binding
    %%
    %% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
 
-   %% Alternatively, you can convert a username to a Distinguished Name via an
-   %% LDAP lookup after binding. See the documentation for full details.
-   %%
+   %% Alternatively, you can convert a username to a Distinguished
+   %% Name via an LDAP lookup after binding. See the documentation for
+   %% full details.
 
-   %% When converting a username to a dn via a lookup, set this to the name of
-   %% the attribute that represents the user name.
+   %% When converting a username to a dn via a lookup, set this to the
+   %% name of the attribute that represents the user name.
    %%
    %% {dn_lookup_attribute,   "userPrincipalName"},
 
@@ -487,8 +461,9 @@
    %%
    %% {dn_lookup_base,        "DC=gopivotal,DC=com"},
 
-   %% Controls how to bind for authorisation queries and to retrieve the details
-   %% of a user logging in without presenting a password (e.g., SASL EXTERNAL).
+   %% Controls how to bind for authorisation queries and also to
+   %% retrieve the details of users logging in without presenting a
+   %% password (e.g., SASL EXTERNAL).
    %% One of
    %%  - as_user (to bind as the authenticated user - requires a password)
    %%  - anon    (to bind anonymously)
@@ -498,7 +473,7 @@
    %%
    %% {other_bind, as_user},
 
-   %% Enable SSL. Uses the same SSL configuration as elsewhere in RabbitMQ.
+   %% Connect to the LDAP server using SSL.
    %%
    %% {use_ssl, false},
 
@@ -516,20 +491,24 @@
    %%
    %% {log, false},
 
-   %% Set the query to use when determining vhost access.
+   %% Configuring authorisation
    %%
-   %% {vhost_access_query, {in_group
-   %%                        "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+   %% The LDAP plugin can perform a variety of queries against your
+   %% LDAP server to determine questions of authorisation. See
+   %% http://www.rabbitmq.com/ldap.html#authorisation for more
+   %% information.
 
-   %% Set the query to use when determining resource (e.g., queue) access.
+   %% Set the query to use when determining vhost access
+   %%
+   %% {vhost_access_query, {in_group,
+   %%                       ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+
+   %% Set the query to use when determining resource (e.g., queue) access
    %%
    %% {resource_access_query, {constant, true}},
 
-   %% Set queries to determine which tags a user has.
-   %% See https://www.rabbitmq.com/management.html#permissions for a detailed
-   %% explanation of tags/permissions.
+   %% Set queries to determine which tags a user has
    %%
    %% {tag_queries, []}
   ]}
 ].
-
