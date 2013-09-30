@@ -45,13 +45,6 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 
-get_used_fd_lsof() ->
-    case os:find_executable("lsof") of
-        false -> unknown;
-        Path  -> Cmd = Path ++ " -d \"0-9999999\" -lna -p " ++ os:getpid(),
-                 string:words(os:cmd(Cmd), $\n) - 1
-    end.
-
 get_used_fd() ->
     get_used_fd(os:type()).
 
@@ -72,7 +65,13 @@ get_used_fd({unix, BSD})
         string:tokens(os:cmd("fstat -p " ++ os:getpid()), "\n")));
 
 get_used_fd({unix, _}) ->
-    get_used_fd_lsof();
+    Cmd = rabbit_misc:format(
+            "lsof -d \"0-9999999\" -lna -p ~s || echo failed", [os:getpid()]),
+    Res = os:cmd(Cmd),
+    case string:right(Res, 7) of
+        "failed\n" -> unknown;
+        _          -> string:words(Res, $\n) - 1
+    end;
 
 %% handle.exe can be obtained from
 %% http://technet.microsoft.com/en-us/sysinternals/bb896655.aspx
