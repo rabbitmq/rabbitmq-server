@@ -33,6 +33,12 @@
    %%
    %% {log_levels, [{connection, info}]},
 
+   %% Set to 'true' to perform reverse DNS lookups when accepting a
+   %% connection. Hostnames will then be shown instead of IP addresses
+   %% in rabbitmqctl and the management plugin.
+   %%
+   %% {reverse_dns_lookups, true},
+
    %%
    %% Security / AAA
    %% ==============
@@ -329,7 +335,15 @@
      %% {reconnect_delay, 2.5}
 
      %% ]} %% End of my_first_shovel
-    ]}
+    ]},
+   %% Rather than specifying some values per-shovel, you can specify
+   %% them for all shovels here.
+   %%
+   %% {defaults, [{prefetch_count,     0},
+   %%             {ack_mode,           on_confirm},
+   %%             {publish_fields,     []},
+   %%             {publish_properties, [{delivery_mode, 2}]},
+   %%             {reconnect_delay,    2.5}]}
   ]},
 
  %% ----------------------------------------------------------------------------
