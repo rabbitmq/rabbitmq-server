@@ -176,10 +176,6 @@
    %%
    %% {disk_free_limit, {mem_relative, 1.0}},
 
-   %% Override the file handle limit.
-   %%
-   %% {file_handles_high_watermark, 10000000},
-
    %% How to respond to cluster partitions.
    %% See http://www.rabbitmq.com/partitions.html for further details.
    %%
