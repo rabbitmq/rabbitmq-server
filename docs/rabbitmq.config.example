@@ -335,7 +335,16 @@
    %% authenticating!
    %%
    %% {default_user, [{login, "guest"},
-   %%                 {passcode, "guest"}]}
+   %%                 {passcode, "guest"}]},
+
+   %% If a default user is configured, or you have configured use SSL client
+   %% certificate based authentication, you can choose to allow clients to
+   %% omit the CONNECT frame entirely. If set to true, the client is
+   %% automatically connected as the default user or user supplied in the
+   %% SSL certificate whenever the first frame sent on a session is not a
+   %% CONNECT frame.
+   %%
+   %% {implicit_connect, true}
   ]},
 
  %% ----------------------------------------------------------------------------
