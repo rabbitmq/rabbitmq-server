@@ -183,6 +183,10 @@
    %%
    %% {disk_free_limit, {mem_relative, 1.0}},
 
+   %% To announce custom properties to clients on connection:
+   %%
+   %% {server_properties, []},
+
    %% How to respond to cluster partitions.
    %% See http://www.rabbitmq.com/partitions.html for further details.
    %%
@@ -258,6 +262,15 @@
    %%                         {certfile,   "/path/to/cert.pem"},
    %%                         {keyfile,    "/path/to/key.pem"}]}]},
 
+   %% Configure how long aggregated data (such as message rates and queue
+   %% lengths) is retained. Please read the plugin's documentation in
+   %% https://www.rabbitmq.com/management.html#configuration for more
+   %% details.
+   %%
+   %% {sample_retention_policies,
+   %%  [{global,   [{60, 5}, {3600, 60}, {86400, 1200}]},
+   %%   {basic,    [{60, 5}, {3600, 60}]},
+   %%   {detailed, [{10, 5}]}]}
   ]},
 
  {rabbitmq_management_agent,
