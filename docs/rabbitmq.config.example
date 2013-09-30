@@ -225,7 +225,7 @@
    %% http://www.rabbitmq.com/nettick.html for further details.
    %%
    %% {net_ticktime, 60}
-  ]}
+  ]},
 
  %% ----------------------------------------------------------------------------
  %% RabbitMQ Management Plugin
@@ -252,7 +252,7 @@
    %%             {ssl,      true},
    %%             {ssl_opts, [{cacertfile, "/path/to/cacert.pem"},
    %%                         {certfile,   "/path/to/cert.pem"},
-   %%                         {keyfile,    "/path/to/key.pem"}]}]}
+   %%                         {keyfile,    "/path/to/key.pem"}]}]},
 
    %% Configure how long aggregated data (such as message rates and queue
    %% lengths) is retained. Please read the plugin's documentation in
@@ -327,6 +327,8 @@
      %% reconnect in the event of a connection failure.
      %%
      %% {reconnect_delay, 2.5}
+
+     %% ]} %% End of my_first_shovel
     ]}
   ]},
 
@@ -462,7 +464,7 @@
    %% Specify servers to bind to. You *must* set this in order for the plugin
    %% to work properly.
    %%
-   %% {servers, ["your-server-name-goes-here"]}
+   %% {servers, ["your-server-name-goes-here"]},
 
    %% Connect to the LDAP server using SSL
    %%
@@ -528,7 +530,7 @@
    %% Set the query to use when determining vhost access
    %%
    %% {vhost_access_query, {in_group,
-   %%                       ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+   %%                       "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
 
    %% Set the query to use when determining resource (e.g., queue) access
    %%
