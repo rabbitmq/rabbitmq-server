@@ -978,7 +978,11 @@ auth_phase(Response,
             case rabbit_misc:table_lookup(Capabilities,
                                           <<"authentication_failure_close">>) of
                 {bool, true} ->
-                    AmqpError1 = AmqpError#amqp_error{explanation = "Refused"},
+                    SafeMsg = io_lib:format(
+                                "Login was refused using authentication "
+                                "mechanism ~s. For details see the broker "
+                                "logfile.", [Name]),
+                    AmqpError1 = AmqpError#amqp_error{explanation = SafeMsg},
                     {0, CloseMethod} = rabbit_binary_generator:map_exception(
                                          0, AmqpError1, Protocol),
                     ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol);
