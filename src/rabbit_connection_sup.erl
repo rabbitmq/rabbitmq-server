@@ -42,8 +42,9 @@ start_link() ->
           SupPid,
           {collector, {rabbit_queue_collector, start_link, []},
            intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
-    %% We need to get channels in the hierarchy here so they close
-    %% before the reader. But for 1.0 readers we can't start the real
+    %% We need to get channels in the hierarchy here so they get shut
+    %% down after the reader, so the reader gets a chance to terminate
+    %% them cleanly. But for 1.0 readers we can't start the real
     %% ch_sup_sup (because we don't know if we will be 0-9-1 or 1.0) -
     %% so we add another supervisor into the hierarchy.
     {ok, ChannelSup3Pid} =
