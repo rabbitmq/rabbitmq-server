@@ -60,6 +60,7 @@ all_tests() ->
     passed = test_user_management(),
     passed = test_runtime_parameters(),
     passed = test_policy_validation(),
+    passed = test_policy_opts_validation(),
     passed = test_ha_policy_validation(),
     passed = test_server_status(),
     passed = test_amqp_connection_refusal(),
@@ -1083,29 +1084,57 @@ test_runtime_parameters() ->
 
 test_policy_validation() ->
     rabbit_runtime_parameters_test:register_policy_validator(),
-    SetPol =
-        fun (Key, Val) ->
-                control_action(
-                  set_policy,
-                  ["name", ".*", rabbit_misc:format("{\"~s\":~p}", [Key, Val])])
-        end,
+    SetPol = fun (Key, Val) ->
+                     control_action_opts(
+                       ["set_policy", "name", ".*",
+                        rabbit_misc:format("{\"~s\":~p}", [Key, Val])])
+             end,
 
-    ok                 = SetPol("testeven", []),
-    ok                 = SetPol("testeven", [1, 2]),
-    ok                 = SetPol("testeven", [1, 2, 3, 4]),
-    ok                 = SetPol("testpos",  [2, 5, 5678]),
+    ok    = SetPol("testeven", []),
+    ok    = SetPol("testeven", [1, 2]),
+    ok    = SetPol("testeven", [1, 2, 3, 4]),
+    ok    = SetPol("testpos",  [2, 5, 5678]),
 
-    {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
-    {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
+    error = SetPol("testpos",  [-1, 0, 1]),
+    error = SetPol("testeven", [ 1, 2, 3]),
 
     ok = control_action(clear_policy, ["name"]),
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     passed.
 
+test_policy_opts_validation() ->
+    Set  = fun (Extra) -> control_action_opts(
+                            ["set_policy", "name", ".*", "{\"ha-mode\":\"all\"}"
+                             | Extra]) end,
+    OK   = fun (Extra) -> ok = Set(Extra) end,
+    Fail = fun (Extra) -> error = Set(Extra) end,
+
+    OK  ([]),
+
+    OK  (["--priority", "0"]),
+    OK  (["--priority", "3"]),
+    Fail(["--priority", "banana"]),
+    Fail(["--priority"]),
+
+    OK  (["--apply-to", "all"]),
+    OK  (["--apply-to", "queues"]),
+    Fail(["--apply-to", "bananas"]),
+    Fail(["--apply-to"]),
+
+    OK  (["--priority", "3",      "--apply-to", "queues"]),
+    Fail(["--priority", "banana", "--apply-to", "queues"]),
+    Fail(["--priority", "3",      "--apply-to", "bananas"]),
+
+    Fail(["--offline"]),
+
+    ok = control_action(clear_policy, ["name"]),
+    passed.
+
 test_ha_policy_validation() ->
-    Set  = fun (JSON) -> control_action(set_policy, ["name", ".*", JSON]) end,
+    Set  = fun (JSON) -> control_action_opts(
+                           ["set_policy", "name", ".*", JSON]) end,
     OK   = fun (JSON) -> ok = Set(JSON) end,
-    Fail = fun (JSON) -> {error_string, _} = Set(JSON) end,
+    Fail = fun (JSON) -> error = Set(JSON) end,
 
     OK  ("{\"ha-mode\":\"all\"}"),
     Fail("{\"ha-mode\":\"made_up\"}"),
@@ -1139,7 +1168,7 @@ test_server_status() ->
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, Limiter, false, <<"ctag">>, true, none, undefined),
+           Q, true, Ch, Limiter, false, <<"ctag">>, true, none, [], undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -1609,6 +1638,18 @@ control_action(Command, Node, Args, Opts) ->
         Other ->
             io:format("failed.~n"),
             Other
+    end.
+
+control_action_opts(Raw) ->
+    NodeStr = atom_to_list(node()),
+    case rabbit_control_main:parse_arguments(Raw, NodeStr) of
+        {ok, {Cmd, Opts, Args}} ->
+            case control_action(Cmd, node(), Args, Opts) of
+                ok -> ok;
+                _  -> error
+            end;
+        _ ->
+            error
     end.
 
 info_action(Command, Args, CheckVHost) ->

@@ -37,7 +37,7 @@
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(register/2 :: (pid(), rabbit_types:mfargs()) -> boolean()).
+-spec(register/2 :: (pid(), rabbit_types:mfargs()) -> [atom()]).
 -spec(set_alarm/1 :: (any()) -> 'ok').
 -spec(clear_alarm/1 :: (any()) -> 'ok').
 -spec(on_node_up/1 :: (node()) -> 'ok').
@@ -93,8 +93,8 @@ init([]) ->
                  alarmed_nodes = dict:new(),
                  alarms        = []}}.
 
-handle_call({register, Pid, AlertMFA}, State) ->
-    {ok, 0 < dict:size(State#alarms.alarmed_nodes),
+handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
+    {ok, lists:usort(lists:append([V || {_, V} <- dict:to_list(AN)])),
      internal_register(Pid, AlertMFA, State)};
 
 handle_call(get_alarms, State = #alarms{alarms = Alarms}) ->
@@ -104,11 +104,20 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
-    handle_set_alarm(Alarm, State#alarms{alarms = [Alarm|Alarms]});
+    case lists:member(Alarm, Alarms) of
+        true  -> {ok, State};
+        false -> UpdatedAlarms = lists:usort([Alarm|Alarms]),
+                 handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms})
+    end;
 
 handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
-    handle_clear_alarm(Alarm, State#alarms{alarms = lists:keydelete(Alarm, 1,
-                                                                    Alarms)});
+    case lists:keymember(Alarm, 1, Alarms) of
+        true  -> handle_clear_alarm(
+                   Alarm, State#alarms{alarms = lists:keydelete(
+                                                  Alarm, 1, Alarms)});
+        false -> {ok, State}
+
+    end;
 
 handle_event({node_up, Node}, State) ->
     %% Must do this via notify and not call to avoid possible deadlock.
@@ -118,7 +127,7 @@ handle_event({node_up, Node}, State) ->
     {ok, State};
 
 handle_event({node_down, Node}, State) ->
-    {ok, maybe_alert(fun dict_unappend_all/3, Node, [], State)};
+    {ok, maybe_alert(fun dict_unappend_all/3, Node, [], false, State)};
 
 handle_event({register, Pid, AlertMFA}, State) ->
     {ok, internal_register(Pid, AlertMFA, State)};
@@ -141,45 +150,36 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+dict_append(Key, Val, Dict) ->
+    L = case dict:find(Key, Dict) of
+            {ok, V} -> V;
+            error   -> []
+        end,
+    dict:store(Key, lists:usort([Val|L]), Dict).
+
 dict_unappend_all(Key, _Val, Dict) ->
     dict:erase(Key, Dict).
 
 dict_unappend(Key, Val, Dict) ->
-    case lists:delete(Val, dict:fetch(Key, Dict)) of
+    L = case dict:find(Key, Dict) of
+            {ok, V} -> V;
+            error   -> []
+        end,
+
+    case lists:delete(Val, L) of
         [] -> dict:erase(Key, Dict);
         X  -> dict:store(Key, X, Dict)
     end.
 
-count_dict_values(Val, Dict) ->
-    dict:fold(fun (_Node, List, Count) ->
-                  Count + case lists:member(Val, List) of
-                              true  -> 1;
-                              false -> 0
-                          end
-              end, 0, Dict).
-
-maybe_alert(UpdateFun, Node, Source,
+maybe_alert(UpdateFun, Node, Source, Alert,
             State = #alarms{alarmed_nodes = AN,
                             alertees      = Alertees}) ->
     AN1 = UpdateFun(Node, Source, AN),
-    BeforeSz = count_dict_values(Source, AN),
-    AfterSz  = count_dict_values(Source, AN1),
-
-    %% If we have changed our alarm state, inform the remotes.
-    IsLocal = Node =:= node(),
-    if IsLocal andalso BeforeSz < AfterSz ->
-           ok = alert_remote(true,  Alertees, Source);
-       IsLocal andalso BeforeSz > AfterSz ->
-           ok = alert_remote(false, Alertees, Source);
-       true                               ->
-           ok
+    case node() of
+        Node -> ok = alert_remote(Alert,  Alertees, Source);
+        _    -> ok
     end,
-    %% If the overall alarm state has changed, inform the locals.
-    case {dict:size(AN), dict:size(AN1)} of
-        {0, 1} -> ok = alert_local(true,  Alertees, Source);
-        {1, 0} -> ok = alert_local(false, Alertees, Source);
-        {_, _} -> ok
-    end,
+    ok = alert_local(Alert, Alertees, Source),
     State#alarms{alarmed_nodes = AN1}.
 
 alert_local(Alert, Alertees, Source) ->
@@ -214,7 +214,7 @@ handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
       "*** Publishers will be blocked until this alarm clears ***~n"
       "**********************************************************~n",
       [Source, Node]),
-    {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
+    {ok, maybe_alert(fun dict_append/3, Node, Source, true, State)};
 handle_set_alarm({file_descriptor_limit, []}, State) ->
     rabbit_log:warning(
       "file descriptor limit alarm set.~n~n"
@@ -229,7 +229,7 @@ handle_set_alarm(Alarm, State) ->
 handle_clear_alarm({resource_limit, Source, Node}, State) ->
     rabbit_log:warning("~s resource limit alarm cleared on node ~p~n",
                        [Source, Node]),
-    {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
+    {ok, maybe_alert(fun dict_unappend/3, Node, Source, false, State)};
 handle_clear_alarm(file_descriptor_limit, State) ->
     rabbit_log:warning("file descriptor limit alarm cleared~n"),
     {ok, State};
