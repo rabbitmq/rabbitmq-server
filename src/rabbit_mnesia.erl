@@ -399,7 +399,8 @@ node_info() ->
      delegate_beam_hash(), cluster_status_from_mnesia()}.
 
 node_type() ->
-    DiscNodes = cluster_nodes(disc),
+    {_AllNodes, DiscNodes, _RunningNodes} =
+        rabbit_node_monitor:read_cluster_status(),
     case DiscNodes =:= [] orelse me_in_nodes(DiscNodes) of
         true  -> disc;
         false -> ram
