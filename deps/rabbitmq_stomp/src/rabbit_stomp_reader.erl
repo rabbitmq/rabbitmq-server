@@ -36,6 +36,11 @@ start_link(SupPid, ProcessorPid, Configuration) ->
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 init(SupPid, ProcessorPid, Configuration) ->
+    Reply = go(SupPid, ProcessorPid, Configuration),
+    rabbit_stomp_processor:flush_and_die(ProcessorPid),
+    Reply.
+
+go(SupPid, ProcessorPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
             {ok, Sock} = SockTransform(Sock0),
@@ -61,8 +66,6 @@ init(SupPid, ProcessorPid, Configuration) ->
                     catch
                         _:Ex -> log(error, "closing STOMP connection "
                                     "~p (~s):~n~p~n", [self(), ConnStr, Ex])
-                    after
-                        rabbit_stomp_processor:flush_and_die(ProcessorPid)
                     end,
                     done;
                 {error, enotconn} ->

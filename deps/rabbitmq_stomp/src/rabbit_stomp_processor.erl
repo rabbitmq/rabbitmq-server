@@ -684,6 +684,8 @@ send_method(Method = #'basic.publish'{}, Channel, Properties, BodyFragments,
                 payload = list_to_binary(BodyFragments)}),
     State.
 
+close_connection(State = #state{connection = none}) ->
+    State;
 %% Closing the connection will close the channel and subchannels
 close_connection(State = #state{connection = Connection}) ->
     %% ignore noproc or other exceptions to avoid debris
