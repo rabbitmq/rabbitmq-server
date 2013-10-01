@@ -133,7 +133,7 @@ do_connect({Addr, Family},
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
            SIF, ChMgr, State) ->
-    app_utils:start_applications([crypto, public_key, ssl]),
+    app_utils:start_applications([asn1, crypto, public_key, ssl]),
     obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
