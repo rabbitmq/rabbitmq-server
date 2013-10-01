@@ -619,6 +619,9 @@ pre_do(#'channel.close'{reply_code = Code, reply_text = Text}, none,
 pre_do(#'basic.consume'{} = Method, none, Sender, State) ->
     ok = call_to_consumer(Method, Sender, State),
     State;
+pre_do(#'basic.cancel'{} = Method, none, Sender, State) ->
+    ok = call_to_consumer(Method, Sender, State),
+    State;
 pre_do(_, _, _, State) ->
     State.
 

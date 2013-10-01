@@ -172,9 +172,10 @@ broker_add_query(Params, ParsedUri, Fields) ->
            end || Field <- Fields], {Params, 2}),
     Params1.
 
-parse_amqp_param(Field, String) when Field =:= channel_max orelse
-                                     Field =:= frame_max   orelse
-                                     Field =:= heartbeat   ->
+parse_amqp_param(Field, String) when Field =:= channel_max        orelse
+                                     Field =:= frame_max          orelse
+                                     Field =:= heartbeat          orelse
+                                     Field =:= connection_timeout ->
     try return(list_to_integer(String))
     catch error:badarg -> fail({not_an_integer, String})
     end;

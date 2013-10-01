@@ -798,21 +798,26 @@ default_consumer_test() ->
     teardown(Connection, Channel).
 
 subscribe_nowait_test() ->
-    {ok, Connection} = new_connection(),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    {ok, Q} = setup_publish(Channel),
-    ok = amqp_channel:call(Channel,
-                           #'basic.consume'{queue = Q,
-                                            consumer_tag = uuid(),
-                                            nowait = true}),
-    receive #'basic.consume_ok'{} -> exit(unexpected_consume_ok)
-    after 0 -> ok
-    end,
+    {ok, Conn} = new_connection(),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {ok, Q} = setup_publish(Ch),
+    CTag = uuid(),
+    amqp_selective_consumer:register_default_consumer(Ch, self()),
+    ok = amqp_channel:call(Ch, #'basic.consume'{queue        = Q,
+                                                consumer_tag = CTag,
+                                                nowait       = true}),
+    ok = amqp_channel:call(Ch, #'basic.cancel' {consumer_tag = CTag,
+                                                nowait       = true}),
+    ok = amqp_channel:call(Ch, #'basic.consume'{queue        = Q,
+                                                consumer_tag = CTag,
+                                                nowait       = true}),
     receive
+        #'basic.consume_ok'{} ->
+            exit(unexpected_consume_ok);
         {#'basic.deliver'{delivery_tag = DTag}, _Content} ->
-            amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DTag})
+            amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag})
     end,
-    teardown(Connection, Channel).
+    teardown(Conn, Ch).
 
 basic_nack_test() ->
     {ok, Connection} = new_connection(),
@@ -903,55 +908,6 @@ pc_consumer_loop(Channel, Payload, NReceived) ->
         NReceived
     end.
 
-
-%%----------------------------------------------------------------------------
-%% Unit test for the direct client
-%% This just relies on the fact that a fresh Rabbit VM must consume more than
-%% 0.1 pc of the system memory:
-%% 0. Wait 1 minute to let memsup do stuff
-%% 1. Make sure that the high watermark is set high
-%% 2. Start a process to receive the pause and resume commands from the broker
-%% 3. Register this as flow control notification handler
-%% 4. Let the system settle for a little bit
-%% 5. Set the threshold to the lowest possible value
-%% 6. When the flow handler receives the pause command, it sets the watermark
-%%    to a high value in order to get the broker to send the resume command
-%% 7. Allow 10 secs to receive the pause and resume, otherwise timeout and
-%%    fail
-channel_flow_test() ->
-    {ok, Connection} = new_connection(),
-    X = <<"amq.direct">>,
-    K = Payload = <<"x">>,
-    memsup:set_sysmem_high_watermark(0.99),
-    timer:sleep(1000),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    Parent = self(),
-    Child = spawn_link(
-              fun() ->
-                      receive
-                          #'channel.flow'{active = false} -> ok
-                      end,
-                      Publish = #'basic.publish'{exchange = X,
-                                                 routing_key = K},
-                      blocked =
-                        amqp_channel:call(Channel, Publish,
-                                          #amqp_msg{payload = Payload}),
-                      memsup:set_sysmem_high_watermark(0.99),
-                      receive
-                          #'channel.flow'{active = true} -> ok
-                      end,
-                      Parent ! ok
-              end),
-    amqp_channel:register_flow_handler(Channel, Child),
-    timer:sleep(1000),
-    memsup:set_sysmem_high_watermark(0.001),
-    receive
-        ok -> ok
-    after 10000 ->
-        ?LOG_DEBUG("Are you sure that you have waited 1 minute?~n"),
-        exit(did_not_receive_channel_flow)
-    end.
-
 %%---------------------------------------------------------------------------
 %% This tests whether RPC over AMQP produces the same result as invoking the
 %% same argument against the same underlying gen_server instance.
@@ -1032,6 +988,47 @@ rpc_client_consume_loop(Channel) ->
             rpc_client_consume_loop(Channel)
     after 3000 ->
             exit(no_request_received)
+    end.
+
+%%---------------------------------------------------------------------------
+
+%% connection.blocked, connection.unblocked
+
+connection_blocked_network_test() ->
+    {ok, Connection} = new_connection(just_network),
+    X = <<"amq.direct">>,
+    K = Payload = <<"x">>,
+    clear_resource_alarm(memory),
+    timer:sleep(1000),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Parent = self(),
+    Child = spawn_link(
+              fun() ->
+                      receive
+                          #'connection.blocked'{} -> ok
+                      end,
+                      clear_resource_alarm(memory),
+                      receive
+                          #'connection.unblocked'{} -> ok
+                      end,
+                      Parent ! ok
+              end),
+    amqp_connection:register_blocked_handler(Connection, Child),
+    set_resource_alarm(memory),
+    Publish = #'basic.publish'{exchange = X,
+                               routing_key = K},
+    amqp_channel:call(Channel, Publish,
+                      #amqp_msg{payload = Payload}),
+    timer:sleep(1000),
+    receive
+        ok ->
+            clear_resource_alarm(memory),
+            clear_resource_alarm(disk),
+            ok
+    after 10000 ->
+        clear_resource_alarm(memory),
+        clear_resource_alarm(disk),
+        exit(did_not_receive_connection_blocked)
     end.
 
 %%---------------------------------------------------------------------------
@@ -1159,3 +1156,14 @@ make_direct_params(Props) ->
                         password     = Pgv(password, <<"guest">>),
                         virtual_host = Pgv(virtual_host, <<"/">>),
                         node         = Pgv(node, node())}.
+
+set_resource_alarm(memory) ->
+    os:cmd("cd ../rabbitmq-test; make set-resource-alarm SOURCE=memory");
+set_resource_alarm(disk) ->
+    os:cmd("cd ../rabbitmq-test; make set-resource-alarm SOURCE=disk").
+
+
+clear_resource_alarm(memory) ->
+    os:cmd("cd ../rabbitmq-test; make clear-resource-alarm SOURCE=memory");
+clear_resource_alarm(disk) ->
+    os:cmd("cd ../rabbitmq-test; make clear-resource-alarm SOURCE=disk").

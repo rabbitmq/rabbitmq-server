@@ -116,7 +116,7 @@ behaviour_info(callbacks) ->
      %%      State = state()
      %%
      %% This callback is invoked by the channel every time a basic.cancel
-     %% is received from the server.
+     %% is sent to the server.
      {handle_cancel, 2},
 
      %% handle_cancel_ok(CancelOk, Cancel, State) -> ok_error()
@@ -128,6 +128,15 @@ behaviour_info(callbacks) ->
      %% This callback is invoked by the channel every time a basic.cancel_ok
      %% is received from the server.
      {handle_cancel_ok, 3},
+
+     %% handle_server_cancel(Cancel, State) -> ok_error()
+     %% where
+     %%      Cancel = #'basic.cancel'{}
+     %%      State = state()
+     %%
+     %% This callback is invoked by the channel every time a basic.cancel
+     %% is received from the server.
+     {handle_server_cancel, 2},
 
      %% handle_deliver(Deliver, Message, State) -> ok_error()
      %% where
@@ -218,7 +227,12 @@ handle_call({consumer_call, Method, Args}, _From,
             #'basic.consume_ok'{} ->
                 ConsumerModule:handle_consume_ok(Method, Args, MState);
             #'basic.cancel'{} ->
-                ConsumerModule:handle_cancel(Method, MState);
+                case Args of
+                    none -> %% server-sent
+                        ConsumerModule:handle_server_cancel(Method, MState);
+                    Pid when is_pid(Pid) -> %% client-sent
+                        ConsumerModule:handle_cancel(Method, MState)
+                end;
             #'basic.cancel_ok'{} ->
                 ConsumerModule:handle_cancel_ok(Method, Args, MState);
             #'basic.deliver'{} ->
