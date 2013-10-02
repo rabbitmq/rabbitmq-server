@@ -76,7 +76,7 @@
             <select name="type">
               <% for (var i = 0; i < exchange_types.length; i++) {
                    var type = exchange_types[i];
-                   if (type.internal_purpose != undefined) { %>
+                   if (type.internal_purpose == undefined) { %>
               <option value="<%= fmt_string(type.name) %>"><%= fmt_string(type.name) %></option>
               <%   }
                  } %>
