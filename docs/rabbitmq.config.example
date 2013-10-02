@@ -321,13 +321,14 @@
      %%
      %% {ack_mode, on_confirm},
 
+     %% Overwrite fields of the outbound basic.publish.
+     %%
+     %% {publish_fields, [{exchange,    <<"my_exchange">>},
+     %%                   {routing_key, <<"from_shovel">>}]},
+
      %% Static list of basic.properties to set on re-publication.
      %%
      %% {publish_properties, [{delivery_mode, 2}]},
-
-     %% Overwrite fields of the outbound basic.publish.
-     %%
-     %% {publish_fields, []},
 
      %% The number of seconds to wait before attempting to
      %% reconnect in the event of a connection failure.
