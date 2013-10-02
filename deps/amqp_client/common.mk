@@ -60,6 +60,7 @@ PACKAGE_NAME_EZ=$(PACKAGE_DIR).ez
 COMMON_PACKAGE=rabbit_common
 export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)-$(VERSION)
 COMMON_PACKAGE_EZ=$(COMMON_PACKAGE_DIR).ez
+NODE_NAME=amqp_client
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  file:consult("$(COMMON_PACKAGE).app.in"), \
@@ -81,7 +82,7 @@ endif
 
 LOAD_PATH=$(EBIN_DIR) $(TEST_DIR) $(ERL_PATH)
 
-RUN:=$(LIBS_PATH) erl -pa $(LOAD_PATH) -sname amqp_client
+RUN:=$(LIBS_PATH) erl -pa $(LOAD_PATH) -sname $(NODE_NAME)
 
 MKTEMP=$$(mktemp $(TMPDIR)/tmp.XXXXXXXXXX)
 
