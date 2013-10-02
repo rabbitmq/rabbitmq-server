@@ -3,6 +3,7 @@
   {vsn, "%%VSN%%"},
   {modules, [
              app_utils,
+             credit_flow,
              pmon,
              gen_server2,
              mirrored_supervisor,
