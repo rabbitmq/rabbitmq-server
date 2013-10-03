@@ -19,8 +19,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([set_for/1, for/1, for/2, params_to_table/1, params_to_string/1,
-         to_params/2]).
+-export([set_for/1, for/1, for/2, params_to_string/1, to_params/2]).
 %% For testing
 -export([from_set/2, remove_credentials/1]).
 
@@ -43,20 +42,18 @@ for(XorQ, UpstreamName) ->
         UpstreamSet -> from_set(UpstreamSet, XorQ, UpstreamName)
     end.
 
-params_to_table(#upstream_params{uri    = URI,
-                                 params = Params,
-                                 x_or_q = XorQ}) ->
+params_table(SafeURI, Params, XorQ) ->
     Key = case XorQ of
               #exchange{} -> <<"exchange">>;
               #amqqueue{} -> <<"queue">>
           end,
-    {table, [{<<"uri">>,          longstr, remove_credentials(URI)},
-             {<<"virtual_host">>, longstr, vhost(Params)},
-             {Key,                longstr, name(XorQ)}]}.
+    [{<<"uri">>,          longstr, SafeURI},
+     {<<"virtual_host">>, longstr, vhost(Params)},
+     {Key,                longstr, name(XorQ)}].
 
-params_to_string(#upstream_params{uri    = URI,
-                                  x_or_q = XorQ}) ->
-    print("~s on ~s", [rabbit_misc:rs(r(XorQ)), remove_credentials(URI)]).
+params_to_string(#upstream_params{safe_uri = SafeURI,
+                                  x_or_q   = XorQ}) ->
+    print("~s on ~s", [rabbit_misc:rs(r(XorQ)), SafeURI]).
 
 remove_credentials(URI) ->
     Props = uri_parser:parse(binary_to_list(URI),
@@ -76,9 +73,13 @@ to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
     random:seed(now()),
     URI = lists:nth(random:uniform(length(URIs)), URIs),
     {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(XorQ)),
-    #upstream_params{params = Params,
-                     uri    = URI,
-                     x_or_q = with_name(Upstream, vhost(Params), XorQ)}.
+    XorQ1 = with_name(Upstream, vhost(Params), XorQ),
+    SafeURI = remove_credentials(URI),
+    #upstream_params{params   = Params,
+                     uri      = URI,
+                     x_or_q   = XorQ1,
+                     safe_uri = SafeURI,
+                     table    = params_table(SafeURI, Params, XorQ)}.
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
