@@ -133,28 +133,38 @@ init(Q = #amqqueue { name = QName }) ->
             {stop, {duplicate_live_master, Node}};
         existing ->
             gm:leave(GM),
+            ignore;
+        master_in_recovery ->
+            %% The queue record vanished - we must have a master starting
+            %% concurrently with us. In that case we can safely decide to do
+            %% nothing here, and the master will start us in
+            %% master:init_with_existing_bq/3
             ignore
     end.
 
 init_it(Self, GM, Node, QName) ->
-    [Q = #amqqueue { pid = QPid, slave_pids = SPids, gm_pids = GMPids }] =
-        mnesia:read({rabbit_queue, QName}),
-    case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
-        []     -> add_slave(Q, Self, GM),
-                  {new, QPid, GMPids};
-        [QPid] -> case rabbit_misc:is_process_alive(QPid) of
-                      true  -> duplicate_live_master;
-                      false -> {stale, QPid}
-                  end;
-        [SPid] -> case rabbit_misc:is_process_alive(SPid) of
-                      true  -> existing;
-                      false -> Q1 = Q#amqqueue {
-                                      slave_pids = SPids -- [SPid],
-                                      gm_pids    = [T || T = {_, S} <- GMPids,
-                                                         S =/= SPid] },
-                               add_slave(Q1, Self, GM),
-                               {new, QPid, GMPids}
-                  end
+    case mnesia:read({rabbit_queue, QName}) of
+        [Q = #amqqueue { pid = QPid, slave_pids = SPids, gm_pids = GMPids }] ->
+            case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
+                []     -> add_slave(Q, Self, GM),
+                          {new, QPid, GMPids};
+                [QPid] -> case rabbit_misc:is_process_alive(QPid) of
+                              true  -> duplicate_live_master;
+                              false -> {stale, QPid}
+                          end;
+                [SPid] -> case rabbit_misc:is_process_alive(SPid) of
+                              true  -> existing;
+                              false -> GMPids = [T || T = {_, S} <- GMPids,
+                                                      S =/= SPid],
+                                       Q1 = Q#amqqueue{
+                                              slave_pids = SPids -- [SPid],
+                                              gm_pids    = GMPids},
+                                       add_slave(Q1, Self, GM),
+                                       {new, QPid, GMPids}
+                          end
+            end;
+        [] ->
+            master_in_recovery
     end.
 
 %% Add to the end, so they are in descending order of age, see

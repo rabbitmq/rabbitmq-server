@@ -24,6 +24,7 @@ dist:
 		TARGET_DIR=`pwd`/$(TARGET_DIR) \
 		SBIN_DIR=`pwd`/$(TARGET_DIR)/sbin \
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
+		DOC_INSTALL_DIR=`pwd`/$(TARGET_DIR)/etc \
 			install
 
 ## Here we set the RABBITMQ_HOME variable,

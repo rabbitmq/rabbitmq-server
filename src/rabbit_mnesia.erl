@@ -399,7 +399,8 @@ node_info() ->
      cluster_status_from_mnesia()}.
 
 node_type() ->
-    DiscNodes = cluster_nodes(disc),
+    {_AllNodes, DiscNodes, _RunningNodes} =
+        rabbit_node_monitor:read_cluster_status(),
     case DiscNodes =:= [] orelse me_in_nodes(DiscNodes) of
         true  -> disc;
         false -> ram
@@ -519,7 +520,7 @@ copy_db(Destination) ->
     rabbit_file:recursive_copy(dir(), Destination).
 
 force_load_filename() ->
-    filename:join(rabbit_mnesia:dir(), "force_load").
+    filename:join(dir(), "force_load").
 
 force_load_next_boot() ->
     rabbit_file:write_file(force_load_filename(), <<"">>).

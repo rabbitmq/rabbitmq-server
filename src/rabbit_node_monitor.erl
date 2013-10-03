@@ -104,23 +104,19 @@ prepare_cluster_status_files() ->
     %% The running nodes file might contain a set or a list, in case
     %% of the legacy file
     RunningNodes2 = lists:usort(ThisNode ++ RunningNodes1),
-    {AllNodes1, WantDiscNode} =
+    {AllNodes1, DiscNodes} =
         case try_read_file(cluster_status_filename()) of
             {ok, [{AllNodes, DiscNodes0}]} ->
-                {AllNodes, lists:member(node(), DiscNodes0)};
+                {AllNodes, DiscNodes0};
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
-                {legacy_cluster_nodes(AllNodes0),
-                 legacy_should_be_disc_node(AllNodes0)};
+                {legacy_cluster_nodes(AllNodes0), legacy_disc_nodes(AllNodes0)};
             {ok, Files} ->
                 Corrupt(Files);
             {error, enoent} ->
-                {legacy_cluster_nodes([]), true}
+                LegacyNodes = legacy_cluster_nodes([]),
+                {LegacyNodes, LegacyNodes}
         end,
     AllNodes2 = lists:usort(AllNodes1 ++ RunningNodes2),
-    DiscNodes = case WantDiscNode of
-                    true  -> ThisNode;
-                    false -> []
-                end,
     ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
 
 write_cluster_status({All, Disc, Running}) ->
@@ -441,8 +437,11 @@ legacy_cluster_nodes(Nodes) ->
     %% list otherwise)
     lists:usort(Nodes ++ mnesia:system_info(db_nodes)).
 
-legacy_should_be_disc_node(DiscNodes) ->
-    DiscNodes == [] orelse lists:member(node(), DiscNodes).
+legacy_disc_nodes(AllNodes) ->
+    case AllNodes == [] orelse lists:member(node(), AllNodes) of
+        true  -> [node()];
+        false -> []
+    end.
 
 add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 
