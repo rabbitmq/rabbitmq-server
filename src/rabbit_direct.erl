@@ -37,8 +37,8 @@
                     rabbit_event:event_props()) ->
                         rabbit_types:ok_or_error2(
                           {rabbit_types:user(), rabbit_framing:amqp_table()},
-                          'broker_not_found_on_node' | 'auth_failure' |
-                          'access_refused')).
+                          'broker_not_found_on_node' |
+                          {'auth_failure', string()} | 'access_refused')).
 -spec(start_channel/9 ::
         (rabbit_channel:channel_number(), pid(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
@@ -90,9 +90,10 @@ connect(Username, VHost, Protocol, Pid, Infos) ->
 connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
     case rabbit:is_running() of
         true  -> case AuthFun() of
-                     {ok, User}        -> connect(User, VHost, Protocol, Pid,
-                                                  Infos);
-                     {refused, _M, _A} -> {error, auth_failure}
+                     {ok, User} ->
+                         connect(User, VHost, Protocol, Pid, Infos);
+                     {refused, _M, _A} ->
+                         {error, {auth_failure, "Refused"}}
                  end;
         false -> {error, broker_not_found_on_node}
     end.
