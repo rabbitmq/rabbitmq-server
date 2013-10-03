@@ -109,7 +109,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         } catch (Exception _) {}
     }
 
-    private void setUpAmqp() throws IOException, AuthenticationFailureException {
+    private void setUpAmqp() throws IOException {
         connectionFactory = new ConnectionFactory();
         connectionFactory.setHost(host);
         conn = connectionFactory.newConnection();
@@ -378,7 +378,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         }
     }
 
-    public void testInteropM2A() throws MqttException, IOException, InterruptedException, AuthenticationFailureException {
+    public void testInteropM2A() throws MqttException, IOException, InterruptedException {
         setUpAmqp();
         String queue = ch.queueDeclare().getQueue();
         ch.queueBind(queue, "amq.topic", topic);
@@ -394,7 +394,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         tearDownAmqp();
     }
 
-    public void testInteropA2M() throws MqttException, IOException, InterruptedException, AuthenticationFailureException {
+    public void testInteropA2M() throws MqttException, IOException, InterruptedException {
         client.connect(conOpt);
         client.setCallback(this);
         client.subscribe(topic, 1);
