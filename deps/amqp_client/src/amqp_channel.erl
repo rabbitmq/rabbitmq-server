@@ -740,9 +740,15 @@ handle_method_from_server1(Method, Content, State) ->
 %%---------------------------------------------------------------------------
 
 handle_connection_closing(CloseType, Reason,
-                          State = #state{rpc_requests = RpcQueue,
+                          State = #state{driver       = Driver,
+                                         writer       = Writer,
+                                         rpc_requests = RpcQueue,
                                          closing      = Closing}) ->
     NewState = State#state{closing = {connection, Reason}},
+    case Driver of
+        network -> catch rabbit_writer:flush(Writer);
+        direct  -> ok
+    end,
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
         {flush, false, false} ->
             erlang:send_after(?TIMEOUT_FLUSH, self(),
@@ -784,9 +790,9 @@ handle_shutdown(Reason, State) ->
 do(Method, Content, Flow, #state{driver = Driver, writer = W}) ->
     %% Catching because it expects the {channel_exit, _, _} message on error
     catch case {Driver, Content, Flow} of
-              {network, none, _}  -> rabbit_writer:send_command_sync(W, Method);
-              {network, _, _}     -> rabbit_writer:send_command_sync(W, Method,
-                                                                     Content);
+              {network, none, _}  -> rabbit_writer:send_command(W, Method);
+              {network, _, _}     -> rabbit_writer:send_command(W, Method,
+                                                                Content);
               {direct, none, _}   -> rabbit_channel:do(W, Method);
               {direct, _, flow}   -> rabbit_channel:do_flow(W, Method, Content);
               {direct, _, noflow} -> rabbit_channel:do(W, Method, Content)
