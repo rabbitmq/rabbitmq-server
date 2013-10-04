@@ -35,9 +35,6 @@
 -behaviour(supervisor).
 -export([init/1]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
--import(rabbit_misc, [pget/3]).
-
 start(_Type, _StartArgs) ->
     rabbit_federation_exchange_link:go(),
     rabbit_federation_queue_link:go(),
