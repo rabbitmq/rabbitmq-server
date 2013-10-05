@@ -46,8 +46,6 @@
                 downstream_exchange,
                 unacked}).
 
--define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
-
 %%----------------------------------------------------------------------------
 
 %% We start off in a state where we do not connect, since we can first
