@@ -239,15 +239,14 @@ check_upstream_suitable(Conn) ->
 update_headers(UParams, Redelivered, undefined) ->
     update_headers(UParams, Redelivered, []);
 
-update_headers(UParams, Redelivered, Headers) ->
-    {table, Info} = rabbit_federation_upstream:params_to_table(UParams),
+update_headers(#upstream_params{table = Table}, Redelivered, Headers) ->
     {Headers1, Count} =
         case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
             undefined ->
                 {Headers, 0};
             {array, Been} ->
                 {Found, Been1} = lists:partition(
-                                      fun (I) -> visit_match(I, Info) end,
+                                      fun (I) -> visit_match(I, Table) end,
                                       Been),
                 C = case Found of
                         []           -> 0;
@@ -261,8 +260,8 @@ update_headers(UParams, Redelivered, Headers) ->
                    Headers, ?ROUTING_HEADER, array, Been1), C}
         end,
     rabbit_basic:prepend_table_header(
-      ?ROUTING_HEADER, Info ++ [{<<"redelivered">>, bool, Redelivered},
-                                {<<"visit-count">>, long, Count + 1}],
+      ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered},
+                                 {<<"visit-count">>, long, Count + 1}],
       Headers1).
 
 visit_match({table, T}, Info) ->

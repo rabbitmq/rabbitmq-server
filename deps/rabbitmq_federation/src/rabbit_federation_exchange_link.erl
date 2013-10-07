@@ -515,8 +515,7 @@ delete_upstream_exchange(Conn, XNameBin) ->
     rabbit_federation_link_util:disposable_channel_call(
       Conn, #'exchange.delete'{exchange = XNameBin}).
 
-update_headers(UParams, Redelivered, Headers) ->
-    {table, Info} = rabbit_federation_upstream:params_to_table(UParams),
+update_headers(#upstream_params{table = Table}, Redelivered, Headers) ->
     rabbit_basic:prepend_table_header(
-      ?ROUTING_HEADER, Info ++ [{<<"redelivered">>, bool, Redelivered}],
+      ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered}],
       Headers).

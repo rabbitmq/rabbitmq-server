@@ -186,7 +186,10 @@ forward(#upstream{ack_mode      = AckMode,
     case ForwardFun(Headers) of
         true  -> Msg1 = maybe_clear_user_id(
                           Trust, update_headers(HeadersFun(Headers), Msg)),
-                 Seq = amqp_channel:next_publish_seqno(DCh),
+                 Seq = case AckMode of
+                           'on-confirm' -> amqp_channel:next_publish_seqno(DCh);
+                           _            -> ignore
+                       end,
                  amqp_channel:cast(DCh, PublishMethod, Msg1),
                  case AckMode of
                      'on-confirm' ->
