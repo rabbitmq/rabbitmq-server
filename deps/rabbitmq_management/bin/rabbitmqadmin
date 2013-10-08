@@ -306,37 +306,48 @@ def make_parser():
         dest="version",
         help="Display version and exit")
 
+def default_config():
+    home = os.getenv('USERPROFILE') or os.getenv('HOME')
+    return home + os.sep + ".rabbitmqadmin.conf"
+
 def make_configuration():
     make_parser()
     (options, args) = parser.parse_args()
     setattr(options, "declare_vhost", None)
     if options.version:
         print_version()
+    if options.config is None:
+        config_file = default_config()
+        if os.path.isfile(config_file): 
+            setattr(options, "config", config_file)
+
     if options.node is None and options.config:
         options.node = "default"
-    elif options.node and options.config is None:
-        home = os.getenv('USERPROFILE') or os.getenv('HOME')
-        setattr(options, "config", home + os.sep + ".rabbitmqadmin.conf")
-    if options.node:
-        config = ConfigParser()
+    else:
+        options.node = options.node
+    for (key, val) in default_options.items():
+        if getattr(options, key) is None:
+            setattr(options, key, val)
+
+    if options.config is not None:
         try:
+            config = ConfigParser()
             config.read(options.config)
             new_conf = dict(config.items(options.node))
+            for (key, val) in new_conf.items():
+                setattr(options, key, val)
         except ConfigParserError, error:
-            assert_usage(False, ("Could not read section '%s' in config file"  +
-                         " '%s':\n   %s") %
-                         (options.node, options.config, error))
-        new_opts = default_options.copy()
-        for (key, val) in new_conf.items():
-            new_opts[key] = val
-        for (key, val) in new_opts.items():
-            if getattr(options, key) is None:
-                setattr(options, key, val)
-    else:
-        for (key, val) in default_options.items():
-            if getattr(options, key) is None:
-                setattr(options, key, val)
+            if using_default_config_and_node(options):
+                pass
+            else:
+                assert_usage(False, ("Could not read section '%s' in config file"  +
+                             " '%s':\n   %s") %
+                             (options.node, options.config, error))
+
     return (options, args)
+
+def using_default_config_and_node(options):
+    return options.node == "default" and options.config == default_config()
 
 def assert_usage(expr, error):
     if not expr:

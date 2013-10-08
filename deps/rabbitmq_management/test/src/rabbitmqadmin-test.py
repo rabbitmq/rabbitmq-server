@@ -6,6 +6,7 @@ import os.path
 import socket
 import subprocess
 import sys
+import shutil
 
 # TODO test: SSL, depth, config file, encodings(?), completion(???)
 
@@ -34,6 +35,24 @@ class TestRabbitMQAdmin(unittest.TestCase):
         self.run_fail(['--port', '15673', 'show', 'overview'])
         # Test port open but not talking HTTP
         self.run_fail(['--port', '5672', 'show', 'overview'])
+
+    def test_config(self):
+        self.run_fail(['--config', '/tmp/no-such-config-file', 'show', 'overview'])
+
+        cf = os.path.dirname(__file__) + os.sep + "test-config"
+        self.run_success(['--config', cf, '--node', 'host_normal', 'show', 'overview'])
+        self.run_fail(['--config', cf, '--node', 'bad_port', 'show', 'overview'])
+
+        default_conf = ".rabbitmqadmin.conf"
+        original_home = os.getenv('HOME')
+        tmpdir = os.getenv("TMPDIR") or os.getenv("TEMP") or "/tmp"
+        shutil.copyfile(os.path.dirname(__file__) + os.sep + default_conf,
+                        tmpdir + os.sep + default_conf)
+        os.environ['HOME'] = tmpdir
+
+        self.run_success(["show", "overview"])
+        self.run_fail(['--node', 'non_default', "show", "overview"])
+        os.environ['HOME'] = original_home
 
     def test_user(self):
         self.run_success(['--user', 'guest', '--password', 'guest', 'show', 'overview'])
@@ -224,5 +243,4 @@ def exp_msg(key, count, redelivered, payload):
 
 if __name__ == '__main__':
     print "\nrabbitmqadmin tests\n===================\n"
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestRabbitMQAdmin)
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    unittest.main(verbosity=2)
