@@ -39,4 +39,4 @@
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(BINDING_HEADER, <<"x-bound-from">>).
 -define(MAX_HOPS_ARG, <<"x-max-hops">>).
--define(DEFAULT_PREFETCH, 1000).
+-define(DEF_PREFETCH, 1000).

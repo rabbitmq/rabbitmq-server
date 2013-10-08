@@ -87,9 +87,9 @@ from_set(SetName, XorQ, UpstName) ->
     rabbit_federation_util:find_upstreams(UpstName, from_set(SetName, XorQ)).
 
 from_set(<<"all">>, XorQ) ->
-    Connections = rabbit_runtime_parameters:list(
+    Upstreams = rabbit_runtime_parameters:list(
                     vhost(XorQ), <<"federation-upstream">>),
-    Set = [[{<<"upstream">>, pget(name, C)}] || C <- Connections],
+    Set = [[{<<"upstream">>, pget(name, U)}] || U <- Upstreams],
     from_set_contents(Set, XorQ);
 
 from_set(SetName, XorQ) ->
@@ -108,29 +108,29 @@ from_set_element(UpstreamSetElem, XorQ) ->
     case rabbit_runtime_parameters:value(
            vhost(XorQ), <<"federation-upstream">>, Name) of
         not_found  -> not_found;
-        Upstream   -> from_props_connection(
+        Upstream   -> from_upstream_or_set(
                         UpstreamSetElem, Name, Upstream, XorQ)
     end.
 
-from_props_connection(U, Name, C, XorQ) ->
-    URIParam = bget(uri, U, C),
+from_upstream_or_set(US, Name, U, XorQ) ->
+    URIParam = bget(uri, US, U),
     URIs = case URIParam of
                B when is_binary(B) -> [B];
                L when is_list(L)   -> L
            end,
     #upstream{uris            = URIs,
-              exchange_name   = bget(exchange,          U, C, name(XorQ)),
-              queue_name      = bget(queue,             U, C, name(XorQ)),
-              prefetch_count  = bget('prefetch-count',  U, C, ?DEFAULT_PREFETCH),
-              reconnect_delay = bget('reconnect-delay', U, C, 1),
-              max_hops        = bget('max-hops',        U, C, 1),
-              expires         = bget(expires,           U, C, none),
-              message_ttl     = bget('message-ttl',     U, C, none),
-              trust_user_id   = bget('trust-user-id',   U, C, false),
+              exchange_name   = bget(exchange,          US, U, name(XorQ)),
+              queue_name      = bget(queue,             US, U, name(XorQ)),
+              prefetch_count  = bget('prefetch-count',  US, U, ?DEF_PREFETCH),
+              reconnect_delay = bget('reconnect-delay', US, U, 1),
+              max_hops        = bget('max-hops',        US, U, 1),
+              expires         = bget(expires,           US, U, none),
+              message_ttl     = bget('message-ttl',     US, U, none),
+              trust_user_id   = bget('trust-user-id',   US, U, false),
               ack_mode        = list_to_atom(
                                   binary_to_list(
-                                    bget('ack-mode', U, C, <<"on-confirm">>))),
-              ha_policy       = bget('ha-policy',       U, C, none),
+                                    bget('ack-mode', US, U, <<"on-confirm">>))),
+              ha_policy       = bget('ha-policy',       US, U, none),
               name            = Name}.
 
 %%----------------------------------------------------------------------------
