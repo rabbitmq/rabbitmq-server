@@ -40,8 +40,7 @@ register() ->
 validate(_VHost, <<"federation-upstream-set">>, Name, Term) ->
     [rabbit_parameter_validation:proplist(
        Name,
-       [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory},
-        {<<"exchange">>, fun rabbit_parameter_validation:binary/2, optional} |
+       [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory} |
         shared_validation()], Upstream)
      || Upstream <- Term];
 
