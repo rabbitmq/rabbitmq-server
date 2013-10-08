@@ -44,13 +44,15 @@ start_link(Sock, Connection, ChMgr, AState) ->
 %%---------------------------------------------------------------------------
 
 init([Sock, Connection, ChMgr, AState]) ->
-    case next(#state{sock             = Sock,
-                     connection       = Connection,
-                     channels_manager = ChMgr,
-                     astate           = AState,
-                     message          = none}) of
-        {noreply, State}       -> {ok, State};
-        {stop, Reason, _State} -> {stop, Reason}
+    State = #state{sock             = Sock,
+                   connection       = Connection,
+                   channels_manager = ChMgr,
+                   astate           = AState,
+                   message          = none},
+    case rabbit_net:async_recv(Sock, 0, infinity) of
+        {ok, _}         -> {ok, State};
+        {error, Reason} -> {stop, Reason, _} = handle_error(Reason, State),
+                           {stop, Reason}
     end.
 
 terminate(_Reason, _State) ->
@@ -138,12 +140,6 @@ process_frame(Type, ChNumber, Payload,
             State#state{astate = amqp_channels_manager:process_channel_frame(
                                    AnalyzedFrame, 0, Connection, AState)}
     end.
-
-next(State = #state{sock = Sock}) ->
-     case rabbit_net:async_recv(Sock, 0, infinity) of
-         {ok, _}         -> {noreply, State};
-         {error, Reason} -> handle_error(Reason, State)
-     end.
 
 handle_error(closed, State = #state{connection = Conn}) ->
     Conn ! socket_closed,
