@@ -93,10 +93,7 @@ federate(#exchange{internal = true}) ->
     false;
 
 federate(X) ->
-    case rabbit_federation_upstream:set_for(X) of
-        undefined -> false;
-        _         -> true
-    end.
+    rabbit_federation_upstream:federate(X).
 
 maybe_start(X = #exchange{name = XName})->
     case federate(X) of

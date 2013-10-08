@@ -19,7 +19,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([set_for/1, for/1, for/2, params_to_string/1, to_params/2]).
+-export([federate/1, for/1, for/2, params_to_string/1, to_params/2]).
 %% For testing
 -export([from_set/2, remove_credentials/1]).
 
@@ -28,18 +28,31 @@
 
 %%----------------------------------------------------------------------------
 
-set_for(XorQ) -> rabbit_policy:get(<<"federation-upstream-set">>, XorQ).
+federate(XorQ) ->
+    rabbit_policy:get(<<"federation-upstream">>, XorQ) =/= undefined orelse
+        rabbit_policy:get(<<"federation-upstream-set">>, XorQ) =/= undefined.
 
 for(XorQ) ->
-    case set_for(XorQ) of
-        undefined   -> [];
-        UpstreamSet -> from_set(UpstreamSet, XorQ)
+    case federate(XorQ) of
+        false -> [];
+        true  -> from_set_contents(upstreams(XorQ), XorQ)
     end.
 
 for(XorQ, UpstreamName) ->
-    case set_for(XorQ) of
-        undefined   -> [];
-        UpstreamSet -> from_set(UpstreamSet, XorQ, UpstreamName)
+    case federate(XorQ) of
+        false -> [];
+        true  -> rabbit_federation_util:find_upstreams(
+                   UpstreamName, from_set_contents(upstreams(XorQ), XorQ))
+    end.
+
+upstreams(XorQ) ->
+    UName = rabbit_policy:get(<<"federation-upstream">>, XorQ),
+    USetName = rabbit_policy:get(<<"federation-upstream-set">>, XorQ),
+    %% Cannot define both, see rabbit_federation_parameters:validate_policy/1
+    case {UName, USetName} of
+        {undefined, undefined} -> [];
+        {undefined, _}         -> set_contents(USetName, vhost(XorQ));
+        {_,         undefined} -> [[{<<"upstream">>, UName}]]
     end.
 
 params_table(SafeURI, Params, XorQ) ->
@@ -83,20 +96,19 @@ to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
-from_set(SetName, XorQ, UpstName) ->
-    rabbit_federation_util:find_upstreams(UpstName, from_set(SetName, XorQ)).
-
-from_set(<<"all">>, XorQ) ->
-    Upstreams = rabbit_runtime_parameters:list(
-                    vhost(XorQ), <<"federation-upstream">>),
-    Set = [[{<<"upstream">>, pget(name, U)}] || U <- Upstreams],
-    from_set_contents(Set, XorQ);
-
 from_set(SetName, XorQ) ->
+    from_set_contents(set_contents(SetName, vhost(XorQ)), XorQ).
+
+set_contents(<<"all">>, VHost) ->
+    Upstreams = rabbit_runtime_parameters:list(
+                    VHost, <<"federation-upstream">>),
+    [[{<<"upstream">>, pget(name, U)}] || U <- Upstreams];
+
+set_contents(SetName, VHost) ->
     case rabbit_runtime_parameters:value(
-           vhost(XorQ), <<"federation-upstream-set">>, SetName) of
+           VHost, <<"federation-upstream-set">>, SetName) of
         not_found -> [];
-        Set       -> from_set_contents(Set, XorQ)
+        Set       -> Set
     end.
 
 from_set_contents(Set, XorQ) ->

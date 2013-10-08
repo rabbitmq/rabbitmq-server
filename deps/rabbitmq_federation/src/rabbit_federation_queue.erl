@@ -63,11 +63,7 @@ policy_changed_local(Q1, Q2) ->
     shutdown(Q1),
     startup(Q2).
 
-active_for(Q) ->
-    case rabbit_federation_upstream:set_for(Q) of
-        undefined -> false;
-        _         -> true
-    end.
+active_for(Q) -> rabbit_federation_upstream:federate(Q).
 
 %% We need to reconsider whether we need to run or pause every time
 %% something significant changes in the queue. In theory we don't need

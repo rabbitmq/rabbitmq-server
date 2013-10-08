@@ -34,6 +34,7 @@ register() ->
         {Class, Name} <- [{runtime_parameter, <<"federation">>},
                           {runtime_parameter, <<"federation-upstream">>},
                           {runtime_parameter, <<"federation-upstream-set">>},
+                          {policy_validator,  <<"federation-upstream">>},
                           {policy_validator,  <<"federation-upstream-set">>}]],
     ok.
 
@@ -126,5 +127,15 @@ validate_policy([{<<"federation-upstream-set">>, Value}])
   when is_binary(Value) ->
     ok;
 validate_policy([{<<"federation-upstream-set">>, Value}]) ->
-    {error, "~p is not a valid federation upstream set name", [Value]}.
+    {error, "~p is not a valid federation upstream set name", [Value]};
+
+validate_policy([{<<"federation-upstream">>, Value}])
+  when is_binary(Value) ->
+    ok;
+validate_policy([{<<"federation-upstream">>, Value}]) ->
+    {error, "~p is not a valid federation upstream name", [Value]};
+
+validate_policy(L) when length(L) =:= 2 ->
+    {error, "cannot specify federation-upstream and federation-upstream-set "
+     "together", []}.
 
