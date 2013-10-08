@@ -178,11 +178,11 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
 
 non_existent_user_test() ->
     Params = [{username, test_util:uuid()}, {password, test_util:uuid()}],
-    ?assertMatch({error, auth_failure}, test_util:new_connection(Params)).
+    ?assertMatch({error, {auth_failure, _}}, test_util:new_connection(Params)).
 
 invalid_password_test() ->
     Params = [{username, <<"guest">>}, {password, test_util:uuid()}],
-    ?assertMatch({error, auth_failure}, test_util:new_connection(Params)).
+    ?assertMatch({error, {auth_failure, _}}, test_util:new_connection(Params)).
 
 non_existent_vhost_test() ->
     Params = [{virtual_host, test_util:uuid()}],
