@@ -8,7 +8,7 @@ password = guest
 declare_vhost = / # Used as default for declare / delete only
 vhost = /         # Used as default for declare / delete / list
 
-[bad_port]
+[default]
 hostname = localhost
 port = 99999
 username = guest
