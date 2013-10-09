@@ -6,6 +6,7 @@ import os.path
 import socket
 import subprocess
 import sys
+import shutil
 
 # TODO test: SSL, depth, config file, encodings(?), completion(???)
 
@@ -34,6 +35,24 @@ class TestRabbitMQAdmin(unittest.TestCase):
         self.run_fail(['--port', '15673', 'show', 'overview'])
         # Test port open but not talking HTTP
         self.run_fail(['--port', '5672', 'show', 'overview'])
+
+    def test_config(self):
+        original_home = os.getenv('HOME')
+        tmpdir = os.getenv("TMPDIR") or os.getenv("TEMP") or "/tmp"
+        shutil.copyfile(os.path.dirname(__file__) + os.sep + "default-config",
+                        tmpdir + os.sep + ".rabbitmqadmin.conf")
+        os.environ['HOME'] = tmpdir
+
+        self.run_fail(['--config', '/tmp/no-such-config-file', 'show', 'overview'])
+
+        cf = os.path.dirname(__file__) + os.sep + "test-config"
+        self.run_success(['--config', cf, '--node', 'host_normal', 'show', 'overview'])
+
+        # test 'default node in the config file' where "default" uses an invalid host
+        self.run_fail(['--config', cf, 'show', 'overview'])
+        self.run_success(["show", "overview"])
+        self.run_fail(['--node', 'non_default', "show", "overview"])
+        os.environ['HOME'] = original_home
 
     def test_user(self):
         self.run_success(['--user', 'guest', '--password', 'guest', 'show', 'overview'])

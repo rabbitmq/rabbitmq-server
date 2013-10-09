@@ -1,0 +1,15 @@
+# rabbitmqadmin.conf.example START
+
+[host_normal]
+hostname = localhost
+port = 15672
+username = guest
+password = guest
+declare_vhost = / # Used as default for declare / delete only
+vhost = /         # Used as default for declare / delete / list
+
+[default]
+hostname = localhost
+port = 99999
+username = guest
+password = guest
