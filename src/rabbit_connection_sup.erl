@@ -37,11 +37,6 @@
 
 start_link() ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, Collector} =
-        supervisor2:start_child(
-          SupPid,
-          {collector, {rabbit_queue_collector, start_link, []},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
     %% We need to get channels in the hierarchy here so they get shut
     %% down after the reader, so the reader gets a chance to terminate
     %% them cleanly. But for 1.0 readers we can't start the real
@@ -61,7 +56,7 @@ start_link() ->
         supervisor2:start_child(
           SupPid,
           {reader, {rabbit_reader, start_link,
-                    [ChannelSup3Pid, Collector,
+                    [ChannelSup3Pid, ConHelperSupPid,
                      rabbit_heartbeat:start_heartbeat_fun(ConHelperSupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.

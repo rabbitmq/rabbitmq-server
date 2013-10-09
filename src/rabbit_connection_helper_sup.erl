@@ -19,18 +19,28 @@
 -behaviour(supervisor2).
 
 -export([start_link/0]).
+-export([start_queue_collector/1]).
 -export([init/1]).
+
+-include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_queue_collector/1 :: (pid()) -> rabbit_types:ok_pid_or_error()).
 -endif.
 
 %%----------------------------------------------------------------------------
 
 start_link() ->
     supervisor2:start_link(?MODULE, []).
+
+start_queue_collector(SupPid) ->
+    supervisor2:start_child(
+      SupPid,
+      {collector, {rabbit_queue_collector, start_link, []},
+       intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}).
 
 %%--------------------------------------------------------------------------
 
