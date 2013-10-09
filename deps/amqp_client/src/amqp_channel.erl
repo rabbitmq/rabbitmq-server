@@ -506,6 +506,7 @@ handle_info({confirm_timeout, From}, State = #state{waiting_set = WSet}) ->
 
 %% @private
 terminate(_Reason, State) ->
+    flush_writer(State),
     State.
 
 %% @private
@@ -745,14 +746,6 @@ handle_connection_closing(CloseType, Reason,
                                          rpc_requests = RpcQueue,
                                          closing      = Closing}) ->
     NewState = State#state{closing = {connection, Reason}},
-    case Driver of
-        network -> try
-                       rabbit_writer:flush(Writer)
-                   catch
-                       exit:noproc -> ok
-                   end;
-        direct  -> ok
-    end,
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
         {flush, false, false} ->
             erlang:send_after(?TIMEOUT_FLUSH, self(),
@@ -810,6 +803,15 @@ do(Method, Content, Flow, #state{driver = direct, writer = W}) ->
 start_writer(State = #state{start_writer_fun = SWF}) ->
     {ok, Writer} = SWF(),
     State#state{writer = Writer}.
+
+flush_writer(#state{driver = network, writer = Writer}) ->
+    try
+        rabbit_writer:flush(Writer)
+    catch
+        exit:noproc -> ok
+    end;
+flush_writer(#state{driver = direct}) ->
+    ok.
 
 amqp_msg(none) ->
     none;
