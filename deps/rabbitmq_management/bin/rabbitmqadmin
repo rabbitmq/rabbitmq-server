@@ -350,9 +350,6 @@ def make_configuration():
 
     return (options, args)
 
-def using_default_config_and_node(options):
-    return options.node == "default" and options.config == default_config()
-
 def assert_usage(expr, error):
     if not expr:
         output("\nERROR: {0}\n".format(error))
