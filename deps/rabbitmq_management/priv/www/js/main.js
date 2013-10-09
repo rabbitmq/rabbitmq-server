@@ -63,7 +63,7 @@ function check_login() {
 }
 
 function start_app() {
-    if (app != undefined) {
+    if (app !== undefined) {
         app.unload();
     }
     // Oh boy. Sammy uses various different methods to determine if
