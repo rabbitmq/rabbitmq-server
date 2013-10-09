@@ -317,7 +317,7 @@ def make_configuration():
         print_version()
     if options.config is None:
         config_file = default_config()
-        if os.path.isfile(config_file): 
+        if os.path.isfile(config_file):
             setattr(options, "config", config_file)
     else:
         if not os.path.isfile(options.config):

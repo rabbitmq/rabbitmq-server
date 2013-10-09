@@ -47,7 +47,7 @@ class TestRabbitMQAdmin(unittest.TestCase):
 
         cf = os.path.dirname(__file__) + os.sep + "test-config"
         self.run_success(['--config', cf, '--node', 'host_normal', 'show', 'overview'])
-        
+
         # test 'default node in the config file' where "default" uses an invalid host
         self.run_fail(['--config', cf, 'show', 'overview'])
         self.run_success(["show", "overview"])
