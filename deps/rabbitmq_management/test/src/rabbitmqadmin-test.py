@@ -37,6 +37,12 @@ class TestRabbitMQAdmin(unittest.TestCase):
         self.run_fail(['--port', '5672', 'show', 'overview'])
 
     def test_config(self):
+        original_home = os.getenv('HOME')
+        tmpdir = os.getenv("TMPDIR") or os.getenv("TEMP") or "/tmp"
+        shutil.copyfile(os.path.dirname(__file__) + os.sep + "default-config",
+                        tmpdir + os.sep + ".rabbitmqadmin.conf")
+        os.environ['HOME'] = tmpdir
+
         self.run_fail(['--config', '/tmp/no-such-config-file', 'show', 'overview'])
 
         cf = os.path.dirname(__file__) + os.sep + "test-config"
@@ -44,13 +50,6 @@ class TestRabbitMQAdmin(unittest.TestCase):
         
         # test 'default node in the config file' where "default" uses an invalid host
         self.run_fail(['--config', cf, 'show', 'overview'])
-
-        original_home = os.getenv('HOME')
-        tmpdir = os.getenv("TMPDIR") or os.getenv("TEMP") or "/tmp"
-        shutil.copyfile(os.path.dirname(__file__) + os.sep + "default-config",
-                        tmpdir + os.sep + ".rabbitmqadmin.conf")
-        os.environ['HOME'] = tmpdir
-
         self.run_success(["show", "overview"])
         self.run_fail(['--node', 'non_default', "show", "overview"])
         os.environ['HOME'] = original_home
