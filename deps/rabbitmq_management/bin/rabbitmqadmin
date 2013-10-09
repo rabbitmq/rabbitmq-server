@@ -330,12 +330,10 @@ def make_configuration():
             setattr(options, key, val)
 
     if options.config is not None:
+        config = ConfigParser()
         try:
-            config = ConfigParser()
             config.read(options.config)
             new_conf = dict(config.items(options.node))
-            for (key, val) in new_conf.items():
-                setattr(options, key, val)
         except ConfigParserError, error:
             if using_default_config_and_node(options):
                 pass
@@ -343,6 +341,9 @@ def make_configuration():
                 assert_usage(False, ("Could not read section '%s' in config file"  +
                              " '%s':\n   %s") %
                              (options.node, options.config, error))
+        else:
+            for key, val in new_conf.items():
+                setattr(options, key, val)
 
     return (options, args)
 
