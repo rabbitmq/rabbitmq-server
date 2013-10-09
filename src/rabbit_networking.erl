@@ -153,7 +153,7 @@ ensure_ssl() ->
         {Module, Function} ->
             rabbit_misc:pset(verify_fun,
                              fun (ErrorList) ->
-                                     apply(Module, Function, [ErrorList])
+                                     Module:Function(ErrorList)
                              end, SslOptsConfig);
         undefined ->
             % unknown_ca errors are silently ignored prior to R14B unless we
