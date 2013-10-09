@@ -1,20 +1,7 @@
 $(document).ready(function() {
     replace_content('outer', format('login', {}));
-    var location = this.location.href;
-    location = location.substr(3 + location.indexOf("://"));
-    var authority = location.substr(0, location.indexOf("/"));
-    if (authority.indexOf("@") === -1) {
-        start_app_login();
-    } else {
-        var userinfo = authority.substr(0, authority.indexOf("@"));
-        if (userinfo.split(":").length === 2) {
-            var b64 = b64_encode_utf8(decodeURIComponent(userinfo));
-            document.cookie = 'auth=' + encodeURIComponent(b64);
-            check_login();
-        } else {
-            start_app_login();
-        }
-    }
+    try_uri_login();
+    start_app_login();
 });
 
 function dispatcher_add(fun) {
@@ -30,13 +17,29 @@ function dispatcher() {
     }
 }
 
+function try_uri_login() {
+    var location = this.location.href;
+    location = location.substr(3 + location.indexOf("://"));
+    var authority = location.substr(0, location.indexOf("/"));
+    if (authority.indexOf("@") !== -1) {
+        var userinfo = authority.substr(0, authority.indexOf("@"));
+        if (userinfo.split(":").length === 2) {
+            set_auth_cookie(decodeURIComponent(userinfo));
+        }
+    }
+}
+
+function set_auth_cookie(userinfo) {
+    var b64 = b64_encode_utf8(decodeURIComponent(userinfo));
+    document.cookie = 'auth=' + encodeURIComponent(b64);
+}
+
 function start_app_login() {
     app = new Sammy.Application(function () {
         this.put('#/login', function() {
             username = this.params['username'];
             password = this.params['password'];
-            var b64 = b64_encode_utf8(username + ':' + password);
-            document.cookie = 'auth=' + encodeURIComponent(b64);
+            set_auth_cookie(username + ':' + password);
             check_login();
         });
     });
