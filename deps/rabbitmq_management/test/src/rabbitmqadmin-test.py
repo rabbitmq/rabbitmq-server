@@ -45,11 +45,10 @@ class TestRabbitMQAdmin(unittest.TestCase):
         # test 'default node in the config file' where "default" uses an invalid host
         self.run_fail(['--config', cf, 'show', 'overview'])
 
-        default_conf = ".rabbitmqadmin.conf"
         original_home = os.getenv('HOME')
         tmpdir = os.getenv("TMPDIR") or os.getenv("TEMP") or "/tmp"
-        shutil.copyfile(os.path.dirname(__file__) + os.sep + default_conf,
-                        tmpdir + os.sep + default_conf)
+        shutil.copyfile(os.path.dirname(__file__) + os.sep + "default-config",
+                        tmpdir + os.sep + ".rabbitmqadmin.conf")
         os.environ['HOME'] = tmpdir
 
         self.run_success(["show", "overview"])
