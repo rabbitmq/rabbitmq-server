@@ -1,6 +1,20 @@
 $(document).ready(function() {
     replace_content('outer', format('login', {}));
-    start_app_login();
+    var location = this.location.href;
+    location = location.substr(3 + location.indexOf("://"));
+    var authority = location.substr(0, location.indexOf("/"));
+    if (authority.indexOf("@") === -1) {
+        start_app_login();
+    } else {
+        var userinfo = authority.substr(0, authority.indexOf("@"));
+        if (userinfo.split(":").length === 2) {
+            var b64 = b64_encode_utf8(decodeURIComponent(userinfo));
+            document.cookie = 'auth=' + encodeURIComponent(b64);
+            check_login();
+        } else {
+            start_app_login();
+        }
+    }
 });
 
 function dispatcher_add(fun) {
@@ -49,7 +63,9 @@ function check_login() {
 }
 
 function start_app() {
-    app.unload();
+    if (app != undefined) {
+        app.unload();
+    }
     // Oh boy. Sammy uses various different methods to determine if
     // the URL hash has changed. Unsurprisingly this is a native event
     // in modern browsers, and falls back to an icky polling function
