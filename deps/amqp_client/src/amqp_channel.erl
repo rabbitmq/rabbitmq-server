@@ -746,7 +746,9 @@ handle_connection_closing(CloseType, Reason,
                                          closing      = Closing}) ->
     NewState = State#state{closing = {connection, Reason}},
     case Driver of
-        network -> catch rabbit_writer:flush(Writer);
+        network -> rabbit_misc:with_exit_handler(
+                     fun rabbit_misc:const_ok/0,
+                     fun() -> rabbit_writer:flush(Writer) end);
         direct  -> ok
     end,
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
