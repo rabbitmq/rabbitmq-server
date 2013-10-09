@@ -52,12 +52,17 @@ start_link() ->
           SupPid,
           {channel_sup3, {rabbit_intermediate_sup, start_link, []},
            intrinsic, infinity, supervisor, [rabbit_intermediate_sup]}),
+    {ok, ConHelperSupPid} =
+        supervisor2:start_child(
+          SupPid,
+          {helper_sup, {rabbit_connection_helper_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_connection_helper_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
           {reader, {rabbit_reader, start_link,
                     [ChannelSup3Pid, Collector,
-                     rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
+                     rabbit_heartbeat:start_heartbeat_fun(ConHelperSupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
 
