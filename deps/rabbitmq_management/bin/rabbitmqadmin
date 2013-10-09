@@ -20,8 +20,7 @@ if sys.version_info[0] < 2 or sys.version_info[1] < 6:
     print "Sorry, rabbitmqadmin requires at least Python 2.6."
     sys.exit(1)
 
-from ConfigParser import ConfigParser
-from ConfigParser import Error as ConfigParserError
+from ConfigParser import ConfigParser, NoSectionError
 from optparse import OptionParser, TitledHelpFormatter
 import httplib
 import urllib
@@ -320,6 +319,10 @@ def make_configuration():
         config_file = default_config()
         if os.path.isfile(config_file): 
             setattr(options, "config", config_file)
+    else:
+        if not os.path.isfile(options.config):
+            assert_usage(False,
+                "Could not read config file '%s'" % options.config)
 
     if options.node is None and options.config:
         options.node = "default"
@@ -334,8 +337,8 @@ def make_configuration():
         try:
             config.read(options.config)
             new_conf = dict(config.items(options.node))
-        except ConfigParserError, error:
-            if using_default_config_and_node(options):
+        except NoSectionError, error:
+            if options.node == "default":
                 pass
             else:
                 assert_usage(False, ("Could not read section '%s' in config file"  +
