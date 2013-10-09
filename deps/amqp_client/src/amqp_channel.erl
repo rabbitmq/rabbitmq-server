@@ -787,15 +787,20 @@ handle_shutdown(Reason, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-do(Method, Content, Flow, #state{driver = Driver, writer = W}) ->
+do(Method, Content, Flow, #state{driver = network, writer = W}) ->
     %% Catching because it expects the {channel_exit, _, _} message on error
-    catch case {Driver, Content, Flow} of
-              {network, none, _}  -> rabbit_writer:send_command_flow(W, Method);
-              {network, _, _}     -> rabbit_writer:send_command_flow(W, Method,
-                                                                     Content);
-              {direct, none, _}   -> rabbit_channel:do(W, Method);
-              {direct, _, flow}   -> rabbit_channel:do_flow(W, Method, Content);
-              {direct, _, noflow} -> rabbit_channel:do(W, Method, Content)
+    catch case {Content, Flow} of
+              {none, _}      -> rabbit_writer:send_command(W, Method);
+              {_,    flow}   -> rabbit_writer:send_command_flow(W, Method,
+                                                                Content);
+              {_,    noflow} -> rabbit_writer:send_command(W, Method, Content)
+          end;
+do(Method, Content, Flow, #state{driver = direct, writer = W}) ->
+    %% ditto catching because...
+    catch case {Content, Flow} of
+              {none, _}      -> rabbit_channel:do(W, Method);
+              {_,    flow}   -> rabbit_channel:do_flow(W, Method, Content);
+              {_,    noflow} -> rabbit_channel:do(W, Method, Content)
           end.
 
 start_writer(State = #state{start_writer_fun = SWF}) ->
