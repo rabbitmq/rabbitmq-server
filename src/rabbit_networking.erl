@@ -152,9 +152,8 @@ ensure_ssl() ->
     case rabbit_misc:pget(verify_fun, SslOptsConfig) of
         {Module, Function} ->
             rabbit_misc:pset(verify_fun,
-                             fun (OtpCert, Event, State) ->
-                                     apply(Module, Function,
-                                           [OtpCert, Event, State])
+                             fun (ErrorList) ->
+                                     apply(Module, Function, [ErrorList])
                              end, SslOptsConfig);
         undefined ->
             % unknown_ca errors are silently ignored prior to R14B unless we
