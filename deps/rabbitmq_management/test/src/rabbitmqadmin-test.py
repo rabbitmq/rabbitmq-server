@@ -243,4 +243,5 @@ def exp_msg(key, count, redelivered, payload):
 
 if __name__ == '__main__':
     print "\nrabbitmqadmin tests\n===================\n"
-    unittest.main(verbosity=2)
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestRabbitMQAdmin)
+    unittest.TextTestRunner(verbosity=2).run(suite)
