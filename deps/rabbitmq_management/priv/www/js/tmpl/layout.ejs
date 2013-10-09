@@ -1,9 +1,11 @@
 <div id="header">
   <div id="login-version">
     <div id="login-details"></div>
+<% if (!uri_auth_used) { %>
     <form action="#/logout" method="put">
       <input type="submit" value="Log out"/>
     </form>
+<% } %>
   </div>
   <div id="logo">
     <a href="#/">

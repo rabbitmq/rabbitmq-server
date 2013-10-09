@@ -24,6 +24,7 @@ function try_uri_login() {
     if (authority.indexOf("@") !== -1) {
         var userinfo = authority.substr(0, authority.indexOf("@"));
         if (userinfo.split(":").length === 2) {
+            uri_auth_used = true;
             set_auth_cookie(decodeURIComponent(userinfo));
         }
     }
@@ -56,7 +57,8 @@ function check_login() {
         replace_content('login-status', '<p>Login failed</p>');
     }
     else {
-        replace_content('outer', format('layout', {}));
+        replace_content('outer',
+                        format('layout', {uri_auth_used: uri_auth_used}));
         setup_global_vars(user);
         setup_constant_events();
         update_vhosts();
