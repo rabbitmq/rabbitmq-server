@@ -55,9 +55,7 @@ start_link() ->
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
-          {reader, {rabbit_reader, start_link,
-                    [IntermediateSup,
-                     rabbit_heartbeat:start_heartbeat_fun(IntermediateSup)]},
+          {reader, {rabbit_reader, start_link, [IntermediateSup]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
 
