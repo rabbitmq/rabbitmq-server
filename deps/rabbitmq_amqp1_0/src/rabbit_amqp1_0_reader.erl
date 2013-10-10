@@ -38,8 +38,8 @@
 %%--------------------------------------------------------------------------
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
-             connection_state, queue_collector, heartbeater, ch_sup3_pid,
-             channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len, throttle}).
+             connection_state, queue_collector, heartbeater, helper_sup,
+             channel_sup_sup_pid, buf, buf_len, throttle}).
 
 -record(connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
                      hostname}).
@@ -54,7 +54,7 @@
 %%--------------------------------------------------------------------------
 
 unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv, QueueCollector,
-                   ChSup3Pid, SHF, Buf, BufLen}) ->
+                   HelperSupPid, Buf, BufLen}) ->
     #v1{parent              = Parent,
         sock                = Sock,
         callback            = handshake,
@@ -63,8 +63,7 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv, QueueCollector,
         connection_state    = pre_init,
         queue_collector     = QueueCollector,
         heartbeater         = none,
-        ch_sup3_pid         = ChSup3Pid,
-        start_heartbeat_fun = SHF,
+        helper_sup          = HelperSupPid,
         buf                 = Buf,
         buf_len             = BufLen,
         throttle = #throttle{conserve_resources = false,
@@ -354,10 +353,10 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                           hostname = Hostname,
                                           properties = Props },
                             State = #v1{
-                              start_heartbeat_fun = SHF,
                               connection_state = starting,
                               connection = Connection,
                               throttle   = Throttle,
+                              helper_sup = HelperSupPid,
                               sock = Sock}) ->
     ClientProps        = case Props of
                              undefined -> [];
@@ -398,8 +397,10 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                 %%         actual timeout threshold
                 ReceiverHeartbeatSec = lists:min([HeartbeatSec * 2, 4294967]),
                 %% TODO: only start heartbeat receive timer at next next frame
-                Heartbeater = SHF(Sock, ClientHeartbeatSec, SendFun,
-                                  ReceiverHeartbeatSec, ReceiveFun),
+                Heartbeater =
+                    rabbit_heartbeat:start(HelperSupPid, Sock,
+                                           ClientHeartbeatSec, SendFun,
+                                           ReceiverHeartbeatSec, ReceiveFun),
                 State#v1{connection_state = running,
                          connection = Connection#connection{
                                                    frame_max = FrameMax,
@@ -575,7 +576,7 @@ start_1_0_connection(amqp,
     end.
 
 start_1_0_connection0(Mode, State = #v1{connection   = Connection,
-                                        ch_sup3_pid  = ChSup3Pid}) ->
+                                        helper_sup  = ChSup3Pid}) ->
     ChannelSupSupPid =
         case Mode of
             sasl -> undefined;
