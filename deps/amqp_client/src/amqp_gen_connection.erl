@@ -173,7 +173,7 @@ handle_call(connect, _From, {TypeSup, AMQPParams}) ->
         {ok, Params} ->
             {reply, {ok, self()}, after_connect(Params, State)};
         {closing, #amqp_error{name = access_refused} = AmqpError, Error} ->
-            {stop, {shutdown, AmqpError}, Error, State1};
+            {stop, {shutdown, AmqpError}, Error, State};
         {closing, Params, #amqp_error{} = AmqpError, Error} ->
             server_misbehaved(self(), AmqpError),
             {reply, Error, after_connect(Params, State)};
