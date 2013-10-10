@@ -159,8 +159,8 @@ processor_args(SupPid, Configuration, Sock) ->
 
     StartHeartbeatFun =
         fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFun) ->
-                SHF = rabbit_heartbeat:start_heartbeat_fun(SupPid),
-                SHF(Sock, SendTimeout, SendFin, ReceiveTimeout, ReceiveFun)
+                rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
+                                       SendFin, ReceiveTimeout, ReceiveFun)
         end,
     [SendFun, adapter_info(Sock), StartHeartbeatFun,
      ssl_login_name(Sock, Configuration)].
