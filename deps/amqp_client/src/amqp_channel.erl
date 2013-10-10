@@ -74,7 +74,7 @@
 -export([call_consumer/2, subscribe/3]).
 -export([next_publish_seqno/1, wait_for_confirms/1, wait_for_confirms/2,
          wait_for_confirms_or_die/1, wait_for_confirms_or_die/2]).
--export([start_link/5, connection_closing/3, open/1]).
+-export([start_link/4, set_writer/2, connection_closing/3, open/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -95,7 +95,6 @@
                 next_pub_seqno     = 0,
                 flow_active        = true,
                 flow_handler       = none,
-                start_writer_fun,
                 unconfirmed_set    = gb_sets:new(),
                 waiting_set        = gb_trees:empty(),
                 only_acks_received = true
@@ -336,9 +335,12 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, Connection, ChannelNumber, Consumer, SWF) ->
+start_link(Driver, Connection, ChannelNumber, Consumer) ->
     gen_server:start_link(
-        ?MODULE, [Driver, Connection, ChannelNumber, Consumer, SWF], []).
+        ?MODULE, [Driver, Connection, ChannelNumber, Consumer], []).
+
+set_writer(Pid, Writer) ->
+    gen_server:cast(Pid, {set_writer, Writer}).
 
 %% @private
 connection_closing(Pid, ChannelCloseType, Reason) ->
@@ -353,12 +355,11 @@ open(Pid) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Driver, Connection, ChannelNumber, Consumer, SWF]) ->
-    {ok, #state{connection       = Connection,
-                driver           = Driver,
-                number           = ChannelNumber,
-                consumer         = Consumer,
-                start_writer_fun = SWF}}.
+init([Driver, Connection, ChannelNumber, Consumer]) ->
+    {ok, #state{connection = Connection,
+                driver     = Driver,
+                number     = ChannelNumber,
+                consumer   = Consumer}}.
 
 %% @private
 handle_call(open, From, State) ->
@@ -396,6 +397,9 @@ handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
     handle_method_to_server(BasicConsume, none, From, Subscriber, noflow,
                             State).
 
+%% @private
+handle_cast({set_writer, Writer}, State) ->
+    {noreply, State#state{writer = Writer}};
 %% @private
 handle_cast({cast, Method, AmqpMsg, Sender, noflow}, State) ->
     handle_method_to_server(Method, AmqpMsg, none, Sender, noflow, State);
@@ -611,8 +615,6 @@ pending_rpc_method(#state{rpc_requests = Q}) ->
     {value, {_From, _Sender, Method, _Content, _Flow}} = queue:peek(Q),
     Method.
 
-pre_do(#'channel.open'{}, none, _Sender, State) ->
-    start_writer(State);
 pre_do(#'channel.close'{reply_code = Code, reply_text = Text}, none,
        _Sender, State) ->
     State#state{closing = {just_channel, {app_initiated_close, Code, Text}}};
@@ -791,10 +793,6 @@ do(Method, Content, Flow, #state{driver = Driver, writer = W}) ->
               {direct, _, flow}   -> rabbit_channel:do_flow(W, Method, Content);
               {direct, _, noflow} -> rabbit_channel:do(W, Method, Content)
           end.
-
-start_writer(State = #state{start_writer_fun = SWF}) ->
-    {ok, Writer} = SWF(),
-    State#state{writer = Writer}.
 
 amqp_msg(none) ->
     none;

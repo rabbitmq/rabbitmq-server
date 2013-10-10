@@ -21,7 +21,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/5, connect/1, open_channel/3, hard_error_in_channel/3,
+-export([start_link/2, connect/1, open_channel/3, hard_error_in_channel/3,
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
          close/3, server_close/2, info/2, info_keys/0, info_keys/1,
          register_blocked_handler/2]).
@@ -34,13 +34,10 @@
 
 -record(state, {module,
                 module_state,
-                sup,
                 channels_manager,
                 amqp_params,
                 channel_max,
                 server_properties,
-                start_infrastructure_fun,
-                start_channels_manager_fun,
                 %% connection.block, connection.unblock handler
                 block_handler,
                 closing = false %% #closing{} | false
@@ -54,10 +51,8 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Mod, AmqpParams, SIF, SChMF, ExtraParams) ->
-    gen_server:start_link(?MODULE,
-                          [Mod, self(), AmqpParams, SIF, SChMF, ExtraParams],
-                          []).
+start_link(TypeSup, AMQPParams) ->
+    gen_server:start_link(?MODULE, {TypeSup, AMQPParams}, []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -104,18 +99,18 @@ info_keys(Pid) ->
 
 behaviour_info(callbacks) ->
     [
-     %% init(Params) -> {ok, InitialState}
-     {init, 1},
+     %% init() -> {ok, InitialState}
+     {init, 0},
 
      %% terminate(Reason, FinalState) -> Ignored
      {terminate, 2},
 
-     %% connect(AmqpParams, SIF, ChMgr, State) ->
+     %% connect(AmqpParams, SIF, State) ->
      %%     {ok, ConnectParams} | {closing, ConnectParams, AmqpError, Reply} |
      %%         {error, Error}
      %% where
      %%     ConnectParams = {ServerProperties, ChannelMax, NewState}
-     {connect, 4},
+     {connect, 3},
 
      %% do(Method, State) -> Ignored
      {do, 2},
@@ -156,38 +151,34 @@ callback(Function, Params, State = #state{module = Mod,
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Mod, Sup, AmqpParams, SIF, SChMF, ExtraParams]) ->
+init({TypeSup, AMQPParams}) ->
     %% Trapping exits since we need to make sure that the `terminate/2' is
     %% called in the case of direct connection (it does not matter for a network
     %% connection).  See bug25116.
     process_flag(trap_exit, true),
-    {ok, MState} = Mod:init(ExtraParams),
-    {ok, #state{module = Mod,
-                module_state = MState,
-                sup = Sup,
-                amqp_params = AmqpParams,
-                start_infrastructure_fun = SIF,
-                start_channels_manager_fun = SChMF,
-                block_handler = none}}.
+    %% connect() has to be called first, so we can use a special state here
+    {ok, {TypeSup, AMQPParams}}.
 
-handle_call(connect, _From,
-            State0 = #state{module = Mod,
-                            module_state = MState,
-                            amqp_params = AmqpParams,
-                            start_infrastructure_fun = SIF,
-                            start_channels_manager_fun = SChMF}) ->
-    {ok, ChMgr} = SChMF(),
-    State1 = State0#state{channels_manager = ChMgr},
-    case Mod:connect(AmqpParams, SIF, ChMgr, MState) of
+handle_call(connect, _From, {TypeSup, AMQPParams}) ->
+    {Type, Mod} = amqp_connection_type_sup:type_module(AMQPParams),
+    {ok, MState} = Mod:init(),
+    {ok, SIF, ChMgr} = amqp_connection_type_sup:start_infrastructure(
+                         TypeSup, self(), Type),
+    State = #state{module           = Mod,
+                   module_state     = MState,
+                   channels_manager = ChMgr,
+                   amqp_params      = AMQPParams,
+                   block_handler    = none},
+    case Mod:connect(AMQPParams, SIF, MState) of
         {ok, Params} ->
-            {reply, {ok, self()}, after_connect(Params, State1)};
+            {reply, {ok, self()}, after_connect(Params, State)};
         {closing, #amqp_error{name = access_refused} = AmqpError, Error} ->
             {stop, {shutdown, AmqpError}, Error, State1};
         {closing, Params, #amqp_error{} = AmqpError, Error} ->
             server_misbehaved(self(), AmqpError),
-            {reply, Error, after_connect(Params, State1)};
+            {reply, Error, after_connect(Params, State)};
         {error, _} = Error ->
-            {stop, {shutdown, Error}, Error, State0}
+            {stop, {shutdown, Error}, Error, State}
     end;
 handle_call({command, Command}, From, State = #state{closing = false}) ->
     handle_command(Command, From, State);
