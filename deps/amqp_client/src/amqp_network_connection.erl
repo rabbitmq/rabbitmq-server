@@ -20,7 +20,7 @@
 -include("amqp_client_internal.hrl").
 
 -behaviour(amqp_gen_connection).
--export([init/0, terminate/2, connect/3, do/2, open_channel_args/1, i/2,
+-export([init/0, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
@@ -32,6 +32,7 @@
                 heartbeat,
                 writer0,
                 frame_max,
+                type_sup,
                 closing_reason, %% undefined | Reason
                 waiting_socket_close = false}).
 
@@ -107,10 +108,11 @@ info_keys() ->
 %% Handshake
 %%---------------------------------------------------------------------------
 
-connect(AmqpParams = #amqp_params_network{host = Host}, SIF, State) ->
+connect(AmqpParams = #amqp_params_network{host = Host}, SIF, TypeSup, State) ->
     case gethostaddr(Host) of
         []     -> {error, unknown_host};
-        [AF|_] -> do_connect(AF, AmqpParams, SIF, State)
+        [AF|_] -> do_connect(
+                    AF, AmqpParams, SIF, State#state{type_sup = TypeSup})
     end.
 
 do_connect({Addr, Family},
@@ -170,15 +172,14 @@ try_handshake(AmqpParams, SIF, State) ->
 
 handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    {SHF, State1} = start_infrastructure(SIF, State0),
-    network_handshake(AmqpParams, SHF, State1).
+    network_handshake(AmqpParams, start_infrastructure(SIF, State0)).
 
 start_infrastructure(SIF, State = #state{sock = Sock}) ->
-    {ok, {Writer, SHF}} = SIF(Sock),
-    {SHF, State#state{writer0 = Writer}}.
+    {ok, Writer} = SIF(Sock),
+    State#state{writer0 = Writer}.
 
 network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
-                  SHF, State0) ->
+                  State0) ->
     Start = #'connection.start'{server_properties = ServerProperties,
                                 mechanisms = Mechanisms} =
         handshake_recv('connection.start'),
@@ -188,7 +189,7 @@ network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
             do(#'connection.close_ok'{}, State0),
             Err;
         Tune ->
-            {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, SHF, State0),
+            {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, State0),
             do2(TuneOk, State1),
             do2(#'connection.open'{virtual_host = VHost}, State1),
             Params = {ServerProperties, ChannelMax, State1},
@@ -214,7 +215,7 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
                         heartbeat   = ServerHeartbeat},
      #amqp_params_network{channel_max = ClientChannelMax,
                           frame_max   = ClientFrameMax,
-                          heartbeat   = ClientHeartbeat}, SHF, State) ->
+                          heartbeat   = ClientHeartbeat}, State) ->
     [ChannelMax, Heartbeat, FrameMax] =
         lists:zipwith(fun (Client, Server) when Client =:= 0; Server =:= 0 ->
                               lists:max([Client, Server]);
@@ -232,17 +233,20 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
                          _ -> lists:min([FrameMax, ?TCP_MAX_PACKET_SIZE])
                      end,
     NewState = State#state{heartbeat = Heartbeat, frame_max = CappedFrameMax},
-    start_heartbeat(SHF, NewState),
+    start_heartbeat(NewState),
     {#'connection.tune_ok'{channel_max = ChannelMax,
                            frame_max   = CappedFrameMax,
                            heartbeat   = Heartbeat}, ChannelMax, NewState}.
 
-start_heartbeat(SHF, #state{sock = Sock, heartbeat = Heartbeat}) ->
+start_heartbeat(#state{sock      = Sock,
+                       heartbeat = Heartbeat,
+                       type_sup  = Sup}) ->
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
     SendFun = fun () -> catch rabbit_net:send(Sock, Frame) end,
     Connection = self(),
     ReceiveFun = fun () -> Connection ! heartbeat_timeout end,
-    SHF(Sock, Heartbeat, SendFun, Heartbeat, ReceiveFun).
+    rabbit_heartbeat:start(
+      Sup, Sock, Heartbeat, SendFun, Heartbeat, ReceiveFun).
 
 login(Params = #amqp_params_network{auth_mechanisms = ClientMechanisms,
                                     client_properties = UserProps},

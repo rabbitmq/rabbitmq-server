@@ -105,12 +105,12 @@ behaviour_info(callbacks) ->
      %% terminate(Reason, FinalState) -> Ignored
      {terminate, 2},
 
-     %% connect(AmqpParams, SIF, State) ->
+     %% connect(AmqpParams, SIF, TypeSup, State) ->
      %%     {ok, ConnectParams} | {closing, ConnectParams, AmqpError, Reply} |
      %%         {error, Error}
      %% where
      %%     ConnectParams = {ServerProperties, ChannelMax, NewState}
-     {connect, 3},
+     {connect, 4},
 
      %% do(Method, State) -> Ignored
      {do, 2},
@@ -169,7 +169,7 @@ handle_call(connect, _From, {TypeSup, AMQPParams}) ->
                    channels_manager = ChMgr,
                    amqp_params      = AMQPParams,
                    block_handler    = none},
-    case Mod:connect(AMQPParams, SIF, MState) of
+    case Mod:connect(AMQPParams, SIF, TypeSup, MState) of
         {ok, Params} ->
             {reply, {ok, self()}, after_connect(Params, State)};
         {closing, #amqp_error{name = access_refused} = AmqpError, Error} ->

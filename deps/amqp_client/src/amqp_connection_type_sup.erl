@@ -69,7 +69,7 @@ start_infrastructure_fun(Sup, Conn, ChMgr, network) ->
                   {main_reader, {amqp_main_reader, start_link,
                                  [Sock, Conn, ChMgr, AState]},
                    transient, ?MAX_WAIT, worker, [amqp_main_reader]}),
-            {ok, {Writer, rabbit_heartbeat:start_heartbeat_fun(Sup)}}
+            {ok, Writer}
     end;
 start_infrastructure_fun(Sup, _Conn, _ChMgr, direct) ->
     fun () ->

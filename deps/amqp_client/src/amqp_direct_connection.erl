@@ -23,7 +23,7 @@
 
 -export([server_close/3]).
 
--export([init/0, terminate/2, connect/3, do/2, open_channel_args/1, i/2,
+-export([init/0, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
 -export([socket_adapter_info/2]).
@@ -120,7 +120,7 @@ connect(Params = #amqp_params_direct{username     = Username,
                                      node         = Node,
                                      adapter_info = Info,
                                      virtual_host = VHost},
-        SIF, State) ->
+        SIF, _TypeSup, State) ->
     State1 = State#state{node         = Node,
                          vhost        = VHost,
                          params       = Params,
