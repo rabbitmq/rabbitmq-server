@@ -19,7 +19,9 @@
 -behaviour(supervisor2).
 
 -export([start_link/0]).
--export([start_queue_collector/1]).
+-export([start_channel_sup_sup/1,
+         start_queue_collector/1]).
+
 -export([init/1]).
 
 -include("rabbit.hrl").
@@ -28,6 +30,7 @@
 
 -ifdef(use_specs).
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_channel_sup_sup/1 :: (pid()) -> rabbit_types:ok_pid_or_error()).
 -spec(start_queue_collector/1 :: (pid()) -> rabbit_types:ok_pid_or_error()).
 -endif.
 
@@ -36,15 +39,20 @@
 start_link() ->
     supervisor2:start_link(?MODULE, []).
 
+start_channel_sup_sup(SupPid) ->
+    supervisor2:start_child(
+          SupPid,
+          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}).
+
 start_queue_collector(SupPid) ->
     supervisor2:start_child(
       SupPid,
       {collector, {rabbit_queue_collector, start_link, []},
        intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}).
 
-%%--------------------------------------------------------------------------
+%%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
-
+    {ok, {{one_for_one, 10, 10}, []}}.
 

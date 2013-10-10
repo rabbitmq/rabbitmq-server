@@ -18,12 +18,12 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/3, info_keys/0, info/1, info/2, force_event_refresh/1,
+-export([start_link/2, info_keys/0, info/1, info/2, force_event_refresh/1,
          shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/4, mainloop/2, recvloop/2]).
+-export([init/3, mainloop/2, recvloop/2]).
 
 -export([conserve_resources/3, server_properties/1]).
 
@@ -36,8 +36,8 @@
 %%--------------------------------------------------------------------------
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
-             connection_state, helper_sup_pid, queue_collector, heartbeater,
-             stats_timer, ch_sup3_pid, channel_sup_sup_pid, start_heartbeat_fun,
+             connection_state, helper_sup, queue_collector, heartbeater,
+             stats_timer, channel_sup_sup_pid, start_heartbeat_fun,
              buf, buf_len, throttle}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
@@ -74,7 +74,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/3 :: (pid(), pid(), rabbit_heartbeat:start_heartbeat_fun()) ->
+-spec(start_link/2 :: (pid(), rabbit_heartbeat:start_heartbeat_fun()) ->
                            rabbit_types:ok(pid())).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
@@ -86,10 +86,10 @@
                                   rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec(init/4 :: (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun())
+-spec(init/3 :: (pid(), pid(), rabbit_heartbeat:start_heartbeat_fun())
                 -> no_return()).
--spec(start_connection/7 ::
-        (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun(), any(),
+-spec(start_connection/6 ::
+        (pid(), pid(), rabbit_heartbeat:start_heartbeat_fun(), any(),
          rabbit_net:socket(),
          fun ((rabbit_net:socket()) ->
                      rabbit_types:ok_or_error2(
@@ -104,19 +104,19 @@
 
 %%--------------------------------------------------------------------------
 
-start_link(ChannelSup3Pid, HelperPid, StartHeartbeatFun) ->
-    {ok, proc_lib:spawn_link(?MODULE, init, [self(), ChannelSup3Pid,
-                                             HelperPid, StartHeartbeatFun])}.
+start_link(HelperSup, StartHeartbeatFun) ->
+    {ok, proc_lib:spawn_link(?MODULE, init, [self(), HelperSup,
+                                             StartHeartbeatFun])}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
-init(Parent, ChSup3Pid, HelperPid, StartHeartbeatFun) ->
+init(Parent, HelperSup, StartHeartbeatFun) ->
     Deb = sys:debug_options([]),
     receive
         {go, Sock, SockTransform} ->
             start_connection(
-              Parent, ChSup3Pid, HelperPid, StartHeartbeatFun, Deb, Sock,
+              Parent, HelperSup, StartHeartbeatFun, Deb, Sock,
               SockTransform)
     end.
 
@@ -205,8 +205,8 @@ socket_op(Sock, Fun) ->
                            exit(normal)
     end.
 
-start_connection(Parent, ChSup3Pid, HelperPid, StartHeartbeatFun, Deb,
-                 Sock, SockTransform) ->
+start_connection(Parent, HelperSup, StartHeartbeatFun,
+                 Deb, Sock, SockTransform) ->
     process_flag(trap_exit, true),
     Name = case rabbit_net:connection_string(Sock, inbound) of
                {ok, Str}         -> Str;
@@ -243,9 +243,8 @@ start_connection(Parent, ChSup3Pid, HelperPid, StartHeartbeatFun, Deb,
                 pending_recv        = false,
                 connection_state    = pre_init,
                 queue_collector     = undefined,  %% started on tune-ok
-                helper_sup_pid      = HelperPid,
+                helper_sup          = HelperSup,
                 heartbeater         = none,
-                ch_sup3_pid         = ChSup3Pid,
                 channel_sup_sup_pid = none,
                 start_heartbeat_fun = StartHeartbeatFun,
                 buf                 = [],
@@ -852,7 +851,7 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
                State = #v1{connection_state = tuning,
                            connection = Connection,
-                           helper_sup_pid = HelperPid,
+                           helper_sup = SupPid,
                            sock = Sock,
                            start_heartbeat_fun = SHF}) ->
     ServerFrameMax = server_frame_max(),
@@ -866,7 +865,7 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               [FrameMax, ServerFrameMax]);
        true ->
             {ok, Collector} =
-                rabbit_connection_helper_sup:start_queue_collector(HelperPid),
+                rabbit_connection_helper_sup:start_queue_collector(SupPid),
             Frame = rabbit_binary_generator:build_heartbeat_frame(),
             SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
             Parent = self(),
@@ -886,7 +885,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            connection       = Connection = #connection{
                                                 user = User,
                                                 protocol = Protocol},
-                           ch_sup3_pid      = ChSup3Pid,
+                           helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
@@ -895,10 +894,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     Throttle1 = Throttle#throttle{alarmed_by = Conserve},
     {ok, ChannelSupSupPid} =
-        supervisor2:start_child(
-          ChSup3Pid,
-          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
+        rabbit_connection_helper_sup:start_channel_sup_sup(SupPid),
     State1 = control_throttle(
                State#v1{connection_state    = running,
                         connection          = NewConnection,
@@ -1112,9 +1108,9 @@ pack_for_1_0(#v1{parent              = Parent,
                  recv_len            = RecvLen,
                  pending_recv        = PendingRecv,
                  queue_collector     = QueueCollector,
-                 ch_sup3_pid         = ChSup3Pid,
+                 helper_sup          = SupPid,
                  start_heartbeat_fun = SHF,
                  buf                 = Buf,
                  buf_len             = BufLen}) ->
-    {Parent, Sock, RecvLen, PendingRecv, QueueCollector, ChSup3Pid, SHF,
+    {Parent, Sock, RecvLen, PendingRecv, QueueCollector, SupPid, SHF,
      Buf, BufLen}.

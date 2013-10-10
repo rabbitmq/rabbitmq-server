@@ -42,22 +42,22 @@ start_link() ->
     %% them cleanly. But for 1.0 readers we can't start the real
     %% ch_sup_sup (because we don't know if we will be 0-9-1 or 1.0) -
     %% so we add another supervisor into the hierarchy.
-    {ok, ChannelSup3Pid} =
+    %%
+    %% This supervisor also acts as an intermediary for heartbeaters and
+    %% the queue collector process, since these must not be siblings of the
+    %% reader due to the potential for deadlock if they are added/restarted
+    %% whilst the supervision tree is shutting down.
+    {ok, IntermediateSup} =
         supervisor2:start_child(
           SupPid,
-          {channel_sup3, {rabbit_intermediate_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_intermediate_sup]}),
-    {ok, ConHelperSupPid} =
-        supervisor2:start_child(
-          SupPid,
-          {helper_sup, {rabbit_connection_helper_sup, start_link, []},
+          {channel_sup3, {rabbit_connection_helper_sup, start_link, []},
            intrinsic, infinity, supervisor, [rabbit_connection_helper_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
           {reader, {rabbit_reader, start_link,
-                    [ChannelSup3Pid, ConHelperSupPid,
-                     rabbit_heartbeat:start_heartbeat_fun(ConHelperSupPid)]},
+                    [IntermediateSup,
+                     rabbit_heartbeat:start_heartbeat_fun(IntermediateSup)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
 
