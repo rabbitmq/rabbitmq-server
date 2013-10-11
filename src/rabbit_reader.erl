@@ -1098,8 +1098,7 @@ pack_for_1_0(#v1{parent              = Parent,
                  sock                = Sock,
                  recv_len            = RecvLen,
                  pending_recv        = PendingRecv,
-                 queue_collector     = QueueCollector,
                  helper_sup          = SupPid,
                  buf                 = Buf,
                  buf_len             = BufLen}) ->
-    {Parent, Sock, RecvLen, PendingRecv, QueueCollector, SupPid, Buf, BufLen}.
+    {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen}.
