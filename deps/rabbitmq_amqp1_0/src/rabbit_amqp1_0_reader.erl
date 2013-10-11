@@ -53,7 +53,7 @@
 
 %%--------------------------------------------------------------------------
 
-unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv, QueueCollector,
+unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv,
                    HelperSupPid, Buf, BufLen}) ->
     #v1{parent              = Parent,
         sock                = Sock,
@@ -61,7 +61,7 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv, QueueCollector,
         recv_len            = RecvLen,
         pending_recv        = PendingRecv,
         connection_state    = pre_init,
-        queue_collector     = QueueCollector,
+        queue_collector     = undefined,
         heartbeater         = none,
         helper_sup          = HelperSupPid,
         buf                 = Buf,
@@ -381,6 +381,8 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                "frame_max=~w < ~w min size",
                                [FrameMax, ?FRAME_1_0_MIN_SIZE]);
            true ->
+                {ok, Collector} =
+                    rabbit_connection_helper_sup:start_queue_collector(HelperSupPid),
                 SendFun =
                     fun() ->
                             Frame =
@@ -405,7 +407,8 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                          connection = Connection#connection{
                                                    frame_max = FrameMax,
                                                    hostname  = Hostname},
-                         heartbeater = Heartbeater}
+                         heartbeater = Heartbeater,
+                         queue_collector = Collector}
         end,
     %% TODO enforce channel_max
     ok = send_on_channel0(
