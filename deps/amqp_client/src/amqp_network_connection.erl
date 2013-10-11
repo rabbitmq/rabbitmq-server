@@ -20,7 +20,7 @@
 -include("amqp_client_internal.hrl").
 
 -behaviour(amqp_gen_connection).
--export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
+-export([init/0, terminate/2, connect/3, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
@@ -39,7 +39,7 @@
 
 %%---------------------------------------------------------------------------
 
-init([]) ->
+init() ->
     {ok, #state{}}.
 
 open_channel_args(#state{sock = Sock, frame_max = FrameMax}) ->
@@ -107,10 +107,10 @@ info_keys() ->
 %% Handshake
 %%---------------------------------------------------------------------------
 
-connect(AmqpParams = #amqp_params_network{host = Host}, SIF, ChMgr, State) ->
+connect(AmqpParams = #amqp_params_network{host = Host}, SIF, State) ->
     case gethostaddr(Host) of
         []     -> {error, unknown_host};
-        [AF|_] -> do_connect(AF, AmqpParams, SIF, ChMgr, State)
+        [AF|_] -> do_connect(AF, AmqpParams, SIF, State)
     end.
 
 do_connect({Addr, Family},
@@ -118,12 +118,12 @@ do_connect({Addr, Family},
                                              port               = Port,
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
-           SIF, ChMgr, State) ->
+           SIF, State) ->
     obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
-        {ok, Sock}     -> try_handshake(AmqpParams, SIF, ChMgr,
+        {ok, Sock}     -> try_handshake(AmqpParams, SIF,
                                         State#state{sock = Sock});
         {error, _} = E -> E
     end;
@@ -132,7 +132,7 @@ do_connect({Addr, Family},
                                              port               = Port,
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
-           SIF, ChMgr, State) ->
+           SIF, State) ->
     app_utils:start_applications([asn1, crypto, public_key, ssl]),
     obtain(),
     case gen_tcp:connect(Addr, Port,
@@ -142,7 +142,7 @@ do_connect({Addr, Family},
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
-                    try_handshake(AmqpParams, SIF, ChMgr,
+                    try_handshake(AmqpParams, SIF,
                                   State#state{sock = RabbitSslSock});
                 {error, _} = E ->
                     E
@@ -162,19 +162,19 @@ gethostaddr(Host) ->
                || Family <- inet_address_preference()],
     [{IP, Family} || {Family, {ok, IP}} <- Lookups].
 
-try_handshake(AmqpParams, SIF, ChMgr, State) ->
-    try handshake(AmqpParams, SIF, ChMgr, State) of
+try_handshake(AmqpParams, SIF, State) ->
+    try handshake(AmqpParams, SIF, State) of
         Return -> Return
     catch exit:Reason -> {error, Reason}
     end.
 
-handshake(AmqpParams, SIF, ChMgr, State0 = #state{sock = Sock}) ->
+handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    {SHF, State1} = start_infrastructure(SIF, ChMgr, State0),
+    {SHF, State1} = start_infrastructure(SIF, State0),
     network_handshake(AmqpParams, SHF, State1).
 
-start_infrastructure(SIF, ChMgr, State = #state{sock = Sock}) ->
-    {ok, {_MainReader, _AState, Writer, SHF}} = SIF(Sock, ChMgr),
+start_infrastructure(SIF, State = #state{sock = Sock}) ->
+    {ok, {Writer, SHF}} = SIF(Sock),
     {SHF, State#state{writer0 = Writer}}.
 
 network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
