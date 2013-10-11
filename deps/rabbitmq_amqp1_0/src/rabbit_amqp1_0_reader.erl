@@ -575,14 +575,14 @@ start_1_0_connection(amqp,
             start_1_0_connection0(amqp, State)
     end.
 
-start_1_0_connection0(Mode, State = #v1{connection   = Connection,
-                                        helper_sup  = ChSup3Pid}) ->
+start_1_0_connection0(Mode, State = #v1{connection = Connection,
+                                        helper_sup = HelperSup}) ->
     ChannelSupSupPid =
         case Mode of
             sasl -> undefined;
             amqp -> {ok, Pid} =
                         supervisor2:start_child(
-                          ChSup3Pid,
+                          HelperSup,
                           {channel_sup_sup,
                            {rabbit_amqp1_0_session_sup_sup, start_link, []},
                            intrinsic, infinity, supervisor,
