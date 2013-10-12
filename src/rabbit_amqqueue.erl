@@ -41,8 +41,6 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
-
 -define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
 -define(FAILOVER_WAIT_MILLIS, 100).
@@ -422,47 +420,13 @@ check_arguments(QueueName, Args, Validators) ->
      end || {Key, Fun} <- Validators],
     ok.
 
-declare_args() ->
-    [{<<"x-expires">>,                 fun check_expires_arg/2},
-     {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
-     {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
-     {<<"x-max-length">>,              fun check_max_length_arg/2}].
+declare_args() -> arguments_list('declare_args').
 
-consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
+consume_args() -> arguments_list('consume_args').
 
-check_int_arg({Type, _}, _) ->
-    case lists:member(Type, ?INTEGER_ARG_TYPES) of
-        true  -> ok;
-        false -> {error, {unacceptable_type, Type}}
-    end.
-
-check_max_length_arg({Type, Val}, Args) ->
-    case check_int_arg({Type, Val}, Args) of
-        ok when Val >= 0 -> ok;
-        ok               -> {error, {value_negative, Val}};
-        Error            -> Error
-    end.
-
-check_expires_arg({Type, Val}, Args) ->
-    case check_int_arg({Type, Val}, Args) of
-        ok when Val == 0 -> {error, {value_zero, Val}};
-        ok               -> rabbit_misc:check_expiry(Val);
-        Error            -> Error
-    end.
-
-check_message_ttl_arg({Type, Val}, Args) ->
-    case check_int_arg({Type, Val}, Args) of
-        ok    -> rabbit_misc:check_expiry(Val);
-        Error -> Error
-    end.
-
-check_dlxrk_arg({longstr, _}, Args) ->
-    case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
-        undefined -> {error, routing_key_but_no_dlx_defined};
-        _         -> ok
-    end;
-check_dlxrk_arg({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
+arguments_list(Method) ->
+    lists:append([QAM:arguments(Method) || 
+        QAM <- rabbit_queue_arguments:select(Method)]).
 
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
