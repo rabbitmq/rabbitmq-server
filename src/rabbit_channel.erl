@@ -740,7 +740,17 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                              consumer_mapping  = ConsumerMapping}) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
-            QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+            OrigQueueName = expand_queue_name_shortcut(QueueNameBin, State),
+            QueueName = 
+                case rabbit_channel_interceptor:run_filter_chain(OrigQueueName,
+                        rabbit_channel_interceptor:select('basic_consume')) of
+                    {ok, QN}        -> 
+                        QN;
+                    {error, Reason} ->
+                        rabbit_misc:protocol_error(
+                          internal_error, "~s",
+                          [Reason])
+                end,
             check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
