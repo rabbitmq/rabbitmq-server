@@ -47,15 +47,15 @@ start_link() ->
     %% the queue collector process, since these must not be siblings of the
     %% reader due to the potential for deadlock if they are added/restarted
     %% whilst the supervision tree is shutting down.
-    {ok, IntermediateSup} =
+    {ok, HelperSup} =
         supervisor2:start_child(
           SupPid,
-          {channel_sup3, {rabbit_connection_helper_sup, start_link, []},
+          {helper_sup, {rabbit_connection_helper_sup, start_link, []},
            intrinsic, infinity, supervisor, [rabbit_connection_helper_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
-          {reader, {rabbit_reader, start_link, [IntermediateSup]},
+          {reader, {rabbit_reader, start_link, [HelperSup]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
 
