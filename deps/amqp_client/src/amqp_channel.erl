@@ -743,9 +743,7 @@ handle_method_from_server1(Method, Content, State) ->
 %%---------------------------------------------------------------------------
 
 handle_connection_closing(CloseType, Reason,
-                          State = #state{driver       = Driver,
-                                         writer       = Writer,
-                                         rpc_requests = RpcQueue,
+                          State = #state{rpc_requests = RpcQueue,
                                          closing      = Closing}) ->
     NewState = State#state{closing = {connection, Reason}},
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
