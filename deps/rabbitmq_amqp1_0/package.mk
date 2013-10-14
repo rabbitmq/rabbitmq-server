@@ -1,7 +1,8 @@
 RELEASABLE:=true
 APP_NAME=rabbitmq_amqp1_0
 DEPS:=rabbitmq-server rabbitmq-erlang-client
-WITH_BROKER_TEST_COMMANDS:=eunit:test(rabbit_amqp1_0_test,[verbose])
+STANDALONE_TEST_COMMANDS:=eunit:test(rabbit_amqp1_0_test,[verbose])
+WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/proton/test.sh
 
 FRAMING_HRL=$(PACKAGE_DIR)/include/rabbit_amqp1_0_framing.hrl
 FRAMING_ERL=$(PACKAGE_DIR)/src/rabbit_amqp1_0_framing0.erl
@@ -21,5 +22,9 @@ $(FRAMING_HRL): $(CODEGEN) $(CODEGEN_SPECS)
 
 $(PACKAGE_DIR)+clean::
 	rm -f $(FRAMING_HRL) $(FRAMING_ERL)
+	make -C $(PACKAGE_DIR)/test/proton clean
+
+$(PACKAGE_DIR)+pre-test::
+	make -C $(PACKAGE_DIR)/test/proton deps
 
 endef
