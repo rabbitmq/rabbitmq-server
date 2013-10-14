@@ -91,8 +91,10 @@ channel_writer_death_test() ->
     {ok, Connection} = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
+    QoS = #'basic.qos'{prefetch_count = 0},
     Message = #amqp_msg{props = <<>>, payload = <<>>},
-    ?assertExit(_, amqp_channel:call(Channel, Publish, Message)),
+    amqp_channel:cast(Channel, Publish, Message),
+    ?assertExit(_, amqp_channel:call(Channel, QoS)),
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection),
     ok.
@@ -120,7 +122,9 @@ shortstr_overflow_property_test() ->
     Publish = #'basic.publish'{exchange = X, routing_key = Key},
     PBasic = #'P_basic'{content_type = SentString},
     AmqpMsg = #amqp_msg{payload = Payload, props = PBasic},
-    ?assertExit(_, amqp_channel:call(Channel, Publish, AmqpMsg)),
+    QoS = #'basic.qos'{prefetch_count = 0},
+    amqp_channel:cast(Channel, Publish, AmqpMsg),
+    ?assertExit(_, amqp_channel:call(Channel, QoS)),
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection),
     ok.
