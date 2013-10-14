@@ -239,22 +239,23 @@ recovery_barrier(BarrierPid) ->
     end.
 
 process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
-    lists:foldl(
-      fun({Arg, Fun}, State1) ->
-              case rabbit_misc:table_lookup(Arguments, Arg) of
-                  {_Type, Val} -> Fun(Val, State1);
-                  undefined    -> State1
-              end
-      end, State,
-      [{<<"x-expires">>,                 fun init_expires/2},
-       {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
-       {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
-       {<<"x-message-ttl">>,             fun init_ttl/2},
-       {<<"x-max-length">>,              fun init_max_length/2}]).
+    drop_expired_msgs(
+      lists:foldl(
+        fun({Arg, Fun}, State1) ->
+                case rabbit_misc:table_lookup(Arguments, Arg) of
+                    {_Type, Val} -> Fun(Val, State1);
+                    undefined    -> State1
+                end
+        end, State,
+        [{<<"x-expires">>,                 fun init_expires/2},
+         {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
+         {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2},
+         {<<"x-message-ttl">>,             fun init_ttl/2},
+         {<<"x-max-length">>,              fun init_max_length/2}])).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
-init_ttl(TTL, State) -> drop_expired_msgs(State#q{ttl = TTL}).
+init_ttl(TTL, State) -> State#q{ttl = TTL}.
 
 init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
     State#q{dlx = rabbit_misc:r(QName, exchange, DLX)}.
