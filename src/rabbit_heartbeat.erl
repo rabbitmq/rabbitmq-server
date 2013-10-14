@@ -16,8 +16,9 @@
 
 -module(rabbit_heartbeat).
 
+-export([start/6]).
 -export([start_heartbeat_sender/3, start_heartbeat_receiver/3,
-         start_heartbeat_fun/1, pause_monitor/1, resume_monitor/1]).
+         pause_monitor/1, resume_monitor/1]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -28,16 +29,15 @@
 -ifdef(use_specs).
 
 -export_type([heartbeaters/0]).
--export_type([start_heartbeat_fun/0]).
 
 -type(heartbeaters() :: {rabbit_types:maybe(pid()), rabbit_types:maybe(pid())}).
 
 -type(heartbeat_callback() :: fun (() -> any())).
 
--type(start_heartbeat_fun() ::
-        fun((rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
-             non_neg_integer(), heartbeat_callback()) ->
-                   no_return())).
+-spec(start/6 ::
+        (pid(), rabbit_net:socket(),
+         non_neg_integer(), heartbeat_callback(),
+         non_neg_integer(), heartbeat_callback()) -> heartbeaters()).
 
 -spec(start_heartbeat_sender/3 ::
         (rabbit_net:socket(), non_neg_integer(), heartbeat_callback()) ->
@@ -45,10 +45,6 @@
 -spec(start_heartbeat_receiver/3 ::
         (rabbit_net:socket(), non_neg_integer(), heartbeat_callback()) ->
                                          rabbit_types:ok(pid())).
-
--spec(start_heartbeat_fun/1 ::
-        (pid()) -> start_heartbeat_fun()).
-
 
 -spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
 -spec(resume_monitor/1 :: (heartbeaters()) -> 'ok').
@@ -60,6 +56,17 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+start(SupPid, Sock, SendTimeoutSec, SendFun, ReceiveTimeoutSec, ReceiveFun) ->
+    {ok, Sender} =
+        start_heartbeater(SendTimeoutSec, SupPid, Sock,
+                          SendFun, heartbeat_sender,
+                          start_heartbeat_sender),
+    {ok, Receiver} =
+        start_heartbeater(ReceiveTimeoutSec, SupPid, Sock,
+                          ReceiveFun, heartbeat_receiver,
+                          start_heartbeat_receiver),
+    {Sender, Receiver}.
 
 start_heartbeat_sender(Sock, TimeoutSec, SendFun) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly
@@ -74,19 +81,6 @@ start_heartbeat_receiver(Sock, TimeoutSec, ReceiveFun) ->
     %% 2 and 3 intervals after the last data has been received.
     heartbeater({Sock, TimeoutSec * 1000, recv_oct, 1,
                  fun () -> ReceiveFun(), stop end}).
-
-start_heartbeat_fun(SupPid) ->
-    fun (Sock, SendTimeoutSec, SendFun, ReceiveTimeoutSec, ReceiveFun) ->
-            {ok, Sender} =
-                start_heartbeater(SendTimeoutSec, SupPid, Sock,
-                                  SendFun, heartbeat_sender,
-                                  start_heartbeat_sender),
-            {ok, Receiver} =
-                start_heartbeater(ReceiveTimeoutSec, SupPid, Sock,
-                                  ReceiveFun, heartbeat_receiver,
-                                  start_heartbeat_receiver),
-            {Sender, Receiver}
-    end.
 
 pause_monitor({_Sender,     none}) -> ok;
 pause_monitor({_Sender, Receiver}) -> Receiver ! pause, ok.
