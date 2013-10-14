@@ -740,17 +740,8 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                              consumer_mapping  = ConsumerMapping}) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
-            OrigQueueName = expand_queue_name_shortcut(QueueNameBin, State),
-            QueueName = 
-                case rabbit_channel_interceptor:run_filter_chain(OrigQueueName,
-                        rabbit_channel_interceptor:select('basic_consume')) of
-                    {ok, QN}        -> 
-                        QN;
-                    {error, Reason} ->
-                        rabbit_misc:protocol_error(
-                          internal_error, "~s",
-                          [Reason])
-                end,
+            OrigQN = expand_queue_name_shortcut(QueueNameBin, State),
+            QueueName = intercept_method('basic_consume', OrigQN),
             check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
@@ -1672,3 +1663,14 @@ erase_queue_stats(QName) ->
     [erase({queue_exchange_stats, QX}) ||
         {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
         QName0 =:= QName].
+
+intercept_method(M, Q) ->
+    case rabbit_channel_interceptor:run_filter_chain(Q,
+            rabbit_channel_interceptor:select(Q, M)) of
+        {ok, QN}        -> 
+            QN;
+        {error, Reason} ->
+            rabbit_misc:protocol_error(
+              internal_error, "~s",
+              [Reason])
+    end.
