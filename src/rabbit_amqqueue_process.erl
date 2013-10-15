@@ -267,15 +267,16 @@ recovery_barrier(BarrierPid) ->
 
 process_args_policy(State = #q{q                   = Q,
                                args_policy_version = N}) ->
-    lists:foldl(
-      fun({Name, Resolve, Fun}, StateN) ->
-              Fun(args_policy_lookup(Name, Resolve, Q), StateN)
-      end, State#q{args_policy_version = N + 1},
-      [{<<"expires">>,                 fun res_min/2, fun init_exp/2},
-       {<<"dead-letter-exchange">>,    fun res_arg/2, fun init_dlx/2},
-       {<<"dead-letter-routing-key">>, fun res_arg/2, fun init_dlx_rkey/2},
-       {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
-       {<<"max-length">>,              fun res_min/2, fun init_max_length/2}]).
+      ArgsTable =
+        [{<<"expires">>,                 fun res_min/2, fun init_exp/2},
+         {<<"dead-letter-exchange">>,    fun res_arg/2, fun init_dlx/2},
+         {<<"dead-letter-routing-key">>, fun res_arg/2, fun init_dlx_rkey/2},
+         {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
+         {<<"max-length">>,              fun res_min/2, fun init_max_length/2}],
+      drop_expired_msgs(
+         lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
+                             Fun(args_policy_lookup(Name, Resolve, Q), StateN)
+                     end, State#q{args_policy_version = N + 1}, ArgsTable)).
 
 args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
     AName = <<"x-", Name/binary>>,
@@ -297,8 +298,7 @@ init_exp(Expires,   State) -> State1 = init_exp(undefined, State),
                               ensure_expiry_timer(State1#q{expires = Expires}).
 
 init_ttl(undefined, State) -> stop_ttl_timer(State#q{ttl = undefined});
-init_ttl(TTL,       State) -> State1 = init_ttl(undefined, State),
-                              drop_expired_msgs(State1#q{ttl = TTL}).
+init_ttl(TTL,       State) -> (init_ttl(undefined, State))#q{ttl = TTL}.
 
 init_dlx(undefined, State) ->
     State#q{dlx = undefined};
