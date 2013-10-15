@@ -1665,7 +1665,7 @@ erase_queue_stats(QName) ->
         QName0 =:= QName].
 
 intercept_method(M, Q) ->
-    case rabbit_channel_interceptor:run_filter_chain(Q,
+    case rabbit_channel_interceptor:run_filter_chain(M, Q,
             rabbit_channel_interceptor:select(Q, M)) of
         {ok, QN}        -> 
             QN;

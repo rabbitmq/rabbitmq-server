@@ -21,7 +21,7 @@
 
 -include("rabbit.hrl").
 
--export([select/2, run_filter_chain/2]).
+-export([select/2, run_filter_chain/3]).
 
 -define(DEFAULT_PRIORITY, 0).
 
@@ -45,8 +45,9 @@
 %% intercepted like 'basic.consume', 'queue.decalre' and so on.
 %% The interceptor might wish to modify the processed_queue_name() based on 
 %% what was the initial_queue_name().
--callback process_queue_name(initial_queue_name(), processed_queue_name()) -> 
-            rabbit_types:ok_or_error2(rabbit_amqqueue:name(), any()).
+-callback intercept(intercept_method(), 
+            initial_queue_name(), processed_queue_name()) -> 
+                rabbit_types:ok_or_error2(rabbit_amqqueue:name(), any()).
 
 %% Whether the interceptor wishes to intercept the amqp method
 -callback applies_to(intercept_method()) -> boolean().
@@ -58,7 +59,7 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {process_queue_name, 2}, {applies_to, 1}, 
+    [{description, 0}, {intercept, 3}, {applies_to, 1}, 
      {priority_param, 0}];
 behaviour_info(_Other) ->
     undefined.
@@ -78,20 +79,21 @@ select(#resource{virtual_host=VHost}, Method)  ->
 %% declaring certain queue names, or deleteign certain queue names.
 %% By providing priorities to each interceptor, then the user can decide the order in which
 %% the filters are applied.
-run_filter_chain(QName, Interceptors) ->
-    run_filter_chain(QName, QName, Interceptors).
+run_filter_chain(Method, QName, Interceptors) ->
+    run_filter_chain(Method, QName, QName, Interceptors).
 
-run_filter_chain(#resource{virtual_host=VHost}, #resource{virtual_host=VHost} = NewQueName, []) ->
+run_filter_chain(_Method, #resource{virtual_host=VHost}, 
+                 #resource{virtual_host=VHost} = NewQueName, []) ->
     {ok, NewQueName};
-run_filter_chain(#resource{virtual_host=VHost} = QName, 
+run_filter_chain(Method, #resource{virtual_host=VHost} = QName, 
                  #resource{virtual_host=VHost} = NewQueName, [I|T]) ->
-    case I:process_queue_name(QName, NewQueName) of
+    case I:intercept(Method, QName, NewQueName) of
         {ok, QName2} -> 
-            run_filter_chain(QName, QName2, T);
+            run_filter_chain(Method, QName, QName2, T);
         {error, Reason} -> 
             {error, Reason}
     end;
-run_filter_chain(#resource{virtual_host=_VHost}, 
+run_filter_chain(_Method, #resource{virtual_host=_VHost}, 
                  #resource{virtual_host=_Other}, _Interceptors) ->
     %% TODO pass along the previous interceptor name so we can log it.
     {error, "Interceptor attempted to modify resource virtual host"}.
