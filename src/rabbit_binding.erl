@@ -324,8 +324,6 @@ delete_object(Tab, Record, LockKind) ->
         [_] -> mnesia:delete_object(Tab, Record, LockKind)
     end.
 
-sync_route(R, Fun) -> sync_route(R, true, true, Fun).
-
 sync_route(Route, true, true, Fun) ->
     ok = Fun(rabbit_durable_route, Route, write),
     sync_route(Route, false, true, Fun);
