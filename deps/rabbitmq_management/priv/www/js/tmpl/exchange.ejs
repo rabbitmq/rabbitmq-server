@@ -1,8 +1,8 @@
 <h1>Exchange: <b><%= fmt_exchange(exchange.name) %></b></h1>
 
 <div class="section">
-  <div class="hider">
   <h2>Overview</h2>
+  <div class="hider">
 <% if (statistics_level == 'fine') { %>
     <%= message_rates('msg-rates-x', exchange.message_stats) %>
 <% } %>
