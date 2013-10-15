@@ -280,9 +280,10 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (B) -> info(B, Items) end).
 
 has_for_source(SrcName) ->
     Match = #route{binding = #binding{source = SrcName, _ = '_'}},
-    %% we need to check for durable routes here too in case a bunch of
-    %% routes to durable queues have been removed temporarily as a
-    %% result of a node failure
+    %% we need to check for semi-durable routes (which subsumes
+    %% durable routes) here too in case a bunch of routes to durable
+    %% queues have been removed temporarily as a result of a node
+    %% failure
     contains(rabbit_route, Match) orelse
         contains(rabbit_semi_durable_route, Match).
 
@@ -399,17 +400,17 @@ lock_route_tables() ->
 remove_routes(Routes) ->
     %% This partitioning allows us to suppress unnecessary delete
     %% operations on disk tables, which require an fsync.
-    {RAMRoutes, DiscRoutes} =
+    {RamRoutes, DiskRoutes} =
         lists:partition(fun (R) -> mnesia:match_object(
                                      rabbit_durable_route, R, write) == [] end,
                         Routes),
     %% Of course the destination might not really be durable but it's
     %% just as easy to try to delete it from the semi-durable table
     %% than check first
-    [ok = sync_route(R, false, true, fun mnesia:delete_object/3) ||
-        R <- RAMRoutes],
+    [ok = sync_route(R, false,  true, fun mnesia:delete_object/3) ||
+        R <- RamRoutes],
     [ok = sync_route(R, false, false, fun mnesia:delete_object/3) ||
-        R <- DiscRoutes],
+        R <- DiskRoutes],
     [R#route.binding || R <- Routes].
 
 remove_transient_routes(Routes) ->
