@@ -34,6 +34,8 @@
                             'basic_get'     |
                             'queue_declare' |
                             'queue_bind'    |
+                            'queue_unbind'  |
+                            'queue_purge'   |
                             'queue_delete').
 
 -type(initial_queue_name() :: rabbit_amqqueue:name()).

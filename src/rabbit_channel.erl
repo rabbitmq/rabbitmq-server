@@ -702,7 +702,8 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                              conn_pid   = ConnPid,
                              limiter    = Limiter,
                              next_tag   = DeliveryTag}) ->
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+    OrigQN = expand_queue_name_shortcut(QueueNameBin, State),
+    QueueName = intercept_method('basic_get', OrigQN),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
@@ -981,7 +982,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                                                     "amq.gen");
                         Other -> check_name('queue', Other)
                     end,
-    QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
+    OrigQN = rabbit_misc:r(VHostPath, queue, ActualNameBin),
+    QueueName = intercept_method('queue_declare', OrigQN),
     check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with(
            QueueName,
@@ -1040,7 +1042,8 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
                                nowait  = NoWait},
               _, State = #ch{virtual_host = VHostPath,
                              conn_pid     = ConnPid}) ->
-    QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
+    OrigQN = rabbit_misc:r(VHostPath, queue, QueueNameBin),
+    QueueName = intercept_method('queue_declare', OrigQN),
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
         rabbit_amqqueue:with_or_die(
           QueueName, fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end),
@@ -1053,7 +1056,8 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
                               if_empty = IfEmpty,
                               nowait = NoWait},
               _, State = #ch{conn_pid = ConnPid}) ->
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+    OrigQN = expand_queue_name_shortcut(QueueNameBin, State),
+    QueueName = intercept_method('queue_delete', OrigQN),
     check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with(
            QueueName,
@@ -1093,7 +1097,8 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
 handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
               _, State = #ch{conn_pid = ConnPid}) ->
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+    OrigQN = expand_queue_name_shortcut(QueueNameBin, State),
+    QueueName = intercept_method('queue_purge', OrigQN),
     check_read_permitted(QueueName, State),
     {ok, PurgedMessageCount} = rabbit_amqqueue:with_exclusive_access_or_die(
                                  QueueName, ConnPid,
@@ -1267,8 +1272,9 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host = VHostPath,
                            conn_pid     = ConnPid }) ->
-    {DestinationName, ActualRoutingKey} =
-        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
+    {OrigDName, ActualRoutingKey} =
+        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),    
+    DestinationName = intercept_binding_method(OrigDName, DestinationType, ReturnMethod),
     check_write_permitted(DestinationName, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     [check_not_default_exchange(N) || N <- [DestinationName, ExchangeName]],
@@ -1663,6 +1669,15 @@ erase_queue_stats(QName) ->
     [erase({queue_exchange_stats, QX}) ||
         {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
         QName0 =:= QName].
+
+intercept_binding_method(OrigDName, queue, #'queue.bind_ok'{}) ->
+    intercept_method('queue_bind', OrigDName);
+
+intercept_binding_method(OrigDName, queue, #'queue.unbind_ok'{}) ->
+    intercept_method('queue_unbind', OrigDName);
+
+intercept_binding_method(OrigDName, _DestinationType, _Method) ->
+    OrigDName.
 
 intercept_method(M, Q) ->
     case rabbit_channel_interceptor:run_filter_chain(M, Q,
