@@ -44,7 +44,7 @@
 -record(connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
                      hostname}).
 
--record(throttle, {conserve_resources, last_blocked_by, last_blocked_at}).
+-record(throttle, {alarmed_by, last_blocked_by, last_blocked_at}).
 
 -define(IS_RUNNING(State),
         (State#v1.connection_state =:= running orelse
@@ -66,9 +66,9 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv,
         helper_sup          = HelperSupPid,
         buf                 = Buf,
         buf_len             = BufLen,
-        throttle = #throttle{conserve_resources = false,
-                             last_blocked_by    = none,
-                             last_blocked_at    = never},
+        throttle = #throttle{alarmed_by      = [],
+                             last_blocked_by = none,
+                             last_blocked_at = never},
         connection = #connection{user           = none,
                                  timeout_sec    = ?HANDSHAKE_TIMEOUT,
                                  frame_max      = ?FRAME_MIN_SIZE,
@@ -87,8 +87,8 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
-conserve_resources(Pid, _Source, Conserve) ->
-    Pid ! {conserve_resources, Conserve},
+conserve_resources(Pid, Source, Conserve) ->
+    Pid ! {conserve_resources, Source, Conserve},
     ok.
 
 server_properties() ->
@@ -150,9 +150,14 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
             end
     end.
 
-handle_other({conserve_resources, Conserve},
-             State = #v1{throttle = Throttle}) ->
-    Throttle1 = Throttle#throttle{conserve_resources = Conserve},
+handle_other({conserve_resources, Source, Conserve},
+             State = #v1{throttle = Throttle =
+                             #throttle{alarmed_by = CR}}) ->
+    CR1 = case Conserve of
+              true  -> lists:usort([Source | CR]);
+              false -> CR -- [Source]
+          end,
+    Throttle1 = Throttle#throttle{alarmed_by = CR1},
     control_throttle(State#v1{throttle = Throttle1});
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     terminate(io_lib:format("broker forced connection closure "
@@ -209,8 +214,9 @@ terminate(_Reason, State) ->
     {force, State}.
 
 control_throttle(State = #v1{connection_state = CS, throttle = Throttle}) ->
-    case {CS, (Throttle#throttle.conserve_resources orelse
-               credit_flow:blocked())} of
+    IsThrottled = ((Throttle#throttle.alarmed_by =/= []) orelse
+               credit_flow:blocked()),
+    case {CS, IsThrottled} of
         {running,   true} -> State#v1{connection_state = blocking};
         {blocking, false} -> State#v1{connection_state = running};
         {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
@@ -221,10 +227,10 @@ control_throttle(State = #v1{connection_state = CS, throttle = Throttle}) ->
         {_,            _} -> State
     end.
 
-update_last_blocked_by(Throttle = #throttle{conserve_resources = true}) ->
-    Throttle#throttle{last_blocked_by = resource};
-update_last_blocked_by(Throttle = #throttle{conserve_resources = false}) ->
-    Throttle#throttle{last_blocked_by = flow}.
+update_last_blocked_by(Throttle = #throttle{alarmed_by = []}) ->
+    Throttle#throttle{last_blocked_by = flow};
+update_last_blocked_by(Throttle) ->
+    Throttle#throttle{last_blocked_by = resource}.
 
 %%--------------------------------------------------------------------------
 %% error handling / termination
@@ -420,8 +426,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                         properties     = server_properties()}),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     control_throttle(
-      State1#v1{throttle = Throttle#throttle{
-                             conserve_resources = Conserve}});
+      State1#v1{throttle = Throttle#throttle{alarmed_by = Conserve}});
 
 handle_1_0_connection_frame(_Frame, State) ->
     maybe_close(State#v1{connection_state = closing}).
