@@ -405,9 +405,9 @@ remove_routes(Routes) ->
     %% Of course the destination might not really be durable but it's
     %% just as easy to try to delete it from the semi-durable table
     %% than check first
-    [ok = sync_route(R, false,  true, fun mnesia:delete_object/3) ||
+    [ok = sync_route(R, false, true, fun mnesia:delete_object/3) ||
         R <- RamRoutes],
-    [ok = sync_route(R, false, false, fun mnesia:delete_object/3) ||
+    [ok = sync_route(R, true,  true, fun mnesia:delete_object/3) ||
         R <- DiskRoutes],
     [R#route.binding || R <- Routes].
 
