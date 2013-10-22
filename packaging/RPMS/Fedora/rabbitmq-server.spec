@@ -12,8 +12,8 @@ Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-server.ocf
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= R13B03, python-simplejson, xmlto, libxslt
-Requires: erlang >= R13B03, logrotate
+BuildRequires: erlang >= R13B-03, python-simplejson, xmlto, libxslt
+Requires: erlang >= R13B-03, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): %%REQUIRES%%
