@@ -45,9 +45,11 @@
 init(VHost) ->
     case enabled(VHost) of
         false -> none;
-        true  -> {ok, X} = rabbit_exchange:lookup(
-                             rabbit_misc:r(VHost, exchange, ?XNAME)),
-                 X
+        true  -> XName = rabbit_misc:r(VHost, exchange, ?XNAME),
+                 case rabbit_exchange:lookup(XName) of
+                     {ok, X}            -> X;
+                     {error, not_found} -> rabbit_misc:not_found(XName)
+                 end
     end.
 
 enabled(VHost) ->
