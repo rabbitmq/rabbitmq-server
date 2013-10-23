@@ -48,7 +48,9 @@ init(VHost) ->
         true  -> XName = rabbit_misc:r(VHost, exchange, ?XNAME),
                  case rabbit_exchange:lookup(XName) of
                      {ok, X}            -> X;
-                     {error, not_found} -> rabbit_misc:not_found(XName)
+                     {error, not_found} -> rabbit_exchange:declare(
+                                             XName, topic, true, false, false,
+                                             [])
                  end
     end.
 
