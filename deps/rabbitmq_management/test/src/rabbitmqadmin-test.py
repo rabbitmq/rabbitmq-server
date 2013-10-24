@@ -29,8 +29,6 @@ class TestRabbitMQAdmin(unittest.TestCase):
     def test_port(self):
         # Test port selection
         self.run_success(['--port', '15672', 'show', 'overview'])
-        # Test redirect
-        self.run_success(['--port', '55672', 'show', 'overview'])
         # Test port not open
         self.run_fail(['--port', '15673', 'show', 'overview'])
         # Test port open but not talking HTTP
