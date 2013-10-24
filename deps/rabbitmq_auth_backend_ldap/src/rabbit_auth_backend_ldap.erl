@@ -48,6 +48,7 @@
                  resource_access_query,
                  tag_queries,
                  use_ssl,
+                 ssl_options,
                  log,
                  port }).
 
@@ -235,11 +236,18 @@ with_ldap(_Creds, _Fun, #state{servers = undefined}) ->
 
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
-with_ldap(Creds, Fun, State = #state{servers = Servers,
-                                     use_ssl = SSL,
-                                     log     = Log,
-                                     port    = Port}) ->
-    Opts0 = [{ssl, SSL}, {port, Port}],
+with_ldap(Creds, Fun, State = #state{servers     = Servers,
+                                     use_ssl     = SSL,
+                                     ssl_options = SSLOpts,
+                                     log         = Log,
+                                     port        = Port}) ->
+    %% We can't just pass through [] as sslopts in the old case, eldap
+    %% exit()s when you do that.
+    Opts0 = case {SSLOpts, erlang:system_info(otp_release) < "R16A"} of
+                {[], _}     -> [{ssl, SSL}, {port, Port}];
+                {_,  false} -> [{ssl, SSL}, {port, Port}, {sslopts, SSLOpts}];
+                {_,  true}  -> exit({ssl_options_requires_min_r16a})
+            end,
     Opts = case Log of
                network ->
                    Pre = "    LDAP network traffic: ",
