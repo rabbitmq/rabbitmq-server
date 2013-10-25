@@ -1,7 +1,7 @@
 RELEASABLE:=true
 APP_NAME=rabbitmq_amqp1_0
 DEPS:=rabbitmq-server rabbitmq-erlang-client
-WITH_BROKER_TEST_COMMANDS:=eunit:test(rabbit_amqp1_0_test,[verbose])
+STANDALONE_TEST_COMMANDS:=eunit:test(rabbit_amqp1_0_test,[verbose])
 
 FRAMING_HRL=$(PACKAGE_DIR)/include/rabbit_amqp1_0_framing.hrl
 FRAMING_ERL=$(PACKAGE_DIR)/src/rabbit_amqp1_0_framing0.erl

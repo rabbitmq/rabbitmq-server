@@ -14,3 +14,7 @@ syntax: regexp
 ^test/swiftmq/build/
 ^test/swiftmq/out/
 ^test/swiftmq/swiftmq_.*_client.zip$
+^test/proton/build/
+^test/proton/proton
+^test/proton/qpid-proton.*\.tar\.gz$
+^test/proton/tmp/
