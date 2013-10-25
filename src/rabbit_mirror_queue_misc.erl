@@ -204,8 +204,6 @@ start_child(Name, MirrorNode, Q) ->
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
 report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
-    rabbit_event:notify(queue_mirror_deaths, [{name, QueueName},
-                                              {pids, DeadPids}]),
     rabbit_log:info("Mirrored-queue (~s): ~s ~s saw deaths of mirrors ~s~n",
                     [rabbit_misc:rs(QueueName),
                      case IsMaster of
@@ -223,7 +221,7 @@ store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
     Q1 = Q#amqqueue{sync_slave_pids = SSPids1},
     ok = rabbit_amqqueue:store_queue(Q1),
     %% Wake it up so that we emit a stats event
-    rabbit_amqqueue:wake_up(Q1),
+    rabbit_amqqueue:notify_policy_changed(Q1),
     Q1.
 
 %%----------------------------------------------------------------------------
@@ -239,28 +237,32 @@ suggested_queue_nodes(Q) ->
 %% This variant exists so we can pull a call to
 %% rabbit_mnesia:cluster_nodes(running) out of a loop or
 %% transaction or both.
-suggested_queue_nodes(Q, All) ->
+suggested_queue_nodes(Q = #amqqueue{exclusive_owner = Owner}, All) ->
     {MNode0, SNodes, SSNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
                 none -> node();
                 _    -> MNode0
             end,
-    Params = policy(<<"ha-params">>, Q),
-    case module(Q) of
-        {ok, M} -> M:suggested_queue_nodes(Params, MNode, SNodes, SSNodes, All);
-        _       -> {MNode, []}
+    case Owner of
+        none -> Params = policy(<<"ha-params">>, Q),
+                case module(Q) of
+                    {ok, M} -> M:suggested_queue_nodes(
+                                 Params, MNode, SNodes, SSNodes, All);
+                    _       -> {MNode, []}
+                end;
+        _    -> {MNode, []}
     end.
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
-        {ok, P} -> P;
-        _       -> none
+        undefined -> none;
+        P         -> P
     end.
 
 module(#amqqueue{} = Q) ->
     case rabbit_policy:get(<<"ha-mode">>, Q) of
-        {ok, Mode} -> module(Mode);
-        _          -> not_mirrored
+        undefined -> not_mirrored;
+        Mode      -> module(Mode)
     end;
 
 module(Mode) when is_binary(Mode) ->

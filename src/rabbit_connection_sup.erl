@@ -37,27 +37,25 @@
 
 start_link() ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, Collector} =
-        supervisor2:start_child(
-          SupPid,
-          {collector, {rabbit_queue_collector, start_link, []},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
     %% We need to get channels in the hierarchy here so they get shut
     %% down after the reader, so the reader gets a chance to terminate
     %% them cleanly. But for 1.0 readers we can't start the real
     %% ch_sup_sup (because we don't know if we will be 0-9-1 or 1.0) -
     %% so we add another supervisor into the hierarchy.
-    {ok, ChannelSup3Pid} =
+    %%
+    %% This supervisor also acts as an intermediary for heartbeaters and
+    %% the queue collector process, since these must not be siblings of the
+    %% reader due to the potential for deadlock if they are added/restarted
+    %% whilst the supervision tree is shutting down.
+    {ok, HelperSup} =
         supervisor2:start_child(
           SupPid,
-          {channel_sup3, {rabbit_intermediate_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_intermediate_sup]}),
+          {helper_sup, {rabbit_connection_helper_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_connection_helper_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
-          {reader, {rabbit_reader, start_link,
-                    [ChannelSup3Pid, Collector,
-                     rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
+          {reader, {rabbit_reader, start_link, [HelperSup]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
 

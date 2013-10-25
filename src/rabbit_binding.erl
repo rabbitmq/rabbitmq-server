@@ -152,7 +152,7 @@ exists(Binding) ->
     binding_action(
       Binding, fun (_Src, _Dst, B) ->
                        rabbit_misc:const(mnesia:read({rabbit_route, B}) /= [])
-               end).
+               end, fun not_found_or_absent_errs/1).
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
@@ -177,7 +177,7 @@ add(Binding, InnerFun) ->
                   {error, _} = Err ->
                       rabbit_misc:const(Err)
               end
-      end).
+      end, fun not_found_or_absent_errs/1).
 
 add(Src, Dst, B) ->
     [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
@@ -200,14 +200,15 @@ remove(Binding, InnerFun) ->
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
-              case mnesia:read(rabbit_route, B, write) of
-                  []  -> rabbit_misc:const({error, binding_not_found});
-                  [_] -> case InnerFun(Src, Dst) of
-                             ok               -> remove(Src, Dst, B);
-                             {error, _} = Err -> rabbit_misc:const(Err)
-                         end
+              case mnesia:read(rabbit_route, B, write) =:= [] andalso
+                  mnesia:read(rabbit_durable_route, B, write) =/= [] of
+                  true  -> rabbit_misc:const({error, binding_not_found});
+                  false -> case InnerFun(Src, Dst) of
+                               ok               -> remove(Src, Dst, B);
+                               {error, _} = Err -> rabbit_misc:const(Err)
+                           end
               end
-      end).
+      end, fun absent_errs_only/1).
 
 remove(Src, Dst, B) ->
     ok = sync_route(#route{binding = B}, durable(Src), durable(Dst),
@@ -308,13 +309,13 @@ durable(#amqqueue{durable = D}) -> D.
 
 binding_action(Binding = #binding{source      = SrcName,
                                   destination = DstName,
-                                  args        = Arguments}, Fun) ->
+                                  args        = Arguments}, Fun, ErrFun) ->
     call_with_source_and_destination(
       SrcName, DstName,
       fun (Src, Dst) ->
               SortedArgs = rabbit_misc:sort_field_table(Arguments),
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
-      end).
+      end, ErrFun).
 
 delete_object(Tab, Record, LockKind) ->
     %% this 'guarded' delete prevents unnecessary writes to the mnesia
@@ -339,13 +340,9 @@ sync_transient_route(Route, Fun) ->
     ok = Fun(rabbit_route, Route, write),
     ok = Fun(rabbit_reverse_route, reverse_route(Route), write).
 
-call_with_source_and_destination(SrcName, DstName, Fun) ->
+call_with_source_and_destination(SrcName, DstName, Fun, ErrFun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
-    ErrFun = fun (Names) ->
-                     Errs = [not_found_or_absent(Name) || Name <- Names],
-                     rabbit_misc:const({error, {resources_missing, Errs}})
-             end,
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case {mnesia:read({SrcTable, SrcName}),
@@ -356,6 +353,18 @@ call_with_source_and_destination(SrcName, DstName, Fun) ->
                   {[],    []   } -> ErrFun([SrcName, DstName])
               end
       end).
+
+not_found_or_absent_errs(Names) ->
+    Errs = [not_found_or_absent(Name) || Name <- Names],
+    rabbit_misc:const({error, {resources_missing, Errs}}).
+
+absent_errs_only(Names) ->
+    Errs = [E || Name <- Names,
+                 {absent, _Q} = E <- [not_found_or_absent(Name)]],
+    rabbit_misc:const(case Errs of
+                          [] -> ok;
+                          _  -> {error, {resources_missing, Errs}}
+                      end).
 
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
 table_for_resource(#resource{kind = queue})    -> rabbit_queue.

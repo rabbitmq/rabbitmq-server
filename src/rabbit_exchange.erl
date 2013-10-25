@@ -347,12 +347,11 @@ route1(Delivery, Decorators,
            lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
                        AlternateDests ++ DecorateDests  ++ ExchangeDests)).
 
-process_alternate(#exchange{arguments = []}, _Results) -> %% optimisation
-    [];
-process_alternate(#exchange{name = XName, arguments = Args}, []) ->
-    case rabbit_misc:r_arg(XName, exchange, Args, <<"alternate-exchange">>) of
+process_alternate(X = #exchange{name = XName}, []) ->
+    case rabbit_policy:get_arg(
+           <<"alternate-exchange">>, <<"alternate-exchange">>, X) of
         undefined -> [];
-        AName     -> [AName]
+        AName     -> [rabbit_misc:r(XName, exchange, AName)]
     end;
 process_alternate(_X, _Results) ->
     [].

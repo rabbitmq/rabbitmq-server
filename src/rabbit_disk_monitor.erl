@@ -23,16 +23,22 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([get_disk_free_limit/0, set_disk_free_limit/1, get_check_interval/0,
-         set_check_interval/1, get_disk_free/0]).
+-export([get_disk_free_limit/0, set_disk_free_limit/1,
+         get_min_check_interval/0, set_min_check_interval/1,
+         get_max_check_interval/0, set_max_check_interval/1,
+         get_disk_free/0]).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_DISK_CHECK_INTERVAL, 10000).
+-define(DEFAULT_MIN_DISK_CHECK_INTERVAL, 100).
+-define(DEFAULT_MAX_DISK_CHECK_INTERVAL, 10000).
+%% 250MB/s i.e. 250kB/ms
+-define(FAST_RATE, (250 * 1000)).
 
 -record(state, {dir,
                 limit,
                 actual,
-                timeout,
+                min_interval,
+                max_interval,
                 timer,
                 alarmed
                }).
@@ -45,8 +51,10 @@
 -spec(start_link/1 :: (disk_free_limit()) -> rabbit_types:ok_pid_or_error()).
 -spec(get_disk_free_limit/0 :: () -> integer()).
 -spec(set_disk_free_limit/1 :: (disk_free_limit()) -> 'ok').
--spec(get_check_interval/0 :: () -> integer()).
--spec(set_check_interval/1 :: (integer()) -> 'ok').
+-spec(get_min_check_interval/0 :: () -> integer()).
+-spec(set_min_check_interval/1 :: (integer()) -> 'ok').
+-spec(get_max_check_interval/0 :: () -> integer()).
+-spec(set_max_check_interval/1 :: (integer()) -> 'ok').
 -spec(get_disk_free/0 :: () -> (integer() | 'unknown')).
 
 -endif.
@@ -61,11 +69,17 @@ get_disk_free_limit() ->
 set_disk_free_limit(Limit) ->
     gen_server:call(?MODULE, {set_disk_free_limit, Limit}, infinity).
 
-get_check_interval() ->
-    gen_server:call(?MODULE, get_check_interval, infinity).
+get_min_check_interval() ->
+    gen_server:call(?MODULE, get_min_check_interval, infinity).
 
-set_check_interval(Interval) ->
-    gen_server:call(?MODULE, {set_check_interval, Interval}, infinity).
+set_min_check_interval(Interval) ->
+    gen_server:call(?MODULE, {set_min_check_interval, Interval}, infinity).
+
+get_max_check_interval() ->
+    gen_server:call(?MODULE, get_max_check_interval, infinity).
+
+set_max_check_interval(Interval) ->
+    gen_server:call(?MODULE, {set_max_check_interval, Interval}, infinity).
 
 get_disk_free() ->
     gen_server:call(?MODULE, get_disk_free, infinity).
@@ -78,16 +92,15 @@ start_link(Args) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
 
 init([Limit]) ->
-    TRef = start_timer(?DEFAULT_DISK_CHECK_INTERVAL),
     Dir = dir(),
-    State = #state { dir     = Dir,
-                     timeout = ?DEFAULT_DISK_CHECK_INTERVAL,
-                     timer   = TRef,
-                     alarmed = false},
+    State = #state{dir          = Dir,
+                   min_interval = ?DEFAULT_MIN_DISK_CHECK_INTERVAL,
+                   max_interval = ?DEFAULT_MAX_DISK_CHECK_INTERVAL,
+                   alarmed      = false},
     case {catch get_disk_free(Dir),
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->
-            {ok, set_disk_limits(State, Limit)};
+            {ok, start_timer(set_disk_limits(State, Limit))};
         Err ->
             rabbit_log:info("Disabling disk free space monitoring "
                             "on unsupported platform: ~p~n", [Err]),
@@ -100,12 +113,17 @@ handle_call(get_disk_free_limit, _From, State) ->
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
     {reply, ok, set_disk_limits(State, Limit)};
 
-handle_call(get_check_interval, _From, State) ->
-    {reply, State#state.timeout, State};
+handle_call(get_min_check_interval, _From, State) ->
+    {reply, State#state.min_interval, State};
 
-handle_call({set_check_interval, Timeout}, _From, State) ->
-    {ok, cancel} = timer:cancel(State#state.timer),
-    {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
+handle_call(get_max_check_interval, _From, State) ->
+    {reply, State#state.max_interval, State};
+
+handle_call({set_min_check_interval, MinInterval}, _From, State) ->
+    {reply, ok, State#state{min_interval = MinInterval}};
+
+handle_call({set_max_check_interval, MaxInterval}, _From, State) ->
+    {reply, ok, State#state{max_interval = MaxInterval}};
 
 handle_call(get_disk_free, _From, State = #state { actual = Actual }) ->
     {reply, Actual, State};
@@ -117,7 +135,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(update, State) ->
-    {noreply, internal_update(State)};
+    {noreply, start_timer(internal_update(State))};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -193,6 +211,15 @@ emit_update_info(StateStr, CurrentFree, Limit) ->
       "Disk free space ~s. Free bytes:~p Limit:~p~n",
       [StateStr, CurrentFree, Limit]).
 
-start_timer(Timeout) ->
-    {ok, TRef} = timer:send_interval(Timeout, update),
-    TRef.
+start_timer(State) ->
+    State#state{timer = erlang:send_after(interval(State), self(), update)}.
+
+interval(#state{alarmed      = true,
+                max_interval = MaxInterval}) ->
+    MaxInterval;
+interval(#state{limit        = Limit,
+                actual       = Actual,
+                min_interval = MinInterval,
+                max_interval = MaxInterval}) ->
+    IdealInterval = 2 * (Actual - Limit) / ?FAST_RATE,
+    trunc(erlang:max(MinInterval, erlang:min(MaxInterval, IdealInterval))).

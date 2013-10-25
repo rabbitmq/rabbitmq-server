@@ -43,6 +43,6 @@ start_channel(Pid, Args) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{channel_sup, {rabbit_channel_sup, start_link, []},
             temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.
