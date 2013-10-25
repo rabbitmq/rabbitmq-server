@@ -16,8 +16,8 @@
 
 -module(rabbit_stomp_reader).
 
--export([start_link/2]).
--export([init/2]).
+-export([start_link/3]).
+-export([init/3]).
 -export([conserve_resources/3]).
 
 -include("rabbit_stomp.hrl").
@@ -29,19 +29,25 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(SupPid, Configuration) ->
-        {ok, proc_lib:spawn_link(?MODULE, init, [SupPid, Configuration])}.
+start_link(SupPid, ProcessorPid, Configuration) ->
+        {ok, proc_lib:spawn_link(?MODULE, init,
+                                 [SupPid, ProcessorPid, Configuration])}.
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init(SupPid, Configuration) ->
+init(SupPid, ProcessorPid, Configuration) ->
+    Reply = go(SupPid, ProcessorPid, Configuration),
+    rabbit_stomp_processor:flush_and_die(ProcessorPid),
+    Reply.
+
+go(SupPid, ProcessorPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
             {ok, Sock} = SockTransform(Sock0),
             case rabbit_net:connection_string(Sock, inbound) of
                 {ok, ConnStr} ->
-                    {ok, ProcessorPid} =
-                        start_processor(SupPid, Configuration, Sock),
+                    ProcInitArgs = processor_args(SupPid, Configuration, Sock),
+                    rabbit_stomp_processor:init_arg(ProcessorPid, ProcInitArgs),
                     log(info, "accepting STOMP connection ~p (~s)~n",
                         [self(), ConnStr]),
 
@@ -60,8 +66,6 @@ init(SupPid, Configuration) ->
                     catch
                         _:Ex -> log(error, "closing STOMP connection "
                                     "~p (~s):~n~p~n", [self(), ConnStr, Ex])
-                    after
-                        rabbit_stomp_processor:flush_and_die(ProcessorPid)
                     end,
                     done;
                 {error, enotconn} ->
@@ -140,7 +144,7 @@ run_socket(State = #reader_state{socket = Sock}) ->
 
 %%----------------------------------------------------------------------------
 
-start_processor(SupPid, Configuration, Sock) ->
+processor_args(SupPid, Configuration, Sock) ->
     SendFun = fun (sync, IoData) ->
                       %% no messages emitted
                       catch rabbit_net:send(Sock, IoData);
@@ -155,14 +159,11 @@ start_processor(SupPid, Configuration, Sock) ->
 
     StartHeartbeatFun =
         fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFun) ->
-                SHF = rabbit_heartbeat:start_heartbeat_fun(SupPid),
-                SHF(Sock, SendTimeout, SendFin, ReceiveTimeout, ReceiveFun)
+                rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
+                                       SendFin, ReceiveTimeout, ReceiveFun)
         end,
-
-    rabbit_stomp_client_sup:start_processor(
-      SupPid, [SendFun, adapter_info(Sock), StartHeartbeatFun,
-               ssl_login_name(Sock, Configuration), Configuration]).
-
+    [SendFun, adapter_info(Sock), StartHeartbeatFun,
+     ssl_login_name(Sock, Configuration)].
 
 adapter_info(Sock) ->
     amqp_connection:socket_adapter_info(Sock, {'STOMP', 0}).
