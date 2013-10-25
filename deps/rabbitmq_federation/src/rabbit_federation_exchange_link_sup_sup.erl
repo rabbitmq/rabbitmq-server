@@ -14,15 +14,17 @@
 %% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_link_sup_sup).
+-module(rabbit_federation_exchange_link_sup_sup).
 
 -behaviour(mirrored_supervisor).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--define(SUPERVISOR, rabbit_federation_link_sup_sup).
+-define(SUPERVISOR, ?MODULE).
+
+%% Supervises the upstream links for all exchanges (but not queues). We need
+%% different handling here since exchanges want a mirrored sup.
 
 -export([start_link/0, start_child/1, adjust/1, stop_child/1]).
-
 -export([init/1]).
 
 %%----------------------------------------------------------------------------
@@ -31,6 +33,8 @@ start_link() ->
     mirrored_supervisor:start_link({local, ?SUPERVISOR},
                                    ?SUPERVISOR, ?MODULE, []).
 
+%% Note that the next supervisor down, rabbit_federation_link_sup, is common
+%% between exchanges and queues.
 start_child(X) ->
     case mirrored_supervisor:start_child(
            ?SUPERVISOR,
@@ -43,8 +47,8 @@ start_child(X) ->
     end.
 
 adjust(Reason) ->
-    [rabbit_federation_link_sup:adjust(Pid, Id, Reason) ||
-        {Id, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+    [rabbit_federation_link_sup:adjust(Pid, X, Reason) ||
+        {X, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
     ok.
 
 stop_child(X) ->
@@ -56,5 +60,4 @@ stop_child(X) ->
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
-id(X) ->
-    X#exchange{scratches = undefined}.
+id(X = #exchange{}) -> X#exchange{scratches = undefined}.

@@ -20,7 +20,8 @@
 
 all_tests() ->
     ok = eunit:test(tests(rabbit_federation_unit_test, 60), [verbose]),
-    ok = eunit:test(tests(rabbit_federation_test, 60), [verbose]).
+    ok = eunit:test(tests(rabbit_federation_exchange_test, 60), [verbose]),
+    ok = eunit:test(tests(rabbit_federation_queue_test, 60), [verbose]).
 
 tests(Module, Timeout) ->
     {foreach, fun() -> ok end,

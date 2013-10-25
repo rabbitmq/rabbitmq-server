@@ -34,14 +34,14 @@ register() ->
         {Class, Name} <- [{runtime_parameter, <<"federation">>},
                           {runtime_parameter, <<"federation-upstream">>},
                           {runtime_parameter, <<"federation-upstream-set">>},
+                          {policy_validator,  <<"federation-upstream">>},
                           {policy_validator,  <<"federation-upstream-set">>}]],
     ok.
 
 validate(_VHost, <<"federation-upstream-set">>, Name, Term) ->
     [rabbit_parameter_validation:proplist(
        Name,
-       [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory},
-        {<<"exchange">>, fun rabbit_parameter_validation:binary/2, optional} |
+       [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory} |
         shared_validation()], Upstream)
      || Upstream <- Term];
 
@@ -60,33 +60,38 @@ validate(_VHost, _Component, Name, _Term) ->
     {error, "name not recognised: ~p", [Name]}.
 
 notify(_VHost, <<"federation-upstream-set">>, Name, _Term) ->
-    rabbit_federation_link_sup_sup:adjust({upstream_set, Name});
+    adjust({upstream_set, Name});
 
 notify(_VHost, <<"federation-upstream">>, Name, _Term) ->
-    rabbit_federation_link_sup_sup:adjust({upstream, Name});
+    adjust({upstream, Name});
 
 notify(_VHost, <<"federation">>, <<"local-nodename">>, _Term) ->
-    rabbit_federation_link_sup_sup:adjust(everything);
+    adjust(everything);
 
 notify(_VHost, <<"federation">>, <<"local-username">>, _Term) ->
-    rabbit_federation_link_sup_sup:adjust(everything).
+    adjust(everything).
 
 notify_clear(_VHost, <<"federation-upstream-set">>, Name) ->
-    rabbit_federation_link_sup_sup:adjust({clear_upstream_set, Name});
+    adjust({clear_upstream_set, Name});
 
 notify_clear(_VHost, <<"federation-upstream">>, Name) ->
-    rabbit_federation_link_sup_sup:adjust({clear_upstream, Name});
+    adjust({clear_upstream, Name});
 
 notify_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
-    rabbit_federation_link_sup_sup:adjust(everything);
+    adjust(everything);
 
 notify_clear(_VHost, <<"federation">>, <<"local-username">>) ->
-    rabbit_federation_link_sup_sup:adjust(everything).
+    adjust(everything).
+
+adjust(Thing) ->
+    rabbit_federation_exchange_link_sup_sup:adjust(Thing),
+    rabbit_federation_queue_link_sup_sup:adjust(Thing).
 
 %%----------------------------------------------------------------------------
 
 shared_validation() ->
     [{<<"exchange">>,       fun rabbit_parameter_validation:binary/2, optional},
+     {<<"queue">>,          fun rabbit_parameter_validation:binary/2, optional},
      {<<"prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"reconnect-delay">>,fun rabbit_parameter_validation:number/2, optional},
      {<<"max-hops">>,       fun rabbit_parameter_validation:number/2, optional},
@@ -122,5 +127,15 @@ validate_policy([{<<"federation-upstream-set">>, Value}])
   when is_binary(Value) ->
     ok;
 validate_policy([{<<"federation-upstream-set">>, Value}]) ->
-    {error, "~p is not a valid federation upstream set name", [Value]}.
+    {error, "~p is not a valid federation upstream set name", [Value]};
+
+validate_policy([{<<"federation-upstream">>, Value}])
+  when is_binary(Value) ->
+    ok;
+validate_policy([{<<"federation-upstream">>, Value}]) ->
+    {error, "~p is not a valid federation upstream name", [Value]};
+
+validate_policy(L) when length(L) =:= 2 ->
+    {error, "cannot specify federation-upstream and federation-upstream-set "
+     "together", []}.
 

@@ -16,6 +16,7 @@
 
 -record(upstream, {uris,
                    exchange_name,
+                   queue_name,
                    prefetch_count,
                    max_hops,
                    reconnect_delay,
@@ -26,9 +27,16 @@
                    ha_policy,
                    name}).
 
--record(upstream_params, {uri, params, exchange}).
+-record(upstream_params,
+        {uri,
+         params,
+         x_or_q,
+         %% The next two can be derived from the above three, but we don't
+         %% want to do that every time we forward a message.
+         safe_uri,
+         table}).
 
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(BINDING_HEADER, <<"x-bound-from">>).
 -define(MAX_HOPS_ARG, <<"x-max-hops">>).
--define(DEFAULT_PREFETCH, 1000).
+-define(DEF_PREFETCH, 1000).

@@ -48,7 +48,12 @@ init([]) ->
     Status = {status, {rabbit_federation_status, start_link, []},
               transient, ?MAX_WAIT, worker,
               [rabbit_federation_status]},
-    LinkSupSup = {links, {rabbit_federation_link_sup_sup, start_link, []},
+    XLinkSupSup = {x_links,
+                   {rabbit_federation_exchange_link_sup_sup, start_link, []},
+                   transient, ?MAX_WAIT, supervisor,
+                   [rabbit_federation_exchange_link_sup_sup]},
+    QLinkSupSup = {q_links,
+                   {rabbit_federation_queue_link_sup_sup, start_link, []},
                   transient, ?MAX_WAIT, supervisor,
-                  [rabbit_federation_link_sup_sup]},
-    {ok, {{one_for_one, 3, 10}, [Status, LinkSupSup]}}.
+                  [rabbit_federation_queue_link_sup_sup]},
+    {ok, {{one_for_one, 3, 10}, [Status, XLinkSupSup, QLinkSupSup]}}.
