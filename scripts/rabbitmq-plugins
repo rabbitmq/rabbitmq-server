@@ -23,6 +23,7 @@
 
 [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
+[ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_NAME_TYPE=-name || RABBITMQ_NAME_TYPE=-sname
 
 ##--- End of overridden <var_name> variables
 
@@ -30,7 +31,7 @@ exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
-    -sname rabbitmq-plugins$$ \
+    $RABBITMQ_NAME_TYPE rabbitmq-plugins$$ \
     -boot "${CLEAN_BOOT_FILE}" \
     -s rabbit_plugins_main \
     -enabled_plugins_file "$RABBITMQ_ENABLED_PLUGINS_FILE" \
