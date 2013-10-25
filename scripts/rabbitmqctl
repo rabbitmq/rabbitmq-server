@@ -23,6 +23,7 @@
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
+[ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_NAME_TYPE=-name || RABBITMQ_NAME_TYPE=-sname
 
 ##--- End of overridden <var_name> variables
 
@@ -31,7 +32,7 @@ exec ${ERL_DIR}erl \
     -noinput \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \
-    -sname rabbitmqctl$$ \
+    $RABBITMQ_NAME_TYPE rabbitmqctl$$ \
     -boot "${CLEAN_BOOT_FILE}" \
     -s rabbit_control_main \
     -nodename $RABBITMQ_NODENAME \
