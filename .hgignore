@@ -4,6 +4,7 @@ syntax: glob
 *.swp
 *.patch
 *.orig
+*.tmp
 erl_crash.dump
 deps.mk
 
