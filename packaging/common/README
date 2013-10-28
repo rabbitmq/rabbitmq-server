@@ -1,0 +1,20 @@
+This is rabbitmq-server, a message broker implementing AMQP, STOMP and MQTT.
+
+Most of the documentation for RabbitMQ is provided on the RabbitMQ web
+site. You can see documentation for the current version at:
+
+http://www.rabbitmq.com/documentation.html
+
+and for previous versions at:
+
+http://www.rabbitmq.com/previous.html
+
+Man pages are installed with this package. Of particular interest are
+rabbitmqctl(1), to interact with a running RabbitMQ server, and
+rabbitmq-plugins(1), to enable and disable plugins. These should be
+run as the superuser.
+
+An example configuration file is provided in the same directory as
+this README. Copy it to /etc/rabbitmq/rabbitmq.config to use it. The
+RabbitMQ server must be restarted after changing the configuration
+file or enabling or disabling plugins.

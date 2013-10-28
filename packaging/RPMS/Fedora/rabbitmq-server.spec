@@ -10,6 +10,7 @@ Source1: rabbitmq-server.init
 Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-server.ocf
+Source5: README
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
 BuildRequires: erlang >= R13B-03, python-simplejson, xmlto, libxslt
@@ -41,6 +42,7 @@ scalable implementation of an AMQP broker.
 %build
 cp %{S:2} %{_rabbit_wrapper}
 cp %{S:4} %{_rabbit_server_ocf}
+cp %{S:5} %{_builddir}/rabbitmq-server-%{version}/README
 make %{?_smp_mflags}
 
 %install
@@ -121,6 +123,7 @@ done
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*
+%doc README
 %doc docs/rabbitmq.config.example
 
 %clean
