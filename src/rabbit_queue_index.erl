@@ -21,7 +21,7 @@
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, recover/1]).
 
--export([scan/3]).
+%% -export([scan/3]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0]).
 
@@ -162,7 +162,7 @@
 %%----------------------------------------------------------------------------
 
 -record(qistate, { dir, segments, journal_handle, dirty_count,
-                   max_journal_entries, on_sync, unconfirmed }).
+                   max_journal_entries, on_sync, unconfirmed, name }).
 
 -record(segment, { num, path, journal_entries, unacked }).
 
@@ -191,7 +191,8 @@
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
-                              unconfirmed         :: gb_set()
+                              unconfirmed         :: gb_set(),
+                              name                :: rabbit_amqqueue:name()
                             }).
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
@@ -222,11 +223,11 @@
                        {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
 
--spec(scan/3 :: (file:filename(),
-                 fun ((seq_id(), rabbit_types:msg_id(),
-                       rabbit_types:message_properties(), boolean(),
-                       ('del' | 'no_del'), ('ack' | 'no_ack'), A) -> A),
-                     A) -> A).
+%-spec(scan/3 :: (file:filename(),
+%                 fun ((seq_id(), rabbit_types:msg_id(),
+%                       rabbit_types:message_properties(), boolean(),
+%                       ('del' | 'no_del'), ('ack' | 'no_ack'), A) -> A),
+%                     A) -> A).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
@@ -243,25 +244,24 @@ init(Name, OnSyncFun) ->
     State #qistate { on_sync = OnSyncFun }.
 
 shutdown_terms(Name) ->
-    #qistate { dir = Dir } = blank_state(Name),
-    case read_shutdown_terms(Dir) of
+    case rabbit_clean_shutdown:read(Name) of
         {error, _}   -> [];
         {ok, Terms1} -> Terms1
     end.
 
 recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
-    State = #qistate { dir = Dir } = blank_state(Name),
+    State = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
-    CleanShutdown = detect_clean_shutdown(Dir),
+    CleanShutdown = rabbit_clean_shutdown:detect(Name),
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
-terminate(Terms, State) ->
-    {SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
-    store_clean_shutdown([{segments, SegmentCounts} | Terms], Dir),
+terminate(Terms, State = #qistate { name = Name }) ->
+    {SegmentCounts, State1} = terminate(State),
+    rabbit_clean_shutdown:store(Name, [{segments, SegmentCounts} | Terms]),
     State1.
 
 delete_and_terminate(State) ->
@@ -358,26 +358,35 @@ bounds(State = #qistate { segments = Segments }) ->
     {LowSeqId, NextSeqId, State}.
 
 recover(DurableQueues) ->
-    DurableDict = dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
-                                     Queue <- DurableQueues ]),
+    ok = rabbit_clean_shutdown:recover(),
+    DurableDict =
+        dict:from_list([begin
+                            {queue_name_to_dir_name(Queue), Queue}
+                        end || Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
     QueueDirNames = all_queue_directory_names(QueuesDir),
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
+
+    %% TODO: this next fold assumes that we can have durable queue
+    %% entires that have no corresponding directory, but not that we
+    %% can have directories with no corresponding queue record.
+
     {DurableQueueNames, DurableTerms} =
         lists:foldl(
           fun (QueueDirName, {DurableAcc, TermsAcc}) ->
+                  QName = dict:fetch(QueueDirName, DurableDict),
                   QueueDirPath = filename:join(QueuesDir, QueueDirName),
                   case sets:is_element(QueueDirName, DurableDirectories) of
                       true ->
                           TermsAcc1 =
-                              case read_shutdown_terms(QueueDirPath) of
+                              case rabbit_clean_shutdown:read(QName) of
                                   {error, _}  -> TermsAcc;
                                   {ok, Terms} -> [Terms | TermsAcc]
                               end,
-                          {[dict:fetch(QueueDirName, DurableDict) | DurableAcc],
-                           TermsAcc1};
+                          {[QName | DurableAcc], TermsAcc1};
                       false ->
                           ok = rabbit_file:recursive_delete([QueueDirPath]),
+                          rabbit_clean_shutdown:remove(QName),
                           {DurableAcc, TermsAcc}
                   end
           end, {[], []}, QueueDirNames),
@@ -396,10 +405,10 @@ all_queue_directory_names(Dir) ->
 %%----------------------------------------------------------------------------
 
 blank_state(QueueName) ->
-    blank_state_dir(
+    blank_state_dir(QueueName,
       filename:join(queues_dir(), queue_name_to_dir_name(QueueName))).
 
-blank_state_dir(Dir) ->
+blank_state_dir(Name, Dir) ->
     {ok, MaxJournal} =
         application:get_env(rabbit, queue_index_max_journal_entries),
     #qistate { dir                 = Dir,
@@ -408,23 +417,8 @@ blank_state_dir(Dir) ->
                dirty_count         = 0,
                max_journal_entries = MaxJournal,
                on_sync             = fun (_) -> ok end,
-               unconfirmed         = gb_sets:new() }.
-
-clean_filename(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
-
-detect_clean_shutdown(Dir) ->
-    case rabbit_file:delete(clean_filename(Dir)) of
-        ok              -> true;
-        {error, enoent} -> false
-    end.
-
-read_shutdown_terms(Dir) ->
-    rabbit_file:read_term_file(clean_filename(Dir)).
-
-store_clean_shutdown(Terms, Dir) ->
-    CleanFileName = clean_filename(Dir),
-    ok = rabbit_file:ensure_dir(CleanFileName),
-    rabbit_file:write_term_file(CleanFileName, Terms).
+               unconfirmed         = gb_sets:new(),
+               name                = Name }.
 
 init_clean(RecoveredCounts, State) ->
     %% Load the journal. Since this is a clean recovery this (almost)
@@ -554,8 +548,8 @@ queue_index_walker_reader(QueueName, Gatherer) ->
            end, ok, State),
     ok = gatherer:finish(Gatherer).
 
-scan(Dir, Fun, Acc) ->
-    scan_segments(Fun, Acc, blank_state_dir(Dir)).
+%scan(Dir, Fun, Acc) ->
+%    scan_segments(Fun, Acc, blank_state_dir(Dir)).
 
 scan_segments(Fun, Acc, State) ->
     State1 = #qistate { segments = Segments, dir = Dir } =
