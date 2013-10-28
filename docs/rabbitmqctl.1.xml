@@ -960,7 +960,7 @@
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg> <arg choice="opt"><replaceable>priority</replaceable></arg> </cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">--priority <replaceable>priority</replaceable></arg> <arg choice="opt">--apply-to <replaceable>apply-to</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Sets a policy.
@@ -989,7 +989,13 @@
               <varlistentry>
                 <term>priority</term>
                 <listitem><para>
-                    The priority of the policy as an integer, defaulting to 0. Higher numbers indicate greater precedence.
+                    The priority of the policy as an integer. Higher numbers indicate greater precedence. The default is 0.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>apply-to</term>
+                <listitem><para>
+                    Which types of object this policy should apply to - "queues", "exchanges" or "all". The default is "all".
                 </para></listitem>
               </varlistentry>
             </variablelist>
@@ -1612,14 +1618,10 @@
               characters, the name of the queue subscribed to, the id of
               the channel process via which the subscription was created
               and is managed, the consumer tag which uniquely identifies
-              the subscription within a channel, and a boolean
+              the subscription within a channel, a boolean
               indicating whether acknowledgements are expected for
-              messages delivered to this consumer.
-            </para>
-            <para>
-              The output is a list of rows containing, in order, the queue name,
-              channel process id, consumer tag, and a boolean indicating whether
-              acknowledgements are expected from the consumer.
+              messages delivered to this consumer, and any arguments for this
+              consumer.
             </para>
           </listitem>
         </varlistentry>

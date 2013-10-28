@@ -35,8 +35,10 @@
                      {rabbit_types:username(), rabbit_types:password()}),
                     rabbit_types:vhost(), rabbit_types:protocol(), pid(),
                     rabbit_event:event_props()) ->
-                        {'ok', {rabbit_types:user(),
-                                rabbit_framing:amqp_table()}}).
+                        rabbit_types:ok_or_error2(
+                          {rabbit_types:user(), rabbit_framing:amqp_table()},
+                          'broker_not_found_on_node' |
+                          {'auth_failure', string()} | 'access_refused')).
 -spec(start_channel/9 ::
         (rabbit_channel:channel_number(), pid(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
@@ -76,21 +78,24 @@ connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
     end;
 
 connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
-    connect0(check_user_pass_login, Username, Password, VHost, Protocol, Pid,
-             Infos);
+    connect0(fun () -> rabbit_access_control:check_user_pass_login(
+                         Username, Password) end,
+             VHost, Protocol, Pid, Infos);
 
 connect(Username, VHost, Protocol, Pid, Infos) ->
-    connect0(check_user_login, Username, [], VHost, Protocol, Pid, Infos).
+    connect0(fun () -> rabbit_access_control:check_user_login(
+                         Username, []) end,
+             VHost, Protocol, Pid, Infos).
 
-connect0(FunctionName, U, P, VHost, Protocol, Pid, Infos) ->
+connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
     case rabbit:is_running() of
-        true  ->
-            case rabbit_access_control:FunctionName(U, P) of
-                {ok, User}        -> connect(User, VHost, Protocol, Pid, Infos);
-                {refused, _M, _A} -> {error, auth_failure}
-            end;
-        false ->
-            {error, broker_not_found_on_node}
+        true  -> case AuthFun() of
+                     {ok, User} ->
+                         connect(User, VHost, Protocol, Pid, Infos);
+                     {refused, _M, _A} ->
+                         {error, {auth_failure, "Refused"}}
+                 end;
+        false -> {error, broker_not_found_on_node}
     end.
 
 

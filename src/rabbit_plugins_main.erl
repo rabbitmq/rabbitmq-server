@@ -121,7 +121,6 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
                                  fmt_missing("dependencies", MissingDeps)})
     end,
     write_enabled_plugins(PluginsFile, NewEnabled),
-    maybe_warn_mochiweb(NewImplicitlyEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> print_list("The following plugins have been enabled:",
@@ -261,25 +260,6 @@ write_enabled_plugins(PluginsFile, Plugins) ->
         ok              -> ok;
         {error, Reason} -> throw({error, {cannot_write_enabled_plugins_file,
                                           PluginsFile, Reason}})
-    end.
-
-maybe_warn_mochiweb(Enabled) ->
-    V = erlang:system_info(otp_release),
-    case lists:member(mochiweb, Enabled) andalso V < "R13B01" of
-        true ->
-            Stars = string:copies("*", 80),
-            io:format("~n~n~s~n"
-                      "  Warning: Mochiweb enabled and Erlang version ~s "
-                      "detected.~n"
-                      "  Enabling plugins that depend on Mochiweb is not "
-                      "supported on this Erlang~n"
-                      "  version. At least R13B01 is required.~n~n"
-                      "  RabbitMQ will not start successfully in this "
-                      "configuration. You *must*~n"
-                      "  disable the Mochiweb plugin, or upgrade Erlang.~n"
-                      "~s~n~n~n", [Stars, V, Stars]);
-        false ->
-            ok
     end.
 
 report_change() ->

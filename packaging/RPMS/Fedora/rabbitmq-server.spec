@@ -12,8 +12,8 @@ Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-server.ocf
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= R12B-3, python-simplejson, xmlto, libxslt
-Requires: erlang >= R12B-3, logrotate
+BuildRequires: erlang >= R13B-03, python-simplejson, xmlto, libxslt
+Requires: erlang >= R13B-03, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): %%REQUIRES%%
@@ -46,9 +46,12 @@ make %{?_smp_mflags}
 %install
 rm -rf %{buildroot}
 
+# Note that we pass /tmp to DOC_INSTALL_DIR here because we're using %doc
+# to actually install rabbitmq.config.example, so this is just a fake/temp path
 make install TARGET_DIR=%{_maindir} \
              SBIN_DIR=%{buildroot}%{_rabbit_libdir}/bin \
-             MAN_DIR=%{buildroot}%{_mandir}
+             MAN_DIR=%{buildroot}%{_mandir} \
+             DOC_INSTALL_DIR=/tmp
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
@@ -118,11 +121,15 @@ done
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*
+%doc docs/rabbitmq.config.example
 
 %clean
 rm -rf %{buildroot}
 
 %changelog
+* Wed Oct 23 2013 emile@rabbitmq.com 3.2.0-1
+- New Upstream Release
+
 * Thu Aug 15 2013 simon@rabbitmq.com 3.1.5-1
 - New Upstream Release
 

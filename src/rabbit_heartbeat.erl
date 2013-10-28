@@ -16,8 +16,11 @@
 
 -module(rabbit_heartbeat).
 
+-export([start/6]).
 -export([start_heartbeat_sender/3, start_heartbeat_receiver/3,
-         start_heartbeat_fun/1, pause_monitor/1, resume_monitor/1]).
+         pause_monitor/1, resume_monitor/1]).
+
+-export([system_continue/3, system_terminate/4, system_code_change/4]).
 
 -include("rabbit.hrl").
 
@@ -26,16 +29,15 @@
 -ifdef(use_specs).
 
 -export_type([heartbeaters/0]).
--export_type([start_heartbeat_fun/0]).
 
 -type(heartbeaters() :: {rabbit_types:maybe(pid()), rabbit_types:maybe(pid())}).
 
 -type(heartbeat_callback() :: fun (() -> any())).
 
--type(start_heartbeat_fun() ::
-        fun((rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
-             non_neg_integer(), heartbeat_callback()) ->
-                   no_return())).
+-spec(start/6 ::
+        (pid(), rabbit_net:socket(),
+         non_neg_integer(), heartbeat_callback(),
+         non_neg_integer(), heartbeat_callback()) -> heartbeaters()).
 
 -spec(start_heartbeat_sender/3 ::
         (rabbit_net:socket(), non_neg_integer(), heartbeat_callback()) ->
@@ -44,16 +46,27 @@
         (rabbit_net:socket(), non_neg_integer(), heartbeat_callback()) ->
                                          rabbit_types:ok(pid())).
 
--spec(start_heartbeat_fun/1 ::
-        (pid()) -> start_heartbeat_fun()).
-
-
 -spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
 -spec(resume_monitor/1 :: (heartbeaters()) -> 'ok').
+
+-spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
+-spec(system_continue/3 :: (_,_,{_, _}) -> any()).
+-spec(system_terminate/4 :: (_,_,_,_) -> none()).
 
 -endif.
 
 %%----------------------------------------------------------------------------
+
+start(SupPid, Sock, SendTimeoutSec, SendFun, ReceiveTimeoutSec, ReceiveFun) ->
+    {ok, Sender} =
+        start_heartbeater(SendTimeoutSec, SupPid, Sock,
+                          SendFun, heartbeat_sender,
+                          start_heartbeat_sender),
+    {ok, Receiver} =
+        start_heartbeater(ReceiveTimeoutSec, SupPid, Sock,
+                          ReceiveFun, heartbeat_receiver,
+                          start_heartbeat_receiver),
+    {Sender, Receiver}.
 
 start_heartbeat_sender(Sock, TimeoutSec, SendFun) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly
@@ -69,24 +82,20 @@ start_heartbeat_receiver(Sock, TimeoutSec, ReceiveFun) ->
     heartbeater({Sock, TimeoutSec * 1000, recv_oct, 1,
                  fun () -> ReceiveFun(), stop end}).
 
-start_heartbeat_fun(SupPid) ->
-    fun (Sock, SendTimeoutSec, SendFun, ReceiveTimeoutSec, ReceiveFun) ->
-            {ok, Sender} =
-                start_heartbeater(SendTimeoutSec, SupPid, Sock,
-                                  SendFun, heartbeat_sender,
-                                  start_heartbeat_sender),
-            {ok, Receiver} =
-                start_heartbeater(ReceiveTimeoutSec, SupPid, Sock,
-                                  ReceiveFun, heartbeat_receiver,
-                                  start_heartbeat_receiver),
-            {Sender, Receiver}
-    end.
-
 pause_monitor({_Sender,     none}) -> ok;
 pause_monitor({_Sender, Receiver}) -> Receiver ! pause, ok.
 
 resume_monitor({_Sender,     none}) -> ok;
 resume_monitor({_Sender, Receiver}) -> Receiver ! resume, ok.
+
+system_continue(_Parent, Deb, {Params, State}) ->
+    heartbeater(Params, Deb, State).
+
+system_terminate(Reason, _Parent, _Deb, _State) ->
+    exit(Reason).
+
+system_code_change(Misc, _Module, _OldVsn, _Extra) ->
+    {ok, Misc}.
 
 %%----------------------------------------------------------------------------
 start_heartbeater(0, _SupPid, _Sock, _TimeoutFun, _Name, _Callback) ->
@@ -98,17 +107,27 @@ start_heartbeater(TimeoutSec, SupPid, Sock, TimeoutFun, Name, Callback) ->
                transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}).
 
 heartbeater(Params) ->
-    {ok, proc_lib:spawn_link(fun () -> heartbeater(Params, {0, 0}) end)}.
+    Deb = sys:debug_options([]),
+    {ok, proc_lib:spawn_link(fun () -> heartbeater(Params, Deb, {0, 0}) end)}.
 
 heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
-            {StatVal, SameCount}) ->
-    Recurse = fun (V) -> heartbeater(Params, V) end,
+            Deb, {StatVal, SameCount} = State) ->
+    Recurse = fun (State1) -> heartbeater(Params, Deb, State1) end,
+    System  = fun (From, Req) ->
+                      sys:handle_system_msg(
+                        Req, From, self(), ?MODULE, Deb, {Params, State})
+              end,
     receive
-        pause -> receive
-                     resume -> Recurse({0, 0});
-                     Other  -> exit({unexpected_message, Other})
-                 end;
-        Other -> exit({unexpected_message, Other})
+        pause ->
+            receive
+                resume              -> Recurse({0, 0});
+                {system, From, Req} -> System(From, Req);
+                Other               -> exit({unexpected_message, Other})
+            end;
+        {system, From, Req} ->
+            System(From, Req);
+        Other ->
+            exit({unexpected_message, Other})
     after TimeoutMillisec ->
             case rabbit_net:getstat(Sock, [StatName]) of
                 {ok, [{StatName, NewStatVal}]} ->

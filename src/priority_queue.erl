@@ -40,8 +40,8 @@
 
 -module(priority_queue).
 
--export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, in/2, in/3,
-         out/1, join/2]).
+-export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, from_list/1,
+         in/2, in/3, out/1, out_p/1, join/2, filter/2, fold/3, highest/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -59,10 +59,16 @@
 -spec(is_empty/1 :: (pqueue()) -> boolean()).
 -spec(len/1 :: (pqueue()) -> non_neg_integer()).
 -spec(to_list/1 :: (pqueue()) -> [{priority(), any()}]).
+-spec(from_list/1 :: ([{priority(), any()}]) -> pqueue()).
 -spec(in/2 :: (any(), pqueue()) -> pqueue()).
 -spec(in/3 :: (any(), priority(), pqueue()) -> pqueue()).
 -spec(out/1 :: (pqueue()) -> {empty | {value, any()}, pqueue()}).
+-spec(out_p/1 :: (pqueue()) -> {empty | {value, any(), priority()}, pqueue()}).
 -spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
+-spec(filter/2 :: (fun ((any()) -> boolean()), pqueue()) -> pqueue()).
+-spec(fold/3 ::
+        (fun ((any(), priority(), A) -> A), A, pqueue()) -> A).
+-spec(highest/1 :: (pqueue()) -> priority() | 'empty').
 
 -endif.
 
@@ -95,6 +101,9 @@ to_list({queue, In, Out, _Len}) when is_list(In), is_list(Out) ->
 to_list({pqueue, Queues}) ->
     [{maybe_negate_priority(P), V} || {P, Q} <- Queues,
                                       {0, V} <- to_list(Q)].
+
+from_list(L) ->
+    lists:foldl(fun ({P, E}, Q) -> in(E, P, Q) end, new(), L).
 
 in(Item, Q) ->
     in(Item, 0, Q).
@@ -147,6 +156,14 @@ out({pqueue, [{P, Q} | Queues]}) ->
            end,
     {R, NewQ}.
 
+out_p({queue, _, _, _}       = Q) -> add_p(out(Q), 0);
+out_p({pqueue, [{P, _} | _]} = Q) -> add_p(out(Q), maybe_negate_priority(P)).
+
+add_p(R, P) -> case R of
+                   {empty, Q}      -> {empty, Q};
+                   {{value, V}, Q} -> {{value, V, P}, Q}
+               end.
+
 join(A, {queue, [], [], 0}) ->
     A;
 join({queue, [], [], 0}, B) ->
@@ -184,6 +201,22 @@ merge([{PA, A}|As], Bs = [{PB, _}|_], Acc) when PA < PB orelse PA == infinity ->
     merge(As, Bs, [ {PA, A} | Acc ]);
 merge(As = [{_, _}|_], [{PB, B}|Bs], Acc) ->
     merge(As, Bs, [ {PB, B} | Acc ]).
+
+filter(Pred, Q) -> fold(fun(V, P, Acc) ->
+                                case Pred(V) of
+                                    true  -> in(V, P, Acc);
+                                    false -> Acc
+                                end
+                        end, new(), Q).
+
+fold(Fun, Init, Q) -> case out_p(Q) of
+                          {empty, _Q}         -> Init;
+                          {{value, V, P}, Q1} -> fold(Fun, Fun(V, P, Init), Q1)
+                      end.
+
+highest({queue, [], [], 0})     -> empty;
+highest({queue, _, _, _})       -> 0;
+highest({pqueue, [{P, _} | _]}) -> maybe_negate_priority(P).
 
 r2f([],      0) -> {queue, [], [], 0};
 r2f([_] = R, 1) -> {queue, [], R, 1};

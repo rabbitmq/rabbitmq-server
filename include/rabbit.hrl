@@ -45,7 +45,7 @@
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
                    arguments, pid, slave_pids, sync_slave_pids, policy,
-                   gm_pids}).
+                   gm_pids, decorators}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).
@@ -104,6 +104,9 @@
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
 -define(CREDIT_DISC_BOUND,   {2000, 500}).
+
+%% This is dictated by `erlang:send_after' on which we depend to implement TTL.
+-define(MAX_EXPIRY_TIMER, 4294967295).
 
 -define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
