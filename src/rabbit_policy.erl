@@ -167,11 +167,18 @@ list() ->
 list(VHost) ->
     list0(VHost, fun ident/1).
 
+list_tx(VHost) ->
+    list0_tx(VHost, fun ident/1).
+
 list_formatted(VHost) ->
     order_policies(list0(VHost, fun format/1)).
 
 list0(VHost, DefnFun) ->
-    [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
+    mnesia:async_dirty(fun () -> list0_tx(VHost, DefnFun) end).
+
+list0_tx(VHost, DefnFun) ->
+    [p(P, DefnFun) ||
+        P <- rabbit_runtime_parameters:list_tx(VHost, <<"policy">>)].
 
 order_policies(PropList) ->
     lists:sort(fun (A, B) -> pget(priority, A) < pget(priority, B) end,
@@ -209,44 +216,17 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 %%----------------------------------------------------------------------------
 
 update_policies(VHost) ->
-    F = fun() ->
-                Policies = list_tx(VHost),
-                Xs = mnesia:match_object(
-                       rabbit_exchange,
-                       #exchange{name = rabbit_misc:r(VHost, exchange),
-                                 _ = '_'},
-                       read),
-                Qs = mnesia:match_object(
-                       rabbit_queue,
-                       #amqqueue{name = rabbit_misc:r(VHost, queue),
-                                 _ = '_'},
-                       read),
-                {[update_exchange(X, Policies) || X <- Xs],
-                 [update_queue(Q, Policies)    || Q <- Qs]}
-        end,
-    {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(F),
+    {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
+                 fun() ->
+                         Policies = list_tx(VHost),
+                         {[update_exchange(X, Policies) ||
+                              X <- rabbit_exchange:list_tx(VHost)],
+                          [update_queue(Q, Policies) ||
+                              Q <- rabbit_amqqueue:list_tx(VHost)]}
+                 end),
     [catch notify(X) || X <- Xs],
     [catch notify(Q) || Q <- Qs],
     ok.
-
-list_tx(VHost) ->
-    [p(P, fun ident/1) || P <- list_p(VHost, <<"policy">>)].
-
-list_p(VHost, Component) ->
-    case VHost of
-        '_' -> ok;
-        _   -> rabbit_vhost:assert(VHost)
-    end,
-    Match = #runtime_parameters{key = {VHost, Component, '_'}, _ = '_'},
-    [p_p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
-                 mnesia:match_object(rabbit_runtime_parameters, Match, read),
-             Comp =/= <<"policy">> orelse Component =:= <<"policy">>].
-
-p_p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
-    [{vhost,     VHost},
-     {component, Component},
-     {name,      Name},
-     {value,     Value}].
 
 update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
     case match(XName, Policies) of
