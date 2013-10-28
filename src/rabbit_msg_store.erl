@@ -37,6 +37,7 @@
 -include("rabbit_msg_store.hrl").
 
 -define(SYNC_INTERVAL,  25).   %% milliseconds
+-define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
 -define(TRANSFORM_TMP, "transform_tmp").
 
@@ -57,7 +58,6 @@
 
 -record(msstate,
         { dir,                    %% store directory
-          server_id,              %% key into rabbit_clean_shutdown dets table
           index_module,           %% the module for index ops
           index_state,            %% where are messages?
           current_file,           %% current file name as number
@@ -708,7 +708,6 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                               }),
 
     State = #msstate { dir                    = Dir,
-                       server_id              = Server,
                        index_module           = IndexModule,
                        index_state            = IndexState,
                        current_file           = 0,
@@ -901,8 +900,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                                       cur_file_cache_ets  = CurFileCacheEts,
                                       flying_ets          = FlyingEts,
                                       clients             = Clients,
-                                      dir                 = Dir,
-                                      server_id           = ServerId }) ->
+                                      dir                 = Dir }) ->
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
     ok = rabbit_msg_store_gc:stop(GCPid),
@@ -917,9 +915,8 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
     [true = ets:delete(T) || T <- [FileSummaryEts, FileHandlesEts,
                                    CurFileCacheEts, FlyingEts]],
     IndexModule:terminate(IndexState),
-    ok = store_recovery_terms(ServerId,
-                              [{client_refs, dict:fetch_keys(Clients)},
-                               {index_module, IndexModule}]),
+    ok = store_recovery_terms([{client_refs, dict:fetch_keys(Clients)},
+                               {index_module, IndexModule}], Dir),
     State3 #msstate { index_state         = undefined,
                       current_file_handle = undefined }.
 
@@ -1466,7 +1463,7 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
                                        [Server | ErrorArgs]),
                     {false, IndexModule:new(Dir), []}
             end,
-    case read_recovery_terms(Server) of
+    case read_recovery_terms(Dir) of
         {false, Error} ->
             Fresh("failed to read recovery terms: ~p", [Error]);
         {true, Terms} ->
@@ -1484,18 +1481,16 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
             end
     end.
 
-store_recovery_terms(ServerId, Terms) ->
-    %% Q: do we need to execute this inside a with_fhc_handle block!?
-    rabbit_clean_shutdown:store(ServerId, Terms).
+store_recovery_terms(Terms, Dir) ->
+    rabbit_file:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
 
-read_recovery_terms(Server) ->
-    case rabbit_clean_shutdown:read(Server) of
-        {ok, Terms}    -> %% TODO: re-think the removal of recovery info....
-                          %case file:delete(Path) of
-                          %    ok             -> {true,  Terms};
-                          %    {error, Error} -> {false, Error}
-                          %end;
-                          {true, Terms};
+read_recovery_terms(Dir) ->
+    Path = filename:join(Dir, ?CLEAN_FILENAME),
+    case rabbit_file:read_term_file(Path) of
+        {ok, Terms}    -> case file:delete(Path) of
+                              ok             -> {true,  Terms};
+                              {error, Error} -> {false, Error}
+                          end;
         {error, Error} -> {false, Error}
     end.
 
@@ -2021,7 +2016,10 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
 
 force_recovery(BaseDir, Store) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),
-    rabbit_clean_shutdown:delete(?MODULE),
+    case file:delete(filename:join(Dir, ?CLEAN_FILENAME)) of
+        ok              -> ok;
+        {error, enoent} -> ok
+    end,
     recover_crashed_compactions(BaseDir),
     ok.
 
