@@ -140,8 +140,7 @@ checks() ->
     %% |  - calling from
     %% || - calling to
     %% "RE1" : "RE2" / "RE3" - regex MFA
-    {"(E | \"(rabbit|amqp).*\" : \".*\" / \".*\" || "
-     "\"gen_server2?\" : \"call\" / \"2\")",
+    {"(E | \"(rabbit|amqp).*\" : _ / _ || \"gen_server2?\" : call / 2)",
      "5 sec timeout in",
      error, filters()},
     {"(Lin) (LU * (X - XU))",
