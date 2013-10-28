@@ -133,16 +133,20 @@ process_analysis(Query, Tag, Severity, Analysis) when is_list(Query) ->
 checks() ->
    [{"(XXL)(Lin) ((XC - UC) || (XU - X - B))",
      "has call to undefined function(s)",
-        error, filters()},
-    {"(Lin) (L - LU)", "has unused local function(s)",
-        error, filters()},
+     error, filters()},
+    {"(Lin) (L - LU)",
+     "has unused local function(s)",
+     error, filters()},
+    {"(E | \"(rabbit|amqp).*\":_/_ || \"gen_server2?\":call/2)",
+     "has 5 sec timeout in",
+     error, filters()},
     {"(Lin) (LU * (X - XU))",
-        "has exported function(s) only used locally",
-        warning, filters()},
+     "has exported function(s) only used locally",
+     warning, filters()},
     {"(Lin) (DF * (XU + LU))", "used deprecated function(s)",
-        warning, filters()}].
-%    {"(Lin) (X - XU)", "possibly unused export",
-%        warning, fun filter_unused/1}].
+     warning, filters()}].
+%%    {"(Lin) (X - XU)", "possibly unused export",
+%%     warning, fun filter_unused/1}].
 
 %%
 %% noise filters (can be disabled with -X) - strip uninteresting analyses

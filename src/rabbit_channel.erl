@@ -177,7 +177,8 @@ info_all(Items) ->
 
 refresh_config_local() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_config) end, list_local()),
+      fun (C) -> gen_server2:call(C, refresh_config, infinity) end,
+      list_local()),
     ok.
 
 ready_for_close(Pid) ->

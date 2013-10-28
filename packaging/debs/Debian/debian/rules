@@ -9,6 +9,7 @@ RABBIT_BIN=$(DEB_DESTDIR)usr/lib/rabbitmq/bin/
 DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
 DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB) SBIN_DIR=$(RABBIT_BIN) DOC_INSTALL_DIR=$(DOCDIR) MAN_DIR=$(DEB_DESTDIR)usr/share/man/
 DEB_MAKE_CLEAN_TARGET:= distclean
+DEB_INSTALL_DOCS_ALL=debian/README
 
 install/rabbitmq-server::
 	mkdir -p $(DOCDIR)
