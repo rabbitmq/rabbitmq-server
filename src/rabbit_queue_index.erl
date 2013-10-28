@@ -252,7 +252,7 @@ shutdown_terms(Name) ->
 recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
-    CleanShutdown = rabbit_clean_shutdown:detect(Name),
+    CleanShutdown = rabbit_clean_shutdown:detect(Name#resource.name),
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);

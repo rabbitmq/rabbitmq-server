@@ -20,7 +20,7 @@
 -export([recover/0,
          start_link/0,
          store/2,
-         detect_clean_shutdown/1,
+         detect/1,
          read/1,
          remove/1]).
 
@@ -47,7 +47,7 @@ start_link() ->
 store(Name, Terms) ->
     dets:insert(?MODULE, {Name, Terms}).
 
-detect_clean_shutdown(Name) ->
+detect(Name) ->
     dets:member(?MODULE, Name).
 
 read(Name) ->
