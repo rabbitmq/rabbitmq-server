@@ -20,9 +20,6 @@
          terminate/2, delete_and_terminate/1,
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, recover/1]).
-
-%% -export([scan/3]).
-
 -export([add_queue_ttl/0, avoid_zeroes/0]).
 
 -define(CLEAN_FILENAME, "clean.dot").
@@ -222,13 +219,6 @@
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
-
-%-spec(scan/3 :: (file:filename(),
-%                 fun ((seq_id(), rabbit_types:msg_id(),
-%                       rabbit_types:message_properties(), boolean(),
-%                       ('del' | 'no_del'), ('ack' | 'no_ack'), A) -> A),
-%                     A) -> A).
-
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
 -endif.
@@ -544,9 +534,6 @@ queue_index_walker_reader(QueueName, Gatherer) ->
                    Acc
            end, ok, State),
     ok = gatherer:finish(Gatherer).
-
-%scan(Dir, Fun, Acc) ->
-%    scan_segments(Fun, Acc, blank_state_dir(Dir)).
 
 scan_segments(Fun, Acc, State) ->
     State1 = #qistate { segments = Segments, dir = Dir } =
