@@ -31,6 +31,22 @@
          terminate/2,
          code_change/3]).
 
+-ifdef(use_specs).
+
+-spec(recover() -> 'ok').
+-spec(start_link() -> rabbit_types:ok_pid_or_error()).
+-spec(store_recovery_terms(
+        Name  :: rabbit_types:resource_name(),
+        Terms :: term()) -> rabbit_types:ok_or_error(term())).
+-spec(detect_clean_shutdown(
+        rabbit_types:resource_name()) ->
+             boolean() | rabbit_types:error(term())).
+-spec(read_recovery_terms(
+        rabbit_types:resource_name()) ->
+             rabbit_types:ok_or_error2(term(), not_found)).
+
+-endif. % use_specs
+
 -include("rabbit.hrl").
 -define(CLEAN_FILENAME, "clean.dot").
 
