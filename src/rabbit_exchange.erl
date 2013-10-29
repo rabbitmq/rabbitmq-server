@@ -20,8 +20,7 @@
 
 -export([recover/0, policy_changed/2, callback/4, declare/6,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
-         lookup/1, lookup_or_die/1, list/1, list_tx/1,
-         lookup_scratch/2, update_scratch/3,
+         lookup/1, lookup_or_die/1, list/1, lookup_scratch/2, update_scratch/3,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          route/2, delete/2, validate_binding/2]).
 %% these must be run inside a mnesia tx
@@ -63,7 +62,6 @@
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
--spec(list_tx/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
 -spec(lookup_scratch/2 :: (name(), atom()) ->
                                rabbit_types:ok(term()) |
                                rabbit_types:error('not_found')).
@@ -246,12 +244,16 @@ lookup_or_die(Name) ->
         {error, not_found} -> rabbit_misc:not_found(Name)
     end.
 
-list(VHostPath) -> mnesia:async_dirty(fun () -> list_tx(VHostPath) end).
-
-list_tx(VHostPath) ->
-    mnesia:match_object(
-      rabbit_exchange,
-      #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}, read).
+%% Not dirty_match_object since that would not be transactional when used in a
+%% tx context
+list(VHostPath) ->
+    mnesia:async_dirty(
+      fun () ->
+              mnesia:match_object(
+                rabbit_exchange,
+                #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'},
+                read)
+      end).
 
 lookup_scratch(Name, App) ->
     case lookup(Name) of

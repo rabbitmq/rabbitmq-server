@@ -23,8 +23,7 @@
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
--export([list/0, list/1, list_tx/1,
-         info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
@@ -104,7 +103,6 @@
         (name(), pid(), qfun(A)) -> A | rabbit_types:channel_exit()).
 -spec(list/0 :: () -> [rabbit_types:amqqueue()]).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
--spec(list_tx/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:amqqueue()) -> rabbit_types:infos()).
 -spec(info/2 ::
@@ -468,12 +466,16 @@ check_dlxrk_arg({Type,    _}, _Args) ->
 
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
-list(VHostPath) -> mnesia:async_dirty(fun () -> list_tx(VHostPath) end).
-
-list_tx(VHostPath) ->
-    mnesia:match_object(
-      rabbit_queue,
-      #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}, read).
+%% Not dirty_match_object since that would not be transactional when used in a
+%% tx context
+list(VHostPath) ->
+    mnesia:async_dirty(
+      fun () ->
+              mnesia:match_object(
+                rabbit_queue,
+                #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'},
+                read)
+      end).
 
 info_keys() -> rabbit_amqqueue_process:info_keys().
 

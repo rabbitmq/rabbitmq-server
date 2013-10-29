@@ -167,18 +167,15 @@ list() ->
 list(VHost) ->
     list0(VHost, fun ident/1).
 
-list_tx(VHost) ->
-    list0_tx(VHost, fun ident/1).
-
 list_formatted(VHost) ->
     order_policies(list0(VHost, fun format/1)).
 
 list0(VHost, DefnFun) ->
-    mnesia:async_dirty(fun () -> list0_tx(VHost, DefnFun) end).
-
-list0_tx(VHost, DefnFun) ->
-    [p(P, DefnFun) ||
-        P <- rabbit_runtime_parameters:list_tx(VHost, <<"policy">>)].
+    mnesia:async_dirty(
+      fun () ->
+              [p(P, DefnFun) ||
+                  P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)]
+      end).
 
 order_policies(PropList) ->
     lists:sort(fun (A, B) -> pget(priority, A) < pget(priority, B) end,
@@ -218,11 +215,11 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 update_policies(VHost) ->
     {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
                  fun() ->
-                         Policies = list_tx(VHost),
+                         Policies = list(VHost),
                          {[update_exchange(X, Policies) ||
-                              X <- rabbit_exchange:list_tx(VHost)],
+                              X <- rabbit_exchange:list(VHost)],
                           [update_queue(Q, Policies) ||
-                              Q <- rabbit_amqqueue:list_tx(VHost)]}
+                              Q <- rabbit_amqqueue:list(VHost)]}
                  end),
     [catch notify(X) || X <- Xs],
     [catch notify(Q) || Q <- Qs],

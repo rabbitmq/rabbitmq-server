@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([parse_set/4, set/4, set_any/4, clear/3, clear_any/3, list/0, list/1,
-         list_component/1, list/2, list_tx/2, list_formatted/1, lookup/3,
+         list_component/1, list/2, list_formatted/1, lookup/3,
          value/3, value/4, info_keys/0]).
 
 %%----------------------------------------------------------------------------
@@ -43,8 +43,6 @@
 -spec(list_component/1 :: (binary()) -> [rabbit_types:infos()]).
 -spec(list/2 :: (rabbit_types:vhost() | '_', binary() | '_')
                 -> [rabbit_types:infos()]).
--spec(list_tx/2 :: (rabbit_types:vhost() | '_', binary() | '_')
-                   -> [rabbit_types:infos()]).
 -spec(list_formatted/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(lookup/3 :: (rabbit_types:vhost(), binary(), binary())
                   -> rabbit_types:infos() | 'not_found').
@@ -141,18 +139,21 @@ list() ->
 list(VHost)               -> list(VHost, '_').
 list_component(Component) -> list('_',   Component).
 
+%% Not dirty_match_object since that would not be transactional when used in a
+%% tx context
 list(VHost, Component) ->
-    mnesia:async_dirty(fun () -> list_tx(VHost, Component) end).
-
-list_tx(VHost, Component) ->
-    case VHost of
-        '_' -> ok;
-        _   -> rabbit_vhost:assert(VHost)
-    end,
-    Match = #runtime_parameters{key = {VHost, Component, '_'}, _ = '_'},
-    [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
-                 mnesia:match_object(?TABLE, Match, read),
-             Comp =/= <<"policy">> orelse Component =:= <<"policy">>].
+    mnesia:async_dirty(
+      fun () ->
+              case VHost of
+                  '_' -> ok;
+                  _   -> rabbit_vhost:assert(VHost)
+              end,
+              Match = #runtime_parameters{key = {VHost, Component, '_'},
+                                          _   = '_'},
+              [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
+                           mnesia:match_object(?TABLE, Match, read),
+                       Comp =/= <<"policy">> orelse Component =:= <<"policy">>]
+      end).
 
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
