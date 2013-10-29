@@ -1,4 +1,4 @@
-{application, rabbit,		%% -*- erlang -*-
+{application, rabbit,           %% -*- erlang -*-
  [{description, "RabbitMQ"},
   {id, "RabbitMQ"},
   {vsn, "%%VSN%%"},
