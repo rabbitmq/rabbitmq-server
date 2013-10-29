@@ -244,7 +244,7 @@ init(Name, OnSyncFun) ->
     State #qistate { on_sync = OnSyncFun }.
 
 shutdown_terms(Name) ->
-    case rabbit_clean_shutdown:read(Name) of
+    case rabbit_clean_shutdown:read_recovery_terms(Name) of
         {error, _}   -> [];
         {ok, Terms1} -> Terms1
     end.
@@ -252,7 +252,8 @@ shutdown_terms(Name) ->
 recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
-    CleanShutdown = rabbit_clean_shutdown:detect(Name#resource.name),
+    CleanShutdown =
+        rabbit_clean_shutdown:detect_clean_shutdown(Name#resource.name),
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);
@@ -261,7 +262,8 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
 
 terminate(Terms, State = #qistate { name = Name }) ->
     {SegmentCounts, State1} = terminate(State),
-    rabbit_clean_shutdown:store(Name, [{segments, SegmentCounts} | Terms]),
+    rabbit_clean_shutdown:store_recovery_terms(
+      Name, [{segments, SegmentCounts} | Terms]),
     State1.
 
 delete_and_terminate(State) ->
@@ -386,7 +388,7 @@ recover(DurableQueues) ->
                           {[QName | DurableAcc], TermsAcc1};
                       false ->
                           ok = rabbit_file:recursive_delete([QueueDirPath]),
-                          rabbit_clean_shutdown:remove(QName),
+                          rabbit_clean_shutdown:remove_recovery_terms(QName),
                           {DurableAcc, TermsAcc}
                   end
           end, {[], []}, QueueDirNames),

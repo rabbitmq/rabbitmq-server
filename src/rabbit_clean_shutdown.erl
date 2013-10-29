@@ -19,10 +19,10 @@
 
 -export([recover/0,
          start_link/0,
-         store/2,
-         detect/1,
-         read/1,
-         remove/1]).
+         store_recovery_terms/2,
+         detect_clean_shutdown/1,
+         read_recovery_terms/1,
+         remove_recovery_terms/1]).
 
 -export([init/1,
          handle_call/3,
@@ -44,19 +44,19 @@ recover() ->
 start_link() ->
     gen_server:start_link(?MODULE, [], []).
 
-store(Name, Terms) ->
+store_recovery_terms(Name, Terms) ->
     dets:insert(?MODULE, {Name, Terms}).
 
-detect(Name) ->
+detect_clean_shutdown(Name) ->
     dets:member(?MODULE, Name).
 
-read(Name) ->
+read_recovery_terms(Name) ->
     case dets:lookup(?MODULE, Name) of
         [Terms] -> {ok, Terms};
         _       -> {error, not_found}
     end.
 
-remove(Name) ->
+remove_recovery_terms(Name) ->
     dets:delete(?MODULE, Name).
 
 init(_) ->
