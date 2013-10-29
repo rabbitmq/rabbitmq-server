@@ -233,7 +233,7 @@ init(Name, OnSyncFun) ->
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
     State #qistate { on_sync = OnSyncFun }.
 
-shutdown_terms(Name) ->
+shutdown_terms(#resource{ name = Name }) ->
     case rabbit_clean_shutdown:read_recovery_terms(Name) of
         {error, _}   -> [];
         {ok, Terms1} -> Terms1
@@ -366,14 +366,16 @@ recover(DurableQueues) ->
                   case sets:is_element(QueueDirName, DurableDirectories) of
                       true ->
                           TermsAcc1 =
-                              case rabbit_clean_shutdown:read(QName) of
+                              case rabbit_clean_shutdown:read_recovery_terms(
+                                     QName#resource.name) of
                                   {error, _}  -> TermsAcc;
                                   {ok, Terms} -> [Terms | TermsAcc]
                               end,
                           {[QName | DurableAcc], TermsAcc1};
                       false ->
                           ok = rabbit_file:recursive_delete([QueueDirPath]),
-                          rabbit_clean_shutdown:remove_recovery_terms(QName),
+                          rabbit_clean_shutdown:remove_recovery_terms(
+                            QName#resource.name),
                           {DurableAcc, TermsAcc}
                   end
           end, {[], []}, QueueDirNames),

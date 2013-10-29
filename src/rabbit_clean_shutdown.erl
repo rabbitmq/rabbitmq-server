@@ -36,13 +36,13 @@
 -spec(recover() -> 'ok').
 -spec(start_link() -> rabbit_types:ok_pid_or_error()).
 -spec(store_recovery_terms(
-        Name  :: rabbit_types:resource_name(),
+        Name  :: rabbit_misc:resource_name(),
         Terms :: term()) -> rabbit_types:ok_or_error(term())).
 -spec(detect_clean_shutdown(
-        rabbit_types:resource_name()) ->
+        rabbit_misc:resource_name()) ->
              boolean() | rabbit_types:error(term())).
 -spec(read_recovery_terms(
-        rabbit_types:resource_name()) ->
+        rabbit_misc:resource_name()) ->
              rabbit_types:ok_or_error2(term(), not_found)).
 
 -endif. % use_specs
