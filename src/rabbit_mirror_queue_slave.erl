@@ -300,17 +300,14 @@ terminate(_Reason, #state { backing_queue_state = undefined }) ->
 terminate({shutdown, dropped} = R, State = #state{backing_queue       = BQ,
                                                   backing_queue_state = BQS}) ->
     %% See rabbit_mirror_queue_master:terminate/2
-    %% TODO why not gm:leave()?
     terminate_common(State),
     BQ:delete_and_terminate(R, BQS);
 terminate(shutdown, State) ->
     terminate_shutdown(shutdown, State);
 terminate({shutdown, _} = R, State) ->
     terminate_shutdown(R, State);
-terminate(Reason, State = #state{gm                  = GM,
-                                 backing_queue       = BQ,
+terminate(Reason, State = #state{backing_queue       = BQ,
                                  backing_queue_state = BQS}) ->
-    ok = gm:leave(GM),
     terminate_common(State),
     BQ:delete_and_terminate(Reason, BQS);
 terminate([_SPid], _Reason) ->
@@ -322,10 +319,8 @@ terminate([_SPid], _Reason) ->
 %% slave, we have no idea whether or not we'll be the only copy coming
 %% back up. Thus we must assume we will be, and preserve anything we
 %% have on disk.
-terminate_shutdown(Reason, State = #state{gm                  = GM,
-                                          backing_queue       = BQ,
+terminate_shutdown(Reason, State = #state{backing_queue       = BQ,
                                           backing_queue_state = BQS}) ->
-    ok = gm:leave(GM),
     terminate_common(State),
     BQ:terminate(Reason, BQS).
 
