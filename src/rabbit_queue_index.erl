@@ -368,11 +368,6 @@ recover(DurableQueues) ->
     QueuesDir = queues_dir(),
     QueueDirNames = all_queue_directory_names(QueuesDir),
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
-
-    %% TODO: this next fold assumes that we can have durable queue
-    %% entires that have no corresponding directory, but not that we
-    %% can have directories with no corresponding queue record.
-
     {DurableQueueNames, DurableTerms} =
         lists:foldl(
           fun (QueueDirName, {DurableAcc, TermsAcc}) ->
