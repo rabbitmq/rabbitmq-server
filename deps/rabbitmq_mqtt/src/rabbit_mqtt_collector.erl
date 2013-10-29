@@ -49,7 +49,7 @@ handle_call({register, ClientId, Pid}, _From,
             State = #state{client_ids = Ids}) ->
     Ids1 = case dict:find(ClientId, Ids) of
                {ok, {OldPid, MRef}} when Pid =/= OldPid ->
-                   catch gen_server2:call(OldPid, duplicate_id),
+                   catch gen_server2:call(OldPid, duplicate_id, infinity),
                    erlang:demonitor(MRef),
                    dict:erase(ClientId, Ids);
                error ->
