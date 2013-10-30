@@ -225,7 +225,7 @@ get_vm_limit({win32,_OSname}) ->
 %% in big trouble anyway.
 get_vm_limit(_OsType) ->
     case erlang:system_info(wordsize) of
-        4 -> 2*1024*1024*1024;          %% 2 GB for 32 bits  2^32
+        4 -> 2*1024*1024*1024;          %% 2 GB for 32 bits  2^31
         8 -> 256*1024*1024*1024*1024    %% 256 TB for 64 bits 2^48
              %%http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
