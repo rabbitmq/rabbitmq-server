@@ -22,7 +22,7 @@
          fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3, len/1,
          is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, multiple_routing_keys/0]).
+         is_duplicate/2, multiple_routing_keys/0, payload_size/0]).
 
 -export([start/1, stop/0]).
 
@@ -316,6 +316,7 @@
 %%----------------------------------------------------------------------------
 
 -rabbit_upgrade({multiple_routing_keys, local, []}).
+-rabbit_upgrade({payload_size, local, []}).
 
 -ifdef(use_specs).
 
@@ -374,6 +375,7 @@
 -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 -spec(multiple_routing_keys/0 :: () -> 'ok').
+-spec(payload_size/0 :: () -> 'ok').
 
 -endif.
 
@@ -1781,6 +1783,18 @@ multiple_routing_keys() ->
       end),
     ok.
 
+payload_size() ->
+    transform_storage(
+      fun ({basic_message, ExchangeName, RoutingKeys,
+            {content, _ClassId, _Properties, _PropertiesBin, _Protocol,
+                      PayloadFragmentsRev} = Content,
+            MsgId, Persistent}) ->
+              {ok, {basic_message, ExchangeName, RoutingKeys,
+                    Content, MsgId, Persistent,
+                    iolist_size(PayloadFragmentsRev)}};
+          (_) -> {error, corrupt_message}
+      end),
+    ok.
 
 %% Assumes message store is not running
 transform_storage(TransformFun) ->

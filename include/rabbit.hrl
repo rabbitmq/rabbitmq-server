@@ -67,7 +67,7 @@
 -record(runtime_parameters, {key, value}).
 
 -record(basic_message, {exchange_name, routing_keys = [], content, id,
-                        is_persistent}).
+                        is_persistent, payload_size}).
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, sender, message, msg_seq_no}).

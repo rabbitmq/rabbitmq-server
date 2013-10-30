@@ -149,13 +149,16 @@ strip_header(#content{properties = Props = #'P_basic'{headers = Headers}}
                                              headers = Headers0}})
     end.
 
-message(XName, RoutingKey, #content{properties = Props} = DecodedContent) ->
+message(XName, RoutingKey,
+        #content{properties            = Props,
+                 payload_fragments_rev = PFR} = DecodedContent) ->
     try
         {ok, #basic_message{
            exchange_name = XName,
            content       = strip_header(DecodedContent, ?DELETED_HEADER),
            id            = rabbit_guid:gen(),
            is_persistent = is_message_persistent(DecodedContent),
+           payload_size  = iolist_size(PFR),
            routing_keys  = [RoutingKey |
                             header_routes(Props#'P_basic'.headers)]}}
     catch
