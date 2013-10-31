@@ -343,18 +343,17 @@ queue_decorators(Table) ->
        sync_slave_pids, policy, gm_pids, decorators]).
 
 internal_trace_log() ->
-    Xs = [<<"amq.rabbitmq.log">>, <<"amq.rabbitmq.trace">>],
     transform(
       rabbit_durable_exchange,
-      fun ({exchange, Name = {resource, _, _, NameBin}, Type, Dur, AutoDel,
-            Int0, Args, Scratches, Policy, Decorators}) ->
-              Int = case lists:member(NameBin, Xs) of
-                        true  -> true;
-                        false -> Int0
-                    end,
-              {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches, Policy,
-               Decorators}
+      fun ({exchange, Name = {resource, _, _, <<"amq.rabbitmq.", _/binary>>},
+            Type, Dur, AutoDel, _Int, Args, Scratches, Policy, Decorators}) ->
+              {exchange, Name, Type, Dur, AutoDel, true, Args, Scratches,
+               Policy, Decorators};
+          (X) ->
+              X
+
       end,
+
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        decorators]).
 
