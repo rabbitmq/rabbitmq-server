@@ -466,10 +466,16 @@ check_dlxrk_arg({Type,    _}, _Args) ->
 
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
+%% Not dirty_match_object since that would not be transactional when used in a
+%% tx context
 list(VHostPath) ->
-    mnesia:dirty_match_object(
-      rabbit_queue,
-      #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
+    mnesia:async_dirty(
+      fun () ->
+              mnesia:match_object(
+                rabbit_queue,
+                #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'},
+                read)
+      end).
 
 info_keys() -> rabbit_amqqueue_process:info_keys().
 

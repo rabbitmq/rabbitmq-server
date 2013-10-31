@@ -171,7 +171,11 @@ list_formatted(VHost) ->
     order_policies(list0(VHost, fun format/1)).
 
 list0(VHost, DefnFun) ->
-    [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
+    mnesia:async_dirty(
+      fun () ->
+              [p(P, DefnFun) ||
+                  P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)]
+      end).
 
 order_policies(PropList) ->
     lists:sort(fun (A, B) -> pget(priority, A) < pget(priority, B) end,
@@ -208,10 +212,16 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 
 %%----------------------------------------------------------------------------
 
+%% [1] We need to prevent this from becoming O(n^2) in a similar
+%% manner to rabbit_binding:remove_for_{source,destination}. So see
+%% the comment in rabbit_binding:lock_route_tables/0 for more rationale.
 update_policies(VHost) ->
-    Policies = list(VHost),
+    Tabs = [rabbit_queue,    rabbit_durable_queue,
+            rabbit_exchange, rabbit_durable_exchange],
     {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
                  fun() ->
+                         [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
+                         Policies = list(VHost),
                          {[update_exchange(X, Policies) ||
                               X <- rabbit_exchange:list(VHost)],
                           [update_queue(Q, Policies) ||

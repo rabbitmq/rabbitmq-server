@@ -139,15 +139,21 @@ list() ->
 list(VHost)               -> list(VHost, '_').
 list_component(Component) -> list('_',   Component).
 
+%% Not dirty_match_object since that would not be transactional when used in a
+%% tx context
 list(VHost, Component) ->
-    case VHost of
-        '_' -> ok;
-        _   -> rabbit_vhost:assert(VHost)
-    end,
-    Match = #runtime_parameters{key = {VHost, Component, '_'}, _ = '_'},
-    [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
-                 mnesia:dirty_match_object(?TABLE, Match),
-             Comp =/= <<"policy">> orelse Component =:= <<"policy">>].
+    mnesia:async_dirty(
+      fun () ->
+              case VHost of
+                  '_' -> ok;
+                  _   -> rabbit_vhost:assert(VHost)
+              end,
+              Match = #runtime_parameters{key = {VHost, Component, '_'},
+                                          _   = '_'},
+              [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
+                           mnesia:match_object(?TABLE, Match, read),
+                       Comp =/= <<"policy">> orelse Component =:= <<"policy">>]
+      end).
 
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
