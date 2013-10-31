@@ -23,7 +23,6 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(CONTEXT, rabbit_mgmt).
--define(CONTEXT_REDIRECT, rabbit_mgmt_redirect).
 -define(STATIC_PATH, "priv/www").
 
 start(_Type, _StartArgs) ->
@@ -38,26 +37,11 @@ stop(_State) ->
     ok.
 
 register_context(Listener) ->
-    if_redirect(
-      fun () ->
-              rabbit_web_dispatch:register_port_redirect(
-                ?CONTEXT_REDIRECT, [{port,          55672},
-                                    {ignore_in_use, true}], "", port(Listener))
-      end),
     rabbit_web_dispatch:register_context_handler(
       ?CONTEXT, Listener, "", make_loop(), "RabbitMQ Management").
 
 unregister_context() ->
-    if_redirect(
-      fun () -> rabbit_web_dispatch:unregister_context(?CONTEXT_REDIRECT) end),
     rabbit_web_dispatch:unregister_context(?CONTEXT).
-
-if_redirect(Thunk) ->
-    {ok, Redir} = application:get_env(rabbitmq_management, redirect_old_port),
-    case Redir of
-        true  -> Thunk();
-        false -> ok
-    end.
 
 make_loop() ->
     Dispatch = rabbit_mgmt_dispatcher:build_dispatcher(),
