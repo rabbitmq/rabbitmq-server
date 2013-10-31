@@ -550,10 +550,11 @@ check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
 check_not_default_exchange(_) ->
     ok.
 
-check_exchange_deletion(#resource{kind = exchange,
-                                  name = <<"amq.rabbitmq.", _/binary>>}) ->
+check_exchange_deletion(XName = #resource{name = <<"amq.rabbitmq.", _/binary>>,
+                                          kind = exchange}) ->
     rabbit_misc:protocol_error(
-      access_refused, "deletion of system exchanges not allowed", []);
+      access_refused, "deletion of system ~s not allowed",
+      [rabbit_misc:rs(XName)]);
 check_exchange_deletion(_) ->
     ok.
 
