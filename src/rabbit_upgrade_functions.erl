@@ -46,7 +46,7 @@
 -rabbit_upgrade({exchange_decorators,   mnesia, [policy]}).
 -rabbit_upgrade({policy_apply_to,       mnesia, [runtime_parameters]}).
 -rabbit_upgrade({queue_decorators,      mnesia, [gm_pids]}).
--rabbit_upgrade({internal_trace_log,    mnesia, [exchange_decorators]}).
+-rabbit_upgrade({internal_system_x,     mnesia, [exchange_decorators]}).
 
 %% -------------------------------------------------------------------
 
@@ -75,7 +75,7 @@
 -spec(exchange_decorators/0   :: () -> 'ok').
 -spec(policy_apply_to/0       :: () -> 'ok').
 -spec(queue_decorators/0      :: () -> 'ok').
--spec(internal_trace_log/0    :: () -> 'ok').
+-spec(internal_system_x/0     :: () -> 'ok').
 
 -endif.
 
@@ -342,7 +342,7 @@ queue_decorators(Table) ->
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, policy, gm_pids, decorators]).
 
-internal_trace_log() ->
+internal_system_x() ->
     transform(
       rabbit_durable_exchange,
       fun ({exchange, Name = {resource, _, _, <<"amq.rabbitmq.", _/binary>>},
@@ -351,9 +351,7 @@ internal_trace_log() ->
                Policy, Decorators};
           (X) ->
               X
-
       end,
-
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        decorators]).
 
