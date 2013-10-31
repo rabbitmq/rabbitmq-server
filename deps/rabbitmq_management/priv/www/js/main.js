@@ -31,7 +31,7 @@ function try_uri_login() {
 }
 
 function set_auth_cookie(userinfo) {
-    var b64 = b64_encode_utf8(decodeURIComponent(userinfo));
+    var b64 = b64_encode_utf8(userinfo);
     document.cookie = 'auth=' + encodeURIComponent(b64);
 }
 
