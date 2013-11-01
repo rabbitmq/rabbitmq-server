@@ -171,11 +171,7 @@ list_formatted(VHost) ->
     order_policies(list0(VHost, fun format/1)).
 
 list0(VHost, DefnFun) ->
-    mnesia:async_dirty(
-      fun () ->
-              [p(P, DefnFun) ||
-                  P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)]
-      end).
+    [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
 order_policies(PropList) ->
     lists:sort(fun (A, B) -> pget(priority, A) < pget(priority, B) end,
