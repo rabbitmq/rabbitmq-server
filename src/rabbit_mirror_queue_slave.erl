@@ -668,7 +668,7 @@ forget_sender(Down1, Down2) when Down1 =/= Down2 -> true.
 
 %% [1] If another slave goes through confirm_sender_death/1 before we
 %% do we can get two GM sender_death messages in a row for the same
-%% channel - don't treeat that as anything special.
+%% channel - don't treat that as anything special.
 
 %% Record and process lifetime events from channels. Forget all about a channel
 %% only when down notifications are received from both the channel and from gm.
