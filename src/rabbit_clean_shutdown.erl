@@ -13,6 +13,7 @@
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
+
 -module(rabbit_clean_shutdown).
 
 -behaviour(gen_server).
