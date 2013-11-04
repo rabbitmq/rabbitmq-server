@@ -55,8 +55,8 @@
 recover() ->
     {ok, _Child} = supervisor:start_child(rabbit_sup,
                                           {?SERVER, {?MODULE, start_link, []},
-                                          permanent, ?MAX_WAIT, worker,
-                                          [?SERVER]}),
+                                           permanent, ?MAX_WAIT, worker,
+                                           [?SERVER]}),
     ok.
 
 start_link() ->
