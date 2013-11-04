@@ -48,13 +48,14 @@
 -endif. % use_specs
 
 -include("rabbit.hrl").
+-define(SERVER, ?MODULE).
 -define(CLEAN_FILENAME, "clean.dot").
 
 recover() ->
     {ok, _Child} = supervisor:start_child(rabbit_sup,
-                                          {?MODULE, {?MODULE, start_link, []},
+                                          {?SERVER, {?MODULE, start_link, []},
                                           permanent, ?MAX_WAIT, worker,
-                                          [?MODULE]}),
+                                          [?SERVER]}),
     ok.
 
 start_link() ->
