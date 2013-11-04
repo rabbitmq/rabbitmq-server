@@ -116,11 +116,8 @@ validate_utf8(<<C, Cs/binary>>) when C < 16#80 ->
 validate_utf8(<<C1, C2, Cs/binary>>) when C1 band 16#E0 =:= 16#C0,
                                           C2 band 16#C0 =:= 16#80 ->
     case ((C1 band 16#1F) bsl 6) bor (C2 band 16#3F) of
-	C when 16#80 =< C ->
-	    validate_utf8(Cs);
-	_ ->
-            %% Bad range.
-	    exit(bad)
+	C when 16#80 =< C -> validate_utf8(Cs);
+	_                 -> error
     end;
 validate_utf8(<<C1, C2, C3, Cs/binary>>) when C1 band 16#F0 =:= 16#E0,
                                               C2 band 16#C0 =:= 16#80,
