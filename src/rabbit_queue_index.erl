@@ -352,9 +352,8 @@ bounds(State = #qistate { segments = Segments }) ->
 recover(DurableQueues) ->
     ok = rabbit_clean_shutdown:recover(),
     DurableDict =
-        dict:from_list([begin
-                            {queue_name_to_dir_name(Queue), Queue}
-                        end || Queue <- DurableQueues ]),
+        dict:from_list([{queue_name_to_dir_name(Queue), Queue} ||
+                           Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
     QueueDirNames = all_queue_directory_names(QueuesDir),
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
