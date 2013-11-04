@@ -243,10 +243,11 @@ with_ldap(Creds, Fun, State = #state{servers     = Servers,
                                      port        = Port}) ->
     %% We can't just pass through [] as sslopts in the old case, eldap
     %% exit()s when you do that.
-    Opts0 = case {SSLOpts, erlang:system_info(otp_release) < "R16A"} of
-                {[], _}     -> [{ssl, SSL}, {port, Port}];
-                {_,  false} -> [{ssl, SSL}, {port, Port}, {sslopts, SSLOpts}];
-                {_,  true}  -> exit({ssl_options_requires_min_r16a})
+    Opts0 = case {SSLOpts, rabbit_misc:version_compare(
+                             erlang:system_info(version), "5.10")} of %% R16A
+                {[], _}  -> [{ssl, SSL}, {port, Port}];
+                {_,  lt} -> exit({ssl_options_requires_min_r16a});
+                {_,  _}  -> [{ssl, SSL}, {port, Port}, {sslopts, SSLOpts}]
             end,
     Opts = case Log of
                network ->
