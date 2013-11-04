@@ -396,7 +396,8 @@ all_queue_directory_names(Dir) ->
 
 blank_state(QueueName) ->
     blank_state_dir(QueueName,
-      filename:join(queues_dir(), queue_name_to_dir_name(QueueName))).
+                    filename:join(queues_dir(),
+                                  queue_name_to_dir_name(QueueName))).
 
 blank_state_dir(Name, Dir) ->
     {ok, MaxJournal} =
