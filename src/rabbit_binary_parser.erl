@@ -20,6 +20,7 @@
 
 -export([parse_table/1]).
 -export([ensure_content_decoded/1, clear_decoded_content/1]).
+-export([validate_utf8/1, assert_utf8/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -30,6 +31,8 @@
         (rabbit_types:content()) -> rabbit_types:decoded_content()).
 -spec(clear_decoded_content/1 ::
         (rabbit_types:content()) -> rabbit_types:undecoded_content()).
+-spec(validate_utf8/1 :: (binary()) -> 'ok' | 'error').
+-spec(assert_utf8/1 :: (binary()) -> 'ok').
 
 -endif.
 
@@ -99,3 +102,44 @@ clear_decoded_content(Content = #content{properties_bin = none}) ->
     Content;
 clear_decoded_content(Content = #content{}) ->
     Content#content{properties = none}.
+
+assert_utf8(B) ->
+    case validate_utf8(B) of
+        ok    -> ok;
+        error -> rabbit_misc:protocol_error(
+                   frame_error, "Malformed UTF-8 in shortstr", [])
+    end.
+
+validate_utf8(<<C, Cs/binary>>) when C < 16#80 ->
+    %% Plain Ascii character.
+    validate_utf8(Cs);
+validate_utf8(<<C1, C2, Cs/binary>>) when C1 band 16#E0 =:= 16#C0,
+                                          C2 band 16#C0 =:= 16#80 ->
+    case ((C1 band 16#1F) bsl 6) bor (C2 band 16#3F) of
+	C when 16#80 =< C ->
+	    validate_utf8(Cs);
+	_ ->
+            %% Bad range.
+	    exit(bad)
+    end;
+validate_utf8(<<C1, C2, C3, Cs/binary>>) when C1 band 16#F0 =:= 16#E0,
+                                              C2 band 16#C0 =:= 16#80,
+                                              C3 band 16#C0 =:= 16#80 ->
+    case ((((C1 band 16#0F) bsl 6) bor (C2 band 16#3F)) bsl 6) bor
+	(C3 band 16#3F) of
+	C when 16#800 =< C -> validate_utf8(Cs);
+	_                  -> error
+    end;
+validate_utf8(<<C1, C2, C3, C4, Cs/binary>>) when C1 band 16#F8 =:= 16#F0,
+                                                  C2 band 16#C0 =:= 16#80,
+                                                  C3 band 16#C0 =:= 16#80,
+                                                  C4 band 16#C0 =:= 16#80 ->
+    case ((((((C1 band 16#0F) bsl 6) bor (C2 band 16#3F)) bsl 6) bor
+               (C3 band 16#3F)) bsl 6) bor (C4 band 16#3F) of
+	C when 16#10000 =< C -> validate_utf8(Cs);
+	_                    -> error
+    end;
+validate_utf8(<<>>) ->
+    ok;
+validate_utf8(_) ->
+    error.
