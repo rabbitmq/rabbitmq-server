@@ -284,5 +284,8 @@ action_change(Node, Action, Targets) ->
     rpc_call(Node, rabbit_plugins, Action, [Targets]).
 
 rpc_call(Node, Mod, Fun, Args) ->
-    rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
+    case rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT) of
+        {badrpc, nodedown} -> io:format("Plugin configuration has changed.~n");
+        _                  -> ok
+    end.
 
