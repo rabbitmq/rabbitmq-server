@@ -51,7 +51,8 @@
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([parse_arguments/3]).
--export([all_module_attributes/1, build_acyclic_graph/3]).
+-export([all_module_attributes/1, all_module_attributes/2]).
+-export([build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
@@ -209,6 +210,7 @@
         -> {'ok', {atom(), [{string(), string()}], [string()]}} |
            'no_command').
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
+-spec(all_module_attributes/2 :: (atom(), atom()) -> [{atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
         (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
         -> rabbit_types:ok_or_error2(digraph(),
@@ -850,12 +852,8 @@ module_attributes(Module) ->
             V
     end.
 
-all_module_attributes(Name) ->
-    Modules =
-        lists:usort(
-          lists:append(
-            [Modules || {App, _, _}   <- application:loaded_applications(),
-                        {ok, Modules} <- [application:get_key(App, modules)]])),
+all_module_attributes(App, Name) ->
+    {ok, Modules} = application:get_key(App, modules),
     lists:foldl(
       fun (Module, Acc) ->
               case lists:append([Atts || {N, Atts} <- module_attributes(Module),
@@ -865,6 +863,10 @@ all_module_attributes(Name) ->
               end
       end, [], Modules).
 
+all_module_attributes(Name) ->
+    lists:usort(lists:append(
+                  [all_module_attributes(App, Name) ||
+                      {App, _, _}   <- application:loaded_applications()])).
 
 build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     G = digraph:new([acyclic]),

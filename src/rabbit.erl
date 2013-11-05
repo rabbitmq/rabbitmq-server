@@ -312,8 +312,7 @@ start() ->
                      ok = ensure_working_log_handlers(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
-                     ok = app_utils:start_applications(
-                            app_startup_order(), fun handle_app_error/2),
+                     ok = rabbit_boot:start(app_startup_order()),
                      ok = log_broker_started(rabbit_plugins:active())
              end).
 
@@ -331,19 +330,9 @@ boot() ->
                      rabbit_mnesia:check_cluster_consistency(),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
-                     ok = app_utils:load_applications(ToBeLoaded),
-                     StartupApps = app_utils:app_dependency_order(ToBeLoaded,
-                                                                  false),
-                     ok = app_utils:start_applications(
-                            StartupApps, fun handle_app_error/2),
+                     ok = rabbit_boot:start(ToBeLoaded),
                      ok = log_broker_started(Plugins)
              end).
-
-handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
-    throw({could_not_start, App, Reason});
-
-handle_app_error(App, Reason) ->
-    throw({could_not_start, App, Reason}).
 
 start_it(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
@@ -352,9 +341,9 @@ start_it(StartFun) ->
         StartFun()
     catch
         throw:{could_not_start, _App, _Reason}=Err ->
-            boot_error(Err, not_available);
+            rabbit_boot:boot_error(Err, not_available);
          _:Reason ->
-            boot_error(Reason, erlang:get_stacktrace())
+            rabbit_boot:boot_error(Reason, erlang:get_stacktrace())
     after
         unlink(Marker),
         Marker ! stop,
@@ -367,7 +356,7 @@ stop() ->
         undefined -> ok;
         _         -> await_startup()
     end,
-    rabbit_log:info("Stopping RabbitMQ~n"),
+    rabbit_log:info("Stopping RabbitMQ~n"), %% TODO: move this to boot:stop/1
     ok = app_utils:stop_applications(app_shutdown_order()).
 
 stop_and_halt() ->
@@ -441,7 +430,6 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
-            [ok = run_boot_step(Step) || Step <- boot_steps()],
             {ok, SupPid};
         Error ->
             Error
@@ -465,120 +453,6 @@ app_startup_order() ->
 app_shutdown_order() ->
     Apps = ?APPS ++ rabbit_plugins:active(),
     app_utils:app_dependency_order(Apps, true).
-
-%%---------------------------------------------------------------------------
-%% boot step logic
-
-run_boot_step({_StepName, Attributes}) ->
-    case [MFA || {mfa, MFA} <- Attributes] of
-        [] ->
-            ok;
-        MFAs ->
-            [try
-                 apply(M,F,A)
-             of
-                 ok ->              ok;
-                 {error, Reason} -> boot_error(Reason, not_available)
-             catch
-                 _:Reason -> boot_error(Reason, erlang:get_stacktrace())
-             end || {M,F,A} <- MFAs],
-            ok
-    end.
-
-boot_steps() ->
-    sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)).
-
-vertices(_Module, Steps) ->
-    [{StepName, {StepName, Atts}} || {StepName, Atts} <- Steps].
-
-edges(_Module, Steps) ->
-    [case Key of
-         requires -> {StepName, OtherStep};
-         enables  -> {OtherStep, StepName}
-     end || {StepName, Atts} <- Steps,
-            {Key, OtherStep} <- Atts,
-            Key =:= requires orelse Key =:= enables].
-
-sort_boot_steps(UnsortedSteps) ->
-    case rabbit_misc:build_acyclic_graph(fun vertices/2, fun edges/2,
-                                         UnsortedSteps) of
-        {ok, G} ->
-            %% Use topological sort to find a consistent ordering (if
-            %% there is one, otherwise fail).
-            SortedSteps = lists:reverse(
-                            [begin
-                                 {StepName, Step} = digraph:vertex(G,
-                                                                   StepName),
-                                 Step
-                             end || StepName <- digraph_utils:topsort(G)]),
-            digraph:delete(G),
-            %% Check that all mentioned {M,F,A} triples are exported.
-            case [{StepName, {M,F,A}} ||
-                     {StepName, Attributes} <- SortedSteps,
-                     {mfa, {M,F,A}}         <- Attributes,
-                     not erlang:function_exported(M, F, length(A))] of
-                []               -> SortedSteps;
-                MissingFunctions -> basic_boot_error(
-                                      {missing_functions, MissingFunctions},
-                                      "Boot step functions not exported: ~p~n",
-                                      [MissingFunctions])
-            end;
-        {error, {vertex, duplicate, StepName}} ->
-            basic_boot_error({duplicate_boot_step, StepName},
-                             "Duplicate boot step name: ~w~n", [StepName]);
-        {error, {edge, Reason, From, To}} ->
-            basic_boot_error(
-              {invalid_boot_step_dependency, From, To},
-              "Could not add boot step dependency of ~w on ~w:~n~s",
-              [To, From,
-               case Reason of
-                   {bad_vertex, V} ->
-                       io_lib:format("Boot step not registered: ~w~n", [V]);
-                   {bad_edge, [First | Rest]} ->
-                       [io_lib:format("Cyclic dependency: ~w", [First]),
-                        [io_lib:format(" depends on ~w", [Next]) ||
-                            Next <- Rest],
-                        io_lib:format(" depends on ~w~n", [First])]
-               end])
-    end.
-
--ifdef(use_specs).
--spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
--endif.
-boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
-    AllNodes = rabbit_mnesia:cluster_nodes(all),
-    {Err, Nodes} =
-        case AllNodes -- [node()] of
-            [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
-                   " shut down forcefully~nit cannot determine which nodes"
-                   " are timing out.~n", []};
-            Ns -> {rabbit_misc:format(
-                     "Timeout contacting cluster nodes: ~p.~n", [Ns]),
-                   Ns}
-        end,
-    basic_boot_error(Term,
-                     Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
-boot_error(Reason, Stacktrace) ->
-    Fmt = "Error description:~n   ~p~n~n" ++
-        "Log files (may contain more information):~n   ~s~n   ~s~n~n",
-    Args = [Reason, log_location(kernel), log_location(sasl)],
-    boot_error(Reason, Fmt, Args, Stacktrace).
-
--ifdef(use_specs).
--spec(boot_error/4 :: (term(), string(), [any()], not_available | [tuple()])
-                      -> no_return()).
--endif.
-boot_error(Reason, Fmt, Args, not_available) ->
-    basic_boot_error(Reason, Fmt, Args);
-boot_error(Reason, Fmt, Args, Stacktrace) ->
-    basic_boot_error(Reason, Fmt ++ "Stack trace:~n   ~p~n~n",
-                     Args ++ [Stacktrace]).
-
-basic_boot_error(Reason, Format, Args) ->
-    io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
-    rabbit_misc:local_info_msg(Format, Args),
-    timer:sleep(1000),
-    exit({?MODULE, failure_during_boot, Reason}).
 
 %%---------------------------------------------------------------------------
 %% boot step functions
