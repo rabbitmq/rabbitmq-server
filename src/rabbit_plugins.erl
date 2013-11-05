@@ -18,6 +18,7 @@
 -include("rabbit.hrl").
 
 -export([setup/0, active/0, read_enabled/1, list/1, dependencies/3]).
+-export([enable/1, disable/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -31,10 +32,21 @@
 -spec(read_enabled/1 :: (file:filename()) -> [plugin_name()]).
 -spec(dependencies/3 :: (boolean(), [plugin_name()], [#plugin{}]) ->
                              [plugin_name()]).
-
+-spec(enable/1  :: ([plugin_name()]) -> 'ok').
+-spec(disable/1 :: ([plugin_name()]) -> 'ok').
 -endif.
 
 %%----------------------------------------------------------------------------
+
+%% TODO: move all the {enable,disable}ment logic from plugins_main to here!
+
+enable(Plugins) ->
+    setup(),
+    rabbit_boot:start(Plugins).
+
+disable(Plugins) ->
+    setup(),
+    rabbit_boot:stop(Plugins).
 
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->

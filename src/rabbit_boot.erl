@@ -47,6 +47,7 @@ start(Apps) ->
 
 stop(Apps) ->
     ShutdownApps = app_utils:app_dependency_order(Apps, true),
+    io:format("Stopping ~p~n", [ShutdownApps]),
     try
         ok = app_utils:stop_applications(
                ShutdownApps, handle_app_error(error_during_shutdown))
