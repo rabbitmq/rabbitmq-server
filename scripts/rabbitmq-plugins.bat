@@ -31,6 +31,10 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\!RABBITMQ_SERVICENAME!
 )
 
+if "!RABBITMQ_NODENAME!"=="" (
+    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
+)
+
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
     echo ******************************
@@ -51,7 +55,7 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
     set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 )
 
-"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugins!RANDOM!!TIME:~9! -s rabbit_plugins_main -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -extra !STAR!
+"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugins!RANDOM!!TIME:~9! -s rabbit_plugins_main -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -nodename !RABBITMQ_NODENAME! -extra !STAR!
 
 endlocal
 endlocal
