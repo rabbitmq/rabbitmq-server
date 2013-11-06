@@ -1,6 +1,5 @@
 $(document).ready(function() {
     replace_content('outer', format('login', {}));
-    try_uri_login();
     start_app_login();
 });
 
@@ -17,22 +16,21 @@ function dispatcher() {
     }
 }
 
-function try_uri_login() {
-    var location = this.location.href;
-    location = location.substr(3 + location.indexOf("://"));
-    var authority = location.substr(0, location.indexOf("/"));
-    if (authority.indexOf("@") !== -1) {
-        var userinfo = authority.substr(0, authority.indexOf("@"));
-        if (userinfo.split(":").length === 2) {
-            uri_auth_used = true;
-            set_auth_cookie(decodeURIComponent(userinfo));
-        }
-    }
-}
-
 function set_auth_cookie(userinfo) {
     var b64 = b64_encode_utf8(userinfo);
     document.cookie = 'auth=' + encodeURIComponent(b64);
+}
+
+function login_route () {
+    var userpass = '' + this.params['username'] + ':' + this.params['password'],
+        location = window.location.href,
+        hash = window.location.hash;
+    set_auth_cookie(decodeURIComponent(userpass));
+    location = location.substr(0, location.length - hash.length);
+    window.location.replace(location);
+    // because we change url, we don't need to hit check_login as
+    // we'll end up doing that at the bottom of start_app_login after
+    // we've changed url.
 }
 
 function start_app_login() {
@@ -43,6 +41,7 @@ function start_app_login() {
             set_auth_cookie(username + ':' + password);
             check_login();
         });
+        this.get('#/login/:username/:password', login_route)
     });
     app.run();
     if (get_cookie('auth') != '') {

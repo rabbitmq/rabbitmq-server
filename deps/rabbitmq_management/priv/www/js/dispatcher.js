@@ -13,6 +13,7 @@ dispatcher_add(function(sammy) {
             }
             render(reqs, 'overview', '#/');
         });
+    sammy.get('#/login/:username/:password', login_route);
     sammy.get('#/nodes/:name', function() {
             var name = esc(this.params['name']);
             render({'node': '/nodes/' + name},
