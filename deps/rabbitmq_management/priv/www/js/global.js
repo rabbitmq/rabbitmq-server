@@ -62,7 +62,6 @@ var user_monitor;                // ...user cannot monitor
 var nodes_interesting;           // ...we are not in a cluster
 var vhosts_interesting;          // ...there is only one vhost
 var rabbit_versions_interesting; // ...all cluster nodes run the same version
-var uri_auth_used = false;       // ...it's impossible to log out
 
 // Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
