@@ -81,29 +81,33 @@ start(Apps) ->
     end.
 
 stop(Apps) ->
-    %% ensure_boot_table(),
+    ensure_boot_table(),
     ShutdownApps = app_utils:app_dependency_order(Apps, true),
     try
         ok = app_utils:stop_applications(
                ShutdownApps, handle_app_error(error_during_shutdown))
     after
-        [begin
-             Steps =
-                 sort_boot_steps(rabbit_misc:all_module_attributes(
-                                   App, rabbit_cleanup_step)),
-             [run_boot_step(Step) || Step <- Steps]
-         end || App <- ShutdownApps]
+        [run_steps(App, rabbit_cleanup_step) || App <- ShutdownApps]
+        %[begin
+        %     Steps =
+        %         sort_boot_steps(rabbit_misc:all_module_attributes(
+        %                           App, rabbit_cleanup_step)),
+        %     [run_boot_step(Step) || Step <- Steps]
+        % end || App <- ShutdownApps]
     end.
 
 run_boot_steps(App) ->
+    run_steps(App, rabbit_boot_step).
+
+run_steps(App, StepType) ->
     RootApps = app_utils:app_dependencies(App),
     Steps =
         sort_boot_steps(
           lists:usort(
             lists:append(
-              [rabbit_misc:all_module_attributes(A, rabbit_boot_step) ||
+              [rabbit_misc:all_module_attributes(A, StepType) ||
                   A <- [App|RootApps]]))),
-    [ok = run_boot_step(Step) || Step <- Steps],
+    [ok = run_boot_step(Step, StepType) || Step <- Steps],
     ok.
 
 boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
@@ -180,10 +184,11 @@ handle_app_error(Term) ->
             throw({Term, App, Reason})
     end.
 
-run_boot_step({StepName, Attributes}) ->
-    case already_run(StepName) of
-        false -> run_it(StepName, Attributes);
-        true  -> ok
+run_boot_step({StepName, Attributes}, StepType) ->
+    case catch {StepType, already_run(StepName)} of
+        {rabbit_clean_step, _} -> run_it(StepName, Attributes);
+        {_, false}             -> run_it(StepName, Attributes);
+        {_, true}              -> ok
     end.
 
 run_it(StepName, Attributes) ->
