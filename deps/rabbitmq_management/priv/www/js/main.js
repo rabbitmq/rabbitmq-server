@@ -56,8 +56,7 @@ function check_login() {
         replace_content('login-status', '<p>Login failed</p>');
     }
     else {
-        replace_content('outer',
-                        format('layout', {uri_auth_used: uri_auth_used}));
+        replace_content('outer', format('layout', {}));
         setup_global_vars(user);
         setup_constant_events();
         update_vhosts();
