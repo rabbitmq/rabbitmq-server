@@ -16,38 +16,73 @@
 
 -module(rabbit_boot).
 
+-export([boot_with/1, shutdown/1]).
 -export([start/1, stop/1]).
 -export([run_boot_steps/1]).
 -export([boot_error/2, boot_error/4]).
 
 -ifdef(use_specs).
 
+-spec(boot_with/1      :: (fun(() -> 'ok')) -> 'ok').
+-spec(shutdown/1       :: ([atom()]) -> 'ok').
 -spec(start/1          :: ([atom()]) -> 'ok').
 -spec(stop/1           :: ([atom()]) -> 'ok').
 -spec(run_boot_steps/1 :: (atom())   -> 'ok').
 -spec(boot_error/2     :: (term(), not_available | [tuple()]) -> no_return()).
 -spec(boot_error/4     :: (term(), string(), [any()], not_available | [tuple()])
-                            -> no_return()).
+                          -> no_return()).
 
 -endif.
+
+-define(BOOT_FILE, "boot.info").
 
 %%---------------------------------------------------------------------------
 %% Public API
 
+boot_with(StartFun) ->
+    %% TODO: this should be done with monitors, not links, I think
+    Marker = spawn_link(fun() -> receive stop -> ok end end),
+    register(rabbit_boot, Marker),
+    try
+        StartFun()
+    catch
+        throw:{could_not_start, _App, _Reason}=Err ->
+            boot_error(Err, not_available);
+        _:Reason ->
+            boot_error(Reason, erlang:get_stacktrace())
+    after
+        unlink(Marker),
+        Marker ! stop,
+        %% give the error loggers some time to catch up
+        timer:sleep(100)
+    end.
+
+shutdown(Apps) ->
+    try
+        case whereis(rabbit_boot) of
+            undefined -> ok;
+            _         -> await_startup(Apps)
+        end,
+        rabbit_log:info("Stopping RabbitMQ~n"),
+        ok = app_utils:stop_applications(Apps)
+    after
+        delete_boot_table()
+    end.
+
 start(Apps) ->
     try
-        ets:new(boot_steps, [named_table, public, ordered_set]),
+        ensure_boot_table(),
         ok = app_utils:load_applications(Apps),
         StartupApps = app_utils:app_dependency_order(Apps, false),
         ok = app_utils:start_applications(StartupApps,
                                           handle_app_error(could_not_start))
     after
-        ets:delete(boot_steps)
+        save_boot_table()
     end.
 
 stop(Apps) ->
+    %% ensure_boot_table(),
     ShutdownApps = app_utils:app_dependency_order(Apps, true),
-    io:format("Stopping ~p~n", [ShutdownApps]),
     try
         ok = app_utils:stop_applications(
                ShutdownApps, handle_app_error(error_during_shutdown))
@@ -99,6 +134,45 @@ boot_error(Reason, Fmt, Args, Stacktrace) ->
 %%---------------------------------------------------------------------------
 %% Private API
 
+await_startup(Apps) ->
+    app_utils:wait_for_applications(Apps).
+
+delete_boot_table() ->
+    case filelib:is_file(boot_file()) of
+        true  -> file:delete(boot_file());
+        false -> ok
+    end.
+
+ensure_boot_table() ->
+    case whereis(?MODULE) of
+        undefined ->
+            case filelib:is_file(boot_file()) of
+                true  -> load_table();
+                false -> clean_table()
+            end;
+        _Pid ->
+            clean_table()
+    end.
+
+clean_table() ->
+    ets:new(?MODULE, [named_table, public, ordered_set]).
+
+load_table() ->
+    {ok, _Tab} = ets:file2tab(boot_file(), [{verify, true}]),
+    ok.
+
+save_boot_table() ->
+    delete_boot_table(),
+    case ets:info(?MODULE) of
+        undefined -> ok;
+        _         -> ets:tab2file(?MODULE, boot_file(),
+                                  [{extended_info, [object_count]}]),
+                     ets:delete(?MODULE)
+    end.
+
+boot_file() ->
+    filename:join(rabbit_mnesia:dir(), ?BOOT_FILE).
+
 handle_app_error(Term) ->
     fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
             throw({Term, App, ExitReason});
@@ -129,10 +203,10 @@ run_it(StepName, Attributes) ->
     end.
 
 already_run(StepName) ->
-    ets:member(boot_steps, StepName).
+    ets:member(?MODULE, StepName).
 
 mark_complete(StepName) ->
-    ets:insert(boot_steps, {StepName}).
+    ets:insert(?MODULE, {StepName}).
 
 basic_boot_error(Reason, Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),

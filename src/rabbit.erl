@@ -305,59 +305,40 @@ ensure_application_loaded() ->
     end.
 
 start() ->
-    start_it(fun() ->
-                     %% We do not want to HiPE compile or upgrade
-                     %% mnesia after just restarting the app
-                     ok = ensure_application_loaded(),
-                     ok = ensure_working_log_handlers(),
-                     rabbit_node_monitor:prepare_cluster_status_files(),
-                     rabbit_mnesia:check_cluster_consistency(),
-                     ok = rabbit_boot:start(app_startup_order()),
-                     ok = log_broker_started(rabbit_plugins:active())
-             end).
+    rabbit_boot:boot_with(
+      fun() ->
+              %% We do not want to HiPE compile or upgrade
+              %% mnesia after just restarting the app
+              ok = ensure_application_loaded(),
+              ok = ensure_working_log_handlers(),
+              rabbit_node_monitor:prepare_cluster_status_files(),
+              rabbit_mnesia:check_cluster_consistency(),
+              ok = rabbit_boot:start(app_startup_order()),
+              ok = log_broker_started(rabbit_plugins:active())
+      end).
 
 boot() ->
-    start_it(fun() ->
-                     ok = ensure_application_loaded(),
-                     Success = maybe_hipe_compile(),
-                     ok = ensure_working_log_handlers(),
-                     warn_if_hipe_compilation_failed(Success),
-                     rabbit_node_monitor:prepare_cluster_status_files(),
-                     ok = rabbit_upgrade:maybe_upgrade_mnesia(),
-                     %% It's important that the consistency check happens after
-                     %% the upgrade, since if we are a secondary node the
-                     %% primary node will have forgotten us
-                     rabbit_mnesia:check_cluster_consistency(),
-                     Plugins = rabbit_plugins:setup(),
-                     ToBeLoaded = Plugins ++ ?APPS,
-                     ok = rabbit_boot:start(ToBeLoaded),
-                     ok = log_broker_started(Plugins)
-             end).
-
-start_it(StartFun) ->
-    Marker = spawn_link(fun() -> receive stop -> ok end end),
-    register(rabbit_boot, Marker),
-    try
-        StartFun()
-    catch
-        throw:{could_not_start, _App, _Reason}=Err ->
-            rabbit_boot:boot_error(Err, not_available);
-         _:Reason ->
-            rabbit_boot:boot_error(Reason, erlang:get_stacktrace())
-    after
-        unlink(Marker),
-        Marker ! stop,
-        %% give the error loggers some time to catch up
-        timer:sleep(100)
-    end.
+    rabbit_boot:boot_with(
+      fun() ->
+              ok = ensure_application_loaded(),
+              Success = maybe_hipe_compile(),
+              ok = ensure_working_log_handlers(),
+              warn_if_hipe_compilation_failed(Success),
+              rabbit_node_monitor:prepare_cluster_status_files(),
+              ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+              %% It's important that the consistency check happens after
+              %% the upgrade, since if we are a secondary node the
+              %% primary node will have forgotten us
+              rabbit_mnesia:check_cluster_consistency(),
+              Plugins = rabbit_plugins:setup(),
+              ToBeLoaded = Plugins ++ ?APPS,
+              ok = rabbit_boot:start(ToBeLoaded),
+              ok = log_broker_started(Plugins)
+      end).
 
 stop() ->
-    case whereis(rabbit_boot) of
-        undefined -> ok;
-        _         -> await_startup()
-    end,
-    rabbit_log:info("Stopping RabbitMQ~n"), %% TODO: move this to boot:stop/1
-    ok = app_utils:stop_applications(app_shutdown_order()).
+    rabbit_log:info("Stopping RabbitMQ~n"),
+    rabbit_boot:shutdown(app_shutdown_order()).
 
 stop_and_halt() ->
     try
@@ -441,6 +422,7 @@ stop(_State) ->
              true  -> rabbit_amqqueue:on_node_down(node());
              false -> rabbit_table:clear_ram_only_tables()
          end,
+    ok = rabbit_boot:shutdown(),
     ok.
 
 %%---------------------------------------------------------------------------
