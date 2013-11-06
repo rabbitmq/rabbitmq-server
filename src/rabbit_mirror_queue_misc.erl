@@ -94,10 +94,11 @@ remove_from_queue(QueueName, Self, LiveGMPids) ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
                               %% become the master.
-                              store_updated_slaves(
-                                Q #amqqueue { pid        = QPid1,
+                              Q1 = Q#amqqueue{pid        = QPid1,
                                               slave_pids = SPids1,
-                                              gm_pids    = GMPids1 }),
+                                              gm_pids    = GMPids1},
+                              store_updated_slaves(Q1),
+                              maybe_auto_sync(Q1),
                               {ok, QPid1, [QPid | SPids] -- Alive};
                           _ ->
                               %% Master has changed, and we're not it,
