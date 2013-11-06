@@ -98,6 +98,9 @@ remove_from_queue(QueueName, Self, LiveGMPids) ->
                                               slave_pids = SPids1,
                                               gm_pids    = GMPids1},
                               store_updated_slaves(Q1),
+                              %% If we add and remove nodes at the same time
+                              %% it's possible we need to sync after removing
+                              %% the master. Let's check.
                               maybe_auto_sync(Q1),
                               {ok, QPid1, [QPid | SPids] -- Alive};
                           _ ->
