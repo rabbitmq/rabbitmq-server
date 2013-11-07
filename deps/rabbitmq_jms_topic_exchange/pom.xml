@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.rabbitmq.jms</groupId>
     <artifactId>rabbitmq-jms-parent</artifactId>
-    <version>1.1.0-SNAPSHOT</version>
+    <version>1.2.0-SNAPSHOT</version>
   </parent>
 
   <properties>
@@ -26,6 +26,9 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
+        <configuration>
+          <executable>make</executable>
+        </configuration>
         <executions>
           <execution>
             <id>clean-jms-topic-plugin</id>
@@ -44,7 +47,7 @@
               <goal>exec</goal>
             </goals>
             <configuration>
-              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} RMQ_VERSION=${rabbitmq.version} dist</commandlineArgs>
+              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} RMQ_VERSION=${rabbitmq.version} RJMS_VERSION=${project.version} dist</commandlineArgs>
             </configuration>
           </execution>
           <execution>
@@ -54,7 +57,7 @@
               <goal>exec</goal>
             </goals>
             <configuration>
-              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} RMQ_VERSION=${rabbitmq.version} test</commandlineArgs>
+              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} RMQ_VERSION=${rabbitmq.version} RJMS_VERSION=${project.version} test</commandlineArgs>
             </configuration>
           </execution>
           <execution>
@@ -64,13 +67,10 @@
               <goal>exec</goal>
             </goals>
             <configuration>
-              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} RMQ_VERSION=${rabbitmq.version} package</commandlineArgs>
+              <commandlineArgs>MAVEN_ARTEFACT=${maven.artefact} RMQ_VERSION=${rabbitmq.version} RJMS_VERSION=${project.version} package</commandlineArgs>
             </configuration>
           </execution>
         </executions>
-        <configuration>
-          <executable>make</executable>
-        </configuration>
       </plugin>
 
       <plugin>

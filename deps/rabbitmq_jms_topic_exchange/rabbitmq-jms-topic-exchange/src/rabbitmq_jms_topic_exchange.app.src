@@ -1,6 +1,6 @@
 { application, rabbitmq_jms_topic_exchange
 , [ {description, "RabbitMQ JMS topic selector exchange plugin"}
-  , {vsn, "1.1.0-SNAPSHOT"}  %% version of rabbit-jms package
+  , {vsn, "@RJMS_VERSION@"}  %% version of rabbit-jms package
   , {modules, []}
   , {registered, []}
   , {applications, [kernel, stdlib, rabbit, mnesia]}
