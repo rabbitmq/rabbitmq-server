@@ -19,7 +19,8 @@
 
 -export([remove_from_queue/3, on_node_up/0, add_mirrors/2, add_mirror/2,
          report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
-         is_mirrored/1, update_mirrors/2, validate_policy/1]).
+         is_mirrored/1, update_mirrors/2, validate_policy/1,
+         maybe_auto_sync/1]).
 
 %% for testing only
 -export([module/1]).
@@ -183,26 +184,15 @@ add_mirror(QName, MirrorNode) ->
               end
       end).
 
-start_child(Name, MirrorNode, Q) ->
+start_child(_Name, MirrorNode, Q) ->
+    %% TODO re-add some log stuff here.
     case rabbit_misc:with_exit_handler(
-           rabbit_misc:const({ok, down}),
+           rabbit_misc:const(down),
            fun () ->
                    rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
            end) of
-        {ok, SPid} when is_pid(SPid)  ->
-            maybe_auto_sync(Q),
-            rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
-                            [rabbit_misc:rs(Name), MirrorNode, SPid]),
-            {ok, started};
-        {error, {{stale_master_pid, StalePid}, _}} ->
-            rabbit_log:warning("Detected stale HA master while adding "
-                               "mirror of ~s on node ~p: ~p~n",
-                               [rabbit_misc:rs(Name), MirrorNode, StalePid]),
-            {ok, stale_master};
-        {error, {{duplicate_live_master, _}=Err, _}} ->
-            Err;
-        Other ->
-            Other
+        {ok, SPid} -> rabbit_mirror_queue_slave:go(SPid);
+        _          -> ok
     end.
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->

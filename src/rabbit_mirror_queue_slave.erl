@@ -24,7 +24,7 @@
 %% All instructions from the GM group must be processed in the order
 %% in which they're received.
 
--export([start_link/1, set_maximum_since_use/2, info/1]).
+-export([start_link/1, set_maximum_since_use/2, info/1, go/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/4,
@@ -78,7 +78,14 @@ set_maximum_since_use(QPid, Age) ->
 
 info(QPid) -> gen_server2:call(QPid, info, infinity).
 
-init(Q = #amqqueue { name = QName }) ->
+init(Q) ->
+    {ok, {not_started, Q}, hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
+      ?DESIRED_HIBERNATE}}.
+
+go(SPid) -> gen_server2:cast(SPid, go).
+
+handle_go({not_started, Q = #amqqueue { name = QName }} = NotStarted) ->
     %% We join the GM group before we add ourselves to the amqqueue
     %% record. As a result:
     %% 1. We can receive msgs from GM that correspond to messages we will
@@ -124,22 +131,24 @@ init(Q = #amqqueue { name = QName }) ->
                    },
             ok = gm:broadcast(GM, request_depth),
             ok = gm:validate_members(GM, [GM | [G || {G, _} <- GMPids]]),
-            {ok, State, hibernate,
-             {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
-              ?DESIRED_HIBERNATE}};
+            rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
+            {noreply, State};
         {stale, StalePid} ->
-            {stop, {stale_master_pid, StalePid}};
+            gm:leave(GM),
+            {stop, {stale_master_pid, StalePid}, NotStarted};
         duplicate_live_master ->
-            {stop, {duplicate_live_master, Node}};
+            gm:leave(GM),
+            {stop, {duplicate_live_master, Node}, NotStarted};
         existing ->
             gm:leave(GM),
-            ignore;
+            {stop, normal, NotStarted};
         master_in_recovery ->
+            gm:leave(GM),
             %% The queue record vanished - we must have a master starting
             %% concurrently with us. In that case we can safely decide to do
             %% nothing here, and the master will start us in
             %% master:init_with_existing_bq/3
-            ignore
+            {stop, normal, NotStarted}
     end.
 
 init_it(Self, GM, Node, QName) ->
@@ -207,6 +216,9 @@ handle_call({gm_deaths, LiveGMPids}, From,
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State).
+
+handle_cast(go, {not_started, _Q} = NotStarted) ->
+    handle_go(NotStarted);
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
@@ -293,6 +305,10 @@ handle_info({bump_credit, Msg}, State) ->
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
+terminate(_, {not_started, _Q}) ->
+    %% TODO we accept gm:leave/1 related garblings here, that '_'
+    %% should be a 'normal'
+    ok;
 terminate(_Reason, #state { backing_queue_state = undefined }) ->
     %% We've received a delete_and_terminate from gm, thus nothing to
     %% do here.
@@ -403,7 +419,9 @@ handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
 inform_deaths(SPid, Live) ->
-    case gen_server2:call(SPid, {gm_deaths, Live}, infinity) of
+    case rabbit_misc:with_exit_handler(
+           rabbit_misc:const(ok),
+           fun() -> gen_server2:call(SPid, {gm_deaths, Live}, infinity) end) of
         ok              -> ok;
         {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
     end.

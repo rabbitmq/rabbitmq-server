@@ -63,7 +63,7 @@ start_link() ->
 submit(Fun) ->
     case get(worker_pool_worker) of
         true -> worker_pool_worker:run(Fun);
-        _    -> Pid = gen_server2:call(?SERVER, next_free, infinity),
+        _    -> Pid = gen_server2:call(?SERVER, {next_free, self()}, infinity),
                 worker_pool_worker:submit(Pid, Fun)
     end.
 
@@ -79,12 +79,12 @@ init([]) ->
     {ok, #state { pending = queue:new(), available = queue:new() }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call(next_free, From, State = #state { available = Avail,
+handle_call({next_free, Pid}, From, State = #state { available = Avail,
                                               pending = Pending }) ->
     case queue:out(Avail) of
         {empty, _Avail} ->
             {noreply,
-             State #state { pending = queue:in({next_free, From}, Pending) },
+             State #state { pending = queue:in({next_free, From, Pid}, Pending) },
              hibernate};
         {{value, WId}, Avail1} ->
             {reply, get_worker_pid(WId), State #state { available = Avail1 },
@@ -96,16 +96,19 @@ handle_call(Msg, _From, State) ->
 
 handle_cast({idle, WId}, State = #state { available = Avail,
                                           pending = Pending }) ->
-    {noreply, case queue:out(Pending) of
-                  {empty, _Pending} ->
-                      State #state { available = queue:in(WId, Avail) };
-                  {{value, {next_free, From}}, Pending1} ->
-                      gen_server2:reply(From, get_worker_pid(WId)),
-                      State #state { pending = Pending1 };
-                  {{value, {run_async, Fun}}, Pending1} ->
-                      worker_pool_worker:submit_async(get_worker_pid(WId), Fun),
-                      State #state { pending = Pending1 }
-              end, hibernate};
+    case queue:out(Pending) of
+        {empty, _Pending} ->
+            {noreply, State #state { available = queue:in(WId, Avail) }, hibernate};
+        {{value, {next_free, From, Pid}}, Pending1} ->
+            case is_process_alive(Pid) of
+                true -> gen_server2:reply(From, get_worker_pid(WId)),
+                        {noreply, State #state { pending = Pending1 }, hibernate};
+                false -> handle_cast({idle, WId}, State#state{pending = Pending1})
+            end;
+        {{value, {run_async, Fun}}, Pending1} ->
+            worker_pool_worker:submit_async(get_worker_pid(WId), Fun),
+            {noreply, State #state { pending = Pending1 }, hibernate}
+    end;
 
 handle_cast({run_async, Fun}, State = #state { available = Avail,
                                                pending = Pending }) ->
