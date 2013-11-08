@@ -46,7 +46,7 @@ SECTION 2: Apache License, V2.0
 
 SECTION 3: Mozilla Public License, V1.1
 
-   >>> amqp-client-3.2.0
+   >>> amqp-client-3.2.1
 
 
 
@@ -116,7 +116,7 @@ Code license:  Apache License 2.0
 Mozilla Public License, V1.1 is applicable to the following component(s).
 
 
->>> amqp-client-3.2.0
+>>> amqp-client-3.2.1
 
 The contents of this file are subject to the Mozilla Public License
 Version 1.1 (the "License"); you may not use this file except in
@@ -137,7 +137,7 @@ ADDITIONAL LICENSE INFORMATION:
 
 > Apache 2.0
 
-amqp-client-3.2.0-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
+amqp-client-3.2.1-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
 
 Copyright (c) 2006-2007 Frank Carver
 Copyright (c) 2007-2013 VMware, Inc. All Rights Reserved
