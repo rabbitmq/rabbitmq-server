@@ -134,6 +134,9 @@ handle_go({not_started, Q = #amqqueue { name = QName }} = NotStarted) ->
             rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
             {noreply, State};
         {stale, StalePid} ->
+            rabbit_log:warning("Detected stale HA master while adding "
+                               "mirror of ~s: ~p~n",
+                               [rabbit_misc:rs(QName), StalePid]),
             gm:leave(GM),
             {stop, {stale_master_pid, StalePid}, NotStarted};
         duplicate_live_master ->

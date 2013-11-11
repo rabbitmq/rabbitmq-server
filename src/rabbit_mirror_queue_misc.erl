@@ -184,14 +184,15 @@ add_mirror(QName, MirrorNode) ->
               end
       end).
 
-start_child(_Name, MirrorNode, Q) ->
-    %% TODO re-add some log stuff here.
+start_child(Name, MirrorNode, Q) ->
     case rabbit_misc:with_exit_handler(
            rabbit_misc:const(down),
            fun () ->
                    rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
            end) of
-        {ok, SPid} -> rabbit_mirror_queue_slave:go(SPid);
+        {ok, SPid} -> rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
+                                      [rabbit_misc:rs(Name), MirrorNode, SPid]),
+                      rabbit_mirror_queue_slave:go(SPid);
         _          -> ok
     end.
 
