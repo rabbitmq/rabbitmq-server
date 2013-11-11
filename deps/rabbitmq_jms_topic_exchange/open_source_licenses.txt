@@ -1,6 +1,6 @@
 open_source_license.txt
 
-JMS Client for VMware vFabric RabbitMQ 1.1.0 GA
+JMS Client for VMware vFabric RabbitMQ 1.1.2
 
 
 
