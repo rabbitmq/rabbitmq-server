@@ -305,9 +305,7 @@ handle_info({bump_credit, Msg}, State) ->
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-terminate(_, {not_started, _Q}) ->
-    %% TODO we accept gm:leave/1 related garblings here, that '_'
-    %% should be a 'normal'
+terminate(normal, {not_started, _Q}) ->
     ok;
 terminate(_Reason, #state { backing_queue_state = undefined }) ->
     %% We've received a delete_and_terminate from gm, thus nothing to
