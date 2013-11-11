@@ -45,7 +45,7 @@
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
--record(state, {id, next_job_from}).
+-record(state, {id, next}).
 
 %%----------------------------------------------------------------------------
 
@@ -83,24 +83,28 @@ prioritise_cast({set_maximum_since_use, _Age}, _Len, _State) -> 8;
 prioritise_cast({next_job_from, _CPid},        _Len, _State) -> 7;
 prioritise_cast(_Msg,                          _Len, _State) -> 0.
 
-handle_call({submit, Fun, CPid}, From, State = #state{id            = WId,
-                                                      next_job_from = NJF}) ->
-    case NJF of
-        undefined    -> receive {'$gen_cast', {next_job_from, CPid}} ->
-                                ok
-                        end;
-        {CPid, MRef} -> erlang:demonitor(MRef)
-    end,
+handle_call({submit, Fun, CPid}, From, State = #state{next = undefined}) ->
+    {noreply, State#state{next = {job, CPid, From, Fun}}, hibernate};
+
+handle_call({submit, Fun, CPid}, From, State = #state{next = {from, CPid, MRef},
+                                                      id   = WId}) ->
+    erlang:demonitor(MRef),
     gen_server2:reply(From, run(Fun)),
     ok = worker_pool:idle(WId),
-    {noreply, State#state{next_job_from = undefined}, hibernate};
+    {noreply, State#state{next = undefined}, hibernate};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast({next_job_from, CPid}, State = #state{next_job_from = undefined}) ->
+handle_cast({next_job_from, CPid}, State = #state{next = undefined}) ->
     MRef = erlang:monitor(process, CPid),
-    {noreply, State#state{next_job_from = {CPid, MRef}}, hibernate};
+    {noreply, State#state{next = {from, CPid, MRef}}, hibernate};
+
+handle_cast({next_job_from, CPid}, State = #state{next = {job, CPid, From, Fun},
+                                                  id   = WId}) ->
+    gen_server2:reply(From, run(Fun)),
+    ok = worker_pool:idle(WId),
+    {noreply, State#state{next = undefined}, hibernate};
 
 handle_cast({submit_async, Fun}, State = #state{id = WId}) ->
     run(Fun),
@@ -116,9 +120,9 @@ handle_cast(Msg, State) ->
 
 handle_info({'DOWN', MRef, process, CPid, _Reason},
             State = #state{id            = WId,
-                           next_job_from = {CPid, MRef}}) ->
+                           next = {from, CPid, MRef}}) ->
     ok = worker_pool:idle(WId),
-    {noreply, State#state{next_job_from = undefined}};
+    {noreply, State#state{next = undefined}};
 
 handle_info({'DOWN', _MRef, process, _Pid, _Reason}, State) ->
     {noreply, State};
