@@ -57,6 +57,7 @@
 -spec(is_mirrored/1 :: (rabbit_types:amqqueue()) -> boolean()).
 -spec(update_mirrors/2 ::
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
+-spec(maybe_auto_sync/1 :: (rabbit_types:amqqueue()) -> 'ok').
 
 -endif.
 
