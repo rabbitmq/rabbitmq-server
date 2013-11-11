@@ -18,7 +18,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, submit/2, submit_async/2, run/1]).
+-export([start_link/1, next_job_from/2, submit/2, submit_async/2, run/1]).
 
 -export([set_maximum_since_use/2]).
 
@@ -32,6 +32,7 @@
 -type(mfargs() :: {atom(), atom(), [any()]}).
 
 -spec(start_link/1 :: (any()) -> {'ok', pid()} | {'error', any()}).
+-spec(next_job_from/2 :: (pid(), pid()) -> 'ok').
 -spec(submit/2 :: (pid(), fun (() -> A) | mfargs()) -> A).
 -spec(submit_async/2 :: (pid(), fun (() -> any()) | mfargs()) -> 'ok').
 -spec(run/1 :: (fun (() -> A)) -> A; (mfargs()) -> any()).
@@ -44,13 +45,18 @@
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
+-record(state, {id, next}).
+
 %%----------------------------------------------------------------------------
 
 start_link(WId) ->
     gen_server2:start_link(?MODULE, [WId], [{timeout, infinity}]).
 
+next_job_from(Pid, CPid) ->
+    gen_server2:cast(Pid, {next_job_from, CPid}).
+
 submit(Pid, Fun) ->
-    gen_server2:call(Pid, {submit, Fun}, infinity).
+    gen_server2:call(Pid, {submit, Fun, self()}, infinity).
 
 submit_async(Pid, Fun) ->
     gen_server2:cast(Pid, {submit_async, Fun}).
@@ -70,31 +76,56 @@ init([WId]) ->
                                              [self()]),
     ok = worker_pool:idle(WId),
     put(worker_pool_worker, true),
-    {ok, WId, hibernate,
+    {ok, #state{id = WId}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 prioritise_cast({set_maximum_since_use, _Age}, _Len, _State) -> 8;
+prioritise_cast({next_job_from, _CPid},        _Len, _State) -> 7;
 prioritise_cast(_Msg,                          _Len, _State) -> 0.
 
-handle_call({submit, Fun}, From, WId) ->
+handle_call({submit, Fun, CPid}, From, State = #state{next = undefined}) ->
+    {noreply, State#state{next = {job, CPid, From, Fun}}, hibernate};
+
+handle_call({submit, Fun, CPid}, From, State = #state{next = {from, CPid, MRef},
+                                                      id   = WId}) ->
+    erlang:demonitor(MRef),
     gen_server2:reply(From, run(Fun)),
     ok = worker_pool:idle(WId),
-    {noreply, WId, hibernate};
+    {noreply, State#state{next = undefined}, hibernate};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast({submit_async, Fun}, WId) ->
+handle_cast({next_job_from, CPid}, State = #state{next = undefined}) ->
+    MRef = erlang:monitor(process, CPid),
+    {noreply, State#state{next = {from, CPid, MRef}}, hibernate};
+
+handle_cast({next_job_from, CPid}, State = #state{next = {job, CPid, From, Fun},
+                                                  id   = WId}) ->
+    gen_server2:reply(From, run(Fun)),
+    ok = worker_pool:idle(WId),
+    {noreply, State#state{next = undefined}, hibernate};
+
+handle_cast({submit_async, Fun}, State = #state{id = WId}) ->
     run(Fun),
     ok = worker_pool:idle(WId),
-    {noreply, WId, hibernate};
+    {noreply, State, hibernate};
 
-handle_cast({set_maximum_since_use, Age}, WId) ->
+handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    {noreply, WId, hibernate};
+    {noreply, State, hibernate};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
+
+handle_info({'DOWN', MRef, process, CPid, _Reason},
+            State = #state{id            = WId,
+                           next = {from, CPid, MRef}}) ->
+    ok = worker_pool:idle(WId),
+    {noreply, State#state{next = undefined}};
+
+handle_info({'DOWN', _MRef, process, _Pid, _Reason}, State) ->
+    {noreply, State};
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
