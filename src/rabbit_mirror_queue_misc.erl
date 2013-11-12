@@ -17,7 +17,7 @@
 -module(rabbit_mirror_queue_misc).
 -behaviour(rabbit_policy_validator).
 
--export([remove_from_queue/3, on_node_up/0, add_mirrors/2, add_mirror/2,
+-export([remove_from_queue/3, on_node_up/0, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2, validate_policy/1,
          maybe_auto_sync/1]).
@@ -46,10 +46,8 @@
         (rabbit_amqqueue:name(), pid(), [pid()])
         -> {'ok', pid(), [pid()]} | {'error', 'not_found'}).
 -spec(on_node_up/0 :: () -> 'ok').
--spec(add_mirrors/2 :: (rabbit_amqqueue:name(), [node()]) -> 'ok').
--spec(add_mirror/2 ::
-        (rabbit_amqqueue:name(), node()) ->
-                           {'ok', atom()} | rabbit_types:error(any())).
+-spec(add_mirrors/3 :: (rabbit_amqqueue:name(), [node()], 'sync' | 'async')
+                       -> 'ok').
 -spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
                                      rabbit_types:amqqueue()).
 -spec(suggested_queue_nodes/1 :: (rabbit_types:amqqueue()) ->
@@ -141,7 +139,7 @@ on_node_up() ->
                             end
                     end, [], rabbit_queue)
           end),
-    [add_mirror(QName, node()) || QName <- QNames],
+    [add_mirror(QName, node(), async) || QName <- QNames],
     ok.
 
 drop_mirrors(QName, Nodes) ->
@@ -166,26 +164,26 @@ drop_mirror(QName, MirrorNode) ->
               end
       end).
 
-add_mirrors(QName, Nodes) ->
-    [add_mirror(QName, Node)  || Node <- Nodes],
+add_mirrors(QName, Nodes, SyncMode) ->
+    [add_mirror(QName, Node, SyncMode)  || Node <- Nodes],
     ok.
 
-add_mirror(QName, MirrorNode) ->
+add_mirror(QName, MirrorNode, SyncMode) ->
     rabbit_amqqueue:with(
       QName,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
                   [] ->
-                      start_child(Name, MirrorNode, Q);
+                      start_child(Name, MirrorNode, Q, SyncMode);
                   [SPid] ->
                       case rabbit_misc:is_process_alive(SPid) of
                           true  -> {ok, already_mirrored};
-                          false -> start_child(Name, MirrorNode, Q)
+                          false -> start_child(Name, MirrorNode, Q, SyncMode)
                       end
               end
       end).
 
-start_child(Name, MirrorNode, Q) ->
+start_child(Name, MirrorNode, Q, SyncMode) ->
     case rabbit_misc:with_exit_handler(
            rabbit_misc:const(down),
            fun () ->
@@ -193,7 +191,7 @@ start_child(Name, MirrorNode, Q) ->
            end) of
         {ok, SPid} -> rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                                       [rabbit_misc:rs(Name), MirrorNode, SPid]),
-                      rabbit_mirror_queue_slave:go(SPid);
+                      rabbit_mirror_queue_slave:go(SPid, SyncMode);
         _          -> ok
     end.
 
@@ -308,7 +306,7 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     {NewMNode, NewSNodes}    = suggested_queue_nodes(NewQ),
     OldNodes = [OldMNode | OldSNodes],
     NewNodes = [NewMNode | NewSNodes],
-    add_mirrors (QName, NewNodes -- OldNodes),
+    add_mirrors (QName, NewNodes -- OldNodes, async),
     drop_mirrors(QName, OldNodes -- NewNodes),
     maybe_auto_sync(NewQ),
     ok.

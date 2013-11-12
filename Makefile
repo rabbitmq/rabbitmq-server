@@ -222,7 +222,7 @@ start-background-node: all
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
-	./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_MNESIA_DIR).pid
+	#./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_MNESIA_DIR).pid
 
 stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)

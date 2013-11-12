@@ -24,7 +24,7 @@
 %% All instructions from the GM group must be processed in the order
 %% in which they're received.
 
--export([start_link/1, set_maximum_since_use/2, info/1, go/1]).
+-export([start_link/1, set_maximum_since_use/2, info/1, go/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/4,
@@ -83,9 +83,10 @@ init(Q) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
       ?DESIRED_HIBERNATE}}.
 
-go(SPid) -> gen_server2:cast(SPid, go).
+go(SPid, sync)  -> gen_server2:call(SPid, go, infinity);
+go(SPid, async) -> gen_server2:cast(SPid, go).
 
-handle_go({not_started, Q = #amqqueue { name = QName }} = NotStarted) ->
+handle_go(Q = #amqqueue{name = QName}) ->
     %% We join the GM group before we add ourselves to the amqqueue
     %% record. As a result:
     %% 1. We can receive msgs from GM that correspond to messages we will
@@ -132,26 +133,26 @@ handle_go({not_started, Q = #amqqueue { name = QName }} = NotStarted) ->
             ok = gm:broadcast(GM, request_depth),
             ok = gm:validate_members(GM, [GM | [G || {G, _} <- GMPids]]),
             rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
-            {noreply, State};
+            {ok, State};
         {stale, StalePid} ->
             rabbit_log:warning("Detected stale HA master while adding "
                                "mirror of ~s: ~p~n",
                                [rabbit_misc:rs(QName), StalePid]),
             gm:leave(GM),
-            {stop, {stale_master_pid, StalePid}, NotStarted};
+            {error, {stale_master_pid, StalePid}};
         duplicate_live_master ->
             gm:leave(GM),
-            {stop, {duplicate_live_master, Node}, NotStarted};
+            {error, {duplicate_live_master, Node}};
         existing ->
             gm:leave(GM),
-            {stop, normal, NotStarted};
+            {error, normal};
         master_in_recovery ->
             gm:leave(GM),
             %% The queue record vanished - we must have a master starting
             %% concurrently with us. In that case we can safely decide to do
             %% nothing here, and the master will start us in
             %% master:init_with_existing_bq/3
-            {stop, normal, NotStarted}
+            {error, normal}
     end.
 
 init_it(Self, GM, Node, QName) ->
@@ -184,6 +185,12 @@ init_it(Self, GM, Node, QName) ->
 add_slave(Q = #amqqueue { slave_pids = SPids, gm_pids = GMPids }, New, GM) ->
     rabbit_mirror_queue_misc:store_updated_slaves(
       Q#amqqueue{slave_pids = SPids ++ [New], gm_pids = [{GM, New} | GMPids]}).
+
+handle_call(go, _From, {not_started, Q} = NotStarted) ->
+    case handle_go(Q) of
+        {ok, State}    -> {reply, ok, State};
+        {error, Error} -> {stop, Error, NotStarted}
+    end;
 
 handle_call({deliver, Delivery, true}, From, State) ->
     %% Synchronous, "mandatory" deliver mode.
@@ -220,8 +227,11 @@ handle_call({gm_deaths, LiveGMPids}, From,
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State).
 
-handle_cast(go, {not_started, _Q} = NotStarted) ->
-    handle_go(NotStarted);
+handle_cast(go, {not_started, Q} = NotStarted) ->
+    case handle_go(Q) of
+        {ok, State}    -> {noreply, State};
+        {error, Error} -> {stop, Error, NotStarted}
+    end;
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
