@@ -53,7 +53,7 @@ check_user_login(Username, []) ->
 
 check_user_login(Username, [{password, Password}]) ->
     ?L("CHECK: login for ~s", [Username]),
-    R = with_ldap({fill_user_dn_pattern(Username), Password},
+    R = with_ldap({ok, {fill_user_dn_pattern(Username), Password}},
                   fun(LDAP) -> do_login(Username, Password, LDAP) end),
     ?L("DECISION: login for ~s: ~p", [Username, log_result(R)]),
     R;
@@ -230,20 +230,31 @@ with_ldap(Creds, Fun) -> with_ldap(Creds, Fun, env(servers)).
 with_ldap(_Creds, _Fun, undefined) ->
     {error, no_ldap_servers_defined};
 
+with_ldap({error, _} = E, _Fun, _State) ->
+    E;
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
-with_ldap(Creds, Fun, Servers) ->
+with_ldap({ok, Creds}, Fun, Servers) ->
     Opts0 = [{ssl, env(use_ssl)}, {port, env(port)}],
+    SSLOpts = env(ssl_options),
+    Opts1 = case {SSLOpts, rabbit_misc:version_compare(
+                             erlang:system_info(version), "5.10")} of %% R16A
+                {[], _}  -> Opts0;
+                {_,  lt} -> exit({ssl_options_requires_min_r16a});
+                {_,  _}  -> [{sslopts, SSLOpts} | Opts0]
+            end,
     Opts = case env(log) of
+    %% We can't just pass through [] as sslopts in the old case, eldap
+    %% exit()s when you do that.
                network ->
                    Pre = "    LDAP network traffic: ",
                    rabbit_log:info(
                      "    LDAP connecting to servers: ~p~n", [Servers]),
                    [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
                              (2, S, A) -> rabbit_log:info   (Pre ++ S, A)
-                          end} | Opts0];
+                          end} | Opts1];
                _ ->
-                   Opts0
+                   Opts1
            end,
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
@@ -325,11 +336,11 @@ fill_user_dn_pattern(Username) ->
 creds(User) -> creds(User, env(other_bind)).
 
 creds(none, as_user) ->
-    exit(as_user_no_password);
+    {error, "'other_bind' set to 'as_user' but no password supplied"};
 creds(#user{impl = #impl{user_dn = UserDN, password = Password}}, as_user) ->
-    {UserDN, Password};
+    {ok, {UserDN, Password}};
 creds(_, Creds) ->
-    Creds.
+    {ok, Creds}.
 
 log(Fmt,  Args) -> case env(log) of
                        false -> ok;
