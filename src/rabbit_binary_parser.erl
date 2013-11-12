@@ -20,6 +20,7 @@
 
 -export([parse_table/1]).
 -export([ensure_content_decoded/1, clear_decoded_content/1]).
+-export([validate_utf8/1, assert_utf8/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -30,6 +31,8 @@
         (rabbit_types:content()) -> rabbit_types:decoded_content()).
 -spec(clear_decoded_content/1 ::
         (rabbit_types:content()) -> rabbit_types:undecoded_content()).
+-spec(validate_utf8/1 :: (binary()) -> 'ok' | 'error').
+-spec(assert_utf8/1 :: (binary()) -> 'ok').
 
 -endif.
 
@@ -99,3 +102,18 @@ clear_decoded_content(Content = #content{properties_bin = none}) ->
     Content;
 clear_decoded_content(Content = #content{}) ->
     Content#content{properties = none}.
+
+assert_utf8(B) ->
+    case validate_utf8(B) of
+        ok    -> ok;
+        error -> rabbit_misc:protocol_error(
+                   frame_error, "Malformed UTF-8 in shortstr", [])
+    end.
+
+validate_utf8(Bin) ->
+    try
+        xmerl_ucs:from_utf8(Bin),
+        ok
+    catch exit:{ucs, _} ->
+            error
+    end.
