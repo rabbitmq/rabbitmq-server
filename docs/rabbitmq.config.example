@@ -286,7 +286,19 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_shovel,
-  [{shovels,
+  [
+   %% Rather than specifying some values per-shovel, you can specify
+   %% them for all shovels here.
+   %%
+   %% {defaults,
+   %% [
+   %%  {prefetch_count,     0},
+   %%  {ack_mode,           on_confirm},
+   %%  {publish_fields,     []},
+   %%  {publish_properties, [{delivery_mode, 2}]},
+   %%  {reconnect_delay,    2.5}
+   %% ]},
+   {shovels,
     [%% A named shovel worker.
      %% {my_first_shovel,
      %%  [
@@ -336,15 +348,7 @@
      %% {reconnect_delay, 2.5}
 
      %% ]} %% End of my_first_shovel
-    ]},
-   %% Rather than specifying some values per-shovel, you can specify
-   %% them for all shovels here.
-   %%
-   %% {defaults, [{prefetch_count,     0},
-   %%             {ack_mode,           on_confirm},
-   %%             {publish_fields,     []},
-   %%             {publish_properties, [{delivery_mode, 2}]},
-   %%             {reconnect_delay,    2.5}]}
+    ]}
   ]},
 
  %% ----------------------------------------------------------------------------
