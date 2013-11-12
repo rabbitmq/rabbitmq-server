@@ -655,10 +655,10 @@ function update_filter_regex_mode() {
 
 function update_filter() {
     current_filter = $(this).val();
-    var filter_and_mode = $('#filter-and-mode');
-    filter_and_mode.removeClass('filter-active');
-    if (current_filter !== '') {
-        filter_and_mode.addClass('filter-active');
+    var table = $(this).parents('table').first();
+    table.removeClass('filter-active');
+    if ($(this).val() != '') {
+        table.addClass('filter-active');
     }
     update_filter_regex();
     partial_update();

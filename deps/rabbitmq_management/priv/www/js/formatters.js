@@ -796,15 +796,15 @@ function filter_ui(items) {
         for (var i in items2) items[i] = items2[i];
     }
 
-    var res = '<div class="filter"><div id="filter-and-mode"' +
+    var res = '<div class="filter"><table' +
         (current_filter == '' ? '' : ' class="filter-active"') +
-        '><table><tr><th>Filter:</th>' +
+        '><tr><th>Filter:</th>' +
         '<td><input id="filter" type="text" value="' +
         fmt_escape_html(current_filter) + '"/>' +
-        '<label for="filter-regex-mode">Regex:</label><span class="help" id="filter-regex">(?)</span>' +
         '<input type="checkbox" name="filter-regex-mode" id="filter-regex-mode"' +
         (current_filter_regex_on ? ' checked' : '') +
-        '/></td></tr></table></div>';
+        '/><label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span>' +
+        '</td></tr></table>';
 
     function items_desc(l) {
         return l == 1 ? (l + ' item') : (l + ' items');
