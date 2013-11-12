@@ -23,7 +23,7 @@
 
 non_existent_exchange_test() ->
     {ok, Connection} = test_util:new_connection(),
-    X = test_util:uuid(),
+    X = test_util:random_string(),
     RoutingKey = <<"a">>,
     Payload = <<"foobar">>,
     {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -39,14 +39,14 @@ non_existent_exchange_test() ->
     {ok, _} = amqp_connection:open_channel(Connection),
     #'exchange.declare_ok'{} =
         amqp_channel:call(OtherChannel,
-                          #'exchange.declare'{exchange = test_util:uuid()}),
+                          #'exchange.declare'{exchange = test_util:random_string()}),
     amqp_connection:close(Connection).
 
 bogus_rpc_test() ->
     {ok, Connection} = test_util:new_connection(),
-    X = test_util:uuid(),
-    Q = test_util:uuid(),
-    R = test_util:uuid(),
+    X = test_util:random_string(),
+    Q = test_util:random_string(),
+    R = test_util:random_string(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     %% Deliberately bind to a non-existent queue
@@ -116,7 +116,7 @@ shortstr_overflow_property_test() ->
     {ok, Connection} = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
-    Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
+    Q = test_util:random_string(), X = test_util:random_string(), Key = test_util:random_string(),
     Payload = <<"foobar">>,
     test_util:setup_exchange(Channel, Q, X, Key),
     Publish = #'basic.publish'{exchange = X, routing_key = Key},
@@ -135,7 +135,7 @@ shortstr_overflow_field_test() ->
     {ok, Connection} = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
-    Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
+    Q = test_util:random_string(), X = test_util:random_string(), Key = test_util:random_string(),
     test_util:setup_exchange(Channel, Q, X, Key),
     ?assertExit(_, amqp_channel:call(
                        Channel, #'basic.consume'{queue = Q,
@@ -181,15 +181,15 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
     end.
 
 non_existent_user_test() ->
-    Params = [{username, test_util:uuid()}, {password, test_util:uuid()}],
+    Params = [{username, test_util:random_string()}, {password, test_util:random_string()}],
     ?assertMatch({error, {auth_failure, _}}, test_util:new_connection(Params)).
 
 invalid_password_test() ->
-    Params = [{username, <<"guest">>}, {password, test_util:uuid()}],
+    Params = [{username, <<"guest">>}, {password, test_util:random_string()}],
     ?assertMatch({error, {auth_failure, _}}, test_util:new_connection(Params)).
 
 non_existent_vhost_test() ->
-    Params = [{virtual_host, test_util:uuid()}],
+    Params = [{virtual_host, test_util:random_string()}],
     ?assertMatch({error, access_refused}, test_util:new_connection(Params)).
 
 no_permission_test() ->
