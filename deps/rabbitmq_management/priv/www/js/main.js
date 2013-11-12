@@ -527,6 +527,7 @@ function postprocess() {
         $(this).parents('form').submit();
     });
     $('#filter').die().live('keyup', debounce(update_filter, 500));
+    $('#filter-regex-mode').change(debounce(update_filter_regex_mode, 500));
     $('#truncate').die().live('keyup', debounce(update_truncate, 500));
     if (! user_administrator) {
         $('.administrator-only').remove();
@@ -637,13 +638,29 @@ function multifield_input(prefix, suffix, type) {
     }
 }
 
+function update_filter_regex() {
+    current_filter_regex = null;
+    if(current_filter_regex_on && $.trim(current_filter).length > 0) {
+        try {
+            current_filter_regex = new RegExp(current_filter,'i');
+        } catch (ignored) {}
+    }
+}
+
+function update_filter_regex_mode() {
+    current_filter_regex_on = $(this).is(':checked');
+    update_filter_regex();
+    partial_update();
+}
+
 function update_filter() {
     current_filter = $(this).val();
-    var table = $(this).parents('table').first();
-    table.removeClass('filter-active');
-    if ($(this).val() != '') {
-        table.addClass('filter-active');
+    var filter_and_mode = $('#filter-and-mode');
+    filter_and_mode.removeClass('filter-active');
+    if (current_filter !== '') {
+        filter_and_mode.addClass('filter-active');
     }
+    update_filter_regex();
     partial_update();
 }
 

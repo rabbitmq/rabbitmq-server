@@ -250,6 +250,17 @@ HELP = {
 
     'handle-exe' : 'In order to monitor the number of file descriptors in use on Windows, RabbitMQ needs the <a href="http://technet.microsoft.com/en-us/sysinternals/bb896655" target="_blank">handle.exe command line tool from Microsoft</a>. Download it and place it in the path (e.g. in C:\Windows).',
 
+    'filter-regex' : 
+    'Whether to enable regular expression matching.\
+      <p>Specifically, the choice is between the following implementations: <dl>\
+      <dt>unchecked</dt>\
+      <dd>literal match</dd>\
+      <dd><code>name.indexOf(<i>pattern</i>) != -1</code></dd>\
+      <dt>checked</dt>\
+      <dd>regular expression match</dd>\
+      <dd><code>new RegExp(<i>pattern</i>, &#39;i&#39;).test(name)</code></dd>\
+      </dl></p>',
+
     'foo': 'foo' // No comma.
 };
 

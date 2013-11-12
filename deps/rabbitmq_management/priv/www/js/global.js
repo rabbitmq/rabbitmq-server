@@ -152,6 +152,8 @@ var current_sort;
 var current_sort_reverse = false;
 
 var current_filter = '';
+var current_filter_regex_on = false;
+var current_filter_regex;
 var current_truncate;
 
 // The timer object for auto-updates, and how often it goes off

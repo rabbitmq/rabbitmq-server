@@ -46,7 +46,8 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .tag-link:hover { color: #888; }
 
 .filter { overflow: auto; width: 100%; margin-bottom: 10px; }
-.filter table { float: left; }
+.filter #filter-and-mode { float: left; }
+.filter label { padding: 4px; }
 .filter p { float: right; padding: 4px; margin: 0; }
 .filter p.filter-warning { border-radius: 5px; background: #ff8; }
 .filter-active { background: #99ebff; border-radius: 5px; }

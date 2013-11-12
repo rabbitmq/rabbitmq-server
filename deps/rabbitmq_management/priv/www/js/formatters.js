@@ -641,8 +641,16 @@ function _link_to(name, url, highlight, args) {
 
 function fmt_highlight_filter(text) {
     if (current_filter == '') return fmt_escape_html(text);
-    var ix = text.toLowerCase().indexOf(current_filter.toLowerCase());
-    var l = current_filter.length;
+    
+    var text_to_match = current_filter.toLowerCase();
+    if (current_filter_regex) {
+        var potential_match = current_filter_regex.exec(text.toLowerCase());
+        if (potential_match) {
+            text_to_match = potential_match[0];
+        }
+    }
+    var ix = text.toLowerCase().indexOf(text_to_match);
+    var l = text_to_match.length;
     if (ix == -1) {
         return fmt_escape_html(text);
     }
@@ -772,7 +780,15 @@ function filter_ui(items) {
         var items2 = [];
         for (var i in items) {
             var item = items[i];
-            if (item.name.toLowerCase().indexOf(current_filter.toLowerCase()) != -1) {
+            var item_name = item.name.toLowerCase();
+            if(current_filter_regex_on) {
+                if(!current_filter_regex) {
+                    //if regex matching is on, but regex pattern is invalid, include all items
+                    items2.push(item);
+                } else if(current_filter_regex.test(item_name)) {
+                    items2.push(item);              
+                }
+            } else if (item_name.indexOf(current_filter.toLowerCase()) != -1) {
                 items2.push(item);
             }
         }
@@ -780,11 +796,15 @@ function filter_ui(items) {
         for (var i in items2) items[i] = items2[i];
     }
 
-    var res = '<div class="filter"><table' +
+    var res = '<div class="filter"><div id="filter-and-mode"' +
         (current_filter == '' ? '' : ' class="filter-active"') +
-        '><tr><th>Filter:</th>' +
+        '><table><tr><th>Filter:</th>' +
         '<td><input id="filter" type="text" value="' +
-        fmt_escape_html(current_filter) + '"/></td></tr></table>';
+        fmt_escape_html(current_filter) + '"/>' +
+        '<label for="filter-regex-mode">Regex:</label><span class="help" id="filter-regex">(?)</span>' +
+        '<input type="checkbox" name="filter-regex-mode" id="filter-regex-mode"' +
+        (current_filter_regex_on ? ' checked' : '') +
+        '/></td></tr></table></div>';
 
     function items_desc(l) {
         return l == 1 ? (l + ' item') : (l + ' items');
