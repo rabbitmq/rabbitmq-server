@@ -128,15 +128,15 @@ handle_info(#'channel.flow'{active = false},
 handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
             State = #state{config = #shovel{ack_mode = on_confirm}}) ->
     {noreply, confirm_to_inbound(
-                fun (DTag, Multiple) ->
-                        #'basic.ack'{delivery_tag = DTag, multiple = Multiple}
+                fun (DTag, Multi) ->
+                        #'basic.ack'{delivery_tag = DTag, multiple = Multi}
                 end, Seq, Multiple, State)};
 
 handle_info(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
             State = #state{config = #shovel{ack_mode = on_confirm}}) ->
     {noreply, confirm_to_inbound(
-                fun (DTag, Multiple) ->
-                        #'basic.nack'{delivery_tag = DTag, multiple = Multiple}
+                fun (DTag, Multi) ->
+                        #'basic.nack'{delivery_tag = DTag, multiple = Multi}
                 end, Seq, Multiple, State)};
 
 handle_info(#'basic.cancel'{}, State = #state{name = Name}) ->
