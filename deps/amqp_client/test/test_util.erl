@@ -613,6 +613,7 @@ simultaneous_close_test() ->
                                                 routing_key = <<"a">>},
                                #amqp_msg{payload = <<"foobar">>}),
     try amqp_channel:close(Channel1) of
+        ok      -> wait_for_death(Channel1);
         closing -> wait_for_death(Channel1)
     catch
         exit:{noproc, _}                                              -> ok;
