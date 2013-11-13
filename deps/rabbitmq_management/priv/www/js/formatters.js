@@ -641,7 +641,7 @@ function _link_to(name, url, highlight, args) {
 
 function fmt_highlight_filter(text) {
     if (current_filter == '') return fmt_escape_html(text);
-    
+
     var text_to_match = current_filter.toLowerCase();
     if (current_filter_regex) {
         var potential_match = current_filter_regex.exec(text.toLowerCase());
@@ -781,14 +781,10 @@ function filter_ui(items) {
         for (var i in items) {
             var item = items[i];
             var item_name = item.name.toLowerCase();
-            if(current_filter_regex_on) {
-                if(!current_filter_regex) {
-                    //if regex matching is on, but regex pattern is invalid, include all items
-                    items2.push(item);
-                } else if(current_filter_regex.test(item_name)) {
-                    items2.push(item);              
-                }
-            } else if (item_name.indexOf(current_filter.toLowerCase()) != -1) {
+            if ((current_filter_regex_on &&
+                 current_filter_regex &&
+                 current_filter_regex.test(item_name)) ||
+                item_name.indexOf(current_filter.toLowerCase()) != -1) {
                 items2.push(item);
             }
         }

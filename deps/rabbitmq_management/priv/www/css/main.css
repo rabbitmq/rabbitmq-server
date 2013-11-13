@@ -49,7 +49,7 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .filter table { float: left; }
 .filter label { margin-top: 4px;}
 .filter input#filter-regex-mode { vertical-align: middle; }
-.filter p { float: right; padding: 4px; margin: 0; }
+.filter p#filter-truncate { float: right; padding: 4px; margin: 0; }
 .filter p.filter-warning { border-radius: 5px; background: #ff8; }
 .filter-active { background: #99ebff; border-radius: 5px; }
 .filter-highlight { background: #99ebff; }
