@@ -1135,6 +1135,10 @@
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>consumer_bound</term>
+                <listitem><para>True if the queue could deliver messages faster if there were more consumers, the consumers were faster, or the consumers had a greater prefetch count.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>memory</term>
                 <listitem><para>Bytes of memory consumed by the Erlang process associated with the
                   queue, including stack, heap and internal structures.</para></listitem>
