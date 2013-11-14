@@ -32,6 +32,14 @@ HELP = {
     'queue-persistent':
       'Number of messages in the queue which are persistent. These messages will be on disc but may also be available in memory. Note that if a message is published as persistent but routed to a transient queue it is not considered persistent by that queue, so transient queues will always report 0 persistent messages.',
 
+    'queue-consumer-bound':
+      'A queue is <i>consumer-bound</i> if it could deliver messages faster if:\
+        <ul> \
+          <li>There were more consumers or</li> \
+          <li>The consumers were faster or</li> \
+          <li>The consumers had a higher prefetch count</li> \
+        </ul>',
+
     'internal-users-only':
       'Only users within the internal RabbitMQ database are shown here. Other users (e.g. those authenticated over LDAP) will not appear.',
 
