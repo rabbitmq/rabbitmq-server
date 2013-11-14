@@ -27,8 +27,7 @@
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
-                name, config, blocked, msg_buf, inbound_params,
-                outbound_params, unacked}).
+                name, config, inbound_params, outbound_params, unacked}).
 
 start_link(Name, Config) ->
     ok = rabbit_shovel_status:report(Name, starting),
@@ -69,8 +68,6 @@ handle_cast(init, State = #state{config = Config}) ->
                           #'basic.qos'{
                             prefetch_count = Config#shovel.prefetch_count}),
 
-    ok = amqp_channel:register_flow_handler(OutboundChan, self()),
-
     case Config#shovel.ack_mode of
         on_confirm ->
             #'confirm.select_ok'{} =
@@ -90,7 +87,6 @@ handle_cast(init, State = #state{config = Config}) ->
     State1 =
         State#state{inbound_conn = InboundConn, inbound_ch = InboundChan,
                     outbound_conn = OutboundConn, outbound_ch = OutboundChan,
-                    blocked = false, msg_buf = queue:new(),
                     inbound_params = InboundParams,
                     outbound_params = OutboundParams,
                     unacked = gb_trees:empty()},
@@ -108,22 +104,6 @@ handle_info({#'basic.deliver'{delivery_tag = Tag,
     Method1 = (Config#shovel.publish_fields)(Method),
     Msg1 = Msg#amqp_msg{props = (Config#shovel.publish_properties)(Props)},
     {noreply, publish(Tag, Method1, Msg1, State)};
-
-handle_info(#'channel.flow'{active = true},
-            State = #state{inbound_ch = InboundChan}) ->
-    ok = report_status(running, State),
-    State1 = drain_buffer(State#state{blocked = false}),
-    ok = case State1#state.blocked of
-             true  -> report_status(blocked, State);
-             false -> channel_flow(InboundChan, true)
-         end,
-    {noreply, State1};
-
-handle_info(#'channel.flow'{active = false},
-            State = #state{inbound_ch = InboundChan}) ->
-    ok = report_status(blocked, State),
-    ok = channel_flow(InboundChan, false),
-    {noreply, State#state{blocked = true}};
 
 handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
             State = #state{config = #shovel{ack_mode = on_confirm}}) ->
@@ -198,48 +178,19 @@ report_status(Verb, State) ->
 
 publish(Tag, Method, Msg,
         State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
-                       config = Config, blocked = false, msg_buf = MsgBuf,
-                       unacked = Unacked}) ->
+                       config = Config, unacked = Unacked}) ->
     Seq = case Config#shovel.ack_mode of
               on_confirm  -> amqp_channel:next_publish_seqno(OutboundChan);
               _           -> undefined
           end,
-    case amqp_channel:call(OutboundChan, Method, Msg) of
-        ok ->
-            case Config#shovel.ack_mode of
-                no_ack ->
-                    State;
-                on_confirm ->
-                    State#state{unacked = gb_trees:insert(Seq, Tag, Unacked)};
-                on_publish ->
-                    ok = amqp_channel:cast(
-                           InboundChan, #'basic.ack'{delivery_tag = Tag}),
-                    State
-            end;
-        blocked ->
-            ok = report_status(blocked, State),
-            ok = channel_flow(InboundChan, false),
-            State#state{blocked = true,
-                        msg_buf = queue:in_r({Tag, Method, Msg}, MsgBuf)}
-    end;
-publish(Tag, Method, Msg, State = #state{blocked = true, msg_buf = MsgBuf}) ->
-    State#state{msg_buf = queue:in({Tag, Method, Msg}, MsgBuf)}.
-
-drain_buffer(State = #state{blocked = true}) ->
-    State;
-drain_buffer(State = #state{blocked = false, msg_buf = MsgBuf}) ->
-    case queue:out(MsgBuf) of
-        {empty, _MsgBuf} ->
-            State;
-        {{value, {Tag, Method, Msg}}, MsgBuf1} ->
-            drain_buffer(publish(Tag, Method, Msg,
-                                 State#state{msg_buf = MsgBuf1}))
+    ok = amqp_channel:call(OutboundChan, Method, Msg),
+    case Config#shovel.ack_mode of
+        no_ack     -> State;
+        on_confirm -> State#state{unacked = gb_trees:insert(Seq, Tag, Unacked)};
+        on_publish -> ok = amqp_channel:cast(
+                             InboundChan, #'basic.ack'{delivery_tag = Tag}),
+                      State
     end.
-
-channel_flow(Chan, Active) ->
-    #'channel.flow_ok'{active = Active} =
-        amqp_channel:call(Chan, #'channel.flow'{active = Active}),
-    ok.
 
 make_conn_and_chan(AmqpParams) ->
     AmqpParam = lists:nth(random:uniform(length(AmqpParams)), AmqpParams),
