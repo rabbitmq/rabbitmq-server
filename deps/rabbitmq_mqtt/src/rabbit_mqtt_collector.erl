@@ -18,7 +18,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, register/2, unregister/1]).
+-export([start_link/0, register/2, unregister/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -35,8 +35,8 @@ start_link() ->
 register(ClientId, Pid) ->
     gen_server:call(rabbit_mqtt_collector, {register, ClientId, Pid}, infinity).
 
-unregister(ClientId) ->
-    gen_server:call(rabbit_mqtt_collector, {unregister, ClientId}, infinity).
+unregister(ClientId, Pid) ->
+    gen_server:call(rabbit_mqtt_collector, {unregister, ClientId, Pid}, infinity).
 
 %%----------------------------------------------------------------------------
 
@@ -49,7 +49,7 @@ handle_call({register, ClientId, Pid}, _From,
             State = #state{client_ids = Ids}) ->
     Ids1 = case dict:find(ClientId, Ids) of
                {ok, {OldPid, MRef}} when Pid =/= OldPid ->
-                   catch gen_server2:call(OldPid, duplicate_id, infinity),
+                   catch gen_server2:cast(OldPid, duplicate_id),
                    erlang:demonitor(MRef),
                    dict:erase(ClientId, Ids);
                error ->
@@ -58,11 +58,11 @@ handle_call({register, ClientId, Pid}, _From,
     Ids2 = dict:store(ClientId, {Pid, erlang:monitor(process, Pid)}, Ids1),
     {reply, ok, State#state{client_ids = Ids2}};
 
-handle_call({unregister, ClientId}, _From, State = #state{client_ids = Ids}) ->
+handle_call({unregister, ClientId, Pid}, _From, State = #state{client_ids = Ids}) ->
     {Reply, Ids1} = case dict:find(ClientId, Ids) of
-                        {ok, {_Pid, MRef}} -> erlang:demonitor(MRef),
-                                              {ok, dict:erase(ClientId, Ids)};
-                        error              -> {not_registered, Ids}
+                        {ok, {Pid, MRef}} -> erlang:demonitor(MRef),
+                                             {ok, dict:erase(ClientId, Ids)};
+                        _                 -> {ok, Ids}
                     end,
     {reply, Reply, State#state{ client_ids = Ids1 }};
 
