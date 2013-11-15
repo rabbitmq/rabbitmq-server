@@ -23,6 +23,7 @@
 -define(UNSENT_MESSAGE_LIMIT,          200).
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+-define(CONSUMER_BIAS,                 0.8).
 
 -export([start_link/1, info_keys/0]).
 
@@ -1095,16 +1096,16 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
 
 %%----------------------------------------------------------------------------
 
-prioritise_call(Msg, _From, _Len, _State) ->
+prioritise_call(Msg, _From, _Len, State) ->
     case Msg of
-        info                                 -> 9;
-        {info, _Items}                       -> 9;
-        consumers                            -> 9;
-        stat                                 -> 7;
-        _                                    -> 0
+        info                                       -> 9;
+        {info, _Items}                             -> 9;
+        consumers                                  -> 9;
+        stat                                       -> 7;
+        {basic_consume, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
+        {basic_cancel, _, _, _}                    -> consumer_bias(State);
+        _                                          -> 0
     end.
-
--define(BIAS, 0.8).
 
 prioritise_cast(Msg, _Len, State) ->
     case Msg of
@@ -1112,15 +1113,19 @@ prioritise_cast(Msg, _Len, State) ->
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
-        {notify_sent, _ChPid, _Credit}       ->
-            #q{backing_queue = BQ, backing_queue_state = BQS} = State,
-            {Ingress, Egress} = BQ:msg_rates(BQS),
-            case ?BIAS of
-                B when B > 0.0 andalso Ingress >= (1.0 - B) * Egress  -> +1;
-                B when B < 0.0 andalso Egress  >= (1.0 + B) * Ingress -> -1;
-                _                                                     -> 0
-            end;
+        {ack, _AckTags, _ChPid}              -> consumer_bias(State);
+        {reject, _AckTags, _Requeue, _ChPid} -> consumer_bias(State);
+        {notify_sent, _ChPid, _Credit}       -> consumer_bias(State);
+        {resume, _ChPid}                     -> consumer_bias(State);
         _                                    -> 0
+    end.
+
+consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    {Ingress, Egress} = BQ:msg_rates(BQS),
+    case ?CONSUMER_BIAS of
+        B when B > 0.0 andalso Ingress >= (1.0 - B) * Egress  -> +1;
+        B when B < 0.0 andalso Egress  >= (1.0 + B) * Ingress -> -1;
+        _                                                     -> 0
     end.
 
 prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
