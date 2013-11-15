@@ -1114,9 +1114,7 @@ prioritise_cast(Msg, _Len, State) ->
         {run_backing_queue, _Mod, _Fun}      -> 6;
         {notify_sent, _ChPid, _Credit}       ->
             #q{backing_queue = BQ, backing_queue_state = BQS} = State,
-            BQSProps = BQ:status(BQS),
-            [Ingress, Egress] = [proplists:get_value(K, BQSProps) ||
-                                    K <- [avg_ingress_rate, avg_egress_rate]],
+            {Ingress, Egress} = BQ:msg_rates(BQS),
             case ?BIAS of
                 B when B > 0.0 andalso Ingress >= (1.0 - B) * Egress  -> +1;
                 B when B < 0.0 andalso Egress  >= (1.0 + B) * Ingress -> -1;

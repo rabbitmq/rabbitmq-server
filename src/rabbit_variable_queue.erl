@@ -21,8 +21,8 @@
          dropwhile/2, fetchwhile/4,
          fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3, len/1,
          is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
-         needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, multiple_routing_keys/0]).
+         needs_timeout/1, timeout/1, handle_pre_hibernate/1, msg_rates/1,
+         status/1, invoke/3, is_duplicate/2, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
@@ -788,6 +788,10 @@ timeout(State = #vqstate { index_state = IndexState }) ->
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
+
+msg_rates(#vqstate { rates = #rates { avg_egress  = AvgEgressRate,
+                                      avg_ingress = AvgIngressRate } }) ->
+    {AvgIngressRate, AvgEgressRate}.
 
 status(#vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
