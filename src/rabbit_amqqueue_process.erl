@@ -59,12 +59,6 @@
 
 -record(consumer, {tag, ack_required, args}).
 
--record(cu_info, {inactive,
-                  active,
-                  inactive_dur,
-                  active_dur,
-                  avg}).
-
 %% These are held in our process dictionary
 -record(cr, {ch_pid,
              monitor_ref,
@@ -157,10 +151,7 @@ init_state(Q) ->
                exclusive_consumer  = none,
                has_had_consumers   = false,
                active_consumers    = priority_queue:new(),
-               consumer_use_info   = #cu_info{inactive     = now_micros(),
-                                              active       = now_micros(),
-                                              inactive_dur = 1,
-                                              active_dur   = 1},
+               consumer_use_info   = {inactive, now_micros(), 0, 0.0},
                senders             = pmon:new(delegate),
                msg_id_to_channel   = gb_trees:empty(),
                status              = running,
@@ -549,33 +540,24 @@ deliver_from_queue_deliver(AckRequired, State) ->
     {Result, State1} = fetch(AckRequired, State),
     {Result, is_empty(State1), State1}.
 
-update_cu(#cu_info{active   = WhenActive,
-                   inactive = WhenInactive} = CUInfo, inactive) ->
-    case WhenInactive > WhenActive of
-        true  -> CUInfo;
-        false -> Now = now_micros(),
-                 CUInfo#cu_info{active_dur = Now - WhenActive,
-                                inactive   = Now}
-    end;
-update_cu(#cu_info{inactive   = WhenInactive,
-                   active     = WhenActive,
-                   active_dur = Active,
-                   avg        = Avg} = CUInfo, active) ->
-    case WhenActive > WhenInactive of
-        true  -> CUInfo;
-        false -> Now = now_micros(),
-                 Inactive = Now - WhenInactive,
-                 Time = Inactive + Active,
-                 Ratio = Active / Time,
-                 Weight = erlang:min(1, Time / 1000000),
-                 Avg1 = case Avg of
-                            undefined -> Ratio;
-                            _         -> Ratio * Weight + Avg * (1 - Weight)
-                        end,
-                 CUInfo#cu_info{inactive_dur = Inactive,
-                                active       = Now,
-                                avg          = Avg1}
-    end.
+update_cu({inactive, _,     _,      _}   = CUInfo, inactive) ->
+    CUInfo;
+update_cu({active,   _,             _}   = CUInfo, active) ->
+    CUInfo;
+update_cu({active,   Since,         Avg} = CUInfo, inactive) ->
+    Now = now_micros(),
+    {inactive, Now, Now - Since, Avg};
+update_cu({inactive, Since, Active, Avg} = CUInfo, active) ->
+    Now = now_micros(),
+    Inactive = Now - Since,
+    Time = Inactive + Active,
+    Ratio = Active / Time,
+    Weight = erlang:min(1, Time / 1000000),
+    Avg1 = case Avg of
+               undefined -> Ratio;
+               _         -> Ratio * Weight + Avg * (1 - Weight)
+           end,
+    {active, Now, Avg1}.
 
 confirm_messages([], State) ->
     State;
@@ -1079,21 +1061,25 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     consumer_count();
-i(consumer_utilisation,
-  #q{consumer_use_info = #cu_info{active   = WhenActive,
-                                  inactive = WhenInactive,
-                                  avg      = Avg}}) ->
+i(consumer_utilisation, #q{consumer_use_info = {active, Since, Avg}}) ->
     Now = now_micros(),
-    case Now - WhenInactive < 5000000 of
-        false -> case WhenInactive > WhenActive of
-                     true  -> inactive;
-                     false -> active
-                 end;
-        true  -> case Avg of
+    case Now - Since > 1000000 of
+        true  -> active;
+        false -> case Avg of
                      undefined -> noavg;
                      _         -> trunc(Avg * 100)
                  end
     end;
+i(consumer_utilisation, #q{consumer_use_info = {inactive, Since, _, Avg}}) ->
+    Now = now_micros(),
+    case Now - Since > 1000000 of
+        true  -> inactive;
+        false -> case Avg of
+                     undefined -> noavg;
+                     _         -> trunc(Avg * 100)
+                 end
+    end;
+
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
