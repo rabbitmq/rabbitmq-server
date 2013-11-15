@@ -39,7 +39,7 @@
             backing_queue,
             backing_queue_state,
             active_consumers,
-            consumer_bound_info,
+            consumer_use_info,
             expires,
             sync_timer_ref,
             rate_timer_ref,
@@ -157,7 +157,7 @@ init_state(Q) ->
                exclusive_consumer  = none,
                has_had_consumers   = false,
                active_consumers    = priority_queue:new(),
-               consumer_bound_info = #cu_info{inactive     = erlang:now(),
+               consumer_use_info   = #cu_info{inactive     = erlang:now(),
                                               active       = erlang:now(),
                                               inactive_dur = 1,
                                               active_dur   = 1},
@@ -494,11 +494,11 @@ send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
 deliver_msgs_to_consumers(_DeliverFun, true, State) ->
     {true, State};
 deliver_msgs_to_consumers(DeliverFun, false,
-                          State = #q{active_consumers    = ActiveConsumers,
-                                     consumer_bound_info = CUInfo}) ->
+                          State = #q{active_consumers  = ActiveConsumers,
+                                     consumer_use_info = CUInfo}) ->
     case priority_queue:out_p(ActiveConsumers) of
         {empty, _} ->
-            {false, State#q{consumer_bound_info = update_cu(CUInfo, inactive)}};
+            {false, State#q{consumer_use_info = update_cu(CUInfo, inactive)}};
         {{value, QEntry, Priority}, Tail} ->
             {Stop, State1} = deliver_msg_to_consumer(
                                DeliverFun, QEntry, Priority,
@@ -754,7 +754,7 @@ possibly_unblock(State, ChPid, Update) ->
                      end
     end.
 
-unblock(State = #q{consumer_bound_info = CUInfo}, C = #cr{limiter = Limiter}) ->
+unblock(State = #q{consumer_use_info = CUInfo}, C = #cr{limiter = Limiter}) ->
     case lists:partition(
            fun({_P, {_ChPid, #consumer{tag = CTag}}}) ->
                    rabbit_limiter:is_consumer_blocked(Limiter, CTag)
@@ -766,7 +766,7 @@ unblock(State = #q{consumer_bound_info = CUInfo}, C = #cr{limiter = Limiter}) ->
             BlockedQ   = priority_queue:from_list(Blocked),
             UnblockedQ = priority_queue:from_list(Unblocked),
             update_ch_record(C#cr{blocked_consumers = BlockedQ}),
-            State1 = State#q{consumer_bound_info = update_cu(CUInfo, active)},
+            State1 = State#q{consumer_use_info = update_cu(CUInfo, active)},
             AC1 = priority_queue:join(State1#q.active_consumers, UnblockedQ),
             State2 = State1#q{active_consumers = AC1},
             [notify_decorators(
@@ -1080,9 +1080,9 @@ i(messages, State) ->
 i(consumers, _) ->
     consumer_count();
 i(consumer_utilisation,
-  #q{consumer_bound_info = #cu_info{active       = WhenActive,
-                                    inactive     = WhenInactive,
-                                    avg          = Avg}}) ->
+  #q{consumer_use_info = #cu_info{active   = WhenActive,
+                                  inactive = WhenInactive,
+                                  avg      = Avg}}) ->
     Now = erlang:now(),
     case timer:now_diff(Now, WhenInactive) < 5000000 of
         false -> case timer:now_diff(WhenInactive, WhenActive) > 0 of
