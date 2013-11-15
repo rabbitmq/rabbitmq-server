@@ -540,14 +540,14 @@ deliver_from_queue_deliver(AckRequired, State) ->
     {Result, State1} = fetch(AckRequired, State),
     {Result, is_empty(State1), State1}.
 
-update_cu({inactive, _,     _,      _}   = CUInfo, inactive) ->
+update_cu({inactive, _, _, _}   = CUInfo, inactive) ->
     CUInfo;
-update_cu({active,   _,             _}   = CUInfo, active) ->
+update_cu({active,   _, _}      = CUInfo, active) ->
     CUInfo;
-update_cu({active,   Since,         Avg} = CUInfo, inactive) ->
+update_cu({active,   Since,         Avg}, inactive) ->
     Now = now_micros(),
     {inactive, Now, Now - Since, Avg};
-update_cu({inactive, Since, Active, Avg} = CUInfo, active) ->
+update_cu({inactive, Since, Active, Avg}, active) ->
     Now = now_micros(),
     Inactive = Now - Since,
     Time = Inactive + Active,
