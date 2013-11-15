@@ -1104,12 +1104,24 @@ prioritise_call(Msg, _From, _Len, _State) ->
         _                                    -> 0
     end.
 
-prioritise_cast(Msg, _Len, _State) ->
+-define(BIAS, 0.8).
+
+prioritise_cast(Msg, _Len, State) ->
     case Msg of
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
+        {notify_sent, _ChPid, _Credit}       ->
+            #q{backing_queue = BQ, backing_queue_state = BQS} = State,
+            BQSProps = BQ:status(BQS),
+            [Ingress, Egress] = [proplists:get_value(K, BQSProps) ||
+                                    K <- [avg_ingress_rate, avg_egress_rate]],
+            case ?BIAS of
+                B when B > 0.0 andalso Ingress >= (1.0 - B) * Egress  -> +1;
+                B when B < 0.0 andalso Egress  >= (1.0 + B) * Ingress -> -1;
+                _                                                     -> 0
+            end;
         _                                    -> 0
     end.
 
