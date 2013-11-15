@@ -59,7 +59,7 @@
 
 -record(consumer, {tag, ack_required, args}).
 
--record(cb_info, {inactive,
+-record(cu_info, {inactive,
                   active,
                   inactive_dur,
                   active_dur,
@@ -157,7 +157,7 @@ init_state(Q) ->
                exclusive_consumer  = none,
                has_had_consumers   = false,
                active_consumers    = priority_queue:new(),
-               consumer_bound_info = #cb_info{inactive     = erlang:now(),
+               consumer_bound_info = #cu_info{inactive     = erlang:now(),
                                               active       = erlang:now(),
                                               inactive_dur = 1,
                                               active_dur   = 1},
@@ -495,10 +495,10 @@ deliver_msgs_to_consumers(_DeliverFun, true, State) ->
     {true, State};
 deliver_msgs_to_consumers(DeliverFun, false,
                           State = #q{active_consumers    = ActiveConsumers,
-                                     consumer_bound_info = CBInfo}) ->
+                                     consumer_bound_info = CUInfo}) ->
     case priority_queue:out_p(ActiveConsumers) of
         {empty, _} ->
-            {false, State#q{consumer_bound_info = update_cb(CBInfo, inactive)}};
+            {false, State#q{consumer_bound_info = update_cu(CUInfo, inactive)}};
         {{value, QEntry, Priority}, Tail} ->
             {Stop, State1} = deliver_msg_to_consumer(
                                DeliverFun, QEntry, Priority,
@@ -549,20 +549,20 @@ deliver_from_queue_deliver(AckRequired, State) ->
     {Result, State1} = fetch(AckRequired, State),
     {Result, is_empty(State1), State1}.
 
-update_cb(#cb_info{active   = WhenActive,
-                   inactive = WhenInactive} = CBInfo, inactive) ->
+update_cu(#cu_info{active   = WhenActive,
+                   inactive = WhenInactive} = CUInfo, inactive) ->
     case timer:now_diff(WhenInactive, WhenActive) > 0 of
-        true  -> CBInfo;
+        true  -> CUInfo;
         false -> Now = erlang:now(),
-                 CBInfo#cb_info{active_dur = timer:now_diff(Now, WhenActive),
+                 CUInfo#cu_info{active_dur = timer:now_diff(Now, WhenActive),
                                 inactive   = Now}
     end;
-update_cb(#cb_info{inactive   = WhenInactive,
+update_cu(#cu_info{inactive   = WhenInactive,
                    active     = WhenActive,
                    active_dur = Active,
-                   avg        = Avg} = CBInfo, active) ->
+                   avg        = Avg} = CUInfo, active) ->
     case timer:now_diff(WhenActive, WhenInactive) > 0 of
-        true  -> CBInfo;
+        true  -> CUInfo;
         false -> Now = erlang:now(),
                  Inactive = timer:now_diff(Now, WhenInactive),
                  Time = Inactive + Active,
@@ -572,7 +572,7 @@ update_cb(#cb_info{inactive   = WhenInactive,
                             undefined -> Ratio;
                             _         -> Ratio * Weight + Avg * (1 - Weight)
                         end,
-                 CBInfo#cb_info{inactive_dur = Inactive,
+                 CUInfo#cu_info{inactive_dur = Inactive,
                                 active       = Now,
                                 avg          = Avg1}
     end.
@@ -754,7 +754,7 @@ possibly_unblock(State, ChPid, Update) ->
                      end
     end.
 
-unblock(State = #q{consumer_bound_info = CBInfo}, C = #cr{limiter = Limiter}) ->
+unblock(State = #q{consumer_bound_info = CUInfo}, C = #cr{limiter = Limiter}) ->
     case lists:partition(
            fun({_P, {_ChPid, #consumer{tag = CTag}}}) ->
                    rabbit_limiter:is_consumer_blocked(Limiter, CTag)
@@ -766,7 +766,7 @@ unblock(State = #q{consumer_bound_info = CBInfo}, C = #cr{limiter = Limiter}) ->
             BlockedQ   = priority_queue:from_list(Blocked),
             UnblockedQ = priority_queue:from_list(Unblocked),
             update_ch_record(C#cr{blocked_consumers = BlockedQ}),
-            State1 = State#q{consumer_bound_info = update_cb(CBInfo, active)},
+            State1 = State#q{consumer_bound_info = update_cu(CUInfo, active)},
             AC1 = priority_queue:join(State1#q.active_consumers, UnblockedQ),
             State2 = State1#q{active_consumers = AC1},
             [notify_decorators(
@@ -1080,7 +1080,7 @@ i(messages, State) ->
 i(consumers, _) ->
     consumer_count();
 i(consumer_utilisation,
-  #q{consumer_bound_info = #cb_info{active       = WhenActive,
+  #q{consumer_bound_info = #cu_info{active       = WhenActive,
                                     inactive     = WhenInactive,
                                     avg          = Avg}}) ->
     Now = erlang:now(),
