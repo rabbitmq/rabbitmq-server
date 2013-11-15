@@ -157,8 +157,8 @@ init_state(Q) ->
                exclusive_consumer  = none,
                has_had_consumers   = false,
                active_consumers    = priority_queue:new(),
-               consumer_use_info   = #cu_info{inactive     = erlang:now(),
-                                              active       = erlang:now(),
+               consumer_use_info   = #cu_info{inactive     = now_micros(),
+                                              active       = now_micros(),
                                               inactive_dur = 1,
                                               active_dur   = 1},
                senders             = pmon:new(delegate),
@@ -551,20 +551,20 @@ deliver_from_queue_deliver(AckRequired, State) ->
 
 update_cu(#cu_info{active   = WhenActive,
                    inactive = WhenInactive} = CUInfo, inactive) ->
-    case timer:now_diff(WhenInactive, WhenActive) > 0 of
+    case WhenInactive > WhenActive of
         true  -> CUInfo;
-        false -> Now = erlang:now(),
-                 CUInfo#cu_info{active_dur = timer:now_diff(Now, WhenActive),
+        false -> Now = now_micros(),
+                 CUInfo#cu_info{active_dur = Now - WhenActive,
                                 inactive   = Now}
     end;
 update_cu(#cu_info{inactive   = WhenInactive,
                    active     = WhenActive,
                    active_dur = Active,
                    avg        = Avg} = CUInfo, active) ->
-    case timer:now_diff(WhenActive, WhenInactive) > 0 of
+    case WhenActive > WhenInactive of
         true  -> CUInfo;
-        false -> Now = erlang:now(),
-                 Inactive = timer:now_diff(Now, WhenInactive),
+        false -> Now = now_micros(),
+                 Inactive = Now - WhenInactive,
                  Time = Inactive + Active,
                  Ratio = Active / Time,
                  Weight = erlang:min(1, Time / 1000000),
@@ -1083,9 +1083,9 @@ i(consumer_utilisation,
   #q{consumer_use_info = #cu_info{active   = WhenActive,
                                   inactive = WhenInactive,
                                   avg      = Avg}}) ->
-    Now = erlang:now(),
-    case timer:now_diff(Now, WhenInactive) < 5000000 of
-        false -> case timer:now_diff(WhenInactive, WhenActive) > 0 of
+    Now = now_micros(),
+    case Now - WhenInactive < 5000000 of
+        false -> case WhenInactive > WhenActive of
                      true  -> inactive;
                      false -> active
                  end;
