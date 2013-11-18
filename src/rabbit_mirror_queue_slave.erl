@@ -293,31 +293,40 @@ handle_info({bump_credit, Msg}, State) ->
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
+terminate(_Reason, #state { backing_queue_state = undefined }) ->
+    %% We've received a delete_and_terminate from gm, thus nothing to
+    %% do here.
+    ok;
+terminate({shutdown, dropped} = R, State = #state{backing_queue       = BQ,
+                                                  backing_queue_state = BQS}) ->
+    %% See rabbit_mirror_queue_master:terminate/2
+    terminate_common(State),
+    BQ:delete_and_terminate(R, BQS);
+terminate(shutdown, State) ->
+    terminate_shutdown(shutdown, State);
+terminate({shutdown, _} = R, State) ->
+    terminate_shutdown(R, State);
+terminate(Reason, State = #state{backing_queue       = BQ,
+                                 backing_queue_state = BQS}) ->
+    terminate_common(State),
+    BQ:delete_and_terminate(Reason, BQS);
+terminate([_SPid], _Reason) ->
+    %% gm case
+    ok.
+
 %% If the Reason is shutdown, or {shutdown, _}, it is not the queue
 %% being deleted: it's just the node going down. Even though we're a
 %% slave, we have no idea whether or not we'll be the only copy coming
 %% back up. Thus we must assume we will be, and preserve anything we
 %% have on disk.
-terminate(_Reason, #state { backing_queue_state = undefined }) ->
-    %% We've received a delete_and_terminate from gm, thus nothing to
-    %% do here.
-    ok;
-terminate({shutdown, dropped} = R, #state { backing_queue       = BQ,
-                                            backing_queue_state = BQS }) ->
-    %% See rabbit_mirror_queue_master:terminate/2
-    BQ:delete_and_terminate(R, BQS);
-terminate(Reason, #state { q                   = Q,
-                           gm                  = GM,
-                           backing_queue       = BQ,
-                           backing_queue_state = BQS,
-                           rate_timer_ref      = RateTRef }) ->
-    ok = gm:leave(GM),
-    QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
-                   Q, BQ, BQS, RateTRef, [], pmon:new(), dict:new()),
-    rabbit_amqqueue_process:terminate(Reason, QueueState);
-terminate([_SPid], _Reason) ->
-    %% gm case
-    ok.
+terminate_shutdown(Reason, State = #state{backing_queue       = BQ,
+                                          backing_queue_state = BQS}) ->
+    terminate_common(State),
+    BQ:terminate(Reason, BQS).
+
+terminate_common(State) ->
+    ok = rabbit_memory_monitor:deregister(self()),
+    stop_rate_timer(stop_sync_timer(State)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -663,7 +672,12 @@ confirm_sender_death(Pid) ->
     ok.
 
 forget_sender(_, running)                        -> false;
+forget_sender(down_from_gm, down_from_gm)        -> false; %% [1]
 forget_sender(Down1, Down2) when Down1 =/= Down2 -> true.
+
+%% [1] If another slave goes through confirm_sender_death/1 before we
+%% do we can get two GM sender_death messages in a row for the same
+%% channel - don't treat that as anything special.
 
 %% Record and process lifetime events from channels. Forget all about a channel
 %% only when down notifications are received from both the channel and from gm.
