@@ -82,18 +82,21 @@ start(Apps) ->
 
 stop(Apps) ->
     ensure_boot_table(),
-    ShutdownApps = app_utils:app_dependency_order(Apps, true),
+    TargetApps = lists:usort([app_utils:app_dependency_order(App, true) ||
+                                 InitApp <- Apps,
+                                 App <- app_utils:app_dependencies(InitApp)]),
+    Ineligible = lists:usort(
+                   app_utils:app_dependency_order(
+                     [App || App <- app_utils:running_applications(),
+                             not lists:member(App, Apps)],
+                     true) ++ [rabbit]),
+    ShutdownApps = TargetApps -- Ineligible,
+    io:format("Shutdown apps = ~p~n", [ShutdownApps]),
     try
         ok = app_utils:stop_applications(
                ShutdownApps, handle_app_error(error_during_shutdown))
     after
         [run_steps(App, rabbit_cleanup_step) || App <- ShutdownApps]
-        %[begin
-        %     Steps =
-        %         sort_boot_steps(rabbit_misc:all_module_attributes(
-        %                           App, rabbit_cleanup_step)),
-        %     [run_boot_step(Step) || Step <- Steps]
-        % end || App <- ShutdownApps]
     end.
 
 run_boot_steps(App) ->
