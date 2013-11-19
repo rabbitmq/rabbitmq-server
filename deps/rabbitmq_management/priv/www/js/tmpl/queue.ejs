@@ -42,7 +42,7 @@
       </tr>
       <tr>
         <th>Consumer utilisation <span class="help" id="queue-consumer-bound"></th>
-        <td><%= queue.consumer_utilisation %>%</td>
+        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
       </tr>
       <tr>
         <th>Memory</th>

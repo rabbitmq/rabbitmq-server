@@ -199,6 +199,10 @@ function fmt_num_thousands(num) {
     return fmt_num_thousands(num.slice(0, -3)) + ',' + num.slice(-3);
 }
 
+function fmt_percent(num) {
+    return Math.round(num * 100) + '%';
+}
+
 function fmt_rate(obj, name, mode) {
     var raw = fmt_rate0(obj, name, mode, fmt_rate_num);
     return raw == '' ? '' : (raw + '/s');
