@@ -1135,8 +1135,11 @@
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>consumer_bound</term>
-                <listitem><para>True if the queue could deliver messages faster if there were more consumers, the consumers were faster, or the consumers had a greater prefetch count.</para></listitem>
+                <term>consumer_utilisation</term>
+                <listitem><para>Fraction of the time (between 0.0 and 1.0)
+                that the queue is able to immediately deliver messages to
+                consumers. This can be less than 1.0 if consumers are limited
+                by network congestion or prefetch count.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>memory</term>
