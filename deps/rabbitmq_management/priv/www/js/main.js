@@ -527,6 +527,7 @@ function postprocess() {
         $(this).parents('form').submit();
     });
     $('#filter').die().live('keyup', debounce(update_filter, 500));
+    $('#filter-regex-mode').change(update_filter_regex_mode);
     $('#truncate').die().live('keyup', debounce(update_truncate, 500));
     if (! user_administrator) {
         $('.administrator-only').remove();
@@ -637,6 +638,25 @@ function multifield_input(prefix, suffix, type) {
     }
 }
 
+function update_filter_regex(jElem) {
+    current_filter_regex = null;
+    jElem.parents('.filter').children('.status-error').remove();
+    if (current_filter_regex_on && $.trim(current_filter).length > 0) {
+        try {
+            current_filter_regex = new RegExp(current_filter,'i');
+        } catch (e) {
+            jElem.parents('.filter').append('<p class="status-error">' +
+                                            e.message + '</p>');
+        }
+    }
+}
+
+function update_filter_regex_mode() {
+    current_filter_regex_on = $(this).is(':checked');
+    update_filter_regex($(this));
+    partial_update();
+}
+
 function update_filter() {
     current_filter = $(this).val();
     var table = $(this).parents('table').first();
@@ -644,6 +664,7 @@ function update_filter() {
     if ($(this).val() != '') {
         table.addClass('filter-active');
     }
+    update_filter_regex($(this));
     partial_update();
 }
 
