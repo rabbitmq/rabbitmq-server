@@ -47,7 +47,8 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
         case rabbit_mgmt_util:is_monitor(Tags) of
             true ->
                 Overview0 ++
-                    rabbit_mgmt_db:get_overview(Range) ++
+                    wrap_in_struct(rabbit_mgmt_db:get_overview(Range), [message_stats,
+                                                                        queue_totals]) ++
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          listeners()},
@@ -92,3 +93,14 @@ rabbit_web_dispatch_contexts(N) ->
 
 erl_version(K) ->
     list_to_binary(string:strip(erlang:system_info(K), both, $\n)).
+
+%% Wraps values of provided keys in {struct, OldValue}.
+wrap_in_struct(Overview, Keys) ->
+    lists:foldl(fun (Key, Acc) ->
+                        lists:keyreplace(Key, 1, Acc,
+                                         {Key,
+                                          {struct,
+                                           proplists:get_value(Key, Acc)}})
+                end,
+               Overview,
+               Keys).
