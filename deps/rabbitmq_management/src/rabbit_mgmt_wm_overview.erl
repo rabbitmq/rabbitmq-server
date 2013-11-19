@@ -47,14 +47,16 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
         case rabbit_mgmt_util:is_monitor(Tags) of
             true ->
                 Overview0 ++
-                    rabbit_mgmt_db:get_overview(Range) ++
+                    [{K, {struct, V}} ||
+                        {K, V} <- rabbit_mgmt_db:get_overview(Range)] ++
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          listeners()},
                      {contexts,           rabbit_web_dispatch_contexts()}];
             _ ->
                 Overview0 ++
-                    rabbit_mgmt_db:get_overview(User, Range)
+                    [{K, {struct, V}} ||
+                        {K, V} <- rabbit_mgmt_db:get_overview(User, Range)]
         end,
     rabbit_mgmt_util:reply(Overview, ReqData, Context).
 
