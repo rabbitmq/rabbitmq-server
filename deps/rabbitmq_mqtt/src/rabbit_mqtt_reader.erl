@@ -66,15 +66,15 @@ handle_call({go, Sock0, SockTransform}, _From, undefined) ->
             {stop, {network_error, Reason}, undefined}
     end;
 
-handle_call(duplicate_id, _From,
+handle_call(Msg, From, State) ->
+    stop({mqtt_unexpected_call, Msg, From}, State).
+
+handle_cast(duplicate_id,
             State = #state{ proc_state = PState,
                             conn_name  = ConnName }) ->
     log(warning, "MQTT disconnecting duplicate client id ~p (~p)~n",
                  [rabbit_mqtt_processor:info(client_id, PState), ConnName]),
     stop({shutdown, duplicate_id}, State);
-
-handle_call(Msg, From, State) ->
-    stop({mqtt_unexpected_call, Msg, From}, State).
 
 handle_cast(Msg, State) ->
     stop({mqtt_unexpected_cast, Msg}, State).
