@@ -1,0 +1,45 @@
+<h1>Dynamic Shovel: <b><%= fmt_string(shovel.name) %></b></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider">
+    <table class="facts">
+      <tr>
+        <th>Virtual Host</th>
+        <td><%= fmt_string(shovel.vhost) %></td>
+      </tr>
+      <tr>
+        <th>From URI</th>
+        <td><%= fmt_string(shovel.value['from-uri']) %></td>
+      </tr>
+      <tr>
+        <th>To URI</th>
+        <td><%= fmt_string(shovel.value['to-uri']) %></td>
+      </tr>
+      <tr>
+        <th>Prefetch Count</th>
+        <td><%= fmt_string(shovel.value['prefetch-count']) %></td>
+      </tr>
+      <tr>
+        <th>Reconnect Delay</th>
+        <td><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
+      </tr>
+      <tr>
+        <th>Ack Mode</th>
+        <td><%= fmt_string(shovel.value['ack-mode']) %></td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Delete this shovel</h2>
+  <div class="hider">
+    <form action="#/shovel-parameters" method="delete" class="confirm">
+      <input type="hidden" name="component" value="shovel"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(shovel.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(shovel.name) %>"/>
+      <input type="submit" value="Delete this shovel"/>
+    </form>
+  </div>
+</div>
