@@ -852,36 +852,37 @@ module_attributes(Module) ->
     end.
 
 all_app_module_attributes(Name) ->
-    Modules =
-        lists:usort(
-          lists:flatten(
-            [{App, Module} ||
-                {App, _, _}   <- application:loaded_applications(),
-                {ok, Modules} <- [application:get_key(App, modules)],
-                Module        <- Modules])),
-    lists:foldl(
+    find_module_attributes(
+      fun(App, Modules) ->
+            [{App, Module} || Module <- Modules]
+      end,
       fun ({App, Module}, Acc) ->
               case lists:append([Atts || {N, Atts} <- module_attributes(Module),
                                          N =:= Name]) of
                   []   -> Acc;
                   Atts -> [{App, Module, Atts} | Acc]
               end
-      end, [], Modules).
+      end).
 
 all_module_attributes(Name) ->
-    Modules =
-        lists:usort(
-          lists:append(
-            [Modules || {App, _, _}   <- application:loaded_applications(),
-                        {ok, Modules} <- [application:get_key(App, modules)]])),
-    lists:foldl(
+    find_module_attributes(
+      fun(_App, Modules) -> Modules end,
       fun (Module, Acc) ->
               case lists:append([Atts || {N, Atts} <- module_attributes(Module),
                                          N =:= Name]) of
                   []   -> Acc;
                   Atts -> [{Module, Atts} | Acc]
               end
-      end, [], Modules).
+      end).
+
+find_module_attributes(Generator, Fold) ->
+    Targets =
+        lists:usort(
+          lists:append(
+            [Generator(App, Modules) ||
+                {App, _, _}   <- application:loaded_applications(),
+                {ok, Modules} <- [application:get_key(App, modules)]])),
+    lists:foldl(Fold, [], Targets).
 
 build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     G = digraph:new([acyclic]),
