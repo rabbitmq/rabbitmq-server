@@ -1064,10 +1064,16 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     consumer_count();
-i(consumer_utilisation, #q{consumer_use = {active, Since, Avg}}) ->
-    consumer_use_avg(now_micros() - Since, 0, Avg);
-i(consumer_utilisation, #q{consumer_use = {inactive, Since, Active, Avg}}) ->
-    consumer_use_avg(Active, now_micros() - Since, Avg);
+i(consumer_utilisation, #q{consumer_use = ConsumerUse}) ->
+    case consumer_count() of
+        0 -> '';
+        _ -> case ConsumerUse of
+                 {active, Since, Avg} ->
+                     consumer_use_avg(now_micros() - Since, 0, Avg);
+                 {inactive, Since, Active, Avg} ->
+                     consumer_use_avg(Active, now_micros() - Since, Avg)
+             end
+    end;
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
@@ -1107,7 +1113,10 @@ emit_stats(State) ->
     emit_stats(State, []).
 
 emit_stats(State, Extra) ->
-    rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
+    ExtraKs = [K || {K, _} <- Extra],
+    Infos = [{K, V} || {K, V} <- infos(?STATISTICS_KEYS, State),
+                       not lists:member(K, ExtraKs)],
+    rabbit_event:notify(queue_stats, Extra ++ Infos).
 
 emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, Args) ->
     rabbit_event:notify(consumer_created,
@@ -1568,7 +1577,8 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     BQS3 = BQ:handle_pre_hibernate(BQS2),
     rabbit_event:if_enabled(
       State, #q.stats_timer,
-      fun () -> emit_stats(State, [{idle_since, now()}]) end),
+      fun () -> emit_stats(State, [{idle_since,           now()},
+                                   {consumer_utilisation, ''}]) end),
     State1 = rabbit_event:stop_stats_timer(State#q{backing_queue_state = BQS3},
                                            #q.stats_timer),
     {hibernate, stop_rate_timer(State1)}.
