@@ -47,10 +47,7 @@ handle_call(_Msg, _From, State) ->
 
 handle_cast(init, State = #state{config = Config}) ->
     process_flag(trap_exit, true),
-    %% TODO when we move to minimum R13B01:
-    %% random:seed(now()),
-    {A, B, C} = now(),
-    random:seed(A, B, C),
+    random:seed(now()),
     #shovel{sources = Sources, destinations = Destinations} = Config,
     {InboundConn, InboundChan, InboundParams} =
         make_conn_and_chan(Sources#endpoint.amqp_params),
