@@ -200,7 +200,11 @@ function fmt_num_thousands(num) {
 }
 
 function fmt_percent(num) {
-    return Math.round(num * 100) + '%';
+    if (num === '') {
+        return 'N/A';
+    } else {
+        return Math.round(num * 100) + '%';
+    }
 }
 
 function fmt_rate(obj, name, mode) {
