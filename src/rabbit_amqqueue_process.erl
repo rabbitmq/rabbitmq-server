@@ -1114,7 +1114,6 @@ prioritise_cast(Msg, _Len, State) ->
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         {ack, _AckTags, _ChPid}              -> consumer_bias(State);
-        {reject, _AckTags, _Requeue, _ChPid} -> consumer_bias(State);
         {notify_sent, _ChPid, _Credit}       -> consumer_bias(State);
         {resume, _ChPid}                     -> consumer_bias(State);
         _                                    -> 0
