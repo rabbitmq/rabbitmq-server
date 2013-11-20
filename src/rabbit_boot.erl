@@ -63,7 +63,8 @@ shutdown(Apps) ->
             undefined -> ok;
             _         -> await_startup(Apps)
         end,
-        rabbit_log:info("Stopping RabbitMQ~n"),
+        %% TODO: put this back in somewhere sensible...
+        %% rabbit_log:info("Stopping RabbitMQ~n"),
         ok = app_utils:stop_applications(Apps)
     after
         delete_boot_table()
@@ -82,35 +83,32 @@ start(Apps) ->
 
 stop(Apps) ->
     ensure_boot_table(),
-    TargetApps = lists:usort([app_utils:app_dependency_order(App, true) ||
-                                 InitApp <- Apps,
-                                 App <- app_utils:app_dependencies(InitApp)]),
-    Ineligible = lists:usort(
-                   app_utils:app_dependency_order(
-                     [App || App <- app_utils:running_applications(),
-                             not lists:member(App, Apps)],
-                     true) ++ [rabbit]),
-    ShutdownApps = TargetApps -- Ineligible,
-    io:format("Shutdown apps = ~p~n", [ShutdownApps]),
+    TargetApps =
+        lists:usort(
+          lists:append([app_utils:direct_dependencies(App) || App <- Apps])),
     try
         ok = app_utils:stop_applications(
-               ShutdownApps, handle_app_error(error_during_shutdown))
+               TargetApps, handle_app_error(error_during_shutdown))
     after
-        [run_steps(App, rabbit_cleanup_step) || App <- ShutdownApps]
+        try
+            [run_steps(App, rabbit_cleanup_step) || App <- TargetApps]
+        after
+            save_boot_table()
+        end
     end.
 
 run_boot_steps(App) ->
     run_steps(App, rabbit_boot_step).
 
 run_steps(App, StepType) ->
-    RootApps = app_utils:app_dependencies(App),
-    Steps =
+    RootApps = [App|app_utils:direct_dependencies(App)],
+    StepAttrs = rabbit_misc:all_app_module_attributes(StepType),
+    BootSteps =
         sort_boot_steps(
-          lists:usort(
-            lists:append(
-              [rabbit_misc:all_module_attributes(A, StepType) ||
-                  A <- [App|RootApps]]))),
-    [ok = run_boot_step(Step, StepType) || Step <- Steps],
+         lists:usort(
+           [{Mod, Steps} || {AppName, Mod, Steps} <- StepAttrs,
+                            lists:member(AppName, RootApps)])),
+    [ok = run_boot_step(Step, StepType) || Step <- BootSteps],
     ok.
 
 boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
@@ -165,8 +163,13 @@ clean_table() ->
     ets:new(?MODULE, [named_table, public, ordered_set]).
 
 load_table() ->
-    {ok, _Tab} = ets:file2tab(boot_file(), [{verify, true}]),
-    ok.
+    case ets:file2tab(boot_file(), [{verify, true}]) of
+        {error, _} -> error(fuck);
+        {ok, _Tab} -> ok,
+                      io:format("Starting with pre-loaded boot table:~n~p~n"
+                                "----------------~n",
+                                [ets:tab2list(?MODULE)])
+    end.
 
 save_boot_table() ->
     delete_boot_table(),
