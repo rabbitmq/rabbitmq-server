@@ -25,9 +25,9 @@ start_link(ShovelName, ShovelConfig) ->
     mirrored_supervisor:start_link({local, ShovelName}, ShovelName,
                                    ?MODULE, [ShovelName, ShovelConfig]).
 
-init([ShovelName, Config]) ->
-    ChildSpecs = [{ShovelName,
-                   {rabbit_shovel_worker, start_link, [ShovelName, Config]},
+init([Name, Config]) ->
+    ChildSpecs = [{Name,
+                   {rabbit_shovel_worker, start_link, [static, Name, Config]},
                    case proplists:get_value(reconnect_delay, Config, none) of
                        N when is_integer(N) andalso N > 0 -> {permanent, N};
                        _                                  -> temporary

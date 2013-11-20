@@ -17,7 +17,7 @@
 -module(rabbit_shovel_worker).
 -behaviour(gen_server2).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -27,20 +27,23 @@
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
-                name, config, inbound_params, outbound_params, unacked}).
+                name, type, config, inbound_params, outbound_params, unacked}).
 
-start_link(Name, Config) ->
-    ok = rabbit_shovel_status:report(Name, starting),
-    gen_server2:start_link(?MODULE, [Name, Config], []).
+start_link(Type, Name, Config) ->
+    ok = rabbit_shovel_status:report(Name, Type, starting),
+    gen_server2:start_link(?MODULE, [Type, Name, Config], []).
 
 %%---------------------------
 %% Gen Server Implementation
 %%---------------------------
 
-init([Name, Config]) ->
+init([Type, Name, Config]) ->
     gen_server2:cast(self(), init),
-    {ok, Shovel} = rabbit_shovel_config:parse(Name, Config),
-    {ok, #state{name = Name, config = Shovel}}.
+    {ok, Shovel} = parse(Type, Name, Config),
+    {ok, #state{name = Name, type = Type, config = Shovel}}.
+
+parse(static,   Name, Config) -> rabbit_shovel_config:parse(Name, Config);
+parse(dynamic, _Name, Config) -> rabbit_shovel_parameters:parse(Config).
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
@@ -131,15 +134,16 @@ handle_info({'EXIT', OutboundConn, Reason},
 
 terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
                          outbound_conn = undefined, outbound_ch = undefined,
-                         name = Name}) ->
-    rabbit_shovel_status:report(Name, {terminated, Reason}),
+                         name = Name, type = Type}) ->
+    rabbit_shovel_status:report(Name, Type, {terminated, Reason}),
     ok;
 terminate(Reason, State) ->
     catch amqp_connection:close(State#state.inbound_conn,
                                 ?MAX_CONNECTION_CLOSE_TIMEOUT),
     catch amqp_connection:close(State#state.outbound_conn,
                                 ?MAX_CONNECTION_CLOSE_TIMEOUT),
-    rabbit_shovel_status:report(State#state.name, {terminated, Reason}),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, Reason}),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -170,8 +174,9 @@ remove_delivery_tags(Seq, true, Unacked) ->
 
 report_status(Verb, State) ->
     rabbit_shovel_status:report(
-      State#state.name, {Verb, {source, State#state.inbound_params},
-                         {destination, State#state.outbound_params}}).
+      State#state.name, State#state.type,
+      {Verb, {source, State#state.inbound_params},
+       {destination, State#state.outbound_params}}).
 
 publish(Tag, Method, Msg,
         State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,

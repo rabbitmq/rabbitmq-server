@@ -19,7 +19,7 @@
 
 -export([start_link/0]).
 
--export([report/2, status/0]).
+-export([report/3, remove/1, status/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -28,13 +28,16 @@
 -define(ETS_NAME, ?MODULE).
 
 -record(state, {}).
--record(entry, {name, info, timestamp}).
+-record(entry, {name, type, info, timestamp}).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-report(Name, Info) ->
-    gen_server:cast(?SERVER, {report, Name, Info, calendar:local_time()}).
+report(Name, Type, Info) ->
+    gen_server:cast(?SERVER, {report, Name, Type, Info, calendar:local_time()}).
+
+remove(Name) ->
+    gen_server:cast(?SERVER, {remove, Name}).
 
 status() ->
     gen_server:call(?SERVER, status, infinity).
@@ -46,12 +49,17 @@ init([]) ->
 
 handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
-    {reply, [{Entry#entry.name, Entry#entry.info, Entry#entry.timestamp}
+    {reply, [{Entry#entry.name, Entry#entry.type, Entry#entry.info,
+              Entry#entry.timestamp}
              || Entry <- Entries], State}.
 
-handle_cast({report, Name, Info, Timestamp}, State) ->
-    true = ets:insert(?ETS_NAME, #entry{name = Name, info = Info,
+handle_cast({report, Name, Type, Info, Timestamp}, State) ->
+    true = ets:insert(?ETS_NAME, #entry{name = Name, type = Type, info = Info,
                                         timestamp = Timestamp}),
+    {noreply, State};
+
+handle_cast({remove, Name}, State) ->
+    true = ets:delete(?ETS_NAME, Name),
     {noreply, State}.
 
 handle_info(_Info, State) ->
