@@ -54,8 +54,8 @@ status(Node) ->
             [format(Node, I) || I <- Status]
     end.
 
-format(Node, {Name, Info, TS}) ->
-    [{name, Name}, {node, Node}, {timestamp, format_ts(TS)} |
+format(Node, {Name, Type, Info, TS}) ->
+    [{name, Name}, {type, Type}, {node, Node}, {timestamp, format_ts(TS)} |
      format_info(Info)].
 
 format_info(starting) ->
