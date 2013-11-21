@@ -84,19 +84,31 @@ validate_uri(Name, Term) ->
 parse(Def) ->
     {ok, FromParams} = parse_uri(<<"from-uri">>, Def),
     {ok, ToParams} = parse_uri(<<"to-uri">>, Def),
+    FromQueue = pget(<<"from-queue">>, Def),
     ToExch = pget(<<"to-exchange">>, Def),
     PubFields = fun (P) -> P#'basic.publish'{exchange = ToExch} end,
+    FromFun = fun (Conn, Ch) ->
+                      disposable_channel_call(
+                        Conn, #'queue.declare'{queue   = FromQueue,
+                                               passive = true},
+                        fun (?NOT_FOUND, _Txt) ->
+                                amqp_channel:call(
+                                  Ch, #'queue.declare'{queue   = FromQueue,
+                                                       durable = true})
+                        end)
+              end,
+    ToFun = fun (_Conn, _Ch) -> ok end,
     {ok, #shovel{
        sources            = #endpoint{amqp_params = [FromParams],
-                                      resource_declarations = []},
+                                      resource_declaration = FromFun},
        destinations       = #endpoint{amqp_params = [ToParams],
-                                      resource_declarations = []},
+                                      resource_declaration = ToFun},
        prefetch_count     = pget(<<"prefetch-count">>, Def, 1000),
        ack_mode           = translate_ack_mode(
                               pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
        publish_fields     = PubFields,
        publish_properties = fun (P) -> P end,
-       queue              = pget(<<"from-queue">>, Def),
+       queue              = FromQueue,
        reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1)}}.
 
 parse_uri(Key, Def) -> amqp_uri:parse(binary_to_list(pget(Key, Def))).
@@ -104,3 +116,13 @@ parse_uri(Key, Def) -> amqp_uri:parse(binary_to_list(pget(Key, Def))).
 translate_ack_mode(<<"on-confirm">>) -> on_confirm;
 translate_ack_mode(<<"on-publish">>) -> on_publish;
 translate_ack_mode(<<"no-ack">>)     -> no_ack.
+
+disposable_channel_call(Conn, Method, ErrFun) ->
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    try
+        amqp_channel:call(Ch, Method)
+    catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
+            ErrFun(Code, Text)
+    after
+        catch amqp_channel:close(Ch)
+    end.

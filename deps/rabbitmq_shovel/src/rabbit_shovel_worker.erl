@@ -57,11 +57,8 @@ handle_cast(init, State = #state{config = Config}) ->
     {OutboundConn, OutboundChan, OutboundParams} =
         make_conn_and_chan(Destinations#endpoint.amqp_params),
 
-    create_resources(InboundChan,
-                     Sources#endpoint.resource_declarations),
-
-    create_resources(OutboundChan,
-                     Destinations#endpoint.resource_declarations),
+    (Sources#endpoint.resource_declaration)(InboundConn, InboundChan),
+    (Destinations#endpoint.resource_declaration)(OutboundConn, OutboundChan),
 
     #'basic.qos_ok'{} =
         amqp_channel:call(InboundChan,
