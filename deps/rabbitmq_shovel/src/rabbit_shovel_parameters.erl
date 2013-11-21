@@ -52,7 +52,9 @@ validation() ->
     [{<<"from-uri">>,       fun validate_uri/2, mandatory},
      {<<"to-uri">>,         fun validate_uri/2, mandatory},
      {<<"from-queue">>,     fun rabbit_parameter_validation:binary/2, mandatory},
-     {<<"to-exchange">>,    fun rabbit_parameter_validation:binary/2, mandatory},
+     {<<"to-exchange">>,    fun rabbit_parameter_validation:binary/2, optional},
+     {<<"to-exchange-key">>,fun rabbit_parameter_validation:binary/2, optional},
+     {<<"to-queue">>,       fun rabbit_parameter_validation:binary/2, optional},
      {<<"prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"reconnect-delay">>,fun rabbit_parameter_validation:number/2, optional},
      {<<"ack-mode">>,       rabbit_parameter_validation:enum(
@@ -84,20 +86,30 @@ validate_uri(Name, Term) ->
 parse(Def) ->
     {ok, FromParams} = parse_uri(<<"from-uri">>, Def),
     {ok, ToParams} = parse_uri(<<"to-uri">>, Def),
-    FromQueue = pget(<<"from-queue">>, Def),
-    ToExch = pget(<<"to-exchange">>, Def),
-    PubFields = fun (P) -> P#'basic.publish'{exchange = ToExch} end,
-    FromFun = fun (Conn, Ch) ->
-                      disposable_channel_call(
-                        Conn, #'queue.declare'{queue   = FromQueue,
-                                               passive = true},
-                        fun (?NOT_FOUND, _Txt) ->
-                                amqp_channel:call(
-                                  Ch, #'queue.declare'{queue   = FromQueue,
-                                                       durable = true})
-                        end)
-              end,
-    ToFun = fun (_Conn, _Ch) -> ok end,
+    FromQueue  = pget(<<"from-queue">>,      Def),
+    ToExch     = pget(<<"to-exchange">>,     Def, none),
+    ToExchKey  = pget(<<"to-exchange-key">>, Def, none),
+    ToQueue    = pget(<<"to-queue">>,        Def, none),
+    {Exch, Key} = case ToQueue of
+                      none -> {ToExch, ToExchKey};
+                      _    -> {<<"">>, ToQueue}
+                  end,
+    PubFun = fun (P0) -> P1 = case Exch of
+                                  none -> P0;
+                                  _    -> #'basic.publish'{exchange = Exch}
+                              end,
+                         case Key of
+                             none -> P1;
+                             _    -> #'basic.publish'{routing_key = Key}
+                         end
+             end,
+    FromFun = fun (Conn, _Ch) -> ensure_queue(Conn, FromQueue) end,
+    ToFun = fun (Conn, _Ch) ->
+                    case ToQueue of
+                        none -> ok;
+                        _    -> ensure_queue(Conn, ToQueue)
+                    end
+            end,
     {ok, #shovel{
        sources            = #endpoint{amqp_params = [FromParams],
                                       resource_declaration = FromFun},
@@ -106,7 +118,7 @@ parse(Def) ->
        prefetch_count     = pget(<<"prefetch-count">>, Def, 1000),
        ack_mode           = translate_ack_mode(
                               pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
-       publish_fields     = PubFields,
+       publish_fields     = PubFun,
        publish_properties = fun (P) -> P end,
        queue              = FromQueue,
        reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1)}}.
@@ -117,12 +129,17 @@ translate_ack_mode(<<"on-confirm">>) -> on_confirm;
 translate_ack_mode(<<"on-publish">>) -> on_publish;
 translate_ack_mode(<<"no-ack">>)     -> no_ack.
 
-disposable_channel_call(Conn, Method, ErrFun) ->
+ensure_queue(Conn, Queue) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
-        amqp_channel:call(Ch, Method)
-    catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
-            ErrFun(Code, Text)
+        amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
+                                               passive = true})
+    catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
+            {ok, Ch2} = amqp_connection:open_channel(Conn),
+            amqp_channel:call(Ch2, #'queue.declare'{queue   = Queue,
+                                                   durable = true}),
+            catch amqp_channel:close(Ch2)
+
     after
         catch amqp_channel:close(Ch)
     end.
