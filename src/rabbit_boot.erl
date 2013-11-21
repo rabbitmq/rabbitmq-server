@@ -18,7 +18,7 @@
 
 -export([boot_with/1, shutdown/1]).
 -export([start/1, stop/1]).
--export([run_boot_steps/1]).
+-export([run_boot_steps/0]).
 -export([boot_error/2, boot_error/4]).
 
 -ifdef(use_specs).
@@ -27,7 +27,7 @@
 -spec(shutdown/1       :: ([atom()]) -> 'ok').
 -spec(start/1          :: ([atom()]) -> 'ok').
 -spec(stop/1           :: ([atom()]) -> 'ok').
--spec(run_boot_steps/1 :: (atom())   -> 'ok').
+-spec(run_boot_steps/0 :: () -> 'ok').
 -spec(boot_error/2     :: (term(), not_available | [tuple()]) -> no_return()).
 -spec(boot_error/4     :: (term(), string(), [any()], not_available | [tuple()])
                           -> no_return()).
@@ -36,6 +36,31 @@
 
 -define(BOOT_FILE, "boot.info").
 
+%%
+%% When the broker is starting, we must run all the boot steps within the
+%% rabbit:start/2 application callback, after rabbit_sup has started and
+%% before any plugin applications begin to start. To achieve this, we process
+%% the boot steps from all loaded applications and run them in dependent
+%% order.
+%%
+%% When the broker is already running, we must run all the boot steps for
+%% each application/plugin we're starting, plus any other (dependent) steps
+%% that have not been run. To achieve this, we process the boot steps from
+%% all loaded applications, but skip those that have already been run (i.e.,
+%% steps that have been run once whilst or since the broker started).
+%%
+%% Tracking which boot steps have already been run is done via an ets table.
+%% Because we frequently find ourselves needing to query this table without
+%% the rabbit application running (e.g., during the initial boot sequence
+%% and when we've "cold started" a node without any running applications),
+%% this table is serialized to a file after each operation. When the node is
+%% stopped cleanly, the file is deleted. When a node is in the process of
+%% starting, the file is also removed and replaced (since we do not want to
+%% track boot steps from a previous incarnation of the node).
+%%
+%% Cleanup steps...
+%%
+
 %%---------------------------------------------------------------------------
 %% Public API
 
@@ -43,6 +68,7 @@ boot_with(StartFun) ->
     %% TODO: this should be done with monitors, not links, I think
     Marker = spawn_link(fun() -> receive stop -> ok end end),
     register(rabbit_boot, Marker),
+    ensure_boot_table(),
     try
         StartFun()
     catch
@@ -73,8 +99,13 @@ shutdown(Apps) ->
 start(Apps) ->
     try
         ensure_boot_table(),
-        ok = app_utils:load_applications(Apps),
+        force_reload(Apps),
         StartupApps = app_utils:app_dependency_order(Apps, false),
+        io:format("App Start Order: ~p~n", [StartupApps]),
+        case whereis(?MODULE) of
+            undefined -> run_boot_steps();
+            _         -> ok
+        end,
         ok = app_utils:start_applications(StartupApps,
                                           handle_app_error(could_not_start))
     after
@@ -84,32 +115,70 @@ start(Apps) ->
 stop(Apps) ->
     ensure_boot_table(),
     TargetApps =
-        lists:usort(
-          lists:append([app_utils:direct_dependencies(App) || App <- Apps])),
+        sets:to_list(
+          lists:foldl(
+            fun(App, Set) ->
+                    lists:foldl(fun sets:add_element/2, Set,
+                                app_utils:direct_dependencies(App) -- [rabbit])
+            end, sets:new(), Apps)),
+    io:format("Target Apps = ~p~n", [TargetApps]),
     try
         ok = app_utils:stop_applications(
                TargetApps, handle_app_error(error_during_shutdown))
     after
         try
-            [run_steps(App, rabbit_cleanup_step) || App <- TargetApps]
+            io:format("Running Cleanup~n"),
+            BootSteps = load_steps(rabbit_boot_step),
+            ToDelete = [Step || {App, _, _}=Step <- BootSteps,
+                                lists:member(App, TargetApps)],
+            io:format("Boot steps on shutdown: ~p~n", [ToDelete]),
+            [begin
+                 ets:delete(?MODULE, Step),
+                 io:format("Deleted ~p~n", [Step])
+             end || {_, Step, _} <- ToDelete],
+            io:format("Run cleanup steps~n"),
+            run_cleanup_steps(TargetApps)
         after
+            io:format("save boot table~n"),
             save_boot_table()
-        end
+        end,
+        [begin
+             {ok, Mods} = application:get_key(App, modules),
+             io:format("cleanup ~p...~n", [Mods]),
+             [begin
+                  code:soft_purge(Mod),
+                  code:delete(Mod),
+                  false = code:is_loaded(Mod)
+              end || Mod <- Mods],
+             application:unload(App)
+         end || App <- TargetApps]
     end.
 
-run_boot_steps(App) ->
-    run_steps(App, rabbit_boot_step).
-
-run_steps(App, StepType) ->
-    RootApps = [App|app_utils:direct_dependencies(App)],
-    StepAttrs = rabbit_misc:all_app_module_attributes(StepType),
-    BootSteps =
-        sort_boot_steps(
-         lists:usort(
-           [{Mod, Steps} || {AppName, Mod, Steps} <- StepAttrs,
-                            lists:member(AppName, RootApps)])),
-    [ok = run_boot_step(Step, StepType) || Step <- BootSteps],
+run_cleanup_steps(Apps) ->
+    Completed = sets:new(),
+    lists:foldl(
+      fun({_, Name, _}=Step, Acc) ->
+              case sets:is_element(Name, Completed) of
+                  true  -> Acc;
+                  false -> run_boot_step(Step, rabbit_cleanup_step),
+                           sets:add_element(Name, Acc)
+              end
+      end,
+      Completed,
+      [Step || {App, _, _}=Step <- load_steps(rabbit_cleanup_step),
+               lists:member(App, Apps)]),
     ok.
+
+run_boot_steps() ->
+    Steps = load_steps(rabbit_boot_step),
+    [ok = run_boot_step(Step, rabbit_boot_step) || Step <- Steps],
+    ok.
+
+load_steps(StepType) ->
+    StepAttrs = rabbit_misc:all_app_module_attributes(StepType),
+    sort_boot_steps(
+      lists:usort(
+        [{Mod, {AppName, Steps}} || {AppName, Mod, Steps} <- StepAttrs])).
 
 boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
@@ -139,6 +208,34 @@ boot_error(Reason, Fmt, Args, Stacktrace) ->
 %%---------------------------------------------------------------------------
 %% Private API
 
+force_reload(Apps) ->
+    ok = app_utils:load_applications(Apps),
+    ok = do_reload(Apps).
+
+do_reload([App|Apps]) ->
+    case application:get_key(App, modules) of
+        {ok, Modules} -> reload_all(Modules);
+        _             -> ok
+    end,
+    force_reload(Apps);
+do_reload([]) ->
+    ok.
+
+reload_all(Modules) ->
+    [begin
+         case code:soft_purge(Mod) of
+             true  -> load_mod(Mod);
+             false -> io:format("unable to purge ~p~n", [Mod])
+         end
+     end || Mod <- Modules].
+
+load_mod(Mod) ->
+    case code:is_loaded(Mod) of
+        {file, preloaded} -> code:load_file(Mod);
+        {file, Path}      -> code:load_abs(Path);
+        false             -> code:load_file(Mod)
+    end.
+
 await_startup(Apps) ->
     app_utils:wait_for_applications(Apps).
 
@@ -160,15 +257,18 @@ ensure_boot_table() ->
     end.
 
 clean_table() ->
-    ets:new(?MODULE, [named_table, public, ordered_set]).
+    delete_boot_table(),
+    case ets:info(?MODULE) of
+        undefined ->
+            ets:new(?MODULE, [named_table, public, ordered_set]);
+        _ ->
+            ok
+    end.
 
 load_table() ->
     case ets:file2tab(boot_file(), [{verify, true}]) of
-        {error, _} -> error(fuck);
-        {ok, _Tab} -> ok,
-                      io:format("Starting with pre-loaded boot table:~n~p~n"
-                                "----------------~n",
-                                [ets:tab2list(?MODULE)])
+        {error, _} -> clean_table();
+        {ok, _Tab} -> ok
     end.
 
 save_boot_table() ->
@@ -190,14 +290,17 @@ handle_app_error(Term) ->
             throw({Term, App, Reason})
     end.
 
-run_boot_step({StepName, Attributes}, StepType) ->
-    case catch {StepType, already_run(StepName)} of
-        {rabbit_clean_step, _} -> run_it(StepName, Attributes);
-        {_, false}             -> run_it(StepName, Attributes);
-        {_, true}              -> ok
-    end.
+run_boot_step({_, _, Attributes}, rabbit_cleanup_step) ->
+    run_step(Attributes);
+run_boot_step({_, StepName, Attributes}, rabbit_boot_step) ->
+    case catch already_run(StepName) of
+        false -> ok = run_step(Attributes),
+                 mark_complete(StepName);
+        true  -> ok
+    end,
+    ok.
 
-run_it(StepName, Attributes) ->
+run_step(Attributes) ->
     case [MFA || {mfa, MFA} <- Attributes] of
         [] ->
             ok;
@@ -205,7 +308,7 @@ run_it(StepName, Attributes) ->
             [try
                  apply(M,F,A)
              of
-                 ok              -> mark_complete(StepName);
+                 ok              -> ok;
                  {error, Reason} -> boot_error(Reason, not_available)
              catch
                  _:Reason -> boot_error(Reason, erlang:get_stacktrace())
@@ -239,10 +342,10 @@ log_location(Type) ->
         _                  -> undefined
     end.
 
-vertices(_Module, Steps) ->
-    [{StepName, {StepName, Atts}} || {StepName, Atts} <- Steps].
+vertices(_Module, {AppName, Steps}) ->
+    [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
 
-edges(_Module, Steps) ->
+edges(_Module, {_AppName, Steps}) ->
     [case Key of
          requires -> {StepName, OtherStep};
          enables  -> {OtherStep, StepName}
@@ -265,7 +368,7 @@ sort_boot_steps(UnsortedSteps) ->
             digraph:delete(G),
             %% Check that all mentioned {M,F,A} triples are exported.
             case [{StepName, {M,F,A}} ||
-                     {StepName, Attributes} <- SortedSteps,
+                     {_App, StepName, Attributes} <- SortedSteps,
                      {mfa, {M,F,A}}         <- Attributes,
                      not erlang:function_exported(M, F, length(A))] of
                 []               -> SortedSteps;

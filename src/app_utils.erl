@@ -60,7 +60,7 @@ stop_applications(Apps) ->
 
 start_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldl/3,
-                        fun start/1,
+                        fun application:start/1,
                         fun application:stop/1,
                         already_started,
                         ErrorHandler,
@@ -101,7 +101,7 @@ direct_dependencies(Root) ->
                  end,
                  sets:from_list([Root]),
                  digraph:out_edges(G, Root)),
-        sets:to_list(sets:del_element(rabbit, Deps))
+        sets:to_list(Deps)
     catch {graph_error, Reason} ->
         {error, Reason}
     after
@@ -132,14 +132,10 @@ app_dependency_order(RootApps, StripUnreachable) ->
 %%---------------------------------------------------------------------------
 %% Private API
 
-start(rabbit) ->
-    case application:start(rabbit) of
-        ok  -> rabbit_boot:run_boot_steps(rabbit), ok;
-        Err -> Err
-    end;
-start(App) ->
-    rabbit_boot:run_boot_steps(App),
-    application:start(App).
+%% It might be worth documenting this on the plugin author's guide/page.
+%% A plugin should expect its boot steps to run /before/ the application
+%% is started, and its cleanup steps to run /after/ the application has
+%% fully stopped.
 
 wait_for_application(Application) ->
     case lists:keymember(Application, 1, rabbit_misc:which_applications()) of

@@ -411,6 +411,7 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
+            rabbit_boot:run_boot_steps(),
             {ok, SupPid};
         Error ->
             Error
