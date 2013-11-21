@@ -25,7 +25,7 @@
 -define(SUPERVISOR, ?MODULE).
 
 start_link(Name, Config) ->
-    supervisor2:start_link({local, ?SUPERVISOR}, ?MODULE, [Name, Config]).
+    supervisor2:start_link(?MODULE, [Name, Config]).
 
 %%----------------------------------------------------------------------------
 
