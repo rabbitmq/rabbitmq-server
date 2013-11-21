@@ -11,7 +11,9 @@
 <% } %>
     <th>Name</th>
     <th>From URI</th>
+    <th>From Queue</th>
     <th>To URI</th>
+    <th>To Exchange / Queue</th>
     <th>Prefetch Count</th>
     <th>Reconnect Delay</th>
     <th>Ack mode</th>
@@ -28,7 +30,20 @@
 <% } %>
      <td><%= link_shovel(shovel.vhost, shovel.name) %></td>
      <td><%= fmt_shortened_uri(shovel.value['from-uri']) %></td>
+     <td><%= fmt_string(shovel.value['from-queue']) %></td>
      <td><%= fmt_shortened_uri(shovel.value['to-uri']) %></td>
+     <td>
+       <% if (shovel.value['to-queue']) { %>
+         <%= fmt_string(shovel.value['to-queue']) %>
+         <sub>queue</sub>
+       <% } else { %>
+         <%= fmt_string(shovel.value['to-exchange']) %>
+         <% if (shovel.value['to-exchange-key']) { %>
+         : <%= fmt_string(shovel.value['to-exchange-key']) %>
+         <% } %>
+         <sub>exchange</sub>
+       <% } %>
+     </td>
      <td class="r"><%= shovel.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
      <td class="c"><%= fmt_string(shovel.value['ack-mode']) %></td>
@@ -86,9 +101,21 @@
         </tr>
         <tr>
           <th>
+            <label>To queue:</label>
+          </th>
+          <td><input type="text" name="to-queue"/></td>
+        </tr>
+        <tr>
+          <th>
             <label>To exchange:</label>
           </th>
-          <td><input type="text" name="to-exchange"/><span class="mand">*</span></td>
+          <td><input type="text" name="to-exchange"/></td>
+        </tr>
+        <tr>
+          <th>
+            <label>To exchange routing key:</label>
+          </th>
+          <td><input type="text" name="to-exchange-key"/></td>
         </tr>
         <tr>
           <th>

@@ -5,7 +5,7 @@
   <div class="hider">
     <table class="facts">
       <tr>
-        <th>Virtual Host</th>
+        <th>Virtual host</th>
         <td><%= fmt_string(shovel.vhost) %></td>
       </tr>
       <tr>
@@ -13,19 +13,38 @@
         <td><%= fmt_string(shovel.value['from-uri']) %></td>
       </tr>
       <tr>
+        <th>From queue</th>
+        <td><%= fmt_string(shovel.value['from-queue']) %></td>
+      </tr>
+      <tr>
         <th>To URI</th>
         <td><%= fmt_string(shovel.value['to-uri']) %></td>
       </tr>
       <tr>
-        <th>Prefetch Count</th>
+        <th>To exchange / queue</th>
+        <td>
+          <% if (shovel.value['to-queue']) { %>
+            <%= fmt_string(shovel.value['to-queue']) %>
+            <sub>queue</sub>
+          <% } else { %>
+            <%= fmt_string(shovel.value['to-exchange']) %>
+            <% if (shovel.value['to-exchange-key']) { %>
+              : <%= fmt_string(shovel.value['to-exchange-key']) %>
+            <% } %>
+            <sub>exchange</sub>
+          <% } %>
+        </td>
+      </tr>
+      <tr>
+        <th>Prefetch count</th>
         <td><%= fmt_string(shovel.value['prefetch-count']) %></td>
       </tr>
       <tr>
-        <th>Reconnect Delay</th>
+        <th>Reconnect delay</th>
         <td><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
       </tr>
       <tr>
-        <th>Ack Mode</th>
+        <th>Ack mode</th>
         <td><%= fmt_string(shovel.value['ack-mode']) %></td>
       </tr>
     </table>
