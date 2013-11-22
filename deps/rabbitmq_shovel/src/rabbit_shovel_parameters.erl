@@ -51,7 +51,9 @@ notify_clear(_VHost, <<"shovel">>, Name) ->
 validation() ->
     [{<<"from-uri">>,       fun validate_uri/2, mandatory},
      {<<"to-uri">>,         fun validate_uri/2, mandatory},
-     {<<"from-queue">>,     fun rabbit_parameter_validation:binary/2, mandatory},
+     {<<"from-exchange">>,  fun rabbit_parameter_validation:binary/2, optional},
+     {<<"from-exchange-key">>,fun rabbit_parameter_validation:binary/2, optional},
+     {<<"from-queue">>,     fun rabbit_parameter_validation:binary/2, optional},
      {<<"to-exchange">>,    fun rabbit_parameter_validation:binary/2, optional},
      {<<"to-exchange-key">>,fun rabbit_parameter_validation:binary/2, optional},
      {<<"to-queue">>,       fun rabbit_parameter_validation:binary/2, optional},
@@ -85,15 +87,32 @@ validate_uri(Name, Term) ->
 
 parse(Def) ->
     {ok, FromParams} = parse_uri(<<"from-uri">>, Def),
-    {ok, ToParams} = parse_uri(<<"to-uri">>, Def),
-    FromQueue  = pget(<<"from-queue">>,      Def),
-    ToExch     = pget(<<"to-exchange">>,     Def, none),
-    ToExchKey  = pget(<<"to-exchange-key">>, Def, none),
-    ToQueue    = pget(<<"to-queue">>,        Def, none),
-    {Exch, Key} = case ToQueue of
-                      none -> {ToExch, ToExchKey};
-                      _    -> {<<"">>, ToQueue}
-                  end,
+    {ok, ToParams}   = parse_uri(<<"to-uri">>,   Def),
+    FromExch     = pget(<<"from-exchange">>,     Def, none),
+    FromExchKey  = pget(<<"from-exchange-key">>, Def, none),
+    FromQueue    = pget(<<"from-queue">>,        Def, <<>>),
+    ToExch       = pget(<<"to-exchange">>,       Def, none),
+    ToExchKey    = pget(<<"to-exchange-key">>,   Def, none),
+    ToQueue      = pget(<<"to-queue">>,          Def, none),
+    FromFun = fun (Conn, Ch) ->
+                      case FromQueue of
+                          <<>> -> Ms = [#'queue.declare'{exclusive = true},
+                                        #'queue.bind'{routing_key = FromExchKey,
+                                                      exchange    = FromExch}],
+                                  [amqp_channel:call(Ch, M) || M <- Ms];
+                          _    -> ensure_queue(Conn, FromQueue)
+                      end
+              end,
+    ToFun = fun (Conn, _Ch) ->
+                    case ToQueue of
+                        none -> ok;
+                        _    -> ensure_queue(Conn, ToQueue)
+                    end
+            end,
+    {Exch, Key}  = case ToQueue of
+                       none -> {ToExch, ToExchKey};
+                       _    -> {<<"">>, ToQueue}
+                   end,
     PubFun = fun (P0) -> P1 = case Exch of
                                   none -> P0;
                                   _    -> P0#'basic.publish'{exchange = Exch}
@@ -103,13 +122,6 @@ parse(Def) ->
                              _    -> P1#'basic.publish'{routing_key = Key}
                          end
              end,
-    FromFun = fun (Conn, _Ch) -> ensure_queue(Conn, FromQueue) end,
-    ToFun = fun (Conn, _Ch) ->
-                    case ToQueue of
-                        none -> ok;
-                        _    -> ensure_queue(Conn, ToQueue)
-                    end
-            end,
     {ok, #shovel{
        sources            = #endpoint{amqp_params = [FromParams],
                                       resource_declaration = FromFun},
