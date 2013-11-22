@@ -96,11 +96,11 @@ parse(Def) ->
                   end,
     PubFun = fun (P0) -> P1 = case Exch of
                                   none -> P0;
-                                  _    -> #'basic.publish'{exchange = Exch}
+                                  _    -> P0#'basic.publish'{exchange = Exch}
                               end,
                          case Key of
                              none -> P1;
-                             _    -> #'basic.publish'{routing_key = Key}
+                             _    -> P1#'basic.publish'{routing_key = Key}
                          end
              end,
     FromFun = fun (Conn, _Ch) -> ensure_queue(Conn, FromQueue) end,
