@@ -319,6 +319,8 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     NewNodes = [NewMNode | NewSNodes],
     add_mirrors (QName, NewNodes -- OldNodes),
     drop_mirrors(QName, OldNodes -- NewNodes),
+    %% This is for the case where no extra nodes were added but we changed to
+    %% a policy requiring auto-sync.
     maybe_auto_sync(NewQ),
     ok.
 
