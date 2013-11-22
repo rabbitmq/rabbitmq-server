@@ -110,7 +110,13 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
                           Q1#amqqueue{gm_pids = [{GM, Self} | GMPids]})
            end),
     {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
-    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
+    %% We need synchronous add here (i.e. do not return until the
+    %% slave is running) so that when queue declaration is finished
+    %% all slaves are up; we don't want to end up with unsynced slaves
+    %% just by declaring a new queue. But add can't be synchronous all
+    %% the time as it can be called by slaves and that's
+    %% deadlock-prone.
+    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes, sync),
     #state { name                = QName,
              gm                  = GM,
              coordinator         = CPid,
