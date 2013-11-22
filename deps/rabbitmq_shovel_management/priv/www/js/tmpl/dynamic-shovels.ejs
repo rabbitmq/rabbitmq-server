@@ -11,7 +11,7 @@
 <% } %>
     <th>Name</th>
     <th>From URI</th>
-    <th>From Queue</th>
+    <th>From Exchange / Queue</th>
     <th>To URI</th>
     <th>To Exchange / Queue</th>
     <th>Prefetch Count</th>
@@ -30,7 +30,18 @@
 <% } %>
      <td><%= link_shovel(shovel.vhost, shovel.name) %></td>
      <td><%= fmt_shortened_uri(shovel.value['from-uri']) %></td>
-     <td><%= fmt_string(shovel.value['from-queue']) %></td>
+     <td>
+       <% if (shovel.value['from-queue']) { %>
+         <%= fmt_string(shovel.value['from-queue']) %>
+         <sub>queue</sub>
+       <% } else { %>
+         <%= fmt_string(shovel.value['from-exchange']) %>
+         <% if (shovel.value['from-exchange-key']) { %>
+         : <%= fmt_string(shovel.value['from-exchange-key']) %>
+         <% } %>
+         <sub>exchange</sub>
+       <% } %>
+     </td>
      <td><%= fmt_shortened_uri(shovel.value['to-uri']) %></td>
      <td>
        <% if (shovel.value['to-queue']) { %>
@@ -87,11 +98,24 @@
             <table class="subform">
               <tr>
                 <th>URI</th>
-                <th>Queue</th>
+                <th>
+                  <select name="queue-or-exchange" class="narrow controls-appearance">
+                    <option value="from-queue">Queue:</option>
+                    <option value="from-exchange">Exchange:</option>
+                  </select>
+                </th>
               </tr>
               <tr>
                 <td><input type="text" name="from-uri"/><span class="mand">*</span></td>
-                <td><input type="text" name="from-queue"/><span class="mand">*</span></td>
+                <td>
+                  <div id="from-queue-div">
+                    <input type="text" name="from-queue"/>
+                  </div>
+                  <div id="from-exchange-div" style="display: none;">
+                    <input type="text" name="from-exchange"/>
+                    (Routing key: <input type="text" name="from-exchange-key"/>)
+                  </div>
+                </td>
               </tr>
             </table>
           </td>

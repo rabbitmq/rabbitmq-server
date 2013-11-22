@@ -13,8 +13,19 @@
         <td><%= fmt_string(shovel.value['from-uri']) %></td>
       </tr>
       <tr>
-        <th>From queue</th>
-        <td><%= fmt_string(shovel.value['from-queue']) %></td>
+        <th>From exchange / queue</th>
+        <td>
+          <% if (shovel.value['from-queue']) { %>
+            <%= fmt_string(shovel.value['from-queue']) %>
+            <sub>queue</sub>
+          <% } else { %>
+            <%= fmt_string(shovel.value['from-exchange']) %>
+            <% if (shovel.value['from-exchange-key']) { %>
+              : <%= fmt_string(shovel.value['from-exchange-key']) %>
+            <% } %>
+            <sub>exchange</sub>
+          <% } %>
+        </td>
       </tr>
       <tr>
         <th>To URI</th>
