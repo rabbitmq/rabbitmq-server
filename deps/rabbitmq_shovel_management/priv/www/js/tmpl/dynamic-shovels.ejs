@@ -82,40 +82,47 @@
           <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
         <tr>
-          <th>
-            <label>From URI:</label>
-          </th>
-          <td><input type="text" name="from-uri"/><span class="mand">*</span></td>
+          <th>From:</th>
+          <td>
+            <table class="subform">
+              <tr>
+                <th>URI</th>
+                <th>Queue</th>
+              </tr>
+              <tr>
+                <td><input type="text" name="from-uri"/><span class="mand">*</span></td>
+                <td><input type="text" name="from-queue"/><span class="mand">*</span></td>
+              </tr>
+            </table>
+          </td>
         </tr>
         <tr>
-          <th>
-            <label>From queue:</label>
-          </th>
-          <td><input type="text" name="from-queue"/><span class="mand">*</span></td>
-        </tr>
-        <tr>
-          <th>
-            <label>To URI:</label>
-          </th>
-          <td><input type="text" name="to-uri"/><span class="mand">*</span></td>
-        </tr>
-        <tr>
-          <th>
-            <label>To queue:</label>
-          </th>
-          <td><input type="text" name="to-queue"/></td>
-        </tr>
-        <tr>
-          <th>
-            <label>To exchange:</label>
-          </th>
-          <td><input type="text" name="to-exchange"/></td>
-        </tr>
-        <tr>
-          <th>
-            <label>To exchange routing key:</label>
-          </th>
-          <td><input type="text" name="to-exchange-key"/></td>
+          <th>To:</th>
+          <td>
+            <table class="subform">
+              <tr>
+                <th>URI</th>
+                <th>
+                  <select name="queue-or-exchange" class="narrow controls-appearance">
+                    <option value="to-queue">Queue:</option>
+                    <option value="to-exchange">Exchange:</option>
+                  </select>
+                </th>
+              </tr>
+              <tr>
+                <td><input type="text" name="to-uri"/><span class="mand">*</span></td>
+                <td>
+                  <div id="to-queue-div">
+                    <input type="text" name="to-queue"/>
+                  </div>
+                  <div id="to-exchange-div" style="display: none;">
+                    <input type="text" name="to-exchange"/>
+                    (Routing key: <input type="text" name="to-exchange-key"/>)
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
         </tr>
         <tr>
           <th>
