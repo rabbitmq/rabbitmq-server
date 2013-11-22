@@ -912,7 +912,8 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
 
 format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
     lists:append(
-      [case rabbit_mgmt_stats:is_blank(Stats) of
+      [case rabbit_mgmt_stats:is_blank(Stats) andalso
+           not lists:member(K, ?COARSE_QUEUE_STATS) of
            true  -> [];
            false -> {Details, Counter} = rabbit_mgmt_stats:format(
                                            pick_range(K, Ranges),
