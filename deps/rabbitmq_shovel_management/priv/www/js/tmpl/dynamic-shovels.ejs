@@ -97,12 +97,16 @@
           <td>
             <table class="subform">
               <tr>
-                <th>URI</th>
+                <th>
+                  URI
+                  <span class="help" id="shovel-uri"></span>
+                </th>
                 <th>
                   <select name="queue-or-exchange" class="narrow controls-appearance">
                     <option value="from-queue">Queue:</option>
                     <option value="from-exchange">Exchange:</option>
                   </select>
+                  <span class="help" id="shovel-queue-exchange"></span>
                 </th>
               </tr>
               <tr>
@@ -125,12 +129,16 @@
           <td>
             <table class="subform">
               <tr>
-                <th>URI</th>
+                <th>
+                  URI
+                  <span class="help" id="shovel-uri"></span>
+                </th>
                 <th>
                   <select name="queue-or-exchange" class="narrow controls-appearance">
                     <option value="to-queue">Queue:</option>
                     <option value="to-exchange">Exchange:</option>
                   </select>
+                  <span class="help" id="shovel-queue-exchange"></span>
                 </th>
               </tr>
               <tr>
@@ -150,19 +158,28 @@
         </tr>
         <tr>
           <th>
-            <label>Prefetch count:</label>
+            <label>
+              Prefetch count:
+              <span class="help" id="shovel-prefetch"></span>
+            </label>
           </th>
           <td><input type="text" name="prefetch-count"/></td>
         </tr>
         <tr>
           <th>
-            <label>Reconnect delay:</label>
+            <label>
+              Reconnect delay:
+              <span class="help" id="shovel-reconnect"></span>
+            </label>
           </th>
           <td><input type="text" name="reconnect-delay"/> s</td>
         </tr>
         <tr>
           <th>
-            <label>Acknowledgement mode:</label>
+            <label>
+              Acknowledgement mode:
+              <span class="help" id="shovel-ack-mode"></span>
+            </label>
           </th>
           <td>
             <select name="ack-mode">
@@ -181,6 +198,15 @@
   <h2>URI examples</h2>
   <div class="hider">
     <ul>
+      <li>
+        <code>amqp://</code><br/>
+        connect to local server as default user
+      </li>
+      <li>
+        <code>amqp://user@/my-vhost</code><br/>
+        connect to local server with alternate user and virtual host
+        (passwords are not required for local connections)
+      </li>
       <li>
         <code>amqp://server-name</code><br/>
         connect to server-name, without SSL and default credentials

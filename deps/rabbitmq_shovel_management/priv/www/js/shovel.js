@@ -30,6 +30,29 @@ dispatcher_add(function(sammy) {
 NAVIGATION['Admin'][0]['Shovel Status'] = ['#/shovels', "administrator"];
 NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "administrator"];
 
+HELP['shovel-uri'] =
+    'Both source and destination can be either a local or remote broker. See the "URI examples" pane for examples of how to construct URIs.';
+
+HELP['shovel-queue-exchange'] =
+    'You can set both source and destination as either a queue or an exchange. If you choose "queue", it will be declared beforehand; if you choose "exchange" it will not, but an appropriate binding and queue will be created when the source is an exchange.';
+
+HELP['shovel-prefetch'] =
+    'Maximum number of unacknowledged messages that may be in flight over a shovel at one time. Defaults to 1000 if not set.';
+
+HELP['shovel-reconnect'] =
+    'Time in seconds to wait after a shovel goes down before attempting reconnection. Defaults to 1 if not set.';
+
+HELP['shovel-ack-mode'] =
+    '<dl>\
+       <dt><code>on-confirm</code></dt>\
+       <dd>Messages are acknowledged at the source after they have been confirmed at the destination. Handles network errors and broker failures without losing messages. The slowest option, and the default.</dd>\
+       <dt><code>on-publish</code></dt>\
+       <dd>Messages are acknowledged at the source after they have been published at the destination. Handles network errors without losing messages, but may lose messages in the event of broker failures.</dd>\
+       <dt><code>no-ack</code></dt>\
+       <dd>Message acknowledgements are not used. The fastest option, but may lose messages in the event of network or broker failures.</dd>\
+</dl>';
+
+
 function link_shovel(vhost, name) {
     return _link_to(fmt_escape_html(name), '#/dynamic-shovels/' + esc(vhost) + '/' + esc(name));
 }
