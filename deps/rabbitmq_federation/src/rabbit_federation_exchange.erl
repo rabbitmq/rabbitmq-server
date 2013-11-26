@@ -24,6 +24,12 @@
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
+-rabbit_cleanup_step({?MODULE,
+                      [{description, "federation exchange decorator"},
+                       {mfa, {rabbit_registry, unregister,
+                              [exchange_decorator, <<"federation">>]}},
+                       {requires, rabbit_federation_supervisor}]}).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -behaviour(rabbit_exchange_decorator).
