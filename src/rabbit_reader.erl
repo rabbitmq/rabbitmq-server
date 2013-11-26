@@ -926,21 +926,14 @@ validate_negotiated_integer_value(Field, ClientValue, ServerValue, Min) ->
             ok
     end.
 
-fail_negotiation(Field, ClientValue,
-                 ServerValue, MinOrMax) ->
-    S1 = case MinOrMax of
-             min -> lower;
-             max -> greater
-         end,
-    S2 = case MinOrMax of
-             min -> minimum;
-             max -> maximum
-         end,
-    AmqpError = rabbit_misc:amqp_error(
-                  not_allowed,
-                  "negotiated ~p = ~w is ~p than the ~p allowed value (~w)",
-                  [Field, ClientValue, S1, S2, ServerValue], none),
-    rabbit_misc:protocol_error(AmqpError).
+fail_negotiation(Field, ClientValue, ServerValue, MinOrMax) ->
+    {S1,S2} = case MinOrMax of
+                  min -> {lower,  minimum};
+                  max -> {higher, maximum}
+              end,
+    rabbit_misc:protocol_error(
+      not_allowed, "negotiated ~p = ~w is ~p than the ~p allowed value (~w)",
+      [Field, ClientValue, S1, S2, ServerValue], 'connection.tune').
 
 server_frame_max() ->
     {ok, FrameMax} = application:get_env(rabbit, frame_max),
