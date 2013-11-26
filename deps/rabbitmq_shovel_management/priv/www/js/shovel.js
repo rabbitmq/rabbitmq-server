@@ -31,7 +31,7 @@ NAVIGATION['Admin'][0]['Shovel Status'] = ['#/shovels', "administrator"];
 NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "administrator"];
 
 HELP['shovel-uri'] =
-    'Both source and destination can be either a local or remote broker. See the "URI examples" pane for examples of how to construct URIs.';
+    'Both source and destination can be either a local or remote broker. See the "URI examples" pane for examples of how to construct URIs. If connecting to a cluster, you can enter several URIs here separated by spaces.';
 
 HELP['shovel-queue-exchange'] =
     'You can set both source and destination as either a queue or an exchange. If you choose "queue", it will be declared beforehand; if you choose "exchange" it will not, but an appropriate binding and queue will be created when the source is an exchange.';
