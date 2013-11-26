@@ -923,24 +923,33 @@ validate_negotiated_integer_value(Field, ClientValue, ServerValue, Min,
                                   State = #v1{sock = Sock, connection = Connection}) ->
     Protocol = Connection#connection.protocol,
     if ClientValue /= 0 andalso ClientValue < Min ->
-            AmqpError = rabbit_misc:amqp_error(
-                          not_allowed, "negotiated ~p = ~w is lower than the minimum allowedvalue (~w)",
-                          [Field, ClientValue, ServerValue], none),
-            {0, CloseMethod} =
-                rabbit_binary_generator:map_exception(0, AmqpError, Protocol),
-            ok = send_on_channel0(Sock, CloseMethod, Protocol),
-            rabbit_misc:protocol_error(AmqpError);
+            fail_negotiation(Field, ClientValue, ServerValue, min, State);
        ServerValue /= 0 andalso ClientValue > ServerValue ->
-            AmqpError = rabbit_misc:amqp_error(
-                                  not_allowed, "negotiated ~p = ~w is greater than the maximum allowed value (~w)",
-                                  [Field, ClientValue, ServerValue], none),
-            {0, CloseMethod} =
-                rabbit_binary_generator:map_exception(0, AmqpError, Protocol),
-            ok = send_on_channel0(Sock, CloseMethod, Protocol),
-            rabbit_misc:protocol_error(AmqpError);
+            fail_negotiation(Field, ClientValue, ServerValue, max, State);
        true ->
             ok
     end.
+
+fail_negotiation(Field, ClientValue,
+                 ServerValue, MinOrMax,
+                 State = #v1{sock = Sock, connection = Connection}) ->
+    Protocol = Connection#connection.protocol,
+    S1 = case MinOrMax of
+             min -> lower;
+             max -> greater
+         end,
+    S2 = case MinOrMax of
+             min -> minimum;
+             max -> maximum
+         end,
+    AmqpError = rabbit_misc:amqp_error(
+                  not_allowed,
+                  "negotiated ~p = ~w is ~p than the ~p allowed value (~w)",
+                  [Field, ClientValue, S1, S2, ServerValue], none),
+    {0, CloseMethod} =
+        rabbit_binary_generator:map_exception(0, AmqpError, Protocol),
+    ok = send_on_channel0(Sock, CloseMethod, Protocol),
+    rabbit_misc:protocol_error(AmqpError).
 
 server_frame_max() ->
     {ok, FrameMax} = application:get_env(rabbit, frame_max),
