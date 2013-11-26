@@ -63,7 +63,7 @@ validation() ->
                               ['no-ack', 'on-publish', 'on-confirm']), optional}
     ].
 
-%% TODO this function is duplicated src federation. Move to amqp_uri module?
+%% TODO this function is duplicated from federation. Move to amqp_uri module?
 validate_uri(Name, Term) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
