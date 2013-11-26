@@ -858,8 +858,7 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
     ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
     Heartbeater =
         rabbit_heartbeat:start(SupPid, Sock, ClientHeartbeat,
-                               SendFun, ClientHeartbeat,
-                               ReceiveFun),
+                               SendFun, ClientHeartbeat, ReceiveFun),
     State#v1{connection_state = opening,
              connection = Connection#connection{
                             timeout_sec = ClientHeartbeat,
