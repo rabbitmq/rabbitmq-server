@@ -215,7 +215,6 @@ test() ->
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
 
-    ok = application:stop(rabbitmq_shovel),
     ok.
 
 test_broken_shovel_configs(Configs) ->
