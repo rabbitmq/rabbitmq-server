@@ -847,9 +847,9 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                            helper_sup = SupPid,
                            sock = Sock}) ->
     ok = validate_negotiated_integer_value(
-           frame_max,   ?FRAME_MIN_SIZE, server_frame_max(),   FrameMax),
+           frame_max,   ?FRAME_MIN_SIZE, FrameMax),
     ok = validate_negotiated_integer_value(
-           channel_max, ?CHANNEL_MIN,    server_channel_max(), ChannelMax),
+           channel_max, ?CHANNEL_MIN,    ChannelMax),
     {ok, Collector} =
         rabbit_connection_helper_sup:start_queue_collector(SupPid),
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
@@ -913,7 +913,8 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
-validate_negotiated_integer_value(Field, Min, ServerValue, ClientValue) ->
+validate_negotiated_integer_value(Field, Min, ClientValue) ->
+    ServerValue = get_env(Field),
     if ClientValue /= 0 andalso ClientValue < Min ->
             fail_negotiation(Field, min, ServerValue, ClientValue);
        ServerValue /= 0 andalso ClientValue > ServerValue ->
@@ -931,17 +932,9 @@ fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
       not_allowed, "negotiated ~w = ~w is ~w than the ~w allowed value (~w)",
       [Field, ClientValue, S1, S2, ServerValue], 'connection.tune').
 
-server_frame_max() ->
-    {ok, FrameMax} = application:get_env(rabbit, frame_max),
-    FrameMax.
-
-server_channel_max() ->
-    {ok, ChannelMax} = application:get_env(rabbit, channel_max),
-    ChannelMax.
-
-server_heartbeat() ->
-    {ok, Heartbeat} = application:get_env(rabbit, heartbeat),
-    Heartbeat.
+get_env(Key) ->
+    {ok, Value} = application:get_env(rabbit, Key),
+    Value.
 
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
@@ -1007,9 +1000,9 @@ auth_phase(Response,
             State#v1{connection = Connection#connection{
                                     auth_state = AuthState1}};
         {ok, User} ->
-            Tune = #'connection.tune'{channel_max = server_channel_max(),
-                                      frame_max = server_frame_max(),
-                                      heartbeat = server_heartbeat()},
+            Tune = #'connection.tune'{channel_max = get_env(channel_max),
+                                      frame_max   = get_env(frame_max),
+                                      heartbeat   = get_env(heartbeat)},
             ok = send_on_channel0(Sock, Tune, Protocol),
             State#v1{connection_state = tuning,
                      connection = Connection#connection{user       = User,
