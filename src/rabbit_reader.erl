@@ -928,7 +928,7 @@ fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
                   max -> {higher, maximum}
               end,
     rabbit_misc:protocol_error(
-      not_allowed, "negotiated ~p = ~w is ~p than the ~p allowed value (~w)",
+      not_allowed, "negotiated ~w = ~w is ~w than the ~w allowed value (~w)",
       [Field, ClientValue, S1, S2, ServerValue], 'connection.tune').
 
 server_frame_max() ->
