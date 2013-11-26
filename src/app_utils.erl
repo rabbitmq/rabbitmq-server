@@ -78,32 +78,27 @@ wait_for_applications(Apps) ->
     [wait_for_application(App) || App <- Apps], ok.
 
 direct_dependencies(Root) ->
-    G = digraph:new(),
     Loaded = application:loaded_applications(),
-    try
-        [begin
-             case digraph:vertex(G, App) of
-                 false -> digraph:add_vertex(G, App, App);
-                 _     -> ok = throw({graph_error, {vertex, duplicate, App}})
-             end
-         end || {App, _, _} <- Loaded],
-        [digraph:add_edge(G, App, Dep) ||
-                            {App, Deps} <- [{App, app_dependencies(App)} ||
+    {ok, G} = rabbit_misc:build_graph(
+                fun() -> [{App, App} || {App, _, _} <- Loaded] end,
+                fun() -> [{App, Dep} ||
+                             {App, Deps} <- [{App, app_dependencies(App)} ||
                                                 {App, _Desc, _Vsn} <- Loaded],
-                            Dep <- Deps],
+                             Dep <- Deps]
+                end,
+                digraph:new()),
+    try
         Deps = lists:foldl(
                  fun(E, Acc) ->
-                     {_, _InVertex, OutVertex, _Label} = digraph:edge(G, E),
-                     case is_reachable(G, OutVertex, Root) of
-                         [] -> sets:add_element(OutVertex, Acc);
-                         _  -> Acc
-                     end
+                         {_, _InVertex, OutVertex, _Label} = digraph:edge(G, E),
+                         case is_reachable(G, OutVertex, Root) of
+                             [] -> sets:add_element(OutVertex, Acc);
+                             _  -> Acc
+                         end
                  end,
                  sets:from_list([Root]),
                  digraph:out_edges(G, Root)),
         sets:to_list(Deps)
-    catch {graph_error, Reason} ->
-        {error, Reason}
     after
         true = digraph:delete(G)
     end.
