@@ -49,21 +49,21 @@ notify_clear(_VHost, <<"shovel">>, Name) ->
 %%----------------------------------------------------------------------------
 
 validation() ->
-    [{<<"from-uri">>,       fun validate_uri/2, mandatory},
-     {<<"to-uri">>,         fun validate_uri/2, mandatory},
-     {<<"from-exchange">>,  fun rabbit_parameter_validation:binary/2, optional},
-     {<<"from-exchange-key">>,fun rabbit_parameter_validation:binary/2, optional},
-     {<<"from-queue">>,     fun rabbit_parameter_validation:binary/2, optional},
-     {<<"to-exchange">>,    fun rabbit_parameter_validation:binary/2, optional},
-     {<<"to-exchange-key">>,fun rabbit_parameter_validation:binary/2, optional},
-     {<<"to-queue">>,       fun rabbit_parameter_validation:binary/2, optional},
-     {<<"prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
-     {<<"reconnect-delay">>,fun rabbit_parameter_validation:number/2, optional},
+    [{<<"src-uri">>,         fun validate_uri/2, mandatory},
+     {<<"dest-uri">>,        fun validate_uri/2, mandatory},
+     {<<"src-exchange">>,    fun rabbit_parameter_validation:binary/2,optional},
+     {<<"src-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
+     {<<"src-queue">>,       fun rabbit_parameter_validation:binary/2,optional},
+     {<<"dest-exchange">>,   fun rabbit_parameter_validation:binary/2,optional},
+     {<<"dest-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
+     {<<"dest-queue">>,      fun rabbit_parameter_validation:binary/2,optional},
+     {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
+     {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"ack-mode">>,       rabbit_parameter_validation:enum(
                               ['no-ack', 'on-publish', 'on-confirm']), optional}
     ].
 
-%% TODO this function is duplicated from federation. Move to amqp_uri module?
+%% TODO this function is duplicated src federation. Move to amqp_uri module?
 validate_uri(Name, Term) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
@@ -86,32 +86,32 @@ validate_uri(Name, Term) ->
 %%----------------------------------------------------------------------------
 
 parse(Def) ->
-    FromParams   = parse_uri(<<"from-uri">>,     Def),
-    ToParams     = parse_uri(<<"to-uri">>,       Def),
-    FromExch     = pget(<<"from-exchange">>,     Def, none),
-    FromExchKey  = pget(<<"from-exchange-key">>, Def, none),
-    FromQueue    = pget(<<"from-queue">>,        Def, <<>>),
-    ToExch       = pget(<<"to-exchange">>,       Def, none),
-    ToExchKey    = pget(<<"to-exchange-key">>,   Def, none),
-    ToQueue      = pget(<<"to-queue">>,          Def, none),
-    FromFun = fun (Conn, Ch) ->
-                      case FromQueue of
-                          <<>> -> Ms = [#'queue.declare'{exclusive = true},
-                                        #'queue.bind'{routing_key = FromExchKey,
-                                                      exchange    = FromExch}],
-                                  [amqp_channel:call(Ch, M) || M <- Ms];
-                          _    -> ensure_queue(Conn, FromQueue)
+    SrcParams   = parse_uri(<<"src-uri">>,      Def),
+    DestParams  = parse_uri(<<"dest-uri">>,     Def),
+    SrcExch     = pget(<<"src-exchange">>,      Def, none),
+    SrcExchKey  = pget(<<"src-exchange-key">>,  Def, none),
+    SrcQueue    = pget(<<"src-queue">>,         Def, <<>>),
+    DestExch    = pget(<<"dest-exchange">>,     Def, none),
+    DestExchKey = pget(<<"dest-exchange-key">>, Def, none),
+    DestQueue   = pget(<<"dest-queue">>,        Def, none),
+    SrcFun = fun (Conn, Ch) ->
+                     case SrcQueue of
+                         <<>> -> Ms = [#'queue.declare'{exclusive = true},
+                                       #'queue.bind'{routing_key = SrcExchKey,
+                                                     exchange    = SrcExch}],
+                                 [amqp_channel:call(Ch, M) || M <- Ms];
+                         _    -> ensure_queue(Conn, SrcQueue)
+                     end
+             end,
+    DestFun = fun (Conn, _Ch) ->
+                      case DestQueue of
+                          none -> ok;
+                          _    -> ensure_queue(Conn, DestQueue)
                       end
               end,
-    ToFun = fun (Conn, _Ch) ->
-                    case ToQueue of
-                        none -> ok;
-                        _    -> ensure_queue(Conn, ToQueue)
-                    end
-            end,
-    {Exch, Key}  = case ToQueue of
-                       none -> {ToExch, ToExchKey};
-                       _    -> {<<"">>, ToQueue}
+    {Exch, Key}  = case DestQueue of
+                       none -> {DestExch, DestExchKey};
+                       _    -> {<<"">>, DestQueue}
                    end,
     PubFun = fun (P0) -> P1 = case Exch of
                                   none -> P0;
@@ -123,16 +123,16 @@ parse(Def) ->
                          end
              end,
     {ok, #shovel{
-       sources            = #endpoint{amqp_params = FromParams,
-                                      resource_declaration = FromFun},
-       destinations       = #endpoint{amqp_params = ToParams,
-                                      resource_declaration = ToFun},
+       sources            = #endpoint{amqp_params          = SrcParams,
+                                      resource_declaration = SrcFun},
+       destinations       = #endpoint{amqp_params          = DestParams,
+                                      resource_declaration = DestFun},
        prefetch_count     = pget(<<"prefetch-count">>, Def, 1000),
        ack_mode           = translate_ack_mode(
                               pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
        publish_fields     = PubFun,
        publish_properties = fun (P) -> P end,
-       queue              = FromQueue,
+       queue              = SrcQueue,
        reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1)}}.
 
 parse_uri(Key, Def) ->
