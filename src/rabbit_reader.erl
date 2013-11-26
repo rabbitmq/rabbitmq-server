@@ -846,19 +846,16 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                            connection = Connection,
                            helper_sup = SupPid,
                            sock = Sock}) ->
-    Protocol = Connection#connection.protocol,
-    ok = validate_negotiated_integer_value(State#v1.sock,
-                                           frame_max,
+    ok = validate_negotiated_integer_value(frame_max,
                                            FrameMax,
                                            server_frame_max(),
                                            ?FRAME_MIN_SIZE,
-                                           Protocol),
-    ok = validate_negotiated_integer_value(State#v1.sock,
-                                           channel_max,
+                                           State),
+    ok = validate_negotiated_integer_value(channel_max,
                                            ChannelMax,
                                            server_channel_max(),
                                            ?CHANNEL_MIN,
-                                           Protocol),
+                                           State),
     {ok, Collector} =
         rabbit_connection_helper_sup:start_queue_collector(SupPid),
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
@@ -922,14 +919,16 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
-validate_negotiated_integer_value(Socket, Field, ClientValue, ServerValue, Min, Protocol) ->
+validate_negotiated_integer_value(Field, ClientValue, ServerValue, Min,
+                                  State = #v1{sock = Sock, connection = Connection}) ->
+    Protocol = Connection#connection.protocol,
     if ClientValue /= 0 andalso ClientValue < Min ->
             AmqpError = rabbit_misc:amqp_error(
                           not_allowed, "negotiated ~p = ~w is lower than the minimum allowedvalue (~w)",
                           [Field, ClientValue, ServerValue], none),
             {0, CloseMethod} =
                 rabbit_binary_generator:map_exception(0, AmqpError, Protocol),
-            ok = send_on_channel0(Socket, CloseMethod, Protocol),
+            ok = send_on_channel0(Sock, CloseMethod, Protocol),
             rabbit_misc:protocol_error(AmqpError);
        ServerValue /= 0 andalso ClientValue > ServerValue ->
             AmqpError = rabbit_misc:amqp_error(
@@ -937,7 +936,7 @@ validate_negotiated_integer_value(Socket, Field, ClientValue, ServerValue, Min, 
                                   [Field, ClientValue, ServerValue], none),
             {0, CloseMethod} =
                 rabbit_binary_generator:map_exception(0, AmqpError, Protocol),
-            ok = send_on_channel0(Socket, CloseMethod, Protocol),
+            ok = send_on_channel0(Sock, CloseMethod, Protocol),
             rabbit_misc:protocol_error(AmqpError);
        true ->
             ok
