@@ -86,8 +86,8 @@ validate_uri(Name, Term) ->
 %%----------------------------------------------------------------------------
 
 parse(Def) ->
-    {ok, FromParams} = parse_uri(<<"from-uri">>, Def),
-    {ok, ToParams}   = parse_uri(<<"to-uri">>,   Def),
+    FromParams   = parse_uri(<<"from-uri">>,     Def),
+    ToParams     = parse_uri(<<"to-uri">>,       Def),
     FromExch     = pget(<<"from-exchange">>,     Def, none),
     FromExchKey  = pget(<<"from-exchange-key">>, Def, none),
     FromQueue    = pget(<<"from-queue">>,        Def, <<>>),
@@ -123,9 +123,9 @@ parse(Def) ->
                          end
              end,
     {ok, #shovel{
-       sources            = #endpoint{amqp_params = [FromParams],
+       sources            = #endpoint{amqp_params = FromParams,
                                       resource_declaration = FromFun},
-       destinations       = #endpoint{amqp_params = [ToParams],
+       destinations       = #endpoint{amqp_params = ToParams,
                                       resource_declaration = ToFun},
        prefetch_count     = pget(<<"prefetch-count">>, Def, 1000),
        ack_mode           = translate_ack_mode(
@@ -135,7 +135,12 @@ parse(Def) ->
        queue              = FromQueue,
        reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1)}}.
 
-parse_uri(Key, Def) -> amqp_uri:parse(binary_to_list(pget(Key, Def))).
+parse_uri(Key, Def) ->
+    URIs = case pget(Key, Def) of
+               B when is_binary(B) -> [B];
+               L when is_list(L)   -> L
+           end,
+    [P || URI <- URIs, {ok, P} <- [amqp_uri:parse(binary_to_list(URI))]].
 
 translate_ack_mode(<<"on-confirm">>) -> on_confirm;
 translate_ack_mode(<<"on-publish">>) -> on_publish;
