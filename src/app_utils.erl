@@ -18,7 +18,7 @@
 -export([load_applications/1, start_applications/1, start_applications/2,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
          running_applications/0, wait_for_applications/1, app_dependencies/1]).
--export([direct_dependencies/1]).
+-export([isolated_dependencies/1]).
 
 -ifdef(use_specs).
 
@@ -32,7 +32,7 @@
 -spec wait_for_applications([atom()])               -> 'ok'.
 -spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
 -spec app_dependencies(atom())                      -> [atom()].
--spec direct_dependencies(atom())                   -> [atom()].
+-spec isolated_dependencies(atom())                 -> [atom()].
 
 -endif.
 
@@ -77,7 +77,7 @@ stop_applications(Apps, ErrorHandler) ->
 wait_for_applications(Apps) ->
     [wait_for_application(App) || App <- Apps], ok.
 
-direct_dependencies(Root) ->
+isolated_dependencies(Root) ->
     Loaded = application:loaded_applications(),
     {ok, G} = rabbit_misc:build_graph(
                 fun() -> [{App, App} || {App, _, _} <- Loaded] end,

@@ -118,7 +118,7 @@ stop(Apps) ->
           lists:foldl(
             fun(App, Set) ->
                     lists:foldl(fun sets:add_element/2, Set,
-                                app_utils:direct_dependencies(App) -- [rabbit])
+                                app_utils:isolated_dependencies(App) -- [rabbit])
             end, sets:new(), Apps)),
     try
         ok = app_utils:stop_applications(
