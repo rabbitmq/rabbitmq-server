@@ -933,7 +933,6 @@ validate_negotiated_integer_value(Field, ClientValue, ServerValue, Min,
 fail_negotiation(Field, ClientValue,
                  ServerValue, MinOrMax,
                  State = #v1{sock = Sock, connection = Connection}) ->
-    Protocol = Connection#connection.protocol,
     S1 = case MinOrMax of
              min -> lower;
              max -> greater
@@ -946,9 +945,6 @@ fail_negotiation(Field, ClientValue,
                   not_allowed,
                   "negotiated ~p = ~w is ~p than the ~p allowed value (~w)",
                   [Field, ClientValue, S1, S2, ServerValue], none),
-    {0, CloseMethod} =
-        rabbit_binary_generator:map_exception(0, AmqpError, Protocol),
-    ok = send_on_channel0(Sock, CloseMethod, Protocol),
     rabbit_misc:protocol_error(AmqpError).
 
 server_frame_max() ->
