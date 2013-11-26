@@ -283,9 +283,17 @@ write_enabled_plugins(PluginsFile, Plugins) ->
 action_change(Node, Action, Targets) ->
     rpc_call(Node, rabbit_plugins, Action, [Targets]).
 
-rpc_call(Node, Mod, Fun, Args) ->
-    case rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT) of
+rpc_call(Node, Mod, Action, Args) ->
+    case rpc:call(Node, Mod, Action, Args, ?RPC_TIMEOUT) of
         {badrpc, nodedown} -> io:format("Plugin configuration has changed.~n");
-        _                  -> ok
+        ok                 -> io:format("Plugin(s) ~pd.~n", [Action]);
+        %% QA question: if we get into a situation where the rpc call fails,
+        %% does it make sense to suggest a restart as we do here? The restart
+        %% would only succeed if the failure (here) was due to a bug in the
+        %% rabbit_plugins:enable/1 code afaict.
+        Error              -> io:format("Unable to ~p plugin(s). "
+                                        "Please restart the broker "
+                                        "to apply your changes.~nError: ~p~n",
+                                        [Action, Error])
     end.
 

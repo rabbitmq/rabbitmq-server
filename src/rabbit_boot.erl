@@ -101,7 +101,6 @@ start(Apps) ->
         ensure_boot_table(),
         force_reload(Apps),
         StartupApps = app_utils:app_dependency_order(Apps, false),
-        io:format("App Start Order: ~p~n", [StartupApps]),
         case whereis(?MODULE) of
             undefined -> run_boot_steps();
             _         -> ok
@@ -121,30 +120,21 @@ stop(Apps) ->
                     lists:foldl(fun sets:add_element/2, Set,
                                 app_utils:direct_dependencies(App) -- [rabbit])
             end, sets:new(), Apps)),
-    io:format("Target Apps = ~p~n", [TargetApps]),
     try
         ok = app_utils:stop_applications(
                TargetApps, handle_app_error(error_during_shutdown))
     after
         try
-            io:format("Running Cleanup~n"),
             BootSteps = load_steps(rabbit_boot_step),
             ToDelete = [Step || {App, _, _}=Step <- BootSteps,
                                 lists:member(App, TargetApps)],
-            io:format("Boot steps on shutdown: ~p~n", [ToDelete]),
-            [begin
-                 ets:delete(?MODULE, Step),
-                 io:format("Deleted ~p~n", [Step])
-             end || {_, Step, _} <- ToDelete],
-            io:format("Run cleanup steps~n"),
+            [ets:delete(?MODULE, Step) || {_, Step, _} <- ToDelete],
             run_cleanup_steps(TargetApps)
         after
-            io:format("save boot table~n"),
             save_boot_table()
         end,
         [begin
              {ok, Mods} = application:get_key(App, modules),
-             io:format("cleanup ~p...~n", [Mods]),
              [begin
                   code:soft_purge(Mod),
                   code:delete(Mod),
