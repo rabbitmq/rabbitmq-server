@@ -846,14 +846,10 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                            connection = Connection,
                            helper_sup = SupPid,
                            sock = Sock}) ->
-    ok = validate_negotiated_integer_value(frame_max,
-                                           FrameMax,
-                                           server_frame_max(),
-                                           ?FRAME_MIN_SIZE),
-    ok = validate_negotiated_integer_value(channel_max,
-                                           ChannelMax,
-                                           server_channel_max(),
-                                           ?CHANNEL_MIN),
+    ok = validate_negotiated_integer_value(
+           frame_max,   ?FRAME_MIN_SIZE, server_frame_max(),   FrameMax),
+    ok = validate_negotiated_integer_value(
+           channel_max, ?CHANNEL_MIN,    server_channel_max(), ChannelMax),
     {ok, Collector} =
         rabbit_connection_helper_sup:start_queue_collector(SupPid),
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
@@ -917,16 +913,16 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
-validate_negotiated_integer_value(Field, ClientValue, ServerValue, Min) ->
+validate_negotiated_integer_value(Field, Min, ServerValue, ClientValue) ->
     if ClientValue /= 0 andalso ClientValue < Min ->
-            fail_negotiation(Field, ClientValue, ServerValue, min);
+            fail_negotiation(Field, min, ServerValue, ClientValue);
        ServerValue /= 0 andalso ClientValue > ServerValue ->
-            fail_negotiation(Field, ClientValue, ServerValue, max);
+            fail_negotiation(Field, max, ServerValue, ClientValue);
        true ->
             ok
     end.
 
-fail_negotiation(Field, ClientValue, ServerValue, MinOrMax) ->
+fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
     {S1,S2} = case MinOrMax of
                   min -> {lower,  minimum};
                   max -> {higher, maximum}
