@@ -23,7 +23,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -define(SUPERVISOR, rabbit_federation_sup).
 
--export([start_link/0]).
+-export([start_link/0, stop/0]).
 
 -export([init/1]).
 
@@ -37,10 +37,18 @@
                     {requires,    kernel_ready},
                     {enables,     rabbit_federation_exchange}]}).
 
+-rabbit_cleanup_step({rabbit_federation_supervisor,
+                      [{description, "federation"},
+                       {mfa, {?MODULE, stop, []}}]}).
+
 %%----------------------------------------------------------------------------
 
 start_link() ->
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
+
+stop() ->
+    ok = supervisor:terminate_child(rabbit_sup, ?MODULE),
+    ok = supervisor:delete_child(rabbit_sup, ?MODULE).
 
 %%----------------------------------------------------------------------------
 
