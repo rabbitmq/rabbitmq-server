@@ -846,51 +846,35 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                            connection = Connection,
                            helper_sup = SupPid,
                            sock = Sock}) ->
-    ServerFrameMax = server_frame_max(),
-    if FrameMax /= 0 andalso FrameMax < ?FRAME_MIN_SIZE ->
-            rabbit_misc:protocol_error(
-              not_allowed, "frame_max=~w < ~w min size",
-              [FrameMax, ?FRAME_MIN_SIZE]);
-       ServerFrameMax /= 0 andalso FrameMax > ServerFrameMax ->
-            rabbit_misc:protocol_error(
-              not_allowed, "frame_max=~w > ~w max size",
-              [FrameMax, ServerFrameMax]);
-       true ->
-            ServerChannelMax = server_channel_max(),
-            Protocol = Connection#connection.protocol,
-            if ChannelMax /= 0 andalso ChannelMax < ?CHANNEL_MIN ->
-                    AmqpError = rabbit_misc:amqp_error(
-                                  not_allowed, "negotiated channel_max=~w < ~w min size",
-                                  [ChannelMax, ServerChannelMax], none),
-                    {0, CloseMethod} = rabbit_binary_generator:map_exception(
-                                         0, AmqpError, Protocol),
-                    ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol);
-               ChannelMax /= 0 andalso ChannelMax > ServerChannelMax ->
-                    AmqpError = rabbit_misc:amqp_error(
-                                  not_allowed, "negotiated channel_max=~w > ~w max size",
-                                  [ChannelMax, ServerChannelMax], none),
-                    {0, CloseMethod} = rabbit_binary_generator:map_exception(
-                                         0, AmqpError, Protocol),
-                    ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol);
-               true ->
-                    {ok, Collector} =
-                rabbit_connection_helper_sup:start_queue_collector(SupPid),
-                    Frame = rabbit_binary_generator:build_heartbeat_frame(),
-                    SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
-                    Parent = self(),
-                    ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
-                    Heartbeater =
-                        rabbit_heartbeat:start(SupPid, Sock, ClientHeartbeat,
-                                               SendFun, ClientHeartbeat,
-                                               ReceiveFun),
-                    State#v1{connection_state = opening,
-                             connection = Connection#connection{
-                                            timeout_sec = ClientHeartbeat,
-                                            frame_max = FrameMax},
-                             queue_collector = Collector,
-                             heartbeater = Heartbeater}
-            end
-    end;
+    Protocol = Connection#connection.protocol,
+    ok = validate_negotiated_integer_value(State,
+                                           frame_max,
+                                           FrameMax,
+                                           server_frame_max(),
+                                           ?FRAME_MIN_SIZE,
+                                           Protocol),
+    ok = validate_negotiated_integer_value(State,
+                                           channel_max,
+                                           ChannelMax,
+                                           server_channel_max(),
+                                           ?CHANNEL_MIN,
+                                           Protocol),
+    {ok, Collector} =
+        rabbit_connection_helper_sup:start_queue_collector(SupPid),
+    Frame = rabbit_binary_generator:build_heartbeat_frame(),
+    SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
+    Parent = self(),
+    ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
+    Heartbeater =
+        rabbit_heartbeat:start(SupPid, Sock, ClientHeartbeat,
+                               SendFun, ClientHeartbeat,
+                               ReceiveFun),
+    State#v1{connection_state = opening,
+             connection = Connection#connection{
+                            timeout_sec = ClientHeartbeat,
+                            frame_max = FrameMax},
+             queue_collector = Collector,
+             heartbeater = Heartbeater};
 
 handle_method0(#'connection.open'{virtual_host = VHostPath},
                State = #v1{connection_state = opening,
@@ -937,6 +921,27 @@ handle_method0(_Method, State) when ?IS_STOPPING(State) ->
 handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
+
+validate_negotiated_integer_value(State, Field, ClientValue, ServerValue, Min, Protocol) ->
+    if ClientValue /= 0 andalso ClientValue < Min ->
+            AmqpError = rabbit_misc:amqp_error(
+                          not_allowed, "negotiated ~p = ~w is lower than the minimum allowedvalue (~w)",
+                          [Field, ClientValue, ServerValue], none),
+            {0, CloseMethod} =
+                rabbit_binary_generator:map_exception(0, AmqpError, Protocol),
+            ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
+            rabbit_misc:protocol_error(AmqpError);
+       ServerValue /= 0 andalso ClientValue > ServerValue ->
+            AmqpError = rabbit_misc:amqp_error(
+                                  not_allowed, "negotiated ~p = ~w is greater than the maximum allowed value (~w)",
+                                  [Field, ClientValue, ServerValue], none),
+            {0, CloseMethod} =
+                rabbit_binary_generator:map_exception(0, AmqpError, Protocol),
+            ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
+            rabbit_misc:protocol_error(AmqpError);
+       true ->
+            ok
+    end.
 
 server_frame_max() ->
     {ok, FrameMax} = application:get_env(rabbit, frame_max),
