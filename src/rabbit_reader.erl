@@ -943,10 +943,8 @@ server_frame_max() ->
     FrameMax.
 
 server_channel_max() ->
-    case application:get_env(rabbit, channel_max) of
-        {ok, ChannelMax} -> ChannelMax;
-        undefined        -> 0
-    end.
+    {ok, ChannelMax} = application:get_env(rabbit, channel_max),
+    ChannelMax.
 
 server_heartbeat() ->
     {ok, Heartbeat} = application:get_env(rabbit, heartbeat),
