@@ -840,8 +840,8 @@ handle_method0(#'connection.secure_ok'{response = Response},
     auth_phase(Response, State);
 
 handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
-                                     heartbeat   = ClientHeartbeat,
-                                     channel_max = ChannelMax},
+                                     channel_max = ChannelMax,
+                                     heartbeat   = ClientHeartbeat},
                State = #v1{connection_state = tuning,
                            connection = Connection,
                            helper_sup = SupPid,
@@ -1000,8 +1000,8 @@ auth_phase(Response,
             State#v1{connection = Connection#connection{
                                     auth_state = AuthState1}};
         {ok, User} ->
-            Tune = #'connection.tune'{channel_max = get_env(channel_max),
-                                      frame_max   = get_env(frame_max),
+            Tune = #'connection.tune'{frame_max   = get_env(frame_max),
+                                      channel_max = get_env(channel_max),
                                       heartbeat   = get_env(heartbeat)},
             ok = send_on_channel0(Sock, Tune, Protocol),
             State#v1{connection_state = tuning,
