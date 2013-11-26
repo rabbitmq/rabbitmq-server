@@ -19,6 +19,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-import(rabbit_misc, [pget/2]).
+
 simple_test() ->
     with_ch(
       fun (Ch) ->
@@ -33,6 +35,40 @@ simple_test() ->
               expect_empty(Ch, <<"dest">>)
       end).
 
+exchange_test() ->
+    with_ch(
+      fun (Ch) ->
+              amqp_channel:call(Ch, #'queue.declare'{queue   = <<"queue">>,
+                                                     durable = true}),
+              amqp_channel:call(
+                Ch, #'queue.bind'{queue       = <<"queue">>,
+                                  exchange    = <<"amq.topic">>,
+                                  routing_key = <<"test-key">>}),
+              set_param("shovel", "test",
+                        [{"src-uri",          "amqp://"},
+                         {"src-exchange",     "amq.direct"},
+                         {"src-exchange-key", "test-key"},
+                         {"dest-uri",         "amqp://"},
+                         {"dest-exchange",    "amq.topic"}]),
+              publish_expect(Ch, <<"amq.direct">>, <<"test-key">>,
+                             <<"queue">>, <<"hello">>),
+              set_param("shovel", "test",
+                        [{"src-uri",           "amqp://"},
+                         {"src-exchange",      "amq.direct"},
+                         {"src-exchange-key",  "test-key"},
+                         {"dest-uri",          "amqp://"},
+                         {"dest-exchange",     "amq.topic"},
+                         {"dest-exchange-key", "new-key"}]),
+              publish(Ch, <<"amq.direct">>, <<"test-key">>, <<"hello">>),
+              expect_empty(Ch, <<"queue">>),
+              amqp_channel:call(
+                Ch, #'queue.bind'{queue       = <<"queue">>,
+                                  exchange    = <<"amq.topic">>,
+                                  routing_key = <<"new-key">>}),
+              publish_expect(Ch, <<"amq.direct">>, <<"test-key">>,
+                             <<"queue">>, <<"hello">>)
+      end).
+
 %%----------------------------------------------------------------------------
 
 with_ch(Fun) ->
@@ -40,6 +76,7 @@ with_ch(Fun) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Fun(Ch),
     amqp_connection:close(Conn),
+    cleanup(),
     ok.
 
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->
@@ -72,24 +109,27 @@ expect_empty(Ch, Q) ->
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
 set_param(Component, Name, Value) ->
-    rabbitmqctl(
-      fmt("set_parameter ~s ~s '~s'", [Component, Name, json(Value)])).
+    ok = rabbit_runtime_parameters:set(
+           <<"/">>, list_to_binary(Component), list_to_binary(Name),
+          [{list_to_binary(K), list_to_binary(V)} || {K, V} <- Value]),
+    await_shovel(list_to_binary(Name)).
+
+await_shovel(Name) ->
+    S = rabbit_shovel_status:status(),
+    case lists:member(Name, [N || {N, dynamic, {running, _, _}, _} <- S]) of
+        true  -> ok;
+        false -> timer:sleep(100),
+                 await_shovel(Name)
+    end.
 
 clear_param(Component, Name) ->
-    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Name])).
+    rabbit_runtime_parameters:clear(
+      <<"/">>, list_to_binary(Component), list_to_binary(Name)).
 
-fmt(Fmt, Args) ->
-    string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
+cleanup() ->
+    [rabbit_runtime_parameters:clear(pget(vhost, P),
+                                     pget(component, P),
+                                     pget(name, P)) ||
+        P <- rabbit_runtime_parameters:list()],
+    [rabbit_amqqueue:delete(Q, false, false) || Q <- rabbit_amqqueue:list()].
 
-rabbitmqctl(Args) ->
-    ?assertCmd(
-       plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
-    timer:sleep(100).
-
-plugin_dir() ->
-    {ok, [[File]]} = init:get_argument(config),
-    filename:dirname(filename:dirname(File)).
-
-json(List) ->
-    "{" ++ string:join([quote(K, V) || {K, V} <- List], ",") ++ "}".
-quote(K, V) -> rabbit_misc:format("\"~s\":\"~s\"", [K, V]).
