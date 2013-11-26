@@ -9,38 +9,38 @@
         <td><%= fmt_string(shovel.vhost) %></td>
       </tr>
       <tr>
-        <th>From URI</th>
-        <td><%= fmt_string(shovel.value['from-uri']) %></td>
+        <th>Source</th>
+        <td><%= fmt_string(shovel.value['src-uri']) %></td>
       </tr>
       <tr>
-        <th>From exchange / queue</th>
+        <th> </th>
         <td>
-          <% if (shovel.value['from-queue']) { %>
-            <%= fmt_string(shovel.value['from-queue']) %>
+          <% if (shovel.value['src-queue']) { %>
+            <%= fmt_string(shovel.value['src-queue']) %>
             <sub>queue</sub>
           <% } else { %>
-            <%= fmt_string(shovel.value['from-exchange']) %>
-            <% if (shovel.value['from-exchange-key']) { %>
-              : <%= fmt_string(shovel.value['from-exchange-key']) %>
+            <%= fmt_string(shovel.value['src-exchange']) %>
+            <% if (shovel.value['src-exchange-key']) { %>
+              : <%= fmt_string(shovel.value['src-exchange-key']) %>
             <% } %>
             <sub>exchange</sub>
           <% } %>
         </td>
       </tr>
       <tr>
-        <th>To URI</th>
-        <td><%= fmt_string(shovel.value['to-uri']) %></td>
+        <th>Destination</th>
+        <td><%= fmt_string(shovel.value['dest-uri']) %></td>
       </tr>
       <tr>
-        <th>To exchange / queue</th>
+        <th> </th>
         <td>
-          <% if (shovel.value['to-queue']) { %>
-            <%= fmt_string(shovel.value['to-queue']) %>
+          <% if (shovel.value['dest-queue']) { %>
+            <%= fmt_string(shovel.value['dest-queue']) %>
             <sub>queue</sub>
           <% } else { %>
-            <%= fmt_string(shovel.value['to-exchange']) %>
-            <% if (shovel.value['to-exchange-key']) { %>
-              : <%= fmt_string(shovel.value['to-exchange-key']) %>
+            <%= fmt_string(shovel.value['dest-exchange']) %>
+            <% if (shovel.value['dest-exchange-key']) { %>
+              : <%= fmt_string(shovel.value['dest-exchange-key']) %>
             <% } %>
             <sub>exchange</sub>
           <% } %>

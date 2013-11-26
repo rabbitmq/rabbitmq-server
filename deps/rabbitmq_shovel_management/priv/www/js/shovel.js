@@ -15,7 +15,7 @@ dispatcher_add(function(sammy) {
     sammy.put('#/shovel-parameters', function() {
             var num_keys = ['prefetch-count', 'reconnect-delay'];
             var bool_keys = [];
-            var arrayable_keys = ['from-uri', 'to-uri'];
+            var arrayable_keys = ['src-uri', 'dest-uri'];
             put_parameter(this, [], num_keys, bool_keys, arrayable_keys);
             return false;
         });
