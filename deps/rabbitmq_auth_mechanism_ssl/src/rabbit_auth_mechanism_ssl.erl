@@ -36,7 +36,6 @@
                        {mfa, {rabbit_registry, unregister,
                               [auth_mechanism, <<"EXTERNAL">>]}}]}).
 
-
 -record(state, {username = undefined}).
 
 %% SASL EXTERNAL. SASL says EXTERNAL means "use credentials
