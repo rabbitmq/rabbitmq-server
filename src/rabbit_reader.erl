@@ -32,7 +32,7 @@
 -define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
--define(CHANNEL_MIN, 4).
+-define(CHANNEL_MIN, 1).
 
 %%--------------------------------------------------------------------------
 
