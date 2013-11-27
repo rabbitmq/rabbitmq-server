@@ -24,8 +24,8 @@
 simple_test() ->
     with_ch(
       fun (Ch) ->
-              set_param("test", [{"src-queue",  "src"},
-                                 {"dest-queue", "dest"}]),
+              set_param(<<"test">>, [{<<"src-queue">>,  <<"src">>},
+                                     {<<"dest-queue">>, <<"dest">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 
@@ -38,15 +38,15 @@ exchange_test() ->
                 Ch, #'queue.bind'{queue       = <<"queue">>,
                                   exchange    = <<"amq.topic">>,
                                   routing_key = <<"test-key">>}),
-              set_param("test", [{"src-exchange",     "amq.direct"},
-                                 {"src-exchange-key", "test-key"},
-                                 {"dest-exchange",    "amq.topic"}]),
+              set_param(<<"test">>, [{<<"src-exchange">>,    <<"amq.direct">>},
+                                     {<<"src-exchange-key">>,<<"test-key">>},
+                                     {<<"dest-exchange">>,   <<"amq.topic">>}]),
               publish_expect(Ch, <<"amq.direct">>, <<"test-key">>,
                              <<"queue">>, <<"hello">>),
-              set_param("test", [{"src-exchange",      "amq.direct"},
-                                 {"src-exchange-key",  "test-key"},
-                                 {"dest-exchange",     "amq.topic"},
-                                 {"dest-exchange-key", "new-key"}]),
+              set_param(<<"test">>, [{<<"src-exchange">>,     <<"amq.direct">>},
+                                     {<<"src-exchange-key">>, <<"test-key">>},
+                                     {<<"dest-exchange">>,    <<"amq.topic">>},
+                                     {<<"dest-exchange-key">>,<<"new-key">>}]),
               publish(Ch, <<"amq.direct">>, <<"test-key">>, <<"hello">>),
               expect_empty(Ch, <<"queue">>),
               amqp_channel:call(
@@ -60,8 +60,8 @@ exchange_test() ->
 restart_test() ->
     with_ch(
       fun (Ch) ->
-              set_param("test", [{"src-queue",  "src"},
-                                 {"dest-queue", "dest"}]),
+              set_param(<<"test">>, [{<<"src-queue">>,  <<"src">>},
+                                     {<<"dest-queue">>, <<"dest">>}]),
               %% The catch is because connections link to the shovel,
               %% so one connection will die, kill the shovel, kill
               %% the other connection, then we can't close it
@@ -72,18 +72,48 @@ restart_test() ->
 change_definition_test() ->
     with_ch(
       fun (Ch) ->
-              set_param("test", [{"src-queue",  "src"},
-                                 {"dest-queue", "dest"}]),
+              set_param(<<"test">>, [{<<"src-queue">>,  <<"src">>},
+                                     {<<"dest-queue">>, <<"dest">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
-              set_param("test", [{"src-queue",  "src"},
-                                 {"dest-queue", "dest2"}]),
+              set_param(<<"test">>, [{<<"src-queue">>,  <<"src">>},
+                                     {<<"dest-queue">>, <<"dest2">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest2">>, <<"hello">>),
               expect_empty(Ch, <<"dest">>),
-              clear_param("test"),
+              clear_param(<<"test">>),
               publish_expect(Ch, <<>>, <<"src">>, <<"src">>, <<"hello">>),
               expect_empty(Ch, <<"dest">>),
               expect_empty(Ch, <<"dest2">>)
       end).
+
+validation_test() ->
+    URIs = [{<<"src-uri">>,  <<"amqp://">>},
+            {<<"dest-uri">>, <<"amqp://">>}],
+
+    %% Need valid src and dest URIs
+    invalid_param([]),
+    invalid_param([{<<"src-queue">>, <<"test">>},
+                   {<<"src-uri">>,   <<"derp">>},
+                   {<<"dest-uri">>,  <<"amqp://">>}]),
+    invalid_param([{<<"src-queue">>, <<"test">>},
+                   {<<"src-uri">>,   [<<"derp">>]},
+                   {<<"dest-uri">>,  <<"amqp://">>}]),
+    invalid_param([{<<"src-queue">>, <<"test">>},
+                   {<<"dest-uri">>,  <<"amqp://">>}]),
+
+    %% Also need src exchange or queue
+    invalid_param(URIs),
+    valid_param([{<<"src-exchange">>, <<"test">>} | URIs]),
+    QURIs =     [{<<"src-queue">>,    <<"test">>} | URIs],
+    valid_param(QURIs),
+
+    %% But not both
+    invalid_param([{<<"src-exchange">>, <<"test">>} | QURIs]),
+
+    %% Check these are of right type
+    invalid_param([{<<"prefetch-count">>,  <<"three">>} | QURIs]),
+    invalid_param([{<<"reconnect-delay">>, <<"three">>} | QURIs]),
+    invalid_param([{<<"ack-mode">>,        <<"whenever">>} | QURIs]),
+    ok.
 
 %%----------------------------------------------------------------------------
 
@@ -124,13 +154,20 @@ expect_empty(Ch, Q) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
-set_param(Name, Value0) ->
-    Value = [{"src-uri",  "amqp://"},
-             {"dest-uri", "amqp://"} | Value0],
+set_param(Name, Value) ->
     ok = rabbit_runtime_parameters:set(
-           <<"/">>, <<"shovel">>, list_to_binary(Name),
-           [{list_to_binary(K), list_to_binary(V)} || {K, V} <- Value]),
-    await_shovel(list_to_binary(Name)).
+           <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  <<"amqp://">>},
+                                         {<<"dest-uri">>, [<<"amqp://">>]} |
+                                         Value]),
+    await_shovel(Name).
+
+invalid_param(Value) ->
+    {error_string, _} = rabbit_runtime_parameters:set(
+                          <<"/">>, <<"shovel">>, <<"invalid">>, Value).
+
+valid_param(Value) ->
+    ok = rabbit_runtime_parameters:set(<<"/">>, <<"shovel">>, <<"a">>, Value),
+    ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>).
 
 await_shovel(Name) ->
     S = rabbit_shovel_status:status(),
@@ -141,8 +178,7 @@ await_shovel(Name) ->
     end.
 
 clear_param(Name) ->
-    rabbit_runtime_parameters:clear(
-      <<"/">>, <<"shovel">>, list_to_binary(Name)).
+    rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, Name).
 
 cleanup() ->
     [rabbit_runtime_parameters:clear(pget(vhost, P),

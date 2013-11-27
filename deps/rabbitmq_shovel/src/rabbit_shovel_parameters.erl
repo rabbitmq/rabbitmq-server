@@ -34,11 +34,27 @@
 register() ->
     rabbit_registry:register(runtime_parameter, <<"shovel">>, ?MODULE).
 
-validate(_VHost, <<"shovel">>, Name, Definition) ->
-    rabbit_parameter_validation:proplist(Name, validation(), Definition);
+validate(_VHost, <<"shovel">>, Name, Def) ->
+    [case pget2(<<"src-exchange">>, <<"src-queue">>, Def) of
+         zero -> {error, "Must specify 'src-exchange' or 'src-queue'", []};
+         one  -> ok;
+         both -> {error, "Cannot specify 'src-exchange' and 'src-queue'", []}
+     end,
+     case pget2(<<"dest-exchange">>, <<"dest-queue">>, Def) of
+         zero -> ok;
+         one  -> ok;
+         both -> {error, "Cannot specify 'dest-exchange' and 'dest-queue'", []}
+     end | rabbit_parameter_validation:proplist(Name, validation(), Def)];
 
 validate(_VHost, _Component, Name, _Term) ->
     {error, "name not recognised: ~p", [Name]}.
+
+pget2(K1, K2, Defs) -> case {pget(K1, Defs), pget(K2, Defs)} of
+                           {undefined, undefined} -> zero;
+                           {undefined, _}         -> one;
+                           {_,         undefined} -> one;
+                           {_,         _}         -> both
+                       end.
 
 notify(_VHost, <<"shovel">>, Name, Definition) ->
     rabbit_shovel_dyn_worker_sup_sup:adjust_or_start_child(Name, Definition).
@@ -89,20 +105,24 @@ parse(Def) ->
     SrcParams   = parse_uri(<<"src-uri">>,      Def),
     DestParams  = parse_uri(<<"dest-uri">>,     Def),
     SrcExch     = pget(<<"src-exchange">>,      Def, none),
-    SrcExchKey  = pget(<<"src-exchange-key">>,  Def, none),
-    SrcQueue    = pget(<<"src-queue">>,         Def, <<>>),
+    SrcExchKey  = pget(<<"src-exchange-key">>,  Def, <<>>), %% [1]
+    SrcQueue    = pget(<<"src-queue">>,         Def, none),
     DestExch    = pget(<<"dest-exchange">>,     Def, none),
     DestExchKey = pget(<<"dest-exchange-key">>, Def, none),
     DestQueue   = pget(<<"dest-queue">>,        Def, none),
-    SrcFun = fun (Conn, Ch) ->
-                     case SrcQueue of
-                         <<>> -> Ms = [#'queue.declare'{exclusive = true},
-                                       #'queue.bind'{routing_key = SrcExchKey,
-                                                     exchange    = SrcExch}],
-                                 [amqp_channel:call(Ch, M) || M <- Ms];
-                         _    -> ensure_queue(Conn, SrcQueue)
-                     end
-             end,
+    %% [1] src-exchange-key is never ignored if src-exchange is set
+    {SrcFun, Queue} =
+        case SrcQueue of
+            none -> {fun (_Conn, Ch) ->
+                             Ms = [#'queue.declare'{exclusive = true},
+                                   #'queue.bind'{routing_key = SrcExchKey,
+                                                 exchange    = SrcExch}],
+                             [amqp_channel:call(Ch, M) || M <- Ms]
+                     end, <<>>};
+            _    -> {fun (Conn, _Ch) ->
+                             ensure_queue(Conn, SrcQueue)
+                     end, SrcQueue}
+        end,
     DestFun = fun (Conn, _Ch) ->
                       case DestQueue of
                           none -> ok;
@@ -111,7 +131,7 @@ parse(Def) ->
               end,
     {Exch, Key}  = case DestQueue of
                        none -> {DestExch, DestExchKey};
-                       _    -> {<<"">>, DestQueue}
+                       _    -> {<<>>,     DestQueue}
                    end,
     PubFun = fun (P0) -> P1 = case Exch of
                                   none -> P0;
@@ -132,7 +152,7 @@ parse(Def) ->
                               pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
        publish_fields     = PubFun,
        publish_properties = fun (P) -> P end,
-       queue              = SrcQueue,
+       queue              = Queue,
        reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1)}}.
 
 parse_uri(Key, Def) ->
