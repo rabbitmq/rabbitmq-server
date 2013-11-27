@@ -24,13 +24,10 @@
 simple_test() ->
     with_ch(
       fun (Ch) ->
-              set_param("shovel", "test",
-                        [{"src-uri",    "amqp://"},
-                         {"src-queue",  "src"},
-                         {"dest-uri",   "amqp://"},
-                         {"dest-queue", "dest"}]),
+              set_param("test", [{"src-queue",  "src"},
+                                 {"dest-queue", "dest"}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
-              clear_param("shovel", "test"),
+              clear_param("test"),
               publish_expect(Ch, <<>>, <<"src">>, <<"src">>, <<"hello">>),
               expect_empty(Ch, <<"dest">>)
       end).
@@ -44,21 +41,15 @@ exchange_test() ->
                 Ch, #'queue.bind'{queue       = <<"queue">>,
                                   exchange    = <<"amq.topic">>,
                                   routing_key = <<"test-key">>}),
-              set_param("shovel", "test",
-                        [{"src-uri",          "amqp://"},
-                         {"src-exchange",     "amq.direct"},
-                         {"src-exchange-key", "test-key"},
-                         {"dest-uri",         "amqp://"},
-                         {"dest-exchange",    "amq.topic"}]),
+              set_param("test", [{"src-exchange",     "amq.direct"},
+                                 {"src-exchange-key", "test-key"},
+                                 {"dest-exchange",    "amq.topic"}]),
               publish_expect(Ch, <<"amq.direct">>, <<"test-key">>,
                              <<"queue">>, <<"hello">>),
-              set_param("shovel", "test",
-                        [{"src-uri",           "amqp://"},
-                         {"src-exchange",      "amq.direct"},
-                         {"src-exchange-key",  "test-key"},
-                         {"dest-uri",          "amqp://"},
-                         {"dest-exchange",     "amq.topic"},
-                         {"dest-exchange-key", "new-key"}]),
+              set_param("test", [{"src-exchange",      "amq.direct"},
+                                 {"src-exchange-key",  "test-key"},
+                                 {"dest-exchange",     "amq.topic"},
+                                 {"dest-exchange-key", "new-key"}]),
               publish(Ch, <<"amq.direct">>, <<"test-key">>, <<"hello">>),
               expect_empty(Ch, <<"queue">>),
               amqp_channel:call(
@@ -67,6 +58,18 @@ exchange_test() ->
                                   routing_key = <<"new-key">>}),
               publish_expect(Ch, <<"amq.direct">>, <<"test-key">>,
                              <<"queue">>, <<"hello">>)
+      end).
+
+restart_test() ->
+    with_ch(
+      fun (Ch) ->
+              set_param("test", [{"src-queue",  "src"},
+                                 {"dest-queue", "dest"}]),
+              %% The catch is because connections link to the shovel,
+              %% so one connection will die, kill the shovel, kill
+              %% the other connection, then we can't close it
+              [catch amqp_connection:close(C) || C <- rabbit_direct:list()],
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 
 %%----------------------------------------------------------------------------
@@ -108,10 +111,12 @@ expect_empty(Ch, Q) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
-set_param(Component, Name, Value) ->
+set_param(Name, Value0) ->
+    Value = [{"src-uri",  "amqp://"},
+             {"dest-uri", "amqp://"} | Value0],
     ok = rabbit_runtime_parameters:set(
-           <<"/">>, list_to_binary(Component), list_to_binary(Name),
-          [{list_to_binary(K), list_to_binary(V)} || {K, V} <- Value]),
+           <<"/">>, <<"shovel">>, list_to_binary(Name),
+           [{list_to_binary(K), list_to_binary(V)} || {K, V} <- Value]),
     await_shovel(list_to_binary(Name)).
 
 await_shovel(Name) ->
@@ -122,9 +127,9 @@ await_shovel(Name) ->
                  await_shovel(Name)
     end.
 
-clear_param(Component, Name) ->
+clear_param(Name) ->
     rabbit_runtime_parameters:clear(
-      <<"/">>, list_to_binary(Component), list_to_binary(Name)).
+      <<"/">>, <<"shovel">>, list_to_binary(Name)).
 
 cleanup() ->
     [rabbit_runtime_parameters:clear(pget(vhost, P),
