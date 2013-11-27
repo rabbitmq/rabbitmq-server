@@ -15,6 +15,11 @@
                     {requires, rabbit_registry},
                     {enables, kernel_ready}]}).
 
+-rabbit_cleanup_step({?MODULE,
+                      [{description, "exchange type x-recent-history"},
+                       {mfa, {rabbit_registry, unregister,
+                                 [exchange, <<"x-recent-history">>]}}]}).
+
 -rabbit_boot_step({rabbit_exchange_type_recent_history_mnesia,
                    [{description, "recent history exchange type: mnesia"},
                     {mfa, {?MODULE, setup_schema, []}},
