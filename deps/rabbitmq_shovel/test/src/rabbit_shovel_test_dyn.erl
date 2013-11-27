@@ -26,10 +26,7 @@ simple_test() ->
       fun (Ch) ->
               set_param("test", [{"src-queue",  "src"},
                                  {"dest-queue", "dest"}]),
-              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
-              clear_param("test"),
-              publish_expect(Ch, <<>>, <<"src">>, <<"src">>, <<"hello">>),
-              expect_empty(Ch, <<"dest">>)
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 
 exchange_test() ->
@@ -70,6 +67,22 @@ restart_test() ->
               %% the other connection, then we can't close it
               [catch amqp_connection:close(C) || C <- rabbit_direct:list()],
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
+      end).
+
+change_definition_test() ->
+    with_ch(
+      fun (Ch) ->
+              set_param("test", [{"src-queue",  "src"},
+                                 {"dest-queue", "dest"}]),
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
+              set_param("test", [{"src-queue",  "src"},
+                                 {"dest-queue", "dest2"}]),
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest2">>, <<"hello">>),
+              expect_empty(Ch, <<"dest">>),
+              clear_param("test"),
+              publish_expect(Ch, <<>>, <<"src">>, <<"src">>, <<"hello">>),
+              expect_empty(Ch, <<"dest">>),
+              expect_empty(Ch, <<"dest2">>)
       end).
 
 %%----------------------------------------------------------------------------
