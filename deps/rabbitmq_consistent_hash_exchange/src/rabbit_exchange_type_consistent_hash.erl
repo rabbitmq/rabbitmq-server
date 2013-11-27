@@ -35,6 +35,12 @@
      {requires,    rabbit_registry},
      {enables,     kernel_ready}]}).
 
+-rabbit_cleanup_step(
+   {rabbit_exchange_type_consistent_hash_registry,
+    [{description, "exchange type x-consistent-hash: registry cleanup"},
+     {mfa,         {rabbit_registry, unregister,
+                    [exchange, <<"x-consistent-hash">>]}}]}).
+
 -rabbit_boot_step(
    {rabbit_exchange_type_consistent_hash_mnesia,
     [{description, "exchange type x-consistent-hash: mnesia"},
