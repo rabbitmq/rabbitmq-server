@@ -611,13 +611,14 @@ create_channel(Channel, State) ->
                                  user         = User,
                                  vhost        = VHost,
                                  capabilities = Capabilities}} = State,
-    case ChannelMax /= 0 andalso Channel > ChannelMax of
+    N = length(all_channels()),
+    case ChannelMax /= 0 andalso N > ChannelMax of
         true ->
             %% we cannot use rabbit_misc:protocol_error here because amqp_error is caught
             %% only for the methods on channel 0.
             AmqpError = rabbit_misc:amqp_error(
-                          not_allowed, "channel ~w is greater than negotiated channel_max (~w)",
-                          [Channel, ChannelMax], 'channel.open'),
+                          not_allowed, "number of channels opened (~w) is greater than the negotiated channel_max (~w)",
+                          [N, ChannelMax], 'channel.open'),
             throw({error, AmqpError});
        false ->
             {ok, _ChSupPid, {ChPid, AState}} =
