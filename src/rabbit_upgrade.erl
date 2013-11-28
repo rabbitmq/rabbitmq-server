@@ -191,9 +191,14 @@ die(Msg, Args) ->
     %% straight out into do_boot, generating an erl_crash.dump
     %% and displaying any error message in a confusing way.
     error_logger:error_msg(Msg, Args),
-    io:format("~n~n****~n~n" ++ Msg ++ "~n~n****~n~n~n", Args),
+    Str = rabbit_misc:format(
+            "~n~n****~n~n" ++ Msg ++ "~n~n****~n~n~n", Args),
+    io:format(Str),
     error_logger:logfile(close),
-    halt(1).
+    case application:get_env(rabbit, halt_on_upgrade_failure) of
+        false -> throw({upgrade_error, Str});
+        _     -> halt(1) %% i.e. true or undefined
+    end.
 
 primary_upgrade(Upgrades, Nodes) ->
     Others = Nodes -- [node()],
