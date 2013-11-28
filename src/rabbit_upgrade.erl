@@ -196,8 +196,8 @@ die(Msg, Args) ->
     io:format(Str),
     error_logger:logfile(close),
     case application:get_env(rabbit, halt_on_upgrade_failure) of
-        false -> throw({upgrade_error, Str});
-        _     -> halt(1) %% i.e. true or undefined
+        {ok, false} -> throw({upgrade_error, Str});
+        _           -> halt(1) %% i.e. true or undefined
     end.
 
 primary_upgrade(Upgrades, Nodes) ->
