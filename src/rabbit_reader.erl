@@ -1063,6 +1063,7 @@ ic(user,              #connection{user        = U})        -> U#user.username;
 ic(vhost,             #connection{vhost       = VHost})    -> VHost;
 ic(timeout,           #connection{timeout_sec = Timeout})  -> Timeout;
 ic(frame_max,         #connection{frame_max   = FrameMax}) -> FrameMax;
+ic(channel_max,       #connection{channel_max = ChannelMax}) -> ChannelMax;
 ic(client_properties, #connection{client_properties = CP}) -> CP;
 ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
 ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
