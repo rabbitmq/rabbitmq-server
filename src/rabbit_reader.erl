@@ -614,12 +614,9 @@ create_channel(Channel, State) ->
     N = length(all_channels()),
     case ChannelMax /= 0 andalso N + 1 > ChannelMax of
         true ->
-            %% we cannot use rabbit_misc:protocol_error here because amqp_error is caught
-            %% only for the methods on channel 0.
-            AmqpError = rabbit_misc:amqp_error(
-                          not_allowed, "number of channels opened (~w) has reached the negotiated channel_max (~w)",
-                          [N, ChannelMax], 'none'),
-            throw({error, AmqpError});
+            rabbit_misc:protocol_error(
+              not_allowed, "number of channels opened (~w) has reached the negotiated channel_max (~w)",
+              [N, ChannelMax], 'none');
        false ->
             {ok, _ChSupPid, {ChPid, AState}} =
                 rabbit_channel_sup_sup:start_channel(
@@ -697,7 +694,7 @@ process_frame(Frame, Channel, State) ->
             {error, Reason} ->
                 handle_exception(State, Channel, Reason)
         end
-    catch {error, Error} ->
+    catch exit:Error ->
             handle_exception(State, Channel, Error)
     end.
 
