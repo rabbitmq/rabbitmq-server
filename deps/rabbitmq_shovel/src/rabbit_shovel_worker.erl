@@ -27,7 +27,7 @@
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
-                name, type, config, inbound_params, outbound_params, unacked}).
+                name, type, config, inbound_uri, outbound_uri, unacked}).
 
 start_link(Type, Name, Config) ->
     ok = rabbit_shovel_status:report(Name, Type, starting),
@@ -52,10 +52,10 @@ handle_cast(init, State = #state{config = Config}) ->
     process_flag(trap_exit, true),
     random:seed(now()),
     #shovel{sources = Sources, destinations = Destinations} = Config,
-    {InboundConn, InboundChan, InboundParams} =
-        make_conn_and_chan(Sources#endpoint.amqp_params),
-    {OutboundConn, OutboundChan, OutboundParams} =
-        make_conn_and_chan(Destinations#endpoint.amqp_params),
+    {InboundConn, InboundChan, InboundURI} =
+        make_conn_and_chan(Sources#endpoint.uris),
+    {OutboundConn, OutboundChan, OutboundURI} =
+        make_conn_and_chan(Destinations#endpoint.uris),
 
     (Sources#endpoint.resource_declaration)(InboundConn, InboundChan),
     (Destinations#endpoint.resource_declaration)(OutboundConn, OutboundChan),
@@ -84,8 +84,8 @@ handle_cast(init, State = #state{config = Config}) ->
     State1 =
         State#state{inbound_conn = InboundConn, inbound_ch = InboundChan,
                     outbound_conn = OutboundConn, outbound_ch = OutboundChan,
-                    inbound_params = InboundParams,
-                    outbound_params = OutboundParams,
+                    inbound_uri = InboundURI,
+                    outbound_uri = OutboundURI,
                     unacked = gb_trees:empty()},
     ok = report_status(running, State1),
     {noreply, State1}.
@@ -172,8 +172,8 @@ remove_delivery_tags(Seq, true, Unacked) ->
 report_status(Verb, State) ->
     rabbit_shovel_status:report(
       State#state.name, State#state.type,
-      {Verb, {source, State#state.inbound_params},
-       {destination, State#state.outbound_params}}).
+      {Verb, {source, State#state.inbound_uri},
+       {destination, State#state.outbound_uri}}).
 
 publish(Tag, Method, Msg,
         State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
@@ -191,9 +191,10 @@ publish(Tag, Method, Msg,
                       State
     end.
 
-make_conn_and_chan(AmqpParams) ->
-    AmqpParam = lists:nth(random:uniform(length(AmqpParams)), AmqpParams),
+make_conn_and_chan(URIs) ->
+    URI = lists:nth(random:uniform(length(URIs)), URIs),
+    {ok, AmqpParam} = amqp_uri:parse(URI),
     {ok, Conn} = amqp_connection:start(AmqpParam),
     link(Conn),
     {ok, Chan} = amqp_connection:open_channel(Conn),
-    {Conn, Chan, AmqpParam}.
+    {Conn, Chan, amqp_uri:remove_credentials(URI)}.

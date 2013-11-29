@@ -102,8 +102,8 @@ validate_uri(Name, Term) ->
 %%----------------------------------------------------------------------------
 
 parse(Def) ->
-    SrcParams   = parse_uri(<<"src-uri">>,      Def),
-    DestParams  = parse_uri(<<"dest-uri">>,     Def),
+    SrcURIs     = get_uris(<<"src-uri">>,       Def),
+    DestURIs    = get_uris(<<"dest-uri">>,      Def),
     SrcExch     = pget(<<"src-exchange">>,      Def, none),
     SrcExchKey  = pget(<<"src-exchange-key">>,  Def, <<>>), %% [1]
     SrcQueue    = pget(<<"src-queue">>,         Def, none),
@@ -143,9 +143,9 @@ parse(Def) ->
                          end
              end,
     {ok, #shovel{
-       sources            = #endpoint{amqp_params          = SrcParams,
+       sources            = #endpoint{uris                 = SrcURIs,
                                       resource_declaration = SrcFun},
-       destinations       = #endpoint{amqp_params          = DestParams,
+       destinations       = #endpoint{uris                 = DestURIs,
                                       resource_declaration = DestFun},
        prefetch_count     = pget(<<"prefetch-count">>, Def, 1000),
        ack_mode           = translate_ack_mode(
@@ -155,12 +155,12 @@ parse(Def) ->
        queue              = Queue,
        reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1)}}.
 
-parse_uri(Key, Def) ->
+get_uris(Key, Def) ->
     URIs = case pget(Key, Def) of
                B when is_binary(B) -> [B];
                L when is_list(L)   -> L
            end,
-    [P || URI <- URIs, {ok, P} <- [amqp_uri:parse(binary_to_list(URI))]].
+    [binary_to_list(URI) || URI <- URIs].
 
 translate_ack_mode(<<"on-confirm">>) -> on_confirm;
 translate_ack_mode(<<"on-publish">>) -> on_publish;
