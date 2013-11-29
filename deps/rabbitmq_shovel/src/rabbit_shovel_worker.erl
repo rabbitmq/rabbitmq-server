@@ -197,6 +197,3 @@ make_conn_and_chan(AmqpParams) ->
     link(Conn),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     {Conn, Chan, AmqpParam}.
-
-create_resources(Chan, Declarations) ->
-    [amqp_channel:call(Chan, Method) || Method <- Declarations].
