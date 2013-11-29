@@ -11,6 +11,7 @@
     <th>State</th>
     <th>Source</th>
     <th>Destination</th>
+    <th>Message rate</th>
     <th>Last changed</th>
   </tr>
  </thead>
@@ -47,6 +48,11 @@
     </td>
     <td>
       <%= fmt_string(shovel.destination) %>
+    </td>
+    <td class="r">
+      <% if (shovel.destination_channel) { %>
+        <%= fmt_rate(shovel.destination_channel.message_stats, 'confirm') %>
+      <% } %>
     </td>
     <td><%= shovel.timestamp %></td>
   </tr>
