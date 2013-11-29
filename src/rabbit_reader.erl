@@ -678,7 +678,9 @@ process_frame(Frame, Channel, State) ->
                           undefined -> try
                                            create_channel(Channel, State)
                                        catch exit:Error ->
-                                           handle_exception(State, Channel, Error)
+                                           handle_exception(State,
+                                                            Channel,
+                                                            Error)
                                        end;
                           Other     -> Other
                       end,
