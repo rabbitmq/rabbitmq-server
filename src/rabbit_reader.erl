@@ -618,7 +618,7 @@ create_channel(Channel, State) ->
             %% only for the methods on channel 0.
             AmqpError = rabbit_misc:amqp_error(
                           not_allowed, "number of channels opened (~w) has reached the negotiated channel_max (~w)",
-                          [N, ChannelMax], 'channel.open'),
+                          [N, ChannelMax], 'none'),
             throw({error, AmqpError});
        false ->
             {ok, _ChSupPid, {ChPid, AState}} =
