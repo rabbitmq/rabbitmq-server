@@ -87,7 +87,7 @@ handle_cast(init, State = #state{config = Config}) ->
                     inbound_uri = InboundURI,
                     outbound_uri = OutboundURI,
                     unacked = gb_trees:empty()},
-    ok = report_status(running, State1),
+    ok = report_running(State1),
     {noreply, State1}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
@@ -169,11 +169,13 @@ remove_delivery_tags(Seq, true, Unacked) ->
                  end
     end.
 
-report_status(Verb, State) ->
+report_running(State) ->
     rabbit_shovel_status:report(
       State#state.name, State#state.type,
-      {Verb, {source, State#state.inbound_uri},
-       {destination, State#state.outbound_uri}}).
+      {running, [{source,                 State#state.inbound_uri},
+                 {destination,            State#state.outbound_uri},
+                 {source_connection,      State#state.inbound_conn},
+                 {destination_connection, State#state.outbound_conn}]}).
 
 publish(Tag, Method, Msg,
         State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
