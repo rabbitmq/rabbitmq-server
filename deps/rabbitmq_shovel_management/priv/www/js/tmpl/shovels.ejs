@@ -20,7 +20,10 @@
     var shovel = shovels[i];
 %>
   <tr<%= alt_rows(i)%>>
-    <td><%= fmt_string(shovel.name) %></td>
+    <td>
+      <%= fmt_string(shovel.name) %>
+      <sub><%= fmt_string(shovel.type) %></sub>
+    </td>
 <% if (nodes_interesting) { %>
     <td><%= fmt_node(shovel.node) %></td>
 <% } %>
