@@ -56,16 +56,3 @@ HELP['shovel-ack-mode'] =
 function link_shovel(vhost, name) {
     return _link_to(fmt_escape_html(name), '#/dynamic-shovels/' + esc(vhost) + '/' + esc(name));
 }
-
-function fmt_shovel_endpoint(point) {
-    if (point == undefined) return '';
-
-    if (point.node) {
-        delete point.heartbeat;
-        delete point.frame_max;
-        delete point.channel_max;
-        delete point.port;
-    }
-    delete point.client_properties;
-    return fmt_table_short(point);
-}

@@ -63,8 +63,8 @@ format_info(starting) ->
 
 format_info({State, {source, Source}, {destination, Destination}}) ->
     [{state,       State},
-     {source,      format_params(Source)},
-     {destination, format_params(Destination)}];
+     {source,      list_to_binary(Source)},
+     {destination, list_to_binary(Destination)}];
 
 format_info({terminated, Reason}) ->
     [{state,  terminated},
@@ -72,29 +72,6 @@ format_info({terminated, Reason}) ->
 
 format_ts({{Y, M, D}, {H, Min, S}}) ->
     print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
-
-format_params(Params) ->
-    [{K, V} || {K, V} <- format_params0(Params), V =/= undefined].
-
-format_params0(#amqp_params_direct{username     = Username,
-                                   virtual_host = VHost,
-                                   node         = Node}) ->
-    [{type,         direct},
-     {virtual_host, VHost},
-     {node,         Node},
-     {username,     Username}];
-
-format_params0(#amqp_params_network{username     = Username,
-                                    virtual_host = VHost,
-                                    host         = Host,
-                                    port         = Port,
-                                    ssl_options  = SSLOptions}) ->
-    [{type,         network},
-     {virtual_host, VHost},
-     {host,         list_to_binary(Host)},
-     {username,     Username},
-     {port,         Port},
-     {ssl,          SSLOptions =/= none}].
 
 
 print(Fmt, Val) ->
