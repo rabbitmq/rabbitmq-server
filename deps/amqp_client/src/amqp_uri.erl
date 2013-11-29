@@ -18,11 +18,30 @@
 
 -include("amqp_client.hrl").
 
--export([parse/1, parse/2]).
+-export([parse/1, parse/2, remove_credentials/1]).
 
 %%---------------------------------------------------------------------------
 %% AMQP URI Parsing
 %%---------------------------------------------------------------------------
+
+%% Reformat a URI to remove authentication secrets from it (before we
+%% log it or display it anywhere).
+remove_credentials(URI) ->
+    Props = uri_parser:parse(URI,
+                             [{host, undefined}, {path, undefined},
+                              {port, undefined}, {'query', []}]),
+    PortPart = case proplists:get_value(port, Props) of
+                   undefined -> "";
+                   Port      -> rabbit_misc:format(":~B", [Port])
+               end,
+    PGet = fun(K, P) -> case proplists:get_value(K, P) of
+                            undefined -> "";
+                            R         -> R
+                        end
+           end,
+    rabbit_misc:format(
+      "~s://~s~s~s", [proplists:get_value(scheme, Props), PGet(host, Props),
+                      PortPart,                           PGet(path, Props)]).
 
 %% @spec (Uri) -> {ok, #amqp_params_network{} | #amqp_params_direct{}} |
 %%                {error, {Info, Uri}}
