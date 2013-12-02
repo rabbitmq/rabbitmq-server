@@ -477,10 +477,9 @@ function fmt_connection_state(conn) {
     if (conn.state == undefined) return '';
 
     var colour = 'green';
-    var text = conn.state;
     var explanation;
 
-    if (conn.last_blocked_by == 'resource' && conn.state == 'blocked') {
+    if (conn.state == 'blocked') {
         colour = 'red';
         explanation = 'Resource alarm: Connection blocked.';
     }
@@ -488,21 +487,17 @@ function fmt_connection_state(conn) {
         colour = 'yellow';
         explanation = 'Resource alarm: Connection will block on publish.';
     }
-    else if (conn.last_blocked_by == 'flow') {
-        var age = conn.last_blocked_age.toFixed();
-        if (age < 5) {
-            colour = 'yellow';
-            text = 'flow';
-            explanation = 'Publishing rate recently restricted by server.';
-        }
+    else if (conn.state == 'flow') {
+        colour = 'yellow';
+        explanation = 'Publishing rate recently restricted by server.';
     }
 
     if (explanation) {
         return '<div class="status-' + colour + '"><acronym title="' +
-            explanation + '">' + text + '</acronym></div>';
+            explanation + '">' + conn.state + '</acronym></div>';
     }
     else {
-        return '<div class="status-' + colour + '">' + text + '</div>';
+        return '<div class="status-' + colour + '">' + conn.state + '</div>';
     }
 }
 
