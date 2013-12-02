@@ -615,7 +615,9 @@ create_channel(Channel, State) ->
     case ChannelMax /= 0 andalso N + 1 > ChannelMax of
         true ->
             rabbit_misc:protocol_error(
-              not_allowed, "number of channels opened (~w) has reached the negotiated channel_max (~w)",
+              not_allowed,
+              "number of channels opened (~w) has reached "
+              ++ "the negotiated channel_max (~w)",
               [N, ChannelMax], 'none');
        false ->
             {ok, _ChSupPid, {ChPid, AState}} =
