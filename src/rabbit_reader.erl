@@ -614,11 +614,12 @@ create_channel(Channel, State) ->
     N = length(all_channels()),
     case ChannelMax /= 0 andalso N + 1 > ChannelMax of
         true ->
-            rabbit_misc:protocol_error(
+            Err = rabbit_misc:amqp_error(
               not_allowed,
               "number of channels opened (~w) has reached "
               ++ "the negotiated channel_max (~w)",
-              [N, ChannelMax], 'none');
+              [N, ChannelMax], 'none'),
+            {error, Err};
        false ->
             {ok, _ChSupPid, {ChPid, AState}} =
                 rabbit_channel_sup_sup:start_channel(
@@ -676,30 +677,31 @@ handle_frame(Type, Channel, Payload, State) ->
 
 process_frame(Frame, Channel, State) ->
     ChKey = {channel, Channel},
-    {ChPid, AState} = case get(ChKey) of
-                          undefined -> try
-                                           create_channel(Channel, State)
-                                       catch exit:Error ->
-                                           handle_exception(State,
-                                                            Channel,
-                                                            Error)
-                                       end;
+    Ch = case get(ChKey) of
+                          undefined -> create_channel(Channel, State);
                           Other     -> Other
                       end,
-    case rabbit_command_assembler:process(Frame, AState) of
-        {ok, NewAState} ->
-            put(ChKey, {ChPid, NewAState}),
-            post_process_frame(Frame, ChPid, State);
-        {ok, Method, NewAState} ->
-            rabbit_channel:do(ChPid, Method),
-            put(ChKey, {ChPid, NewAState}),
-            post_process_frame(Frame, ChPid, State);
-        {ok, Method, Content, NewAState} ->
-            rabbit_channel:do_flow(ChPid, Method, Content),
-            put(ChKey, {ChPid, NewAState}),
-            post_process_frame(Frame, ChPid, control_throttle(State));
-        {error, Reason} ->
-            handle_exception(State, Channel, Reason)
+    case Ch of
+        {error, Error} ->
+            handle_exception(State,
+                             Channel,
+                             Error);
+        {ChPid, AState} -> 
+            case rabbit_command_assembler:process(Frame, AState) of
+                {ok, NewAState} ->
+                    put(ChKey, {ChPid, NewAState}),
+                    post_process_frame(Frame, ChPid, State);
+                {ok, Method, NewAState} ->
+                    rabbit_channel:do(ChPid, Method),
+                    put(ChKey, {ChPid, NewAState}),
+                    post_process_frame(Frame, ChPid, State);
+                {ok, Method, Content, NewAState} ->
+                    rabbit_channel:do_flow(ChPid, Method, Content),
+                    put(ChKey, {ChPid, NewAState}),
+                    post_process_frame(Frame, ChPid, control_throttle(State));
+                {error, Reason} ->
+                    handle_exception(State, Channel, Reason)
+            end
     end.
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
