@@ -101,7 +101,7 @@
          slave_pids,
          synchronised_slave_pids,
          backing_queue_status,
-         status
+         state
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -1091,8 +1091,8 @@ i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
         false -> '';
         true  -> SSPids
     end;
-i(status, #q{status = Status}) ->
-    Status;
+i(state, #q{status = running}) -> credit_flow:state();
+i(state, #q{status = State})   -> State;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
 i(Item, _) ->
