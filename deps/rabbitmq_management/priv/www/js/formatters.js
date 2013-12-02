@@ -414,23 +414,6 @@ function fmt_rabbit_version(applications) {
     return 'unknown';
 }
 
-function fmt_idle(obj) {
-    if (obj.idle_since == undefined) {
-        return 'Active';
-    } else {
-        return '<acronym title="Idle since ' + obj.idle_since +
-            '">Idle</acronym>';
-    }
-}
-
-function fmt_idle_long(obj) {
-    if (obj.idle_since == undefined) {
-        return 'Active';
-    } else {
-        return 'Idle since<br/>' + obj.idle_since;
-    }
-}
-
 function fmt_escape_html(txt) {
     return fmt_escape_html0(txt).replace(/\n/g, '<br/>');
 }
@@ -473,31 +456,36 @@ function fmt_node(node_host) {
     return '<small>' + node + '@</small>' + host;
 }
 
-function fmt_connection_state(conn) {
-    if (conn.state == undefined) return '';
+function fmt_object_state(obj) {
+    if (obj.idle_since !== undefined) {
+        return '<acronym title="Idle since ' + obj.idle_since +
+            '">Idle</acronym>';
+    }
+
+    if (obj.state == undefined) return '';
 
     var colour = 'green';
     var explanation;
 
-    if (conn.state == 'blocked') {
+    if (obj.state == 'blocked') {
         colour = 'red';
-        explanation = 'Resource alarm: Connection blocked.';
+        explanation = 'Resource alarm: Objection blocked.';
     }
-    else if (conn.state == 'blocking') {
+    else if (obj.state == 'blocking') {
         colour = 'yellow';
-        explanation = 'Resource alarm: Connection will block on publish.';
+        explanation = 'Resource alarm: Objection will block on publish.';
     }
-    else if (conn.state == 'flow') {
+    else if (obj.state == 'flow') {
         colour = 'yellow';
         explanation = 'Publishing rate recently restricted by server.';
     }
 
     if (explanation) {
         return '<div class="status-' + colour + '"><acronym title="' +
-            explanation + '">' + conn.state + '</acronym></div>';
+            explanation + '">' + obj.state + '</acronym></div>';
     }
     else {
-        return '<div class="status-' + colour + '">' + conn.state + '</div>';
+        return '<div class="status-' + colour + '">' + obj.state + '</div>';
     }
 }
 
