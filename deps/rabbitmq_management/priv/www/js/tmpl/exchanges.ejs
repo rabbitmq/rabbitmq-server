@@ -34,8 +34,10 @@
    <td class="c"><%= fmt_exchange_type(exchange.type) %></td>
    <td class="c"><%= fmt_string(exchange.policy, '') %></td>
    <td class="c"><%= fmt_parameters_short(exchange) %></td>
+<% if (statistics_level == 'fine') { %>
    <td class="r"><%= fmt_rate(exchange.message_stats, 'publish_in') %></td>
    <td class="r"><%= fmt_rate(exchange.message_stats, 'publish_out') %></td>
+<% } %>
   </tr>
   <% } %>
  </tbody>
