@@ -47,7 +47,9 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 
 .filter { overflow: auto; width: 100%; margin-bottom: 10px; }
 .filter table { float: left; }
-.filter p { float: right; padding: 4px; margin: 0; }
+.filter label { margin-top: 4px;}
+.filter input#filter-regex-mode { vertical-align: middle; }
+.filter p#filter-truncate { float: right; padding: 4px; margin: 0; }
 .filter p.filter-warning { border-radius: 5px; background: #ff8; }
 .filter-active { background: #99ebff; border-radius: 5px; }
 .filter-highlight { background: #99ebff; }
@@ -189,6 +191,10 @@ table.form .multifield td.equals { padding: 3px; }
 table.form .multifield td input { float: left; }
 table.form .multifield td select { width: 70px; display: block; float: left; margin-left: 5px; }
 table.form label { margin-top: 5px; display: block; }
+
+table.form table.subform { margin-bottom: 5px; }
+table.form table.subform th { text-align: left; }
+table.form table.subform th, table.form table.subform td { padding: 0; }
 
 .multifield-sub { border: 1px solid #ddd; background: #f8f8f8; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; float: left; margin-bottom: 10px; }
 
