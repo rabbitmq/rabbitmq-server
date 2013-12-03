@@ -1135,6 +1135,13 @@
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>consumer_utilisation</term>
+                <listitem><para>Fraction of the time (between 0.0 and 1.0)
+                that the queue is able to immediately deliver messages to
+                consumers. This can be less than 1.0 if consumers are limited
+                by network congestion or prefetch count.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>memory</term>
                 <listitem><para>Bytes of memory consumed by the Erlang process associated with the
                   queue, including stack, heap and internal structures.</para></listitem>

@@ -550,6 +550,14 @@ check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
 check_not_default_exchange(_) ->
     ok.
 
+check_exchange_deletion(XName = #resource{name = <<"amq.rabbitmq.", _/binary>>,
+                                          kind = exchange}) ->
+    rabbit_misc:protocol_error(
+      access_refused, "deletion of system ~s not allowed",
+      [rabbit_misc:rs(XName)]);
+check_exchange_deletion(_) ->
+    ok.
+
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
 %%
@@ -933,6 +941,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
               _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_not_default_exchange(ExchangeName),
+    check_exchange_deletion(ExchangeName),
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
