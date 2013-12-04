@@ -83,15 +83,9 @@ format_info_item({K, L}, _Chs) when is_list(L) ->
     {K, list_to_binary(L)};
 format_info_item({K, B}, _Chs) when is_binary(B) ->
     {K, B};
-format_info_item({K, Conn}, Chs) when is_pid(Conn) ->
-    ConnName = pget(name, amqp_connection:info(Conn, [name])),
+format_info_item({K, ChPid}, Chs) when is_pid(ChPid) ->
     case rabbit_mgmt_format:strip_pids(
-           [Ch || Ch <- Chs,
-                  pget(name, pget(connection_details, Ch))
-                      =:= ConnName]) of
-        [Ch] -> {conn_to_ch(K), Ch};
+           [Ch || Ch <- Chs, pget(pid, Ch) =:= ChPid]) of
+        [Ch] -> {K, Ch};
         []   -> unknown
     end.
-
-conn_to_ch(src_connection)  -> src_channel;
-conn_to_ch(dest_connection) -> dest_channel.
