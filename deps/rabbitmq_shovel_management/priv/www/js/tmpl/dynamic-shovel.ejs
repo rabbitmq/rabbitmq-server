@@ -38,7 +38,11 @@
             <%= fmt_string(shovel.value['dest-queue']) %>
             <sub>queue</sub>
           <% } else { %>
-            <%= fmt_string(shovel.value['dest-exchange']) %>
+            <% if (shovel.value['dest-exchange']) { %>
+              <%= fmt_string(shovel.value['dest-exchange']) %>
+            <% } else { %>
+              <i>as published</i>
+            <% } %>
             <% if (shovel.value['dest-exchange-key']) { %>
               : <%= fmt_string(shovel.value['dest-exchange-key']) %>
             <% } %>
