@@ -169,13 +169,24 @@ remove_delivery_tags(Seq, true, Unacked) ->
                  end
     end.
 
-report_running(State) ->
+report_running(State = #state{config = Config}) ->
     rabbit_shovel_status:report(
       State#state.name, State#state.type,
-      {running, [{source,                 State#state.inbound_uri},
-                 {destination,            State#state.outbound_uri},
-                 {source_connection,      State#state.inbound_conn},
-                 {destination_connection, State#state.outbound_conn}]}).
+      {running, [{src_uri,         State#state.inbound_uri},
+                 {src_connection,  State#state.inbound_conn},
+                 {src_queue,       Config#shovel.queue},
+                 {dest_uri,        State#state.outbound_uri},
+                 {dest_connection, State#state.outbound_conn}] ++
+           dest_exchange_details(Config)}).
+
+dest_exchange_details(#shovel{publish_fields = PubFields}) ->
+    #'basic.publish'{exchange    = Exch,
+                     routing_key = Key} =
+        PubFields(#'basic.publish'{exchange    = undefined,
+                                   routing_key = undefined}),
+    [{K, V} || {K, V} <- [{dest_exchange,     Exch},
+                          {dest_exchange_key, Key}],
+               V =/= undefined].
 
 publish(Tag, Method, Msg,
         State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
