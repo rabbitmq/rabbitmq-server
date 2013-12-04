@@ -615,10 +615,8 @@ create_channel(Channel, State) ->
     case ChannelMax /= 0 andalso N + 1 > ChannelMax of
         true ->
             Err = rabbit_misc:amqp_error(
-              not_allowed,
-              "number of channels opened (~w) has reached "
-              ++ "the negotiated channel_max (~w)",
-              [N, ChannelMax], 'none'),
+                    not_allowed, "number of channels opened (~w) has reached "
+                    "the negotiated channel_max (~w)", [N, ChannelMax], 'none'),
             {error, Err};
        false ->
             {ok, _ChSupPid, {ChPid, AState}} =
@@ -678,15 +676,13 @@ handle_frame(Type, Channel, Payload, State) ->
 process_frame(Frame, Channel, State) ->
     ChKey = {channel, Channel},
     Ch = case get(ChKey) of
-                          undefined -> create_channel(Channel, State);
-                          Other     -> Other
-                      end,
+             undefined -> create_channel(Channel, State);
+             Other     -> Other
+         end,
     case Ch of
         {error, Error} ->
-            handle_exception(State,
-                             Channel,
-                             Error);
-        {ChPid, AState} -> 
+            handle_exception(State, Channel, Error);
+        {ChPid, AState} ->
             case rabbit_command_assembler:process(Frame, AState) of
                 {ok, NewAState} ->
                     put(ChKey, {ChPid, NewAState}),
@@ -943,10 +939,10 @@ validate_negotiated_integer_value(Field, Min, ClientValue) ->
     end.
 
 fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
-    {S1,S2} = case MinOrMax of
-                  min -> {lower,  minimum};
-                  max -> {higher, maximum}
-              end,
+    {S1, S2} = case MinOrMax of
+                   min -> {lower,  minimum};
+                   max -> {higher, maximum}
+               end,
     rabbit_misc:protocol_error(
       not_allowed, "negotiated ~w = ~w is ~w than the ~w allowed value (~w)",
       [Field, ClientValue, S1, S2, ServerValue], 'connection.tune').
