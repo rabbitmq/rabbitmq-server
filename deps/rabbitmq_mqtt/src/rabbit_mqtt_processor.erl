@@ -245,7 +245,8 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
 
 amqp_callback(#'basic.ack'{ multiple = true, delivery_tag = Tag } = Ack,
               PState = #proc_state{ unacked_pubs = UnackedPubs }) ->
-    case gb_trees:take_smallest(UnackedPubs) of
+    case gb_trees:size(UnackedPubs) > 0 andalso
+         gb_trees:take_smallest(UnackedPubs) of
         {TagSmall, MsgId, UnackedPubs1} when TagSmall =< Tag ->
             send_client(
               #mqtt_frame{ fixed    = #mqtt_frame_fixed{ type = ?PUBACK },
