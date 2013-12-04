@@ -16,7 +16,7 @@
 
 -module(rabbit_version).
 
--export([recorded/0, matches/2, desired/0, desired_for_scope/1,
+-export([recorded/0, matches/2, compare/2, desired/0, desired_for_scope/1,
          record_desired/0, record_desired_for_scope/1,
          upgrades_required/1]).
 
@@ -33,6 +33,7 @@
 
 -spec(recorded/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(matches/2 :: ([A], [A]) -> boolean()).
+-spec(compare/2 :: ([A], [A]) -> ('eq' | 'lt' | 'gt' | 'incomparable')).
 -spec(desired/0 :: () -> version()).
 -spec(desired_for_scope/1 :: (scope()) -> scope_version()).
 -spec(record_desired/0 :: () -> 'ok').
@@ -81,6 +82,22 @@ record_for_scope(Scope, ScopeVersion) ->
 
 matches(VerA, VerB) ->
     lists:usort(VerA) =:= lists:usort(VerB).
+
+compare(VerA, VerB) ->
+    VerAS = lists:usort(VerA),
+    VerBS = lists:usort(VerB),
+    VerASPrefixVerBS = lists:prefix(VerAS, VerBS),
+    VerBSPrefixVerAS = lists:prefix(VerBS, VerAS),
+    if
+        VerAS =:= VerBS ->
+            eq;
+        VerASPrefixVerBS ->
+            lt;
+        VerBSPrefixVerAS ->
+            gt;
+        true ->
+            incomparable
+    end.
 
 %% -------------------------------------------------------------------
 
