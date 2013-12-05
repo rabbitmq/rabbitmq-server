@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_clean_shutdown).
+-module(rabbit_recovery_indexes).
 
 -behaviour(gen_server).
 
