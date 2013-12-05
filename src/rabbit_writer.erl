@@ -30,7 +30,7 @@
 -export([internal_send_command/4, internal_send_command/6]).
 
 %% internal
--export([mainloop/2, mainloop1/2]).
+-export([enter_mainloop/2, mainloop/2, mainloop1/2]).
 
 -record(wstate, {sock, channel, frame_max, protocol, reader,
                  stats_timer, pending}).
@@ -109,13 +109,13 @@ start(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
     State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
                           ReaderWantsStats),
     Deb = sys:debug_options([]),
-    {ok, proc_lib:spawn(?MODULE, mainloop, [Deb, State])}.
+    {ok, proc_lib:spawn(?MODULE, enter_mainloop, [Deb, State])}.
 
 start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
     State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
                           ReaderWantsStats),
     Deb = sys:debug_options([]),
-    {ok, proc_lib:spawn_link(?MODULE, mainloop, [Deb, State])}.
+    {ok, proc_lib:spawn_link(?MODULE, enter_mainloop, [Deb, State])}.
 
 initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
     (case ReaderWantsStats of
@@ -137,6 +137,10 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
+
+enter_mainloop(Deb, State = #wstate{channel = Channel}) ->
+    put(rabbit_process_name, {writer, unknown, Channel}),
+    mainloop(Deb, State).
 
 mainloop(Deb, State) ->
     try

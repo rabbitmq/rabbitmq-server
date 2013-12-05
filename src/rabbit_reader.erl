@@ -212,6 +212,7 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(), handshake_timeout),
     {PeerHost, PeerPort, Host, Port} =
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
+    put(rabbit_process_name, {reader, list_to_binary(Name)}),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
                 connection          = #connection{
