@@ -28,12 +28,26 @@ toplist(Key, Info) ->
     {Key, Val} = lists:keyfind(Key, 1, Info),
     {Val, Info}.
 
-fmt_all(Info) ->
-    [{K, fmt(K, V)} || {K, V} <- Info].
+fmt_all(Info0) ->
+    {pid, Pid} = lists:keyfind(pid, 1, Info0),
+    Info = [KV || KV0 <- Info0,
+                  KV  <- [fmt(KV0)],
+                  KV  =/= none],
+    case process_info(Pid, dictionary) of
+        {dictionary, Dict} ->
+            case lists:keyfind(rabbit_process_name, 1, Dict) of
+                {rabbit_process_name, Name} -> [fmt({name, Name}) | Info];
+                false                       -> Info
+            end;
+        undefined ->
+            Info
+    end.
 
-fmt(_K, Pid) when is_pid(Pid) ->
-    list_to_binary(rabbit_misc:pid_to_string(Pid));
-fmt(registered_name, Name) ->
-    list_to_binary(rabbit_misc:format("~s", [Name]));
-fmt(_K, Other) ->
-    list_to_binary(rabbit_misc:format("~p", [Other])).
+fmt({K, Pid}) when is_pid(Pid) ->
+    {K, list_to_binary(rabbit_misc:pid_to_string(Pid))};
+fmt({registered_name, []}) ->
+    none;
+fmt({registered_name, Name}) ->
+    {name, list_to_binary(rabbit_misc:format("~s", [Name]))};
+fmt({K, Other}) ->
+    {K, list_to_binary(rabbit_misc:format("~p", [Other]))}.
