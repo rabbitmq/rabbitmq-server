@@ -457,17 +457,18 @@ function fmt_node(node_host) {
 }
 
 function fmt_object_state(obj) {
-    if (obj.idle_since !== undefined) {
-        return '<acronym title="Idle since ' + obj.idle_since +
-            '">Idle</acronym>';
-    }
-
     if (obj.state == undefined) return '';
 
     var colour = 'green';
+    var text = obj.state;
     var explanation;
 
-    if (obj.state == 'blocked') {
+    if (obj.idle_since !== undefined) {
+        colour = 'grey';
+        explanation = 'Idle since ' + obj.idle_since;
+        text = 'idle';
+    }
+    else if (obj.state == 'blocked') {
         colour = 'red';
         explanation = 'Resource alarm: Objection blocked.';
     }
@@ -482,7 +483,7 @@ function fmt_object_state(obj) {
 
     if (explanation) {
         return '<div class="status-' + colour + '"><acronym title="' +
-            explanation + '">' + obj.state + '</acronym></div>';
+            explanation + '">' + text + '</acronym></div>';
     }
     else {
         return '<div class="status-' + colour + '">' + obj.state + '</div>';

@@ -114,10 +114,11 @@ table.mini td { border: none; padding: 0 2px 2px 2px; }
 tr.alt1>td { background: #eee; }
 tr.alt2>td { background: #fff; }
 
-div.status-bar, div.status-red, div.status-yellow, div.status-green { text-align: center; }
-div.status-bar-main, div.status-red, div.status-yellow, div.status-green { border-radius: 5px; -moz-border-radius: 5px; padding: 5px; }
+div.status-bar, div.status-red, div.status-yellow, div.status-green, div.status-grey { text-align: center; }
+div.status-bar-main, div.status-red, div.status-yellow, div.status-green, div.status-grey { border-radius: 5px; -moz-border-radius: 5px; padding: 5px; }
 div.status-bar sub { white-space: nowrap; }
 
+div.status-bar .grey, div.status-grey { background: #ddd; }
 div.status-bar .red, div.status-red { background: #ff7a7a; color: white; }
 div.status-bar .yellow, div.status-yellow { background: #ffff7b; }
 div.status-bar .green, div.status-green { background: #98f898; }
@@ -223,7 +224,7 @@ acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -
 
 acronym.warning { background: #daa; }
 
-.status-red acronym, .status-yellow acronym, .status-green acronym, small acronym, acronym.normal { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
+.status-red acronym, .status-yellow acronym, .status-green acronym, .status-grey acronym, small acronym, acronym.normal { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
 
 acronym.type { background: none; color: inherit; padding: 0; border-bottom: 1px dotted #ddd; cursor: default; }
 
