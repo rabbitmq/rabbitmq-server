@@ -612,12 +612,8 @@ create_channel(Channel, State) ->
                                  vhost        = VHost,
                                  capabilities = Capabilities}} = State,
     N = length(all_channels()),
-    case ChannelMax /= 0 andalso N + 1 > ChannelMax of
-        true  -> {error, rabbit_misc:amqp_error(
-                           not_allowed, "number of channels opened (~w) has "
-                           "reached the negotiated channel_max (~w)",
-                           [N, ChannelMax], 'none')};
-        false -> {ok, _ChSupPid, {ChPid, AState}} =
+    case ChannelMax == 0 orelse N < ChannelMax of
+        true  -> {ok, _ChSupPid, {ChPid, AState}} =
                      rabbit_channel_sup_sup:start_channel(
                        ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
                                     Protocol, User, VHost, Capabilities,
@@ -625,8 +621,12 @@ create_channel(Channel, State) ->
                  MRef = erlang:monitor(process, ChPid),
                  put({ch_pid, ChPid}, {Channel, MRef}),
                  put({channel, Channel}, {ChPid, AState}),
-                 {ok, {ChPid, AState}}
-    end.
+                 {ok, {ChPid, AState}};
+        false -> {error, rabbit_misc:amqp_error(
+                           not_allowed, "number of channels opened (~w) has "
+                           "reached the negotiated channel_max (~w)",
+                           [N, ChannelMax], 'none')}
+        end.
 
 channel_cleanup(ChPid) ->
     case get({ch_pid, ChPid}) of
