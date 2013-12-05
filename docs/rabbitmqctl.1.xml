@@ -1430,6 +1430,10 @@
                 <listitem><para>Maximum frame size (bytes).</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>channel_max</term>
+                <listitem><para>Maximum number of channels on this connection.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>client_properties</term>
                 <listitem><para>Informational properties transmitted by the client
                   during connection establishment.</para></listitem>
