@@ -192,6 +192,10 @@ table.form .multifield td input { float: left; }
 table.form .multifield td select { width: 70px; display: block; float: left; margin-left: 5px; }
 table.form label { margin-top: 5px; display: block; }
 
+table.form table.subform { margin-bottom: 5px; }
+table.form table.subform th { text-align: left; }
+table.form table.subform th, table.form table.subform td { padding: 0; }
+
 .multifield-sub { border: 1px solid #ddd; background: #f8f8f8; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; float: left; margin-bottom: 10px; }
 
 label.radio { padding: 5px; border: 1px solid #eee; cursor: pointer; border-radius: 5px; -moz-border-radius: 5px; }

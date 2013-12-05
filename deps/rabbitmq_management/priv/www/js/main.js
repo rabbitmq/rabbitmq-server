@@ -489,13 +489,16 @@ function postprocess() {
             update_multifields();
         });
     $('.controls-appearance').change(function() {
-        var controls = $(this).attr('controls-divs');
-        if ($(this).val() == 'true') {
-            $('#' + controls + '-yes').slideDown(100);
-            $('#' + controls + '-no').slideUp(100);
-        } else {
-            $('#' + controls + '-yes').slideUp(100);
-            $('#' + controls + '-no').slideDown(100);
+        var params = $(this).get(0).options;
+        var selected = $(this).val();
+
+        for (i = 0; i < params.length; i++) {
+            var param = params[i].value;
+            if (param == selected) {
+                $('#' + param + '-div').slideDown(100);
+            } else {
+                $('#' + param + '-div').slideUp(100);
+            }
         }
     });
     setup_visibility();
@@ -1059,10 +1062,16 @@ function check_password(params) {
 
 function maybe_remove_fields(params) {
     $('.controls-appearance').each(function(index) {
-        if ($(this).val() == 'false') {
-            delete params[$(this).attr('param-name')];
-            delete params[$(this).attr('name')];
+        var options = $(this).get(0).options;
+        var selected = $(this).val();
+
+        for (i = 0; i < options.length; i++) {
+            var option = options[i].value;
+            if (option != selected) {
+                delete params[option];
+            }
         }
+        delete params[$(this).attr('name')];
     });
     return params;
 }
