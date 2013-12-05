@@ -235,7 +235,7 @@ init(Name, OnSyncFun) ->
 
 shutdown_terms(Name) ->
     #qistate { dir = Dir } = blank_state(Name),
-    case rabbit_clean_shutdown:read_recovery_terms(Dir) of
+    case rabbit_recover_indexes:read_recovery_terms(Dir) of
         {error, _}        -> [];
         {ok, {_, Terms1}} -> Terms1
     end.
@@ -244,7 +244,7 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
     CleanShutdown =
-        rabbit_clean_shutdown:had_clean_shutdown(Dir),
+        rabbit_recovery_indexes:had_clean_shutdown(Dir),
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);
@@ -253,7 +253,7 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
 
 terminate(Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
-    rabbit_clean_shutdown:store_recovery_terms(
+    rabbit_recovery_indexes:store_recovery_terms(
       Dir, [{segments, SegmentCounts} | Terms]),
     State1.
 
@@ -351,7 +351,7 @@ bounds(State = #qistate { segments = Segments }) ->
     {LowSeqId, NextSeqId, State}.
 
 recover(DurableQueues) ->
-    ok = rabbit_clean_shutdown:recover(),
+    ok = rabbit_recovery_indexes:recover(),
     DurableDict =
         dict:from_list([{queue_name_to_dir_name(Queue), Queue} ||
                            Queue <- DurableQueues ]),
@@ -366,7 +366,7 @@ recover(DurableQueues) ->
                   case sets:is_element(QueueDirName, DurableDirectories) of
                       true ->
                           TermsAcc1 =
-                              case rabbit_clean_shutdown:read_recovery_terms(
+                              case rabbit_recovery_indexes:read_recovery_terms(
                                      QueueDirPath) of
                                   {error, _}  -> TermsAcc;
                                   {ok, Terms} -> [Terms | TermsAcc]
@@ -374,7 +374,7 @@ recover(DurableQueues) ->
                           {[QName | DurableAcc], TermsAcc1};
                       false ->
                           ok = rabbit_file:recursive_delete([QueueDirPath]),
-                          rabbit_clean_shutdown:remove_recovery_terms(
+                          rabbit_recovery_indexes:remove_recovery_terms(
                             QueueDirPath),
                           {DurableAcc, TermsAcc}
                   end
