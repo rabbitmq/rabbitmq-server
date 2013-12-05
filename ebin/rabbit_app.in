@@ -53,6 +53,7 @@
                                {nodelay,       true},
                                {linger,        {true, 0}},
                                {exit_on_close, false}]},
+         {halt_on_upgrade_failure, true},
          {hipe_compile, false},
          %% see bug 24513 for how this list was created
          {hipe_modules,
