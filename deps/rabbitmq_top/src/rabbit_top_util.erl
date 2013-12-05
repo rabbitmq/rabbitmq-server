@@ -22,11 +22,14 @@ toplist(Key, Count, List) ->
     Sorted = lists:sublist(
                lists:reverse(
                  lists:keysort(1, [toplist(Key, I) || I <- List])), Count),
-    [Info || {_, Info} <- Sorted].
+    [fmt_all(Info) || {_, Info} <- Sorted].
 
 toplist(Key, Info) ->
     {Key, Val} = lists:keyfind(Key, 1, Info),
-    {Val, [{K, fmt(K, V)} || {K, V} <- Info]}.
+    {Val, Info}.
+
+fmt_all(Info) ->
+    [{K, fmt(K, V)} || {K, V} <- Info].
 
 fmt(_K, Pid) when is_pid(Pid) ->
     list_to_binary(rabbit_misc:pid_to_string(Pid));

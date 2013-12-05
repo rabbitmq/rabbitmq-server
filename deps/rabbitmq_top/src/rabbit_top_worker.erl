@@ -17,11 +17,9 @@
 -module(rabbit_top_worker).
 -behaviour(gen_server).
 
--define(PROCESS_INFO, [memory, current_function, current_stacktrace,
-                       garbage_collection, heap_size, initial_call,
-                       links, message_queue_len, monitors, reductions,
-                       registered_name, stack_size, status, trap_exit,
-                       total_heap_size]).
+-define(PROCESS_INFO, [memory, current_function, initial_call,
+                       message_queue_len, reductions, registered_name, status,
+                       dictionary]).
 
 -export([start_link/0]).
 
