@@ -251,7 +251,7 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
-terminate(Terms, State = #qistate { name = Name, dir = Dir }) ->
+terminate(Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
     rabbit_clean_shutdown:store_recovery_terms(
       Dir, [{segments, SegmentCounts} | Terms]),
@@ -371,11 +371,8 @@ recover(DurableQueues) ->
                                   {error, _}  -> TermsAcc;
                                   {ok, Terms} -> [Terms | TermsAcc]
                               end,
-                          rabbit_log:info("reading recovery terms: ~p~n",
-                                          [TermsAcc1]),
                           {[QName | DurableAcc], TermsAcc1};
                       false ->
-                          rabbit_log:info("clearing recovery info!~n", []),
                           ok = rabbit_file:recursive_delete([QueueDirPath]),
                           rabbit_clean_shutdown:remove_recovery_terms(
                             QueueDirPath),
