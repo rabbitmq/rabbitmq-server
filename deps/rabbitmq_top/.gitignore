@@ -1,0 +1,6 @@
+*~
+build/
+dist/
+cover/
+ebin/
+erl_crash.dump

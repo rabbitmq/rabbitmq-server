@@ -1,0 +1,29 @@
+<table class="list updatable">
+ <thead>
+  <tr>
+    <th>Name or initial call</th>
+    <th><%= fmt_sort('Memory', 'memory') %></th>
+    <th><%= fmt_sort('Reductions / sec', 'reductions') %></th>
+    <th>Current function</th>
+    <th>Message queue</th>
+    <th>Status</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < processes.length; i++) {
+    var process = processes[i];
+%>
+  <tr<%= alt_rows(i)%>>
+    <td>
+      <acronym class="normal" title="<%= fmt_string(process.pid) %>"><%= fmt_process_name_or_initial_call(process) %></acronym>
+    </td>
+    <td><%= fmt_bytes(process.memory) %></td>
+    <td class="r"><%= process.reduction_delta %></td>
+    <td><%= process.current_function %></td>
+    <td class="r"><%= process.message_queue_len %></td>
+    <td><%= process.status %></td>
+  </tr>
+<% } %>
+ </tbody>
+</table>

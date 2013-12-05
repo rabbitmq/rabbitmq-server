@@ -1,0 +1,7 @@
+{application, rabbitmq_top,
+ [{description, "RabbitMQ Top"},
+  {vsn, "%%VSN%%"},
+  {modules, []},
+  {registered, []},
+  {mod, {rabbit_top_app, []}},
+  {applications, [kernel, stdlib, rabbit, rabbitmq_management]}]}.
