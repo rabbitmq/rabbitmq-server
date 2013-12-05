@@ -625,8 +625,8 @@ create_channel(Channel, State) ->
                                Protocol, User, VHost, Capabilities, Collector}),
             MRef = erlang:monitor(process, ChPid),
             put({ch_pid, ChPid}, {Channel, MRef}),
-            put({channel, Channel}, {ChPid, AState}),
-            {ChPid, AState}
+            put({channel, Channel}, {ok, ChPid, AState}),
+            {ok, ChPid, AState}
     end.
 
 channel_cleanup(ChPid) ->
@@ -682,18 +682,18 @@ process_frame(Frame, Channel, State) ->
     case Ch of
         {error, Error} ->
             handle_exception(State, Channel, Error);
-        {ChPid, AState} ->
+        {ok, ChPid, AState} ->
             case rabbit_command_assembler:process(Frame, AState) of
                 {ok, NewAState} ->
-                    put(ChKey, {ChPid, NewAState}),
+                    put(ChKey, {ok, ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State);
                 {ok, Method, NewAState} ->
                     rabbit_channel:do(ChPid, Method),
-                    put(ChKey, {ChPid, NewAState}),
+                    put(ChKey, {ok, ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State);
                 {ok, Method, Content, NewAState} ->
                     rabbit_channel:do_flow(ChPid, Method, Content),
-                    put(ChKey, {ChPid, NewAState}),
+                    put(ChKey, {ok, ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, control_throttle(State));
                 {error, Reason} ->
                     handle_exception(State, Channel, Reason)
