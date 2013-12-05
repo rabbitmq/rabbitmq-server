@@ -21,7 +21,7 @@
 -export([recover/0,
          start_link/0,
          store_recovery_terms/2,
-         detect_clean_shutdown/1,
+         had_clean_shutdown/1,
          read_recovery_terms/1,
          remove_recovery_terms/1]).
 
@@ -39,7 +39,7 @@
 -spec(store_recovery_terms(
         Name  :: rabbit_misc:resource_name(),
         Terms :: term()) -> rabbit_types:ok_or_error(term())).
--spec(detect_clean_shutdown(
+-spec(had_clean_shutdown(
         rabbit_misc:resource_name()) ->
              boolean() | rabbit_types:error(term())).
 -spec(read_recovery_terms(
@@ -65,7 +65,7 @@ start_link() ->
 store_recovery_terms(Name, Terms) ->
     dets:insert(?MODULE, {Name, Terms}).
 
-detect_clean_shutdown(Name) ->
+had_clean_shutdown(Name) ->
     dets:member(?MODULE, Name).
 
 read_recovery_terms(Name) ->
@@ -84,8 +84,6 @@ init(_) ->
                                        {auto_save, infinity}]),
     {ok, undefined}.
 
-handle_call(ready, _, State) ->
-    {reply, ok, State};
 handle_call(Msg, _, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
