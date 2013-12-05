@@ -625,8 +625,8 @@ create_channel(Channel, State) ->
                                Protocol, User, VHost, Capabilities, Collector}),
             MRef = erlang:monitor(process, ChPid),
             put({ch_pid, ChPid}, {Channel, MRef}),
-            put({channel, Channel}, {ok, ChPid, AState}),
-            {ok, ChPid, AState}
+            put({channel, Channel}, {ChPid, AState}),
+            {ok, {ChPid, AState}}
     end.
 
 channel_cleanup(ChPid) ->
@@ -675,25 +675,24 @@ handle_frame(Type, Channel, Payload, State) ->
 
 process_frame(Frame, Channel, State) ->
     ChKey = {channel, Channel},
-    Ch = case get(ChKey) of
-             undefined -> create_channel(Channel, State);
-             Other     -> Other
-         end,
-    case Ch of
+    case (case get(ChKey) of
+              undefined -> create_channel(Channel, State);
+              Other     -> {ok, Other}
+          end) of
         {error, Error} ->
             handle_exception(State, Channel, Error);
-        {ok, ChPid, AState} ->
+        {ok, {ChPid, AState}} ->
             case rabbit_command_assembler:process(Frame, AState) of
                 {ok, NewAState} ->
-                    put(ChKey, {ok, ChPid, NewAState}),
+                    put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State);
                 {ok, Method, NewAState} ->
                     rabbit_channel:do(ChPid, Method),
-                    put(ChKey, {ok, ChPid, NewAState}),
+                    put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State);
                 {ok, Method, Content, NewAState} ->
                     rabbit_channel:do_flow(ChPid, Method, Content),
-                    put(ChKey, {ok, ChPid, NewAState}),
+                    put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, control_throttle(State));
                 {error, Reason} ->
                     handle_exception(State, Channel, Reason)
