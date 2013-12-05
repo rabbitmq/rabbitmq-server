@@ -613,20 +613,19 @@ create_channel(Channel, State) ->
                                  capabilities = Capabilities}} = State,
     N = length(all_channels()),
     case ChannelMax /= 0 andalso N + 1 > ChannelMax of
-        true ->
-            Err = rabbit_misc:amqp_error(
-                    not_allowed, "number of channels opened (~w) has reached "
-                    "the negotiated channel_max (~w)", [N, ChannelMax], 'none'),
-            {error, Err};
-       false ->
-            {ok, _ChSupPid, {ChPid, AState}} =
-                rabbit_channel_sup_sup:start_channel(
-                  ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
-                               Protocol, User, VHost, Capabilities, Collector}),
-            MRef = erlang:monitor(process, ChPid),
-            put({ch_pid, ChPid}, {Channel, MRef}),
-            put({channel, Channel}, {ChPid, AState}),
-            {ok, {ChPid, AState}}
+        true  -> {error, rabbit_misc:amqp_error(
+                           not_allowed, "number of channels opened (~w) has "
+                           "reached the negotiated channel_max (~w)",
+                           [N, ChannelMax], 'none')};
+        false -> {ok, _ChSupPid, {ChPid, AState}} =
+                     rabbit_channel_sup_sup:start_channel(
+                       ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
+                                    Protocol, User, VHost, Capabilities,
+                                    Collector}),
+                 MRef = erlang:monitor(process, ChPid),
+                 put({ch_pid, ChPid}, {Channel, MRef}),
+                 put({channel, Channel}, {ChPid, AState}),
+                 {ok, {ChPid, AState}}
     end.
 
 channel_cleanup(ChPid) ->
@@ -875,9 +874,9 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                                SendFun, ClientHeartbeat, ReceiveFun),
     State#v1{connection_state = opening,
              connection = Connection#connection{
-                            timeout_sec = ClientHeartbeat,
-                            frame_max = FrameMax,
-                            channel_max = ChannelMax},
+                            frame_max   = FrameMax,
+                            channel_max = ChannelMax,
+                            timeout_sec = ClientHeartbeat},
              queue_collector = Collector,
              heartbeater = Heartbeater};
 
