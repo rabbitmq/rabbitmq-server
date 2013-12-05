@@ -1446,7 +1446,7 @@
               </varlistentry>
               <varlistentry>
                 <term>channel_max</term>
-                <listitem><para>Maximum number of channels per connection.</para></listitem>
+                <listitem><para>Maximum number of channels on this connection.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>client_properties</term>
