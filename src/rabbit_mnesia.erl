@@ -434,9 +434,10 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             %% First disc node up
             maybe_force_load(),
             ok;
-        {[_ | _], _, _} ->
+        {[AnotherNode | _], _, _} ->
             %% Subsequent node in cluster, catch up
-            ok = ensure_version_ok(Nodes),
+            ensure_version_ok(
+              rpc:call(AnotherNode, rabbit_version, recorded, [])),
             maybe_force_load(),
             ok = rabbit_table:wait_for_replicated(),
             ok = rabbit_table:create_local_copy(NodeType)
@@ -638,29 +639,14 @@ schema_ok_or_move() ->
             ok = create_schema()
     end.
 
-ensure_version_ok(OtherNodes) ->
-    Desired = rabbit_version:desired(),
-    Fun = fun (Node, FoundMatch) ->
-                  case rpc:call(Node, rabbit_version, recorded, []) of
-                      {error, _} ->
-                          FoundMatch; %% Node probably isn't fully up.
-                      {ok, NodeVersion} ->
-                          case rabbit_version:compare(Desired, NodeVersion) of
-                              eq ->
-                                  true;
-                              gt ->
-                                  FoundMatch; %% Remote is just older than us.
-                              _ ->
-                                  throw({error, {version_mismatch,
-                                                 Desired, NodeVersion}})
-                          end
-                  end
-          end,
-    FoundMatch = lists:foldl(Fun, false, OtherNodes),
-    case FoundMatch of
+ensure_version_ok({ok, DiscVersion}) ->
+    DesiredVersion = rabbit_version:desired(),
+    case rabbit_version:matches(DesiredVersion, DiscVersion) of
         true  -> ok;
-        false -> throw({error, {version_mismatch, Desired}})
-    end.
+        false -> throw({error, {version_mismatch, DesiredVersion, DiscVersion}})
+    end;
+ensure_version_ok({error, _}) ->
+    ok = rabbit_version:record_desired().
 
 %% We only care about disc nodes since ram nodes are supposed to catch
 %% up only
