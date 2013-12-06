@@ -93,14 +93,17 @@ format(#entry{key       = {#resource{virtual_host = VHost,
               status    = Status,
               uri       = URI,
               timestamp = Timestamp}) ->
-    [{type,                 Type},
-     {object_name,          XorQNameBin},
-     {upstream_object_name, UXorQNameBin},
-     {vhost,                VHost},
-     {upstream,             UpstreamName},
-     {uri,                  URI},
-     {status,               Status},
-     {timestamp,            Timestamp}].
+    case Type of
+        exchange -> [{exchange,          XorQNameBin},
+                     {upstream_exchange, UXorQNameBin}];
+        queue    -> [{queue,             XorQNameBin},
+                     {upstream_queue,    UXorQNameBin}]
+    end ++ [{type,      Type},
+            {vhost,     VHost},
+            {upstream,  UpstreamName},
+            {uri,       URI},
+            {status,    Status},
+            {timestamp, Timestamp}].
 
 %% We don't want to key off the entire upstream, bits of it may change
 key(XName = #resource{kind = exchange}, #upstream{name          = UpstreamName,
