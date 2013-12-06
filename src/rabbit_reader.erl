@@ -1073,8 +1073,18 @@ maybe_emit_stats(State) ->
                             fun() -> emit_stats(State) end).
 
 emit_stats(State) ->
-    rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),
-    rabbit_event:reset_stats_timer(State, #v1.stats_timer).
+    Infos = infos(?STATISTICS_KEYS, State),
+    rabbit_event:notify(connection_stats, Infos),
+    State1 = rabbit_event:reset_stats_timer(State, #v1.stats_timer),
+    %% If we emit an event which looks like we are in flow control, it's not a
+    %% good idea for it to be our last even if we go idle. Keep emitting
+    %% events, either we stay busy or we drop out of flow control.
+    %% The 5 is to match the test in formatters.js:fmt_connection_state().
+    %% This magic number will go away when bug 24829 is merged.
+    case proplists:get_value(last_blocked_age, Infos) < 5 of
+        true -> ensure_stats_timer(State1);
+        _    -> State1
+    end.
 
 %% 1.0 stub
 -ifdef(use_specs).
