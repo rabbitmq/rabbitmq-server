@@ -434,10 +434,8 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             %% First disc node up
             maybe_force_load(),
             ok;
-        {[AnotherNode | _], _, _} ->
+        {[_ | _], _, _} ->
             %% Subsequent node in cluster, catch up
-            ensure_version_ok(
-              rpc:call(AnotherNode, rabbit_version, recorded, [])),
             maybe_force_load(),
             ok = rabbit_table:wait_for_replicated(),
             ok = rabbit_table:create_local_copy(NodeType)
@@ -638,15 +636,6 @@ schema_ok_or_move() ->
             ok = move_db(),
             ok = create_schema()
     end.
-
-ensure_version_ok({ok, DiscVersion}) ->
-    DesiredVersion = rabbit_version:desired(),
-    case rabbit_version:matches(DesiredVersion, DiscVersion) of
-        true  -> ok;
-        false -> throw({error, {version_mismatch, DesiredVersion, DiscVersion}})
-    end;
-ensure_version_ok({error, _}) ->
-    ok = rabbit_version:record_desired().
 
 %% We only care about disc nodes since ram nodes are supposed to catch
 %% up only
