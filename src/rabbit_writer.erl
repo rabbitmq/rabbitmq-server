@@ -100,10 +100,10 @@
 %%---------------------------------------------------------------------------
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    start(Sock, Channel, FrameMax, Protocol, ReaderPid, false, unknown).
+    start(Sock, Channel, FrameMax, Protocol, ReaderPid, unknown, false).
 
 start_link(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, false, unknown).
+    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, unknown, false).
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid, ConnName,
       ReaderWantsStats) ->
