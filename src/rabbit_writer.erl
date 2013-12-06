@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/5, start_link/5, start/6, start_link/6]).
+-export([start/5, start_link/5, start/7, start_link/7]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -49,13 +49,13 @@
         (rabbit_net:socket(), rabbit_channel:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid())
         -> rabbit_types:ok(pid())).
--spec(start/6 ::
+-spec(start/7 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(), boolean())
+         non_neg_integer(), rabbit_types:protocol(), pid(), boolean(), string())
         -> rabbit_types:ok(pid())).
--spec(start_link/6 ::
+-spec(start_link/7 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(), boolean())
+         non_neg_integer(), rabbit_types:protocol(), pid(), boolean(), string())
         -> rabbit_types:ok(pid())).
 
 -spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
@@ -100,22 +100,22 @@
 %%---------------------------------------------------------------------------
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    start(Sock, Channel, FrameMax, Protocol, ReaderPid, false).
+    start(Sock, Channel, FrameMax, Protocol, ReaderPid, false, unknown).
 
 start_link(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, false).
+    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, false, unknown).
 
-start(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
+start(Sock, Channel, FrameMax, Protocol, ReaderPid, ConnName,
+      ReaderWantsStats) ->
     State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
                           ReaderWantsStats),
-    Deb = sys:debug_options([]),
-    {ok, proc_lib:spawn(?MODULE, enter_mainloop, [Deb, State])}.
+    {ok, proc_lib:spawn(?MODULE, enter_mainloop, [ConnName, State])}.
 
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
+start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, ConnName,
+           ReaderWantsStats) ->
     State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
                           ReaderWantsStats),
-    Deb = sys:debug_options([]),
-    {ok, proc_lib:spawn_link(?MODULE, enter_mainloop, [Deb, State])}.
+    {ok, proc_lib:spawn_link(?MODULE, enter_mainloop, [ConnName, State])}.
 
 initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
     (case ReaderWantsStats of
@@ -138,8 +138,12 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
-enter_mainloop(Deb, State = #wstate{channel = Channel}) ->
-    put(rabbit_process_name, {writer, unknown, Channel}),
+enter_mainloop(ConnName, State = #wstate{channel = Channel}) ->
+    Deb = sys:debug_options([]),
+    put(rabbit_process_name, case ConnName of
+                                 unknown -> writer;
+                                 _       -> {writer, {ConnName, Channel}}
+                             end),
     mainloop(Deb, State).
 
 mainloop(Deb, State) ->

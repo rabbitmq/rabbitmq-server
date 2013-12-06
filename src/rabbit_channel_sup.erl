@@ -49,7 +49,7 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
             VHost, Capabilities, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE,
                                           {tcp, Sock, Channel, FrameMax,
-                                           ReaderPid, Protocol}),
+                                           ReaderPid, Protocol, ConnName}),
     [LimiterPid] = supervisor2:find_child(SupPid, limiter),
     [WriterPid] = supervisor2:find_child(SupPid, writer),
     {ok, ChannelPid} =
@@ -81,9 +81,9 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
 init(Type) ->
     {ok, {{one_for_all, 0, 1}, child_specs(Type)}}.
 
-child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol}) ->
+child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, ConnName}) ->
     [{writer, {rabbit_writer, start_link,
-               [Sock, Channel, FrameMax, Protocol, ReaderPid, true]},
+               [Sock, Channel, FrameMax, Protocol, ReaderPid, true, ConnName]},
       intrinsic, ?MAX_WAIT, worker, [rabbit_writer]} | child_specs(direct)];
 child_specs(direct) ->
     [{limiter, {rabbit_limiter, start_link, []},
