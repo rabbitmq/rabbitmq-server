@@ -49,8 +49,7 @@
                    blocked_sent}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
-                          send_pend, state, last_blocked_by, last_blocked_age,
-                          channels]).
+                          send_pend, state, channels]).
 
 -define(CREATION_EVENT_KEYS,
         [pid, name, port, peer_port, host,
@@ -1042,13 +1041,17 @@ i(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
 i(peer_cert_issuer,   S) -> cert_info(fun rabbit_ssl:peer_cert_issuer/1,   S);
 i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
 i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
-i(state,              #v1{connection_state = CS}) -> CS;
-i(last_blocked_by,    #v1{throttle = #throttle{last_blocked_by = By}}) -> By;
-i(last_blocked_age,   #v1{throttle = #throttle{last_blocked_at = never}}) ->
-    infinity;
-i(last_blocked_age,   #v1{throttle = #throttle{last_blocked_at = T}}) ->
-    timer:now_diff(erlang:now(), T) / 1000000;
 i(channels,           #v1{}) -> length(all_channels());
+i(state, #v1{connection_state = ConnectionState,
+             throttle         = #throttle{last_blocked_by  = BlockedBy,
+                                          last_blocked_at  = T}}) ->
+    Recent = T =/= never andalso timer:now_diff(erlang:now(), T) < 5000000,
+    case {BlockedBy, ConnectionState, Recent} of
+        {resourse, blocked,  _}    -> blocked;
+        {_,        blocking, _}    -> blocking;
+        {flow,     _,        true} -> flow;
+        {_,        _,        _}    -> ConnectionState
+    end;
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
 ic(name,              #connection{name        = Name})     -> Name;
@@ -1104,10 +1107,8 @@ emit_stats(State) ->
     %% If we emit an event which looks like we are in flow control, it's not a
     %% good idea for it to be our last even if we go idle. Keep emitting
     %% events, either we stay busy or we drop out of flow control.
-    %% The 5 is to match the test in formatters.js:fmt_connection_state().
-    %% This magic number will go away when bug 24829 is merged.
-    case proplists:get_value(last_blocked_age, Infos) < 5 of
-        true -> ensure_stats_timer(State1);
+    case proplists:get_value(state, Infos) of
+        flow -> ensure_stats_timer(State1);
         _    -> State1
     end.
 
