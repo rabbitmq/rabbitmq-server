@@ -38,6 +38,14 @@ init() ->
     cowboy:start_listener(http, 100,
                           cowboy_tcp_transport, [{port,     Port}],
                           cowboy_http_protocol, [{dispatch, Routes}]),
+    case get_env(ssl_config, []) of
+        [] ->
+            ok;
+        Conf ->
+            cowboy:start_listener(https, 100,
+                                  cowboy_ssl_transport, Conf,
+                                  cowboy_http_protocol, [{dispatch, Routes}])
+    end,
     ok.
 
 get_env(Key, Default) ->
