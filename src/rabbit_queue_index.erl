@@ -20,6 +20,9 @@
          terminate/2, delete_and_terminate/1,
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, recover/1]).
+
+-export([scan/3]).
+
 -export([add_queue_ttl/0, avoid_zeroes/0]).
 
 -define(CLEAN_FILENAME, "clean.dot").
@@ -219,6 +222,11 @@
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
+-spec(scan/3 :: (file:filename(),
+                 fun ((seq_id(), rabbit_types:msg_id(),
+                       rabbit_types:message_properties(), boolean(),
+                       ('del' | 'no_del'), ('ack' | 'no_ack'), A) -> A),
+                     A) -> A).
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
 -endif.
@@ -352,16 +360,14 @@ bounds(State = #qistate { segments = Segments }) ->
 
 recover(DurableQueues) ->
     ok = rabbit_recovery_indexes:recover(),
-    DurableDict =
-        dict:from_list([{queue_name_to_dir_name(Queue), Queue} ||
-                           Queue <- DurableQueues ]),
+    DurableDict = dict:from_list([{queue_name_to_dir_name(Queue), Queue} ||
+                                    Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
     QueueDirNames = all_queue_directory_names(QueuesDir),
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
     {DurableQueueNames, DurableTerms} =
         lists:foldl(
           fun (QueueDirName, {DurableAcc, TermsAcc}) ->
-                  QName = dict:fetch(QueueDirName, DurableDict),
                   QueueDirPath = filename:join(QueuesDir, QueueDirName),
                   case sets:is_element(QueueDirName, DurableDirectories) of
                       true ->
@@ -371,7 +377,8 @@ recover(DurableQueues) ->
                                   {error, _}  -> TermsAcc;
                                   {ok, Terms} -> [Terms | TermsAcc]
                               end,
-                          {[QName | DurableAcc], TermsAcc1};
+                          {[dict:fetch(QueueDirName, DurableDict) | DurableAcc],
+                           TermsAcc1};
                       false ->
                           ok = rabbit_file:recursive_delete([QueueDirPath]),
                           rabbit_recovery_indexes:remove_recovery_terms(
@@ -394,8 +401,8 @@ all_queue_directory_names(Dir) ->
 %%----------------------------------------------------------------------------
 
 blank_state(QueueName) ->
-    blank_state_dir(filename:join(queues_dir(),
-                                  queue_name_to_dir_name(QueueName))).
+    blank_state_dir(
+      filename:join(queues_dir(), queue_name_to_dir_name(QueueName))).
 
 blank_state_dir(Dir) ->
     {ok, MaxJournal} =
@@ -535,6 +542,9 @@ queue_index_walker_reader(QueueName, Gatherer) ->
                    Acc
            end, ok, State),
     ok = gatherer:finish(Gatherer).
+
+scan(Dir, Fun, Acc) ->
+    scan_segments(Fun, Acc, blank_state_dir(Dir)).
 
 scan_segments(Fun, Acc, State) ->
     State1 = #qistate { segments = Segments, dir = Dir } =

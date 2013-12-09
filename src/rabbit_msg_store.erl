@@ -652,6 +652,7 @@ clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
 
 init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     process_flag(trap_exit, true),
+
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
 
