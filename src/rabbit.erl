@@ -727,15 +727,17 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
+    {{Year, Month, Day},{ Hour, Minutes, Seconds}} = erlang:localtime(),
     io:format("~n              ~s ~s. ~s"
               "~n  ##  ##      ~s"
               "~n  ##  ##"
               "~n  ##########  Logs: ~s"
               "~n  ######  ##        ~s"
               "~n  ##########"
-              "~n              Starting broker...",
+              "~n  ~p-~p-~p ~p:~p:~p    Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE,
-               log_location(kernel), log_location(sasl)]).
+               log_location(kernel), log_location(sasl), Year, Month, Day,
+               Hour, Minutes, Seconds]).
 
 log_banner() ->
     Settings = [{"node",           node()},
