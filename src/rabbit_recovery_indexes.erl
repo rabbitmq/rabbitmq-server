@@ -23,7 +23,8 @@
          store_recovery_terms/2,
          had_clean_shutdown/1,
          read_recovery_terms/1,
-         remove_recovery_terms/1]).
+         remove_recovery_terms/1,
+         flush/0]).
 
 -export([init/1,
          handle_call/3,
@@ -66,7 +67,7 @@ store_recovery_terms(Name, Terms) ->
     dets:insert(?MODULE, {Name, Terms}).
 
 had_clean_shutdown(Name) ->
-    dets:member(?MODULE, Name).
+    ok == remove_recovery_terms(Name).
 
 read_recovery_terms(Name) ->
     case dets:lookup(?MODULE, Name) of
@@ -75,7 +76,13 @@ read_recovery_terms(Name) ->
     end.
 
 remove_recovery_terms(Name) ->
-    dets:delete(?MODULE, Name).
+    case dets:member(?MODULE, Name) of
+        true  -> dets:delete(?MODULE, Name);
+        false -> {error, not_found}
+    end.
+
+flush() ->
+    ok = dets:sync(?MODULE).
 
 init(_) ->
     File = filename:join([rabbit_mnesia:dir(), "queues", ?CLEAN_FILENAME]),

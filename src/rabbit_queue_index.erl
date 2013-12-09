@@ -243,7 +243,7 @@ init(Name, OnSyncFun) ->
 
 shutdown_terms(Name) ->
     #qistate { dir = Dir } = blank_state(Name),
-    case rabbit_recover_indexes:read_recovery_terms(Dir) of
+    case rabbit_recovery_indexes:read_recovery_terms(Dir) of
         {error, _}        -> [];
         {ok, {_, Terms1}} -> Terms1
     end.
