@@ -244,24 +244,26 @@ init(Name, OnSyncFun) ->
 
 shutdown_terms(Name) ->
     #qistate { dir = Dir } = blank_state(Name),
-    case read_shutdown_terms(Dir) of
-        {error, _}   -> [];
-        {ok, Terms1} -> Terms1
+    case rabbit_recovery_indexes:read_recovery_terms(Dir) of
+        {error, _}        -> [];
+        {ok, {_, Terms1}} -> Terms1
     end.
 
 recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
-    CleanShutdown = detect_clean_shutdown(Dir),
+    CleanShutdown =
+        rabbit_recovery_indexes:had_clean_shutdown(Dir),
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
-terminate(Terms, State) ->
-    {SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
-    store_clean_shutdown([{segments, SegmentCounts} | Terms], Dir),
+terminate(Terms, State = #qistate { dir = Dir }) ->
+    {SegmentCounts, State1} = terminate(State),
+    rabbit_recovery_indexes:store_recovery_terms(
+      Dir, [{segments, SegmentCounts} | Terms]),
     State1.
 
 delete_and_terminate(State) ->
@@ -358,8 +360,9 @@ bounds(State = #qistate { segments = Segments }) ->
     {LowSeqId, NextSeqId, State}.
 
 recover(DurableQueues) ->
-    DurableDict = dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
-                                     Queue <- DurableQueues ]),
+    ok = rabbit_recovery_indexes:recover(),
+    DurableDict = dict:from_list([{queue_name_to_dir_name(Queue), Queue} ||
+                                    Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),
     QueueDirNames = all_queue_directory_names(QueuesDir),
     DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
@@ -370,7 +373,8 @@ recover(DurableQueues) ->
                   case sets:is_element(QueueDirName, DurableDirectories) of
                       true ->
                           TermsAcc1 =
-                              case read_shutdown_terms(QueueDirPath) of
+                              case rabbit_recovery_indexes:read_recovery_terms(
+                                     QueueDirPath) of
                                   {error, _}  -> TermsAcc;
                                   {ok, Terms} -> [Terms | TermsAcc]
                               end,
@@ -378,6 +382,8 @@ recover(DurableQueues) ->
                            TermsAcc1};
                       false ->
                           ok = rabbit_file:recursive_delete([QueueDirPath]),
+                          rabbit_recovery_indexes:remove_recovery_terms(
+                            QueueDirPath),
                           {DurableAcc, TermsAcc}
                   end
           end, {[], []}, QueueDirNames),
@@ -409,22 +415,6 @@ blank_state_dir(Dir) ->
                max_journal_entries = MaxJournal,
                on_sync             = fun (_) -> ok end,
                unconfirmed         = gb_sets:new() }.
-
-clean_filename(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
-
-detect_clean_shutdown(Dir) ->
-    case rabbit_file:delete(clean_filename(Dir)) of
-        ok              -> true;
-        {error, enoent} -> false
-    end.
-
-read_shutdown_terms(Dir) ->
-    rabbit_file:read_term_file(clean_filename(Dir)).
-
-store_clean_shutdown(Terms, Dir) ->
-    CleanFileName = clean_filename(Dir),
-    ok = rabbit_file:ensure_dir(CleanFileName),
-    rabbit_file:write_term_file(CleanFileName, Terms).
 
 init_clean(RecoveredCounts, State) ->
     %% Load the journal. Since this is a clean recovery this (almost)
