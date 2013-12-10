@@ -35,9 +35,9 @@ fmt_all(Info0) ->
     Info = [{K, fmt(K, V)} || {K, V} <- Info0],
     case process_info(Pid, dictionary) of
         {dictionary, Dict} ->
-            case lists:keyfind(rabbit_process_name, 1, Dict) of
-                {rabbit_process_name = K, Name} -> [{K, fmt_name(Name)} | Info];
-                false                           -> Info
+            case lists:keyfind(process_name, 1, Dict) of
+                {process_name = K, Name} -> [{K, fmt_name(Name)} | Info];
+                false                    -> Info
             end;
         undefined ->
             Info
@@ -50,18 +50,21 @@ fmt(registered_name, Name) ->
 fmt(_K, Other) ->
     list_to_binary(rabbit_misc:format("~p", [Other])).
 
-fmt_name({Type, {ConnName, ChNum}}) when Type =:= channel; Type =:= writer ->
-    [{type,            Type},
+fmt_name({Type, {ConnName, ChNum}}) when is_binary(ConnName),
+                                         is_integer(ChNum) ->
+    [{supertype,       channel},
+     {type,            Type},
      {connection_name, ConnName},
      {channel_number,  ChNum}];
 
 fmt_name({Type, #resource{virtual_host = VHost,
-                          name         = Name}}) when Type =:= queue;
-                                                      Type =:= queue_slave ->
-    [{type,       Type},
+                          name         = Name}}) ->
+    [{supertype,  queue},
+     {type,       Type},
      {queue_name, Name},
      {vhost,      VHost}];
 
-fmt_name({reader, ConnName}) ->
-    [{type,            reader},
+fmt_name({Type, ConnName}) when is_binary(ConnName) ->
+    [{supertype,       connection},
+     {type,            Type},
      {connection_name, ConnName}].
