@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2012, 2013 GoPivotal, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is Pivotal Software, Inc.
+%% Copyright (c) 2012, 2013 Pivotal Software, Inc.  All rights reserved.
 %% -----------------------------------------------------------------------------
 
 %% Unit test file for RJMS Topic Selector plugin

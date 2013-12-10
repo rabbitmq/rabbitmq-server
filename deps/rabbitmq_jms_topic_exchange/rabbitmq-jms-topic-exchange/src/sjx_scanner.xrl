@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2012, 2013 GoPivotal, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is Pivotal Software, Inc.
+%% Copyright (c) 2012, 2013 Pivotal Software, Inc.  All rights reserved.
 %% -----------------------------------------------------------------------------
 %% Derived from works which were:
 %% Copyright (c) 2002, 2012 Tim Watson (watson.timothy@gmail.com)
@@ -108,8 +108,8 @@ Erlang code.
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2012, 2013 GoPivotal, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is Pivotal Software, Inc.
+%% Copyright (c) 2012, 2013 Pivotal Software, Inc.  All rights reserved.
 %% -----------------------------------------------------------------------------
 %% Derived from works which were:
 %% Copyright (c) 2002, 2012 Tim Watson (watson.timothy@gmail.com)
