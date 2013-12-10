@@ -188,6 +188,10 @@ start_link() ->
     %% mirrored_supervisor to maintain the uniqueness of this process.
     case gen_server2:start_link(?MODULE, [], []) of
         {ok, Pid} -> yes = global:re_register_name(?MODULE, Pid),
+                     %% For debugging it's helpful to locally register the
+                     %% name too since that shows up in places global names
+                     %% don't.
+                     register(?MODULE, Pid),
                      rabbit:force_event_refresh(),
                      {ok, Pid};
         Else      -> Else
