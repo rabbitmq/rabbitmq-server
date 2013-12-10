@@ -115,7 +115,7 @@ tr.alt1>td { background: #eee; }
 tr.alt2>td { background: #fff; }
 
 div.status-bar, div.status-red, div.status-yellow, div.status-green, div.status-grey { text-align: center; }
-div.status-bar-main, div.status-red, div.status-yellow, div.status-green, div.status-grey { border-radius: 5px; -moz-border-radius: 5px; padding: 5px; }
+div.status-bar-main, div.status-red, div.status-yellow, div.status-green, div.status-grey { border-radius: 3px; -moz-border-radius: 3px; padding: 3px; }
 div.status-bar sub { white-space: nowrap; }
 
 div.status-bar .grey, div.status-grey { background: #ddd; }
