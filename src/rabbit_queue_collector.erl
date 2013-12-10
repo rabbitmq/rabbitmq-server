@@ -18,7 +18,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, register/2, delete_all/1]).
+-export([start_link/1, register/2, delete_all/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -31,7 +31,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/1 :: (rabbit_types:identity()) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(register/2 :: (pid(), pid()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
 
@@ -39,8 +40,8 @@
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+start_link(Identity) ->
+    gen_server:start_link(?MODULE, [Identity], []).
 
 register(CollectorPid, Q) ->
     gen_server:call(CollectorPid, {register, Q}, infinity).
@@ -50,7 +51,8 @@ delete_all(CollectorPid) ->
 
 %%----------------------------------------------------------------------------
 
-init([]) ->
+init([Identity]) ->
+    rabbit_misc:store_identity(queue_collector, Identity),
     {ok, #state{monitors = pmon:new(), delete_from = undefined}}.
 
 %%--------------------------------------------------------------------------

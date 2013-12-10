@@ -51,11 +51,13 @@
         -> rabbit_types:ok(pid())).
 -spec(start/7 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(), boolean(), string())
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:identity(), boolean())
         -> rabbit_types:ok(pid())).
 -spec(start_link/7 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(), boolean(), string())
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:identity(), boolean())
         -> rabbit_types:ok(pid())).
 
 -spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
@@ -105,17 +107,17 @@ start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
 start_link(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
     start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, unknown, false).
 
-start(Sock, Channel, FrameMax, Protocol, ReaderPid, ConnName,
+start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
       ReaderWantsStats) ->
     State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
                           ReaderWantsStats),
-    {ok, proc_lib:spawn(?MODULE, enter_mainloop, [ConnName, State])}.
+    {ok, proc_lib:spawn(?MODULE, enter_mainloop, [Identity, State])}.
 
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, ConnName,
+start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
            ReaderWantsStats) ->
     State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
                           ReaderWantsStats),
-    {ok, proc_lib:spawn_link(?MODULE, enter_mainloop, [ConnName, State])}.
+    {ok, proc_lib:spawn_link(?MODULE, enter_mainloop, [Identity, State])}.
 
 initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
     (case ReaderWantsStats of
@@ -138,12 +140,9 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
-enter_mainloop(ConnName, State = #wstate{channel = Channel}) ->
+enter_mainloop(Identity, State) ->
     Deb = sys:debug_options([]),
-    put(rabbit_process_name, case ConnName of
-                                 unknown -> writer;
-                                 _       -> {writer, {ConnName, Channel}}
-                             end),
+    rabbit_misc:store_identity(writer, Identity),
     mainloop(Deb, State).
 
 mainloop(Deb, State) ->

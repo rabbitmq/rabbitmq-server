@@ -195,7 +195,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
-    put(rabbit_process_name, {channel, {ConnName, Channel}}),
+    rabbit_misc:store_identity(channel, {ConnName, Channel}),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,

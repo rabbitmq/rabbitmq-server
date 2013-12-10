@@ -70,6 +70,7 @@
 -export([interval_operation/4]).
 -export([ensure_timer/4, stop_timer/2]).
 -export([get_parent/0]).
+-export([store_identity/1, store_identity/2]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -248,6 +249,8 @@
 -spec(ensure_timer/4 :: (A, non_neg_integer(), non_neg_integer(), any()) -> A).
 -spec(stop_timer/2 :: (A, non_neg_integer()) -> A).
 -spec(get_parent/0 :: () -> pid()).
+-spec(store_identity/2 :: (atom(), rabbit_types:identity()) -> ok).
+-spec(store_identity/1 :: (rabbit_types:type_identity()) -> ok).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -1081,6 +1084,9 @@ stop_timer(State, Idx) ->
                          _     -> setelement(Idx, State, undefined)
                      end
     end.
+
+store_identity(Type, Identity) -> store_identity({Type, Identity}).
+store_identity(TypeIdentity)   -> put(rabbit_process_name, TypeIdentity).
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl

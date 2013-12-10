@@ -79,7 +79,7 @@ set_maximum_since_use(QPid, Age) ->
 info(QPid) -> gen_server2:call(QPid, info, infinity).
 
 init(Q) ->
-    put(rabbit_process_name, {queue_slave, Q#amqqueue.name}),
+    rabbit_misc:store_identity(queue_slave, Q#amqqueue.name),
     {ok, {not_started, Q}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
       ?DESIRED_HIBERNATE}}.
@@ -617,7 +617,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     KS1 = lists:foldl(fun (ChPid0, KS0) ->
                               pmon:demonitor(ChPid0, KS0)
                       end, KS, AwaitGmDown),
-    put(rabbit_process_name, {queue, QName}),
+    rabbit_misc:store_identity(queue, QName),
     rabbit_amqqueue_process:init_with_backing_queue_state(
       Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS1,
       MTC).
