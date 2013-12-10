@@ -57,11 +57,14 @@
 -define(CLEAN_FILENAME, "clean.dot").
 
 recover() ->
-    supervisor:start_child(rabbit_sup,
-                           {?SERVER, {?MODULE, start_link, []},
-                            permanent, ?MAX_WAIT, worker,
-                            [?SERVER]}),
-    ok.
+    case supervisor:start_child(rabbit_sup,
+                                {?SERVER, {?MODULE, start_link, []},
+                                 permanent, ?MAX_WAIT, worker,
+                                 [?SERVER]}) of
+        {ok, _}                       -> ok;
+        {error, {already_started, _}} -> ok;
+        {error, _}=Err                -> Err
+    end.
 
 start_link() ->
     gen_server:start_link(?MODULE, [], []).
