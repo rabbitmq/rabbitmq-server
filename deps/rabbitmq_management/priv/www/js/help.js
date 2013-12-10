@@ -32,6 +32,14 @@ HELP = {
     'queue-persistent':
       'Number of messages in the queue which are persistent. These messages will be on disc but may also be available in memory. Note that if a message is published as persistent but routed to a transient queue it is not considered persistent by that queue, so transient queues will always report 0 persistent messages.',
 
+    'queue-consumer-utilisation':
+      'Fraction of the time that the queue is able to immediately deliver messages to consumers. If this number is less than 100% you may be able to deliver messages faster if: \
+        <ul> \
+          <li>There were more consumers or</li> \
+          <li>The consumers were faster or</li> \
+          <li>The consumers had a higher prefetch count</li> \
+        </ul>',
+
     'internal-users-only':
       'Only users within the internal RabbitMQ database are shown here. Other users (e.g. those authenticated over LDAP) will not appear.',
 
@@ -249,6 +257,11 @@ HELP = {
 </dl>',
 
     'handle-exe' : 'In order to monitor the number of file descriptors in use on Windows, RabbitMQ needs the <a href="http://technet.microsoft.com/en-us/sysinternals/bb896655" target="_blank">handle.exe command line tool from Microsoft</a>. Download it and place it in the path (e.g. in C:\Windows).',
+
+    'filter-regex' :
+    'Whether to enable regular expression matching. Both string literals \
+    and regular expressions are matched in a case-insensitive manner.<br/></br/> \
+    (<a href="https://developer.mozilla.org/en/docs/Web/JavaScript/Guide/Regular_Expressions" target="_blank">Regular expression reference</a>)',
 
     'foo': 'foo' // No comma.
 };

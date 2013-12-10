@@ -33,12 +33,16 @@
 
     <table class="facts">
       <tr>
-        <th>Status</th>
-        <td><%= fmt_idle_long(queue) %></td>
+        <th>State</th>
+        <td><%= fmt_object_state(queue) %></td>
       </tr>
       <tr>
         <th>Consumers</th>
         <td><%= fmt_string(queue.consumers) %></td>
+      </tr>
+      <tr>
+        <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
+        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
       </tr>
       <tr>
         <th>Memory</th>
@@ -108,11 +112,11 @@
             <% } %>
             <br/>
           <% } %>
-          <% if (queue.status == 'syncing') { %>
+          <% if (queue.state == 'syncing') { %>
           <table>
             <tr>
               <td>
-                <%= fmt_sync_status(queue) %>
+                <%= fmt_sync_state(queue) %>
               </td>
               <td>
                 <form action="#/queues/actions" method="post">
