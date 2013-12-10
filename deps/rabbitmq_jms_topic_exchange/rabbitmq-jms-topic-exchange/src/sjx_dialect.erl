@@ -70,6 +70,8 @@ check_type_bool( TypeInfo, {'between', Exp1, Exp2 }) -> check_type_arith(TypeInf
 check_type_bool( TypeInfo, {'not_between', Exp1, Exp2 }) -> check_type_arith(TypeInfo, Exp1) andalso check_type_range(TypeInfo, Exp2);
 check_type_bool(_TypeInfo, {'is_null', Exp }) -> check_type_ident(Exp);
 check_type_bool(_TypeInfo, {'not_null', Exp }) -> check_type_ident(Exp);
+check_type_bool( TypeInfo, {'in', LHS, RHS}) -> check_type_string(TypeInfo, LHS) andalso check_type_list(RHS);
+check_type_bool( TypeInfo, {'not_in', LHS, RHS}) -> check_type_string(TypeInfo, LHS) andalso check_type_list(RHS);
 check_type_bool( TypeInfo, { Op, LHS, RHS }) ->
     ( check_eq_op(Op)
         andalso ( (check_type_arith(TypeInfo, LHS) andalso check_type_arith(TypeInfo, RHS))
@@ -96,7 +98,6 @@ check_type_enums( TypeInfo, {'ident', LIdent}, {'ident', RIdent}) ->
     end;
 check_type_enums( TypeInfo, LHS, RHS = {'ident', _}) -> check_type_enums(TypeInfo, RHS, LHS);
 check_type_enums( TypeInfo, {'ident', Ident}, RHS) when is_binary(RHS) ->
-    io:format("check_type_enums(~p~n, ~p~n, ~p~n                )~n", [TypeInfo, {'ident', Ident}, RHS]),
     case get_ident_type(Ident, TypeInfo) of
         ElemList when is_list(ElemList) -> lists:member({longstr, RHS}, ElemList);
         _                               -> false
@@ -135,3 +136,6 @@ check_cmp_op(_) -> false.
 
 check_type_range( TypeInfo, {'range', From, To }) -> check_type_arith(TypeInfo, From) andalso check_type_arith(TypeInfo, To);
 check_type_range(_,_) -> false.
+
+check_type_list( [] ) -> false;
+check_type_list( [ _hd | _tl ] ) -> true.
