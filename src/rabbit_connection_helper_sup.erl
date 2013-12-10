@@ -31,7 +31,7 @@
 -ifdef(use_specs).
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start_channel_sup_sup/1 :: (pid()) -> rabbit_types:ok_pid_or_error()).
--spec(start_queue_collector/2 :: (pid(), rabbit_types:identity()) ->
+-spec(start_queue_collector/2 :: (pid(), rabbit_types:proc_name()) ->
                                       rabbit_types:ok_pid_or_error()).
 -endif.
 

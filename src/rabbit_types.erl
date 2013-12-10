@@ -30,8 +30,8 @@
               connection/0, protocol/0, user/0, internal_user/0,
               username/0, password/0, password_hash/0,
               ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
-              channel_exit/0, connection_exit/0, mfargs/0, identity/0,
-              type_identity/0]).
+              channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
+              proc_type_and_name/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(vhost() :: binary()).
@@ -157,7 +157,7 @@
 
 -type(mfargs() :: {atom(), atom(), [any()]}).
 
--type(identity() :: term()).
--type(type_identity() :: {atom(), identity()}).
+-type(proc_name() :: term()).
+-type(proc_type_and_name() :: {atom(), proc_name()}).
 
 -endif. % use_specs

@@ -124,7 +124,7 @@ info_keys() -> ?INFO_KEYS.
 
 init(Q) ->
     process_flag(trap_exit, true),
-    rabbit_misc:store_identity(queue, Q#amqqueue.name),
+    rabbit_misc:store_proc_name(queue, Q#amqqueue.name),
     {ok, init_state(Q#amqqueue{pid = self()}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 

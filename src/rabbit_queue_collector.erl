@@ -31,7 +31,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: (rabbit_types:identity()) ->
+-spec(start_link/1 :: (rabbit_types:proc_name()) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(register/2 :: (pid(), pid()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
@@ -52,7 +52,7 @@ delete_all(CollectorPid) ->
 %%----------------------------------------------------------------------------
 
 init([Identity]) ->
-    rabbit_misc:store_identity(queue_collector, Identity),
+    rabbit_misc:store_proc_name(queue_collector, Identity),
     {ok, #state{monitors = pmon:new(), delete_from = undefined}}.
 
 %%--------------------------------------------------------------------------

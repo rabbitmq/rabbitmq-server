@@ -52,12 +52,12 @@
 -spec(start/7 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:identity(), boolean())
+         rabbit_types:proc_name(), boolean())
         -> rabbit_types:ok(pid())).
 -spec(start_link/7 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:identity(), boolean())
+         rabbit_types:proc_name(), boolean())
         -> rabbit_types:ok(pid())).
 
 -spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
@@ -142,7 +142,7 @@ system_code_change(Misc, _Module, _OldVsn, _Extra) ->
 
 enter_mainloop(Identity, State) ->
     Deb = sys:debug_options([]),
-    rabbit_misc:store_identity(writer, Identity),
+    rabbit_misc:store_proc_name(writer, Identity),
     mainloop(Deb, State).
 
 mainloop(Deb, State) ->

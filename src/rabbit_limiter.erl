@@ -145,7 +145,7 @@
 -type(qstate() :: #qstate{pid :: pid(),
                           state :: 'dormant' | 'active' | 'suspended'}).
 
--spec(start_link/1 :: (rabbit_types:identity()) ->
+-spec(start_link/1 :: (rabbit_types:proc_name()) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(new/1 :: (pid()) -> lstate()).
 
@@ -323,7 +323,7 @@ update_credit(CTag, Credit, Drain, Credits) ->
 %%----------------------------------------------------------------------------
 
 init([Identity]) ->
-    rabbit_misc:store_identity(limiter, Identity),
+    rabbit_misc:store_proc_name(limiter, Identity),
     {ok, #lim{}}.
 
 prioritise_call(get_prefetch_limit, _From, _Len, _State) -> 9;

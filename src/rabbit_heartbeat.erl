@@ -40,16 +40,16 @@
          non_neg_integer(), heartbeat_callback()) -> heartbeaters()).
 
 -spec(start/7 ::
-        (pid(), rabbit_net:socket(), rabbit_types:identity(),
+        (pid(), rabbit_net:socket(), rabbit_types:proc_name(),
          non_neg_integer(), heartbeat_callback(),
          non_neg_integer(), heartbeat_callback()) -> heartbeaters()).
 
 -spec(start_heartbeat_sender/4 ::
         (rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
-         rabbit_types:type_identity()) -> rabbit_types:ok(pid())).
+         rabbit_types:proc_type_and_name()) -> rabbit_types:ok(pid())).
 -spec(start_heartbeat_receiver/4 ::
         (rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
-         rabbit_types:type_identity()) -> rabbit_types:ok(pid())).
+         rabbit_types:proc_type_and_name()) -> rabbit_types:ok(pid())).
 
 -spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
 -spec(resume_monitor/1 :: (heartbeaters()) -> 'ok').
@@ -121,7 +121,7 @@ start_heartbeater(TimeoutSec, SupPid, Sock, TimeoutFun, Name, Callback,
 heartbeater(Params, Identity) ->
     Deb = sys:debug_options([]),
     {ok, proc_lib:spawn_link(fun () ->
-                                     rabbit_misc:store_identity(Identity),
+                                     rabbit_misc:store_proc_name(Identity),
                                      heartbeater(Params, Deb, {0, 0})
                              end)}.
 
