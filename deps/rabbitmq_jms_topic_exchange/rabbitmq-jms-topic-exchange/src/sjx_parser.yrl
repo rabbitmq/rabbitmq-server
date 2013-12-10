@@ -107,8 +107,8 @@ identifier   -> ident                                              : {'ident', b
 
 stringlist   -> '(' strings ')'                                    : '$2'.
 
-strings      -> string                                             : [value_of('$1')].
-strings      -> string ',' strings                                 : [value_of('$1') | '$3'].
+strings      -> string                                             : ['$1'].
+strings      -> string ',' strings                                 : ['$1' | '$3'].
 
 string       -> lit_string                                         : bin_value_of('$1').
 

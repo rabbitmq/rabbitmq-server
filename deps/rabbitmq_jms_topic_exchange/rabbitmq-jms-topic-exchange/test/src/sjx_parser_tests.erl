@@ -70,6 +70,8 @@ basic_parse_test_() ->
     , ?_assertMatch( {'>', {'ident', <<"weight">>}, 2500},              analyze(?TEST_TYPE_INFO, "weight > 0x9C4               "))
     , ?_assertMatch( {is_null, {'ident', <<"weight">>}},                analyze(?TEST_TYPE_INFO, "weight is null               "))
     , ?_assertMatch( {not_null, {'ident', <<"weight">>}},               analyze(?TEST_TYPE_INFO, "weight IS not NULL           "))
+    , ?_assertMatch( {in, {'ident', <<"wight">>}, [<<"lite">>, <<"ugh">>]}, analyze(?TEST_TYPE_INFO, "wight in ('lite', 'ugh') "))
+    , ?_assertMatch( {not_in, {'ident', <<"wight">>}, [<<"light">>, <<"heavy">>]}, analyze(?TEST_TYPE_INFO, "wight NoT iN ('light', 'heavy') "))
     , ?_assertMatch( {between, {'ident', <<"weight">>}, {range, 1, 10}}, analyze(?TEST_TYPE_INFO, "weight between 1 and 10     "))
     , ?_assertMatch( {between, 2, {range, 1, 10}},                      analyze(?TEST_TYPE_INFO, "2 between 1 and 10           "))
     , ?_assertMatch( {not_between, 2, {range, 1, 10}},                  analyze(?TEST_TYPE_INFO, "2 not between 1 and 10       "))
