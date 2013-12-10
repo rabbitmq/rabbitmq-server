@@ -11,31 +11,35 @@ NAVIGATION['Admin'][0]['Top'] = ['#/top', 'administrator'];
 function fmt_process_name(process) {
     if (process == undefined) return '';
 
-    debug(JSON.stringify(process));
+    var name = process.name;
+    debug(JSON.stringify(name));
+    var type = name.type;
 
-    if (process.registered_name != '') {
-        return '<b>' + process.registered_name +
-            '</b><sub>registered</sub>';
+    var txt;
+    if (name.supertype == 'channel') {
+        txt = link_channel(name.connection_name + ' (' +
+                           name.channel_number + ')');
     }
-    else if (process.process_name != undefined) {
-        var proc = process.process_name;
-        var txt;
-        if (proc.supertype == 'channel') {
-            txt = link_channel(proc.connection_name + ' (' +
-                               proc.channel_number + ')');
-        }
-        else if (proc.supertype == 'queue') {
-            txt = link_queue(proc.vhost, proc.queue_name);
-        }
-        else if (proc.supertype == 'connection') {
-            txt = link_conn(proc.connection_name);
-        }
+    else if (name.supertype == 'queue') {
+        txt = link_queue(name.vhost, name.queue_name);
+    }
+    else if (name.supertype == 'connection') {
+        txt = link_conn(name.connection_name);
+    }
+    else if (name.supertype == 'registered') {
+        txt = '<b>' + name.type + '</b>';
+        type = 'registered';
+    }
+    else if (name.supertype == 'initial_call') {
+        txt = '<b>' + name.type + '</b>';
+        type = 'initial call determination';
+    }
+    else if (name.supertype == 'unidentified') {
+        txt = fmt_string(process.pid);
+        type = 'unidentified';
+    }
 
-        return txt + '<sub>' + fmt_remove_rabbit_prefix(proc.type) + '</sub>';
-    }
-    else {
-        return fmt_string(process.pid) + '<sub>unidentified</sub>';
-    }
+    return txt + '<sub>' + fmt_remove_rabbit_prefix(type) + '</sub>';
 }
 
 function fmt_remove_rabbit_prefix(name) {

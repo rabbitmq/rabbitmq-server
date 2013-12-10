@@ -30,41 +30,76 @@ toplist(Key, Info) ->
     {Key, Val} = lists:keyfind(Key, 1, Info),
     {Val, Info}.
 
-fmt_all(Info0) ->
-    {pid, Pid} = lists:keyfind(pid, 1, Info0),
-    Info = [{K, fmt(K, V)} || {K, V} <- Info0],
-    case process_info(Pid, dictionary) of
-        {dictionary, Dict} ->
-            case lists:keyfind(process_name, 1, Dict) of
-                {process_name = K, Name} -> [{K, fmt_name(Name)} | Info];
-                false                    -> Info
-            end;
-        undefined ->
-            Info
-    end.
+fmt_all(Info) ->
+    {pid, Pid} = lists:keyfind(pid, 1, Info),
+    [{name, obtain_name(Pid)} | [{K, fmt(K, V)} || {K, V} <- Info]].
 
 fmt(_K, Pid) when is_pid(Pid) ->
     list_to_binary(rabbit_misc:pid_to_string(Pid));
-fmt(registered_name, Name) ->
-    list_to_binary(rabbit_misc:format("~s", [Name]));
 fmt(_K, Other) ->
     list_to_binary(rabbit_misc:format("~p", [Other])).
 
-fmt_name({Type, {ConnName, ChNum}}) when is_binary(ConnName),
-                                         is_integer(ChNum) ->
+obtain_name(Pid) ->
+    lists:foldl(fun(Fun,  fail) -> Fun(Pid);
+                   (_Fun, Res)  -> Res
+                end, fail, [fun obtain_from_registered_name/1,
+                            fun obtain_from_process_name/1,
+                            fun obtain_from_initial_call_name/1,
+                            fun unidentified/1]).
+
+obtain_from_registered_name(Pid) ->
+    case process_info(Pid, registered_name) of
+        {registered_name, Name} -> [{supertype, registered},
+                                    {type,      Name}];
+        _                       -> fail
+    end.
+
+obtain_from_process_name(Pid) ->
+    case process_info(Pid, dictionary) of
+        {dictionary, Dict} ->
+            case lists:keyfind(process_name, 1, Dict) of
+                {process_name, Name} -> fmt_process_name(Name);
+                false                -> fail
+            end;
+        _ ->
+            fail
+    end.
+
+fmt_process_name({Type, {ConnName, ChNum}}) when is_binary(ConnName),
+                                                 is_integer(ChNum) ->
     [{supertype,       channel},
      {type,            Type},
      {connection_name, ConnName},
      {channel_number,  ChNum}];
 
-fmt_name({Type, #resource{virtual_host = VHost,
-                          name         = Name}}) ->
+fmt_process_name({Type, #resource{virtual_host = VHost,
+                                  name         = Name}}) ->
     [{supertype,  queue},
      {type,       Type},
      {queue_name, Name},
      {vhost,      VHost}];
 
-fmt_name({Type, ConnName}) when is_binary(ConnName) ->
+fmt_process_name({Type, ConnName}) when is_binary(ConnName) ->
     [{supertype,       connection},
      {type,            Type},
      {connection_name, ConnName}].
+
+obtain_from_initial_call_name(Pid) ->
+    case process_info(Pid, dictionary) of
+        {dictionary, Dict} ->
+            case lists:keyfind('$initial_call', 1, Dict) of
+                {'$initial_call', MFA} -> case guess_initial_call(MFA) of
+                                              fail -> fail;
+                                              Name -> [{supertype,initial_call},
+                                                       {type,     Name}]
+                                          end;
+                false                  -> fail
+            end;
+        _ ->
+            fail
+    end.
+
+guess_initial_call({mochiweb_acceptor, _F, _A}) -> mochiweb_http;
+guess_initial_call(MFA)                         -> fail.
+
+unidentified(_Pid) -> [{supertype, unidentified}].
