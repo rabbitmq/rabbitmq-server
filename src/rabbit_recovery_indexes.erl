@@ -14,6 +14,9 @@
 %% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
+%% We use a gen_server simply so that during the terminate/2 call
+%% (i.e., during shutdown), we can sync/flush the dets table to disk.
+
 -module(rabbit_recovery_indexes).
 
 -behaviour(gen_server).
@@ -21,7 +24,7 @@
 -export([recover/0,
          start_link/0,
          store_recovery_terms/2,
-         had_clean_shutdown/1,
+         check_clean_shutdown/1,
          read_recovery_terms/1,
          remove_recovery_terms/1,
          flush/0]).
@@ -40,7 +43,7 @@
 -spec(store_recovery_terms(
         Name  :: rabbit_misc:resource_name(),
         Terms :: term()) -> rabbit_types:ok_or_error(term())).
--spec(had_clean_shutdown(
+-spec(check_clean_shutdown(
         rabbit_misc:resource_name()) ->
              boolean() | rabbit_types:error(term())).
 -spec(read_recovery_terms(
@@ -54,10 +57,10 @@
 -define(CLEAN_FILENAME, "clean.dot").
 
 recover() ->
-    {ok, _Child} = supervisor:start_child(rabbit_sup,
-                                          {?SERVER, {?MODULE, start_link, []},
-                                           permanent, ?MAX_WAIT, worker,
-                                           [?SERVER]}),
+    supervisor:start_child(rabbit_sup,
+                           {?SERVER, {?MODULE, start_link, []},
+                            permanent, ?MAX_WAIT, worker,
+                            [?SERVER]}),
     ok.
 
 start_link() ->
@@ -66,23 +69,24 @@ start_link() ->
 store_recovery_terms(Name, Terms) ->
     dets:insert(?MODULE, {Name, Terms}).
 
-had_clean_shutdown(Name) ->
+check_clean_shutdown(Name) ->
     ok == remove_recovery_terms(Name).
 
 read_recovery_terms(Name) ->
     case dets:lookup(?MODULE, Name) of
-        [Terms] -> {ok, Terms};
-        _       -> {error, not_found}
+        [{_, Terms}] -> {ok, Terms};
+        _            -> {error, not_found}
     end.
 
 remove_recovery_terms(Name) ->
     case dets:member(?MODULE, Name) of
-        true  -> dets:delete(?MODULE, Name);
-        false -> {error, not_found}
+        true -> dets:delete(?MODULE, Name);
+        _    -> {error, not_found}
     end.
 
 flush() ->
-    ok = dets:sync(?MODULE).
+    dets:sync(?MODULE),
+    ok.
 
 init(_) ->
     File = filename:join([rabbit_mnesia:dir(), "queues", ?CLEAN_FILENAME]),

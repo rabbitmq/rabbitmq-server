@@ -245,15 +245,15 @@ init(Name, OnSyncFun) ->
 shutdown_terms(Name) ->
     #qistate { dir = Dir } = blank_state(Name),
     case rabbit_recovery_indexes:read_recovery_terms(Dir) of
-        {error, _}        -> [];
-        {ok, {_, Terms1}} -> Terms1
+        {error, _}   -> [];
+        {ok, Terms1} -> Terms1
     end.
 
 recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
     CleanShutdown =
-        rabbit_recovery_indexes:had_clean_shutdown(Dir),
+        rabbit_recovery_indexes:check_clean_shutdown(Dir),
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);

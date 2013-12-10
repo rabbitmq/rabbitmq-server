@@ -391,7 +391,7 @@
 start(DurableQueues) ->
     {AllTerms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
     start_msg_store(
-      [Ref || {_, Terms} <- AllTerms,
+      [Ref || Terms <- AllTerms,
               begin
                   Ref = proplists:get_value(persistent_ref, Terms),
                   Ref =/= undefined
