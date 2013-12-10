@@ -119,7 +119,8 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter) ->
     gen_server2:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol,
-                User, VHost, Capabilities, CollectorPid, Limiter], []).
+                User, VHost, Capabilities, CollectorPid, Limiter],
+      [{proc_name, {ConnName, Channel}}]).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -195,7 +196,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
-    rabbit_misc:store_proc_name(channel, {ConnName, Channel}),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,

@@ -142,7 +142,7 @@ system_code_change(Misc, _Module, _OldVsn, _Extra) ->
 
 enter_mainloop(Identity, State) ->
     Deb = sys:debug_options([]),
-    rabbit_misc:store_proc_name(writer, Identity),
+    rabbit_misc:store_proc_name(?MODULE, Identity),
     mainloop(Deb, State).
 
 mainloop(Deb, State) ->

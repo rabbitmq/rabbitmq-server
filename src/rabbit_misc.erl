@@ -1085,8 +1085,8 @@ stop_timer(State, Idx) ->
                      end
     end.
 
-store_proc_name(Type, Identity) -> store_proc_name({Type, Identity}).
-store_proc_name(TypeIdentity)   -> put(process_name, TypeIdentity).
+store_proc_name(Type, ProcName) -> store_proc_name({Type, ProcName}).
+store_proc_name(TypeProcName)   -> put(process_name, TypeProcName).
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl

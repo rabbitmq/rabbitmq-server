@@ -517,7 +517,8 @@ table_definitions() ->
     [{Name, [?TABLE_MATCH | Attributes]}].
 
 start_link(GroupName, Module, Args, TxnFun) ->
-    gen_server2:start_link(?MODULE, [GroupName, Module, Args, TxnFun], []).
+    gen_server2:start_link(
+      ?MODULE, [GroupName, Module, Args, TxnFun], [{proc_name, GroupName}]).
 
 leave(Server) ->
     gen_server2:cast(Server, leave).

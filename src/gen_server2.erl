@@ -283,7 +283,7 @@ behaviour_info(_Other) ->
 %%%    Name ::= {local, atom()} | {global, atom()}
 %%%    Mod  ::= atom(), callback module implementing the 'real' server
 %%%    Args ::= term(), init arguments (to Mod:init/1)
-%%%    Options ::= [{timeout, Timeout} | {debug, [Flag]}]
+%%%    Options ::= [{timeout, Timeout} | {debug, [Flag]} | {proc_name, term()}]
 %%%      Flag ::= trace | log | {logfile, File} | statistics | debug
 %%%          (debug == log && statistics)
 %%% Returns: {ok, Pid} |
@@ -463,6 +463,10 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
                               mod     = Mod,
                               queue   = Queue,
                               debug   = Debug }),
+    case opt(proc_name, Options) of
+        {ok, ProcName} -> put(process_name, {Mod, ProcName});
+        false          -> ok
+    end,
     case catch Mod:init(Args) of
         {ok, State} ->
             proc_lib:init_ack(Starter, {ok, self()}),

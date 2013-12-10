@@ -16,7 +16,7 @@
 
 -module(rabbit_queue_collector).
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/1, register/2, delete_all/1]).
 
@@ -40,19 +40,18 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Identity) ->
-    gen_server:start_link(?MODULE, [Identity], []).
+start_link(ProcName) ->
+    gen_server2:start_link(?MODULE, [], [{proc_name, ProcName}]).
 
 register(CollectorPid, Q) ->
-    gen_server:call(CollectorPid, {register, Q}, infinity).
+    gen_server2:call(CollectorPid, {register, Q}, infinity).
 
 delete_all(CollectorPid) ->
-    gen_server:call(CollectorPid, delete_all, infinity).
+    gen_server2:call(CollectorPid, delete_all, infinity).
 
 %%----------------------------------------------------------------------------
 
-init([Identity]) ->
-    rabbit_misc:store_proc_name(queue_collector, Identity),
+init([]) ->
     {ok, #state{monitors = pmon:new(), delete_from = undefined}}.
 
 %%--------------------------------------------------------------------------
@@ -80,7 +79,7 @@ handle_info({'DOWN', _MRef, process, DownPid, _Reason},
             State = #state{monitors = QMons, delete_from = Deleting}) ->
     QMons1 = pmon:erase(DownPid, QMons),
     case Deleting =/= undefined andalso pmon:is_empty(QMons1) of
-        true  -> gen_server:reply(Deleting, ok);
+        true  -> gen_server2:reply(Deleting, ok);
         false -> ok
     end,
     {noreply, State#state{monitors = QMons1}}.

@@ -194,8 +194,8 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link(Identity) ->
-    gen_server2:start_link(?MODULE, [Identity], []).
+start_link(ProcName) ->
+    gen_server2:start_link(?MODULE, [], [{proc_name, ProcName}]).
 
 new(Pid) ->
     %% this a 'call' to ensure that it is invoked at most once.
@@ -322,8 +322,7 @@ update_credit(CTag, Credit, Drain, Credits) ->
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Identity]) ->
-    rabbit_misc:store_proc_name(limiter, Identity),
+init([]) ->
     {ok, #lim{}}.
 
 prioritise_call(get_prefetch_limit, _From, _Len, _State) -> 9;
