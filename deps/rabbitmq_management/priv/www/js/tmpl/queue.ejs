@@ -112,11 +112,11 @@
             <% } %>
             <br/>
           <% } %>
-          <% if (queue.status == 'syncing') { %>
+          <% if (queue.state == 'syncing') { %>
           <table>
             <tr>
               <td>
-                <%= fmt_sync_status(queue) %>
+                <%= fmt_sync_state(queue) %>
               </td>
               <td>
                 <form action="#/queues/actions" method="post">

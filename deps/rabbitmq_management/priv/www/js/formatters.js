@@ -143,7 +143,7 @@ function fmt_mirrors(queue) {
     return res;
 }
 
-function fmt_sync_status(queue) {
+function fmt_sync_state(queue) {
     var res = '<p><b>Syncing: ';
     res += (queue.messages == 0) ? 100 : Math.round(100 * queue.sync_messages /
                                                     queue.messages);

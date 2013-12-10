@@ -57,8 +57,8 @@
    <td>
      <%= fmt_node(queue.node) %>
      <%= fmt_mirrors(queue) %>
-     <% if (queue.status == 'syncing') { %>
-       <%= fmt_sync_status(queue) %>
+     <% if (queue.state == 'syncing') { %>
+       <%= fmt_sync_state(queue) %>
      <% } %>
    </td>
 <% } %>
