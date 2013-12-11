@@ -253,7 +253,10 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
     CleanShutdown =
-        rabbit_recovery_indexes:check_clean_shutdown(Dir),
+        case rabbit_recovery_indexes:remove_recovery_terms(Dir) of
+            ok                 -> true;
+            {error, not_found} -> false
+        end,
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);
@@ -360,7 +363,6 @@ bounds(State = #qistate { segments = Segments }) ->
     {LowSeqId, NextSeqId, State}.
 
 recover(DurableQueues) ->
-    ok = rabbit_recovery_indexes:recover(),
     DurableDict = dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
                                      Queue <- DurableQueues ]),
     QueuesDir = queues_dir(),

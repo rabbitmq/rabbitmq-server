@@ -595,6 +595,7 @@ boot_delegate() ->
 
 recover() ->
     rabbit_policy:recover(),
+    ok = rabbit_recovery_indexes:recover(),
     Qs = rabbit_amqqueue:recover(),
     ok = rabbit_binding:recover(rabbit_exchange:recover(),
                                 [QName || #amqqueue{name = QName} <- Qs]),

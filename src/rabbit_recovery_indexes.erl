@@ -24,7 +24,6 @@
 -export([recover/0,
          start_link/0,
          store_recovery_terms/2,
-         check_clean_shutdown/1,
          read_recovery_terms/1,
          remove_recovery_terms/1,
          flush/0]).
@@ -41,15 +40,14 @@
 -spec(recover() -> 'ok').
 -spec(start_link() -> rabbit_types:ok_pid_or_error()).
 -spec(store_recovery_terms(
-        Name  :: rabbit_misc:resource_name(),
+        Name  :: file:filename(),
         Terms :: term()) -> rabbit_types:ok_or_error(term())).
--spec(check_clean_shutdown(
-        rabbit_misc:resource_name()) ->
-             boolean() | rabbit_types:error(term())).
 -spec(read_recovery_terms(
-        rabbit_misc:resource_name()) ->
-             rabbit_types:ok_or_error2(term(), not_found)).
-
+        file:filename()) ->
+             rabbit_types:ok_or_error(not_found)).
+-spec(remove_recovery_terms(
+        file:filename()) ->
+             rabbit_types:ok_or_error(not_found)).
 -endif. % use_specs
 
 -include("rabbit.hrl").
@@ -71,9 +69,6 @@ start_link() ->
 
 store_recovery_terms(Name, Terms) ->
     dets:insert(?MODULE, {Name, Terms}).
-
-check_clean_shutdown(Name) ->
-    ok == remove_recovery_terms(Name).
 
 read_recovery_terms(Name) ->
     case dets:lookup(?MODULE, Name) of
