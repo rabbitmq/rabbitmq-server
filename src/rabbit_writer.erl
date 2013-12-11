@@ -25,6 +25,7 @@
 -export([send_command/2, send_command/3,
          send_command_sync/2, send_command_sync/3,
          send_command_and_notify/4, send_command_and_notify/5,
+         send_command_flow/2, send_command_flow/3,
          flush/1]).
 -export([internal_send_command/4, internal_send_command/6]).
 
@@ -77,6 +78,11 @@
 -spec(send_command_and_notify/5 ::
         (pid(), pid(), pid(), rabbit_framing:amqp_method_record(),
          rabbit_types:content())
+        -> 'ok').
+-spec(send_command_flow/2 ::
+        (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
+-spec(send_command_flow/3 ::
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
         -> 'ok').
 -spec(flush/1 :: (pid()) -> 'ok').
 -spec(internal_send_command/4 ::
@@ -165,6 +171,12 @@ handle_message({send_command, MethodRecord}, State) ->
     internal_send_command_async(MethodRecord, State);
 handle_message({send_command, MethodRecord, Content}, State) ->
     internal_send_command_async(MethodRecord, Content, State);
+handle_message({send_command_flow, MethodRecord, Sender}, State) ->
+    credit_flow:ack(Sender),
+    internal_send_command_async(MethodRecord, State);
+handle_message({send_command_flow, MethodRecord, Content, Sender}, State) ->
+    credit_flow:ack(Sender),
+    internal_send_command_async(MethodRecord, Content, State);
 handle_message({'$gen_call', From, {send_command_sync, MethodRecord}}, State) ->
     State1 = internal_flush(
                internal_send_command_async(MethodRecord, State)),
@@ -210,6 +222,16 @@ send_command(W, MethodRecord) ->
 
 send_command(W, MethodRecord, Content) ->
     W ! {send_command, MethodRecord, Content},
+    ok.
+
+send_command_flow(W, MethodRecord) ->
+    credit_flow:send(W),
+    W ! {send_command_flow, MethodRecord, self()},
+    ok.
+
+send_command_flow(W, MethodRecord, Content) ->
+    credit_flow:send(W),
+    W ! {send_command_flow, MethodRecord, Content, self()},
     ok.
 
 send_command_sync(W, MethodRecord) ->

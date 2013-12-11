@@ -53,7 +53,8 @@
          messages_uncommitted,
          acks_uncommitted,
          prefetch_count,
-         client_flow_blocked]).
+         client_flow_blocked,
+         state]).
 
 -define(CREATION_EVENT_KEYS,
         [pid,
@@ -177,7 +178,8 @@ info_all(Items) ->
 
 refresh_config_local() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_config) end, list_local()),
+      fun (C) -> gen_server2:call(C, refresh_config, infinity) end,
+      list_local()),
     ok.
 
 ready_for_close(Pid) ->
@@ -549,6 +551,14 @@ check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
 check_not_default_exchange(_) ->
     ok.
 
+check_exchange_deletion(XName = #resource{name = <<"amq.rabbitmq.", _/binary>>,
+                                          kind = exchange}) ->
+    rabbit_misc:protocol_error(
+      access_refused, "deletion of system ~s not allowed",
+      [rabbit_misc:rs(XName)]);
+check_exchange_deletion(_) ->
+    ok.
+
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
 %%
@@ -591,7 +601,11 @@ confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
     record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
-    {reply, #'channel.open_ok'{}, State#ch{state = running}};
+    %% Don't leave "starting" as the state for 5s. TODO is this TRTTD?
+    State1 = State#ch{state = running},
+    rabbit_event:if_enabled(State1, #ch.stats_timer,
+                            fun() -> emit_stats(State1) end),
+    {reply, #'channel.open_ok'{}, State1};
 
 handle_method(#'channel.open'{}, _, _State) ->
     rabbit_misc:protocol_error(
@@ -934,6 +948,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
               _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_not_default_exchange(ExchangeName),
+    check_exchange_deletion(ExchangeName),
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
@@ -1273,7 +1288,7 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                State = #ch{virtual_host = VHostPath,
                            conn_pid     = ConnPid }) ->
     {OrigDName, ActualRoutingKey} =
-        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),    
+        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
     DestinationName = intercept_binding_method(OrigDName, DestinationType, ReturnMethod),
     check_write_permitted(DestinationName, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
@@ -1621,6 +1636,8 @@ i(messages_uncommitted,    #ch{tx = {Msgs, _Acks}})       -> queue:len(Msgs);
 i(messages_uncommitted,    #ch{})                         -> 0;
 i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
+i(state,                   #ch{state = running})         -> credit_flow:state();
+i(state,                   #ch{state = State})            -> State;
 i(prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_prefetch_limit(Limiter);
 i(client_flow_blocked, #ch{limiter = Limiter}) ->
@@ -1682,7 +1699,7 @@ intercept_binding_method(OrigDName, _DestinationType, _Method) ->
 intercept_method(M, Q) ->
     case rabbit_channel_interceptor:run_filter_chain(M, Q,
             rabbit_channel_interceptor:select(Q, M)) of
-        {ok, QN}        -> 
+        {ok, QN}        ->
             QN;
         {error, Reason} ->
             rabbit_misc:protocol_error(

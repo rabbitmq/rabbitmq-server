@@ -1135,25 +1135,11 @@
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>active_consumers</term>
-                <listitem>
-                  <para>
-                    Number of active consumers. An active consumer is
-                    one which could immediately receive any messages
-                    sent to the queue - i.e. it is not limited by its
-                    prefetch count, TCP congestion, flow control, or
-                    because it has issued channel.flow. At least one
-                    of messages_ready and active_consumers must always
-                    be zero.
-                  </para>
-                  <para>
-                    Note that this value is an instantaneous snapshot
-                    - when consumers are restricted by their prefetch
-                    count they may only appear to be active for small
-                    fractions of a second until more messages are sent
-                    out.
-                  </para>
-                </listitem>
+                <term>consumer_utilisation</term>
+                <listitem><para>Fraction of the time (between 0.0 and 1.0)
+                that the queue is able to immediately deliver messages to
+                consumers. This can be less than 1.0 if consumers are limited
+                by network congestion or prefetch count.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>memory</term>
@@ -1411,24 +1397,9 @@
               </varlistentry>
 
               <varlistentry>
-                <term>last_blocked_by</term>
-                <listitem><para>The reason for which this connection
-                    was last blocked. One of 'resource' - due to a memory
-                    or disk alarm, 'flow' - due to internal flow control, or
-                    'none' if the connection was never
-                    blocked.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>last_blocked_age</term>
-                <listitem><para>Time, in seconds, since this
-                    connection was last blocked, or
-                    'infinity'.</para></listitem>
-              </varlistentry>
-
-              <varlistentry>
                 <term>state</term>
                 <listitem><para>Connection state (one of [<command>starting</command>, <command>tuning</command>,
-                  <command>opening</command>, <command>running</command>, <command>blocking</command>, <command>blocked</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
+                  <command>opening</command>, <command>running</command>, <command>flow</command>, <command>blocking</command>, <command>blocked</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>channels</term>
@@ -1457,6 +1428,10 @@
               <varlistentry>
                 <term>frame_max</term>
                 <listitem><para>Maximum frame size (bytes).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>channel_max</term>
+                <listitem><para>Maximum number of channels on this connection.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>client_properties</term>

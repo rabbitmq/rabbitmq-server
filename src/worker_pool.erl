@@ -63,7 +63,7 @@ start_link() ->
 submit(Fun) ->
     case get(worker_pool_worker) of
         true -> worker_pool_worker:run(Fun);
-        _    -> Pid = gen_server2:call(?SERVER, next_free, infinity),
+        _    -> Pid = gen_server2:call(?SERVER, {next_free, self()}, infinity),
                 worker_pool_worker:submit(Pid, Fun)
     end.
 
@@ -79,15 +79,17 @@ init([]) ->
     {ok, #state { pending = queue:new(), available = queue:new() }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call(next_free, From, State = #state { available = Avail,
-                                              pending = Pending }) ->
+handle_call({next_free, CPid}, From, State = #state { available = Avail,
+                                                     pending = Pending }) ->
     case queue:out(Avail) of
         {empty, _Avail} ->
             {noreply,
-             State #state { pending = queue:in({next_free, From}, Pending) },
+             State#state{pending = queue:in({next_free, From, CPid}, Pending)},
              hibernate};
         {{value, WId}, Avail1} ->
-            {reply, get_worker_pid(WId), State #state { available = Avail1 },
+            WPid = get_worker_pid(WId),
+            worker_pool_worker:next_job_from(WPid, CPid),
+            {reply, WPid, State #state { available = Avail1 },
              hibernate}
     end;
 
@@ -99,8 +101,10 @@ handle_cast({idle, WId}, State = #state { available = Avail,
     {noreply, case queue:out(Pending) of
                   {empty, _Pending} ->
                       State #state { available = queue:in(WId, Avail) };
-                  {{value, {next_free, From}}, Pending1} ->
-                      gen_server2:reply(From, get_worker_pid(WId)),
+                  {{value, {next_free, From, CPid}}, Pending1} ->
+                      WPid = get_worker_pid(WId),
+                      worker_pool_worker:next_job_from(WPid, CPid),
+                      gen_server2:reply(From, WPid),
                       State #state { pending = Pending1 };
                   {{value, {run_async, Fun}}, Pending1} ->
                       worker_pool_worker:submit_async(get_worker_pid(WId), Fun),

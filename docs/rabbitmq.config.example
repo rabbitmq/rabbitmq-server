@@ -138,6 +138,11 @@
    %%
    %% {frame_max, 131072},
 
+   %% Set the max permissible number of channels per connection.
+   %% 0 means "no limit".
+   %%
+   %% {channel_max, 128},
+
    %% Customising Socket Options.
    %%
    %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
@@ -169,7 +174,7 @@
    %% lower bound, a disk alarm will be set - see the documentation
    %% listed above for more details.
    %%
-   %% {disk_free_limit, 1000000000},
+   %% {disk_free_limit, 50000000},
 
    %% Alternatively, we can set a limit relative to total available RAM.
    %%

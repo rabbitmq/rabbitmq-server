@@ -197,24 +197,25 @@ start_link() -> gen_server2:start_link(?MODULE, [], []).
 
 new(Pid) ->
     %% this a 'call' to ensure that it is invoked at most once.
-    ok = gen_server:call(Pid, {new, self()}),
+    ok = gen_server:call(Pid, {new, self()}, infinity),
     #lstate{pid = Pid, prefetch_limited = false, blocked = false}.
 
 limit_prefetch(L, PrefetchCount, UnackedCount) when PrefetchCount > 0 ->
-    ok = gen_server:call(L#lstate.pid,
-                         {limit_prefetch, PrefetchCount, UnackedCount}),
+    ok = gen_server:call(
+           L#lstate.pid,
+           {limit_prefetch, PrefetchCount, UnackedCount}, infinity),
     L#lstate{prefetch_limited = true}.
 
 unlimit_prefetch(L) ->
-    ok = gen_server:call(L#lstate.pid, unlimit_prefetch),
+    ok = gen_server:call(L#lstate.pid, unlimit_prefetch, infinity),
     L#lstate{prefetch_limited = false}.
 
 block(L) ->
-    ok = gen_server:call(L#lstate.pid, block),
+    ok = gen_server:call(L#lstate.pid, block, infinity),
     L#lstate{blocked = true}.
 
 unblock(L) ->
-    ok = gen_server:call(L#lstate.pid, unblock),
+    ok = gen_server:call(L#lstate.pid, unblock, infinity),
     L#lstate{blocked = false}.
 
 is_prefetch_limited(#lstate{prefetch_limited = Limited}) -> Limited.
@@ -224,7 +225,8 @@ is_blocked(#lstate{blocked = Blocked}) -> Blocked.
 is_active(L) -> is_prefetch_limited(L) orelse is_blocked(L).
 
 get_prefetch_limit(#lstate{prefetch_limited = false}) -> 0;
-get_prefetch_limit(L) -> gen_server:call(L#lstate.pid, get_prefetch_limit).
+get_prefetch_limit(L) ->
+    gen_server:call(L#lstate.pid, get_prefetch_limit, infinity).
 
 ack(#lstate{prefetch_limited = false}, _AckCount) -> ok;
 ack(L, AckCount) -> gen_server:cast(L#lstate.pid, {ack, AckCount}).

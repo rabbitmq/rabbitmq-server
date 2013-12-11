@@ -208,10 +208,16 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 
 %%----------------------------------------------------------------------------
 
+%% [1] We need to prevent this from becoming O(n^2) in a similar
+%% manner to rabbit_binding:remove_for_{source,destination}. So see
+%% the comment in rabbit_binding:lock_route_tables/0 for more rationale.
 update_policies(VHost) ->
-    Policies = list(VHost),
+    Tabs = [rabbit_queue,    rabbit_durable_queue,
+            rabbit_exchange, rabbit_durable_exchange],
     {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
                  fun() ->
+                         [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
+                         Policies = list(VHost),
                          {[update_exchange(X, Policies) ||
                               X <- rabbit_exchange:list(VHost)],
                           [update_queue(Q, Policies) ||

@@ -1,4 +1,4 @@
-{application, rabbit,		%% -*- erlang -*-
+{application, rabbit,           %% -*- erlang -*-
  [{description, "RabbitMQ"},
   {id, "RabbitMQ"},
   {vsn, "%%VSN%%"},
@@ -25,7 +25,8 @@
          %% 0 ("no limit") would make a better default, but that
          %% breaks the QPid Java client
          {frame_max, 131072},
-         {heartbeat, 600},
+         {channel_max, 0},
+         {heartbeat, 580},
          {msg_store_file_size_limit, 16777216},
          {queue_index_max_journal_entries, 65536},
          {default_user, <<"guest">>},
@@ -52,6 +53,7 @@
                                {nodelay,       true},
                                {linger,        {true, 0}},
                                {exit_on_close, false}]},
+         {halt_on_upgrade_failure, true},
          {hipe_compile, false},
          %% see bug 24513 for how this list was created
          {hipe_modules,

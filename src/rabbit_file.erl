@@ -181,8 +181,8 @@ with_synced_copy(Path, Modes, Fun) ->
                           {ok, Hdl} ->
                               try
                                   Result = Fun(Hdl),
-                                  ok = prim_file:rename(Bak, Path),
                                   ok = prim_file:sync(Hdl),
+                                  ok = prim_file:rename(Bak, Path),
                                   Result
                               after
                                   prim_file:close(Hdl)

@@ -10,10 +10,11 @@ Source1: rabbitmq-server.init
 Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
 Source4: rabbitmq-server.ocf
+Source5: README
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= R13B03, python-simplejson, xmlto, libxslt
-Requires: erlang >= R13B03, logrotate
+BuildRequires: erlang >= R13B-03, python-simplejson, xmlto, libxslt
+Requires: erlang >= R13B-03, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): %%REQUIRES%%
@@ -41,6 +42,7 @@ scalable implementation of an AMQP broker.
 %build
 cp %{S:2} %{_rabbit_wrapper}
 cp %{S:4} %{_rabbit_server_ocf}
+cp %{S:5} %{_builddir}/rabbitmq-server-%{version}/README
 make %{?_smp_mflags}
 
 %install
@@ -121,12 +123,16 @@ done
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*
+%doc README
 %doc docs/rabbitmq.config.example
 
 %clean
 rm -rf %{buildroot}
 
 %changelog
+* Wed Oct 23 2013 emile@rabbitmq.com 3.2.0-1
+- New Upstream Release
+
 * Thu Aug 15 2013 simon@rabbitmq.com 3.1.5-1
 - New Upstream Release
 

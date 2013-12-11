@@ -149,14 +149,22 @@ ensure_ssl() ->
     ok = app_utils:start_applications(SslAppsConfig),
     {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
 
-    % unknown_ca errors are silently ignored prior to R14B unless we
-    % supply this verify_fun - remove when at least R14B is required
-    case proplists:get_value(verify, SslOptsConfig, verify_none) of
-        verify_none -> SslOptsConfig;
-        verify_peer -> [{verify_fun, fun([])    -> true;
-                                        ([_|_]) -> false
-                                     end}
-                        | SslOptsConfig]
+    case rabbit_misc:pget(verify_fun, SslOptsConfig) of
+        {Module, Function} ->
+            rabbit_misc:pset(verify_fun,
+                             fun (ErrorList) ->
+                                     Module:Function(ErrorList)
+                             end, SslOptsConfig);
+        undefined ->
+            % unknown_ca errors are silently ignored prior to R14B unless we
+            % supply this verify_fun - remove when at least R14B is required
+            case proplists:get_value(verify, SslOptsConfig, verify_none) of
+                verify_none -> SslOptsConfig;
+                verify_peer -> [{verify_fun, fun([])    -> true;
+                                                ([_|_]) -> false
+                                             end}
+                                | SslOptsConfig]
+            end
     end.
 
 ssl_transform_fun(SslOpts) ->
