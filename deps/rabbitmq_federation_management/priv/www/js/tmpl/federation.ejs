@@ -6,7 +6,7 @@
 <table class="list">
  <thead>
   <tr>
-    <th>Connection</th>
+    <th>Upstream</th>
     <th>URI</th>
 <% if (vhosts_interesting) { %>
     <th>Virtual Host</th>
@@ -27,9 +27,13 @@
 %>
    <tr<%= alt_rows(i)%>>
     <td>
-      <%= fmt_string(link.connection) %>
-      <% if (link.name != link.upstream_name) { %>
-      <sub><%= fmt_string(link.upstream_name) %></sub>
+      <%= fmt_string(link.upstream) %>
+      <% if (link.type == 'exchange' &&
+             link.exchange != link.upstream_exchange) { %>
+        <sub><%= fmt_string(link.upstream_exchange) %></sub>
+      <% } else if (link.type == 'queue' &&
+                    link.queue != link.upstream_queue) { %>
+        <sub><%= fmt_string(link.upstream_queue) %></sub>
       <% } %>
     </td>
     <td><%= fmt_string(link.uri) %></td>
@@ -38,9 +42,9 @@
 <% } %>
     <td>
       <% if (link.type == 'exchange') { %>
-        <%= link_exchange(link.vhost, link.name) %>
+        <%= link_exchange(link.vhost, link.exchange) %>
       <% } else { %>
-        <%= link_queue(link.vhost, link.name) %>
+        <%= link_queue(link.vhost, link.queue) %>
       <% } %>
     <sub><%= fmt_string(link.type) %></sub>
     </td>
