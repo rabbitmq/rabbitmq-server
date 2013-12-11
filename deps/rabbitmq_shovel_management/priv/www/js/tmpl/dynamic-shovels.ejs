@@ -1,0 +1,231 @@
+<h1>Dynamic Shovels</h1>
+<div class="section">
+  <h2>Shovels</h2>
+  <div class="hider updatable">
+<% if (shovels.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>Name</th>
+    <th colspan="2">Source</th>
+    <th colspan="2">Destination</th>
+    <th>Prefetch Count</th>
+    <th>Reconnect Delay</th>
+    <th>Ack mode</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < shovels.length; i++) {
+    var shovel = shovels[i];
+%>
+   <tr<%= alt_rows(i)%>>
+<% if (vhosts_interesting) { %>
+     <td><%= fmt_string(shovel.vhost) %></td>
+<% } %>
+     <td><%= link_shovel(shovel.vhost, shovel.name) %></td>
+     <td><%= fmt_shortened_uri(shovel.value['src-uri']) %></td>
+     <td>
+       <% if (shovel.value['src-queue']) { %>
+         <%= fmt_string(shovel.value['src-queue']) %>
+         <sub>queue</sub>
+       <% } else { %>
+         <%= fmt_string(shovel.value['src-exchange']) %>
+         <% if (shovel.value['src-exchange-key']) { %>
+         : <%= fmt_string(shovel.value['src-exchange-key']) %>
+         <% } %>
+         <sub>exchange</sub>
+       <% } %>
+     </td>
+     <td><%= fmt_shortened_uri(shovel.value['dest-uri']) %></td>
+     <td>
+       <% if (shovel.value['dest-queue']) { %>
+         <%= fmt_string(shovel.value['dest-queue']) %>
+         <sub>queue</sub>
+       <% } else { %>
+         <% if (shovel.value['dest-exchange']) { %>
+           <%= fmt_string(shovel.value['dest-exchange']) %>
+         <% } else { %>
+           <i>as published</i>
+         <% } %>
+         <% if (shovel.value['dest-exchange-key']) { %>
+         : <%= fmt_string(shovel.value['dest-exchange-key']) %>
+         <% } %>
+         <sub>exchange</sub>
+       <% } %>
+     </td>
+     <td class="r"><%= shovel.value['prefetch-count'] %></td>
+     <td class="r"><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
+     <td class="c"><%= fmt_string(shovel.value['ack-mode']) %></td>
+   </tr>
+<% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no shovels ...</p>
+<% } %>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Add a new shovel</h2>
+  <div class="hider">
+    <form action="#/shovel-parameters" method="put">
+      <input type="hidden" name="component" value="shovel"/>
+      <table class="form">
+<% if (vhosts_interesting) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th>Source:</th>
+          <td>
+            <table class="subform">
+              <tr>
+                <th>
+                  URI
+                  <span class="help" id="shovel-uri"></span>
+                </th>
+                <th>
+                  <select name="queue-or-exchange" class="narrow controls-appearance">
+                    <option value="src-queue">Queue:</option>
+                    <option value="src-exchange">Exchange:</option>
+                  </select>
+                  <span class="help" id="shovel-queue-exchange"></span>
+                </th>
+              </tr>
+              <tr>
+                <td><input type="text" name="src-uri"/><span class="mand">*</span></td>
+                <td>
+                  <div id="src-queue-div">
+                    <input type="text" name="src-queue"/>
+                  </div>
+                  <div id="src-exchange-div" style="display: none;">
+                    <input type="text" name="src-exchange"/>
+                    (Routing key: <input type="text" name="src-exchange-key"/>)
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <th>Destination:</th>
+          <td>
+            <table class="subform">
+              <tr>
+                <th>
+                  URI
+                  <span class="help" id="shovel-uri"></span>
+                </th>
+                <th>
+                  <select name="queue-or-exchange" class="narrow controls-appearance">
+                    <option value="dest-queue">Queue:</option>
+                    <option value="dest-exchange">Exchange:</option>
+                  </select>
+                  <span class="help" id="shovel-queue-exchange"></span>
+                </th>
+              </tr>
+              <tr>
+                <td><input type="text" name="dest-uri"/><span class="mand">*</span></td>
+                <td>
+                  <div id="dest-queue-div">
+                    <input type="text" name="dest-queue"/>
+                  </div>
+                  <div id="dest-exchange-div" style="display: none;">
+                    <input type="text" name="dest-exchange"/>
+                    (Routing key: <input type="text" name="dest-exchange-key"/>)
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Prefetch count:
+              <span class="help" id="shovel-prefetch"></span>
+            </label>
+          </th>
+          <td><input type="text" name="prefetch-count"/></td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Reconnect delay:
+              <span class="help" id="shovel-reconnect"></span>
+            </label>
+          </th>
+          <td><input type="text" name="reconnect-delay"/> s</td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Acknowledgement mode:
+              <span class="help" id="shovel-ack-mode"></span>
+            </label>
+          </th>
+          <td>
+            <select name="ack-mode">
+              <option value="on-confirm">On confirm</option>
+              <option value="on-publish">On publish</option>
+              <option value="no-ack">No ack</option>
+            </select>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Add shovel"/>
+    </form>
+  </div>
+</div>
+<div class="section-hidden">
+  <h2>URI examples</h2>
+  <div class="hider">
+    <ul>
+      <li>
+        <code>amqp://</code><br/>
+        connect to local server as default user
+      </li>
+      <li>
+        <code>amqp://user@/my-vhost</code><br/>
+        connect to local server with alternate user and virtual host
+        (passwords are not required for local connections)
+      </li>
+      <li>
+        <code>amqp://server-name</code><br/>
+        connect to server-name, without SSL and default credentials
+      </li>
+      <li>
+        <code>amqp://user:password@server-name/my-vhost</code><br/>
+        connect to server-name, with credentials and overridden
+        virtual host
+      </li>
+      <li>
+        <code>amqps://user:password@server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer</code><br/>
+        connect to server-name, with credentials and SSL
+      </li>
+      <li>
+        <code>amqps://server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer&fail_if_no_peer_cert=true&auth_mechanism=external</code><br/>
+        connect to server-name, with SSL and EXTERNAL authentication
+      </li>
+    </ul>
+  </div>
+</div>
