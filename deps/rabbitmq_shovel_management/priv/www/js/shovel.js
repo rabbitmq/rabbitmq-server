@@ -56,3 +56,21 @@ HELP['shovel-ack-mode'] =
 function link_shovel(vhost, name) {
     return _link_to(fmt_escape_html(name), '#/dynamic-shovels/' + esc(vhost) + '/' + esc(name));
 }
+
+function fmt_shovel_endpoint(prefix, shovel) {
+    var txt = '';
+    if (shovel[prefix + '-queue']) {
+        txt += fmt_string(shovel[prefix + '-queue']) + '<sub>queue</sub>';
+    } else {
+        if (shovel[prefix + '-exchange']) {
+            txt += fmt_string(shovel[prefix + '-exchange']);
+        } else {
+            txt += '<i>as published</i>';
+        }
+        if (shovel[prefix + '-exchange-key']) {
+            txt += ' : ' + fmt_string(shovel[prefix + '-exchange-key']);
+        }
+        txt += '<sub>exchange</sub>';
+    }
+    return txt;
+}

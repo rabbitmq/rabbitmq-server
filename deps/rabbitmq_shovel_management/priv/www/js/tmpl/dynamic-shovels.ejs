@@ -28,35 +28,9 @@
 <% } %>
      <td><%= link_shovel(shovel.vhost, shovel.name) %></td>
      <td><%= fmt_shortened_uri(shovel.value['src-uri']) %></td>
-     <td>
-       <% if (shovel.value['src-queue']) { %>
-         <%= fmt_string(shovel.value['src-queue']) %>
-         <sub>queue</sub>
-       <% } else { %>
-         <%= fmt_string(shovel.value['src-exchange']) %>
-         <% if (shovel.value['src-exchange-key']) { %>
-         : <%= fmt_string(shovel.value['src-exchange-key']) %>
-         <% } %>
-         <sub>exchange</sub>
-       <% } %>
-     </td>
+     <td><%= fmt_shovel_endpoint('src', shovel.value) %></td>
      <td><%= fmt_shortened_uri(shovel.value['dest-uri']) %></td>
-     <td>
-       <% if (shovel.value['dest-queue']) { %>
-         <%= fmt_string(shovel.value['dest-queue']) %>
-         <sub>queue</sub>
-       <% } else { %>
-         <% if (shovel.value['dest-exchange']) { %>
-           <%= fmt_string(shovel.value['dest-exchange']) %>
-         <% } else { %>
-           <i>as published</i>
-         <% } %>
-         <% if (shovel.value['dest-exchange-key']) { %>
-         : <%= fmt_string(shovel.value['dest-exchange-key']) %>
-         <% } %>
-         <sub>exchange</sub>
-       <% } %>
-     </td>
+     <td><%= fmt_shovel_endpoint('dest', shovel.value) %></td>
      <td class="r"><%= shovel.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
      <td class="c"><%= fmt_string(shovel.value['ack-mode']) %></td>

@@ -58,18 +58,26 @@ status(Chs, Node) ->
     end.
 
 format(Node, {Name, Type, Info, TS}, Chs) ->
-    [{name, Name}, {type, Type}, {node, Node}, {timestamp, format_ts(TS)} |
-     format_info(Info, Chs)].
+    [{node, Node}, {timestamp, format_ts(TS)}] ++
+        format_name(Type, Name) ++
+        format_info(Info, Type, Name, Chs).
 
-format_info(starting, _Chs) ->
+format_name(static,  Name)          -> [{name,  Name},
+                                        {type,  static}];
+format_name(dynamic, {VHost, Name}) -> [{name,  Name},
+                                        {vhost, VHost},
+                                        {type,  dynamic}].
+
+format_info(starting, _Type, _Name, _Chs) ->
     [{state, starting}];
 
-format_info({running, Props}, Chs) ->
-    [{state, running} | [R || KV <-  Props,
-                              R  <-  [format_info_item(KV, Chs)],
-                              R  =/= unknown]];
+format_info({running, Props}, Type, Name, Chs) ->
+    [{state, running}] ++ lookup_src_dest(Type, Name) ++
+        [R || KV <-  Props,
+              R  <-  [format_info_item(KV, Chs)],
+              R  =/= unknown];
 
-format_info({terminated, Reason}, _Chs) ->
+format_info({terminated, Reason}, _Type, _Name, _Chs) ->
     [{state,  terminated},
      {reason, print("~p", [Reason])}].
 
@@ -89,3 +97,12 @@ format_info_item({K, ChPid}, Chs) when is_pid(ChPid) ->
         [Ch] -> {K, Ch};
         []   -> unknown
     end.
+
+lookup_src_dest(static, _Name) ->
+    []; %% This is too messy to do, the config may be on another node
+lookup_src_dest(dynamic, {VHost, Name}) ->
+    Def = pget(value,
+               rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, Name)),
+    Ks = [<<"src-queue">>,  <<"src-exchange">>,  <<"src-exchange-key">>,
+          <<"dest-queue">>, <<"dest-exchange">>, <<"dest-exchange-key">>],
+    [{definition, [{K, V} || {K, V} <- Def, lists:member(K, Ks)]}].
