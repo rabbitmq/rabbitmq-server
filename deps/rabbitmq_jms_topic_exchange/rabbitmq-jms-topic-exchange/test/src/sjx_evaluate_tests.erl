@@ -32,8 +32,7 @@
 [ {<<"JMSType">>,          longstr, <<"string">>}
 , {<<"JMSCorrelationID">>, longstr, <<"string">>}
 , {<<"JMSMessageID">>,     longstr, <<"string">>}
-, {<<"JMSDeliveryMode">>,  array,
-     [{longstr, <<"PERSISTENT">>}, {longstr, <<"NON_PERSISTENT">>}]}
+, {<<"JMSDeliveryMode">>,  longstr, <<"string">>}
 , {<<"JMSPriority">>,      longstr, <<"number">>}
 , {<<"JMSTimestamp">>,     longstr, <<"number">>}
 ]).
@@ -80,6 +79,10 @@ basic_evaluate_test_() ->
     , ?_assert(    eval(Hs, " likevar like 'b_!_ue' escape '!'                 "))
     , ?_assert(    eval(Hs, " colour like 'bl_e'                               "))
     , ?_assert(    eval(Hs, " colour not like 'l%'                             "))
+    , ?_assert(    eval(Hs, " colour     in ('blue', 'green')                  "))
+    , ?_assert(not eval(Hs, " colour not in ('green', 'blue')                  "))
+    , ?_assert(not eval(Hs, " colour     in ('bleen', 'grue')                  "))
+    , ?_assert(    eval(Hs, " colour not in ('grue', 'bleen')                  "))
     , ?_assert(    eval(Hs, " altcol not like 'bl%'                            "))
     , ?_assert(    eval(Hs, " altcol     like '''bl%'                          "))
     , ?_assert(    eval(Hs, " altcol not like 'bl%'                            "))
@@ -87,4 +90,5 @@ basic_evaluate_test_() ->
     , ?_assert(not eval(Hs, " weight <= 2500                                   "))
     , ?_assert(not eval(Hs, " colour not like 'bl%'                            "))
     , ?_assert(undefined =:= eval(Hs, " missing <= 2500                        "))
+    , ?_assert(undefined =:= eval(Hs, " missing in ('blue')                    "))
     ].

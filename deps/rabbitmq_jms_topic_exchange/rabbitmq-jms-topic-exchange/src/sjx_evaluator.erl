@@ -91,6 +91,7 @@ do_bin_op('<' , L, R) -> L < R;
 do_bin_op('>=', L, R) -> L >= R;
 do_bin_op('<=', L, R) -> L =< R;
 do_bin_op('in', L, R) -> isIn(L, R);
+do_bin_op('not_in', L, R) -> not isIn(L, R);
 do_bin_op('+' , L, R) -> L + R;
 do_bin_op('-' , L, R) -> L - R;
 do_bin_op('*' , L, R) -> L * R;
