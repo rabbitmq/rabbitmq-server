@@ -16,7 +16,7 @@
 
 -record(endpoint,
         {amqp_params,
-         resource_declarations
+         resource_declaration
         }).
 
 -record(shovel,

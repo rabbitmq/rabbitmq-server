@@ -197,7 +197,7 @@ test() ->
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)
     end,
 
-    [{test_shovel,
+    [{test_shovel, static,
       {running, {source, _Source}, {destination, _Destination}}, _Time}] =
         rabbit_shovel_status:status(),
 
@@ -215,7 +215,6 @@ test() ->
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
 
-    ok = application:stop(rabbitmq_shovel),
     ok.
 
 test_broken_shovel_configs(Configs) ->
