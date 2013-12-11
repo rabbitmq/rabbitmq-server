@@ -47,21 +47,24 @@
 -spec evaluate(expression(), table()) -> true | false | error.
 
 
-evaluate( true,                        _Headers ) -> true;
-evaluate( false,                       _Headers ) -> false;
-evaluate( {'not', Exp },                Headers ) -> not3(evaluate(Exp, Headers));
-evaluate( {'ident', Ident },            Headers ) -> lookup_value(Headers, Ident);
-evaluate( {'and', Exp1, Exp2 },         Headers ) -> and3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
-evaluate( {'or', Exp1, Exp2 },          Headers ) -> or3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
-evaluate( {'like', LHS, {regex, RX} },  Headers ) -> isLike(val_of(LHS, Headers), RX);
-evaluate( {'not_like', LHS, RegEx },    Headers ) -> not3(evaluate({'like', LHS, RegEx}, Headers));
-evaluate( {'is_null', Exp },            Headers ) -> val_of(Exp, Headers) =:= undefined;
+evaluate( true,                           _Headers ) -> true;
+evaluate( false,                          _Headers ) -> false;
+
+evaluate( {'not', Exp },                   Headers ) -> not3(evaluate(Exp, Headers));
+evaluate( {'ident', Ident },               Headers ) -> lookup_value(Headers, Ident);
+evaluate( {'is_null', Exp },               Headers ) -> val_of(Exp, Headers) =:= undefined;
+evaluate( {'not_null', Exp },              Headers ) -> val_of(Exp, Headers) =/= undefined;
+evaluate( { Op, Exp },                     Headers ) -> do_una_op(Op, evaluate(Exp, Headers));
+
+evaluate( {'and', Exp1, Exp2 },            Headers ) -> and3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
+evaluate( {'or', Exp1, Exp2 },             Headers ) -> or3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
+evaluate( {'like', LHS, {regex, RX} },     Headers ) -> isLike(val_of(LHS, Headers), RX);
+evaluate( {'not_like', LHS, {regex, RX} }, Headers ) -> not3(isLike(val_of(LHS, Headers), RX));
 evaluate( {'between', Exp, {range, From, To} },     Hs ) -> between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs));
 evaluate( {'not_between', Exp, {range, From, To} }, Hs ) -> not3(between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs)));
-evaluate( {'not_null', Exp },           Headers ) -> val_of(Exp, Headers) =/= undefined;
-evaluate( { Op, Exp },                  Headers ) -> do_una_op(Op, evaluate(Exp, Headers));
-evaluate( { Op, LHS, RHS },             Headers ) -> do_bin_op(Op, evaluate(LHS, Headers), evaluate(RHS, Headers));
-evaluate( Value,                       _Headers ) -> Value.
+evaluate( { Op, LHS, RHS },                Headers ) -> do_bin_op(Op, evaluate(LHS, Headers), evaluate(RHS, Headers));
+
+evaluate( Value,                          _Headers ) -> Value.
 
 not3(true ) -> false;
 not3(false) -> true;
@@ -101,6 +104,7 @@ do_bin_op('/' , L, R) when L < 0 andalso R == 0 -> minus_infinity;
 do_bin_op('/' , L, R) when L == 0 andalso R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
+isLike(undefined, _MP) -> undefined;
 isLike(L, MP) ->
   Res = re:run(L, MP, [{capture, first}]),
   BS = byte_size(L),
