@@ -320,9 +320,9 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
 
 process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
                                              socket    = Sock }) ->
-     VHost = rabbit_mqtt_util:env(vhost),
+     {VHost, UsernameBin} = get_vhost_username(UserBin),
      case amqp_connection:start(#amqp_params_direct{
-                                  username     = UserBin,
+                                  username     = UsernameBin,
                                   password     = PassBin,
                                   virtual_host = VHost,
                                   adapter_info = adapter_info(Sock)}) of
@@ -338,6 +338,13 @@ process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
                                 [binary_to_list(UserBin)]),
              ?CONNACK_AUTH
       end.
+
+get_vhost_username(UserBin) ->
+    %% split at the last colon, disallowing colons in username
+    case re:split(UserBin, ":(?!.*?:)") of
+        [Vhost, UserName] -> {Vhost,  UserName};
+        [UserBin]         -> {rabbit_mqtt_util:env(vhost), UserBin}
+    end.
 
 creds(User, Pass) ->
     DefaultUser = rabbit_mqtt_util:env(default_user),
