@@ -48,7 +48,7 @@
 <table class="facts">
 <tr>
  <th>State</th>
- <td><%= fmt_connection_state(connection) %></td>
+ <td><%= fmt_object_state(connection) %></td>
 </tr>
 <tr>
  <th>Timeout</th>
@@ -57,6 +57,10 @@
 <tr>
  <th>Frame max</th>
  <td><%= connection.frame_max %> bytes</td>
+</tr>
+<tr>
+ <th>Channel limit</th>
+ <td><%= connection.channel_max %> channels</td>
 </tr>
 </table>
 <% } %>
