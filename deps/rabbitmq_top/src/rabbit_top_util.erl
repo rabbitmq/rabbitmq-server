@@ -32,11 +32,11 @@ toplist(Key, Info) ->
 
 fmt_all(Info) ->
     {pid, Pid} = lists:keyfind(pid, 1, Info),
-    [{name, obtain_name(Pid)} | [{K, fmt(K, V)} || {K, V} <- Info]].
+    [{name, obtain_name(Pid)} | [{K, fmt(V)} || {K, V} <- Info]].
 
-fmt(_K, Pid) when is_pid(Pid) ->
+fmt(Pid) when is_pid(Pid) ->
     list_to_binary(rabbit_misc:pid_to_string(Pid));
-fmt(_K, Other) ->
+fmt(Other) ->
     list_to_binary(rabbit_misc:format("~p", [Other])).
 
 obtain_name(Pid) ->
@@ -44,13 +44,12 @@ obtain_name(Pid) ->
                    (_Fun, Res)  -> Res
                 end, fail, [fun obtain_from_registered_name/1,
                             fun obtain_from_process_name/1,
-                            fun obtain_from_initial_call_name/1,
-                            fun unidentified/1]).
+                            fun obtain_from_initial_call/1]).
 
 obtain_from_registered_name(Pid) ->
     case process_info(Pid, registered_name) of
-        {registered_name, Name} -> [{supertype, registered},
-                                    {type,      Name}];
+        {registered_name, Name} -> [{type, registered},
+                                    {name, Name}];
         _                       -> fail
     end.
 
@@ -84,15 +83,32 @@ fmt_process_name({Type, ConnName}) when is_binary(ConnName) ->
      {type,            Type},
      {connection_name, ConnName}].
 
-obtain_from_initial_call_name(Pid) ->
+obtain_from_initial_call(Pid) ->
+    case initial_call(Pid) of
+        fail -> [{type, unidentified},
+                 {name, fmt(Pid)}];
+        MFA  -> case guess_initial_call(MFA) of
+                    fail -> [{type, initial_call_guess},
+                             {name, fmt(MFA)}];
+                    Name -> [{type, initial_call},
+                             {name, Name}]
+                end
+    end.
+
+initial_call(Pid) ->
+    case initial_call_dict(Pid) of
+        fail -> case process_info(Pid, initial_call) of
+                    {initial_call, MFA} -> MFA;
+                    _                   -> fail
+                end;
+        MFA  -> MFA
+    end.
+
+initial_call_dict(Pid) ->
     case process_info(Pid, dictionary) of
         {dictionary, Dict} ->
             case lists:keyfind('$initial_call', 1, Dict) of
-                {'$initial_call', MFA} -> case guess_initial_call(MFA) of
-                                              fail -> fail;
-                                              Name -> [{supertype,initial_call},
-                                                       {type,     Name}]
-                                          end;
+                {'$initial_call', MFA} -> MFA;
                 false                  -> fail
             end;
         _ ->
@@ -101,5 +117,3 @@ obtain_from_initial_call_name(Pid) ->
 
 guess_initial_call({mochiweb_acceptor, _F, _A}) -> mochiweb_http;
 guess_initial_call(MFA)                         -> fail.
-
-unidentified(_Pid) -> [{supertype, unidentified}].
