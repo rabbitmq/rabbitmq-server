@@ -107,19 +107,21 @@ plugin_dir() ->
 
 %%----------------------------------------------------------------------------
 
-assert_status(XorQs) ->
+assert_status(XorQs, Names) ->
     Links = lists:append([links(XorQ) || XorQ <- XorQs]),
-    Remaining = lists:foldl(fun assert_link_status/2,
-                            rabbit_federation_status:status(), Links),
+    Remaining = lists:foldl(fun (Link, Status) ->
+                                    assert_link_status(Link, Status, Names)
+                            end, rabbit_federation_status:status(), Links),
     ?assertEqual([], Remaining),
     ok.
 
-assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
+assert_link_status({DXorQNameBin, UpstreamName, UXorQNameBin}, Status,
+                   {TypeName, UpstreamTypeName}) ->
     {This, Rest} = lists:partition(
                      fun(St) ->
-                             pget(connection, St) =:= ConnectionName andalso
-                                 pget(name, St) =:= DXNameBin andalso
-                                 pget(upstream_name, St) =:= UXNameBin
+                             pget(upstream, St) =:= UpstreamName andalso
+                                 pget(TypeName, St) =:= DXorQNameBin andalso
+                                 pget(UpstreamTypeName, St) =:= UXorQNameBin
                      end, Status),
     ?assertMatch([_], This),
     Rest.
