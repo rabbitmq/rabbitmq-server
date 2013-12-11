@@ -1,0 +1,30 @@
+<h1>Process: <b><%= fmt_string(process.pid) %></b></h1>
+
+<div class="updatable">
+  <table class="facts">
+    <tr>
+      <th>Description</th>
+      <td><%= fmt_process_name(process) %></td>
+    </tr>
+    <tr>
+      <th>Description type</th>
+      <td><%= fmt_remove_rabbit_prefix(process.name.type) %></td>
+    </tr>
+    <tr>
+      <th>Memory</th>
+      <td><%= fmt_bytes(process.memory) %></td>
+    </tr>
+    <tr>
+      <th>Message queue length</th>
+      <td><%= process.message_queue_len %></td>
+    </tr>
+    <tr>
+      <th>Total reductions</th>
+      <td><%= process.reductions %></td>
+    </tr>
+    <tr>
+      <th>Status</th>
+      <td><%= process.status %></td>
+    </tr>
+  </table>
+</div>

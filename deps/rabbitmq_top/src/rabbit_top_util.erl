@@ -18,7 +18,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([toplist/3]).
+-export([toplist/3, obtain_name/1]).
 
 toplist(Key, Count, List) ->
     Sorted = lists:sublist(
@@ -35,7 +35,7 @@ fmt_all(Info) ->
     [{name, obtain_name(Pid)} | [{K, fmt(V)} || {K, V} <- Info]].
 
 fmt(Pid) when is_pid(Pid) ->
-    list_to_binary(rabbit_misc:pid_to_string(Pid));
+    list_to_binary(pid_to_list(Pid));
 fmt(Other) ->
     list_to_binary(rabbit_misc:format("~p", [Other])).
 
@@ -88,9 +88,9 @@ obtain_from_initial_call(Pid) ->
         fail -> [{type, unidentified},
                  {name, fmt(Pid)}];
         MFA  -> case guess_initial_call(MFA) of
-                    fail -> [{type, initial_call_guess},
+                    fail -> [{type, guessed},
                              {name, fmt(MFA)}];
-                    Name -> [{type, initial_call},
+                    Name -> [{type, known},
                              {name, Name}]
                 end
     end.
