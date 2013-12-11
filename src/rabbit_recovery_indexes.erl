@@ -22,6 +22,7 @@
 -behaviour(gen_server).
 
 -export([recover/0,
+         upgrade_recovery_indexes/0,
          start_link/0,
          store_recovery_terms/2,
          read_recovery_terms/1,
@@ -35,9 +36,12 @@
          terminate/2,
          code_change/3]).
 
+-rabbit_upgrade({upgrade_recovery_indexes, local, []}).
+
 -ifdef(use_specs).
 
 -spec(recover() -> 'ok').
+-spec(upgrade_recovery_indexes() -> 'ok').
 -spec(start_link() -> rabbit_types:ok_pid_or_error()).
 -spec(store_recovery_terms(
         Name  :: file:filename(),
@@ -48,6 +52,7 @@
 -spec(remove_recovery_terms(
         file:filename()) ->
              rabbit_types:ok_or_error(not_found)).
+
 -endif. % use_specs
 
 -include("rabbit.hrl").
@@ -62,6 +67,21 @@ recover() ->
         {ok, _}                       -> ok;
         {error, {already_started, _}} -> ok;
         {error, _}=Err                -> Err
+    end.
+
+upgrade_recovery_indexes() ->
+    create_table(),
+    try
+        QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
+        DotFiles = filelib:fold_files(QueuesDir, ?CLEAN_FILENAME, true,
+                                      fun(F, Acc) -> [F|Acc] end, []),
+        [begin
+             {ok, Terms} = rabbit_file:read_term_file(File),
+             ok = store_recovery_terms(File, Terms)
+         end || File <- lists:delete(dets_filename(), DotFiles)],
+        ok
+    after
+        flush()
     end.
 
 start_link() ->
@@ -87,10 +107,7 @@ flush() ->
     ok.
 
 init(_) ->
-    File = filename:join([rabbit_mnesia:dir(), "queues", ?CLEAN_FILENAME]),
-    {ok, _} = dets:open_file(?MODULE, [{file, File},
-                                       {ram_file, true},
-                                       {auto_save, infinity}]),
+    create_table(),
     {ok, undefined}.
 
 handle_call(Msg, _, State) ->
@@ -108,3 +125,11 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+create_table() ->
+    File = dets_filename(),
+    {ok, _} = dets:open_file(?MODULE, [{file, File},
+                                       {ram_file, true},
+                                       {auto_save, infinity}]).
+
+dets_filename() ->
+    filename:join([rabbit_mnesia:dir(), "queues", ?CLEAN_FILENAME]).
