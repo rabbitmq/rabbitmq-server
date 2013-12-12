@@ -622,9 +622,9 @@ create_channel(Channel, State) ->
                                     Protocol, User, VHost, Capabilities,
                                     Collector}),
                  MRef = erlang:monitor(process, ChPid),
-                 State1 = State#v1{channel_count = (ChannelCount + 1)},
                  put({ch_pid, ChPid}, {Channel, MRef}),
-                 {ok, {ChPid, AState}, State1};
+                 {ok, {ChPid, AState}, State#v1{
+                                         channel_count = ChannelCount + 1}};
         false -> {error, rabbit_misc:amqp_error(
                            not_allowed, "number of channels opened (~w) has "
                            "reached the negotiated channel_max (~w)",
@@ -638,7 +638,8 @@ channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
                            erase({channel, Channel}),
                            erase({ch_pid, ChPid}),
                            erlang:demonitor(MRef, [flush]),
-                           {Channel, State#v1{channel_count = ChannelCount - 1}}
+                           {Channel, State#v1{
+                                       channel_count = ChannelCount - 1}}
     end.
 
 all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
