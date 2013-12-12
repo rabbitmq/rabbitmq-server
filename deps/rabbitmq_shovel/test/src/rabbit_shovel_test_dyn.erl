@@ -171,7 +171,8 @@ valid_param(Value) ->
 
 await_shovel(Name) ->
     S = rabbit_shovel_status:status(),
-    case lists:member(Name, [N || {N, dynamic, {running, _, _}, _} <- S]) of
+    Names = [N || {{<<"/">>, N}, dynamic, {running, _}, _} <- S],
+    case lists:member(Name, Names) of
         true  -> ok;
         false -> timer:sleep(100),
                  await_shovel(Name)

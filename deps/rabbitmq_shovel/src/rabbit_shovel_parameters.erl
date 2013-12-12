@@ -60,8 +60,8 @@ notify(VHost, <<"shovel">>, Name, Definition) ->
     rabbit_shovel_dyn_worker_sup_sup:adjust_or_start_child(
       {VHost, Name}, Definition).
 
-notify_clear(_VHost, <<"shovel">>, Name) ->
-    rabbit_shovel_dyn_worker_sup_sup:stop_child(Name).
+notify_clear(VHost, <<"shovel">>, Name) ->
+    rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}).
 
 %%----------------------------------------------------------------------------
 
