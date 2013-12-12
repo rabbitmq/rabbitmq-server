@@ -38,8 +38,8 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, helper_sup, queue_collector, heartbeater,
-             stats_timer, channel_sup_sup_pid, buf, buf_len, throttle,
-             channel_count}).
+             stats_timer, channel_sup_sup_pid, buf, buf_len, channel_count,
+             throttle}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
                      protocol, user, timeout_sec, frame_max, channel_max, vhost,
