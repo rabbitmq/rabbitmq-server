@@ -565,8 +565,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
         [self(), CS, Channel, Reason]),
     {0, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
-    terminate_channels(State),
-    State1 = close_connection(State),
+    State1 = close_connection(terminate_channels(State)),
     ok = send_on_channel0(State1#v1.sock, CloseMethod, Protocol),
     State1;
 handle_exception(State, Channel, Reason) ->
