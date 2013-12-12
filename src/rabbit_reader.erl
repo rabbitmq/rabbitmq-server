@@ -536,15 +536,12 @@ wait_for_channel_termination(N, TimerRef, State) ->
     end.
 
 maybe_close(State = #v1{connection_state = closing,
-                        connection = #connection{protocol = Protocol},
-                        sock = Sock}) ->
-    case all_channels() of
-        [] ->
-            NewState = close_connection(State),
-            ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
-            NewState;
-        _  -> State
-    end;
+                        channel_count    = 0,
+                        connection       = #connection{protocol = Protocol},
+                        sock             = Sock}) ->
+    NewState = close_connection(State),
+    ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
+    NewState;
 maybe_close(State) ->
     State.
 
