@@ -634,12 +634,11 @@ create_channel(Channel, State) ->
 channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
     case get({ch_pid, ChPid}) of
         undefined       -> {undefined, State};
-        {Channel, MRef} -> State1 = State#v1{channel_count = (ChannelCount - 1)},
-                           credit_flow:peer_down(ChPid),
+        {Channel, MRef} -> credit_flow:peer_down(ChPid),
                            erase({channel, Channel}),
                            erase({ch_pid, ChPid}),
                            erlang:demonitor(MRef, [flush]),
-                           {Channel, State1}
+                           {Channel, State#v1{channel_count = ChannelCount - 1}}
     end.
 
 all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
