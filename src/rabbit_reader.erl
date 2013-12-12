@@ -876,7 +876,6 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
         rabbit_heartbeat:start(SupPid, Sock, ClientHeartbeat,
                                SendFun, ClientHeartbeat, ReceiveFun),
     State#v1{connection_state = opening,
-             channel_count    = 0,
              connection = Connection#connection{
                             frame_max   = FrameMax,
                             channel_max = ChannelMax,
