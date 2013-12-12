@@ -603,33 +603,33 @@ payload_snippet(<<Snippet:16/binary, _/binary>>) ->
 
 %%--------------------------------------------------------------------------
 
-create_channel(Channel, State) ->
-    #v1{sock = Sock, queue_collector = Collector,
-        channel_sup_sup_pid = ChanSupSup,
-        channel_count = ChannelCount,
-        connection = Conn} = State,
-    #connection{name          = Name,
-                protocol      = Protocol,
-                frame_max     = FrameMax,
-                channel_max   = ChannelMax,
-                user          = User,
-                vhost         = VHost,
-                capabilities  = Capabilities} = Conn,
-    case ChannelMax == 0 orelse ChannelCount < ChannelMax of
-        true  -> {ok, _ChSupPid, {ChPid, AState}} =
-                     rabbit_channel_sup_sup:start_channel(
-                       ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
-                                    Protocol, User, VHost, Capabilities,
-                                    Collector}),
-                 MRef = erlang:monitor(process, ChPid),
-                 put({ch_pid, ChPid}, {Channel, MRef}),
-                 {ok, {ChPid, AState}, State#v1{
-                                         channel_count = ChannelCount + 1}};
-        false -> {error, rabbit_misc:amqp_error(
-                           not_allowed, "number of channels opened (~w) has "
-                           "reached the negotiated channel_max (~w)",
-                           [ChannelCount, ChannelMax], 'none')}
-        end.
+create_channel(_Channel,
+               #v1{channel_count = ChannelCount,
+                   connection    = #connection{channel_max = ChannelMax}})
+  when ChannelMax /= 0 andalso ChannelCount >= ChannelMax ->
+    {error, rabbit_misc:amqp_error(
+              not_allowed, "number of channels opened (~w) has reached the "
+              "negotiated channel_max (~w)",
+              [ChannelCount, ChannelMax], 'none')};
+create_channel(Channel,
+               #v1{sock                = Sock,
+                   queue_collector     = Collector,
+                   channel_sup_sup_pid = ChanSupSup,
+                   channel_count       = ChannelCount,
+                   connection =
+                       #connection{name         = Name,
+                                   protocol     = Protocol,
+                                   frame_max    = FrameMax,
+                                   user         = User,
+                                   vhost        = VHost,
+                                   capabilities = Capabilities}} = State) ->
+    {ok, _ChSupPid, {ChPid, AState}} =
+        rabbit_channel_sup_sup:start_channel(
+          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
+                       Protocol, User, VHost, Capabilities, Collector}),
+    MRef = erlang:monitor(process, ChPid),
+    put({ch_pid, ChPid}, {Channel, MRef}),
+    {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}}.
 
 channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
     case get({ch_pid, ChPid}) of
@@ -638,8 +638,7 @@ channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
                            erase({channel, Channel}),
                            erase({ch_pid, ChPid}),
                            erlang:demonitor(MRef, [flush]),
-                           {Channel, State#v1{
-                                       channel_count = ChannelCount - 1}}
+                           {Channel, State#v1{channel_count = ChannelCount - 1}}
     end.
 
 all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
