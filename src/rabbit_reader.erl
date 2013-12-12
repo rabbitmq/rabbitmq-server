@@ -330,7 +330,7 @@ handle_other({conserve_resources, Source, Conserve},
 handle_other({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     channel_cleanup(ChPid),
-    maybe_close(control_throttle(State));
+    maybe_close(control_throttle(State#v1{channel_count = (ChannelCount - 1)}));
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     terminate(io_lib:format("broker forced connection closure "
                             "with reason '~w'", [Reason]), State),
