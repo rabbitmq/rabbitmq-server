@@ -99,7 +99,10 @@ format_info_item({K, ChPid}, Chs) when is_pid(ChPid) ->
     end.
 
 lookup_src_dest(static, _Name) ->
-    []; %% This is too messy to do, the config may be on another node
+    %% This is too messy to do, the config may be on another node and anyway
+    %% does not necessarily tell us the source and destination very clearly.
+    [];
+
 lookup_src_dest(dynamic, {VHost, Name}) ->
     Def = pget(value,
                rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, Name)),
