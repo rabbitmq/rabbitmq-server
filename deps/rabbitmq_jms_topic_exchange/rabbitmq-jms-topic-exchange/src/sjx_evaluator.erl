@@ -58,8 +58,8 @@ evaluate( { Op, Exp },                     Headers ) -> do_una_op(Op, evaluate(E
 
 evaluate( {'and', Exp1, Exp2 },            Headers ) -> and3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
 evaluate( {'or', Exp1, Exp2 },             Headers ) -> or3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
-evaluate( {'like', LHS, {regex, RX} },     Headers ) -> isLike(val_of(LHS, Headers), RX);
-evaluate( {'not_like', LHS, {regex, RX} }, Headers ) -> not3(isLike(val_of(LHS, Headers), RX));
+evaluate( {'like', LHS, Patt },            Headers ) -> isLike(val_of(LHS, Headers), Patt);
+evaluate( {'not_like', LHS, Patt },        Headers ) -> not3(isLike(val_of(LHS, Headers), Patt));
 evaluate( {'between', Exp, {range, From, To} },     Hs ) -> between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs));
 evaluate( {'not_between', Exp, {range, From, To} }, Hs ) -> not3(between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs)));
 evaluate( { Op, LHS, RHS },                Headers ) -> do_bin_op(Op, evaluate(LHS, Headers), evaluate(RHS, Headers));
@@ -104,14 +104,14 @@ do_bin_op('/' , L, R) when L < 0 andalso R == 0 -> minus_infinity;
 do_bin_op('/' , L, R) when L == 0 andalso R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
-isLike(undefined, _MP) -> undefined;
-isLike(L, MP) ->
-  Res = re:run(L, MP, [{capture, first}]),
+isLike(undefined, _Patt) -> undefined;
+isLike(L, {regex, MP}) ->
   BS = byte_size(L),
-  case Res of
+  case re:run(L, MP, [{capture, first}]) of
     {match, [{0, BS}]} -> true;
     _                  -> false
-  end.
+  end;
+isLike(L, {Patt, Esc}) -> isLike(L, {regex, sjx_parser:pattern_of(Patt, Esc)}).
 
 isIn(_L, []   ) -> false;
 isIn( L, [L|_]) -> true;
