@@ -678,17 +678,10 @@ handle_frame(Type, Channel, Payload, State) ->
 
 process_frame(Frame, Channel, State) ->
     ChKey = {channel, Channel},
-    ChRes = case get(ChKey) of
-                undefined ->
-                    case create_channel(Channel, State) of
-                        {ok, ChVal, ConnState} ->
-                            {ok, ChVal, ConnState};
-                        {error, E} ->
-                            {error, E}
-                    end;
-                Other     -> {ok, Other, State}
-            end,
-    case ChRes of
+    case (case get(ChKey) of
+              undefined -> create_channel(Channel, State);
+              Other     -> {ok, Other, State}
+          end) of
         {error, Error} ->
             handle_exception(State, Channel, Error);
         {ok, {ChPid, AState}, State1} ->
