@@ -113,7 +113,7 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
               end,
     {[], Brokers1} = run_state_monad(
                        lists:duplicate(length(Brokers),
-                                       fun parse_uri/1),
+                                       fun check_uri/1),
                        {Brokers, []}),
 
     ResourceDecls =
@@ -132,16 +132,16 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
         fun (_Conn, Ch) ->
                 [amqp_channel:call(Ch, M) || M <- lists:reverse(ResourceDecls1)]
         end,
-    return({#endpoint{amqp_params = Brokers1,
+    return({#endpoint{uris = Brokers1,
                       resource_declaration = DeclareFun},
             Pos});
 parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
 
-parse_uri({[Uri | Uris], Acc}) ->
+check_uri({[Uri | Uris], Acc}) ->
     case amqp_uri:parse(Uri) of
-        {ok, Params} ->
-            return({Uris, [Params | Acc]});
+        {ok, _Params} ->
+            return({Uris, [Uri | Acc]});
         {error, _} = Err ->
             throw(Err)
     end.

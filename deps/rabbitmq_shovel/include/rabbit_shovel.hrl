@@ -15,7 +15,7 @@
 %%
 
 -record(endpoint,
-        {amqp_params,
+        {uris,
          resource_declaration
         }).
 

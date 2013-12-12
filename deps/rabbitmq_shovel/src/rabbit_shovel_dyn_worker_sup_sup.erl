@@ -28,7 +28,7 @@ start_link() ->
     {ok, Pid} = mirrored_supervisor:start_link({local, ?SUPERVISOR},
                                                ?SUPERVISOR, ?MODULE, []),
     Shovels = rabbit_runtime_parameters:list_component(<<"shovel">>),
-    [adjust_or_start_child(pget(name, Shovel),
+    [adjust_or_start_child({pget(vhost, Shovel), pget(name, Shovel)},
                            pget(value, Shovel)) || Shovel <- Shovels],
     {ok, Pid}.
 
