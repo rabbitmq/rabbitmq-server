@@ -507,14 +507,13 @@ terminate_channels(#v1{channel_count = ChannelCount} = State) ->
     TimerRef = erlang:send_after(Timeout, self(), cancel_wait),
     wait_for_channel_termination(ChannelCount, TimerRef, State).
 
-wait_for_channel_termination(0, TimerRef, _State) ->
+wait_for_channel_termination(0, TimerRef, State) ->
     case erlang:cancel_timer(TimerRef) of
         false -> receive
-                     cancel_wait -> ok
+                     cancel_wait -> State
                  end;
-        _     -> ok
+        _     -> State
     end;
-
 wait_for_channel_termination(N, TimerRef, State) ->
     receive
         {'DOWN', _MRef, process, ChPid, Reason} ->
