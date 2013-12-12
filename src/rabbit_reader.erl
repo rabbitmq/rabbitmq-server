@@ -712,7 +712,7 @@ post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     %% This is not strictly necessary, but more obviously
     %% correct. Also note that we do not need to call maybe_close/1
     %% since we cannot possibly be in the 'closing' state.
-    control_throttle(State);
+    control_throttle(State#v1{channel_count = (ChannelCount - 1)});
 post_process_frame({content_header, _, _, _, _}, _ChPid, State) ->
     maybe_block(State);
 post_process_frame({content_body, _}, _ChPid, State) ->
