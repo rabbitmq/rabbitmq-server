@@ -241,6 +241,7 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                 channel_sup_sup_pid = none,
                 buf                 = [],
                 buf_len             = 0,
+                channel_count       = 0,
                 throttle            = #throttle{
                                          alarmed_by      = [],
                                          last_blocked_by = none,
