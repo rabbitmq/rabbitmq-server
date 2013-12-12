@@ -885,9 +885,9 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
     State#v1{connection_state = opening,
              channel_count    = 0,
              connection = Connection#connection{
-                            frame_max     = FrameMax,
-                            channel_max   = ChannelMax,
-                            timeout_sec   = ClientHeartbeat},
+                            frame_max   = FrameMax,
+                            channel_max = ChannelMax,
+                            timeout_sec = ClientHeartbeat},
              queue_collector = Collector,
              heartbeater = Heartbeater};
 
