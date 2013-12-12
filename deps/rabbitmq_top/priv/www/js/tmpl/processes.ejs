@@ -20,7 +20,7 @@
     <td><%= fmt_process_name(process) %></td>
     <td><%= fmt_remove_rabbit_prefix(process.name.type) %></td>
     <td><%= fmt_bytes(process.memory * 1.0) %></td>
-    <td class="r"><%= process.reduction_delta %></td>
+    <td class="r"><%= fmt_reduction_delta(process.reduction_delta) %></td>
     <td class="r"><%= process.message_queue_len %></td>
     <td><%= process.status %></td>
   </tr>

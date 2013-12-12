@@ -24,7 +24,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([procs/2]).
+-export([procs/2, proc/1]).
 
 -define(SERVER, ?MODULE).
 -define(MILLIS, 1000).
@@ -41,6 +41,9 @@ start_link() ->
 procs(Key, Count) ->
     gen_server:call(?SERVER, {procs, Key, Count}, infinity).
 
+proc(Pid) ->
+    gen_server:call(?SERVER, {proc, Pid}, infinity).
+
 %%--------------------------------------------------------------------
 
 init([]) ->
@@ -48,7 +51,10 @@ init([]) ->
     {ok, #state{procs = procs(dict:new())}}.
 
 handle_call({procs, Key, Count}, _From, State = #state{procs = Procs}) ->
-    {reply, rabbit_top_util:toplist(Key, Count, flatten(Procs)), State}.
+    {reply, rabbit_top_util:toplist(Key, Count, flatten(Procs)), State};
+
+handle_call({proc, Pid}, _From, State = #state{procs = Procs}) ->
+    {reply, dict:find(Pid, Procs), State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.

@@ -48,3 +48,16 @@ function fmt_remove_rabbit_prefix(name) {
         return name;
     }
 }
+
+function fmt_pids(pids) {
+    var txt = '';
+    for (var i = 0; i < pids.length; i++) {
+        txt += link_pid(pids[i]) + ' ';
+    }
+
+    return txt;
+}
+
+function fmt_reduction_delta(delta) {
+    return Math.round(delta / 5); // gen_server updates every 5s
+}

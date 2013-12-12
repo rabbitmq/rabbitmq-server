@@ -18,7 +18,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([toplist/3, obtain_name/1]).
+-export([toplist/3, obtain_name/1, fmt/1]).
 
 toplist(Key, Count, List) ->
     Sorted = lists:sublist(
