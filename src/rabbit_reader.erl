@@ -1040,7 +1040,7 @@ i(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
 i(peer_cert_issuer,   S) -> cert_info(fun rabbit_ssl:peer_cert_issuer/1,   S);
 i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
 i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
-i(channels,           #v1{channel_count = N}) -> N;
+i(channels,           #v1{channel_count = ChannelCount}) -> ChannelCount;
 i(state, #v1{connection_state = ConnectionState,
              throttle         = #throttle{last_blocked_by  = BlockedBy,
                                           last_blocked_at  = T}}) ->
