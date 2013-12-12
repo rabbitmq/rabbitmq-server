@@ -506,7 +506,7 @@ terminate_channels(State) ->
             Timeout = 1000 * ?CHANNEL_TERMINATION_TIMEOUT * NChannels,
             TimerRef = erlang:send_after(Timeout, self(), cancel_wait),
             wait_for_channel_termination(NChannels, TimerRef, State);
-       true -> ok
+       true -> State
     end.
 
 wait_for_channel_termination(0, TimerRef, _State) ->
