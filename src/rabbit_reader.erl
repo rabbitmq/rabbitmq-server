@@ -623,6 +623,7 @@ create_channel(Channel,
                        Protocol, User, VHost, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
     put({ch_pid, ChPid}, {Channel, MRef}),
+    put({channel, Channel}, {ChPid, AState}),
     {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}}.
 
 channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
