@@ -3,6 +3,7 @@
   <tr>
     <th>Process</th>
     <th>Description</th>
+    <th>Type</th>
     <th><%= fmt_sort('Memory', 'memory') %></th>
     <th><%= fmt_sort('Reductions / sec', 'reductions') %></th>
     <th>Message queue</th>
@@ -16,10 +17,8 @@
 %>
   <tr<%= alt_rows(i)%>>
     <td><%= link_pid(process.pid) %></td>
-    <td>
-      <%= fmt_process_name(process) %>
-      <sub><%= fmt_remove_rabbit_prefix(process.name.type) %></sub>
-    </td>
+    <td><%= fmt_process_name(process) %></td>
+    <td><%= fmt_remove_rabbit_prefix(process.name.type) %></td>
     <td><%= fmt_bytes(process.memory * 1.0) %></td>
     <td class="r"><%= process.reduction_delta %></td>
     <td class="r"><%= process.message_queue_len %></td>
