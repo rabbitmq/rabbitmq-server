@@ -68,7 +68,8 @@ process(ReqData) ->
 
 fmt(Props) -> [{K, fmt(K, V)} || {K, V} <- Props].
 
-fmt(links,        V) -> [rabbit_top_util:fmt(P) || P <- V, is_pid(P)];
-fmt(monitors,     V) -> [rabbit_top_util:fmt(P) || {process, P} <- V];
-fmt(monitored_by, V) -> [rabbit_top_util:fmt(P) || P <- V];
-fmt(_K,           V) -> rabbit_top_util:fmt(V).
+fmt(links,              V) -> [rabbit_top_util:fmt(P) || P <- V, is_pid(P)];
+fmt(monitors,           V) -> [rabbit_top_util:fmt(P) || {process, P} <- V];
+fmt(monitored_by,       V) -> [rabbit_top_util:fmt(P) || P <- V];
+fmt(current_stacktrace, V) -> rabbit_top_util:fmt(V);
+fmt(_K,                 V) -> V.

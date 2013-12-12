@@ -18,24 +18,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([toplist/4, obtain_name/1, fmt/1]).
-
-toplist(Key, Order, Count, List) ->
-    RevFun = case Order of
-                 asc  -> fun (L) -> L end;
-                 desc -> fun lists:reverse/1
-             end,
-    Keyed = [toplist(Key, I) || I <- List],
-    Sorted = lists:sublist(RevFun(lists:keysort(1, Keyed)), Count), 
-    [fmt_all(Info) || {_, Info} <- Sorted].
-
-toplist(Key, Info) ->
-    {Key, Val} = lists:keyfind(Key, 1, Info),
-    {Val, Info}.
-
-fmt_all(Info) ->
-    {pid, Pid} = lists:keyfind(pid, 1, Info),
-    [{name, obtain_name(Pid)} | [{K, fmt(V)} || {K, V} <- Info]].
+-export([fmt/1, obtain_name/1]).
 
 fmt(Pid) when is_pid(Pid) ->
     list_to_binary(pid_to_list(Pid));

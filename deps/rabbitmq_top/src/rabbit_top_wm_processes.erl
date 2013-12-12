@@ -38,8 +38,18 @@ to_json(ReqData, Context) ->
                 "true" -> asc;
                 _      -> desc
             end,
-    rabbit_mgmt_util:reply(rabbit_top_worker:procs(Sort, Order, 20),
-                           ReqData, Context).
+    rabbit_mgmt_util:reply(processes(Sort, Order), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+
+%%--------------------------------------------------------------------
+
+processes(Sort, Order) ->
+    [fmt(P) || P <- rabbit_top_worker:procs(Sort, Order, 20)].
+
+fmt(Info) ->
+    {pid, Pid} = lists:keyfind(pid, 1, Info),
+    Info1 = lists:keydelete(pid, 1, Info),
+    [{pid,  rabbit_top_util:fmt(Pid)},
+     {name, rabbit_top_util:obtain_name(Pid)} | Info1].
