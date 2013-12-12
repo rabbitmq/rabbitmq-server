@@ -1,20 +1,20 @@
 dispatcher_add(function(sammy) {
-    sammy.get('#/top', function() {
-            render({'top': {path:    '/top',
-                            options: {sort:true}}},
-                    'top', '#/top');
+    sammy.get('#/processes', function() {
+            render({'processes': {path:    '/processes',
+                                  options: {sort:true}}},
+                    'processes', '#/processes');
         });
-    sammy.get('#/top/:pid', function() {
-            render({'process': '/top/' + esc(this.params['pid'])},
-                    'process', '#/top');
+    sammy.get('#/processes/:pid', function() {
+            render({'process': '/processes/' + esc(this.params['pid'])},
+                    'process', '#/processes');
         });
 
 });
 
-NAVIGATION['Admin'][0]['Top'] = ['#/top', 'administrator'];
+NAVIGATION['Admin'][0]['Top Processes'] = ['#/processes', 'administrator'];
 
 function link_pid(name) {
-    return _link_to(name, '#/top/' + esc(name))
+    return _link_to(name, '#/processes/' + esc(name))
 }
 
 function fmt_process_name(process) {
