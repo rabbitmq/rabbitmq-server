@@ -327,7 +327,7 @@ handle_other({conserve_resources, Source, Conserve},
           end,
     Throttle1 = Throttle#throttle{alarmed_by = CR1},
     control_throttle(State#v1{throttle = Throttle1});
-handle_other({channel_closing, ChPid}, State) ->
+handle_other({channel_closing, ChPid}, State = #v1{channel_count = ChannelCount}) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     channel_cleanup(ChPid),
     maybe_close(control_throttle(State#v1{channel_count = (ChannelCount - 1)}));
@@ -707,7 +707,8 @@ process_frame(Frame, Channel, State) ->
             end
     end.
 
-post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
+post_process_frame({method, 'channel.close_ok', _}, ChPid,
+                   State = #v1{channel_count = ChannelCount}) ->
     channel_cleanup(ChPid),
     %% This is not strictly necessary, but more obviously
     %% correct. Also note that we do not need to call maybe_close/1
