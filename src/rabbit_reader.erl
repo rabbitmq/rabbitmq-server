@@ -614,7 +614,7 @@ create_channel(Channel, State) ->
                 vhost         = VHost,
                 capabilities  = Capabilities} = Conn,
     case ChannelMax == 0 orelse ChannelCount < ChannelMax of
-        true  -> {ok, _ChSupPid, {ChPid, ChState}} =
+        true  -> {ok, _ChSupPid, {ChPid, AState}} =
                      rabbit_channel_sup_sup:start_channel(
                        ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
                                     Protocol, User, VHost, Capabilities,
@@ -622,7 +622,7 @@ create_channel(Channel, State) ->
                  MRef = erlang:monitor(process, ChPid),
                  State1 = State#v1{channel_count = (ChannelCount + 1)},
                  put({ch_pid, ChPid}, {Channel, MRef}),
-                 {ok, {ChPid, ChState}, State1};
+                 {ok, {ChPid, AState}, State1};
         false -> {error, rabbit_misc:amqp_error(
                            not_allowed, "number of channels opened (~w) has "
                            "reached the negotiated channel_max (~w)",
@@ -689,18 +689,18 @@ process_frame(Frame, Channel, State) ->
     case ChRes of
         {error, Error} ->
             handle_exception(State, Channel, Error);
-        {ok, {ChPid, ChState}, State1} ->
-            case rabbit_command_assembler:process(Frame, ChState) of
-                {ok, NewChState} ->
-                    put(ChKey, {ChPid, NewChState}),
+        {ok, {ChPid, AState}, State1} ->
+            case rabbit_command_assembler:process(Frame, AState) of
+                {ok, NewAState} ->
+                    put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State1);
-                {ok, Method, NewChState} ->
+                {ok, Method, NewAState} ->
                     rabbit_channel:do(ChPid, Method),
-                    put(ChKey, {ChPid, NewChState}),
+                    put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State1);
-                {ok, Method, Content, NewChState} ->
+                {ok, Method, Content, NewAState} ->
                     rabbit_channel:do_flow(ChPid, Method, Content),
-                    put(ChKey, {ChPid, NewChState}),
+                    put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, control_throttle(State1));
                 {error, Reason} ->
                     handle_exception(State1, Channel, Reason)
