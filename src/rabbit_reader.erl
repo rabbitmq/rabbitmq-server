@@ -38,13 +38,13 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, helper_sup, queue_collector, heartbeater,
-             stats_timer, channel_sup_sup_pid, buf, buf_len, throttle}).
+             stats_timer, channel_sup_sup_pid, buf, buf_len, throttle,
+             channel_count}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
                      protocol, user, timeout_sec, frame_max, channel_max, vhost,
                      client_properties, capabilities,
-                     auth_mechanism, auth_state,
-                     channel_count}).
+                     auth_mechanism, auth_state}).
 
 -record(throttle, {alarmed_by, last_blocked_by, last_blocked_at,
                    blocked_sent}).
@@ -604,12 +604,12 @@ payload_snippet(<<Snippet:16/binary, _/binary>>) ->
 create_channel(Channel, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
+        channel_count = ChannelCount,
         connection = Conn} = State,
     #connection{name          = Name,
                 protocol      = Protocol,
                 frame_max     = FrameMax,
                 channel_max   = ChannelMax,
-                channel_count = ChannelCount,
                 user          = User,
                 vhost         = VHost,
                 capabilities  = Capabilities} = Conn,
@@ -620,8 +620,7 @@ create_channel(Channel, State) ->
                                     Protocol, User, VHost, Capabilities,
                                     Collector}),
                  MRef = erlang:monitor(process, ChPid),
-                 State1 = State#v1{connection =
-                           Conn#connection{channel_count = (ChannelCount + 1)}},
+                 State1 = State#v1{channel_count = (ChannelCount + 1)},
                  put({ch_pid, ChPid}, {Channel, MRef}),
                  {ok, {ChPid, ChState}, State1};
         false -> {error, rabbit_misc:amqp_error(
@@ -883,10 +882,10 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
         rabbit_heartbeat:start(SupPid, Sock, ClientHeartbeat,
                                SendFun, ClientHeartbeat, ReceiveFun),
     State#v1{connection_state = opening,
+             channel_count    = 0,
              connection = Connection#connection{
                             frame_max     = FrameMax,
                             channel_max   = ChannelMax,
-                            channel_count = 0,
                             timeout_sec   = ClientHeartbeat},
              queue_collector = Collector,
              heartbeater = Heartbeater};
@@ -1053,8 +1052,7 @@ i(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
 i(peer_cert_issuer,   S) -> cert_info(fun rabbit_ssl:peer_cert_issuer/1,   S);
 i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
 i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
-i(channels,           #v1{connection = Conn}) ->
-    Conn#connection.channel_count;
+i(channels,           #v1{channel_count = N}) -> N;
 i(state, #v1{connection_state = ConnectionState,
              throttle         = #throttle{last_blocked_by  = BlockedBy,
                                           last_blocked_at  = T}}) ->
