@@ -520,17 +520,18 @@ wait_for_channel_termination(0, TimerRef, _State) ->
 wait_for_channel_termination(N, TimerRef, State) ->
     receive
         {'DOWN', _MRef, process, ChPid, Reason} ->
-            case {channel_cleanup(ChPid, State), termination_kind(Reason)} of
-                {undefined, _} ->
-                    exit({abnormal_dependent_exit, ChPid, Reason});
-                {_Channel, controlled} ->
-                    wait_for_channel_termination(N-1, TimerRef, State);
-                {Channel, uncontrolled} ->
-                    log(error,
-                        "AMQP connection ~p, channel ~p - "
-                        "error while terminating:~n~p~n",
-                        [self(), Channel, Reason]),
-                    wait_for_channel_termination(N-1, TimerRef, State)
+            {Channel, State1} = channel_cleanup(ChPid, State),
+            case {Channel, termination_kind(Reason)} of
+                {undefined,    _} -> exit({abnormal_dependent_exit,
+                                           ChPid, Reason});
+                {_,   controlled} -> wait_for_channel_termination(
+                                       N-1, TimerRef, State1);
+                {_, uncontrolled} -> log(error,
+                                         "AMQP connection ~p, channel ~p - "
+                                         "error while terminating:~n~p~n",
+                                         [self(), Channel, Reason]),
+                                     wait_for_channel_termination(
+                                       N-1, TimerRef, State1)
             end;
         cancel_wait ->
             exit(channel_termination_timeout)
