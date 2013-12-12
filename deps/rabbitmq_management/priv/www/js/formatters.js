@@ -468,13 +468,14 @@ function fmt_object_state(obj) {
         explanation = 'Idle since ' + obj.idle_since;
         text = 'idle';
     }
+    // Only connections can be 'blocked' or 'blocking'
     else if (obj.state == 'blocked') {
         colour = 'red';
-        explanation = 'Resource alarm: Objection blocked.';
+        explanation = 'Resource alarm: connection blocked.';
     }
     else if (obj.state == 'blocking') {
         colour = 'yellow';
-        explanation = 'Resource alarm: Objection will block on publish.';
+        explanation = 'Resource alarm: connection will block on publish.';
     }
     else if (obj.state == 'flow') {
         colour = 'yellow';
