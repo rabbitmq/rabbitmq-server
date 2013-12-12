@@ -1045,11 +1045,9 @@ i(state, #v1{connection_state = ConnectionState,
              throttle         = #throttle{last_blocked_by  = BlockedBy,
                                           last_blocked_at  = T}}) ->
     Recent = T =/= never andalso timer:now_diff(erlang:now(), T) < 5000000,
-    case {BlockedBy, ConnectionState, Recent} of
-        {resourse, blocked,  _}    -> blocked;
-        {_,        blocking, _}    -> blocking;
-        {flow,     _,        true} -> flow;
-        {_,        _,        _}    -> ConnectionState
+    case {BlockedBy, Recent} of
+        {flow, true} -> flow;
+        {_,    _}    -> ConnectionState
     end;
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
