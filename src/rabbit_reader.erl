@@ -499,15 +499,13 @@ handle_dependent_exit(ChPid, Reason, State) ->
                                      maybe_close(control_throttle(State2))
     end.
 
-terminate_channels(State) ->
-    NChannels =
-        length([rabbit_channel:shutdown(ChPid) || ChPid <- all_channels()]),
-    if NChannels > 0 ->
-            Timeout = 1000 * ?CHANNEL_TERMINATION_TIMEOUT * NChannels,
-            TimerRef = erlang:send_after(Timeout, self(), cancel_wait),
-            wait_for_channel_termination(NChannels, TimerRef, State);
-       true -> State
-    end.
+terminate_channels(#v1{channel_count = 0} = State) ->
+    State;
+terminate_channels(#v1{channel_count = ChannelCount} = State) ->
+    lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
+    Timeout = 1000 * ?CHANNEL_TERMINATION_TIMEOUT * ChannelCount,
+    TimerRef = erlang:send_after(Timeout, self(), cancel_wait),
+    wait_for_channel_termination(ChannelCount, TimerRef, State).
 
 wait_for_channel_termination(0, TimerRef, _State) ->
     case erlang:cancel_timer(TimerRef) of
