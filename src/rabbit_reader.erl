@@ -680,7 +680,6 @@ process_frame(Frame, Channel, State) ->
                 undefined ->
                     case create_channel(Channel, State) of
                         {ok, ChVal, ConnState} ->
-                            put(ChKey, ChVal),
                             {ok, ChVal, ConnState};
                         {error, E} ->
                             {error, E}
