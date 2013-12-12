@@ -488,16 +488,15 @@ close_connection(State = #v1{queue_collector = Collector,
     State#v1{connection_state = closed}.
 
 handle_dependent_exit(ChPid, Reason, State) ->
-    case {channel_cleanup(ChPid, State), termination_kind(Reason)} of
-        {{undefined, State1}, controlled} ->
-            State1;
-        {{undefined, _}, uncontrolled} ->
-            exit({abnormal_dependent_exit, ChPid, Reason});
-        {{_, State1}, controlled} ->
-            maybe_close(control_throttle(State1));
-        {{Channel, State1}, uncontrolled} ->
-            State2 = handle_exception(State1, Channel, Reason),
-            maybe_close(control_throttle(State2))
+    {Channel, State1} = channel_cleanup(ChPid, State),
+    case {Channel, termination_kind(Reason)} of
+        {undefined,   controlled} -> State1;
+        {undefined, uncontrolled} -> exit({abnormal_dependent_exit,
+                                           ChPid, Reason});
+        {_,           controlled} -> maybe_close(control_throttle(State1));
+        {_,         uncontrolled} -> State2 = handle_exception(
+                                                State1, Channel, Reason),
+                                     maybe_close(control_throttle(State2))
     end.
 
 terminate_channels(State) ->
