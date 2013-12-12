@@ -1,11 +1,11 @@
 <table class="list updatable">
  <thead>
   <tr>
-    <th>Process</th>
+    <th><%= fmt_sort('Process', 'pid') %></th>
     <th>Description</th>
     <th>Type</th>
     <th><%= fmt_sort('Memory', 'memory') %></th>
-    <th><%= fmt_sort('Reductions / sec', 'reductions') %></th>
+    <th><%= fmt_sort('Reductions / sec', 'reduction_delta') %></th>
     <th>Message queue</th>
     <th>Status</th>
   </tr>

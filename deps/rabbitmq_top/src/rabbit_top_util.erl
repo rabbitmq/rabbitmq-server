@@ -18,12 +18,15 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([toplist/3, obtain_name/1, fmt/1]).
+-export([toplist/4, obtain_name/1, fmt/1]).
 
-toplist(Key, Count, List) ->
-    Sorted = lists:sublist(
-               lists:reverse(
-                 lists:keysort(1, [toplist(Key, I) || I <- List])), Count),
+toplist(Key, Order, Count, List) ->
+    RevFun = case Order of
+                 asc  -> fun (L) -> L end;
+                 desc -> fun lists:reverse/1
+             end,
+    Keyed = [toplist(Key, I) || I <- List],
+    Sorted = lists:sublist(RevFun(lists:keysort(1, Keyed)), Count), 
     [fmt_all(Info) || {_, Info} <- Sorted].
 
 toplist(Key, Info) ->
@@ -116,4 +119,4 @@ initial_call_dict(Pid) ->
     end.
 
 guess_initial_call({mochiweb_acceptor, _F, _A}) -> mochiweb_http;
-guess_initial_call(MFA)                         -> fail.
+guess_initial_call(_MFA)                        -> fail.

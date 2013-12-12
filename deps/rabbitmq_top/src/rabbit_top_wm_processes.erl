@@ -31,10 +31,15 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Sort = case wrq:get_qs_value("sort", ReqData) of
-               "memory" -> memory;
-               _        -> reduction_delta
+               undefined -> reduction_delta;
+               Str       -> list_to_atom(Str)
            end,
-    rabbit_mgmt_util:reply(rabbit_top_worker:procs(Sort, 20), ReqData, Context).
+    Order = case wrq:get_qs_value("sort_reverse", ReqData) of
+                "true" -> asc;
+                _      -> desc
+            end,
+    rabbit_mgmt_util:reply(rabbit_top_worker:procs(Sort, Order, 20),
+                           ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
