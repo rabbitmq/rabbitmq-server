@@ -502,7 +502,8 @@ with_ch(Fun, Xs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_all(Ch, Xs),
-    rabbit_federation_test_util:assert_status(Xs),
+    rabbit_federation_test_util:assert_status(
+      Xs, {exchange, upstream_exchange}),
     Fun(Ch),
     delete_all(Ch, Xs),
     amqp_connection:close(Conn),
@@ -594,8 +595,10 @@ assert_connections(Xs, Conns) ->
                 X <- Xs,
                 C <- Conns],
     Remaining = lists:foldl(
-                  fun rabbit_federation_test_util:assert_link_status/2,
-                  rabbit_federation_status:status(), Links),
+                  fun (Link, Status) ->
+                          rabbit_federation_test_util:assert_link_status(
+                            Link, Status, {exchange, upstream_exchange})
+                  end, rabbit_federation_status:status(), Links),
     ?assertEqual([], Remaining),
     ok.
 
