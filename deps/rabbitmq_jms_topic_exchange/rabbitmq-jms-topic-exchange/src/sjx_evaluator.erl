@@ -105,13 +105,15 @@ do_bin_op('/' , L, R) when L == 0 andalso R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
 isLike(undefined, _Patt) -> undefined;
-isLike(L, {regex, MP}) ->
+isLike(L, {regex, MP}) -> patt_match(L, MP);
+isLike(L, {Patt, Esc}) -> patt_match(L, sjx_parser:pattern_of(Patt, Esc)).
+
+patt_match(L, MP) ->
   BS = byte_size(L),
   case re:run(L, MP, [{capture, first}]) of
     {match, [{0, BS}]} -> true;
     _                  -> false
-  end;
-isLike(L, {Patt, Esc}) -> isLike(L, {regex, sjx_parser:pattern_of(Patt, Esc)}).
+  end.
 
 isIn(_L, []   ) -> false;
 isIn( L, [L|_]) -> true;
