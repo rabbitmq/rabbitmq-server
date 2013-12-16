@@ -125,7 +125,7 @@ stop(Apps) ->
                TargetApps, handle_app_error(error_during_shutdown))
     after
         try
-            BootSteps = load_steps(rabbit_boot_step),
+            BootSteps = load_steps(),
             ToDelete = [Step || {App, _, _}=Step <- BootSteps,
                                 lists:member(App, TargetApps)],
             [ets:delete(?MODULE, Step) || {_, Step, _} <- ToDelete],
@@ -150,22 +150,21 @@ run_cleanup_steps(Apps) ->
       fun({_, Name, _}=Step, Acc) ->
               case sets:is_element(Name, Completed) of
                   true  -> Acc;
-                  false -> run_boot_step(Step, rabbit_cleanup_step),
+                  false -> run_cleanup_step(Step),
                            sets:add_element(Name, Acc)
               end
       end,
       Completed,
-      [Step || {App, _, _}=Step <- load_steps(rabbit_cleanup_step),
-               lists:member(App, Apps)]),
+      [Step || {App, _, _}=Step <- load_steps(), lists:member(App, Apps)]),
     ok.
 
 run_boot_steps() ->
-    Steps = load_steps(rabbit_boot_step),
-    [ok = run_boot_step(Step, rabbit_boot_step) || Step <- Steps],
+    Steps = load_steps(),
+    [ok = run_boot_step(Step) || Step <- Steps],
     ok.
 
-load_steps(StepType) ->
-    StepAttrs = rabbit_misc:all_app_module_attributes(StepType),
+load_steps() ->
+    StepAttrs = rabbit_misc:all_app_module_attributes(rabbit_boot_step),
     sort_boot_steps(
       lists:usort(
         [{Mod, {AppName, Steps}} || {AppName, Mod, Steps} <- StepAttrs])).
@@ -280,18 +279,20 @@ handle_app_error(Term) ->
             throw({Term, App, Reason})
     end.
 
-run_boot_step({_, _, Attributes}, rabbit_cleanup_step) ->
-    run_step(Attributes);
-run_boot_step({_, StepName, Attributes}, rabbit_boot_step) ->
+run_cleanup_step({_, _, Attributes}) ->
+    run_step_name(Attributes, cleanup).
+
+run_boot_step({_, StepName, Attributes}) ->
     case catch already_run(StepName) of
-        false -> ok = run_step(Attributes),
+        false -> ok = run_step_name(Attributes, mfa),
                  mark_complete(StepName);
         true  -> ok
     end,
     ok.
 
-run_step(Attributes) ->
-    case [MFA || {mfa, MFA} <- Attributes] of
+run_step_name(Attributes, AttributeName) ->
+    case [MFA || {Key, MFA} <- Attributes,
+                 Key =:= AttributeName] of
         [] ->
             ok;
         MFAs ->
