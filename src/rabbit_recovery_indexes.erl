@@ -76,8 +76,15 @@ upgrade_recovery_indexes() ->
                                       fun(F, Acc) -> [F|Acc] end, []),
         [begin
              {ok, Terms} = rabbit_file:read_term_file(File),
-             ok = store_recovery_terms(File, Terms)
-         end || File <- lists:delete(dets_filename(), DotFiles)],
+             ok = store_recovery_terms(File, Terms),
+             case file:delete(File) of
+                 {error, E} ->
+                     rabbit_log:warning("Unable to delete recovery index"
+                                        "~s during upgrade: ~p~n", [File, E]);
+                 ok ->
+                     ok
+             end
+         end || File <- DotFiles],
         ok
     after
         flush()
