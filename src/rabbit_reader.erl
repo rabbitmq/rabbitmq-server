@@ -808,6 +808,9 @@ handle_method0(MethodName, FieldsBin,
                        State)
     catch exit:#amqp_error{method = none} = Reason ->
             handle_exception(State, 0, Reason#amqp_error{method = MethodName});
+          throw:{writer_inet_error, closed} ->
+            maybe_emit_stats(State),
+            throw(connection_closed_abruptly);
           Type:Reason ->
             Stack = erlang:get_stacktrace(),
             handle_exception(State, 0, {Type, Reason, MethodName, Stack})
