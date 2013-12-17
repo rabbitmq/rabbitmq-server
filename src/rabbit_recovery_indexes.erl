@@ -57,7 +57,6 @@
 
 -include("rabbit.hrl").
 -define(SERVER, ?MODULE).
--define(CLEAN_FILENAME, "clean.dot").
 
 recover() ->
     case supervisor:start_child(rabbit_sup,
@@ -73,7 +72,7 @@ upgrade_recovery_indexes() ->
     create_table(),
     try
         QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
-        DotFiles = filelib:fold_files(QueuesDir, ?CLEAN_FILENAME, true,
+        DotFiles = filelib:fold_files(QueuesDir, "clean.dot", true,
                                       fun(F, Acc) -> [F|Acc] end, []),
         [begin
              {ok, Terms} = rabbit_file:read_term_file(File),
@@ -132,4 +131,4 @@ create_table() ->
                                        {auto_save, infinity}]).
 
 dets_filename() ->
-    filename:join([rabbit_mnesia:dir(), "queues", ?CLEAN_FILENAME]).
+    filename:join([rabbit_mnesia:dir(), "queues", "recovery.dets"]).
