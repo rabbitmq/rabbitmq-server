@@ -81,6 +81,10 @@
 %% process as sys:get_status/1 would). Pass through a function which
 %% can be invoked on the state, get back the result. The state is not
 %% modified.
+%%
+%% 10) The Options parameter to start / start_link can include
+%% {proc_name, Name}. This name is stored in the process dictionary
+%% for later debugging.
 
 %% All modifications are (C) 2009-2013 GoPivotal, Inc.
 
