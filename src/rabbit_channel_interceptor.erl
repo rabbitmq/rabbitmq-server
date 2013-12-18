@@ -54,21 +54,12 @@ intercept_method(M) ->
     intercept_method(M, select(M)).
 
 intercept_method(M, []) ->
-    M;
+    {ok, M};
 intercept_method(M, [I]) ->
-    case I:intercept(M) of
-        {ok, M2} ->
-            M2;
-        {error, Reason} ->
-            rabbit_misc:protocol_error(
-              internal_error, "~s",
-              [Reason])
-    end;
-intercept_method(M, _) ->
-    rabbit_misc:protocol_error(
-      internal_error,
-      "More than one interceptor defined for method: ~p",
-      [rabbit_misc:method_record_type(M)]).
+    I:intercept(M);
+intercept_method(M, Is) ->
+    {error, rabbit_misc:format("More than one interceptor for method: ~p - ~p",
+                               [rabbit_misc:method_record_type(M)], Is)}.
 
 %% select the interceptors that apply to intercept_method().
 select(Method)  ->

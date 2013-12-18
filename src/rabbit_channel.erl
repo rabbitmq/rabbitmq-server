@@ -273,19 +273,28 @@ handle_cast({method, Method, Content, Flow},
         noflow -> ok
     end,
     %% handle MRDQ before calling handle method
-    Method2 = handle_expand_shortcuts(Method, State),
-    try handle_method(Method2, Content, State) of
-        {reply, Reply, NewState} ->
-            ok = send(Reply, NewState),
-            noreply(NewState);
-        {noreply, NewState} ->
-            noreply(NewState);
-        stop ->
-            {stop, normal, State}
+    M = handle_expand_shortcuts(Method, State),
+    try rabbit_channel_interceptor:intercept_method(M) of
+        {ok, Method2} ->
+            try handle_method(Method2, Content, State) of
+                {reply, Reply, NewState} ->
+                    ok = send(Reply, NewState),
+                    noreply(NewState);
+                {noreply, NewState} ->
+                    noreply(NewState);
+                stop ->
+                    {stop, normal, State}
+            catch
+                exit:Reason = #amqp_error{} ->
+                    handle_method_exception(Reason, Method2, State);
+                _:Reason ->
+                    {stop, {Reason, erlang:get_stacktrace()}, State}
+            end;
+        {error, Reason} ->
+            rabbit_misc:protocol_error(internal_error, Reason, [])
     catch
         exit:Reason = #amqp_error{} ->
-            MethodName = rabbit_misc:method_record_type(Method2),
-            handle_exception(Reason#amqp_error{method = MethodName}, State);
+            handle_method_exception(Reason, Method, State);
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
@@ -428,6 +437,10 @@ send(_Command, #ch{state = closing}) ->
     ok;
 send(Command, #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Command).
+
+handle_method_exception(Reason, Method, State) ->
+    MethodName = rabbit_misc:method_record_type(Method),
+    handle_exception(Reason#amqp_error{method = MethodName}, State).
 
 handle_exception(Reason, State = #ch{protocol   = Protocol,
                                      channel    = Channel,
