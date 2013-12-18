@@ -17,7 +17,7 @@
 %% We use a gen_server simply so that during the terminate/2 call
 %% (i.e., during shutdown), we can sync/flush the dets table to disk.
 
--module(rabbit_recovery_indexes).
+-module(rabbit_recovery_terms).
 
 -behaviour(gen_server).
 
