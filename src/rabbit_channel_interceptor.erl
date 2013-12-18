@@ -14,55 +14,35 @@
 %% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
-%% Since the AMQP methods used here are queue related, 
+%% Since the AMQP methods used here are queue related,
 %% maybe we want this to be a queue_interceptor.
 
 -module(rabbit_channel_interceptor).
 
 -include("rabbit.hrl").
 
--export([select/2, run_filter_chain/3]).
-
--define(DEFAULT_PRIORITY, 0).
-
-%% TODO: docs
+-export([intercept_method/1]).
 
 -ifdef(use_specs).
 
-%% TODO: maybe we want to use rabbit_framing:amqp_method_name() instead?
--type(intercept_method() :: 'basic_consume' |
-                            'basic_get'     |
-                            'queue_declare' |
-                            'queue_bind'    |
-                            'queue_unbind'  |
-                            'queue_purge'   |
-                            'queue_delete').
-
--type(initial_queue_name() :: rabbit_amqqueue:name()).
--type(processed_queue_name() :: rabbit_amqqueue:name()).
+-type(intercept_method() :: rabbit_framing:amqp_method_name()).
+-type(original_method() :: rabbit_framing:amqp_method_record()).
+-type(processed_method() :: rabbit_framing:amqp_method_record()).
 
 -callback description() -> [proplists:property()].
 
-%% TODO: maybe we want to also pass a second argument that's the amqp.method 
-%% intercepted like 'basic.consume', 'queue.decalre' and so on.
-%% The interceptor might wish to modify the processed_queue_name() based on 
-%% what was the initial_queue_name().
--callback intercept(intercept_method(), 
-            initial_queue_name(), processed_queue_name()) -> 
-                rabbit_types:ok_or_error2(rabbit_amqqueue:name(), any()).
+-callback intercept(original_method()) ->
+    rabbit_types:ok_or_error2(processed_method(), any()).
 
 %% Whether the interceptor wishes to intercept the amqp method
 -callback applies_to(intercept_method()) -> boolean().
-
--callback priority_param() -> binary().
 
 -else.
 
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {intercept, 3}, {applies_to, 1}, 
-     {priority_param, 0}];
+    [{description, 0}, {intercept, 1}, {applies_to, 1}];
 behaviour_info(_Other) ->
     undefined.
 
@@ -70,55 +50,28 @@ behaviour_info(_Other) ->
 
 %%----------------------------------------------------------------------------
 
-%% select the interceptors that apply to intercept_method().
-select(#resource{virtual_host=VHost}, Method)  -> 
-    lists:sort(fun (A, B) ->
-                 get_priority(A, Method, VHost) > get_priority(B, Method, VHost) 
-               end, [I || I <- filter(list()), I:applies_to(Method)]).
+intercept_method(M) ->
+    intercept_method(M, select(M)).
 
-%% We have a chain of filters because one interceptor might want to modify the queue name,
-%% while another might want just to stop the filter chain and prevent the user from 
-%% declaring certain queue names, or deleteign certain queue names.
-%% By providing priorities to each interceptor, then the user can decide the order in which
-%% the filters are applied.
-run_filter_chain(Method, QName, Interceptors) ->
-    run_filter_chain(Method, QName, QName, Interceptors).
-
-run_filter_chain(_Method, #resource{virtual_host=VHost}, 
-                 #resource{virtual_host=VHost} = NewQueName, []) ->
-    {ok, NewQueName};
-run_filter_chain(Method, #resource{virtual_host=VHost} = QName, 
-                 #resource{virtual_host=VHost} = NewQueName, [I|T]) ->
-    case I:intercept(Method, QName, NewQueName) of
-        {ok, QName2} -> 
-            run_filter_chain(Method, QName, QName2, T);
-        {error, Reason} -> 
-            {error, Reason}
+intercept_method(M, []) ->
+    M;
+intercept_method(M, [I]) ->
+    case I:intercept(M) of
+        {ok, M2} ->
+            M2;
+        {error, Reason} ->
+            rabbit_misc:protocol_error(
+              internal_error, "~s",
+              [Reason])
     end;
-run_filter_chain(_Method, #resource{virtual_host=_VHost}, 
-                 #resource{virtual_host=_Other}, _Interceptors) ->
-    %% TODO pass along the previous interceptor name so we can log it.
-    {error, "Interceptor attempted to modify resource virtual host"}.
+intercept_method(M, _) ->
+    rabbit_misc:protocol_error(
+      internal_error,
+      "More than one interceptor defined for method: ~p",
+      [rabbit_misc:method_record_type(M)]).
 
-filter(Modules) ->
-    [M || M <- Modules, code:which(M) =/= non_existing].
-
-list() -> [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)].
-
-%% Every implementation of rabbit_channel_interceptor should also expect a 
-%% runtime parameter for each intercept_method().
-%% The rabbit_channel_interceptor needs to return the Component name to find
-%% those runtime parameters. The parameters will be the priorities on which
-%% the interceptors will apply to the specified intercept_method(), this the
-%% user can decide how to compose interceptors provided by plugins.
-get_priority(I, Method, VHost) ->
-    Component = I:priority_param(),
-    Name = a2b(Method),
-    case rabbit_runtime_parameters:value(
-           VHost, Component, Name) of
-        not_found -> ?DEFAULT_PRIORITY;
-        Value     -> Value
-    end.
-
-%% since this code is proliferating everywhere, we might want to add it to rabbit_misc
-a2b(A) -> list_to_binary(atom_to_list(A)).
+%% select the interceptors that apply to intercept_method().
+select(Method)  ->
+    [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor),
+          code:which(M) =/= non_existing,
+          M:applies_to(Method)].
