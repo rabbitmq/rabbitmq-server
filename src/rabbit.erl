@@ -595,12 +595,11 @@ boot_delegate() ->
 
 recover() ->
     rabbit_policy:recover(),
-    ok = rabbit_recovery_indexes:recover(),
+    ok = rabbit_recovery_terms:recover(),
     Qs = rabbit_amqqueue:recover(),
     ok = rabbit_binding:recover(rabbit_exchange:recover(),
                                 [QName || #amqqueue{name = QName} <- Qs]),
-    rabbit_amqqueue:start(Qs),
-    ok = rabbit_recovery_indexes:flush().
+    rabbit_amqqueue:start(Qs).
 
 maybe_insert_default_data() ->
     case rabbit_table:is_empty() of

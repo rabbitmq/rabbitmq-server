@@ -27,7 +27,8 @@
         ('empty' | {rabbit_types:basic_message(), boolean(), Ack})).
 -type(drop_result(Ack) ::
         ('empty' | {rabbit_types:msg_id(), Ack})).
--type(attempt_recovery() :: boolean()).
+-type(recovery_terms() :: [{file:filename(), [term()]}]).
+-type(attempt_recovery() :: {boolean(), recovery_terms()}).
 -type(purged_msg_count() :: non_neg_integer()).
 -type(async_callback() ::
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
@@ -40,7 +41,7 @@
 %% aren't being started at this point, but this call allows the
 %% backing queue to perform any checking necessary for the consistency
 %% of those queues, or initialise any other shared resources.
--callback start([rabbit_amqqueue:name()]) -> 'ok'.
+-callback start([rabbit_amqqueue:name()]) -> rabbit_types:ok(recovery_terms()).
 
 %% Called to tear down any state/resources. NB: Implementations should
 %% not depend on this function being called on shutdown and instead

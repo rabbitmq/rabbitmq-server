@@ -391,12 +391,13 @@
 start(DurableQueues) ->
     {AllTerms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
     start_msg_store(
-      [Ref || Terms <- AllTerms,
+      [Ref || {_, Terms} <- AllTerms,
               begin
                   Ref = proplists:get_value(persistent_ref, Terms),
                   Ref =/= undefined
               end],
-      StartFunState).
+      StartFunState),
+    {ok, AllTerms}.
 
 stop() -> stop_msg_store().
 
@@ -419,7 +420,7 @@ init(Queue, Recover, AsyncCallback) ->
          end,
          fun (MsgIds) -> msg_indices_written_to_disk(AsyncCallback, MsgIds) end).
 
-init(#amqqueue { name = QueueName, durable = IsDurable }, false,
+init(#amqqueue { name = QueueName, durable = IsDurable }, new,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
     init(IsDurable, IndexState, 0, [],
@@ -430,21 +431,17 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, false,
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback));
 
-init(#amqqueue { name = QueueName, durable = true }, true,
+init(#amqqueue { name = QueueName, durable = true }, {_, Terms},
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
-    Terms = rabbit_queue_index:shutdown_terms(QueueName),
-    {PRef, Terms1} =
-        case proplists:get_value(persistent_ref, Terms) of
-            undefined -> {rabbit_guid:gen(), []};
-            PRef1     -> {PRef1, Terms}
-        end,
+    %% Terms = rabbit_queue_index:shutdown_terms(QueueName),
+    {PRef, Recovery, Terms1} = process_recovery_terms(Terms),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
                                              MsgOnDiskFun, AsyncCallback),
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
                                              undefined, AsyncCallback),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
-          QueueName, Terms1,
+          QueueName, {Recovery, Terms1},
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
           fun (MsgId) ->
                   rabbit_msg_store:contains(MsgId, PersistentClient)
@@ -452,6 +449,14 @@ init(#amqqueue { name = QueueName, durable = true }, true,
           MsgIdxOnDiskFun),
     init(true, IndexState, DeltaCount, Terms1,
          PersistentClient, TransientClient).
+
+process_recovery_terms(Recovery=non_clean_shutdown) ->
+    {rabbit_guid:gen(), Recovery, []};
+process_recovery_terms(Terms) ->
+    case proplists:get_value(persistent_ref, Terms) of
+        undefined -> {rabbit_guid:gen(), clean_shutdown, []};
+        PRef1     -> {PRef1, clean_shutdown, Terms}
+    end.
 
 terminate(_Reason, State) ->
     State1 = #vqstate { persistent_count  = PCount,

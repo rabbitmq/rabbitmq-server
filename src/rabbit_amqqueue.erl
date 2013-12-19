@@ -20,7 +20,7 @@
          delete_immediately/1, delete/3, purge/1, forget_all_durable/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
-         assert_equivalence/5,
+         assert_equivalence/5, queue_name_to_dir_name/1,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
@@ -117,6 +117,7 @@
         (rabbit_types:amqqueue())
         -> [{pid(), rabbit_types:ctag(), boolean(),
              rabbit_framing:amqp_table()}]).
+-spec(queue_name_to_dir_name/1 :: (rabbit_types:amqqueue()) -> string()).
 -spec(consumer_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(consumers_all/1 ::
         (rabbit_types:vhost())
@@ -195,13 +196,13 @@ recover() ->
     on_node_down(node()),
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-    ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
+    {ok, Terms} = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
-    recover_durable_queues(DurableQueues).
+    recover_durable_queues(DurableQueues, Terms).
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
@@ -229,10 +230,17 @@ find_durable_queues() ->
                                 node(Pid) == Node]))
       end).
 
-recover_durable_queues(DurableQueues) ->
+recover_durable_queues(DurableQueues, RecoveryTerms) ->
     Qs = [start_queue_process(node(), Q) || Q <- DurableQueues],
-    [Q || Q = #amqqueue{pid = Pid} <- Qs,
-          gen_server2:call(Pid, {init, self()}, infinity) == {new, Q}].
+    [Q || Q <- Qs, queue_init(Q, RecoveryTerms) == {new, Q}].
+
+queue_init(#amqqueue{ pid = Pid, name = Name }, RecoveryTerms) ->
+    RecoveryKey = queue_name_to_dir_name(Name),
+    QueueRecoveryTerms = case lists:keyfind(RecoveryKey, 1, RecoveryTerms) of
+                             {_, Terms} -> Terms;
+                             false      -> non_clean_shutdown
+                         end,
+    gen_server2:call(Pid, {init, {self(), QueueRecoveryTerms}}, infinity).
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
@@ -518,6 +526,10 @@ notify_policy_changed(#amqqueue{pid = QPid}) ->
     gen_server2:cast(QPid, policy_changed).
 
 consumers(#amqqueue{ pid = QPid }) -> delegate:call(QPid, consumers).
+
+queue_name_to_dir_name(Name = #resource { kind = queue }) ->
+    <<Num:128>> = erlang:md5(term_to_binary(Name)),
+    rabbit_misc:format("~.36B", [Num]).
 
 consumer_info_keys() -> ?CONSUMER_INFO_KEYS.
 

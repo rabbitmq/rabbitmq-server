@@ -187,12 +187,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-declare(Recover, From, State = #q{q                   = Q,
-                                  backing_queue       = undefined,
-                                  backing_queue_state = undefined}) ->
-    case rabbit_amqqueue:internal_declare(Q, Recover =/= new) of
+declare(Recover, From,
+        State = #q{q                   = Q,
+                   backing_queue       = undefined,
+                   backing_queue_state = undefined}) ->
+    {IsRecovering, MediatorPid} = recovery_status(Recover),
+    case rabbit_amqqueue:internal_declare(Q, IsRecovering) of
         #amqqueue{} = Q1 ->
-            case matches(Recover, Q, Q1) of
+            case matches(IsRecovering, Q, Q1) of
                 true ->
                     gen_server2:reply(From, {new, Q}),
                     ok = file_handle_cache:register_callback(
@@ -202,7 +204,7 @@ declare(Recover, From, State = #q{q                   = Q,
                                     set_ram_duration_target, [self()]}),
                     BQ = backing_queue_module(Q1),
                     BQS = bq_init(BQ, Q, Recover),
-                    recovery_barrier(Recover),
+                    recovery_barrier(MediatorPid),
                     State1 = process_args_policy(
                                State#q{backing_queue       = BQ,
                                        backing_queue_state = BQS}),
@@ -218,6 +220,11 @@ declare(Recover, From, State = #q{q                   = Q,
         Err ->
             {stop, normal, Err, State}
     end.
+
+recovery_status(new) ->
+    {false, new};
+recovery_status({Recover, _}) ->
+    {true, Recover}.
 
 matches(new, Q1, Q2) ->
     %% i.e. not policy
@@ -254,7 +261,7 @@ decorator_callback(QName, F, A) ->
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
-    BQ:init(Q, Recover =/= new,
+    BQ:init(Q, Recover,
             fun (Mod, Fun) ->
                     rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).

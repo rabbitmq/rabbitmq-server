@@ -24,9 +24,9 @@
 -export([recover/0,
          upgrade_recovery_indexes/0,
          start_link/0,
-         store_recovery_terms/2,
-         read_recovery_terms/1,
-         remove_recovery_terms/1,
+         store/2,
+         read/1,
+         clear/0,
          flush/0]).
 
 -export([init/1,
@@ -43,15 +43,16 @@
 -spec(recover() -> 'ok').
 -spec(upgrade_recovery_indexes() -> 'ok').
 -spec(start_link() -> rabbit_types:ok_pid_or_error()).
--spec(store_recovery_terms(
+-spec(store(
         Name  :: file:filename(),
         Terms :: term()) -> rabbit_types:ok_or_error(term())).
--spec(read_recovery_terms(
+-spec(read(
         file:filename()) ->
              rabbit_types:ok_or_error(not_found)).
--spec(remove_recovery_terms(
-        file:filename()) ->
-             rabbit_types:ok_or_error(not_found)).
+-spec(clear() -> 'ok').
+%-spec(remove_recovery_terms(
+%        file:filename()) ->
+%             rabbit_types:ok_or_error(not_found)).
 
 -endif. % use_specs
 
@@ -76,7 +77,7 @@ upgrade_recovery_indexes() ->
                                       fun(F, Acc) -> [F|Acc] end, []),
         [begin
              {ok, Terms} = rabbit_file:read_term_file(File),
-             ok = store_recovery_terms(File, Terms),
+             ok = store(File, Terms),
              case file:delete(File) of
                  {error, E} ->
                      rabbit_log:warning("Unable to delete recovery index"
@@ -93,20 +94,26 @@ upgrade_recovery_indexes() ->
 start_link() ->
     gen_server:start_link(?MODULE, [], []).
 
-store_recovery_terms(Name, Terms) ->
-    dets:insert(?MODULE, {Name, Terms}).
+store(Name, Terms) ->
+    dets:insert(?MODULE, {scrub(Name), Terms}).
 
-read_recovery_terms(Name) ->
-    case dets:lookup(?MODULE, Name) of
+read(Name) ->
+    case dets:lookup(?MODULE, scrub(Name)) of
         [{_, Terms}] -> {ok, Terms};
         _            -> {error, not_found}
     end.
 
-remove_recovery_terms(Name) ->
-    case dets:member(?MODULE, Name) of
-        true -> dets:delete(?MODULE, Name);
-        _    -> {error, not_found}
-    end.
+scrub(Name) ->
+    filename:basename(Name).
+
+%remove_recovery_terms(Name) ->
+%    case dets:member(?MODULE, Name) of
+%        true -> dets:delete(?MODULE, Name);
+%        _    -> {error, not_found}
+%    end.
+
+clear() ->
+    dets:delete_all_objects(?MODULE).
 
 flush() ->
     dets:sync(?MODULE),
