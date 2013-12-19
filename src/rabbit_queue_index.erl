@@ -362,6 +362,7 @@ bounds(State = #qistate { segments = Segments }) ->
     {LowSeqId, NextSeqId, State}.
 
 recover(DurableQueues) ->
+    rabbit_recovery_terms:recover(),
     DurableDict =
         dict:from_list(
           [ begin
