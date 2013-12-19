@@ -19,6 +19,7 @@
 
 -module(rabbit_channel_interceptor).
 
+-include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
 -export([intercept_method/1]).
@@ -50,6 +51,8 @@ behaviour_info(_Other) ->
 
 %%----------------------------------------------------------------------------
 
+intercept_method(#'basic.publish'{} = M) ->
+    M;
 intercept_method(M) ->
     intercept_method(M, select(M)).
 
