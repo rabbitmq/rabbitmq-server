@@ -1,11 +1,20 @@
+<h1>Top Processes</h1>
+
+<p>
+  Nodes:
+  <% for (var i = 0; i < nodes.length; i++) { %>
+     <a href="#/top/<%= fmt_string(nodes[i].name) %>"><%= nodes[i].name %></a>
+  <% } %>
+</p>
+
 <table class="list updatable">
  <thead>
   <tr>
-    <th>Process</th>
+    <th><%= fmt_sort('Process', 'pid') %></th>
     <th>Description</th>
     <th>Type</th>
     <th><%= fmt_sort('Memory', 'memory') %></th>
-    <th><%= fmt_sort('Reductions / sec', 'reductions') %></th>
+    <th><%= fmt_sort('Reductions / sec', 'reduction_delta') %></th>
     <th>Message queue</th>
     <th>Status</th>
   </tr>
@@ -17,14 +26,10 @@
 %>
   <tr<%= alt_rows(i)%>>
     <td><%= link_pid(process.pid) %></td>
-    <td>
-      <%= fmt_process_name(process) %>
-    </td>
-    <td>
-      <%= fmt_remove_rabbit_prefix(process.name.type) %>
-    </td>
+    <td><%= fmt_process_name(process) %></td>
+    <td><%= fmt_remove_rabbit_prefix(process.name.type) %></td>
     <td><%= fmt_bytes(process.memory * 1.0) %></td>
-    <td class="r"><%= process.reduction_delta %></td>
+    <td class="r"><%= fmt_reduction_delta(process.reduction_delta) %></td>
     <td class="r"><%= process.message_queue_len %></td>
     <td><%= process.status %></td>
   </tr>

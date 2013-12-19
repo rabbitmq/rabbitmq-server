@@ -18,7 +18,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([toplist/3, fmt_all/1, obtain_name/1]).
+-export([toplist/3, fmt_all/1, fmt/1, obtain_name/1]).
 
 toplist(Key, Count, List) ->
     Sorted = lists:sublist(
@@ -38,10 +38,6 @@ fmt_all(Info) -> [{K, fmt(V)} || {K, V} <- Info].
 
 fmt(Pid) when is_pid(Pid) ->
     list_to_binary(pid_to_list(Pid));
-fmt(N) when is_number(N) ->
-    N;
-fmt(L) when is_list(L) ->
-    L;
 fmt(Other) ->
     list_to_binary(rabbit_misc:format("~p", [Other])).
 

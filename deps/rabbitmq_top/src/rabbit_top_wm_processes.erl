@@ -31,16 +31,28 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Sort = case wrq:get_qs_value("sort", ReqData) of
-               "memory" -> memory;
-               _        -> reduction_delta
+               undefined -> reduction_delta;
+               Str       -> list_to_atom(Str)
            end,
     Node = b2a(rabbit_mgmt_util:id(node, ReqData)),
-    rabbit_mgmt_util:reply(fmt(rabbit_top_worker:procs(Node, Sort, 20)),
-                           ReqData, Context).
+    Order = case wrq:get_qs_value("sort_reverse", ReqData) of
+                "true" -> asc;
+                _      -> desc
+            end,
+    rabbit_mgmt_util:reply(procs(Node, Sort, Order), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
 
+%%--------------------------------------------------------------------
+
 b2a(B) -> list_to_atom(binary_to_list(B)).
 
-fmt(Procs) -> [rabbit_top_util:fmt_all(Proc) || Proc <- Procs].
+procs(Node, Sort, Order) ->
+    [fmt(P) || P <- rabbit_top_worker:procs(Node, Sort, Order, 20)].
+
+fmt(Info) ->
+    {pid, Pid} = lists:keyfind(pid, 1, Info),
+    Info1 = lists:keydelete(pid, 1, Info),
+    [{pid,  rabbit_top_util:fmt(Pid)},
+     {name, rabbit_top_util:obtain_name(Pid)} | Info1].

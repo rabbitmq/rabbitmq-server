@@ -24,7 +24,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([procs/3]).
+-export([procs/4, proc/1]).
 
 -define(SERVER, ?MODULE).
 -define(MILLIS, 1000).
@@ -38,8 +38,12 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-procs(Node, Key, Count) ->
-    gen_server:call({?SERVER, Node}, {procs, Key, Count}, infinity).
+
+procs(Node, Key, Rev, Count) ->
+    gen_server:call({?SERVER, Node}, {procs, Key, Rev, Count}, infinity).
+
+proc(Pid) ->
+    gen_server:call({?SERVER, node(Pid)}, {proc, Pid}, infinity).
 
 %%--------------------------------------------------------------------
 
@@ -47,8 +51,11 @@ init([]) ->
     ensure_timer(),
     {ok, #state{procs = procs(dict:new())}}.
 
-handle_call({procs, Key, Count}, _From, State = #state{procs = Procs}) ->
-    {reply, rabbit_top_util:toplist(Key, Count, flatten(Procs)), State}.
+handle_call({procs, Key, Order, Count}, _From, State = #state{procs = Procs}) ->
+    {reply, toplist(Key, Order, Count, flatten(Procs)), State};
+
+handle_call({proc, Pid}, _From, State = #state{procs = Procs}) ->
+    {reply, dict:find(Pid, Procs), State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -96,3 +103,19 @@ flatten(Procs) ->
     dict:fold(fun(Pid, Props, Rest) ->
                       [[{pid, Pid} | Props] | Rest]
               end, [], Procs).
+
+%%--------------------------------------------------------------------
+
+toplist(Key, Order, Count, List) ->
+    RevFun = case Order of
+                 asc  -> fun (L) -> L end;
+                 desc -> fun lists:reverse/1
+             end,
+    Keyed = [toplist(Key, I) || I <- List],
+    Sorted = lists:sublist(RevFun(lists:keysort(1, Keyed)), Count), 
+    [Info || {_, Info} <- Sorted].
+
+toplist(Key, Info) ->
+    {Key, Val} = lists:keyfind(Key, 1, Info),
+    {Val, Info}.
+
