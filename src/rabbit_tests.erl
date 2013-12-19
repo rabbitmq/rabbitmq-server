@@ -2145,12 +2145,12 @@ init_test_queue() ->
 restart_test_queue(Qi) ->
     _ = rabbit_queue_index:terminate([], Qi),
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([test_queue()]),
+    {ok, _} = rabbit_variable_queue:start([test_queue()]),
     init_test_queue().
 
 empty_test_queue() ->
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
     {0, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
@@ -2206,7 +2206,7 @@ test_queue_index_props() ->
       end),
 
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
 
@@ -2330,7 +2330,7 @@ test_queue_index() ->
       end),
 
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
 
@@ -2386,7 +2386,7 @@ with_fresh_variable_queue(Fun) ->
     %% bump_credit messages and we want to ignore them
     spawn_link(fun() ->
                        ok = empty_test_queue(),
-                       VQ = variable_queue_init(test_amqqueue(true), false),
+                       VQ = variable_queue_init(test_amqqueue(true), new),
                        S0 = rabbit_variable_queue:status(VQ),
                        assert_props(S0, [{q1, 0}, {q2, 0},
                                          {delta,
@@ -2775,7 +2775,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
     {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
-    VQ7 = variable_queue_init(test_amqqueue(true), true),
+    VQ7 = variable_queue_init(test_amqqueue(true),
+                              {self(), non_clean_shutdown}),
     {{_Msg1, true, _AckTag1}, VQ8} = rabbit_variable_queue:fetch(true, VQ7),
     Count1 = rabbit_variable_queue:len(VQ8),
     VQ9 = variable_queue_publish(false, 1, VQ8),
@@ -2792,7 +2793,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
         rabbit_variable_queue:requeue(AckTags, VQ3),
     VQ5 = rabbit_variable_queue:timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
-    VQ7 = variable_queue_init(test_amqqueue(true), true),
+    VQ7 = variable_queue_init(test_amqqueue(true),
+                              {self(), non_clean_shutdown}),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
 
@@ -2824,7 +2826,7 @@ test_queue_recover() ->
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
                   rabbit_amqqueue:basic_get(Q1, self(), false, Limiter),
               exit(QPid1, shutdown),
-              VQ1 = variable_queue_init(Q, true),
+              VQ1 = variable_queue_init(Q, {self(), non_clean_shutdown}),
               {{_Msg1, true, _AckTag1}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               CountMinusOne = rabbit_variable_queue:len(VQ2),
