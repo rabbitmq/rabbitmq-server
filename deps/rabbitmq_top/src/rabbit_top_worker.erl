@@ -24,7 +24,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([procs/2]).
+-export([procs/3]).
 
 -define(SERVER, ?MODULE).
 -define(MILLIS, 1000).
@@ -38,8 +38,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-procs(Key, Count) ->
-    gen_server:call(?SERVER, {procs, Key, Count}, infinity).
+procs(Node, Key, Count) ->
+    gen_server:call({?SERVER, Node}, {procs, Key, Count}, infinity).
 
 %%--------------------------------------------------------------------
 

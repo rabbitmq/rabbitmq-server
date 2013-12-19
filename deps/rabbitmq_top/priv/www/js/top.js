@@ -1,11 +1,16 @@
 dispatcher_add(function(sammy) {
     sammy.get('#/top', function() {
-            render({'top': {path:    '/top',
-                            options: {sort:true}}},
+            var nodes = JSON.parse(sync_get('/nodes'));
+            go_to('#/top/' + nodes[0].name);
+        });
+    sammy.get('#/top/:node', function() {
+            render({'top':   {path:    '/top/' + esc(this.params['node']),
+                              options: {sort:true}},
+                    'nodes': '/nodes'},
                     'top', '#/top');
         });
-    sammy.get('#/top/:pid', function() {
-            render({'process': '/top/' + esc(this.params['pid'])},
+    sammy.get('#/process/:pid', function() {
+            render({'process': '/process/' + esc(this.params['pid'])},
                     'process', '#/top');
         });
 
@@ -14,7 +19,7 @@ dispatcher_add(function(sammy) {
 NAVIGATION['Admin'][0]['Top'] = ['#/top', 'administrator'];
 
 function link_pid(name) {
-    return _link_to(name, '#/top/' + esc(name))
+    return _link_to(name, '#/process/' + esc(name))
 }
 
 function fmt_process_name(process) {

@@ -18,24 +18,30 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([toplist/3, obtain_name/1]).
+-export([toplist/3, fmt_all/1, obtain_name/1]).
 
 toplist(Key, Count, List) ->
     Sorted = lists:sublist(
                lists:reverse(
                  lists:keysort(1, [toplist(Key, I) || I <- List])), Count),
-    [fmt_all(Info) || {_, Info} <- Sorted].
+    [add_name(Info) || {_, Info} <- Sorted].
 
 toplist(Key, Info) ->
     {Key, Val} = lists:keyfind(Key, 1, Info),
     {Val, Info}.
 
-fmt_all(Info) ->
+add_name(Info) ->
     {pid, Pid} = lists:keyfind(pid, 1, Info),
-    [{name, obtain_name(Pid)} | [{K, fmt(V)} || {K, V} <- Info]].
+    [{name, obtain_name(Pid)} | Info].
+
+fmt_all(Info) -> [{K, fmt(V)} || {K, V} <- Info].
 
 fmt(Pid) when is_pid(Pid) ->
     list_to_binary(pid_to_list(Pid));
+fmt(N) when is_number(N) ->
+    N;
+fmt(L) when is_list(L) ->
+    L;
 fmt(Other) ->
     list_to_binary(rabbit_misc:format("~p", [Other])).
 
@@ -116,4 +122,4 @@ initial_call_dict(Pid) ->
     end.
 
 guess_initial_call({mochiweb_acceptor, _F, _A}) -> mochiweb_http;
-guess_initial_call(MFA)                         -> fail.
+guess_initial_call(_MFA)                        -> fail.

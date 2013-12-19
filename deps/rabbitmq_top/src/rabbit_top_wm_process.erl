@@ -33,7 +33,8 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(process(ReqData), ReqData, Context).
+    rabbit_mgmt_util:reply(rabbit_top_util:fmt_all(process(ReqData)),
+                           ReqData, Context).
 
 resource_exists(ReqData, Context) ->
     {case process(ReqData) of

@@ -34,7 +34,13 @@ to_json(ReqData, Context) ->
                "memory" -> memory;
                _        -> reduction_delta
            end,
-    rabbit_mgmt_util:reply(rabbit_top_worker:procs(Sort, 20), ReqData, Context).
+    Node = b2a(rabbit_mgmt_util:id(node, ReqData)),
+    rabbit_mgmt_util:reply(fmt(rabbit_top_worker:procs(Node, Sort, 20)),
+                           ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+
+b2a(B) -> list_to_atom(binary_to_list(B)).
+
+fmt(Procs) -> [rabbit_top_util:fmt_all(Proc) || Proc <- Procs].
