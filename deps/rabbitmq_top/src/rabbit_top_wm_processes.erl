@@ -39,7 +39,9 @@ to_json(ReqData, Context) ->
                 "true" -> asc;
                 _      -> desc
             end,
-    rabbit_mgmt_util:reply(procs(Node, Sort, Order), ReqData, Context).
+    rabbit_mgmt_util:reply([{node,      Node},
+                            {processes, procs(Node, Sort, Order)}],
+                           ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).

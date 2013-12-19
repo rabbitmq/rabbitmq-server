@@ -4,9 +4,9 @@ dispatcher_add(function(sammy) {
             go_to('#/top/' + nodes[0].name);
         });
     sammy.get('#/top/:node', function() {
-            render({'processes': {path:    '/top/' + esc(this.params['node']),
-                                  options: {sort:true}},
-                    'nodes':     '/nodes'},
+            render({'top':   {path:    '/top/' + esc(this.params['node']),
+                              options: {sort:true}},
+                    'nodes': '/nodes'},
                     'processes', '#/top');
         });
     sammy.get('#/process/:pid', function() {
@@ -16,6 +16,10 @@ dispatcher_add(function(sammy) {
 });
 
 NAVIGATION['Admin'][0]['Top Processes'] = ['#/top', 'administrator'];
+
+$('select#top-node').live('change', function() {
+    go_to('#/top/' + $(this).val());
+});
 
 function link_pid(name) {
     return _link_to(name, '#/process/' + esc(name))

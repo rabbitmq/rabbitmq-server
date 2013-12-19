@@ -1,10 +1,12 @@
-<h1>Top Processes</h1>
+<h1>Top Processes: <b><%= top.node %></b></h1>
 
 <p>
-  Nodes:
+  Node:
+  <select id="top-node">
   <% for (var i = 0; i < nodes.length; i++) { %>
-     <a href="#/top/<%= fmt_string(nodes[i].name) %>"><%= nodes[i].name %></a>
+     <option name="#/top/<%= fmt_string(nodes[i].name) %>"<% if (nodes[i].name == top.node) { %>selected="selected"<% } %>><%= nodes[i].name %></option>
   <% } %>
+  </select>
 </p>
 
 <table class="list updatable">
@@ -21,8 +23,8 @@
  </thead>
  <tbody>
 <%
- for (var i = 0; i < processes.length; i++) {
-    var process = processes[i];
+ for (var i = 0; i < top.processes.length; i++) {
+    var process = top.processes[i];
 %>
   <tr<%= alt_rows(i)%>>
     <td><%= link_pid(process.pid) %></td>
