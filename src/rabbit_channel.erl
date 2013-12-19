@@ -593,7 +593,10 @@ handle_expand_shortcuts(#'queue.unbind'{queue = QueueNameBin,
                         State) ->
     {DestinationName, ActualRoutingKey} =
         expand_binding(queue, QueueNameBin, RoutingKey, State),
-    Method#'queue.bind'{queue = DestinationName, routing_key = ActualRoutingKey}.
+    Method#'queue.bind'{queue = DestinationName, routing_key = ActualRoutingKey};
+handle_expand_shortcuts(M, _State) ->
+    M.
+
 
 check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
     rabbit_misc:protocol_error(
