@@ -18,7 +18,9 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([toplist/3, fmt_all/1, fmt/1, obtain_name/1]).
+-export([toplist/3, fmt_all/1, fmt/1, obtain_name/1, process_info/2]).
+
+-compile({no_auto_import,[process_info/2]}).
 
 toplist(Key, Count, List) ->
     Sorted = lists:sublist(
@@ -119,3 +121,7 @@ initial_call_dict(Pid) ->
 
 guess_initial_call({mochiweb_acceptor, _F, _A}) -> mochiweb_http;
 guess_initial_call(_MFA)                        -> fail.
+
+
+process_info(Pid, Info) ->
+    rpc:call(node(Pid), erlang, process_info, [Pid, Info]).

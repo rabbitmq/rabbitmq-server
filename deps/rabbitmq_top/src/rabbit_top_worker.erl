@@ -112,7 +112,7 @@ toplist(Key, Order, Count, List) ->
                  desc -> fun lists:reverse/1
              end,
     Keyed = [toplist(Key, I) || I <- List],
-    Sorted = lists:sublist(RevFun(lists:keysort(1, Keyed)), Count), 
+    Sorted = lists:sublist(RevFun(lists:keysort(1, Keyed)), Count),
     [Info || {_, Info} <- Sorted].
 
 toplist(Key, Info) ->

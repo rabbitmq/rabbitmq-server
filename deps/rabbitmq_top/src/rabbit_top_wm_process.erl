@@ -54,7 +54,8 @@ proc(ReqData) ->
                    {ok, Base} -> [{pid,  PidBin},
                                   {name, rabbit_top_util:obtain_name(Pid)}] ++
                                      Base ++
-                                     case process_info(Pid, ?ADDITIONAL_INFO) of
+                                     case rabbit_top_util:process_info(
+                                            Pid, ?ADDITIONAL_INFO) of
                                          undefined -> [];
                                          Props     -> fmt(Props)
                                      end;
