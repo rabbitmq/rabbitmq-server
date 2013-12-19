@@ -806,11 +806,11 @@ handle_method0(MethodName, FieldsBin,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
                        State)
-    catch exit:#amqp_error{method = none} = Reason ->
-            handle_exception(State, 0, Reason#amqp_error{method = MethodName});
-          throw:{writer_inet_error, closed} ->
+    catch throw:{writer_inet_error, closed} ->
             maybe_emit_stats(State),
             throw(connection_closed_abruptly);
+          exit:#amqp_error{method = none} = Reason ->
+            handle_exception(State, 0, Reason#amqp_error{method = MethodName});
           Type:Reason ->
             Stack = erlang:get_stacktrace(),
             handle_exception(State, 0, {Type, Reason, MethodName, Stack})
