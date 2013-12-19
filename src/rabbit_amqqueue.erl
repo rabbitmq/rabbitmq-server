@@ -117,7 +117,7 @@
         (rabbit_types:amqqueue())
         -> [{pid(), rabbit_types:ctag(), boolean(),
              rabbit_framing:amqp_table()}]).
--spec(queue_name_to_dir_name/1 :: (rabbit_types:amqqueue()) -> string()).
+-spec(queue_name_to_dir_name/1 :: (rabbit_types:r('queue')) -> string()).
 -spec(consumer_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(consumers_all/1 ::
         (rabbit_types:vhost())

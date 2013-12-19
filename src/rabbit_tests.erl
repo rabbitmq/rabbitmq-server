@@ -2129,12 +2129,10 @@ test_queue() ->
 
 init_test_queue() ->
     TestQueue = test_queue(),
-    %% TODO: shutdown_terms is no longer relevant - rework this test case
-    Terms = rabbit_queue_index:shutdown_terms(TestQueue),
-    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:gen()),
+    PRef = rabbit_guid:gen(),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
-            TestQueue, {clean_shutdown, Terms}, false,
+            TestQueue, {clean_shutdown, []}, false,
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,

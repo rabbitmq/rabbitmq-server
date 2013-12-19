@@ -27,8 +27,8 @@
         ('empty' | {rabbit_types:basic_message(), boolean(), Ack})).
 -type(drop_result(Ack) ::
         ('empty' | {rabbit_types:msg_id(), Ack})).
--type(recovery_terms() :: [{file:filename(), [term()]}]).
--type(attempt_recovery() :: {boolean(), recovery_terms()}).
+-type(recovery_terms() :: [term()] | 'non_clean_shutdown').
+-type(recovery_info() :: 'new' | {pid(), recovery_terms()}).
 -type(purged_msg_count() :: non_neg_integer()).
 -type(async_callback() ::
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
@@ -52,15 +52,16 @@
 %%
 %% Takes
 %% 1. the amqqueue record
-%% 2. a boolean indicating whether the queue is an existing queue that
-%%    should be recovered
+%% 2. a term indicating whether the queue is an existing queue that
+%%    should be recovered or not, possibly containing recovery terms
+%%    to be used in the recovery process
 %% 3. an asynchronous callback which accepts a function of type
 %%    backing-queue-state to backing-queue-state. This callback
 %%    function can be safely invoked from any process, which makes it
 %%    useful for passing messages back into the backing queue,
 %%    especially as the backing queue does not have control of its own
 %%    mailbox.
--callback init(rabbit_types:amqqueue(), attempt_recovery(),
+-callback init(rabbit_types:amqqueue(), recovery_info(),
                async_callback()) -> state().
 
 %% Called on queue shutdown when queue isn't being deleted.

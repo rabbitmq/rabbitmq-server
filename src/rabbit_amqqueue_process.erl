@@ -226,7 +226,7 @@ recovery_status(new) ->
 recovery_status({Recover, _}) ->
     {true, Recover}.
 
-matches(new, Q1, Q2) ->
+matches(false, Q1, Q2) ->
     %% i.e. not policy
     Q1#amqqueue.name            =:= Q2#amqqueue.name            andalso
     Q1#amqqueue.durable         =:= Q2#amqqueue.durable         andalso

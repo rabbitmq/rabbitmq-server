@@ -221,7 +221,8 @@
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
+-spec(recover/1 :: ([rabbit_amqqueue:name()]) ->
+                        {[{file:filename(), [any()]}], {walker(A), A}}).
 
 -spec(scan/3 :: (file:filename(),
                  fun ((seq_id(), rabbit_types:msg_id(),
