@@ -706,7 +706,14 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
     end.
 
 call(Node, {Mod, Fun, Args}) ->
-    rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary/1, Args)).
+    rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args)).
+
+list_to_binary_utf8(L) ->
+    B = list_to_binary(L),
+    case rabbit_binary_parser:validate_utf8(B) of
+        ok    -> B;
+        error -> throw({error, {not_utf_8, L}})
+    end.
 
 rpc_call(Node, Mod, Fun, Args) ->
     rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
