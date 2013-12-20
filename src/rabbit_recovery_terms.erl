@@ -120,6 +120,7 @@ flush() ->
     ok.
 
 init(_) ->
+    process_flag(trap_exit, true),
     create_table(),
     {ok, undefined}.
 
@@ -133,7 +134,8 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, _State) ->
-    ok = dets:sync(?MODULE).
+    ok = dets:sync(?MODULE),
+    ok = dets:close(?MODULE).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
