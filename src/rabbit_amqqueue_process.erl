@@ -619,7 +619,7 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                                end},
     case rabbit_queue_consumers:erase_ch(DownPid, Consumers) of
         not_found ->
-            {ok, State};
+            {ok, State1};
         {ChAckTags, ChCTags, Consumers1} ->
             QName = qname(State1),
             [emit_consumer_deleted(DownPid, CTag, QName) || CTag <- ChCTags],
