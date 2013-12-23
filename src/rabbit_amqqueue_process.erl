@@ -235,10 +235,11 @@ notify_decorators(Event, Props, State) when Event =:= startup;
 notify_decorators(Event, Props, State = #q{active_consumers    = ACs,
                                            backing_queue       = BQ,
                                            backing_queue_state = BQS}) ->
-    decorator_callback(
-      qname(State), notify,
-      [Event, [{max_active_consumer_priority, priority_queue:highest(ACs)},
-               {is_empty,                     BQ:is_empty(BQS)} | Props]]).
+    P = priority_queue:highest(ACs),
+    decorator_callback(qname(State), notify,
+                       [Event, [{max_active_consumer_priority, P},
+                                {is_empty, BQ:is_empty(BQS)} |
+                                Props]]).
 
 decorator_callback(QName, F, A) ->
     %% Look up again in case policy and hence decorators have changed
@@ -1332,11 +1333,12 @@ handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
     QName = qname(State),
+    AllConsumers = consumers(State),
     case Exclusive of
         none       -> [emit_consumer_created(
                          Ch, CTag, false, AckRequired, QName, Args) ||
-                          {Ch, CTag, AckRequired, Args} <- consumers(State)];
-        {Ch, CTag} -> [{Ch, CTag, AckRequired, Args}] = consumers(State),
+                          {Ch, CTag, AckRequired, Args} <- AllConsumers];
+        {Ch, CTag} -> [{Ch, CTag, AckRequired, Args}] = AllConsumers,
                       emit_consumer_created(
                         Ch, CTag, true, AckRequired, QName, Args)
     end,
