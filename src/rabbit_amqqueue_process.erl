@@ -323,8 +323,8 @@ terminate_shutdown(Fun, State) ->
         _         -> ok = rabbit_memory_monitor:deregister(self()),
                      QName = qname(State),
                      notify_decorators(shutdown, [], State),
-                     [emit_consumer_deleted(Ch, CTag, QName)
-                      || {Ch, CTag, _} <- consumers(State1)],
+                     [emit_consumer_deleted(Ch, CTag, QName) ||
+                         {Ch, CTag, _} <- consumers(State1)],
                      State1#q{backing_queue_state = Fun(BQS)}
     end.
 
@@ -582,9 +582,9 @@ discard(#delivery{sender     = SenderPid,
     State1#q{backing_queue_state = BQS1}.
 
 run_message_queue(State) ->
-    {_IsEmpty1, State1} = deliver_msgs_to_consumers(
-                            fun deliver_from_queue_deliver/2,
-                            is_empty(State), State),
+    {_Active, State1} = deliver_msgs_to_consumers(
+                          fun deliver_from_queue_deliver/2,
+                          is_empty(State), State),
     State1.
 
 add_consumer({ChPid, Consumer = #consumer{args = Args}}, ActiveConsumers) ->
@@ -627,7 +627,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
         {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             BQS1 = BQ:publish(Message, Props, Delivered, SenderPid, BQS),
             {Dropped, State3 = #q{backing_queue_state = BQS2}} =
-              maybe_drop_head(State2#q{backing_queue_state = BQS1}),
+                maybe_drop_head(State2#q{backing_queue_state = BQS1}),
             QLen = BQ:len(BQS2),
             %% optimisation: it would be perfectly safe to always
             %% invoke drop_expired_msgs here, but that is expensive so
@@ -1411,21 +1411,21 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     noreply(State);
 
 handle_cast(start_mirroring, State = #q{backing_queue       = BQ,
-					backing_queue_state = BQS}) ->
+                                        backing_queue_state = BQS}) ->
     %% lookup again to get policy for init_with_existing_bq
     {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
     true = BQ =/= rabbit_mirror_queue_master, %% assertion
     BQ1 = rabbit_mirror_queue_master,
     BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
     noreply(State#q{backing_queue       = BQ1,
-		    backing_queue_state = BQS1});
+                    backing_queue_state = BQS1});
 
 handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
-				       backing_queue_state = BQS}) ->
+                                       backing_queue_state = BQS}) ->
     BQ = rabbit_mirror_queue_master, %% assertion
     {BQ1, BQS1} = BQ:stop_mirroring(BQS),
     noreply(State#q{backing_queue       = BQ1,
-		    backing_queue_state = BQS1});
+                    backing_queue_state = BQS1});
 
 handle_cast({credit, ChPid, CTag, Credit, Drain},
             State = #q{backing_queue       = BQ,
