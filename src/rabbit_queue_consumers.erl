@@ -116,7 +116,7 @@ record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
     update_ch_record(C#cr{acktags = queue:in(AckTag, ChAckTags)}),
     ok.
-                             
+
 subtract_acks(ChPid, AckTags) ->
     case lookup_ch(ChPid) of
         not_found ->
