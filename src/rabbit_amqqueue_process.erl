@@ -20,7 +20,6 @@
 
 -behaviour(gen_server2).
 
--define(UNSENT_MESSAGE_LIMIT,          200).
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
@@ -38,7 +37,7 @@
             has_had_consumers,
             backing_queue,
             backing_queue_state,
-            active_consumers,
+            consumers,
             consumer_use,
             expires,
             sync_timer_ref,
@@ -56,21 +55,6 @@
             args_policy_version,
             status
            }).
-
--record(consumer, {tag, ack_required, args}).
-
-%% These are held in our process dictionary
--record(cr, {ch_pid,
-             monitor_ref,
-             acktags,
-             consumer_count,
-             %% Queue of {ChPid, #consumer{}} for consumers which have
-             %% been blocked for any reason
-             blocked_consumers,
-             %% The limiter itself
-             limiter,
-             %% Internal flow control for queue -> writer
-             unsent_message_count}).
 
 %%----------------------------------------------------------------------------
 
@@ -150,7 +134,7 @@ init_state(Q) ->
     State = #q{q                   = Q,
                exclusive_consumer  = none,
                has_had_consumers   = false,
-               active_consumers    = priority_queue:new(),
+               consumers           = rabbit_queue_consumers:new(),
                consumer_use        = {inactive, now_micros(), 0, 0.0},
                senders             = pmon:new(delegate),
                msg_id_to_channel   = gb_trees:empty(),
@@ -235,10 +219,10 @@ notify_decorators(Event, Props, State) when Event =:= startup;
                                             Event =:= shutdown ->
     decorator_callback(qname(State), Event, Props);
 
-notify_decorators(Event, Props, State = #q{active_consumers    = ACs,
+notify_decorators(Event, Props, State = #q{consumers           = Consumers,
                                            backing_queue       = BQ,
                                            backing_queue_state = BQS}) ->
-    P = priority_queue:highest(ACs),
+    P = rabbit_queue_consumers:max_active_priority(Consumers),
     decorator_callback(qname(State), notify,
                        [Event, [{max_active_consumer_priority, P},
                                 {is_empty, BQ:is_empty(BQS)} |
@@ -316,7 +300,7 @@ init_max_length(MaxLen, State) ->
     State1.
 
 terminate_shutdown(Fun, State) ->
-    State1 = #q{backing_queue_state = BQS} =
+    State1 = #q{backing_queue_state = BQS, consumers = Consumers} =
         lists:foldl(fun (F, S) -> F(S) end, State,
                     [fun stop_sync_timer/1,
                      fun stop_rate_timer/1,
@@ -328,7 +312,8 @@ terminate_shutdown(Fun, State) ->
                      QName = qname(State),
                      notify_decorators(shutdown, [], State),
                      [emit_consumer_deleted(Ch, CTag, QName) ||
-                         {Ch, CTag, _} <- consumers(State1)],
+                         {Ch, CTag, _, _} <-
+                             rabbit_queue_consumers:all(Consumers)],
                      State1#q{backing_queue_state = Fun(BQS)}
     end.
 
@@ -411,130 +396,30 @@ stop_ttl_timer(State) -> rabbit_misc:stop_timer(State, #q.ttl_timer_ref).
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #q.stats_timer, emit_stats).
 
-assert_invariant(State = #q{active_consumers = AC}) ->
-    true = (priority_queue:is_empty(AC) orelse is_empty(State)).
+assert_invariant(State = #q{consumers = Consumers}) ->
+    true = (rabbit_queue_consumers:inactive(Consumers) orelse is_empty(State)).
 
 is_empty(#q{backing_queue = BQ, backing_queue_state = BQS}) -> BQ:is_empty(BQS).
-
-lookup_ch(ChPid) ->
-    case get({ch, ChPid}) of
-        undefined -> not_found;
-        C         -> C
-    end.
-
-ch_record(ChPid, LimiterPid) ->
-    Key = {ch, ChPid},
-    case get(Key) of
-        undefined -> MonitorRef = erlang:monitor(process, ChPid),
-                     Limiter = rabbit_limiter:client(LimiterPid),
-                     C = #cr{ch_pid               = ChPid,
-                             monitor_ref          = MonitorRef,
-                             acktags              = queue:new(),
-                             consumer_count       = 0,
-                             blocked_consumers    = priority_queue:new(),
-                             limiter              = Limiter,
-                             unsent_message_count = 0},
-                     put(Key, C),
-                     C;
-        C = #cr{} -> C
-    end.
-
-update_ch_record(C = #cr{consumer_count       = ConsumerCount,
-                         acktags              = ChAckTags,
-                         unsent_message_count = UnsentMessageCount}) ->
-    case {queue:is_empty(ChAckTags), ConsumerCount, UnsentMessageCount} of
-        {true, 0, 0} -> ok = erase_ch_record(C);
-        _            -> ok = store_ch_record(C)
-    end,
-    C.
-
-store_ch_record(C = #cr{ch_pid = ChPid}) ->
-    put({ch, ChPid}, C),
-    ok.
-
-erase_ch_record(#cr{ch_pid = ChPid, monitor_ref = MonitorRef}) ->
-    erlang:demonitor(MonitorRef),
-    erase({ch, ChPid}),
-    ok.
-
-all_ch_record() -> [C || {{ch, _}, C} <- get()].
-
-block_consumer(C = #cr{blocked_consumers = Blocked},
-               {_ChPid, #consumer{tag = CTag}} = QEntry, State) ->
-    update_ch_record(C#cr{blocked_consumers = add_consumer(QEntry, Blocked)}),
-    notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State).
-
-is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
-    Count >= ?UNSENT_MESSAGE_LIMIT orelse rabbit_limiter:is_suspended(Limiter).
 
 maybe_send_drained(WasEmpty, State) ->
     case (not WasEmpty) andalso is_empty(State) of
         true  -> notify_decorators(queue_empty, [], State),
-                 [send_drained(C) || C <- all_ch_record()];
+                 rabbit_queue_consumers:send_drained();
         false -> ok
     end,
     State.
 
-send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
-    case rabbit_limiter:drained(Limiter) of
-        {[], Limiter}          -> ok;
-        {CTagCredit, Limiter2} -> rabbit_channel:send_drained(
-                                    ChPid, CTagCredit),
-                                  update_ch_record(C#cr{limiter = Limiter2})
+deliver_msgs_to_consumers(DeliverFun, Stop, State) ->
+    {Active, Blocked, State1, Consumers1} =
+        rabbit_queue_consumers:deliver(DeliverFun, Stop, qname(State), State,
+                                       State#q.consumers),
+    State2 = State1#q{consumers = Consumers1},
+    [notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State2) ||
+        {_ChPid, CTag} <- Blocked],
+    case Active of
+        true  -> {true, State2};
+        false -> {false, update_consumer_use(State2, inactive)}
     end.
-
-deliver_msgs_to_consumers(_DeliverFun, true, State) ->
-    {true, State};
-deliver_msgs_to_consumers(DeliverFun, false,
-                          State = #q{active_consumers = ActiveConsumers}) ->
-    case priority_queue:out_p(ActiveConsumers) of
-        {empty, _} ->
-            {false, update_consumer_use(State, inactive)};
-        {{value, QEntry, Priority}, Tail} ->
-            {Stop, State1} = deliver_msg_to_consumer(
-                               DeliverFun, QEntry, Priority,
-                               State#q{active_consumers = Tail}),
-            deliver_msgs_to_consumers(DeliverFun, Stop, State1)
-    end.
-
-deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, Priority, State) ->
-    C = lookup_ch(ChPid),
-    case is_ch_blocked(C) of
-        true  -> block_consumer(C, E, State),
-                 {false, State};
-        false -> case rabbit_limiter:can_send(C#cr.limiter,
-                                              Consumer#consumer.ack_required,
-                                              Consumer#consumer.tag) of
-                     {suspend, Limiter} ->
-                         block_consumer(C#cr{limiter = Limiter}, E, State),
-                         {false, State};
-                     {continue, Limiter} ->
-                         AC1 = priority_queue:in(E, Priority,
-                                                 State#q.active_consumers),
-                         deliver_msg_to_consumer0(
-                           DeliverFun, Consumer, C#cr{limiter = Limiter},
-                           State#q{active_consumers = AC1})
-                 end
-    end.
-
-deliver_msg_to_consumer0(DeliverFun,
-                         #consumer{tag          = ConsumerTag,
-                                   ack_required = AckRequired},
-                         C = #cr{ch_pid               = ChPid,
-                                 acktags              = ChAckTags,
-                                 unsent_message_count = Count},
-                         State = #q{q = #amqqueue{name = QName}}) ->
-    {{Message, IsDelivered, AckTag}, Stop, State1} =
-        DeliverFun(AckRequired, State),
-    rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
-                           {QName, self(), AckTag, IsDelivered, Message}),
-    ChAckTags1 = case AckRequired of
-                     true  -> queue:in(AckTag, ChAckTags);
-                     false -> ChAckTags
-                 end,
-    update_ch_record(C#cr{acktags              = ChAckTags1,
-                          unsent_message_count = Count + 1}),
-    {Stop, State1}.
 
 update_consumer_use(State = #q{consumer_use = CUInfo}, Use) ->
     State#q{consumer_use = update_consumer_use1(CUInfo, Use)}.
@@ -611,13 +496,6 @@ run_message_queue(State) ->
                                   {Result, is_empty(State2), State2}
                           end, is_empty(State), State),
     State3.
-
-add_consumer({ChPid, Consumer = #consumer{args = Args}}, ActiveConsumers) ->
-    Priority = case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
-                   {_, P} -> P;
-                   _      -> 0
-               end,
-    priority_queue:in({ChPid, Consumer}, Priority, ActiveConsumers).
 
 attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
@@ -714,56 +592,22 @@ requeue(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
                   fun (State1) -> requeue_and_run(AckTags, State1) end).
 
-remove_consumer(ChPid, ConsumerTag, Queue) ->
-    priority_queue:filter(fun ({CP, #consumer{tag = CTag}}) ->
-                                  (CP /= ChPid) or (CTag /= ConsumerTag)
-                          end, Queue).
-
-remove_consumers(ChPid, Queue, QName) ->
-    priority_queue:filter(fun ({CP, #consumer{tag = CTag}}) when CP =:= ChPid ->
-                                  emit_consumer_deleted(ChPid, CTag, QName),
-                                  false;
-                              (_) ->
-                                  true
-                          end, Queue).
-
-possibly_unblock(State, ChPid, Update) ->
-    case lookup_ch(ChPid) of
-        not_found -> State;
-        C         -> C1 = Update(C),
-                     case is_ch_blocked(C) andalso not is_ch_blocked(C1) of
-                         false -> update_ch_record(C1),
-                                  State;
-                         true  -> unblock(State, C1)
-                     end
-    end.
-
-unblock(State, C = #cr{limiter = Limiter}) ->
-    case lists:partition(
-           fun({_P, {_ChPid, #consumer{tag = CTag}}}) ->
-                   rabbit_limiter:is_consumer_blocked(Limiter, CTag)
-           end, priority_queue:to_list(C#cr.blocked_consumers)) of
-        {_, []} ->
-            update_ch_record(C),
+possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
+    case rabbit_queue_consumers:possibly_unblock(Update, ChPid, Consumers) of
+        unchanged ->
             State;
-        {Blocked, Unblocked} ->
-            BlockedQ   = priority_queue:from_list(Blocked),
-            UnblockedQ = priority_queue:from_list(Unblocked),
-            update_ch_record(C#cr{blocked_consumers = BlockedQ}),
-            AC1 = priority_queue:join(State#q.active_consumers, UnblockedQ),
-            State1 = update_consumer_use(State#q{active_consumers = AC1},
-                                         active),
-            [notify_decorators(
-               consumer_unblocked, [{consumer_tag, CTag}], State1) ||
-                {_P, {_ChPid, #consumer{tag = CTag}}} <- Unblocked],
-            run_message_queue(State1)
+        {unblocked, UnblockedCTags, Consumers1} ->
+            [notify_decorators(consumer_unblocked, [{consumer_tag, CTag}],
+                               State) || CTag <- UnblockedCTags],
+            run_message_queue(
+              update_consumer_use(State#q{consumers = Consumers1}, active))
     end.
 
 should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
 should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
-handle_ch_down(DownPid, State = #q{active_consumers   = AC,
+handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                                    exclusive_consumer = Holder,
                                    senders            = Senders}) ->
     State1 = State#q{senders = case pmon:is_monitored(DownPid, Senders) of
@@ -771,25 +615,21 @@ handle_ch_down(DownPid, State = #q{active_consumers   = AC,
                                    true  -> credit_flow:peer_down(DownPid),
                                             pmon:demonitor(DownPid, Senders)
                                end},
-    case lookup_ch(DownPid) of
+    case rabbit_queue_consumers:erase_ch(DownPid, Consumers) of
         not_found ->
             {ok, State1};
-        C = #cr{ch_pid            = ChPid,
-                acktags           = ChAckTags,
-                blocked_consumers = Blocked} ->
-            QName = qname(State),
-            AC1 = remove_consumers(ChPid, AC,      QName),
-            _   = remove_consumers(ChPid, Blocked, QName), %% for stats emission
-            ok = erase_ch_record(C),
+        {ChAckTags, ChCTags, Consumers1} ->
+            QName = qname(State1),
+            [emit_consumer_deleted(DownPid, CTag, QName) || CTag <- ChCTags],
             Holder1 = case Holder of
                           {DownPid, _} -> none;
                           Other        -> Other
                       end,
-            State2 = State1#q{active_consumers   = AC1,
+            State2 = State1#q{consumers          = Consumers1,
                               exclusive_consumer = Holder1},
             case should_auto_delete(State2) of
                 true  -> {stop, State2};
-                false -> {ok, requeue_and_run(queue:to_list(ChAckTags),
+                false -> {ok, requeue_and_run(ChAckTags,
                                               ensure_expiry_timer(State2))}
             end
     end.
@@ -804,10 +644,7 @@ check_exclusive_access(none, true, State) ->
         false -> in_use
     end.
 
-consumer_count() ->
-    lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
-
-is_unused(_State) -> consumer_count() == 0.
+is_unused(_State) -> rabbit_queue_consumers:count() == 0.
 
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
@@ -819,23 +656,9 @@ backing_queue_timeout(State = #q{backing_queue       = BQ,
     State#q{backing_queue_state = BQ:timeout(BQS)}.
 
 subtract_acks(ChPid, AckTags, State, Fun) ->
-    case lookup_ch(ChPid) of
-        not_found ->
-            State;
-        C = #cr{acktags = ChAckTags} ->
-            update_ch_record(
-              C#cr{acktags = subtract_acks(AckTags, [], ChAckTags)}),
-            Fun(State)
-    end.
-
-subtract_acks([], [], AckQ) ->
-    AckQ;
-subtract_acks([], Prefix, AckQ) ->
-    queue:join(queue:from_list(lists:reverse(Prefix)), AckQ);
-subtract_acks([T | TL] = AckTags, Prefix, AckQ) ->
-    case queue:out(AckQ) of
-        {{value,  T}, QTail} -> subtract_acks(TL,             Prefix, QTail);
-        {{value, AT}, QTail} -> subtract_acks(AckTags, [AT | Prefix], QTail)
+    case rabbit_queue_consumers:subtract_acks(ChPid, AckTags) of
+        not_found -> State;
+        ok        -> Fun(State)
     end.
 
 message_properties(Message, Confirm, #q{ttl = TTL}) ->
@@ -1056,14 +879,14 @@ i(exclusive_consumer_tag, #q{exclusive_consumer = {_ChPid, ConsumerTag}}) ->
 i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:len(BQS);
 i(messages_unacknowledged, _) ->
-    lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]);
+    rabbit_queue_consumers:unacknowledged_message_count();
 i(messages, State) ->
     lists:sum([i(Item, State) || Item <- [messages_ready,
                                           messages_unacknowledged]]);
 i(consumers, _) ->
-    consumer_count();
+    rabbit_queue_consumers:count();
 i(consumer_utilisation, #q{consumer_use = ConsumerUse}) ->
-    case consumer_count() of
+    case rabbit_queue_consumers:count() of
         0 -> '';
         _ -> case ConsumerUse of
                  {active, Since, Avg} ->
@@ -1095,17 +918,6 @@ i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
 i(Item, _) ->
     throw({bad_argument, Item}).
-
-consumers(#q{active_consumers = ActiveConsumers}) ->
-    lists:foldl(fun (C, Acc) -> consumers(C#cr.blocked_consumers, Acc) end,
-                consumers(ActiveConsumers, []), all_ch_record()).
-
-consumers(Consumers, Acc) ->
-    priority_queue:fold(
-      fun ({ChPid, Consumer}, _P, Acc1) ->
-              #consumer{tag = CTag, ack_required = Ack, args = Args} = Consumer,
-              [{ChPid, CTag, Ack, Args} | Acc1]
-      end, Acc, Consumers).
 
 emit_stats(State) ->
     emit_stats(State, []).
@@ -1195,8 +1007,8 @@ handle_call({info, Items}, _From, State) ->
     catch Error -> reply({error, Error}, State)
     end;
 
-handle_call(consumers, _From, State) ->
-    reply(consumers(State), State);
+handle_call(consumers, _From, State = #q{consumers = Consumers}) ->
+    reply(rabbit_queue_consumers:all(Consumers), State);
 
 handle_call({deliver, Delivery, Delivered}, From, State) ->
     %% Synchronous, "mandatory" deliver mode.
@@ -1224,10 +1036,8 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
         {{Message, IsDelivered, AckTag},
          #q{backing_queue = BQ, backing_queue_state = BQS} = State2} ->
             case AckRequired of
-                true  -> C = #cr{acktags = ChAckTags} =
-                             ch_record(ChPid, LimiterPid),
-                         ChAckTags1 = queue:in(AckTag, ChAckTags),
-                         update_ch_record(C#cr{acktags = ChAckTags1});
+                true  -> ok = rabbit_queue_consumers:record_ack(
+                                ChPid, LimiterPid, AckTag);
                 false -> ok
             end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
@@ -1236,39 +1046,21 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
              ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg},
-            _From, State = #q{active_consumers   = AC,
+            _From, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
         in_use -> reply({error, exclusive_consume_unavailable}, State);
-        ok     -> C = #cr{consumer_count = Count,
-                          limiter        = Limiter} =
-                      ch_record(ChPid, LimiterPid),
-                  Limiter1 = case LimiterActive of
-                                 true  -> rabbit_limiter:activate(Limiter);
-                                 false -> Limiter
-                             end,
-                  Limiter2 = case CreditArgs of
-                                 none         -> Limiter1;
-                                 {Crd, Drain} -> rabbit_limiter:credit(
-                                                   Limiter1, ConsumerTag,
-                                                   Crd, Drain)
-                             end,
-                  C1 = update_ch_record(C#cr{consumer_count = Count + 1,
-                                             limiter        = Limiter2}),
-                  case is_empty(State) of
-                      true  -> send_drained(C1);
-                      false -> ok
-                  end,
-                  Consumer = #consumer{tag          = ConsumerTag,
-                                       ack_required = not NoAck,
-                                       args         = OtherArgs},
-                  AC1 = add_consumer({ChPid, Consumer}, AC),
+        ok     -> Consumers1 = rabbit_queue_consumers:add(
+                                 ChPid, ConsumerTag, NoAck,
+                                 LimiterPid, LimiterActive,
+                                 CreditArgs, OtherArgs,
+                                 is_empty(State), Consumers),
                   ExclusiveConsumer =
                       if ExclusiveConsume -> {ChPid, ConsumerTag};
                          true             -> Holder
                       end,
-                  State1 = State#q{active_consumers   = AC1,
-                                   has_had_consumers = true,
+                  State1 = State#q{consumers          = Consumers1,
+                                   has_had_consumers  = true,
                                    exclusive_consumer = ExclusiveConsumer},
                   ok = maybe_send_reply(ChPid, OkMsg),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
@@ -1279,30 +1071,18 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
     end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
-            State = #q{active_consumers   = AC,
+            State = #q{consumers          = Consumers,
                        exclusive_consumer = Holder}) ->
     ok = maybe_send_reply(ChPid, OkMsg),
-    case lookup_ch(ChPid) of
+    case rabbit_queue_consumers:remove(ChPid, ConsumerTag, Consumers) of
         not_found ->
             reply(ok, State);
-        C = #cr{consumer_count    = Count,
-                limiter           = Limiter,
-                blocked_consumers = Blocked} ->
-            AC1      = remove_consumer(ChPid, ConsumerTag, AC),
-            Blocked1 = remove_consumer(ChPid, ConsumerTag, Blocked),
-            Limiter1 = case Count of
-                           1 -> rabbit_limiter:deactivate(Limiter);
-                           _ -> Limiter
-                       end,
-            Limiter2 = rabbit_limiter:forget_consumer(Limiter1, ConsumerTag),
-            update_ch_record(C#cr{consumer_count    = Count - 1,
-                                  limiter           = Limiter2,
-                                  blocked_consumers = Blocked1}),
+        Consumers1 ->
             Holder1 = case Holder of
                           {ChPid, ConsumerTag} -> none;
                           _                    -> Holder
                       end,
-            State1 = State#q{active_consumers   = AC1,
+            State1 = State#q{consumers          = Consumers1,
                              exclusive_consumer = Holder1},
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State1)),
             notify_decorators(
@@ -1316,7 +1096,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
 handle_call(stat, _From, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         ensure_expiry_timer(State),
-    reply({ok, BQ:len(BQS), consumer_count()}, State1);
+    reply({ok, BQ:len(BQS), rabbit_queue_consumers:count()}, State1);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
@@ -1368,10 +1148,11 @@ handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State);
 
 handle_call(force_event_refresh, _From,
-            State = #q{exclusive_consumer = Exclusive}) ->
+            State = #q{consumers          = Consumers,
+                       exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
     QName = qname(State),
-    AllConsumers = consumers(State),
+    AllConsumers = rabbit_queue_consumers:all(Consumers),
     case Exclusive of
         none       -> [emit_consumer_created(
                          Ch, CTag, false, AckRequired, QName, Args) ||
@@ -1417,25 +1198,16 @@ handle_cast(delete_immediately, State) ->
     stop(State);
 
 handle_cast({resume, ChPid}, State) ->
-    noreply(
-      possibly_unblock(State, ChPid,
-                       fun (C = #cr{limiter = Limiter}) ->
-                               C#cr{limiter = rabbit_limiter:resume(Limiter)}
-                       end));
+    noreply(possibly_unblock(rabbit_queue_consumers:resume_fun(),
+                             ChPid, State));
 
 handle_cast({notify_sent, ChPid, Credit}, State) ->
-    noreply(
-      possibly_unblock(State, ChPid,
-                       fun (C = #cr{unsent_message_count = Count}) ->
-                               C#cr{unsent_message_count = Count - Credit}
-                       end));
+    noreply(possibly_unblock(rabbit_queue_consumers:notify_sent_fun(Credit),
+                             ChPid, State));
 
 handle_cast({activate_limit, ChPid}, State) ->
-    noreply(
-      possibly_unblock(State, ChPid,
-                       fun (C = #cr{limiter = Limiter}) ->
-                               C#cr{limiter = rabbit_limiter:activate(Limiter)}
-                       end));
+    noreply(possibly_unblock(rabbit_queue_consumers:activate_limit_fun(),
+                             ChPid, State));
 
 handle_cast({flush, ChPid}, State) ->
     ok = rabbit_channel:flushed(ChPid, self()),
@@ -1472,18 +1244,9 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
                        backing_queue_state = BQS}) ->
     Len = BQ:len(BQS),
     rabbit_channel:send_credit_reply(ChPid, Len),
-    C = #cr{limiter = Limiter} = lookup_ch(ChPid),
-    C1 = C#cr{limiter = rabbit_limiter:credit(Limiter, CTag, Credit, Drain)},
-    noreply(case Drain andalso Len == 0 of
-                true  -> update_ch_record(C1),
-                         send_drained(C1),
-                         State;
-                false -> case is_ch_blocked(C1) of
-                             true  -> update_ch_record(C1),
-                                      State;
-                             false -> unblock(State, C1)
-                         end
-            end);
+    noreply(possibly_unblock(rabbit_queue_consumers:credit_fun(
+                               Len == 0, Credit, Drain, CTag),
+                             ChPid, State));
 
 handle_cast(notify_decorators, State) ->
     notify_decorators(refresh, [], State),
