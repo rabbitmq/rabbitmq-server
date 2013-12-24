@@ -533,10 +533,6 @@ deliver_msg_to_consumer0(DeliverFun,
                           unsent_message_count = Count + 1}),
     {Stop, State1}.
 
-deliver_from_queue_deliver(AckRequired, State) ->
-    {Result, State1} = fetch(AckRequired, State),
-    {Result, is_empty(State1), State1}.
-
 confirm_messages([], State) ->
     State;
 confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
@@ -583,10 +579,12 @@ discard(#delivery{sender     = SenderPid,
     State1#q{backing_queue_state = BQS1}.
 
 run_message_queue(State) ->
-    {_Active, State1} = deliver_msgs_to_consumers(
-                          fun deliver_from_queue_deliver/2,
-                          is_empty(State), State),
-    State1.
+    {_Active, State3} = deliver_msgs_to_consumers(
+                          fun(AckRequired, State1) ->
+                                  {Result, State2} = fetch(AckRequired, State1),
+                                  {Result, is_empty(State2), State2}
+                          end, is_empty(State), State),
+    State3.
 
 add_consumer({ChPid, Consumer = #consumer{args = Args}}, ActiveConsumers) ->
     Priority = case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
