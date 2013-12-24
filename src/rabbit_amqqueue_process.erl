@@ -1150,7 +1150,7 @@ handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State);
 
 handle_call(force_event_refresh, _From,
-            State = #q{consumers          = Consumers, 
+            State = #q{consumers          = Consumers,
                        exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
     QName = qname(State),
