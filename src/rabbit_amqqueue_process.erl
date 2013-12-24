@@ -409,10 +409,10 @@ maybe_send_drained(WasEmpty, State) ->
     end,
     State.
 
-deliver_msgs_to_consumers(DeliverFun, Stop, State) ->
+deliver_msgs_to_consumers(FetchFun, Stop, State = #q{consumers = Consumers}) ->
     {Active, Blocked, State1, Consumers1} =
-        rabbit_queue_consumers:deliver(DeliverFun, Stop, qname(State), State,
-                                       State#q.consumers),
+        rabbit_queue_consumers:deliver(FetchFun, Stop, qname(State), State,
+                                       Consumers),
     State2 = State1#q{consumers = Consumers1},
     [notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State2) ||
         {_ChPid, CTag} <- Blocked],

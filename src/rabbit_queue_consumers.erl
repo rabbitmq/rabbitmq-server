@@ -168,23 +168,23 @@ erase_ch(ChPid, Consumers) ->
 send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()],
                   ok.
 
-deliver(DeliverFun, Stop, QName, S, Consumers) ->
-    deliver(DeliverFun, Stop, QName, [], S, Consumers).
+deliver(FetchFun, Stop, QName, S, Consumers) ->
+    deliver(FetchFun, Stop, QName, [], S, Consumers).
 
-deliver(_DeliverFun,  true, _QName, Blocked, S, Consumers) ->
+deliver(_FetchFun,  true, _QName, Blocked, S, Consumers) ->
     {true, Blocked, S, Consumers};
-deliver( DeliverFun, false,  QName, Blocked, S, Consumers) ->
+deliver( FetchFun, false,  QName, Blocked, S, Consumers) ->
     case priority_queue:out_p(Consumers) of
         {empty, _} ->
             {false, Blocked, S, Consumers};
         {{value, QEntry, Priority}, Tail} ->
             {Stop, Blocked1, S1, Consumers1} =
-                deliver_to_consumer(DeliverFun, QEntry, Priority, QName,
+                deliver_to_consumer(FetchFun, QEntry, Priority, QName,
                                     Blocked, S, Tail),
-            deliver(DeliverFun, Stop, QName, Blocked1, S1, Consumers1)
+            deliver(FetchFun, Stop, QName, Blocked1, S1, Consumers1)
     end.
 
-deliver_to_consumer(DeliverFun, E = {ChPid, Consumer}, Priority, QName,
+deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, Priority, QName,
                     Blocked, S, Consumers) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
@@ -200,21 +200,21 @@ deliver_to_consumer(DeliverFun, E = {ChPid, Consumer}, Priority, QName,
                          {false, Blocked1, S, Consumers};
                      {continue, Limiter} ->
                          {Stop, S1} = deliver_to_consumer(
-                                        DeliverFun, Consumer,
+                                        FetchFun, Consumer,
                                         C#cr{limiter = Limiter}, QName, S),
                          {Stop, Blocked, S1,
                           priority_queue:in(E, Priority, Consumers)}
                  end
     end.
 
-deliver_to_consumer(DeliverFun,
+deliver_to_consumer(FetchFun,
                     #consumer{tag          = ConsumerTag,
                               ack_required = AckRequired},
                     C = #cr{ch_pid               = ChPid,
                             acktags              = ChAckTags,
                             unsent_message_count = Count},
                     QName, S) ->
-    {{Message, IsDelivered, AckTag}, Stop, S1} = DeliverFun(AckRequired, S),
+    {{Message, IsDelivered, AckTag}, Stop, S1} = FetchFun(AckRequired, S),
     rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
