@@ -1080,13 +1080,13 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
         not_found ->
             reply(ok, State);
         Consumers1 ->
-            emit_consumer_deleted(ChPid, ConsumerTag, qname(State)),
             Holder1 = case Holder of
                           {ChPid, ConsumerTag} -> none;
                           _                    -> Holder
                       end,
             State1 = State#q{consumers          = Consumers1,
                              exclusive_consumer = Holder1},
+            emit_consumer_deleted(ChPid, ConsumerTag, qname(State1)),
             notify_decorators(
               basic_cancel, [{consumer_tag, ConsumerTag}], State1),
             case should_auto_delete(State1) of
