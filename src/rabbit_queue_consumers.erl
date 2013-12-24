@@ -16,12 +16,11 @@
 
 -module(rabbit_queue_consumers).
 
--export([new/0, max_active_priority/1, inactive/1,
-         unacknowledged_message_count/0, erase_ch/2, deliver/5,
-         add/9, remove/3, send_drained/0, record_ack/3, subtract_acks/2,
+-export([new/0, max_active_priority/1, inactive/1, count/0, all/1,
+         unacknowledged_message_count/0, add/9, remove/3, erase_ch/2,
+         send_drained/0, deliver/5, record_ack/3, subtract_acks/2,
          possibly_unblock/3,
-         resume_fun/0, notify_sent_fun/1, activate_limit_fun/0, credit_fun/4,
-         count/0, all/1]).
+         resume_fun/0, notify_sent_fun/1, activate_limit_fun/0, credit_fun/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -50,22 +49,21 @@ max_active_priority(Consumers) -> priority_queue:highest(Consumers).
 
 inactive(Consumers) -> priority_queue:is_empty(Consumers).
 
+count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
+
+all(Consumers) ->
+    lists:foldl(fun (C, Acc) -> consumers(C#cr.blocked_consumers, Acc) end,
+                consumers(Consumers, []), all_ch_record()).
+
+consumers(Consumers, Acc) ->
+    priority_queue:fold(
+      fun ({ChPid, Consumer}, _P, Acc1) ->
+              #consumer{tag = CTag, ack_required = Ack, args = Args} = Consumer,
+              [{ChPid, CTag, Ack, Args} | Acc1]
+      end, Acc, Consumers).
+
 unacknowledged_message_count() ->
     lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]).
-
-erase_ch(ChPid, Consumers) ->
-    case lookup_ch(ChPid) of
-        not_found ->
-            not_found;
-        C = #cr{ch_pid            = ChPid,
-                acktags           = ChAckTags,
-                blocked_consumers = BlockedQ} ->
-            AllConsumers = priority_queue:join(Consumers, BlockedQ),
-            ok = erase_ch_record(C),
-            {queue:to_list(ChAckTags),
-             tags(priority_queue:to_list(AllConsumers)),
-             remove_consumers(ChPid, Consumers)}
-    end.
 
 add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
     Drained, Consumers) ->
@@ -110,7 +108,78 @@ remove(ChPid, ConsumerTag, Consumers) ->
             remove_consumer(ChPid, ConsumerTag, Consumers)
     end.
 
+erase_ch(ChPid, Consumers) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            not_found;
+        C = #cr{ch_pid            = ChPid,
+                acktags           = ChAckTags,
+                blocked_consumers = BlockedQ} ->
+            AllConsumers = priority_queue:join(Consumers, BlockedQ),
+            ok = erase_ch_record(C),
+            {queue:to_list(ChAckTags),
+             tags(priority_queue:to_list(AllConsumers)),
+             remove_consumers(ChPid, Consumers)}
+    end.
+
 send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()].
+
+deliver(DeliverFun, Stop, QName, S, Consumers) ->
+    deliver(DeliverFun, Stop, QName, [], S, Consumers).
+
+deliver(_DeliverFun,  true, _QName, Blocked, S, Consumers) ->
+    {true, Blocked, S, Consumers};
+deliver( DeliverFun, false,  QName, Blocked, S, Consumers) ->
+    case priority_queue:out_p(Consumers) of
+        {empty, _} ->
+            {false, Blocked, S, Consumers};
+        {{value, QEntry, Priority}, Tail} ->
+            {Stop, Blocked1, S1, Consumers1} =
+                deliver_to_consumer(DeliverFun, QEntry, Priority, QName,
+                                    Blocked, S, Tail),
+            deliver(DeliverFun, Stop, QName, Blocked1, S1, Consumers1)
+    end.
+
+deliver_to_consumer(DeliverFun, E = {ChPid, Consumer}, Priority, QName,
+                    Blocked, S, Consumers) ->
+    C = lookup_ch(ChPid),
+    case is_ch_blocked(C) of
+        true  -> block_consumer(C, E),
+                 Blocked1 = [{ChPid, Consumer#consumer.tag} | Blocked],
+                 {false, Blocked1, S, Consumers};
+        false -> case rabbit_limiter:can_send(C#cr.limiter,
+                                              Consumer#consumer.ack_required,
+                                              Consumer#consumer.tag) of
+                     {suspend, Limiter} ->
+                         block_consumer(C#cr{limiter = Limiter}, E),
+                         Blocked1 = [{ChPid, Consumer#consumer.tag} | Blocked],
+                         {false, Blocked1, S, Consumers};
+                     {continue, Limiter} ->
+                         {Stop, S1} = deliver_to_consumer(
+                                        DeliverFun, Consumer,
+                                        C#cr{limiter = Limiter}, QName, S),
+                         {Stop, Blocked, S1,
+                          priority_queue:in(E, Priority, Consumers)}
+                 end
+    end.
+
+deliver_to_consumer(DeliverFun,
+                    #consumer{tag          = ConsumerTag,
+                              ack_required = AckRequired},
+                    C = #cr{ch_pid               = ChPid,
+                            acktags              = ChAckTags,
+                            unsent_message_count = Count},
+                    QName, S) ->
+    {{Message, IsDelivered, AckTag}, Stop, S1} = DeliverFun(AckRequired, S),
+    rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
+                           {QName, self(), AckTag, IsDelivered, Message}),
+    ChAckTags1 = case AckRequired of
+                     true  -> queue:in(AckTag, ChAckTags);
+                     false -> ChAckTags
+                 end,
+    update_ch_record(C#cr{acktags              = ChAckTags1,
+                          unsent_message_count = Count + 1}),
+    {Stop, S1}.
 
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
@@ -136,62 +205,6 @@ subtract_acks([T | TL] = AckTags, Prefix, AckQ) ->
         {{value,  T}, QTail} -> subtract_acks(TL,             Prefix, QTail);
         {{value, AT}, QTail} -> subtract_acks(AckTags, [AT | Prefix], QTail)
     end.
-
-deliver(DeliverFun, Stop, QName, S, Consumers) ->
-    deliver(DeliverFun, Stop, QName, [], S, Consumers).
-
-deliver(_DeliverFun,  true, _QName, Blocked, S, Consumers) ->
-    {true, Blocked, S, Consumers};
-deliver( DeliverFun, false,  QName, Blocked, S, Consumers) ->
-    case priority_queue:out_p(Consumers) of
-        {empty, _} ->
-            {false, Blocked, S, Consumers};
-        {{value, QEntry, Priority}, Tail} ->
-            {Stop, Blocked1, S1, Consumers1} =
-                deliver1(DeliverFun, QEntry, Priority, QName, Blocked, S, Tail),
-            deliver(DeliverFun, Stop, QName, Blocked1, S1, Consumers1)
-    end.
-
-deliver1(DeliverFun, E = {ChPid, Consumer}, Priority, QName,
-         Blocked, S, Consumers) ->
-    C = lookup_ch(ChPid),
-    case is_ch_blocked(C) of
-        true  -> block_consumer(C, E),
-                 Blocked1 = [{ChPid, Consumer#consumer.tag} | Blocked],
-                 {false, Blocked1, S, Consumers};
-        false -> case rabbit_limiter:can_send(C#cr.limiter,
-                                              Consumer#consumer.ack_required,
-                                              Consumer#consumer.tag) of
-                     {suspend, Limiter} ->
-                         block_consumer(C#cr{limiter = Limiter}, E),
-                         Blocked1 = [{ChPid, Consumer#consumer.tag} | Blocked],
-                         {false, Blocked1, S, Consumers};
-                     {continue, Limiter} ->
-                         {Stop, S1} = deliver1(
-                                        DeliverFun, Consumer,
-                                        C#cr{limiter = Limiter}, QName, S),
-                         {Stop, Blocked, S1,
-                          priority_queue:in(E, Priority, Consumers)}
-                 end
-    end.
-
-deliver1(DeliverFun,
-         #consumer{tag          = ConsumerTag,
-                   ack_required = AckRequired},
-         C = #cr{ch_pid               = ChPid,
-                 acktags              = ChAckTags,
-                 unsent_message_count = Count},
-         QName, S) ->
-    {{Message, IsDelivered, AckTag}, Stop, S1} = DeliverFun(AckRequired, S),
-    rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
-                           {QName, self(), AckTag, IsDelivered, Message}),
-    ChAckTags1 = case AckRequired of
-                     true  -> queue:in(AckTag, ChAckTags);
-                     false -> ChAckTags
-                 end,
-    update_ch_record(C#cr{acktags              = ChAckTags1,
-                          unsent_message_count = Count + 1}),
-    {Stop, S1}.
 
 possibly_unblock(Update, ChPid, Consumers) ->
     case lookup_ch(ChPid) of
@@ -245,20 +258,6 @@ credit_fun(IsEmpty, Credit, Drain, CTag) ->
                 false -> C1
             end
     end.
-
-count() ->
-    lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
-
-all(Consumers) ->
-    lists:foldl(fun (C, Acc) -> consumers(C#cr.blocked_consumers, Acc) end,
-                consumers(Consumers, []), all_ch_record()).
-
-consumers(Consumers, Acc) ->
-    priority_queue:fold(
-      fun ({ChPid, Consumer}, _P, Acc1) ->
-              #consumer{tag = CTag, ack_required = Ack, args = Args} = Consumer,
-              [{ChPid, CTag, Ack, Args} | Acc1]
-      end, Acc, Consumers).
 
 %%----------------------------------------------------------------------------
 
