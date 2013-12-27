@@ -284,11 +284,16 @@ recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
     ok = rabbit_net:setopts(Sock, [{active, once}]),
     mainloop(Deb, State#v1{pending_recv = true});
-recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
+recvloop(Deb, State = #v1{recv_len = RecvLen, buf_len = BufLen, buf = [B]}) ->
+    {Data, Rest} = split_binary(B, RecvLen),
+    recvloop(Deb, handle_input(State#v1.callback, Data,
+                               State#v1{buf     = [Rest],
+                                        buf_len = BufLen - RecvLen}));
+recvloop(Deb, State = #v1{recv_len = RecvLen, buf_len = BufLen, buf = Buf}) ->
     {Data, Rest} = binlist_split(RecvLen, BufLen, Buf, []),
     recvloop(Deb, handle_input(State#v1.callback,
                                list_to_binary(lists:reverse(Data)),
-                               State#v1{buf = lists:reverse(Rest),
+                               State#v1{buf     = lists:reverse(Rest),
                                         buf_len = BufLen - RecvLen})).
 
 binlist_split(N, N, L, Acc) ->
