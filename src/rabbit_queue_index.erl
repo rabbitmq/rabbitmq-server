@@ -389,8 +389,6 @@ recover(DurableQueues) ->
                            TermsAcc1};
                       false ->
                           ok = rabbit_file:recursive_delete([QueueDirPath]),
-                          %rabbit_recovery_indexes:remove_recovery_terms(
-                          %  QueueDirPath),
                           {DurableAcc, TermsAcc}
                   end
           end, {[], []}, QueueDirNames),

@@ -433,7 +433,6 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, new,
 
 init(#amqqueue { name = QueueName, durable = true }, {_, Terms},
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
-    %% Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, Recovery, Terms1} = process_recovery_terms(Terms),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
                                              MsgOnDiskFun, AsyncCallback),

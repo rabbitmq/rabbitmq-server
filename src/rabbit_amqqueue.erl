@@ -236,7 +236,8 @@ recover_durable_queues(DurableQueues, RecoveryTerms) ->
 
 queue_init(#amqqueue{ pid = Pid, name = Name }, RecoveryTerms) ->
     RecoveryKey = queue_name_to_dir_name(Name),
-    QueueRecoveryTerms = case lists:keyfind(RecoveryKey, 1, RecoveryTerms) of
+    QueueRecoveryTerms = case rabbit_recovery_terms:lookup(RecoveryKey,
+                                                           RecoveryTerms) of
                              {_, Terms} -> Terms;
                              false      -> non_clean_shutdown
                          end,

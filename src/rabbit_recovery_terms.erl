@@ -26,6 +26,7 @@
          start_link/0,
          store/2,
          read/1,
+         lookup/2,
          clear/0,
          flush/0]).
 
@@ -49,10 +50,11 @@
 -spec(read(
         file:filename()) ->
              rabbit_types:ok_or_error(not_found)).
+-spec(lookup(
+        file:filename(),
+        [{file:filename(), [term()]}]) ->
+             {'ok', [term()]} | 'false').
 -spec(clear() -> 'ok').
-%-spec(remove_recovery_terms(
-%        file:filename()) ->
-%             rabbit_types:ok_or_error(not_found)).
 
 -endif. % use_specs
 
@@ -103,21 +105,12 @@ read(Name) ->
         _            -> {error, not_found}
     end.
 
-scrub(Name) ->
-    filename:basename(Name).
-
-%remove_recovery_terms(Name) ->
-%    case dets:member(?MODULE, Name) of
-%        true -> dets:delete(?MODULE, Name);
-%        _    -> {error, not_found}
-%    end.
+lookup(RecoveryKey, RecoveryTerms) ->
+    lists:keyfind(to_dirname(RecoveryKey), 1, RecoveryTerms).
 
 clear() ->
-    dets:delete_all_objects(?MODULE).
-
-flush() ->
-    dets:sync(?MODULE),
-    ok.
+    dets:delete_all_objects(?MODULE),
+    flush().
 
 init(_) ->
     process_flag(trap_exit, true),
@@ -134,11 +127,14 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, _State) ->
-    ok = dets:sync(?MODULE),
+    ok = flush(),
     ok = dets:close(?MODULE).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+flush() ->
+    dets:sync(?MODULE).
 
 create_table() ->
     File = dets_filename(),
@@ -146,5 +142,12 @@ create_table() ->
                                        {ram_file, true},
                                        {auto_save, infinity}]).
 
+scrub(Name) ->
+    filename:basename(Name).
+
 dets_filename() ->
-    filename:join([rabbit_mnesia:dir(), "queues", "recovery.dets"]).
+    to_dirname("recovery.dets").
+
+to_dirname(FileName) ->
+    filename:join([rabbit_mnesia:dir(), "queues", FileName]).
+
