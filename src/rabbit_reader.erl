@@ -751,7 +751,7 @@ handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
 handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
-%% ... and finally, the 1.0 spec is crystal clear!  Note that the
+%% ... and finally, the 1.0 spec is crystal clear!
 handle_input(handshake, <<"AMQP", Id, 1, 0, 0>>, State) ->
     become_1_0(Id, State);
 
