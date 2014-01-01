@@ -763,8 +763,8 @@ handshake({1, 1, 9, 1}, State) ->
 handshake({Id, 1, 0, 0}, State) ->
     become_1_0(Id, State);
 
-handshake({A, B, C, D}, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_version, {A, B, C, D}}).
+handshake(Vsn, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_version, Vsn}).
 
 %% Offer a protocol version to the client.  Connection.start only
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
