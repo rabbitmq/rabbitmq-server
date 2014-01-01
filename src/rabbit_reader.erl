@@ -724,6 +724,14 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
                                         Type, Channel, Payload, State)
     end;
 
+handle_input(handshake, <<"AMQP", A, B, C, D>>, State) ->
+    handshake({A, B, C, D}, State);
+handle_input(handshake, Other, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_header, Other});
+
+handle_input(Callback, Data, _State) ->
+    throw({bad_input, Callback, Data}).
+
 %% The two rules pertaining to version negotiation:
 %%
 %% * If the server cannot support the protocol specified in the
@@ -732,37 +740,31 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
 %%
 %% * The server MUST provide a protocol version that is lower than or
 %% equal to that requested by the client in the protocol header.
-handle_input(handshake, <<"AMQP", 0, 0, 9, 1>>, State) ->
+handshake({0, 0, 9, 1}, State) ->
     start_connection({0, 9, 1}, rabbit_framing_amqp_0_9_1, State);
 
 %% This is the protocol header for 0-9, which we can safely treat as
 %% though it were 0-9-1.
-handle_input(handshake, <<"AMQP", 1, 1, 0, 9>>, State) ->
+handshake({1, 1, 0, 9}, State) ->
     start_connection({0, 9, 0}, rabbit_framing_amqp_0_9_1, State);
 
 %% This is what most clients send for 0-8.  The 0-8 spec, confusingly,
 %% defines the version as 8-0.
-handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
+handshake({1, 1, 8, 0}, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 %% The 0-8 spec as on the AMQP web site actually has this as the
 %% protocol header; some libraries e.g., py-amqplib, send it when they
 %% want 0-8.
-handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
+handshake({1, 1, 9, 1}, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 %% ... and finally, the 1.0 spec is crystal clear!
-handle_input(handshake, <<"AMQP", Id, 1, 0, 0>>, State) ->
+handshake({Id, 1, 0, 0}, State) ->
     become_1_0(Id, State);
 
-handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_version, {A, B, C, D}});
-
-handle_input(handshake, Other, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_header, Other});
-
-handle_input(Callback, Data, _State) ->
-    throw({bad_input, Callback, Data}).
+handshake({A, B, C, D}, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_version, {A, B, C, D}}).
 
 %% Offer a protocol version to the client.  Connection.start only
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
