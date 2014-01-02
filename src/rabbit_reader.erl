@@ -723,9 +723,7 @@ handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32,
                              Payload:PayloadSize/binary, ?FRAME_END,
                              Rest/binary>>,
              State) ->
-    {Rest, ensure_stats_timer(
-             switch_callback(handle_frame(Type, Channel, Payload, State),
-                             frame_header, 7))};
+    {Rest, ensure_stats_timer(handle_frame(Type, Channel, Payload, State))};
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32, Rest/binary>>,
              State) ->
     {Rest, ensure_stats_timer(
