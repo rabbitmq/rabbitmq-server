@@ -280,6 +280,8 @@ recvloop(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
+recvloop(Deb, State = #v1{connection_state = {become, F}}) ->
+    throw({become, F(Deb, State)});
 recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
     ok = rabbit_net:setopts(Sock, [{active, once}]),
@@ -1118,8 +1120,11 @@ become_1_0(Id, State = #v1{sock = Sock}) ->
                                    Sock, {unsupported_amqp1_0_protocol_id, Id},
                                    {3, 1, 0, 0})
                         end,
-                 throw({become, {rabbit_amqp1_0_reader, init,
-                                 [Mode, pack_for_1_0(State)]}})
+                 F = fun (_Deb, S) ->
+                             {rabbit_amqp1_0_reader, init,
+                              [Mode, pack_for_1_0(S)]}
+                     end,
+                 State = #v1{connection_state = {become, F}}
     end.
 
 pack_for_1_0(#v1{parent              = Parent,
