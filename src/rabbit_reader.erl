@@ -1124,10 +1124,9 @@ become_1_0(Id, State = #v1{sock = Sock}) ->
                  State = #v1{connection_state = {become, F}}
     end.
 
-pack_for_1_0(Buf, BufLen,
-             #v1{parent              = Parent,
-                 sock                = Sock,
-                 recv_len            = RecvLen,
-                 pending_recv        = PendingRecv,
-                 helper_sup          = SupPid}) ->
+pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
+                              sock         = Sock,
+                              recv_len     = RecvLen,
+                              pending_recv = PendingRecv,
+                              helper_sup   = SupPid}) ->
     {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen}.
