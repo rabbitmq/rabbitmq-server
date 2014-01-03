@@ -173,16 +173,19 @@ set_mem_limits(State, MemFraction) ->
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
         end,
-    UsableMemory = case get_vm_limit() of
-                       Limit when Limit < TotalMemory ->
-                           error_logger:warning_msg(
-                             "Only ~pMB of ~pMB memory usable due to "
-                             "limited address space.~n",
-                             [trunc(V/?ONE_MB) || V <- [Limit, TotalMemory]]),
-                           Limit;
-                       _ ->
-                           TotalMemory
-                   end,
+    UsableMemory =
+        case get_vm_limit() of
+            Limit when Limit < TotalMemory ->
+                error_logger:warning_msg(
+                  "Only ~pMB of ~pMB memory usable due to "
+                  "limited address space.~n"
+                  "Crashes due to memory exhaustion are possible - see~n"
+                  "http://www.rabbitmq.com/memory.html#address-space~n",
+                  [trunc(V/?ONE_MB) || V <- [Limit, TotalMemory]]),
+                Limit;
+            _ ->
+                TotalMemory
+        end,
     MemLim = trunc(MemFraction * UsableMemory),
     error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
                           [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),

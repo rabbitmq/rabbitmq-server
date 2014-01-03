@@ -272,7 +272,7 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     [MethodFrame | ContentFrames].
 
 tcp_send(Sock, Data) ->
-    rabbit_misc:throw_on_error(inet_error,
+    rabbit_misc:throw_on_error(writer_inet_error,
                                fun () -> rabbit_net:send(Sock, Data) end).
 
 internal_send_command(Sock, Channel, MethodRecord, Protocol) ->
