@@ -54,7 +54,7 @@ behaviour_info(_Other) ->
 intercept_method(#'basic.publish'{} = M) ->
     M;
 intercept_method(M) ->
-    intercept_method(M, select(M)).
+    intercept_method(M, select(rabbit_misc:method_record_type(M))).
 
 intercept_method(M, []) ->
     M;
