@@ -21,7 +21,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
--export([conserve_resources/3]).
+-export([conserve_resources/3, start_keepalive/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
@@ -40,7 +40,7 @@ conserve_resources(Pid, _, Conserve) ->
 init([]) ->
     {ok, undefined, hibernate, {backoff, 1000, 1000, 10000}}.
 
-handle_call({go, Sock0, SockTransform}, _From, undefined) ->
+handle_call({go, Sock0, SockTransform, SupPid}, _From, undefined) ->
     process_flag(trap_exit, true),
     {ok, Sock} = SockTransform(Sock0),
     case rabbit_net:connection_string(Sock, inbound) of
@@ -54,6 +54,8 @@ handle_call({go, Sock0, SockTransform}, _From, undefined) ->
                        conn_name        = ConnStr,
                        await_recv       = false,
                        connection_state = running,
+                       keepalive        = {none, none},
+                       supervisor       = SupPid,
                        conserve         = false,
                        parse_state      = rabbit_mqtt_frame:initial_state(),
                        proc_state       = ProcessorState }),
@@ -116,6 +118,19 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     {noreply, control_throttle(State), hibernate};
 
+handle_info({keepalive, Keepalive}, State = #state { supervisor = SupPid,
+                                                     socket     = Sock }) ->
+    SendFun = fun() -> ok end,
+    Parent = self(),
+    ReceiveFun = fun() -> Parent ! keepalive_timeout end,
+    Heartbeater =
+      rabbit_heartbeat:start(SupPid, Sock, 0, SendFun, Keepalive, ReceiveFun),
+    {noreply, State #state { keepalive = Heartbeater }};
+
+handle_info(keepalive_timeout, State = #state { conn_name = ConnStr }) ->
+    log(error, "closing MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
+    stop({shutdown, keepalive_timeout}, State);
+
 handle_info(Msg, State) ->
     stop({mqtt_unexpected_msg, Msg}, State).
 
@@ -164,6 +179,9 @@ callback_reply(State, {ok, ProcState}) ->
 callback_reply(State, {err, Reason, ProcState}) ->
     {stop, Reason, pstate(State, ProcState)}.
 
+start_keepalive(_,   0        ) -> ok;
+start_keepalive(Pid, Keepalive) -> Pid ! {keepalive, Keepalive}.
+
 pstate(State = #state {}, PState = #proc_state{}) ->
     State #state{ proc_state = PState }.
 
@@ -196,8 +214,13 @@ run_socket(State = #state{ socket = Sock }) ->
 control_throttle(State = #state{ connection_state = Flow,
                                  conserve         = Conserve }) ->
     case {Flow, Conserve orelse credit_flow:blocked()} of
-        {running,   true} -> State #state{ connection_state = blocked };
-        {blocked,  false} -> run_socket(State #state{
+        {running,   true} -> ok = rabbit_heartbeat:pause_monitor(
+                                    State#state.keepalive),
+                             State #state{ connection_state = blocked };
+        {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
+                                    State#state.keepalive),
+                             run_socket(State #state{
                                                 connection_state = running });
         {_,            _} -> run_socket(State)
     end.
+
