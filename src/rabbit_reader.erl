@@ -808,7 +808,7 @@ handle_method0(MethodName, FieldsBin,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
                        State)
-    catch throw:{writer_inet_error, closed} ->
+    catch throw:{inet_error, closed} ->
             maybe_emit_stats(State),
             throw(connection_closed_abruptly);
           exit:#amqp_error{method = none} = Reason ->
