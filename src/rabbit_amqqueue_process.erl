@@ -38,7 +38,6 @@
             backing_queue,
             backing_queue_state,
             consumers,
-            consumer_use,
             expires,
             sync_timer_ref,
             rate_timer_ref,
@@ -135,7 +134,6 @@ init_state(Q) ->
                exclusive_consumer  = none,
                has_had_consumers   = false,
                consumers           = rabbit_queue_consumers:new(),
-               consumer_use        = {inactive, now_micros(), 0, 0.0},
                senders             = pmon:new(delegate),
                msg_id_to_channel   = gb_trees:empty(),
                status              = running,
@@ -416,33 +414,7 @@ deliver_msgs_to_consumers(FetchFun, Stop, State = #q{consumers = Consumers}) ->
     State2 = State1#q{consumers = Consumers1},
     [notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State2) ||
         {_ChPid, CTag} <- Blocked],
-    case Active of
-        true  -> {true, State2};
-        false -> {false, update_consumer_use(State2, inactive)}
-    end.
-
-update_consumer_use(State = #q{consumer_use = CUInfo}, Use) ->
-    State#q{consumer_use = update_consumer_use1(CUInfo, Use)}.
-
-update_consumer_use1({inactive, _, _, _}   = CUInfo, inactive) ->
-    CUInfo;
-update_consumer_use1({active,   _, _}      = CUInfo,   active) ->
-    CUInfo;
-update_consumer_use1({active,   Since,         Avg}, inactive) ->
-    Now = now_micros(),
-    {inactive, Now, Now - Since, Avg};
-update_consumer_use1({inactive, Since, Active, Avg},   active) ->
-    Now = now_micros(),
-    {active, Now, consumer_use_avg(Active, Now - Since, Avg)}.
-
-consumer_use_avg(Active, Inactive, Avg) ->
-    Time = Inactive + Active,
-    Ratio = Active / Time,
-    Weight = erlang:min(1, Time / 1000000),
-    case Avg of
-        undefined -> Ratio;
-        _         -> Ratio * Weight + Avg * (1 - Weight)
-    end.
+    {Active, State2}.
 
 confirm_messages([], State) ->
     State;
@@ -597,10 +569,10 @@ possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
         unchanged ->
             State;
         {unblocked, UnblockedCTags, Consumers1} ->
+            State1 = State#q{consumers = Consumers1},
             [notify_decorators(consumer_unblocked, [{consumer_tag, CTag}],
-                               State) || CTag <- UnblockedCTags],
-            run_message_queue(
-              update_consumer_use(State#q{consumers = Consumers1}, active))
+                               State1) || CTag <- UnblockedCTags],
+            run_message_queue(State1)
     end.
 
 should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
@@ -885,15 +857,10 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     rabbit_queue_consumers:count();
-i(consumer_utilisation, #q{consumer_use = ConsumerUse}) ->
+i(consumer_utilisation, #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:count() of
         0 -> '';
-        _ -> case ConsumerUse of
-                 {active, Since, Avg} ->
-                     consumer_use_avg(now_micros() - Since, 0, Avg);
-                 {inactive, Since, Active, Avg} ->
-                     consumer_use_avg(Active, now_micros() - Since, Avg)
-             end
+        _ -> rabbit_queue_consumers:utilisation(Consumers)
     end;
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
