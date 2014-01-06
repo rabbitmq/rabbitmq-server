@@ -150,7 +150,9 @@ test() ->
          {queue, <<>>},
          {ack_mode, on_confirm},
          {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
-         {publish_properties, [{content_type, ?SHOVELLED}]}
+         {publish_properties, [{delivery_mode, 2},
+                               {cluster_id,    <<"my-cluster">>},
+                               {content_type,  ?SHOVELLED}]}
         ]}],
       infinity),
 

@@ -204,8 +204,7 @@ make_publish_fun(Fields, Pos, ValidFields) ->
     SuppliedFields = proplists:get_keys(Fields),
     case SuppliedFields -- ValidFields of
         [] ->
-            FieldIndices =
-                make_field_indices(ValidFields, SuppliedFields, Fields),
+            FieldIndices = make_field_indices(ValidFields, Fields),
             Fun = fun (Publish) ->
                           lists:foldl(fun ({Pos1, Value}, Pub) ->
                                               setelement(Pos1, Pub, Value)
@@ -216,16 +215,20 @@ make_publish_fun(Fields, Pos, ValidFields) ->
             fail({unexpected_fields, Unexpected, ValidFields})
     end.
 
-make_field_indices(Valid, Supplied, Fields) ->
-    make_field_indices(Valid, Supplied, Fields, 2, []).
+make_field_indices(Valid, Fields) ->
+    make_field_indices(Fields, field_map(Valid, 2), []).
 
-make_field_indices(_Valid, [], _Fields, _Idx, Acc) ->
+make_field_indices([], _Idxs , Acc) ->
     lists:reverse(Acc);
-make_field_indices([F|Valid], [F|Supplied], Fields, Idx, Acc) ->
-    Value = proplists:get_value(F, Fields),
-    make_field_indices(Valid, Supplied, Fields, Idx+1, [{Idx, Value}|Acc]);
-make_field_indices([_V|Valid], Supplied, Fields, Idx, Acc) ->
-    make_field_indices(Valid, Supplied, Fields, Idx+1, Acc).
+make_field_indices([{Key, Value} | Rest], Idxs, Acc) ->
+    make_field_indices(Rest, Idxs, [{dict:fetch(Key, Idxs), Value} | Acc]).
+
+field_map(Fields, Idx0) ->
+    {Dict, _IdxMax} =
+        lists:foldl(fun (Field, {Dict1, Idx1}) ->
+                            {dict:store(Field, Idx1, Dict1), Idx1 + 1}
+                    end, {dict:new(), Idx0}, Fields),
+    Dict.
 
 duplicate_keys(PropList) ->
     proplists:get_keys(
