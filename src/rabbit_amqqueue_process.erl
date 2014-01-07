@@ -405,13 +405,13 @@ maybe_send_drained(WasEmpty, State) ->
     State.
 
 deliver_msgs_to_consumers(FetchFun, Stop, State = #q{consumers = Consumers}) ->
-    {Active, Blocked, State1, Consumers1} =
+    {Active, ACResult, State1, Consumers1} =
         rabbit_queue_consumers:deliver(FetchFun, Stop, qname(State), State,
                                        Consumers),
     State2 = State1#q{consumers = Consumers1},
-    case Blocked of
-        something_became_blocked -> notify_decorators(State2);
-        nothing_became_blocked   -> ok
+    case ACResult of
+        active_consumers_changed   -> notify_decorators(State2);
+        active_consumers_unchanged -> ok
     end,
     {Active, State2}.
 
