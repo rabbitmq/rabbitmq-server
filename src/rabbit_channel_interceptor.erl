@@ -61,19 +61,31 @@ intercept_method(M, []) ->
 intercept_method(M, [I]) ->
     case I:intercept(M) of
         {ok, M2} ->
-            M2;
+            case validate_method(M, M2) of
+                true ->
+                    M2;
+                _   ->
+                    internal_error("Interceptor: ~p expected "
+                                   "to return method: ~p but returned: ~p",
+                                   [I, rabbit_misc:method_record_type(M),
+                                       rabbit_misc:method_record_type(M2)])
+            end;
         {error, Reason} ->
-            rabbit_misc:protocol_error(internal_error,
-                                       "Interceptor: ~p failed with reason: ~p",
-                                       [I, Reason])
+            internal_error("Interceptor: ~p failed with reason: ~p",
+                           [I, Reason])
     end;
 intercept_method(M, Is) ->
-    rabbit_misc:protocol_error(internal_error,
-                               "More than one interceptor for method: ~p -- ~p",
-                               [rabbit_misc:method_record_type(M), Is]).
+    internal_error("More than one interceptor for method: ~p -- ~p",
+                   [rabbit_misc:method_record_type(M), Is]).
 
 %% select the interceptors that apply to intercept_method().
 select(Method)  ->
     [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor),
           code:which(M) =/= non_existing,
           M:applies_to(Method)].
+
+validate_method(M, M2) ->
+    rabbit_misc:method_record_type(M) =:= rabbit_misc:method_record_type(M2).
+
+internal_error(Format, Args) ->
+    rabbit_misc:protocol_error(internal_error, Format, Args).
