@@ -75,7 +75,7 @@ start_infrastructure_fun(Sup, _Conn, _ChMgr, direct) ->
     fun () ->
             supervisor2:start_child(
               Sup,
-              {collector, {rabbit_queue_collector, start_link, []},
+              {collector, {rabbit_queue_collector, start_link, [unknown]},
                transient, ?MAX_WAIT, worker, [rabbit_queue_collector]})
     end.
 
