@@ -325,7 +325,7 @@ terminate_shutdown(Fun, State) ->
                      QName = qname(State),
                      notify_decorators(shutdown, [], State),
                      [emit_consumer_deleted(Ch, CTag, QName) ||
-                         {Ch, CTag, _} <- consumers(State1)],
+                         {Ch, CTag, _, _} <- consumers(State1)],
                      State1#q{backing_queue_state = Fun(BQS)}
     end.
 
