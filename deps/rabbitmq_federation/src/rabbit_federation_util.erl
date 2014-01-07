@@ -16,7 +16,6 @@
 
 -module(rabbit_federation_util).
 
--include_lib("kernel/include/inet.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
