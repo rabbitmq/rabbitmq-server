@@ -276,12 +276,10 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         none                                    -> false
     end.
 
-credit(Limiter = #qstate{credits = Credits}, CTag, Credit, IsEmpty, Drain) ->
-    Credit1 = case Drain andalso IsEmpty of
-                  true  -> 0;
-                  false -> Credit
-              end,
-    Limiter#qstate{credits = update_credit(CTag, Credit1, Drain, Credits)}.
+credit(Limiter = #qstate{credits = Credits}, CTag, _Credit, true, true) ->
+    Limiter#qstate{credits = update_credit(CTag, 0, true, Credits)};
+credit(Limiter = #qstate{credits = Credits}, CTag, Credit, false, Drain) ->
+    Limiter#qstate{credits = update_credit(CTag, Credit, Drain, Credits)}.
 
 drained(Limiter = #qstate{credits = Credits}) ->
     {CTagCredits, Credits2} =
