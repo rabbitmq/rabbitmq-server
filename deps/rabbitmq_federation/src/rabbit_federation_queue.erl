@@ -29,7 +29,7 @@
 -behaviour(rabbit_queue_decorator).
 
 -export([startup/1, shutdown/1, policy_changed/2, active_for/1,
-         active_consumers_changed/2]).
+         active_consumers_changed/3]).
 -export([policy_changed_local/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -66,9 +66,8 @@ policy_changed_local(Q1, Q2) ->
 
 active_for(Q) -> rabbit_federation_upstream:federate(Q).
 
-active_consumers_changed(#amqqueue{name = QName}, Props) ->
-    case pget(is_empty, Props) andalso
-        active_unfederated(pget(max_active_consumer_priority, Props)) of
+active_consumers_changed(#amqqueue{name = QName}, MaxActivePriority, IsEmpty) ->
+    case IsEmpty andalso active_unfederated(MaxActivePriority) of
         true  -> rabbit_federation_queue_link:run(QName);
         false -> rabbit_federation_queue_link:pause(QName)
     end,
