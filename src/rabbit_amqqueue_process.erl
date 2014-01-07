@@ -39,6 +39,7 @@
             backing_queue,
             backing_queue_state,
             active_consumers,
+            consumer_use,
             expires,
             sync_timer_ref,
             rate_timer_ref,
@@ -95,11 +96,12 @@
          messages_unacknowledged,
          messages,
          consumers,
+         consumer_utilisation,
          memory,
          slave_pids,
          synchronised_slave_pids,
          backing_queue_status,
-         status
+         state
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -149,6 +151,7 @@ init_state(Q) ->
                exclusive_consumer  = none,
                has_had_consumers   = false,
                active_consumers    = priority_queue:new(),
+               consumer_use        = {inactive, now_micros(), 0, 0.0},
                senders             = pmon:new(delegate),
                msg_id_to_channel   = gb_trees:empty(),
                status              = running,
@@ -486,7 +489,7 @@ deliver_msgs_to_consumers(DeliverFun, false,
                           State = #q{active_consumers = ActiveConsumers}) ->
     case priority_queue:out_p(ActiveConsumers) of
         {empty, _} ->
-            {false, State};
+            {false, update_consumer_use(State, inactive)};
         {{value, QEntry, Priority}, Tail} ->
             {Stop, State1} = deliver_msg_to_consumer(
                                DeliverFun, QEntry, Priority,
@@ -532,6 +535,29 @@ deliver_msg_to_consumer0(DeliverFun,
     update_ch_record(C#cr{acktags              = ChAckTags1,
                           unsent_message_count = Count + 1}),
     {Stop, State1}.
+
+update_consumer_use(State = #q{consumer_use = CUInfo}, Use) ->
+    State#q{consumer_use = update_consumer_use1(CUInfo, Use)}.
+
+update_consumer_use1({inactive, _, _, _}   = CUInfo, inactive) ->
+    CUInfo;
+update_consumer_use1({active,   _, _}      = CUInfo,   active) ->
+    CUInfo;
+update_consumer_use1({active,   Since,         Avg}, inactive) ->
+    Now = now_micros(),
+    {inactive, Now, Now - Since, Avg};
+update_consumer_use1({inactive, Since, Active, Avg},   active) ->
+    Now = now_micros(),
+    {active, Now, consumer_use_avg(Active, Now - Since, Avg)}.
+
+consumer_use_avg(Active, Inactive, Avg) ->
+    Time = Inactive + Active,
+    Ratio = Active / Time,
+    Weight = erlang:min(1, Time / 1000000),
+    case Avg of
+        undefined -> Ratio;
+        _         -> Ratio * Weight + Avg * (1 - Weight)
+    end.
 
 confirm_messages([], State) ->
     State;
@@ -731,7 +757,8 @@ unblock(State, C = #cr{limiter = Limiter}) ->
             UnblockedQ = priority_queue:from_list(Unblocked),
             update_ch_record(C#cr{blocked_consumers = BlockedQ}),
             AC1 = priority_queue:join(State#q.active_consumers, UnblockedQ),
-            State1 = State#q{active_consumers = AC1},
+            State1 = update_consumer_use(State#q{active_consumers = AC1},
+                                         active),
             [notify_decorators(
                consumer_unblocked, [{consumer_tag, CTag}], State1) ||
                 {_P, {_ChPid, #consumer{tag = CTag}}} <- Unblocked],
@@ -1045,6 +1072,16 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     consumer_count();
+i(consumer_utilisation, #q{consumer_use = ConsumerUse}) ->
+    case consumer_count() of
+        0 -> '';
+        _ -> case ConsumerUse of
+                 {active, Since, Avg} ->
+                     consumer_use_avg(now_micros() - Since, 0, Avg);
+                 {inactive, Since, Active, Avg} ->
+                     consumer_use_avg(Active, now_micros() - Since, Avg)
+             end
+    end;
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
@@ -1062,8 +1099,8 @@ i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
         false -> '';
         true  -> SSPids
     end;
-i(status, #q{status = Status}) ->
-    Status;
+i(state, #q{status = running}) -> credit_flow:state();
+i(state, #q{status = State})   -> State;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
 i(Item, _) ->
@@ -1084,7 +1121,10 @@ emit_stats(State) ->
     emit_stats(State, []).
 
 emit_stats(State, Extra) ->
-    rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
+    ExtraKs = [K || {K, _} <- Extra],
+    Infos = [{K, V} || {K, V} <- infos(?STATISTICS_KEYS, State),
+                       not lists:member(K, ExtraKs)],
+    rabbit_event:notify(queue_stats, Extra ++ Infos).
 
 emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, Args) ->
     rabbit_event:notify(consumer_created,
@@ -1547,7 +1587,8 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     BQS3 = BQ:handle_pre_hibernate(BQS2),
     rabbit_event:if_enabled(
       State, #q.stats_timer,
-      fun () -> emit_stats(State, [{idle_since, now()}]) end),
+      fun () -> emit_stats(State, [{idle_since,           now()},
+                                   {consumer_utilisation, ''}]) end),
     State1 = rabbit_event:stop_stats_timer(State#q{backing_queue_state = BQS3},
                                            #q.stats_timer),
     {hibernate, stop_rate_timer(State1)}.
