@@ -29,6 +29,7 @@
 -define(TCP_MAX_PACKET_SIZE, (16#4000000 + ?EMPTY_FRAME_SIZE - 1)).
 
 -record(state, {sock,
+                name,
                 heartbeat,
                 writer0,
                 frame_max,
@@ -36,7 +37,7 @@
                 closing_reason, %% undefined | Reason
                 waiting_socket_close = false}).
 
--define(INFO_KEYS, [type, heartbeat, frame_max, sock]).
+-define(INFO_KEYS, [type, heartbeat, frame_max, sock, name]).
 
 %%---------------------------------------------------------------------------
 
@@ -99,6 +100,7 @@ i(type,     _State) -> network;
 i(heartbeat, State) -> State#state.heartbeat;
 i(frame_max, State) -> State#state.frame_max;
 i(sock,      State) -> State#state.sock;
+i(name,      State) -> State#state.name;
 i(Item,     _State) -> throw({bad_argument, Item}).
 
 info_keys() ->
@@ -164,8 +166,12 @@ gethostaddr(Host) ->
                || Family <- inet_address_preference()],
     [{IP, Family} || {Family, {ok, IP}} <- Lookups].
 
-try_handshake(AmqpParams, SIF, State) ->
-    try handshake(AmqpParams, SIF, State) of
+try_handshake(AmqpParams, SIF, State = #state{sock = Sock}) ->
+    Name = case rabbit_net:connection_string(Sock, outbound) of
+               {ok, Str}  -> list_to_binary(Str);
+               {error, _} -> <<"unknown">>
+           end,
+    try handshake(AmqpParams, SIF, State#state{name = Name}) of
         Return -> Return
     catch exit:Reason -> {error, Reason}
     end.
