@@ -126,7 +126,7 @@
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
 -export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
-         is_suspended/1, is_consumer_blocked/2, credit/4, drained/1,
+         is_suspended/1, is_consumer_blocked/2, credit/5, drained/1,
          forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -168,8 +168,8 @@
 -spec(deactivate/1   :: (qstate()) -> qstate()).
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
 -spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
--spec(credit/4 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean())
-                  -> qstate()).
+-spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean(),
+                   boolean()) -> qstate()).
 -spec(drained/1 :: (qstate())
                    -> {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}).
 -spec(forget_consumer/2 :: (qstate(), rabbit_types:ctag()) -> qstate()).
@@ -276,8 +276,12 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         none                                    -> false
     end.
 
-credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain) ->
-    Limiter#qstate{credits = update_credit(CTag, Credit, Drain, Credits)}.
+credit(Limiter = #qstate{credits = Credits}, CTag, Credit, IsEmpty, Drain) ->
+    Credit1 = case Drain andalso IsEmpty of
+                  true  -> 0;
+                  false -> Credit
+              end,
+    Limiter#qstate{credits = update_credit(CTag, Credit1, Drain, Credits)}.
 
 drained(Limiter = #qstate{credits = Credits}) ->
     {CTagCredits, Credits2} =

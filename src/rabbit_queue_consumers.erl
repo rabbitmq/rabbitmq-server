@@ -121,7 +121,7 @@ unacknowledged_message_count() ->
     lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]).
 
 add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
-    Drained, State = #state{consumers = Consumers}) ->
+    IsEmpty, State = #state{consumers = Consumers}) ->
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
     Limiter1 = case LimiterActive of
@@ -131,11 +131,11 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
     Limiter2 = case CreditArgs of
                    none         -> Limiter1;
                    {Crd, Drain} -> rabbit_limiter:credit(
-                                     Limiter1, ConsumerTag, Crd, Drain)
+                                     Limiter1, ConsumerTag, Crd, IsEmpty, Drain)
                end,
     C1 = C#cr{consumer_count = Count + 1,
               limiter        = Limiter2},
-    update_ch_record(case Drained of
+    update_ch_record(case IsEmpty of
                          true  -> send_drained(C1);
                          false -> C1
                      end),
@@ -313,7 +313,7 @@ activate_limit_fun() ->
 credit_fun(IsEmpty, Credit, Drain, CTag) ->
     fun (C = #cr{limiter = Limiter}) ->
             C1 = C#cr{limiter = rabbit_limiter:credit(
-                                  Limiter, CTag, Credit, Drain)},
+                                  Limiter, CTag, Credit, IsEmpty, Drain)},
             case Drain andalso IsEmpty of
                 true  -> send_drained(C1);
                 false -> C1
