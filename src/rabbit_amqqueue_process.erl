@@ -454,18 +454,18 @@ discard(#delivery{sender     = SenderPid,
 
 run_message_queue(State) -> run_message_queue([], State).
 
-run_message_queue(Blocked, State = #q{consumers = Consumers}) ->
+run_message_queue(Blocked, State) ->
     case is_empty(State) of
-        true  -> blocked(lists:append(Blocked), Consumers, State);
+        true  -> blocked(lists:append(Blocked), State);
         false -> case rabbit_queue_consumers:deliver(
                         fun(AckRequired) -> fetch(AckRequired, State) end,
-                        qname(State), Consumers) of
-                     {delivered, MoreBlocked, State1, Consumers1} ->
+                        qname(State), State#q.consumers) of
+                     {delivered, MoreBlocked, State1, Consumers} ->
                          run_message_queue([MoreBlocked | Blocked],
-                                           State1#q{consumers = Consumers1});
-                     {undelivered, MoreBlocked, Consumers1} ->
+                                           State1#q{consumers = Consumers});
+                     {undelivered, MoreBlocked, Consumers} ->
                          blocked(lists:append([MoreBlocked | Blocked]),
-                                 Consumers1, State)
+                                 State#q{consumers = Consumers})
                  end
     end.
 
@@ -482,16 +482,15 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                            discard(Delivery, State)}
            end, qname(State), State#q.consumers) of
         {delivered, Blocked, State1, Consumers} ->
-            {delivered,   blocked(Blocked, Consumers, State1)};
+            {delivered,   blocked(Blocked, State1#q{consumers = Consumers})};
         {undelivered, Blocked, Consumers} ->
-            {undelivered, blocked(Blocked, Consumers, State)}
+            {undelivered, blocked(Blocked, State#q{consumers = Consumers})}
     end.
 
-blocked(Blocked, Consumers, State) ->
-    State1 = State#q{consumers = Consumers},
-    [notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State1) ||
+blocked(Blocked, State) ->
+    [notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State) ||
         {_ChPid, CTag} <- Blocked],
-    State1.
+    State.
 
 deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
                    Delivered, State = #q{backing_queue       = BQ,
