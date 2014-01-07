@@ -42,8 +42,8 @@ init([Type, Name, Config]) ->
     {ok, Shovel} = parse(Type, Name, Config),
     {ok, #state{name = Name, type = Type, config = Shovel}}.
 
-parse(static,   Name, Config) -> rabbit_shovel_config:parse(Name, Config);
-parse(dynamic, _Name, Config) -> rabbit_shovel_parameters:parse(Config).
+parse(static,  Name, Config) -> rabbit_shovel_config:parse(Name, Config);
+parse(dynamic, Name, Config) -> rabbit_shovel_parameters:parse(Name, Config).
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
@@ -96,10 +96,13 @@ handle_info(#'basic.consume_ok'{}, State) ->
 handle_info({#'basic.deliver'{delivery_tag = Tag,
                               exchange = Exchange, routing_key = RoutingKey},
              Msg = #amqp_msg{props = Props = #'P_basic'{}}},
-            State = #state{config = Config}) ->
+            State = #state{inbound_uri  = InboundURI,
+                           outbound_uri = OutboundURI,
+                           config = #shovel{publish_properties = PropsFun,
+                                            publish_fields     = FieldsFun}}) ->
     Method = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
-    Method1 = (Config#shovel.publish_fields)(Method),
-    Msg1 = Msg#amqp_msg{props = (Config#shovel.publish_properties)(Props)},
+    Method1 = FieldsFun(InboundURI, OutboundURI, Method),
+    Msg1 = Msg#amqp_msg{props = PropsFun(InboundURI, OutboundURI, Props)},
     {noreply, publish(Tag, Method1, Msg1, State)};
 
 handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},

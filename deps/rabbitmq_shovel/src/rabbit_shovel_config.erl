@@ -209,7 +209,7 @@ make_publish_fun(Fields, Pos, ValidFields) ->
     case SuppliedFields -- ValidFields of
         [] ->
             FieldIndices = make_field_indices(ValidFields, Fields),
-            Fun = fun (Publish) ->
+            Fun = fun (_SrcUri, _DestUri, Publish) ->
                           lists:foldl(fun ({Pos1, Value}, Pub) ->
                                               setelement(Pos1, Pub, Value)
                                       end, Publish, FieldIndices)

@@ -17,13 +17,16 @@
 -module(rabbit_shovel_parameters).
 -behaviour(rabbit_runtime_parameter).
 
+-include_lib("kernel/include/inet.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
 -export([validate/4, notify/4, notify_clear/3]).
--export([register/0, parse/1]).
+-export([register/0, parse/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
+
+-define(ROUTING_HEADER, <<"x-shovelled">>).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "shovel parameters"},
@@ -76,8 +79,9 @@ validation() ->
      {<<"dest-queue">>,      fun rabbit_parameter_validation:binary/2,optional},
      {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
      {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
-     {<<"ack-mode">>,       rabbit_parameter_validation:enum(
-                              ['no-ack', 'on-publish', 'on-confirm']), optional}
+     {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
+     {<<"ack-mode">>,        rabbit_parameter_validation:enum(
+                               ['no-ack', 'on-publish', 'on-confirm']), optional}
     ].
 
 %% TODO this function is duplicated from federation. Move to amqp_uri module?
@@ -102,47 +106,64 @@ validate_uri(Name, Term) ->
 
 %%----------------------------------------------------------------------------
 
-parse(Def) ->
-    SrcURIs     = get_uris(<<"src-uri">>,       Def),
-    DestURIs    = get_uris(<<"dest-uri">>,      Def),
-    SrcExch     = pget(<<"src-exchange">>,      Def, none),
-    SrcExchKey  = pget(<<"src-exchange-key">>,  Def, <<>>), %% [1]
-    SrcQueue    = pget(<<"src-queue">>,         Def, none),
-    DestExch    = pget(<<"dest-exchange">>,     Def, none),
-    DestExchKey = pget(<<"dest-exchange-key">>, Def, none),
-    DestQueue   = pget(<<"dest-queue">>,        Def, none),
+parse({VHost, Name}, Def) ->
+    SrcURIs  = get_uris(<<"src-uri">>,       Def),
+    DestURIs = get_uris(<<"dest-uri">>,      Def),
+    SrcX     = pget(<<"src-exchange">>,      Def, none),
+    SrcXKey  = pget(<<"src-exchange-key">>,  Def, <<>>), %% [1]
+    SrcQ     = pget(<<"src-queue">>,         Def, none),
+    DestX    = pget(<<"dest-exchange">>,     Def, none),
+    DestXKey = pget(<<"dest-exchange-key">>, Def, none),
+    DestQ    = pget(<<"dest-queue">>,        Def, none),
     %% [1] src-exchange-key is never ignored if src-exchange is set
-    {SrcFun, Queue} =
-        case SrcQueue of
+    {SrcFun, Queue, Table1} =
+        case SrcQ of
             none -> {fun (_Conn, Ch) ->
                              Ms = [#'queue.declare'{exclusive = true},
-                                   #'queue.bind'{routing_key = SrcExchKey,
-                                                 exchange    = SrcExch}],
+                                   #'queue.bind'{routing_key = SrcXKey,
+                                                 exchange    = SrcX}],
                              [amqp_channel:call(Ch, M) || M <- Ms]
-                     end, <<>>};
+                     end, <<>>, [{<<"src-exchange">>,     SrcX},
+                                 {<<"src-exchange-key">>, SrcXKey}]};
             _    -> {fun (Conn, _Ch) ->
-                             ensure_queue(Conn, SrcQueue)
-                     end, SrcQueue}
+                             ensure_queue(Conn, SrcQ)
+                     end, SrcQ, [{<<"src-queue">>, SrcQ}]}
         end,
     DestFun = fun (Conn, _Ch) ->
-                      case DestQueue of
+                      case DestQ of
                           none -> ok;
-                          _    -> ensure_queue(Conn, DestQueue)
+                          _    -> ensure_queue(Conn, DestQ)
                       end
               end,
-    {Exch, Key}  = case DestQueue of
-                       none -> {DestExch, DestExchKey};
-                       _    -> {<<>>,     DestQueue}
-                   end,
-    PubFun = fun (P0) -> P1 = case Exch of
-                                  none -> P0;
-                                  _    -> P0#'basic.publish'{exchange = Exch}
-                              end,
-                         case Key of
-                             none -> P1;
-                             _    -> P1#'basic.publish'{routing_key = Key}
-                         end
+    {X, Key, Table2}
+        = case DestQ of
+              none -> {DestX, DestXKey, [{<<"dest-exchange">>,     DestX},
+                                         {<<"dest-exchange-key">>, DestXKey}]};
+              _    -> {<<>>,  DestQ,    [{<<"dest-queue">>,        DestQ}]}
+          end,
+    PubFun = fun (_SrcURI, _DestURI, P0) ->
+                     P1 = case X of
+                              none -> P0;
+                              _    -> P0#'basic.publish'{exchange = X}
+                          end,
+                     case Key of
+                         none -> P1;
+                         _    -> P1#'basic.publish'{routing_key = Key}
+                     end
              end,
+    AddHeaders = pget(<<"add-forward-headers">>, Def, false),
+    Table0 = [{<<"shovel-host">>,  rabbit_nodes:fqdn_nodename()},
+              {<<"shovel-name">>,  Name},
+              {<<"shovel-vhost">>, VHost}],
+    PubPropsFun = fun (SrcURI, DestURI, P = #'P_basic'{headers = H}) ->
+                          case AddHeaders of
+                              true  -> H1 = update_headers(
+                                              Table0, Table1 ++ Table2,
+                                              SrcURI, DestURI, H),
+                                       P#'P_basic'{headers = H1};
+                              false -> P
+                          end
+                  end,
     {ok, #shovel{
        sources            = #endpoint{uris                 = SrcURIs,
                                       resource_declaration = SrcFun},
@@ -152,7 +173,7 @@ parse(Def) ->
        ack_mode           = translate_ack_mode(
                               pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
        publish_fields     = PubFun,
-       publish_properties = fun (P) -> P end,
+       publish_properties = PubPropsFun,
        queue              = Queue,
        reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1)}}.
 
@@ -181,3 +202,10 @@ ensure_queue(Conn, Queue) ->
     after
         catch amqp_channel:close(Ch)
     end.
+
+update_headers(Table0, Table1, SrcURI, DestURI, Headers) ->
+    Table = Table0 ++ [{<<"src-uri">>,  list_to_binary(SrcURI)},
+                       {<<"dest-uri">>, list_to_binary(DestURI)}] ++ Table1,
+    rabbit_basic:prepend_table_header(
+      ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
+      Headers).
