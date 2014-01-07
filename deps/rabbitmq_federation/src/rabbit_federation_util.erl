@@ -29,13 +29,8 @@
 
 local_nodename(VHost) ->
     rabbit_runtime_parameters:value(
-      VHost, <<"federation">>, <<"local-nodename">>, local_nodename_implicit()).
-
-local_nodename_implicit() ->
-    {ID, _} = rabbit_nodes:parts(node()),
-    {ok, Host} = inet:gethostname(),
-    {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
-    list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN}))).
+      VHost, <<"federation">>, <<"local-nodename">>,
+      rabbit_nodes:fqdn_nodename()).
 
 should_forward(undefined, _MaxHops) ->
     true;
