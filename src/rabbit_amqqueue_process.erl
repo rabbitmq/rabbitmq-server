@@ -458,12 +458,11 @@ run_message_queue(Blocked, State = #q{consumers = Consumers}) ->
     case is_empty(State) of
         true  -> blocked(lists:append(Blocked), Consumers, State);
         false -> case rabbit_queue_consumers:deliver(
-                        fun(AckRequired, State1) ->
-                                fetch(AckRequired, State1)
-                        end, qname(State), State, Consumers) of
-                     {delivered, MoreBlocked, State2, Consumers1} ->
+                        fun(AckRequired) -> fetch(AckRequired, State) end,
+                        qname(State), Consumers) of
+                     {delivered, MoreBlocked, State1, Consumers1} ->
                          run_message_queue([MoreBlocked | Blocked],
-                                           State2#q{consumers = Consumers1});
+                                           State1#q{consumers = Consumers1});
                      {undelivered, MoreBlocked, Consumers1} ->
                          blocked(lists:append([MoreBlocked | Blocked]),
                                  Consumers1, State)
@@ -474,19 +473,16 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
                                               backing_queue_state = BQS}) ->
     case rabbit_queue_consumers:deliver(
-           fun (true, BQS1) ->
-                   true = BQ:is_empty(BQS1),
-                   {AckTag, BQS2} = BQ:publish_delivered(
-                                      Message, Props, SenderPid, BQS1),
-                   {{Message, Delivered, AckTag}, {ack, BQS2}};
-               (false, _BQS) ->
-                   {{Message, Delivered, undefined}, noack}
-           end, qname(State), BQS, State#q.consumers) of
-        {delivered, Blocked, {ack, BQS3}, Consumers} ->
-            {delivered, blocked(Blocked, Consumers,
-                                State#q{backing_queue_state = BQS3})};
-        {delivered, Blocked, noack, Consumers} ->
-            {delivered, discard(Delivery, blocked(Blocked, Consumers, State))};
+           fun (true)  -> true = BQ:is_empty(BQS),
+                          {AckTag, BQS1} = BQ:publish_delivered(
+                                             Message, Props, SenderPid, BQS),
+                          {{Message, Delivered, AckTag},
+                           State#q{backing_queue_state = BQS1}};
+               (false) -> {{Message, Delivered, undefined},
+                           discard(Delivery, State)}
+           end, qname(State), State#q.consumers) of
+        {delivered, Blocked, State1, Consumers} ->
+            {delivered,   blocked(Blocked, Consumers, State1)};
         {undelivered, Blocked, Consumers} ->
             {undelivered, blocked(Blocked, Consumers, State)}
     end.
