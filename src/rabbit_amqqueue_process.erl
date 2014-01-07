@@ -221,8 +221,7 @@ notify_decorators(State = #q{consumers           = Consumers,
                              backing_queue_state = BQS}) ->
     P = rabbit_queue_consumers:max_active_priority(Consumers),
     decorator_callback(qname(State), active_consumers_changed,
-                       [[{max_active_consumer_priority, P},
-                         {is_empty,                     BQ:is_empty(BQS)}]]).
+                       [P, BQ:is_empty(BQS)]).
 
 decorator_callback(QName, F, A) ->
     %% Look up again in case policy and hence decorators have changed

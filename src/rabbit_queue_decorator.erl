@@ -17,7 +17,9 @@
 
 -callback active_for(rabbit_types:amqqueue()) -> boolean().
 
--callback active_consumers_changed(rabbit_types:amqqueue(), any()) -> 'ok'.
+%% called with Queue, MaxActivePriority, IsEmpty
+-callback active_consumers_changed(
+            rabbit_types:amqqueue(), integer(), boolean()) -> 'ok'.
 
 -else.
 
@@ -25,7 +27,7 @@
 
 behaviour_info(callbacks) ->
     [{description, 0}, {startup, 1}, {shutdown, 1}, {policy_changed, 2},
-     {active_for, 1}, {active_consumers_changed, 2}];
+     {active_for, 1}, {active_consumers_changed, 3}];
 behaviour_info(_Other) ->
     undefined.
 
