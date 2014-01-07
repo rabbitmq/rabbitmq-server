@@ -120,7 +120,7 @@ table_field_to_binary({FName, T, V}) ->
     [short_string_to_binary(FName) | field_value_to_binary(T, V)].
 
 field_value_to_binary(longstr,   V) -> [$S | long_string_to_binary(V)];
-field_value_to_binary(signedint, V) -> [$I | <<V:32/signed>>];
+field_value_to_binary(signedint, V) -> [$I, <<V:32/signed>>];
 field_value_to_binary(decimal,   V) -> {Before, After} = V,
                                        [$D, Before, <<After:32>>];
 field_value_to_binary(timestamp, V) -> [$T, <<V:64>>];
