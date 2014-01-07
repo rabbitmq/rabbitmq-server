@@ -126,7 +126,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
     State3 = lists:foldl(fun (Delivery, StateN) ->
                                  deliver_or_enqueue(Delivery, true, StateN)
                          end, State2, Deliveries),
-    notify_decorators(startup, [], State3),
+    notify_decorators(startup, State3),
     State3.
 
 init_state(Q) ->
@@ -188,7 +188,7 @@ declare(Recover, From, State = #q{q                   = Q,
                     State1 = process_args_policy(
                                State#q{backing_queue       = BQ,
                                        backing_queue_state = BQS}),
-                    notify_decorators(startup, [], State),
+                    notify_decorators(startup, State),
                     rabbit_event:notify(queue_created,
                                         infos(?CREATION_EVENT_KEYS, State1)),
                     rabbit_event:if_enabled(State1, #q.stats_timer,
@@ -213,18 +213,16 @@ matches(new, Q1, Q2) ->
 matches(_,  Q,   Q) -> true;
 matches(_, _Q, _Q1) -> false.
 
-notify_decorators(Event, Props, State) when Event =:= startup;
-                                            Event =:= shutdown ->
-    decorator_callback(qname(State), Event, Props);
+notify_decorators(Event, State) ->
+    decorator_callback(qname(State), Event, []).
 
-notify_decorators(Event, Props, State = #q{consumers           = Consumers,
-                                           backing_queue       = BQ,
-                                           backing_queue_state = BQS}) ->
+notify_decorators(State = #q{consumers           = Consumers,
+                             backing_queue       = BQ,
+                             backing_queue_state = BQS}) ->
     P = rabbit_queue_consumers:max_active_priority(Consumers),
-    decorator_callback(qname(State), notify,
-                       [Event, [{max_active_consumer_priority, P},
-                                {is_empty, BQ:is_empty(BQS)} |
-                                Props]]).
+    decorator_callback(qname(State), active_consumers_changed,
+                       [[{max_active_consumer_priority, P},
+                         {is_empty,                     BQ:is_empty(BQS)}]]).
 
 decorator_callback(QName, F, A) ->
     %% Look up again in case policy and hence decorators have changed
@@ -308,7 +306,7 @@ terminate_shutdown(Fun, State) ->
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
                      QName = qname(State),
-                     notify_decorators(shutdown, [], State),
+                     notify_decorators(shutdown, State),
                      [emit_consumer_deleted(Ch, CTag, QName) ||
                          {Ch, CTag, _, _} <-
                              rabbit_queue_consumers:all(Consumers)],
@@ -401,7 +399,7 @@ is_empty(#q{backing_queue = BQ, backing_queue_state = BQS}) -> BQ:is_empty(BQS).
 
 maybe_send_drained(WasEmpty, State) ->
     case (not WasEmpty) andalso is_empty(State) of
-        true  -> notify_decorators(queue_empty, [], State),
+        true  -> notify_decorators(State),
                  rabbit_queue_consumers:send_drained();
         false -> ok
     end,
@@ -412,8 +410,10 @@ deliver_msgs_to_consumers(FetchFun, Stop, State = #q{consumers = Consumers}) ->
         rabbit_queue_consumers:deliver(FetchFun, Stop, qname(State), State,
                                        Consumers),
     State2 = State1#q{consumers = Consumers1},
-    [notify_decorators(consumer_blocked, [{consumer_tag, CTag}], State2) ||
-        {_ChPid, CTag} <- Blocked],
+    case Blocked of
+        true  -> notify_decorators(State2);
+        false -> ok
+    end,
     {Active, State2}.
 
 confirm_messages([], State) ->
@@ -568,10 +568,9 @@ possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:possibly_unblock(Update, ChPid, Consumers) of
         unchanged ->
             State;
-        {unblocked, UnblockedCTags, Consumers1} ->
+        {unblocked, Consumers1} ->
             State1 = State#q{consumers = Consumers1},
-            [notify_decorators(consumer_unblocked, [{consumer_tag, CTag}],
-                               State1) || CTag <- UnblockedCTags],
+            notify_decorators(State1),
             run_message_queue(State1)
     end.
 
@@ -599,8 +598,7 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                       end,
             State2 = State1#q{consumers          = Consumers1,
                               exclusive_consumer = Holder1},
-            [notify_decorators(basic_cancel, [{consumer_tag, CTag}], State2) ||
-                CTag <- ChCTags],
+            notify_decorators(State2),
             case should_auto_delete(State2) of
                 true  -> {stop, State2};
                 false -> {ok, requeue_and_run(ChAckTags,
@@ -1034,8 +1032,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                   ok = maybe_send_reply(ChPid, OkMsg),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                         not NoAck, qname(State1), OtherArgs),
-                  notify_decorators(
-                    basic_consume, [{consumer_tag, ConsumerTag}], State1),
+                  notify_decorators(State1),
                   reply(ok, run_message_queue(State1))
     end;
 
@@ -1054,8 +1051,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             State1 = State#q{consumers          = Consumers1,
                              exclusive_consumer = Holder1},
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State1)),
-            notify_decorators(
-              basic_cancel, [{consumer_tag, ConsumerTag}], State1),
+            notify_decorators(State1),
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
                 true  -> stop(ok, State1)
@@ -1218,7 +1214,7 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
                              ChPid, State));
 
 handle_cast(notify_decorators, State) ->
-    notify_decorators(refresh, [], State),
+    notify_decorators(State),
     noreply(State);
 
 handle_cast(policy_changed, State = #q{q = #amqqueue{name = Name}}) ->
