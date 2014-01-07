@@ -599,6 +599,8 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                       end,
             State2 = State1#q{consumers          = Consumers1,
                               exclusive_consumer = Holder1},
+            [notify_decorators(basic_cancel, [{consumer_tag, CTag}], State2) ||
+                CTag <- ChCTags],
             case should_auto_delete(State2) of
                 true  -> {stop, State2};
                 false -> {ok, requeue_and_run(ChAckTags,
