@@ -28,7 +28,8 @@
 
 -behaviour(rabbit_queue_decorator).
 
--export([startup/1, shutdown/1, policy_changed/2, active_for/1, notify/3]).
+-export([startup/1, shutdown/1, policy_changed/2, active_for/1,
+         active_consumers_changed/2]).
 -export([policy_changed_local/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -65,33 +66,7 @@ policy_changed_local(Q1, Q2) ->
 
 active_for(Q) -> rabbit_federation_upstream:federate(Q).
 
-%% We need to reconsider whether we need to run or pause every time
-%% something significant changes in the queue. In theory we don't need
-%% to respond to absolutely every event the queue emits, but in
-%% practice we need to respond to most of them and it doesn't really
-%% cost much to respond to all of them. So that's why we ignore the
-%% Event parameter.
-%%
-%% For the record, the events, and why we care about them:
-%%
-%% consumer_blocked   | We may have no more active consumers, and thus need to
-%%                    | pause
-%%                    |
-%% consumer_unblocked | We don't care
-%%                    |
-%% queue_empty        | The queue has become empty therefore we need to run to
-%%                    | get more messages
-%%                    |
-%% basic_consume      | We don't care
-%%                    |
-%% basic_cancel       | We may have no more active consumers, and thus need to
-%%                    | pause
-%%                    |
-%% refresh            | We asked for it (we have started a new link after
-%%                    | failover and need something to prod us into action
-%%                    | (or not)).
-
-notify(#amqqueue{name = QName}, _Event, Props) ->
+active_consumers_changed(#amqqueue{name = QName}, Props) ->
     case pget(is_empty, Props) andalso
         active_unfederated(pget(max_active_consumer_priority, Props)) of
         true  -> rabbit_federation_queue_link:run(QName);
