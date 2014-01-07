@@ -273,7 +273,7 @@ handle_cast({method, Method, Content, Flow},
         noflow -> ok
     end,
     %% handle MRDQ before calling handle method
-    M = handle_expand_shortcuts(Method, State),
+    M = expand_shortcuts(Method, State),
     try handle_method(rabbit_channel_interceptor:intercept_method(M),
                       Content, State) of
         {reply, Reply, NewState} ->
@@ -557,44 +557,44 @@ expand_binding(queue, DestinationNameBin, RoutingKey, State) ->
 expand_binding(exchange, DestinationNameBin, RoutingKey, _) ->
     {DestinationNameBin, RoutingKey}.
 
-handle_expand_shortcuts(#'basic.get'{queue = QueueNameBin} = Method, State) ->
+expand_shortcuts(#'basic.get'{queue = QueueNameBin} = Method, State) ->
     setelement(#'basic.get'.queue, Method,
                expand_queue_name_shortcut(QueueNameBin, State));
-handle_expand_shortcuts(#'basic.consume'{queue = QueueNameBin} = Method, State) ->
+expand_shortcuts(#'basic.consume'{queue = QueueNameBin} = Method, State) ->
     setelement(#'basic.consume'.queue, Method,
                expand_queue_name_shortcut(QueueNameBin, State));
-handle_expand_shortcuts(#'queue.delete'{queue = QueueNameBin} = Method, State) ->
+expand_shortcuts(#'queue.delete'{queue = QueueNameBin} = Method, State) ->
     setelement(#'queue.delete'.queue, Method,
                expand_queue_name_shortcut(QueueNameBin, State));
-handle_expand_shortcuts(#'queue.purge'{queue = QueueNameBin} = Method, State) ->
+expand_shortcuts(#'queue.purge'{queue = QueueNameBin} = Method, State) ->
     setelement(#'queue.purge'.queue, Method,
                expand_queue_name_shortcut(QueueNameBin, State));
-handle_expand_shortcuts(#'exchange.bind'{destination = DestinationNameBin,
+expand_shortcuts(#'exchange.bind'{destination = DestinationNameBin,
                                         routing_key = RoutingKey} = Method,
                         State) ->
     {DestinationName, ActualRoutingKey} =
         expand_binding(exchange, DestinationNameBin, RoutingKey, State),
     Method#'exchange.bind'{destination = DestinationName,
                            routing_key = ActualRoutingKey};
-handle_expand_shortcuts(#'exchange.unbind'{destination = DestinationNameBin,
+expand_shortcuts(#'exchange.unbind'{destination = DestinationNameBin,
                                            routing_key = RoutingKey} = Method, State) ->
     {DestinationName, ActualRoutingKey} =
         expand_binding(exchange, DestinationNameBin, RoutingKey, State),
     Method#'exchange.unbind'{destination = DestinationName,
                              routing_key = ActualRoutingKey};
-handle_expand_shortcuts(#'queue.bind'{queue = QueueNameBin,
+expand_shortcuts(#'queue.bind'{queue = QueueNameBin,
                                       routing_key = RoutingKey} = Method,
                         State) ->
     {DestinationName, ActualRoutingKey} =
         expand_binding(queue, QueueNameBin, RoutingKey, State),
     Method#'queue.bind'{queue = DestinationName, routing_key = ActualRoutingKey};
-handle_expand_shortcuts(#'queue.unbind'{queue = QueueNameBin,
+expand_shortcuts(#'queue.unbind'{queue = QueueNameBin,
                                         routing_key = RoutingKey} = Method,
                         State) ->
     {DestinationName, ActualRoutingKey} =
         expand_binding(queue, QueueNameBin, RoutingKey, State),
     Method#'queue.bind'{queue = DestinationName, routing_key = ActualRoutingKey};
-handle_expand_shortcuts(M, _State) ->
+expand_shortcuts(M, _State) ->
     M.
 
 
