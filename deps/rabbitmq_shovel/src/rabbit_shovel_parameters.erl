@@ -17,7 +17,6 @@
 -module(rabbit_shovel_parameters).
 -behaviour(rabbit_runtime_parameter).
 
--include_lib("kernel/include/inet.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
