@@ -410,8 +410,8 @@ deliver_msgs_to_consumers(FetchFun, Stop, State = #q{consumers = Consumers}) ->
                                        Consumers),
     State2 = State1#q{consumers = Consumers1},
     case Blocked of
-        true  -> notify_decorators(State2);
-        false -> ok
+        something_became_blocked -> notify_decorators(State2);
+        nothing_became_blocked   -> ok
     end,
     {Active, State2}.
 
