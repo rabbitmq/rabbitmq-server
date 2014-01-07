@@ -14,7 +14,7 @@ dispatcher_add(function(sammy) {
         });
     sammy.put('#/shovel-parameters', function() {
             var num_keys = ['prefetch-count', 'reconnect-delay'];
-            var bool_keys = [];
+            var bool_keys = ['add-forward-headers'];
             var arrayable_keys = ['src-uri', 'dest-uri'];
             put_parameter(this, [], num_keys, bool_keys, arrayable_keys);
             return false;
@@ -41,6 +41,9 @@ HELP['shovel-prefetch'] =
 
 HELP['shovel-reconnect'] =
     'Time in seconds to wait after a shovel goes down before attempting reconnection. Defaults to 1 if not set.';
+
+HELP['shovel-forward-headers'] =
+    'Whether to add headers to the shovelled messages indicating where they have been shovelled from and to. Defaults to false if not set.';
 
 HELP['shovel-ack-mode'] =
     '<dl>\

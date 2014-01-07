@@ -14,6 +14,7 @@
     <th colspan="2">Destination</th>
     <th>Prefetch Count</th>
     <th>Reconnect Delay</th>
+    <th>Add headers</th>
     <th>Ack mode</th>
   </tr>
  </thead>
@@ -33,6 +34,7 @@
      <td><%= fmt_shovel_endpoint('dest', shovel.value) %></td>
      <td class="r"><%= shovel.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
+     <td class="c"><%= fmt_boolean(shovel.value['add-forward-headers']) %></td>
      <td class="c"><%= fmt_string(shovel.value['ack-mode']) %></td>
    </tr>
 <% } %>
@@ -149,6 +151,20 @@
             </label>
           </th>
           <td><input type="text" name="reconnect-delay"/> s</td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Add forwarding headers:
+              <span class="help" id="shovel-forward-headers"></span>
+            </label>
+          </th>
+          <td>
+            <select name="add-forward-headers">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </td>
         </tr>
         <tr>
           <th>

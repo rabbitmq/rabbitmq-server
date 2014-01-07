@@ -33,6 +33,10 @@
         <td><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
       </tr>
       <tr>
+        <th>Add headers</th>
+        <td><%= fmt_boolean(shovel.value['add-forward-headers']) %></td>
+      </tr>
+      <tr>
         <th>Ack mode</th>
         <td><%= fmt_string(shovel.value['ack-mode']) %></td>
       </tr>
