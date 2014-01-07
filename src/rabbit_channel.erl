@@ -522,16 +522,11 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
-binding_to_resource(queue, DestinationNameBin, State) ->
-    queue_bin_to_resource(DestinationNameBin, State);
-binding_to_resource(exchange, DestinationNameBin, State) ->
-    exchange_bin_to_resource(DestinationNameBin, State).
-
-queue_bin_to_resource(QueueNameBin, #ch{virtual_host = VHostPath}) ->
+qbin_to_resource(QueueNameBin, #ch{virtual_host = VHostPath}) ->
     rabbit_misc:r(VHostPath, queue, QueueNameBin).
 
-exchange_bin_to_resource(ExchangeNameBin, #ch{virtual_host = VHostPath}) ->
-    rabbit_misc:r(VHostPath, queue, ExchangeNameBin).
+name_to_resource(Type, NameBin, #ch{virtual_host = VHostPath}) ->
+    rabbit_misc:r(VHostPath, Type, NameBin).
 
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
@@ -551,52 +546,22 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
-expand_binding(queue, DestinationNameBin, RoutingKey, State) ->
-    {expand_queue_name_shortcut(DestinationNameBin, State),
-     expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State)};
-expand_binding(exchange, DestinationNameBin, RoutingKey, _) ->
-    {DestinationNameBin, RoutingKey}.
-
-expand_shortcuts(#'basic.get'{queue = QueueNameBin} = Method, State) ->
-    setelement(#'basic.get'.queue, Method,
-               expand_queue_name_shortcut(QueueNameBin, State));
-expand_shortcuts(#'basic.consume'{queue = QueueNameBin} = Method, State) ->
-    setelement(#'basic.consume'.queue, Method,
-               expand_queue_name_shortcut(QueueNameBin, State));
-expand_shortcuts(#'queue.delete'{queue = QueueNameBin} = Method, State) ->
-    setelement(#'queue.delete'.queue, Method,
-               expand_queue_name_shortcut(QueueNameBin, State));
-expand_shortcuts(#'queue.purge'{queue = QueueNameBin} = Method, State) ->
-    setelement(#'queue.purge'.queue, Method,
-               expand_queue_name_shortcut(QueueNameBin, State));
-expand_shortcuts(#'exchange.bind'{destination = DestinationNameBin,
-                                        routing_key = RoutingKey} = Method,
-                        State) ->
-    {DestinationName, ActualRoutingKey} =
-        expand_binding(exchange, DestinationNameBin, RoutingKey, State),
-    Method#'exchange.bind'{destination = DestinationName,
-                           routing_key = ActualRoutingKey};
-expand_shortcuts(#'exchange.unbind'{destination = DestinationNameBin,
-                                           routing_key = RoutingKey} = Method, State) ->
-    {DestinationName, ActualRoutingKey} =
-        expand_binding(exchange, DestinationNameBin, RoutingKey, State),
-    Method#'exchange.unbind'{destination = DestinationName,
-                             routing_key = ActualRoutingKey};
-expand_shortcuts(#'queue.bind'{queue = QueueNameBin,
-                                      routing_key = RoutingKey} = Method,
-                        State) ->
-    {DestinationName, ActualRoutingKey} =
-        expand_binding(queue, QueueNameBin, RoutingKey, State),
-    Method#'queue.bind'{queue = DestinationName, routing_key = ActualRoutingKey};
-expand_shortcuts(#'queue.unbind'{queue = QueueNameBin,
-                                        routing_key = RoutingKey} = Method,
-                        State) ->
-    {DestinationName, ActualRoutingKey} =
-        expand_binding(queue, QueueNameBin, RoutingKey, State),
-    Method#'queue.bind'{queue = DestinationName, routing_key = ActualRoutingKey};
+expand_shortcuts(#'basic.get'{queue = QName} = M, State) ->
+    M#'basic.get'{queue = expand_queue_name_shortcut(QName, State)};
+expand_shortcuts(#'basic.consume'{queue = QName} = M, State) ->
+    M#'basic.consume'{queue = expand_queue_name_shortcut(QName, State)};
+expand_shortcuts(#'queue.delete'{queue = QName} = M, State) ->
+    M#'queue.delete'{queue = expand_queue_name_shortcut(QName, State)};
+expand_shortcuts(#'queue.purge'{queue = QName} = M, State) ->
+    M#'queue.purge'{queue = expand_queue_name_shortcut(QName, State)};
+expand_shortcuts(#'queue.bind'{queue = Q, routing_key = K} = M, State) ->
+    M#'queue.bind'{queue       = expand_queue_name_shortcut(Q, State), 
+                   routing_key = expand_routing_key_shortcut(Q, K, State)};
+expand_shortcuts(#'queue.unbind'{queue = Q, routing_key = K} = M, State) ->
+    M#'queue.bind'{queue       = expand_queue_name_shortcut(Q, State), 
+                   routing_key = expand_routing_key_shortcut(Q, K, State)};
 expand_shortcuts(M, _State) ->
     M.
-
 
 check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
     rabbit_misc:protocol_error(
@@ -769,7 +734,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                              conn_pid   = ConnPid,
                              limiter    = Limiter,
                              next_tag   = DeliveryTag}) ->
-    QueueName = queue_bin_to_resource(QueueNameBin, State),
+    QueueName = qbin_to_resource(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
@@ -807,7 +772,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                              consumer_mapping  = ConsumerMapping}) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
-            QueueName = queue_bin_to_resource(QueueNameBin, State),
+            QueueName = qbin_to_resource(QueueNameBin, State),
             check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
@@ -1120,7 +1085,7 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
                               if_empty = IfEmpty,
                               nowait = NoWait},
               _, State = #ch{conn_pid = ConnPid}) ->
-    QueueName = queue_bin_to_resource(QueueNameBin, State),
+    QueueName = qbin_to_resource(QueueNameBin, State),
     check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with(
            QueueName,
@@ -1160,7 +1125,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
 handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
               _, State = #ch{conn_pid = ConnPid}) ->
-    QueueName = queue_bin_to_resource(QueueNameBin, State),
+    QueueName = qbin_to_resource(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     {ok, PurgedMessageCount} = rabbit_amqqueue:with_exclusive_access_or_die(
                                  QueueName, ConnPid,
@@ -1334,7 +1299,7 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host = VHostPath,
                            conn_pid     = ConnPid }) ->
-    DestinationName = binding_to_resource(DestinationType, DestinationNameBin, State),
+    DestinationName = name_to_resource(DestinationType, DestinationNameBin, State),
     check_write_permitted(DestinationName, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     [check_not_default_exchange(N) || N <- [DestinationName, ExchangeName]],
