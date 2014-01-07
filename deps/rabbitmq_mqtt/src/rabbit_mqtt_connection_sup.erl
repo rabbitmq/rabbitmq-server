@@ -20,7 +20,7 @@
 
 -define(MAX_WAIT, 16#ffffffff).
 
--export([start_link/0]).
+-export([start_link/0, start_keepalive_link/0]).
 
 -export([init/1]).
 
@@ -32,8 +32,16 @@ start_link() ->
                         SupPid,
                         {rabbit_mqtt_reader,
                          {rabbit_mqtt_reader, start_link, []},
-                         transient, ?MAX_WAIT, worker, [rabbit_mqtt_reader]}),
-    {ok, SupPid, ReaderPid}.
+                         intrinsic, ?MAX_WAIT, worker, [rabbit_mqtt_reader]}),
+    {ok, KeepaliveSup} = supervisor2:start_child(
+                          SupPid,
+                          {rabbit_keepalive_sup,
+                           {rabbit_mqtt_connection_sup, start_keepalive_link, []},
+                           intrinsic, infinity, supervisor, [rabbit_keepalive_sup]}),
+    {ok, KeepaliveSup, ReaderPid}.
+
+start_keepalive_link() ->
+    supervisor2:start_link(?MODULE, []).
 
 %%----------------------------------------------------------------------------
 
