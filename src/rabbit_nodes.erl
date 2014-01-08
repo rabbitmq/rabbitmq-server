@@ -17,7 +17,9 @@
 -module(rabbit_nodes).
 
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
-         is_running/2, is_process_running/2]).
+         is_running/2, is_process_running/2, fqdn_nodename/0]).
+
+-include_lib("kernel/include/inet.hrl").
 
 -define(EPMD_TIMEOUT, 30000).
 
@@ -35,6 +37,7 @@
 -spec(cookie_hash/0 :: () -> string()).
 -spec(is_running/2 :: (node(), atom()) -> boolean()).
 -spec(is_process_running/2 :: (node(), atom()) -> boolean()).
+-spec(fqdn_nodename/0 :: () -> binary()).
 
 -endif.
 
@@ -107,3 +110,9 @@ is_process_running(Node, Process) ->
         undefined        -> false;
         P when is_pid(P) -> true
     end.
+
+fqdn_nodename() ->
+    {ID, _} = rabbit_nodes:parts(node()),
+    {ok, Host} = inet:gethostname(),
+    {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
+    list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN}))).
