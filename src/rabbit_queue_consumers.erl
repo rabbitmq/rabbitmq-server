@@ -78,13 +78,12 @@
 -spec send_drained() -> 'ok'.
 -spec deliver(fun ((boolean()) -> {fetch_result(), T}),
               rabbit_amqqueue:name(), state()) ->
-                     {'delivered', [{ch(), rabbit_types:ctag()}], T, state()} |
-                     {'undelivered', [{ch(), rabbit_types:ctag()}], state()}.
+                     {'delivered',   boolean(), T, state()} |
+                     {'undelivered', boolean(), state()}.
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
 -spec subtract_acks(ch(), [ack()]) -> 'not_found' | 'ok'.
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
-                              'unchanged' |
-                              {'unblocked', [rabbit_types:ctag()], state()}.
+                              'unchanged' | {'unblocked', state()}.
 -spec resume_fun()                                        -> cr_fun().
 -spec notify_sent_fun(non_neg_integer())                  -> cr_fun().
 -spec activate_limit_fun()                                -> cr_fun().
@@ -182,23 +181,22 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
 send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()],
                   ok.
 
-deliver(FetchFun, QName, State) ->
-    deliver(FetchFun, QName, [], State).
+deliver(FetchFun, QName, State) -> deliver(FetchFun, QName, false, State).
 
-deliver(FetchFun, QName, Blocked, State = #state{consumers = Consumers}) ->
+deliver(FetchFun, QName, ConsumersChanged,
+        State = #state{consumers = Consumers}) ->
     case priority_queue:out_p(Consumers) of
         {empty, _} ->
-            {undelivered, Blocked,
+            {undelivered, ConsumersChanged,
              State#state{use = update_use(State#state.use, inactive)}};
-        {{value, QEntry = {ChPid, Consumer}, Priority}, Tail} ->
+        {{value, QEntry, Priority}, Tail} ->
             case deliver_to_consumer(FetchFun, QEntry, QName) of
                 {delivered, R} ->
-                    {delivered, Blocked, R,
+                    {delivered, ConsumersChanged, R,
                      State#state{consumers = priority_queue:in(QEntry, Priority,
                                                                Tail)}};
                 undelivered ->
-                    deliver(FetchFun, QName,
-                            [{ChPid, Consumer#consumer.tag} | Blocked],
+                    deliver(FetchFun, QName, true,
                             State#state{consumers = Tail})
             end
     end.
@@ -289,7 +287,6 @@ unblock(C = #cr{blocked_consumers = BlockedQ, limiter = Limiter},
             UnblockedQ = priority_queue:from_list(Unblocked),
             update_ch_record(C#cr{blocked_consumers = BlockedQ1}),
             {unblocked,
-             tags(Unblocked),
              State#state{consumers = priority_queue:join(Consumers, UnblockedQ),
                          use       = update_use(Use, active)}}
     end.
