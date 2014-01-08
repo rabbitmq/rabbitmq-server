@@ -171,7 +171,8 @@ try_handshake(AmqpParams, SIF, State = #state{sock = Sock}) ->
                {ok, Str}  -> list_to_binary(Str);
                {error, _} -> <<"unknown">>
            end,
-    try handshake(AmqpParams, SIF, State#state{name = Name}) of
+    try handshake(AmqpParams, SIF,
+                  State#state{name = <<"client ", Name/binary>>}) of
         Return -> Return
     catch exit:Reason -> {error, Reason}
     end.
