@@ -21,22 +21,24 @@
 
 -behaviour(supervisor2).
 
--export([start_link/5]).
+-export([start_link/6]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Connection, InfraArgs, ChNumber, Consumer = {_, _}) ->
-    {ok, Sup} = supervisor2:start_link(?MODULE, [Consumer]),
+start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
+           Consumer = {_, _}) ->
+    Identity = {ConnName, ChNumber},
+    {ok, Sup} = supervisor2:start_link(?MODULE, [Consumer, Identity]),
     [{gen_consumer, ConsumerPid, _, _}] = supervisor2:which_children(Sup),
     {ok, ChPid} = supervisor2:start_child(
                     Sup, {channel,
                           {amqp_channel, start_link,
-                           [Type, Connection, ChNumber, ConsumerPid]},
+                           [Type, Connection, ChNumber, ConsumerPid, Identity]},
                           intrinsic, ?MAX_WAIT, worker, [amqp_channel]}),
-    Writer = start_writer(Sup, Type, InfraArgs, ChNumber, ChPid),
+    Writer = start_writer(Sup, Type, InfraArgs, ConnName, ChNumber, ChPid),
     amqp_channel:set_writer(ChPid, Writer),
     {ok, AState} = init_command_assembler(Type),
     {ok, Sup, {ChPid, AState}}.
@@ -45,20 +47,20 @@ start_link(Type, Connection, InfraArgs, ChNumber, Consumer = {_, _}) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-start_writer(_Sup, direct, [ConnPid, ConnName, Node, User, VHost, Collector],
-             ChNumber, ChPid) ->
+start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector],
+             ConnName, ChNumber, ChPid) ->
     {ok, RabbitCh} =
         rpc:call(Node, rabbit_direct, start_channel,
                  [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
                   VHost, ?CLIENT_CAPABILITIES, Collector]),
     link(RabbitCh),
     RabbitCh;
-start_writer(Sup, network, [Sock, FrameMax], ChNumber, ChPid) ->
+start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     {ok, Writer} = supervisor2:start_child(
                      Sup,
                      {writer, {rabbit_writer, start_link,
                                [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
-                                unknown]}, %% FIXME hack
+                                {ConnName, ChNumber}]},
                       intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
     Writer.
 
@@ -69,8 +71,8 @@ init_command_assembler(network) -> rabbit_command_assembler:init(?PROTOCOL).
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([{ConsumerModule, ConsumerArgs}]) ->
+init([{ConsumerModule, ConsumerArgs}, Identity]) ->
     {ok, {{one_for_all, 0, 1},
           [{gen_consumer, {amqp_gen_consumer, start_link,
-                           [ConsumerModule, ConsumerArgs]},
+                           [ConsumerModule, ConsumerArgs, Identity]},
            intrinsic, ?MAX_WAIT, worker, [amqp_gen_consumer]}]}}.

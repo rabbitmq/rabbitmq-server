@@ -60,9 +60,8 @@ init() ->
 open_channel_args(#state{node = Node,
                          user = User,
                          vhost = VHost,
-                         adapter_info = Info,
                          collector = Collector}) ->
-    [self(), Info#amqp_adapter_info.name, Node, User, VHost, Collector].
+    [self(), Node, User, VHost, Collector].
 
 do(_Method, _State) ->
     ok.

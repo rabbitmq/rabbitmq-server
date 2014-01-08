@@ -41,7 +41,7 @@ start_channels_manager(Sup, Conn, ConnName, Type) ->
     {ok, ChSupSup} = supervisor2:start_child(
                        Sup,
                        {channel_sup_sup, {amqp_channel_sup_sup, start_link,
-                                          [Type, Conn]},
+                                          [Type, Conn, ConnName]},
                         intrinsic, infinity, supervisor,
                         [amqp_channel_sup_sup]}),
     {ok, _} = supervisor2:start_child(

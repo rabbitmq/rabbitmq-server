@@ -64,7 +64,7 @@
 
 -include("amqp_client_internal.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([call/2, call/3, cast/2, cast/3, cast_flow/3]).
 -export([close/1, close/3]).
@@ -74,7 +74,7 @@
 -export([call_consumer/2, subscribe/3]).
 -export([next_publish_seqno/1, wait_for_confirms/1, wait_for_confirms/2,
          wait_for_confirms_or_die/1, wait_for_confirms_or_die/2]).
--export([start_link/4, set_writer/2, connection_closing/3, open/1]).
+-export([start_link/5, set_writer/2, connection_closing/3, open/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -130,7 +130,7 @@
 %% @spec (Channel, Method) -> Result
 %% @doc This is equivalent to amqp_channel:call(Channel, Method, none).
 call(Channel, Method) ->
-    gen_server:call(Channel, {call, Method, none, self()}, infinity).
+    gen_server2:call(Channel, {call, Method, none, self()}, infinity).
 
 %% @spec (Channel, Method, Content) -> Result
 %% where
@@ -153,12 +153,12 @@ call(Channel, Method) ->
 %% the broker. It does not necessarily imply that the broker has
 %% accepted responsibility for the message.
 call(Channel, Method, Content) ->
-    gen_server:call(Channel, {call, Method, Content, self()}, infinity).
+    gen_server2:call(Channel, {call, Method, Content, self()}, infinity).
 
 %% @spec (Channel, Method) -> ok
 %% @doc This is equivalent to amqp_channel:cast(Channel, Method, none).
 cast(Channel, Method) ->
-    gen_server:cast(Channel, {cast, Method, none, self(), noflow}).
+    gen_server2:cast(Channel, {cast, Method, none, self(), noflow}).
 
 %% @spec (Channel, Method, Content) -> ok
 %% where
@@ -170,7 +170,7 @@ cast(Channel, Method) ->
 %% This function is not recommended with synchronous methods, since there is no
 %% way to verify that the server has received the method.
 cast(Channel, Method, Content) ->
-    gen_server:cast(Channel, {cast, Method, Content, self(), noflow}).
+    gen_server2:cast(Channel, {cast, Method, Content, self(), noflow}).
 
 %% @spec (Channel, Method, Content) -> ok
 %% where
@@ -180,7 +180,7 @@ cast(Channel, Method, Content) ->
 %% @doc Like cast/3, with flow control.
 cast_flow(Channel, Method, Content) ->
     credit_flow:send(Channel),
-    gen_server:cast(Channel, {cast, Method, Content, self(), flow}).
+    gen_server2:cast(Channel, {cast, Method, Content, self(), flow}).
 
 %% @spec (Channel) -> ok | closing
 %% where
@@ -198,7 +198,7 @@ close(Channel) ->
 %% @doc Closes the channel, allowing the caller to supply a reply code and
 %% text. If the channel is already closing, the atom 'closing' is returned.
 close(Channel, Code, Text) ->
-    gen_server:call(Channel, {close, Code, Text}, infinity).
+    gen_server2:call(Channel, {close, Code, Text}, infinity).
 
 %% @spec (Channel) -> integer()
 %% where
@@ -206,7 +206,7 @@ close(Channel, Code, Text) ->
 %% @doc When in confirm mode, returns the sequence number of the next
 %% message to be published.
 next_publish_seqno(Channel) ->
-    gen_server:call(Channel, next_publish_seqno, infinity).
+    gen_server2:call(Channel, next_publish_seqno, infinity).
 
 %% @spec (Channel) -> boolean() | 'timeout'
 %% where
@@ -226,7 +226,7 @@ wait_for_confirms(Channel) ->
 %% Note, when called on a non-Confirm channel, waitForConfirms throws
 %% an exception.
 wait_for_confirms(Channel, Timeout) ->
-    case gen_server:call(Channel, {wait_for_confirms, Timeout}, infinity) of
+    case gen_server2:call(Channel, {wait_for_confirms, Timeout}, infinity) of
         {error, Reason} -> throw(Reason);
         Other           -> Other
     end.
@@ -264,7 +264,7 @@ wait_for_confirms_or_die(Channel, Timeout) ->
 %% @doc This registers a handler to deal with returned messages. The
 %% registered process will receive #basic.return{} records.
 register_return_handler(Channel, ReturnHandler) ->
-    gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
+    gen_server2:cast(Channel, {register_return_handler, ReturnHandler} ).
 
 %% @spec (Channel) -> ok
 %% where
@@ -272,7 +272,7 @@ register_return_handler(Channel, ReturnHandler) ->
 %% @doc Removes the return handler, if it exists. Does nothing if there is no
 %% such handler.
 unregister_return_handler(Channel) ->
-    gen_server:cast(Channel, unregister_return_handler).
+    gen_server2:cast(Channel, unregister_return_handler).
 
 %% @spec (Channel, ConfirmHandler) -> ok
 %% where
@@ -283,7 +283,7 @@ unregister_return_handler(Channel) ->
 %% messages. The registered process will receive #basic.ack{} and
 %% #basic.nack{} commands.
 register_confirm_handler(Channel, ConfirmHandler) ->
-    gen_server:cast(Channel, {register_confirm_handler, ConfirmHandler} ).
+    gen_server2:cast(Channel, {register_confirm_handler, ConfirmHandler} ).
 
 %% @spec (Channel) -> ok
 %% where
@@ -291,7 +291,7 @@ register_confirm_handler(Channel, ConfirmHandler) ->
 %% @doc Removes the confirm handler, if it exists. Does nothing if there is no
 %% such handler.
 unregister_confirm_handler(Channel) ->
-    gen_server:cast(Channel, unregister_confirm_handler).
+    gen_server2:cast(Channel, unregister_confirm_handler).
 
 %% @spec (Channel, FlowHandler) -> ok
 %% where
@@ -300,7 +300,7 @@ unregister_confirm_handler(Channel) ->
 %% @doc This registers a handler to deal with channel flow notifications.
 %% The registered process will receive #channel.flow{} records.
 register_flow_handler(Channel, FlowHandler) ->
-    gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
+    gen_server2:cast(Channel, {register_flow_handler, FlowHandler} ).
 
 %% @spec (Channel) -> ok
 %% where
@@ -308,7 +308,7 @@ register_flow_handler(Channel, FlowHandler) ->
 %% @doc Removes the flow handler, if it exists. Does nothing if there is no
 %% such handler.
 unregister_flow_handler(Channel) ->
-    gen_server:cast(Channel, unregister_flow_handler).
+    gen_server2:cast(Channel, unregister_flow_handler).
 
 %% @spec (Channel, Msg) -> ok
 %% where
@@ -318,7 +318,7 @@ unregister_flow_handler(Channel) ->
 %% where Consumer is the amqp_gen_consumer implementation registered with
 %% the channel.
 call_consumer(Channel, Msg) ->
-    gen_server:call(Channel, {call_consumer, Msg}, infinity).
+    gen_server2:call(Channel, {call_consumer, Msg}, infinity).
 
 %% @spec (Channel, BasicConsume, Subscriber) -> ok
 %% where
@@ -328,27 +328,28 @@ call_consumer(Channel, Msg) ->
 %% @doc Subscribe the given pid to a queue using the specified
 %% basic.consume method.
 subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber) ->
-    gen_server:call(Channel, {subscribe, BasicConsume, Subscriber}, infinity).
+    gen_server2:call(Channel, {subscribe, BasicConsume, Subscriber}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Internal interface
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, Connection, ChannelNumber, Consumer) ->
-    gen_server:start_link(
-        ?MODULE, [Driver, Connection, ChannelNumber, Consumer], []).
+start_link(Driver, Connection, ChannelNumber, Consumer, Identity) ->
+    gen_server2:start_link(
+      ?MODULE, [Driver, Connection, ChannelNumber, Consumer],
+      [{proc_name, Identity}]).
 
 set_writer(Pid, Writer) ->
-    gen_server:cast(Pid, {set_writer, Writer}).
+    gen_server2:cast(Pid, {set_writer, Writer}).
 
 %% @private
 connection_closing(Pid, ChannelCloseType, Reason) ->
-    gen_server:cast(Pid, {connection_closing, ChannelCloseType, Reason}).
+    gen_server2:cast(Pid, {connection_closing, ChannelCloseType, Reason}).
 
 %% @private
 open(Pid) ->
-    gen_server:call(Pid, open, infinity).
+    gen_server2:call(Pid, open, infinity).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -374,13 +375,13 @@ handle_call({call, Method, AmqpMsg, Sender}, From, State) ->
 %% @private
 handle_call({send_command_sync, Method, Content}, From, State) ->
     Ret = handle_method_from_server(Method, Content, State),
-    gen_server:reply(From, ok),
+    gen_server2:reply(From, ok),
     Ret;
 %% Handles the delivery of messages from a direct channel
 %% @private
 handle_call({send_command_sync, Method}, From, State) ->
     Ret = handle_method_from_server(Method, none, State),
-    gen_server:reply(From, ok),
+    gen_server2:reply(From, ok),
     Ret;
 %% @private
 handle_call(next_publish_seqno, _From,
@@ -504,7 +505,7 @@ handle_info({confirm_timeout, From}, State = #state{waiting_set = WSet}) ->
         none ->
             {noreply, State};
         {value, _} ->
-            gen_server:reply(From, timeout),
+            gen_server2:reply(From, timeout),
             {noreply, State#state{waiting_set = gb_trees:delete(From, WSet)}}
     end.
 
@@ -580,7 +581,7 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
         queue:out(RequestQueue),
     case From of
         none -> ok;
-        _    -> gen_server:reply(From, Reply)
+        _    -> gen_server2:reply(From, Reply)
     end,
     do_rpc(State#state{rpc_requests = RequestQueue1}).
 
@@ -594,7 +595,7 @@ do_rpc(State = #state{rpc_requests = Q,
                 true  -> State1;
                 false -> case {From, DoRet} of
                              {none, _} -> ok;
-                             {_, ok}   -> gen_server:reply(From, ok);
+                             {_, ok}   -> gen_server2:reply(From, ok);
                              _         -> ok
                              %% Do not reply if error in do. Expecting
                              %% {channel_exit, _, _}
@@ -604,8 +605,8 @@ do_rpc(State = #state{rpc_requests = Q,
         {empty, NewQ} ->
             case Closing of
                 {connection, Reason} ->
-                    gen_server:cast(self(),
-                                    {shutdown, {connection_closing, Reason}});
+                    gen_server2:cast(self(),
+                                     {shutdown, {connection_closing, Reason}});
                 _ ->
                     ok
             end,
@@ -894,7 +895,7 @@ notify_confirm_waiters(State = #state{waiting_set        = WSet,
                                       only_acks_received = OAR}) ->
     [begin
          safe_cancel_timer(TRef),
-         gen_server:reply(From, OAR)
+         gen_server2:reply(From, OAR)
      end || {From, TRef} <- gb_trees:to_list(WSet)],
     State#state{waiting_set        = gb_trees:empty(),
                 only_acks_received = true}.
