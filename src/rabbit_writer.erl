@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/5, start_link/5, start/7, start_link/7]).
+-export([start/6, start_link/6, start/7, start_link/7]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -41,13 +41,15 @@
 
 -ifdef(use_specs).
 
--spec(start/5 ::
+-spec(start/6 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid())
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name())
         -> rabbit_types:ok(pid())).
--spec(start_link/5 ::
+-spec(start_link/6 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid())
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name())
         -> rabbit_types:ok(pid())).
 -spec(start/7 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
@@ -101,11 +103,11 @@
 
 %%---------------------------------------------------------------------------
 
-start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    start(Sock, Channel, FrameMax, Protocol, ReaderPid, unknown, false).
+start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
+    start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, false).
 
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, unknown, false).
+start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
+    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, false).
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
       ReaderWantsStats) ->
