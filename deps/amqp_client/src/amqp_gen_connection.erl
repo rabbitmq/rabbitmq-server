@@ -109,7 +109,7 @@ behaviour_info(callbacks) ->
      %%     {ok, ConnectParams} | {closing, ConnectParams, AmqpError, Reply} |
      %%         {error, Error}
      %% where
-     %%     ConnectParams = {ServerProperties, ChannelMax, NewState}
+     %%     ConnectParams = {ServerProperties, ChannelMax, ChMgr, NewState}
      {connect, 4},
 
      %% do(Method, State) -> Ignored
