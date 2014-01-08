@@ -181,12 +181,12 @@ handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
     network_handshake(AmqpParams, start_infrastructure(SIF, State0)).
 
-start_infrastructure(SIF, State = #state{sock = Sock}) ->
-    {ok, Writer} = SIF(Sock),
-    State#state{writer0 = Writer}.
+start_infrastructure(SIF, State = #state{sock = Sock, name = Name}) ->
+    {ok, ChMgr, Writer} = SIF(Sock, Name),
+    {ChMgr, State#state{writer0 = Writer}}.
 
 network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
-                  State0) ->
+                  {ChMgr, State0}) ->
     Start = #'connection.start'{server_properties = ServerProperties,
                                 mechanisms = Mechanisms} =
         handshake_recv('connection.start'),
@@ -199,7 +199,7 @@ network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
             {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, State0),
             do2(TuneOk, State1),
             do2(#'connection.open'{virtual_host = VHost}, State1),
-            Params = {ServerProperties, ChannelMax, State1},
+            Params = {ServerProperties, ChannelMax, ChMgr, State1},
             case handshake_recv('connection.open_ok') of
                 #'connection.open_ok'{}                     -> {ok, Params};
                 {closing, #amqp_error{} = AmqpError, Error} -> {closing, Params,
@@ -246,6 +246,7 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
                            heartbeat   = Heartbeat}, ChannelMax, NewState}.
 
 start_heartbeat(#state{sock      = Sock,
+                       name      = Name,
                        heartbeat = Heartbeat,
                        type_sup  = Sup}) ->
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
@@ -253,7 +254,7 @@ start_heartbeat(#state{sock      = Sock,
     Connection = self(),
     ReceiveFun = fun () -> Connection ! heartbeat_timeout end,
     rabbit_heartbeat:start(
-      Sup, Sock, Heartbeat, SendFun, Heartbeat, ReceiveFun).
+      Sup, Sock, Name, Heartbeat, SendFun, Heartbeat, ReceiveFun).
 
 login(Params = #amqp_params_network{auth_mechanisms = ClientMechanisms,
                                     client_properties = UserProps},

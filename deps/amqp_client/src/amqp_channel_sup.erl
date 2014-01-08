@@ -57,7 +57,8 @@ start_writer(Sup, network, [Sock, FrameMax], ChNumber, ChPid) ->
     {ok, Writer} = supervisor2:start_child(
                      Sup,
                      {writer, {rabbit_writer, start_link,
-                               [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid]},
+                               [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
+                                unknown]}, %% FIXME hack
                       intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
     Writer.
 

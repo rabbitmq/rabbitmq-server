@@ -19,9 +19,9 @@
 
 -include("amqp_client_internal.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
--export([start_link/2, open_channel/4, set_channel_max/2, is_empty/1,
+-export([start_link/3, open_channel/4, set_channel_max/2, is_empty/1,
          num_channels/1, pass_frame/3, signal_connection_closing/3,
          process_channel_frame/4]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -38,27 +38,28 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Connection, ChSupSup) ->
-    gen_server:start_link(?MODULE, [Connection, ChSupSup], []).
+start_link(Connection, ConnName, ChSupSup) ->
+    gen_server2:start_link(
+      ?MODULE, [Connection, ChSupSup], [{proc_name, ConnName}]).
 
 open_channel(ChMgr, ProposedNumber, Consumer, InfraArgs) ->
-    gen_server:call(ChMgr, {open_channel, ProposedNumber, Consumer, InfraArgs},
-                    infinity).
+    gen_server2:call(ChMgr, {open_channel, ProposedNumber, Consumer, InfraArgs},
+                     infinity).
 
 set_channel_max(ChMgr, ChannelMax) ->
-    gen_server:cast(ChMgr, {set_channel_max, ChannelMax}).
+    gen_server2:cast(ChMgr, {set_channel_max, ChannelMax}).
 
 is_empty(ChMgr) ->
-    gen_server:call(ChMgr, is_empty, infinity).
+    gen_server2:call(ChMgr, is_empty, infinity).
 
 num_channels(ChMgr) ->
-    gen_server:call(ChMgr, num_channels, infinity).
+    gen_server2:call(ChMgr, num_channels, infinity).
 
 pass_frame(ChMgr, ChNumber, Frame) ->
-    gen_server:cast(ChMgr, {pass_frame, ChNumber, Frame}).
+    gen_server2:cast(ChMgr, {pass_frame, ChNumber, Frame}).
 
 signal_connection_closing(ChMgr, ChannelCloseType, Reason) ->
-    gen_server:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
+    gen_server2:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
 
 process_channel_frame(Frame, Channel, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of

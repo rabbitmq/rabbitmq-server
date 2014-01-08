@@ -162,11 +162,10 @@ init({TypeSup, AMQPParams}) ->
 handle_call(connect, _From, {TypeSup, AMQPParams}) ->
     {Type, Mod} = amqp_connection_type_sup:type_module(AMQPParams),
     {ok, MState} = Mod:init(),
-    {ok, SIF, ChMgr} = amqp_connection_type_sup:start_infrastructure(
-                         TypeSup, self(), Type),
+    SIF = amqp_connection_type_sup:start_infrastructure_fun(
+            TypeSup, self(), Type),
     State = #state{module           = Mod,
                    module_state     = MState,
-                   channels_manager = ChMgr,
                    amqp_params      = AMQPParams,
                    block_handler    = none},
     case Mod:connect(AMQPParams, SIF, TypeSup, MState) of
@@ -189,15 +188,17 @@ handle_call({info, Items}, _From, State) ->
 handle_call(info_keys, _From, State = #state{module = Mod}) ->
     {reply, ?INFO_KEYS ++ Mod:info_keys(), State}.
 
-after_connect({ServerProperties, ChannelMax, NewMState},
-               State = #state{channels_manager = ChMgr}) ->
+after_connect({ServerProperties, ChannelMax, ChMgr, NewMState}, State) ->
     case ChannelMax of
         0 -> ok;
         _ -> amqp_channels_manager:set_channel_max(ChMgr, ChannelMax)
     end,
-    State#state{server_properties = ServerProperties,
-                channel_max       = ChannelMax,
-                module_state      = NewMState}.
+    State1 = State#state{server_properties = ServerProperties,
+                         channel_max       = ChannelMax,
+                         channels_manager  = ChMgr,
+                         module_state      = NewMState},
+    rabbit_misc:store_proc_name(?MODULE, i(name, State1)),
+    State1.
 
 handle_cast({method, Method, none, noflow}, State) ->
     handle_method(Method, State);

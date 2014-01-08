@@ -133,10 +133,10 @@ connect(Params = #amqp_params_direct{username     = Username,
                   [AuthToken, VHost, ?PROTOCOL, self(),
                    connection_info(State1)]) of
         {ok, {User, ServerProperties}} ->
-            {ok, Collector} = SIF(),
+            {ok, ChMgr, Collector} = SIF(i(name, State1)),
             State2 = State1#state{user      = User,
                                   collector = Collector},
-            {ok, {ServerProperties, 0, State2}};
+            {ok, {ServerProperties, 0, ChMgr, State2}};
         {error, _} = E ->
             E;
         {badrpc, nodedown} ->

@@ -19,9 +19,9 @@
 
 -include("amqp_client_internal.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
--export([start_link/4]).
+-export([start_link/5]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -36,8 +36,9 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Sock, Connection, ChMgr, AState) ->
-    gen_server:start_link(?MODULE, [Sock, Connection, ChMgr, AState], []).
+start_link(Sock, Connection, ChMgr, AState, ConnName) ->
+    gen_server2:start_link(
+      ?MODULE, [Sock, Connection, ChMgr, AState], [{proc_name, ConnName}]).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
