@@ -578,9 +578,7 @@ possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
         unchanged ->
             State;
         {unblocked, Consumers1} ->
-            State1 = State#q{consumers = Consumers1},
-            notify_decorators(State1),
-            run_message_queue(State1)
+            run_message_queue(true, State#q{consumers = Consumers1})
     end.
 
 should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
