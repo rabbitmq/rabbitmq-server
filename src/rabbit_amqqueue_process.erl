@@ -704,7 +704,9 @@ remove_consumers(ChPid, Queue, QName) ->
 channel_consumers(ChPid, Queue) ->
     priority_queue:fold(
       fun ({CP, #consumer{tag = CTag}}, _, Acc) when CP =:= ChPid ->
-              [CTag | Acc]
+              [CTag | Acc];
+          (_, _, Acc) ->
+              Acc
       end, [], Queue).
 
 possibly_unblock(State, ChPid, Update) ->
