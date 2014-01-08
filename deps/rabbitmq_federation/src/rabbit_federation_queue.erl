@@ -29,7 +29,7 @@
 -behaviour(rabbit_queue_decorator).
 
 -export([startup/1, shutdown/1, policy_changed/2, active_for/1,
-         active_consumers_changed/3]).
+         consumer_state_changed/3]).
 -export([policy_changed_local/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -66,7 +66,36 @@ policy_changed_local(Q1, Q2) ->
 
 active_for(Q) -> rabbit_federation_upstream:federate(Q).
 
-active_consumers_changed(#amqqueue{name = QName}, MaxActivePriority, IsEmpty) ->
+%% We need to reconsider whether we need to run or pause every time
+%% the consumer state changes in the queue. But why can the state
+%% change?
+%%
+%% consumer blocked   | We may have no more active consumers, and thus need to
+%%                    | pause
+%%                    |
+%% consumer unblocked | We don't care
+%%                    |
+%% queue empty        | The queue has become empty therefore we need to run to
+%%                    | get more messages
+%%                    |
+%% basic consume      | We don't care
+%%                    |
+%% basic cancel       | We may have no more active consumers, and thus need to
+%%                    | pause
+%%                    |
+%% refresh            | We asked for it (we have started a new link after
+%%                    | failover and need something to prod us into action
+%%                    | (or not)).
+%%
+%% In the cases where we don't care it's not prohibitively expensive
+%% for us to be here anyway, so never mind.
+%%
+%% Note that there is no "queue became non-empty" state change - that's
+%% because of the queue invariant. If the queue transitions from empty to
+%% non-empty then it must have no active consumers - in which case it stays
+%% the same from our POV.
+
+consumer_state_changed(#amqqueue{name = QName}, MaxActivePriority, IsEmpty) ->
     case IsEmpty andalso active_unfederated(MaxActivePriority) of
         true  -> rabbit_federation_queue_link:run(QName);
         false -> rabbit_federation_queue_link:pause(QName)
