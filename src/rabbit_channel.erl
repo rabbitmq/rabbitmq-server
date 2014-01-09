@@ -1264,9 +1264,11 @@ handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
 parse_credit_args(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-credit">>) of
         {table, T} -> {case {rabbit_misc:table_lookup(T, <<"credit">>),
-                             rabbit_misc:table_lookup(T, <<"drain">>)} of
-                           {{long, Credit}, {bool, Drain}} -> {Credit, Drain};
-                           _                               -> none
+                             rabbit_misc:table_lookup(T, <<"drain">>),
+                             rabbit_misc:table_lookup(T, <<"prefetch">>)} of
+                           {{long, C}, {bool, D}, _}         -> {credit, C, D};
+                           {_,         _,         {long, P}} -> {prefetch, P};
+                           _                                 -> none
                        end, lists:keydelete(<<"x-credit">>, 1, Arguments)};
         undefined  -> {none, Arguments}
     end.
@@ -1395,8 +1397,8 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
 %% NB: Acked is in youngest-first order
 ack(Acked, State = #ch{queue_names = QNames}) ->
     foreach_per_queue(
-      fun (QPid, MsgIds) ->
-              ok = rabbit_amqqueue:ack(QPid, MsgIds, self()),
+      fun ({QPid, CTag}, MsgIds) ->
+              ok = rabbit_amqqueue:ack(QPid, CTag, MsgIds, self()),
               ?INCR_STATS(case dict:find(QPid, QNames) of
                               {ok, QName} -> Count = length(MsgIds),
                                              [{queue_stats, QName, Count}];
@@ -1429,13 +1431,13 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
 
 foreach_per_queue(_F, []) ->
     ok;
-foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}]) -> %% common case
-    F(QPid, [MsgId]);
+foreach_per_queue(F, [{_DTag, CTag, {QPid, MsgId}}]) -> %% common case
+    F({QPid, CTag}, [MsgId]);
 %% NB: UAL should be in youngest-first order; the tree values will
 %% then be in oldest-first order
 foreach_per_queue(F, UAL) ->
-    T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) ->
-                            rabbit_misc:gb_trees_cons(QPid, MsgId, T)
+    T = lists:foldl(fun ({_DTag, CTag, {QPid, MsgId}}, T) ->
+                            rabbit_misc:gb_trees_cons({QPid, CTag}, MsgId, T)
                     end, gb_trees:empty(), UAL),
     rabbit_misc:gb_trees_foreach(F, T).
 

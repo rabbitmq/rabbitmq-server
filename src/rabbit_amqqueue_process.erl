@@ -561,8 +561,8 @@ fetch(AckRequired, State = #q{backing_queue       = BQ,
     State1 = drop_expired_msgs(State#q{backing_queue_state = BQS1}),
     {Result, maybe_send_drained(Result =:= empty, State1)}.
 
-ack(AckTags, ChPid, State) ->
-    subtract_acks(ChPid, AckTags, State,
+ack(AckTags, CTag, ChPid, State) ->
+    subtract_acks(ChPid, CTag, AckTags, State,
                   fun (State1 = #q{backing_queue       = BQ,
                                    backing_queue_state = BQS}) ->
                           {_Guids, BQS1} = BQ:ack(AckTags, BQS),
@@ -570,7 +570,7 @@ ack(AckTags, ChPid, State) ->
                   end).
 
 requeue(AckTags, ChPid, State) ->
-    subtract_acks(ChPid, AckTags, State,
+    subtract_acks(ChPid, fixme, AckTags, State,
                   fun (State1) -> requeue_and_run(AckTags, State1) end).
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
@@ -634,8 +634,8 @@ backing_queue_timeout(State = #q{backing_queue       = BQ,
                                  backing_queue_state = BQS}) ->
     State#q{backing_queue_state = BQ:timeout(BQS)}.
 
-subtract_acks(ChPid, AckTags, State, Fun) ->
-    case rabbit_queue_consumers:subtract_acks(ChPid, AckTags) of
+subtract_acks(ChPid, CTag, AckTags, State, Fun) ->
+    case rabbit_queue_consumers:subtract_acks(ChPid, CTag, AckTags) of
         not_found -> State;
         ok        -> Fun(State)
     end.
@@ -1150,8 +1150,8 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
     State1 = State#q{senders = Senders1},
     noreply(deliver_or_enqueue(Delivery, Delivered, State1));
 
-handle_cast({ack, AckTags, ChPid}, State) ->
-    noreply(ack(AckTags, ChPid, State));
+handle_cast({ack, CTag, AckTags, ChPid}, State) ->
+    noreply(ack(AckTags, CTag, ChPid, State));
 
 handle_cast({reject, AckTags, true, ChPid}, State) ->
     noreply(requeue(AckTags, ChPid, State));
@@ -1159,12 +1159,12 @@ handle_cast({reject, AckTags, true, ChPid}, State) ->
 handle_cast({reject, AckTags, false, ChPid}, State) ->
     noreply(with_dlx(
               State#q.dlx,
-              fun (X) -> subtract_acks(ChPid, AckTags, State,
+              fun (X) -> subtract_acks(ChPid, fixme, AckTags, State,
                                        fun (State1) ->
                                                dead_letter_rejected_msgs(
                                                  AckTags, X, State1)
                                        end) end,
-              fun () -> ack(AckTags, ChPid, State) end));
+              fun () -> ack(AckTags, fixme, ChPid, State) end));
 
 handle_cast(delete_immediately, State) ->
     stop(State);

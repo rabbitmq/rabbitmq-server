@@ -18,7 +18,7 @@
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
          unacknowledged_message_count/0, add/9, remove/3, erase_ch/2,
-         send_drained/0, deliver/3, record_ack/3, subtract_acks/2,
+         send_drained/0, deliver/3, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0, credit_fun/4,
          utilisation/1]).
@@ -81,7 +81,7 @@
                      {'delivered',   boolean(), T, state()} |
                      {'undelivered', boolean(), state()}.
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
--spec subtract_acks(ch(), [ack()]) -> 'not_found' | 'ok'.
+%% -spec subtract_acks(ch(), [ack()]) -> 'not_found' | 'ok'.
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
                               'unchanged' | {'unblocked', state()}.
 -spec resume_fun()                                        -> cr_fun().
@@ -129,9 +129,11 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
                    false -> Limiter
                end,
     Limiter2 = case CreditArgs of
-                   none         -> Limiter1;
-                   {Crd, Drain} -> rabbit_limiter:credit(
-                                     Limiter1, ConsumerTag, Crd, IsEmpty, Drain)
+                   none           -> Limiter1;
+                   {credit, C, D} -> rabbit_limiter:credit(
+                                       Limiter1, ConsumerTag, C, IsEmpty, D);
+                   {prefetch , P} -> rabbit_limiter:set_consumer_prefetch(
+                                       Limiter1, ConsumerTag, P)
                end,
     C1 = C#cr{consumer_count = Count + 1,
               limiter        = Limiter2},
@@ -242,24 +244,26 @@ record_ack(ChPid, LimiterPid, AckTag) ->
     update_ch_record(C#cr{acktags = queue:in(AckTag, ChAckTags)}),
     ok.
 
-subtract_acks(ChPid, AckTags) ->
+subtract_acks(ChPid, CTag, AckTags) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
-        C = #cr{acktags = ChAckTags} ->
-            update_ch_record(
-              C#cr{acktags = subtract_acks(AckTags, [], ChAckTags)}),
+        C = #cr{acktags = ChAckTags, limiter = Lim} ->
+            Lim2 = rabbit_limiter:ack_from_queue(Lim, CTag, length(AckTags)),
+            AckTags2 = subtract_acks0(AckTags, [], ChAckTags),
+            update_ch_record(C#cr{acktags = AckTags2,
+                                  limiter = Lim2}),
             ok
     end.
 
-subtract_acks([], [], AckQ) ->
+subtract_acks0([], [], AckQ) ->
     AckQ;
-subtract_acks([], Prefix, AckQ) ->
+subtract_acks0([], Prefix, AckQ) ->
     queue:join(queue:from_list(lists:reverse(Prefix)), AckQ);
-subtract_acks([T | TL] = AckTags, Prefix, AckQ) ->
+subtract_acks0([T | TL] = AckTags, Prefix, AckQ) ->
     case queue:out(AckQ) of
-        {{value,  T}, QTail} -> subtract_acks(TL,             Prefix, QTail);
-        {{value, AT}, QTail} -> subtract_acks(AckTags, [AT | Prefix], QTail)
+        {{value,  T}, QTail} -> subtract_acks0(TL,             Prefix, QTail);
+        {{value, AT}, QTail} -> subtract_acks0(AckTags, [AT | Prefix], QTail)
     end.
 
 possibly_unblock(Update, ChPid, State) ->
