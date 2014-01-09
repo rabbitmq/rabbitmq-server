@@ -369,31 +369,31 @@ recover(DurableQueues) ->
                 DirName = rabbit_amqqueue:queue_name_to_dir_name(Queue),
                 {DirName, Queue}
             end || Queue <- DurableQueues ]),
+
     QueuesDir = queues_dir(),
-    QueueDirNames = all_queue_directory_names(QueuesDir),
-    DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
     {DurableQueueNames, DurableTerms} =
-        lists:foldl(
-          fun (QueueDirName, {DurableAcc, TermsAcc}) ->
+        dict:fold(
+          fun (QueueDirName, QueueName, {DurableAcc, TermsAcc}) ->
                   QueueDirPath = filename:join(QueuesDir, QueueDirName),
-                  case sets:is_element(QueueDirName, DurableDirectories) of
-                      true ->
-                          TermsAcc1 =
-                              case rabbit_recovery_terms:read(
-                                     QueueDirPath) of
-                                  {error, _}  -> TermsAcc;
-                                  {ok, Terms} -> [{QueueDirPath, Terms} |
-                                                  TermsAcc]
-                              end,
-                          {[dict:fetch(QueueDirName, DurableDict) | DurableAcc],
-                           TermsAcc1};
-                      false ->
-                          ok = rabbit_file:recursive_delete([QueueDirPath]),
-                          {DurableAcc, TermsAcc}
-                  end
-          end, {[], []}, QueueDirNames),
+                  TermsAcc1 =
+                      case rabbit_recovery_terms:read(QueueDirPath) of
+                          {error, _}  -> TermsAcc;
+                          {ok, Terms} -> [{QueueDirPath, Terms} | TermsAcc]
+                      end,
+                  {[QueueName | DurableAcc], TermsAcc1}
+          end, {[], []}, DurableDict),
+
+    %% Any queue directory we've not been asked to recover is considered garbage
+    lists:map(
+      fun(QueueDir) ->
+              case dict:is_key(filename:basename(QueueDir),
+                               DurableDict) of
+                  true  -> ok;
+                  false -> ok = rabbit_file:recursive_delete([QueueDir])
+              end
+      end, all_queue_directory_names(QueuesDir)),
+
     rabbit_recovery_terms:clear(),
-    rabbit_recovery_terms:flush(),
     {DurableTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
 all_queue_directory_names(Dir) ->
