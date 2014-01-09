@@ -79,7 +79,7 @@ upgrade_recovery_indexes() ->
                                       fun(F, Acc) -> [F|Acc] end, []),
         [begin
              {ok, Terms} = rabbit_file:read_term_file(File),
-             ok = store(File, Terms),
+             ok = store(filename:dirname(File), Terms),
              case file:delete(File) of
                  {error, E} ->
                      rabbit_log:warning("Unable to delete recovery index"
