@@ -546,20 +546,20 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
-expand_shortcuts(#'basic.get'{queue = QName} = M, State) ->
-    M#'basic.get'{queue = expand_queue_name_shortcut(QName, State)};
-expand_shortcuts(#'basic.consume'{queue = QName} = M, State) ->
-    M#'basic.consume'{queue = expand_queue_name_shortcut(QName, State)};
-expand_shortcuts(#'queue.delete'{queue = QName} = M, State) ->
-    M#'queue.delete'{queue = expand_queue_name_shortcut(QName, State)};
-expand_shortcuts(#'queue.purge'{queue = QName} = M, State) ->
-    M#'queue.purge'{queue = expand_queue_name_shortcut(QName, State)};
-expand_shortcuts(#'queue.bind'{queue = Q, routing_key = K} = M, State) ->
-    M#'queue.bind'{queue       = expand_queue_name_shortcut(Q, State), 
-                   routing_key = expand_routing_key_shortcut(Q, K, State)};
-expand_shortcuts(#'queue.unbind'{queue = Q, routing_key = K} = M, State) ->
-    M#'queue.bind'{queue       = expand_queue_name_shortcut(Q, State), 
-                   routing_key = expand_routing_key_shortcut(Q, K, State)};
+expand_shortcuts(#'basic.get'    {queue = Q} = M, State) ->
+    M#'basic.get'    {queue = expand_queue_name_shortcut(Q, State)};
+expand_shortcuts(#'basic.consume'{queue = Q} = M, State) ->
+    M#'basic.consume'{queue = expand_queue_name_shortcut(Q, State)};
+expand_shortcuts(#'queue.delete' {queue = Q} = M, State) ->
+    M#'queue.delete' {queue = expand_queue_name_shortcut(Q, State)};
+expand_shortcuts(#'queue.purge'  {queue = Q} = M, State) ->
+    M#'queue.purge'  {queue = expand_queue_name_shortcut(Q, State)};
+expand_shortcuts(#'queue.bind'   {queue = Q, routing_key = K} = M, State) ->
+    M#'queue.bind'   {queue       = expand_queue_name_shortcut(Q, State), 
+                      routing_key = expand_routing_key_shortcut(Q, K, State)};
+expand_shortcuts(#'queue.unbind' {queue = Q, routing_key = K} = M, State) ->
+    M#'queue.bind'   {queue       = expand_queue_name_shortcut(Q, State), 
+                      routing_key = expand_routing_key_shortcut(Q, K, State)};
 expand_shortcuts(M, _State) ->
     M.
 
