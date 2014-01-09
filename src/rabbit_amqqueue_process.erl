@@ -1019,7 +1019,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg},
+             ConsumerTag, ExclusiveConsume, CreditArgs, Args, OkMsg},
             _From, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
@@ -1027,7 +1027,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
         ok     -> Consumers1 = rabbit_queue_consumers:add(
                                  ChPid, ConsumerTag, NoAck,
                                  LimiterPid, LimiterActive,
-                                 CreditArgs, OtherArgs,
+                                 CreditArgs, Args,
                                  is_empty(State), Consumers),
                   ExclusiveConsumer =
                       if ExclusiveConsume -> {ChPid, ConsumerTag};
@@ -1038,7 +1038,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                                    exclusive_consumer = ExclusiveConsumer},
                   ok = maybe_send_reply(ChPid, OkMsg),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                        not NoAck, qname(State1), OtherArgs),
+                                        not NoAck, qname(State1), Args),
                   notify_decorators(State1),
                   reply(ok, run_message_queue(State1))
     end;

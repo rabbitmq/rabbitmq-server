@@ -120,7 +120,7 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 unacknowledged_message_count() ->
     lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]).
 
-add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
+add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, Args,
     IsEmpty, State = #state{consumers = Consumers}) ->
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
@@ -143,7 +143,7 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
                      end),
     Consumer = #consumer{tag          = ConsumerTag,
                          ack_required = not NoAck,
-                         args         = OtherArgs},
+                         args         = Args},
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers)}.
 
 remove(ChPid, ConsumerTag, State = #state{consumers = Consumers}) ->
