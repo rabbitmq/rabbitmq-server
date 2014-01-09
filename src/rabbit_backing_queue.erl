@@ -53,8 +53,11 @@
 %% Takes
 %% 1. the amqqueue record
 %% 2. a term indicating whether the queue is an existing queue that
-%%    should be recovered or not, possibly containing recovery terms
-%%    to be used in the recovery process
+%%    should be recovered or not. When 'new' is given, no recovery is
+%%    taking place, otherwise a tuple containing the process id of a
+%%    "barrier process" (on which to wait for a {BarrierPid, 'go'}
+%%    notification) is passed as the first element, whilst the second
+%%    holds either a list of recovery terms or the atom 'non_clean_shutdown'.
 %% 3. an asynchronous callback which accepts a function of type
 %%    backing-queue-state to backing-queue-state. This callback
 %%    function can be safely invoked from any process, which makes it
