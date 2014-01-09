@@ -245,9 +245,9 @@ can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
     case is_consumer_blocked(L, CTag) of
         false -> case (State =/= active orelse
                        safe_call(Pid, {can_send, self(), AckRequired}, true)) of
-                     true  -> {continue, L#qstate{
-                                credits = record_send_q(CTag, Credits)}};
-                     false -> {suspend, L#qstate{state = suspended}}
+                     true  -> Credits1 = decrement_credit(CTag, Credits),
+                              {continue, L#qstate{credits = Credits1}};
+                     false -> {suspend,  L#qstate{state = suspended}}
                  end;
         true  -> {suspend, L}
     end.
@@ -271,9 +271,9 @@ is_suspended(#qstate{})                  -> false.
 
 is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
     case gb_trees:lookup(CTag, Credits) of
+        none                                    -> false;
         {value, #credit{credit = C}} when C > 0 -> false;
-        {value, #credit{}}                      -> true;
-        none                                    -> false
+        {value, #credit{}}                      -> true
     end.
 
 credit(Limiter = #qstate{credits = Credits}, CTag, _Credit, true, true) ->
@@ -305,7 +305,7 @@ forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
 %% state for us (#qstate.credits), and maintain a fiction that the
 %% limiter is making the decisions...
 
-record_send_q(CTag, Credits) ->
+decrement_credit(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
         {value, #credit{credit = Credit, drain = Drain}} ->
             update_credit(CTag, Credit - 1, Drain, Credits);

@@ -18,7 +18,7 @@
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
          unacknowledged_message_count/0, add/9, remove/3, erase_ch/2,
-         send_drained/0, deliver/5, record_ack/3, subtract_acks/2,
+         send_drained/0, deliver/3, record_ack/3, subtract_acks/2,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0, credit_fun/4,
          utilisation/1]).
@@ -76,14 +76,14 @@
                       'not_found' | {[ack()], [rabbit_types:ctag()],
                                      state()}.
 -spec send_drained() -> 'ok'.
--spec deliver(fun ((boolean(), T) -> {fetch_result(), boolean(), T}),
-              boolean(), rabbit_amqqueue:name(), T, state()) ->
-                     {boolean(), [{ch(), rabbit_types:ctag()}], T, state()}.
+-spec deliver(fun ((boolean()) -> {fetch_result(), T}),
+              rabbit_amqqueue:name(), state()) ->
+                     {'delivered',   boolean(), T, state()} |
+                     {'undelivered', boolean(), state()}.
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
 -spec subtract_acks(ch(), [ack()]) -> 'not_found' | 'ok'.
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
-                              'unchanged' |
-                              {'unblocked', [rabbit_types:ctag()], state()}.
+                              'unchanged' | {'unblocked', state()}.
 -spec resume_fun()                                        -> cr_fun().
 -spec notify_sent_fun(non_neg_integer())                  -> cr_fun().
 -spec activate_limit_fun()                                -> cr_fun().
@@ -181,44 +181,41 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
 send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()],
                   ok.
 
-deliver(FetchFun, Stop, QName, S, State) ->
-    deliver(FetchFun, Stop, QName, [], S, State).
+deliver(FetchFun, QName, State) -> deliver(FetchFun, QName, false, State).
 
-deliver(_FetchFun,  true, _QName, Blocked, S, State) ->
-    {true, Blocked, S, State};
-deliver( FetchFun, false,  QName, Blocked, S,
-         State = #state{consumers = Consumers, use = Use}) ->
+deliver(FetchFun, QName, ConsumersChanged,
+        State = #state{consumers = Consumers}) ->
     case priority_queue:out_p(Consumers) of
         {empty, _} ->
-            {false, Blocked, S, State#state{use = update_use(Use, inactive)}};
+            {undelivered, ConsumersChanged,
+             State#state{use = update_use(State#state.use, inactive)}};
         {{value, QEntry, Priority}, Tail} ->
-            {Stop, Blocked1, S1, Consumers1} =
-                deliver_to_consumer(FetchFun, QEntry, Priority, QName,
-                                    Blocked, S, Tail),
-            deliver(FetchFun, Stop, QName, Blocked1, S1,
-                    State#state{consumers = Consumers1})
+            case deliver_to_consumer(FetchFun, QEntry, QName) of
+                {delivered, R} ->
+                    {delivered, ConsumersChanged, R,
+                     State#state{consumers = priority_queue:in(QEntry, Priority,
+                                                               Tail)}};
+                undelivered ->
+                    deliver(FetchFun, QName, true,
+                            State#state{consumers = Tail})
+            end
     end.
 
-deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, Priority, QName,
-                    Blocked, S, Consumers) ->
+deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E),
-                 Blocked1 = [{ChPid, Consumer#consumer.tag} | Blocked],
-                 {false, Blocked1, S, Consumers};
+                 undelivered;
         false -> case rabbit_limiter:can_send(C#cr.limiter,
                                               Consumer#consumer.ack_required,
                                               Consumer#consumer.tag) of
                      {suspend, Limiter} ->
                          block_consumer(C#cr{limiter = Limiter}, E),
-                         Blocked1 = [{ChPid, Consumer#consumer.tag} | Blocked],
-                         {false, Blocked1, S, Consumers};
+                         undelivered;
                      {continue, Limiter} ->
-                         {Stop, S1} = deliver_to_consumer(
-                                        FetchFun, Consumer,
-                                        C#cr{limiter = Limiter}, QName, S),
-                         {Stop, Blocked, S1,
-                          priority_queue:in(E, Priority, Consumers)}
+                         {delivered, deliver_to_consumer(
+                                       FetchFun, Consumer,
+                                       C#cr{limiter = Limiter}, QName)}
                  end
     end.
 
@@ -228,8 +225,8 @@ deliver_to_consumer(FetchFun,
                     C = #cr{ch_pid               = ChPid,
                             acktags              = ChAckTags,
                             unsent_message_count = Count},
-                    QName, S) ->
-    {{Message, IsDelivered, AckTag}, Stop, S1} = FetchFun(AckRequired, S),
+                    QName) ->
+    {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
@@ -238,7 +235,7 @@ deliver_to_consumer(FetchFun,
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
                           unsent_message_count = Count + 1}),
-    {Stop, S1}.
+    R.
 
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
@@ -290,7 +287,6 @@ unblock(C = #cr{blocked_consumers = BlockedQ, limiter = Limiter},
             UnblockedQ = priority_queue:from_list(Unblocked),
             update_ch_record(C#cr{blocked_consumers = BlockedQ1}),
             {unblocked,
-             tags(Unblocked),
              State#state{consumers = priority_queue:join(Consumers, UnblockedQ),
                          use       = update_use(Use, active)}}
     end.
