@@ -23,7 +23,7 @@
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/2, mainloop/2, recvloop/2]).
+-export([init/2, mainloop/4, recvloop/4]).
 
 -export([conserve_resources/3, server_properties/1]).
 
@@ -38,8 +38,7 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, helper_sup, queue_collector, heartbeater,
-             stats_timer, channel_sup_sup_pid, buf, buf_len, channel_count,
-             throttle}).
+             stats_timer, channel_sup_sup_pid, channel_count, throttle}).
 
 -record(connection, {name, host, peer_host, port, peer_port,
                      protocol, user, timeout_sec, frame_max, channel_max, vhost,
@@ -92,9 +91,10 @@
                      rabbit_types:ok_or_error2(
                        rabbit_net:socket(), any()))) -> no_return()).
 
--spec(mainloop/2 :: (_,#v1{}) -> any()).
+-spec(mainloop/4 :: (_,[binary()], non_neg_integer(), #v1{}) -> any()).
 -spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
--spec(system_continue/3 :: (_,_,#v1{}) -> any()).
+-spec(system_continue/3 :: (_,_,{[binary()], non_neg_integer(), #v1{}}) ->
+                                any()).
 -spec(system_terminate/4 :: (_,_,_,_) -> none()).
 
 -endif.
@@ -114,8 +114,8 @@ init(Parent, HelperSup) ->
             start_connection(Parent, HelperSup, Deb, Sock, SockTransform)
     end.
 
-system_continue(Parent, Deb, State) ->
-    mainloop(Deb, State#v1{parent = Parent}).
+system_continue(Parent, Deb, {Buf, BufLen, State}) ->
+    mainloop(Deb, Buf, BufLen, State#v1{parent = Parent}).
 
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
@@ -239,8 +239,6 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                 helper_sup          = HelperSup,
                 heartbeater         = none,
                 channel_sup_sup_pid = none,
-                buf                 = [],
-                buf_len             = 0,
                 channel_count       = 0,
                 throttle            = #throttle{
                                          alarmed_by      = [],
@@ -249,9 +247,9 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                          blocked_sent    = false}},
     try
         run({?MODULE, recvloop,
-             [Deb, switch_callback(rabbit_event:init_stats_timer(
-                                     State, #v1.stats_timer),
-                                   handshake, 8)]}),
+             [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
+                                            State, #v1.stats_timer),
+                                          handshake, 8)]}),
         log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
         Ex -> log(case Ex of
@@ -278,29 +276,38 @@ run({M, F, A}) ->
     catch {become, MFA} -> run(MFA)
     end.
 
-recvloop(Deb, State = #v1{pending_recv = true}) ->
-    mainloop(Deb, State);
-recvloop(Deb, State = #v1{connection_state = blocked}) ->
-    mainloop(Deb, State);
-recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
+recvloop(Deb, Buf, BufLen, State = #v1{pending_recv = true}) ->
+    mainloop(Deb, Buf, BufLen, State);
+recvloop(Deb, Buf, BufLen, State = #v1{connection_state = blocked}) ->
+    mainloop(Deb, Buf, BufLen, State);
+recvloop(Deb, Buf, BufLen, State = #v1{connection_state = {become, F}}) ->
+    throw({become, F(Deb, Buf, BufLen, State)});
+recvloop(Deb, Buf, BufLen, State = #v1{sock = Sock, recv_len = RecvLen})
   when BufLen < RecvLen ->
     ok = rabbit_net:setopts(Sock, [{active, once}]),
-    mainloop(Deb, State#v1{pending_recv = true});
-recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
-    {Data, Rest} = split_binary(case Buf of
-                                    [B] -> B;
-                                    _   -> list_to_binary(lists:reverse(Buf))
-                                end, RecvLen),
-    recvloop(Deb, handle_input(State#v1.callback, Data,
-                               State#v1{buf = [Rest],
-                                        buf_len = BufLen - RecvLen})).
+    mainloop(Deb, Buf, BufLen, State#v1{pending_recv = true});
+recvloop(Deb, [B], _BufLen, State) ->
+    {Rest, State1} = handle_input(State#v1.callback, B, State),
+    recvloop(Deb, [Rest], size(Rest), State1);
+recvloop(Deb, Buf, BufLen, State = #v1{recv_len = RecvLen}) ->
+    {DataLRev, RestLRev} = binlist_split(BufLen - RecvLen, Buf, []),
+    Data = list_to_binary(lists:reverse(DataLRev)),
+    {<<>>, State1} = handle_input(State#v1.callback, Data, State),
+    recvloop(Deb, lists:reverse(RestLRev), BufLen - RecvLen, State1).
 
-mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
+binlist_split(0, L, Acc) ->
+    {L, Acc};
+binlist_split(Len, L, [Acc0|Acc]) when Len < 0 ->
+    {H, T} = split_binary(Acc0, -Len),
+    {[H|L], [T|Acc]};
+binlist_split(Len, [H|T], Acc) ->
+    binlist_split(Len - size(H), T, [H|Acc]).
+
+mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock}) ->
     case rabbit_net:recv(Sock) of
         {data, Data} ->
-            recvloop(Deb, State#v1{buf = [Data | Buf],
-                                   buf_len = BufLen + size(Data),
-                                   pending_recv = false});
+            recvloop(Deb, [Data | Buf], BufLen + size(Data),
+                     State#v1{pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
             ok;
         closed ->
@@ -311,11 +318,11 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
             throw({inet_error, Reason});
         {other, {system, From, Request}} ->
             sys:handle_system_msg(Request, From, State#v1.parent,
-                                  ?MODULE, Deb, State);
+                                  ?MODULE, Deb, {Buf, BufLen, State});
         {other, Other}  ->
             case handle_other(Other, State) of
                 stop     -> ok;
-                NewState -> recvloop(Deb, NewState)
+                NewState -> recvloop(Deb, Buf, BufLen, NewState)
             end
     end.
 
@@ -715,26 +722,38 @@ post_process_frame(_Frame, _ChPid, State) ->
 %% a few get it wrong - off-by 1 or 8 (empty frame size) are typical.
 -define(FRAME_SIZE_FUDGE, ?EMPTY_FRAME_SIZE).
 
-handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>,
+handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32, _/binary>>,
              State = #v1{connection = #connection{frame_max = FrameMax}})
   when FrameMax /= 0 andalso
        PayloadSize > FrameMax - ?EMPTY_FRAME_SIZE + ?FRAME_SIZE_FUDGE ->
     fatal_frame_error(
       {frame_too_large, PayloadSize, FrameMax - ?EMPTY_FRAME_SIZE},
       Type, Channel, <<>>, State);
-handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
-    ensure_stats_timer(
-      switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
-                      PayloadSize + 1));
-
+handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32,
+                             Payload:PayloadSize/binary, ?FRAME_END,
+                             Rest/binary>>,
+             State) ->
+    {Rest, ensure_stats_timer(handle_frame(Type, Channel, Payload, State))};
+handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32, Rest/binary>>,
+             State) ->
+    {Rest, ensure_stats_timer(
+             switch_callback(State,
+                             {frame_payload, Type, Channel, PayloadSize},
+                             PayloadSize + 1))};
 handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
-    <<Payload:PayloadSize/binary, EndMarker>> = Data,
+    <<Payload:PayloadSize/binary, EndMarker, Rest/binary>> = Data,
     case EndMarker of
         ?FRAME_END -> State1 = handle_frame(Type, Channel, Payload, State),
-                      switch_callback(State1, frame_header, 7);
+                      {Rest, switch_callback(State1, frame_header, 7)};
         _          -> fatal_frame_error({invalid_frame_end_marker, EndMarker},
                                         Type, Channel, Payload, State)
     end;
+handle_input(handshake, <<"AMQP", A, B, C, D, Rest/binary>>, State) ->
+    {Rest, handshake({A, B, C, D}, State)};
+handle_input(handshake, <<Other:8/binary, _/binary>>, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_header, Other});
+handle_input(Callback, Data, _State) ->
+    throw({bad_input, Callback, Data}).
 
 %% The two rules pertaining to version negotiation:
 %%
@@ -744,37 +763,31 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
 %%
 %% * The server MUST provide a protocol version that is lower than or
 %% equal to that requested by the client in the protocol header.
-handle_input(handshake, <<"AMQP", 0, 0, 9, 1>>, State) ->
+handshake({0, 0, 9, 1}, State) ->
     start_connection({0, 9, 1}, rabbit_framing_amqp_0_9_1, State);
 
 %% This is the protocol header for 0-9, which we can safely treat as
 %% though it were 0-9-1.
-handle_input(handshake, <<"AMQP", 1, 1, 0, 9>>, State) ->
+handshake({1, 1, 0, 9}, State) ->
     start_connection({0, 9, 0}, rabbit_framing_amqp_0_9_1, State);
 
 %% This is what most clients send for 0-8.  The 0-8 spec, confusingly,
 %% defines the version as 8-0.
-handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
+handshake({1, 1, 8, 0}, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 %% The 0-8 spec as on the AMQP web site actually has this as the
 %% protocol header; some libraries e.g., py-amqplib, send it when they
 %% want 0-8.
-handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
+handshake({1, 1, 9, 1}, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
-%% ... and finally, the 1.0 spec is crystal clear!  Note that the
-handle_input(handshake, <<"AMQP", Id, 1, 0, 0>>, State) ->
+%% ... and finally, the 1.0 spec is crystal clear!
+handshake({Id, 1, 0, 0}, State) ->
     become_1_0(Id, State);
 
-handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_version, {A, B, C, D}});
-
-handle_input(handshake, Other, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_header, Other});
-
-handle_input(Callback, Data, _State) ->
-    throw({bad_input, Callback, Data}).
+handshake(Vsn, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_version, Vsn}).
 
 %% Offer a protocol version to the client.  Connection.start only
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
@@ -818,7 +831,10 @@ handle_method0(MethodName, FieldsBin,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
                        State)
-    catch exit:#amqp_error{method = none} = Reason ->
+    catch throw:{inet_error, closed} ->
+            maybe_emit_stats(State),
+            throw(connection_closed_abruptly);
+          exit:#amqp_error{method = none} = Reason ->
             handle_exception(State, 0, Reason#amqp_error{method = MethodName});
           Type:Reason ->
             Stack = erlang:get_stacktrace(),
@@ -1123,15 +1139,16 @@ become_1_0(Id, State = #v1{sock = Sock}) ->
                                    Sock, {unsupported_amqp1_0_protocol_id, Id},
                                    {3, 1, 0, 0})
                         end,
-                 throw({become, {rabbit_amqp1_0_reader, init,
-                                 [Mode, pack_for_1_0(State)]}})
+                 F = fun (_Deb, Buf, BufLen, S) ->
+                             {rabbit_amqp1_0_reader, init,
+                              [Mode, pack_for_1_0(Buf, BufLen, S)]}
+                     end,
+                 State = #v1{connection_state = {become, F}}
     end.
 
-pack_for_1_0(#v1{parent              = Parent,
-                 sock                = Sock,
-                 recv_len            = RecvLen,
-                 pending_recv        = PendingRecv,
-                 helper_sup          = SupPid,
-                 buf                 = Buf,
-                 buf_len             = BufLen}) ->
+pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
+                              sock         = Sock,
+                              recv_len     = RecvLen,
+                              pending_recv = PendingRecv,
+                              helper_sup   = SupPid}) ->
     {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen}.

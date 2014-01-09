@@ -53,35 +53,35 @@ parse_array(<<ValueAndRest/binary>>) ->
     {Type, Value, Rest} = parse_field_value(ValueAndRest),
     [{Type, Value} | parse_array(Rest)].
 
-parse_field_value(<<"S", VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
+parse_field_value(<<$S, VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
     {longstr, V, R};
 
-parse_field_value(<<"I", V:32/signed, R/binary>>) ->
+parse_field_value(<<$I, V:32/signed, R/binary>>) ->
     {signedint, V, R};
 
-parse_field_value(<<"D", Before:8/unsigned, After:32/unsigned, R/binary>>) ->
+parse_field_value(<<$D, Before:8/unsigned, After:32/unsigned, R/binary>>) ->
     {decimal, {Before, After}, R};
 
-parse_field_value(<<"T", V:64/unsigned, R/binary>>) ->
+parse_field_value(<<$T, V:64/unsigned, R/binary>>) ->
     {timestamp, V, R};
 
-parse_field_value(<<"F", VLen:32/unsigned, Table:VLen/binary, R/binary>>) ->
+parse_field_value(<<$F, VLen:32/unsigned, Table:VLen/binary, R/binary>>) ->
     {table, parse_table(Table), R};
 
-parse_field_value(<<"A", VLen:32/unsigned, Array:VLen/binary, R/binary>>) ->
+parse_field_value(<<$A, VLen:32/unsigned, Array:VLen/binary, R/binary>>) ->
     {array, parse_array(Array), R};
 
-parse_field_value(<<"b", V:8/unsigned, R/binary>>) -> {byte,        V, R};
-parse_field_value(<<"d", V:64/float,   R/binary>>) -> {double,      V, R};
-parse_field_value(<<"f", V:32/float,   R/binary>>) -> {float,       V, R};
-parse_field_value(<<"l", V:64/signed,  R/binary>>) -> {long,        V, R};
-parse_field_value(<<"s", V:16/signed,  R/binary>>) -> {short,       V, R};
-parse_field_value(<<"t", V:8/unsigned, R/binary>>) -> {bool, (V /= 0), R};
+parse_field_value(<<$b, V:8/unsigned, R/binary>>) -> {byte,        V, R};
+parse_field_value(<<$d, V:64/float,   R/binary>>) -> {double,      V, R};
+parse_field_value(<<$f, V:32/float,   R/binary>>) -> {float,       V, R};
+parse_field_value(<<$l, V:64/signed,  R/binary>>) -> {long,        V, R};
+parse_field_value(<<$s, V:16/signed,  R/binary>>) -> {short,       V, R};
+parse_field_value(<<$t, V:8/unsigned, R/binary>>) -> {bool, (V /= 0), R};
 
-parse_field_value(<<"x", VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
+parse_field_value(<<$x, VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
     {binary, V, R};
 
-parse_field_value(<<"V", R/binary>>) ->
+parse_field_value(<<$V, R/binary>>) ->
     {void, undefined, R}.
 
 ensure_content_decoded(Content = #content{properties = Props})
