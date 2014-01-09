@@ -22,7 +22,7 @@
 -behaviour(gen_server).
 
 -export([recover/0,
-         upgrade_recovery_indexes/0,
+         upgrade_recovery_terms/0,
          start_link/0,
          store/2,
          read/1,
@@ -37,23 +37,17 @@
          terminate/2,
          code_change/3]).
 
--rabbit_upgrade({upgrade_recovery_indexes, local, []}).
+-rabbit_upgrade({upgrade_recovery_terms, local, []}).
 
 -ifdef(use_specs).
 
 -spec(recover() -> 'ok').
--spec(upgrade_recovery_indexes() -> 'ok').
+-spec(upgrade_recovery_terms() -> 'ok').
 -spec(start_link() -> rabbit_types:ok_pid_or_error()).
--spec(store(
-        Name  :: file:filename(),
-        Terms :: term()) -> rabbit_types:ok_or_error(term())).
--spec(read(
-        file:filename()) ->
-             rabbit_types:ok_or_error(not_found)).
--spec(lookup(
-        file:filename(),
-        [{file:filename(), [term()]}]) ->
-             {'ok', [term()]} | 'false').
+-spec(store(file:filename(), term()) -> rabbit_types:ok_or_error(term())).
+-spec(read(file:filename()) -> rabbit_types:ok_or_error(not_found)).
+-spec(lookup(file:filename(),
+             [{file:filename(), [term()]}]) -> {'ok', [term()]} | 'false').
 -spec(clear() -> 'ok').
 
 -endif. % use_specs
@@ -71,7 +65,7 @@ recover() ->
         {error, _}=Err                -> Err
     end.
 
-upgrade_recovery_indexes() ->
+upgrade_recovery_terms() ->
     create_table(),
     try
         QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
@@ -96,17 +90,17 @@ upgrade_recovery_indexes() ->
 start_link() ->
     gen_server:start_link(?MODULE, [], []).
 
-store(Name, Terms) ->
-    dets:insert(?MODULE, {scrub(Name), Terms}).
+store(QueueDir, Terms) ->
+    dets:insert(?MODULE, {to_key(QueueDir), Terms}).
 
-read(Name) ->
-    case dets:lookup(?MODULE, scrub(Name)) of
+read(QueueDir) ->
+    case dets:lookup(?MODULE, to_key(QueueDir)) of
         [{_, Terms}] -> {ok, Terms};
         _            -> {error, not_found}
     end.
 
-lookup(RecoveryKey, RecoveryTerms) ->
-    lists:keyfind(to_dirname(RecoveryKey), 1, RecoveryTerms).
+lookup(QueueName, Terms) ->
+    lists:keyfind(to_dirname(QueueName), 1, Terms).
 
 clear() ->
     dets:delete_all_objects(?MODULE),
@@ -143,8 +137,8 @@ create_table() ->
                                        {ram_file, true},
                                        {auto_save, infinity}]).
 
-scrub(Name) ->
-    filename:basename(Name).
+to_key(QueueDir) ->
+    filename:basename(QueueDir).
 
 dets_filename() ->
     to_dirname("recovery.dets").
