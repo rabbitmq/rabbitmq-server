@@ -169,10 +169,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-declare(Recover, From,
-        State = #q{q                   = Q,
-                   backing_queue       = undefined,
-                   backing_queue_state = undefined}) ->
+declare(Recover, From, State = #q{q                   = Q,
+                                  backing_queue       = undefined,
+                                  backing_queue_state = undefined}) ->
     {IsRecovering, MediatorPid} = recovery_status(Recover),
     case rabbit_amqqueue:internal_declare(Q, IsRecovering) of
         #amqqueue{} = Q1 ->
