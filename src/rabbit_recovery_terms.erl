@@ -144,5 +144,5 @@ dets_filename() ->
     to_dirname("recovery.dets").
 
 to_dirname(FileName) ->
-    filename:join([rabbit_mnesia:dir(), "queues", FileName]).
+    filename:join([rabbit_mnesia:dir(), FileName]).
 
