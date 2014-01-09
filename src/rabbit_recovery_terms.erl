@@ -132,7 +132,6 @@ flush() ->
 
 create_table() ->
     File = dets_filename(),
-    rabbit_file:ensure_dir(dets_filename()),
     {ok, _} = dets:open_file(?MODULE, [{file, File},
                                        {ram_file, true},
                                        {auto_save, infinity}]).
