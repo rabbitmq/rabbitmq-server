@@ -140,8 +140,8 @@ to_key(QueueDir) ->
     filename:basename(QueueDir).
 
 dets_filename() ->
-    to_dirname("recovery.dets").
+    filename:join(rabbit_mnesia:dir(), "recovery.dets").
 
 to_dirname(FileName) ->
-    filename:join([rabbit_mnesia:dir(), FileName]).
+    filename:join([rabbit_mnesia:dir(), "queues", FileName]).
 
