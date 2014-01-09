@@ -290,15 +290,17 @@ set_consumer_prefetch(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     Limiter#qstate{credits = Credits1}.
 
 ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
-    Credits1 = case gb_trees:lookup(CTag, Credits) of
-                   {value, C = #credit{mode   = auto,
-                                       credit = Credit0}} ->
-                       gb_trees:enter(CTag, C#credit{credit = Credit0 + Credit},
-                                      Credits);
-                   _ ->
-                       Credits
+    {Credits1, Unblocked} =
+        case gb_trees:lookup(CTag, Credits) of
+            {value, C = #credit{mode   = auto,
+                                credit = Credit0}} ->
+                {gb_trees:enter(
+                   CTag, C#credit{credit = Credit0 + Credit}, Credits),
+                 Credit0 =:= 0};
+            _ ->
+                {Credits, false}
         end,
-    Limiter#qstate{credits = Credits1}.
+    {Limiter#qstate{credits = Credits1}, Unblocked}.
 
 drained(Limiter = #qstate{credits = Credits}) ->
     {CTagCredits, Credits2} =

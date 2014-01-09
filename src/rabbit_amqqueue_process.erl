@@ -634,10 +634,13 @@ backing_queue_timeout(State = #q{backing_queue       = BQ,
                                  backing_queue_state = BQS}) ->
     State#q{backing_queue_state = BQ:timeout(BQS)}.
 
-subtract_acks(ChPid, CTag, AckTags, State, Fun) ->
-    case rabbit_queue_consumers:subtract_acks(ChPid, CTag, AckTags) of
-        not_found -> State;
-        ok        -> Fun(State)
+subtract_acks(ChPid, CTag, AckTags, State = #q{consumers = Consumers}, Fun) ->
+    case rabbit_queue_consumers:subtract_acks(
+           ChPid, CTag, AckTags, Consumers) of
+        not_found               -> State;
+        unchanged               -> Fun(State);
+        {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
+                                   run_message_queue(true, Fun(State1))
     end.
 
 message_properties(Message, Confirm, #q{ttl = TTL}) ->
