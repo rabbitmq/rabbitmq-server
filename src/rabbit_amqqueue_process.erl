@@ -575,10 +575,9 @@ requeue(AckTags, ChPid, State) ->
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:possibly_unblock(Update, ChPid, Consumers) of
-        unchanged ->
-            State;
-        {unblocked, Consumers1} ->
-            run_message_queue(true, State#q{consumers = Consumers1})
+        unchanged               -> State;
+        {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
+                                   run_message_queue(true, State1)
     end.
 
 should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
