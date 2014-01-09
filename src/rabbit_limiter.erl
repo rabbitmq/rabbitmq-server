@@ -190,7 +190,7 @@
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
 
--record(credit, {credit = 0, drain = false, mode}).
+-record(credit, {credit = 0, drain = false, mode = manual}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -281,7 +281,7 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
 
 credit(Limiter = #qstate{credits = Credits}, CTag, _Credit, true, true) ->
     Limiter#qstate{credits = update_credit(CTag, 0, true, Credits)};
-credit(Limiter = #qstate{credits = Credits}, CTag, Credit, false, Drain) ->
+credit(Limiter = #qstate{credits = Credits}, CTag, Credit, _IsEmpty, Drain) ->
     Limiter#qstate{credits = update_credit(CTag, Credit, Drain, Credits)}.
 
 set_consumer_prefetch(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
@@ -290,15 +290,15 @@ set_consumer_prefetch(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     Limiter#qstate{credits = Credits1}.
 
 ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
-    Limiter#qstate{
-      credits = case gb_trees:lookup(CTag, Credits) of
-                    {value, #credit{mode   = auto,
-                                    credit = Current,
-                                    drain  = Drain}} ->
-                        update_credit(CTag, Current + Credit, Drain, Credits);
-                    none ->
-                        Credits
-                end}.
+    Credits1 = case gb_trees:lookup(CTag, Credits) of
+                   {value, C = #credit{mode   = auto,
+                                       credit = Credit0}} ->
+                       gb_trees:enter(CTag, C#credit{credit = Credit0 + Credit},
+                                      Credits);
+                   _ ->
+                       Credits
+        end,
+    Limiter#qstate{credits = Credits1}.
 
 drained(Limiter = #qstate{credits = Credits}) ->
     {CTagCredits, Credits2} =
@@ -326,8 +326,8 @@ forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
 
 decrement_credit(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
-        {value, #credit{credit = Credit, drain = Drain}} ->
-            update_credit(CTag, Credit - 1, Drain, Credits);
+        {value, C = #credit{credit = Credit}} ->
+            gb_trees:enter(CTag, C#credit{credit = Credit - 1}, Credits);
         none ->
             Credits
     end.
@@ -335,7 +335,11 @@ decrement_credit(CTag, Credits) ->
 update_credit(CTag, Credit, Drain, Credits) ->
     %% Using up all credit implies no need to send a 'drained' event
     Drain1 = Drain andalso Credit > 0,
-    gb_trees:enter(CTag, #credit{credit = Credit, drain = Drain1}, Credits).
+    C = case gb_trees:lookup(CTag, Credits) of
+            {value, C0} -> C0;
+            none        -> #credit{}
+        end,
+    gb_trees:enter(CTag, C#credit{credit = Credit, drain = Drain1}, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
