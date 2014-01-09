@@ -1211,13 +1211,18 @@ handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
                     backing_queue_state = BQS1});
 
 handle_cast({credit, ChPid, CTag, Credit, Drain},
-            State = #q{backing_queue       = BQ,
+            State = #q{consumers           = Consumers,
+                       backing_queue       = BQ,
                        backing_queue_state = BQS}) ->
     Len = BQ:len(BQS),
     rabbit_channel:send_credit_reply(ChPid, Len),
-    noreply(possibly_unblock(rabbit_queue_consumers:credit_fun(
-                               Len == 0, Credit, Drain, CTag),
-                             ChPid, State));
+    noreply(
+      case rabbit_queue_consumers:credit(Len == 0, Credit, Drain, ChPid, CTag,
+                                         Consumers) of
+          unchanged               -> State;
+          {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
+                                     run_message_queue(true, State1)
+      end);
 
 handle_cast(notify_decorators, State) ->
     notify_decorators(State),
