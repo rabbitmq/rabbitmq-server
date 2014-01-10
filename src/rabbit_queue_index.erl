@@ -370,20 +370,19 @@ recover(DurableQueues) ->
                 {DirName, Queue}
             end || Queue <- DurableQueues ]),
 
-    QueuesDir = queues_dir(),
     {DurableQueueNames, DurableTerms} =
         dict:fold(
           fun (QueueDirName, QueueName, {DurableAcc, TermsAcc}) ->
-                  QueueDirPath = filename:join(QueuesDir, QueueDirName),
                   TermsAcc1 =
-                      case rabbit_recovery_terms:read(QueueDirPath) of
+                      case rabbit_recovery_terms:read(QueueDirName) of
                           {error, _}  -> TermsAcc;
-                          {ok, Terms} -> [{QueueDirPath, Terms} | TermsAcc]
+                          {ok, Terms} -> [{QueueDirName, Terms} | TermsAcc]
                       end,
                   {[QueueName | DurableAcc], TermsAcc1}
           end, {[], []}, DurableDict),
 
     %% Any queue directory we've not been asked to recover is considered garbage
+    QueuesDir = queues_dir(),
     lists:map(
       fun(QueueDir) ->
               case dict:is_key(filename:basename(QueueDir),

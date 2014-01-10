@@ -100,7 +100,7 @@ read(QueueDir) ->
     end.
 
 lookup(QueueName, Terms) ->
-    lists:keyfind(to_dirname(QueueName), 1, Terms).
+    lists:keyfind(QueueName, 1, Terms).
 
 clear() ->
     dets:delete_all_objects(?MODULE),
@@ -141,7 +141,4 @@ to_key(QueueDir) ->
 
 dets_filename() ->
     filename:join(rabbit_mnesia:dir(), "recovery.dets").
-
-to_dirname(FileName) ->
-    filename:join([rabbit_mnesia:dir(), "queues", FileName]).
 
