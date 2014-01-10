@@ -47,8 +47,8 @@
 %% Denotes a successful or an error return from a consumer module call.
 
 start_link(ConsumerModule, ExtraParams, Identity) ->
-    gen_server2:start_link(?MODULE, [ConsumerModule, ExtraParams],
-                           [{proc_name, Identity}]).
+    gen_server2:start_link(
+      ?MODULE, [ConsumerModule, ExtraParams, Identity], []).
 
 %% @spec (Consumer, Msg) -> ok
 %% where
@@ -193,7 +193,8 @@ behaviour_info(_Other) ->
 %% gen_server2 callbacks
 %%---------------------------------------------------------------------------
 
-init([ConsumerModule, ExtraParams]) ->
+init([ConsumerModule, ExtraParams, Identity]) ->
+    ?store_proc_name(Identity),
     case ConsumerModule:init(ExtraParams) of
         {ok, MState} ->
             {ok, #state{module = ConsumerModule, module_state = MState}};

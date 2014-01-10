@@ -19,7 +19,7 @@
 
 -include("amqp_client_internal.hrl").
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -export([start_link/3, open_channel/4, set_channel_max/2, is_empty/1,
          num_channels/1, pass_frame/3, signal_connection_closing/3,
@@ -39,27 +39,26 @@
 %%---------------------------------------------------------------------------
 
 start_link(Connection, ConnName, ChSupSup) ->
-    gen_server2:start_link(
-      ?MODULE, [Connection, ChSupSup], [{proc_name, ConnName}]).
+    gen_server:start_link(?MODULE, [Connection, ConnName, ChSupSup], []).
 
 open_channel(ChMgr, ProposedNumber, Consumer, InfraArgs) ->
-    gen_server2:call(ChMgr, {open_channel, ProposedNumber, Consumer, InfraArgs},
+    gen_server:call(ChMgr, {open_channel, ProposedNumber, Consumer, InfraArgs},
                      infinity).
 
 set_channel_max(ChMgr, ChannelMax) ->
-    gen_server2:cast(ChMgr, {set_channel_max, ChannelMax}).
+    gen_server:cast(ChMgr, {set_channel_max, ChannelMax}).
 
 is_empty(ChMgr) ->
-    gen_server2:call(ChMgr, is_empty, infinity).
+    gen_server:call(ChMgr, is_empty, infinity).
 
 num_channels(ChMgr) ->
-    gen_server2:call(ChMgr, num_channels, infinity).
+    gen_server:call(ChMgr, num_channels, infinity).
 
 pass_frame(ChMgr, ChNumber, Frame) ->
-    gen_server2:cast(ChMgr, {pass_frame, ChNumber, Frame}).
+    gen_server:cast(ChMgr, {pass_frame, ChNumber, Frame}).
 
 signal_connection_closing(ChMgr, ChannelCloseType, Reason) ->
-    gen_server2:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
+    gen_server:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
 
 process_channel_frame(Frame, Channel, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
@@ -78,7 +77,8 @@ process_channel_frame(Frame, Channel, ChPid, AState) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Connection, ChSupSup]) ->
+init([Connection, ConnName, ChSupSup]) ->
+    ?store_proc_name(ConnName),
     {ok, #state{connection = Connection, channel_sup_sup = ChSupSup}}.
 
 terminate(_Reason, _State) ->
