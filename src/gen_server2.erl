@@ -909,9 +909,17 @@ common_noreply(_Name, _NState, [] = _Debug) ->
 common_noreply(Name, NState, Debug) ->
     sys:handle_debug(Debug, fun print_event/3, Name, {noreply, NState}).
 
-common_become(_Name, _Mod, _NState, [] = _Debug) ->
+
+common_become(Name, OldMod, NewMod, NState, Debug) ->
+    case get(process_name) of
+        {OldMod, ProcName} -> put(process_name, {NewMod, ProcName});
+        _                  -> ok
+    end,
+    common_become0(Name, NewMod, NState, Debug).
+
+common_become0(_Name, _Mod, _NState, [] = _Debug) ->
     [];
-common_become(Name, Mod, NState, Debug) ->
+common_become0(Name, Mod, NState, Debug) ->
     sys:handle_debug(Debug, fun print_event/3, Name, {become, Mod, NState}).
 
 handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
@@ -943,6 +951,7 @@ handle_msg(Msg, GS2State = #gs2_state { mod = Mod, state = State }) ->
     handle_common_reply(Reply, Msg, GS2State).
 
 handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
+                                                        mod   = Mod0,
                                                         debug = Debug}) ->
     case Reply of
         {noreply, NState} ->
@@ -956,14 +965,14 @@ handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
                                       time  = Time1,
                                       debug = Debug1});
         {become, Mod, NState} ->
-            Debug1 = common_become(Name, Mod, NState, Debug),
+            Debug1 = common_become(Name, Mod0, Mod, NState, Debug),
             loop(find_prioritisers(
                    GS2State #gs2_state { mod   = Mod,
                                          state = NState,
                                          time  = infinity,
                                          debug = Debug1 }));
         {become, Mod, NState, Time1} ->
-            Debug1 = common_become(Name, Mod, NState, Debug),
+            Debug1 = common_become(Name, Mod0, Mod, NState, Debug),
             loop(find_prioritisers(
                    GS2State #gs2_state { mod   = Mod,
                                          state = NState,

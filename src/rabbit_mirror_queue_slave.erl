@@ -617,7 +617,6 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     KS1 = lists:foldl(fun (ChPid0, KS0) ->
                               pmon:demonitor(ChPid0, KS0)
                       end, KS, AwaitGmDown),
-    rabbit_misc:store_proc_name(rabbit_amqqueue_process, QName),
     rabbit_amqqueue_process:init_with_backing_queue_state(
       Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS1,
       MTC).
