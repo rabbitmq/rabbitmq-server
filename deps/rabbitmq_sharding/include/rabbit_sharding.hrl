@@ -1,0 +1,4 @@
+-define(SHARDING_TABLE, rabbit_sharding).
+-define(DEFAULT_SHARDS_NUM, 1).
+-define(DEFAULT_RK, <<"10000">>).
+-record(sharding, {name, shards_per_node = ?DEFAULT_SHARDS_NUM, routing_key = ?DEFAULT_RK}).
