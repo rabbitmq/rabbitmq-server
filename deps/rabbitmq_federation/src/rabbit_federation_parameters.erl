@@ -34,12 +34,9 @@
                    [{description, "federation parameters"},
                     {mfa, {rabbit_federation_parameters, register, []}},
                     {requires, rabbit_registry},
+                    % {requires, {hard, rabbit_federation_supervisor}},
+                    {cleanup, {rabbit_federation_parameters, unregister, []}},
                     {enables, recovery}]}).
-
--rabbit_cleanup_step({?MODULE,
-                      [{description, "federation parameters"},
-                       {mfa, {rabbit_federation_parameters, unregister, []}},
-                       {requires, rabbit_federation_supervisor}]}).
 
 register() ->
     [rabbit_registry:register(Class, Name, ?MODULE) ||

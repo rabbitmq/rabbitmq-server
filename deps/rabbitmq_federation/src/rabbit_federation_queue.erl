@@ -21,13 +21,10 @@
                     {mfa, {rabbit_registry, register,
                            [queue_decorator, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
+                    % {requires, {hard, rabbit_federation_supervisor}},
+                    {cleanup, {rabbit_registry, unregister,
+                               [queue_decorator, <<"federation">>]}},
                     {enables, recovery}]}).
-
--rabbit_cleanup_step({?MODULE,
-                      [{description, "federation queue decorator"},
-                       {mfa, {rabbit_registry, unregister,
-                              [queue_decorator, <<"federation">>]}},
-                       {requires, rabbit_federation_supervisor}]}).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").

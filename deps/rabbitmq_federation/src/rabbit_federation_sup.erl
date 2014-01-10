@@ -35,11 +35,11 @@
                    [{description, "federation"},
                     {mfa,         {rabbit_sup, start_child, [?MODULE]}},
                     {requires,    kernel_ready},
-                    {enables,     rabbit_federation_exchange}]}).
-
--rabbit_cleanup_step({rabbit_federation_supervisor,
-                      [{description, "federation"},
-                       {mfa, {?MODULE, stop, []}}]}).
+                    {cleanup,     {?MODULE, stop, []}},
+                    {enables,     {hard, rabbit_federation_exchange}},
+                    {enables,     {hard, rabbit_federation_parameters}},
+                    {enables,     {hard, rabbit_federation_queue}},
+                    {enables,     {hard, rabbit_federation_upstream_exchange}}]}).
 
 %%----------------------------------------------------------------------------
 
