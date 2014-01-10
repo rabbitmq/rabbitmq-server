@@ -522,8 +522,8 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
-qbin_to_resource(QueueNameBin, #ch{virtual_host = VHostPath}) ->
-    rabbit_misc:r(VHostPath, queue, QueueNameBin).
+qbin_to_resource(QueueNameBin, State) ->
+    name_to_resource(queue, QueueNameBin, State).
 
 name_to_resource(Type, NameBin, #ch{virtual_host = VHostPath}) ->
     rabbit_misc:r(VHostPath, Type, NameBin).
