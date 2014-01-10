@@ -131,7 +131,7 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
     Limiter2 = case CreditArgs of
                    none         -> Limiter1;
                    {Crd, Drain} -> rabbit_limiter:credit(
-                                     Limiter1, ConsumerTag, Crd, IsEmpty, Drain)
+                                     Limiter1, ConsumerTag, Crd, Drain)
                end,
     C1 = C#cr{consumer_count = Count + 1,
               limiter        = Limiter2},
@@ -312,7 +312,7 @@ credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
             unchanged;
         #cr{limiter = Limiter} = C ->
             C1 = C#cr{limiter = rabbit_limiter:credit(
-                                  Limiter, CTag, Credit, IsEmpty, Drain)},
+                                  Limiter, CTag, Credit, Drain)},
             C2 = #cr{limiter = Limiter1} =
                 case Drain andalso IsEmpty of
                     true  -> send_drained(C1);
