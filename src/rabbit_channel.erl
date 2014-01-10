@@ -272,7 +272,8 @@ handle_cast({method, Method, Content, Flow},
         flow   -> credit_flow:ack(Reader);
         noflow -> ok
     end,
-    try handle_method(intercept_method(Method, State),
+    try handle_method(rabbit_channel_interceptor:intercept_method(
+                        expand_shortcuts(Method, State)),
                       Content, State) of
         {reply, Reply, NewState} ->
             ok = send(Reply, NewState),
@@ -553,10 +554,10 @@ expand_shortcuts(#'queue.delete' {queue = Q} = M, State) ->
 expand_shortcuts(#'queue.purge'  {queue = Q} = M, State) ->
     M#'queue.purge'  {queue = expand_queue_name_shortcut(Q, State)};
 expand_shortcuts(#'queue.bind'   {queue = Q, routing_key = K} = M, State) ->
-    M#'queue.bind'   {queue       = expand_queue_name_shortcut(Q, State), 
+    M#'queue.bind'   {queue       = expand_queue_name_shortcut(Q, State),
                       routing_key = expand_routing_key_shortcut(Q, K, State)};
 expand_shortcuts(#'queue.unbind' {queue = Q, routing_key = K} = M, State) ->
-    M#'queue.unbind' {queue       = expand_queue_name_shortcut(Q, State), 
+    M#'queue.unbind' {queue       = expand_queue_name_shortcut(Q, State),
                       routing_key = expand_routing_key_shortcut(Q, K, State)};
 expand_shortcuts(M, _State) ->
     M.
@@ -1694,8 +1695,3 @@ erase_queue_stats(QName) ->
     [erase({queue_exchange_stats, QX}) ||
         {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
         QName0 =:= QName].
-
-intercept_method(Method, State) ->
-    %% handle MRDQ before calling intercept_method
-    rabbit_channel_interceptor:intercept_method(
-        expand_shortcuts(Method, State)).
