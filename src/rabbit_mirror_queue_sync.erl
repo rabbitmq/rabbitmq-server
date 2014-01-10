@@ -84,7 +84,7 @@
 master_prepare(Ref, QName, Log, SPids) ->
     MPid = self(),
     spawn_link(fun () ->
-                       rabbit_misc:store_proc_name(?MODULE, QName),
+                       ?store_proc_name(QName),
                        syncer(Ref, Log, MPid, SPids)
                end).
 

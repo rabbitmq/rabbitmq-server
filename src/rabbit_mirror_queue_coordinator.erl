@@ -310,8 +310,7 @@
 %%----------------------------------------------------------------------------
 
 start_link(Queue, GM, DeathFun, DepthFun) ->
-    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, DepthFun],
-                           [{proc_name, Queue#amqqueue.name}]).
+    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, DepthFun], []).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
@@ -324,6 +323,7 @@ ensure_monitoring(CPid, Pids) ->
 %% ---------------------------------------------------------------------------
 
 init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
+    ?store_proc_name(QueueName),
     GM1 = case GM of
               undefined ->
                   {ok, GM2} = gm:start_link(

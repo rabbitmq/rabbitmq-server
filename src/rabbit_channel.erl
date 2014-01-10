@@ -119,8 +119,7 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter) ->
     gen_server2:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol,
-                User, VHost, Capabilities, CollectorPid, Limiter],
-      [{proc_name, {ConnName, Channel}}]).
+                User, VHost, Capabilities, CollectorPid, Limiter], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -195,6 +194,7 @@ force_event_refresh() ->
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid]) ->
     process_flag(trap_exit, true),
+    ?store_proc_name({ConnName, Channel}),
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{state                   = starting,
                 protocol                = Protocol,

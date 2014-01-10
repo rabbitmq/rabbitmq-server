@@ -71,8 +71,7 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(
-                   ?MODULE, Q, [{proc_name, Q#amqqueue.name}]).
+start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
@@ -80,6 +79,7 @@ set_maximum_since_use(QPid, Age) ->
 info(QPid) -> gen_server2:call(QPid, info, infinity).
 
 init(Q) ->
+    ?store_proc_name(Q#amqqueue.name),
     {ok, {not_started, Q}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
       ?DESIRED_HIBERNATE}}.
@@ -617,6 +617,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     KS1 = lists:foldl(fun (ChPid0, KS0) ->
                               pmon:demonitor(ChPid0, KS0)
                       end, KS, AwaitGmDown),
+    rabbit_misc:store_proc_name(rabbit_amqqueue_process, QName),
     rabbit_amqqueue_process:init_with_backing_queue_state(
       Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS1,
       MTC).
