@@ -128,16 +128,11 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
                    true  -> rabbit_limiter:activate(Limiter);
                    false -> Limiter
                end,
-    Limiter2 = case CreditArgs of
-                   none         -> Limiter1;
-                   {Crd, Drain} -> rabbit_limiter:credit(
-                                     Limiter1, ConsumerTag, Crd, Drain)
-               end,
-    C1 = C#cr{consumer_count = Count + 1,
-              limiter        = Limiter2},
-    update_ch_record(case IsEmpty of
-                         true  -> send_drained(C1);
-                         false -> C1
+    C1 = C#cr{consumer_count = Count + 1, limiter = Limiter1},
+    update_ch_record(case CreditArgs of
+                         none         -> C1;
+                         {Crd, Drain} -> credit_and_drain(
+                                           C1, ConsumerTag, Crd, Drain, IsEmpty)
                      end),
     Consumer = #consumer{tag          = ConsumerTag,
                          ack_required = not NoAck,
@@ -311,19 +306,14 @@ credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
         not_found ->
             unchanged;
         #cr{limiter = Limiter} = C ->
-            C1 = C#cr{limiter = rabbit_limiter:credit(
-                                  Limiter, CTag, Credit, Drain)},
-            C2 = #cr{limiter = Limiter1} =
-                case Drain andalso IsEmpty of
-                    true  -> send_drained(C1);
-                    false -> C1
-                end,
-            case is_ch_blocked(C2) orelse
+            C1 = #cr{limiter = Limiter1} =
+                credit_and_drain(C, CTag, Credit, Drain, IsEmpty),
+            case is_ch_blocked(C1) orelse
                 (not rabbit_limiter:is_consumer_blocked(Limiter, CTag)) orelse
                 rabbit_limiter:is_consumer_blocked(Limiter1, CTag) of
-                true  -> update_ch_record(C2),
+                true  -> update_ch_record(C1),
                          unchanged;
-                false -> unblock(C2, State)
+                false -> unblock(C1, State)
             end
     end.
 
@@ -389,6 +379,15 @@ send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
         {CTagCredit, Limiter2} -> rabbit_channel:send_drained(
                                     ChPid, CTagCredit),
                                   C#cr{limiter = Limiter2}
+    end.
+
+credit_and_drain(C = #cr{ch_pid = ChPid, limiter = Limiter},
+                 CTag, Credit, Drain, IsEmpty) ->
+    case rabbit_limiter:credit(Limiter, CTag, Credit, Drain, IsEmpty) of
+        {true,  Limiter1} -> rabbit_channel:send_drained(ChPid,
+                                                         [{CTag, Credit}]),
+                             C#cr{limiter = Limiter1};
+        {false, Limiter1} -> C#cr{limiter = Limiter1}
     end.
 
 tags(CList) -> [CTag || {_P, {_ChPid, #consumer{tag = CTag}}} <- CList].
