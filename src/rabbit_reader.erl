@@ -878,17 +878,15 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
            frame_max,   ?FRAME_MIN_SIZE, FrameMax),
     ok = validate_negotiated_integer_value(
            channel_max, ?CHANNEL_MIN,    ChannelMax),
-    {ok, Collector} =
-                rabbit_connection_helper_sup:start_queue_collector(
-                  SupPid, Connection#connection.name),
+    {ok, Collector} = rabbit_connection_helper_sup:start_queue_collector(
+                        SupPid, Connection#connection.name),
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
     SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
     Parent = self(),
     ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
-    Heartbeater =
-                rabbit_heartbeat:start(
-                  SupPid, Sock, Connection#connection.name,
-                  ClientHeartbeat, SendFun, ClientHeartbeat, ReceiveFun),
+    Heartbeater = rabbit_heartbeat:start(
+                    SupPid, Sock, Connection#connection.name,
+                    ClientHeartbeat, SendFun, ClientHeartbeat, ReceiveFun),
     State#v1{connection_state = opening,
              connection = Connection#connection{
                             frame_max   = FrameMax,

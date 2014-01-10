@@ -324,8 +324,7 @@ update_credit(CTag, Credit, Drain, Credits) ->
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([]) ->
-    {ok, #lim{}}.
+init([]) -> {ok, #lim{}}.
 
 prioritise_call(get_prefetch_limit, _From, _Len, _State) -> 9;
 prioritise_call(_Msg,               _From, _Len, _State) -> 0.
