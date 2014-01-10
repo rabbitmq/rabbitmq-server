@@ -898,10 +898,10 @@ internal_broadcast(Msg, From, State = #state { self             = Self,
     State1 = State #state { pub_count        = PubCount1,
                             confirms         = Confirms1,
                             broadcast_buffer = Buffer1 },
-    handle_callback_result(case From of
-                               none -> {Result, State1};
-                               _    -> {Result, flush_broadcast_buffer(State1)}
-                           end).
+    handle_callback_result({Result, case From of
+                                        none -> State1;
+                                        _    -> flush_broadcast_buffer(State1)
+                                    end}).
 
 flush_broadcast_buffer(State = #state { broadcast_buffer = [] }) ->
     State;
