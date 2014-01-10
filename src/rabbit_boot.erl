@@ -90,7 +90,7 @@ boot_with(StartFun) ->
 
 shutdown(Apps) ->
     try
-        case whereis(rabbit_boot) of
+        case whereis(?MODULE) of
             undefined -> ok;
             _         -> await_startup(Apps)
         end,
@@ -130,7 +130,7 @@ stop(Apps) ->
                TargetApps, handle_app_error(error_during_shutdown))
     after
         try
-            BootSteps = load_steps(),
+            BootSteps = load_steps(boot),
             ToDelete = [Step || {App, _, _}=Step <- BootSteps,
                                 lists:member(App, TargetApps)],
             [ets:delete(?MODULE, Step) || {_, Step, _} <- ToDelete],
@@ -160,17 +160,20 @@ run_cleanup_steps(Apps) ->
               end
       end,
       Completed,
-      [Step || {App, _, _}=Step <- load_steps(), lists:member(App, Apps)]),
+      [Step || {App, _, _}=Step <- load_steps(cleanup),
+               lists:member(App, Apps)]),
     ok.
 
 run_boot_steps() ->
-    Steps = load_steps(),
+    Steps = load_steps(boot),
     [ok = run_boot_step(Step) || Step <- Steps],
     ok.
 
-load_steps() ->
+load_steps(Type) ->
+    io:format("Loading steps for ~p~n", [Type]),
     StepAttrs = rabbit_misc:all_app_module_attributes(rabbit_boot_step),
     sort_boot_steps(
+      Type,
       lists:usort(
         [{Mod, {AppName, Steps}} || {AppName, Mod, Steps} <- StepAttrs])).
 
@@ -341,16 +344,35 @@ log_location(Type) ->
 vertices(_Module, {AppName, Steps}) ->
     [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
 
-edges(_Module, {_AppName, Steps}) ->
-    [case Key of
-         requires -> {StepName, OtherStep};
-         enables  -> {OtherStep, StepName}
-     end || {StepName, Atts} <- Steps,
-            {Key, OtherStep} <- Atts,
-            Key =:= requires orelse Key =:= enables].
+edges(Type) ->
+    %% When running "boot" steps, both hard _and_ soft dependencies are
+    %% considered equally. When running "cleanup" steps however, we only
+    %% consider /hard/ dependencies (i.e., of the form {Key, {hard, StepName}})
+    %% as needing to run before or after our own cleanup actions.
+    fun (_Module, {_AppName, Steps}) ->
+            [case Key of
+                 requires -> {StepName, strip_type(OtherStep)};
+                 enables  -> {strip_type(OtherStep), StepName}
+             end || {StepName, Atts} <- Steps,
+                    {Key, OtherStep} <- Atts,
+                    filter_dependent_steps(Key, OtherStep, Type)]
+    end.
 
-sort_boot_steps(UnsortedSteps) ->
-    case rabbit_misc:build_acyclic_graph(fun vertices/2, fun edges/2,
+filter_dependent_steps(Key, Dependency, Type)
+  when Key =:= requires orelse Key =:= enables ->
+    case {Dependency, Type} of
+        {{hard, _}, cleanup} -> true;
+        {_SoftReqs, cleanup} -> false;
+        {_,         boot}    -> true
+    end;
+filter_dependent_steps(_, _, _) ->
+    false.
+
+strip_type({hard, Step}) -> Step;
+strip_type(Step)         -> Step.
+
+sort_boot_steps(Type, UnsortedSteps) ->
+    case rabbit_misc:build_acyclic_graph(fun vertices/2, edges(Type),
                                          UnsortedSteps) of
         {ok, G} ->
             %% Use topological sort to find a consistent ordering (if
@@ -365,7 +387,7 @@ sort_boot_steps(UnsortedSteps) ->
             %% Check that all mentioned {M,F,A} triples are exported.
             case [{StepName, {M,F,A}} ||
                      {_App, StepName, Attributes} <- SortedSteps,
-                     {mfa, {M,F,A}}         <- Attributes,
+                     {mfa, {M,F,A}}               <- Attributes,
                      not erlang:function_exported(M, F, length(A))] of
                 []               -> SortedSteps;
                 MissingFunctions -> basic_boot_error(
