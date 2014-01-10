@@ -67,20 +67,25 @@
 boot_with(StartFun) ->
     %% TODO: this should be done with monitors, not links, I think
     Marker = spawn_link(fun() -> receive stop -> ok end end),
-    register(rabbit_boot, Marker),
-    ensure_boot_table(),
-    try
-        StartFun()
-    catch
-        throw:{could_not_start, _App, _Reason}=Err ->
-            boot_error(Err, not_available);
-        _:Reason ->
-            boot_error(Reason, erlang:get_stacktrace())
-    after
-        unlink(Marker),
-        Marker ! stop,
-        %% give the error loggers some time to catch up
-        timer:sleep(100)
+    case catch register(rabbit_boot, Marker) of
+        true -> try
+                    case rabbit:is_running() of
+                        true  -> ok;
+                        false -> StartFun()
+                    end
+                catch
+                    throw:{could_not_start, _App, _Reason}=Err ->
+                        boot_error(Err, not_available);
+                    _:Reason ->
+                        boot_error(Reason, erlang:get_stacktrace())
+                after
+                    unlink(Marker),
+                    Marker ! stop,
+                    %% give the error loggers some time to catch up
+                    timer:sleep(100)
+                end;
+        _    -> unlink(Marker),
+                Marker ! stop
     end.
 
 shutdown(Apps) ->
