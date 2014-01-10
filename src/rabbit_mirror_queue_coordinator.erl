@@ -310,7 +310,8 @@
 %%----------------------------------------------------------------------------
 
 start_link(Queue, GM, DeathFun, DepthFun) ->
-    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, DepthFun], []).
+    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, DepthFun],
+                           [{proc_name, Queue#amqqueue.name}]).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).

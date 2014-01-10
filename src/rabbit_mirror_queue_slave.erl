@@ -71,7 +71,8 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
+start_link(Q) -> gen_server2:start_link(
+                   ?MODULE, Q, [{proc_name, Q#amqqueue.name}]).
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).

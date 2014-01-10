@@ -99,7 +99,8 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
+start_link(Q) ->
+    gen_server2:start_link(?MODULE, Q, [{proc_name, Q#amqqueue.name}]).
 
 info_keys() -> ?INFO_KEYS.
 

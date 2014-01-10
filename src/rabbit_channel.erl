@@ -119,7 +119,8 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter) ->
     gen_server2:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol,
-                User, VHost, Capabilities, CollectorPid, Limiter], []).
+                User, VHost, Capabilities, CollectorPid, Limiter],
+      [{proc_name, {ConnName, Channel}}]).
 
 do(Pid, Method) ->
     do(Pid, Method, none).

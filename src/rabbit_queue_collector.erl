@@ -16,9 +16,9 @@
 
 -module(rabbit_queue_collector).
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
--export([start_link/0, register/2, delete_all/1]).
+-export([start_link/1, register/2, delete_all/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -31,7 +31,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/1 :: (rabbit_types:proc_name()) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(register/2 :: (pid(), pid()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
 
@@ -39,14 +40,14 @@
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+start_link(ProcName) ->
+    gen_server2:start_link(?MODULE, [], [{proc_name, ProcName}]).
 
 register(CollectorPid, Q) ->
-    gen_server:call(CollectorPid, {register, Q}, infinity).
+    gen_server2:call(CollectorPid, {register, Q}, infinity).
 
 delete_all(CollectorPid) ->
-    gen_server:call(CollectorPid, delete_all, infinity).
+    gen_server2:call(CollectorPid, delete_all, infinity).
 
 %%----------------------------------------------------------------------------
 
@@ -78,7 +79,7 @@ handle_info({'DOWN', _MRef, process, DownPid, _Reason},
             State = #state{monitors = QMons, delete_from = Deleting}) ->
     QMons1 = pmon:erase(DownPid, QMons),
     case Deleting =/= undefined andalso pmon:is_empty(QMons1) of
-        true  -> gen_server:reply(Deleting, ok);
+        true  -> gen_server2:reply(Deleting, ok);
         false -> ok
     end,
     {noreply, State#state{monitors = QMons1}}.

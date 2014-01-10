@@ -81,6 +81,10 @@
 %% process as sys:get_status/1 would). Pass through a function which
 %% can be invoked on the state, get back the result. The state is not
 %% modified.
+%%
+%% 10) The Options parameter to start / start_link can include
+%% {proc_name, Name}. This name is stored in the process dictionary
+%% for later debugging.
 
 %% All modifications are (C) 2009-2013 GoPivotal, Inc.
 
@@ -283,7 +287,7 @@ behaviour_info(_Other) ->
 %%%    Name ::= {local, atom()} | {global, atom()}
 %%%    Mod  ::= atom(), callback module implementing the 'real' server
 %%%    Args ::= term(), init arguments (to Mod:init/1)
-%%%    Options ::= [{timeout, Timeout} | {debug, [Flag]}]
+%%%    Options ::= [{timeout, Timeout} | {debug, [Flag]} | {proc_name, term()}]
 %%%      Flag ::= trace | log | {logfile, File} | statistics | debug
 %%%          (debug == log && statistics)
 %%% Returns: {ok, Pid} |
@@ -463,6 +467,10 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
                               mod     = Mod,
                               queue   = Queue,
                               debug   = Debug }),
+    case opt(proc_name, Options) of
+        {ok, ProcName} -> put(process_name, {Mod, ProcName});
+        false          -> ok
+    end,
     case catch Mod:init(Args) of
         {ok, State} ->
             proc_lib:init_ack(Starter, {ok, self()}),
@@ -901,9 +909,17 @@ common_noreply(_Name, _NState, [] = _Debug) ->
 common_noreply(Name, NState, Debug) ->
     sys:handle_debug(Debug, fun print_event/3, Name, {noreply, NState}).
 
-common_become(_Name, _Mod, _NState, [] = _Debug) ->
+
+common_become(Name, OldMod, NewMod, NState, Debug) ->
+    case get(process_name) of
+        {OldMod, ProcName} -> put(process_name, {NewMod, ProcName});
+        _                  -> ok
+    end,
+    common_become0(Name, NewMod, NState, Debug).
+
+common_become0(_Name, _Mod, _NState, [] = _Debug) ->
     [];
-common_become(Name, Mod, NState, Debug) ->
+common_become0(Name, Mod, NState, Debug) ->
     sys:handle_debug(Debug, fun print_event/3, Name, {become, Mod, NState}).
 
 handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
@@ -935,6 +951,7 @@ handle_msg(Msg, GS2State = #gs2_state { mod = Mod, state = State }) ->
     handle_common_reply(Reply, Msg, GS2State).
 
 handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
+                                                        mod   = Mod0,
                                                         debug = Debug}) ->
     case Reply of
         {noreply, NState} ->
@@ -948,14 +965,14 @@ handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
                                       time  = Time1,
                                       debug = Debug1});
         {become, Mod, NState} ->
-            Debug1 = common_become(Name, Mod, NState, Debug),
+            Debug1 = common_become(Name, Mod0, Mod, NState, Debug),
             loop(find_prioritisers(
                    GS2State #gs2_state { mod   = Mod,
                                          state = NState,
                                          time  = infinity,
                                          debug = Debug1 }));
         {become, Mod, NState, Time1} ->
-            Debug1 = common_become(Name, Mod, NState, Debug),
+            Debug1 = common_become(Name, Mod0, Mod, NState, Debug),
             loop(find_prioritisers(
                    GS2State #gs2_state { mod   = Mod,
                                          state = NState,
