@@ -163,7 +163,7 @@ run_boot_steps() ->
     ok.
 
 load_steps(Type) ->
-    StepAttrs = rabbit_misc:all_app_module_attributes(rabbit_boot_step),
+    StepAttrs = rabbit_misc:all_module_attributes_with_app(rabbit_boot_step),
     sort_boot_steps(
       Type,
       lists:usort(

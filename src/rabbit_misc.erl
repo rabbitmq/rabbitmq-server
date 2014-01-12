@@ -51,8 +51,8 @@
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([parse_arguments/3]).
--export([all_app_module_attributes/1]).
--export([all_module_attributes/1, build_graph/3, build_acyclic_graph/3]).
+-export([all_module_attributes_with_app/1]).
+-export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
@@ -92,12 +92,8 @@
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
 -type(graph_vertex_fun() ::
-        fun (() -> [{digraph:vertex(), digraph_label()}])).
--type(acyclic_graph_vertex_fun() ::
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
-        fun (() -> [{digraph:vertex(), digraph:vertex()}])).
--type(acyclic_graph_edge_fun() ::
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
@@ -215,17 +211,10 @@
         -> {'ok', {atom(), [{string(), string()}], [string()]}} |
            'no_command').
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
--spec(build_graph/3 ::
-        (graph_vertex_fun(), graph_edge_fun(),
-         [{atom(), [term()]}])
-        -> rabbit_types:ok_or_error2(digraph(),
-                                     {'vertex', 'duplicate', digraph:vertex()} |
-                                     {'edge', ({bad_vertex, digraph:vertex()} |
-                                               {bad_edge, [digraph:vertex()]}),
-                                      digraph:vertex(), digraph:vertex()})).
+-spec(all_module_attributes_with_app/1 ::
+        (atom()) -> [{atom(), atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
-        (acyclic_graph_vertex_fun(),
-         acyclic_graph_edge_fun(), [{atom(), [term()]}])
+        (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
         -> rabbit_types:ok_or_error2(digraph(),
                                      {'vertex', 'duplicate', digraph:vertex()} |
                                      {'edge', ({bad_vertex, digraph:vertex()} |
@@ -867,7 +856,7 @@ module_attributes(Module) ->
             V
     end.
 
-all_app_module_attributes(Name) ->
+all_module_attributes_with_app(Name) ->
     find_module_attributes(
       fun(App, Modules) ->
             [{App, Module} || Module <- Modules]
@@ -900,30 +889,24 @@ find_module_attributes(Generator, Fold) ->
                 {ok, Modules} <- [application:get_key(App, modules)]])),
     lists:foldl(Fold, [], Targets).
 
-build_graph(VertexFun, EdgeFun, G) ->
+build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
+    G = digraph:new([acyclic]),
     try
         [case digraph:vertex(G, Vertex) of
              false -> digraph:add_vertex(G, Vertex, Label);
              _     -> ok = throw({graph_error, {vertex, duplicate, Vertex}})
-         end || {Vertex, Label} <- VertexFun()],
+         end || {Module, Atts}  <- Graph,
+                {Vertex, Label} <- VertexFun(Module, Atts)],
         [case digraph:add_edge(G, From, To) of
              {error, E} -> throw({graph_error, {edge, E, From, To}});
              _          -> ok
-         end || {From, To} <- EdgeFun()],
+         end || {Module, Atts} <- Graph,
+                {From, To}     <- EdgeFun(Module, Atts)],
         {ok, G}
     catch {graph_error, Reason} ->
             true = digraph:delete(G),
             {error, Reason}
     end.
-
-build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
-    build_graph(fun() -> [Vertex || {Module, Atts} <- Graph,
-                                    Vertex <- VertexFun(Module, Atts)]
-                end,
-                fun() -> [Edge || {Module, Atts} <- Graph,
-                                  Edge <- EdgeFun(Module, Atts)]
-                end,
-                digraph:new([acyclic])).
 
 const_ok() -> ok.
 const(X) -> fun () -> X end.

@@ -17,7 +17,7 @@
 
 -export([load_applications/1, start_applications/1, start_applications/2,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
-         running_applications/0, wait_for_applications/1, app_dependencies/1]).
+         wait_for_applications/1, app_dependencies/1]).
 
 -ifdef(use_specs).
 
@@ -36,9 +36,6 @@
 
 %%---------------------------------------------------------------------------
 %% Public API
-
-running_applications() ->
-    [App || {App, _, _} <- application:which_applications()].
 
 load_applications(Apps) ->
     load_applications(queue:from_list(Apps), sets:new()),

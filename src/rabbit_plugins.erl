@@ -38,8 +38,6 @@
 
 %%----------------------------------------------------------------------------
 
-%% TODO: move all the {enable,disable}ment logic from plugins_main to here!
-
 enable(Plugins) ->
     setup(),
     rabbit_boot:start(Plugins).
