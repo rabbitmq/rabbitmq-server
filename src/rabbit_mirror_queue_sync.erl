@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([master_prepare/3, master_go/7, slave/7]).
+-export([master_prepare/4, master_go/7, slave/7]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
@@ -61,7 +61,8 @@
 -type(slave_sync_state() :: {[{rabbit_types:msg_id(), ack()}], timer:tref(),
                              bqs()}).
 
--spec(master_prepare/3 :: (reference(), log_fun(), [pid()]) -> pid()).
+-spec(master_prepare/4 :: (reference(), rabbit_amqqueue:name(),
+                               log_fun(), [pid()]) -> pid()).
 -spec(master_go/7 :: (pid(), reference(), log_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
@@ -80,9 +81,12 @@
 %% ---------------------------------------------------------------------------
 %% Master
 
-master_prepare(Ref, Log, SPids) ->
+master_prepare(Ref, QName, Log, SPids) ->
     MPid = self(),
-    spawn_link(fun () -> syncer(Ref, Log, MPid, SPids) end).
+    spawn_link(fun () ->
+                       ?store_proc_name(QName),
+                       syncer(Ref, Log, MPid, SPids)
+               end).
 
 master_go(Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) ->
     Args = {Syncer, Ref, Log, HandleInfo, EmitStats, rabbit_misc:get_parent()},
