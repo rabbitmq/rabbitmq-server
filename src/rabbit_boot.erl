@@ -118,23 +118,16 @@ start(Apps) ->
 
 stop(Apps) ->
     ensure_boot_table(),
-    TargetApps =
-        sets:to_list(
-          lists:foldl(
-            fun(App, Set) ->
-                    lists:foldl(fun sets:add_element/2, Set,
-                                app_utils:isolated_dependencies(App) -- [rabbit])
-            end, sets:new(), Apps)),
     try
         ok = app_utils:stop_applications(
-               TargetApps, handle_app_error(error_during_shutdown))
+               Apps, handle_app_error(error_during_shutdown))
     after
         try
             BootSteps = load_steps(boot),
             ToDelete = [Step || {App, _, _}=Step <- BootSteps,
-                                lists:member(App, TargetApps)],
+                                lists:member(App, Apps)],
             [ets:delete(?MODULE, Step) || {_, Step, _} <- ToDelete],
-            run_cleanup_steps(TargetApps)
+            run_cleanup_steps(Apps)
         after
             save_boot_table()
         end,
@@ -146,7 +139,7 @@ stop(Apps) ->
                   false = code:is_loaded(Mod)
               end || Mod <- Mods],
              application:unload(App)
-         end || App <- TargetApps]
+         end || App <- Apps]
     end.
 
 run_cleanup_steps(Apps) ->
@@ -170,7 +163,6 @@ run_boot_steps() ->
     ok.
 
 load_steps(Type) ->
-    io:format("Loading steps for ~p~n", [Type]),
     StepAttrs = rabbit_misc:all_app_module_attributes(rabbit_boot_step),
     sort_boot_steps(
       Type,
@@ -347,8 +339,9 @@ vertices(_Module, {AppName, Steps}) ->
 edges(Type) ->
     %% When running "boot" steps, both hard _and_ soft dependencies are
     %% considered equally. When running "cleanup" steps however, we only
-    %% consider /hard/ dependencies (i.e., of the form {Key, {hard, StepName}})
-    %% as needing to run before or after our own cleanup actions.
+    %% consider /hard/ dependencies (i.e., of the form
+    %% {DependencyType, {hard, StepName}}) as needing to run before or after
+    %% our own cleanup actions.
     fun (_Module, {_AppName, Steps}) ->
             [case Key of
                  requires -> {StepName, strip_type(OtherStep)};

@@ -18,7 +18,6 @@
 -export([load_applications/1, start_applications/1, start_applications/2,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
          running_applications/0, wait_for_applications/1, app_dependencies/1]).
--export([isolated_dependencies/1]).
 
 -ifdef(use_specs).
 
@@ -32,7 +31,6 @@
 -spec wait_for_applications([atom()])               -> 'ok'.
 -spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
 -spec app_dependencies(atom())                      -> [atom()].
--spec isolated_dependencies(atom())                 -> [atom()].
 
 -endif.
 
@@ -77,35 +75,6 @@ stop_applications(Apps, ErrorHandler) ->
 wait_for_applications(Apps) ->
     [wait_for_application(App) || App <- Apps], ok.
 
-isolated_dependencies(Root) ->
-    Loaded = application:loaded_applications(),
-    {ok, G} = rabbit_misc:build_graph(
-                fun() -> [{App, App} || {App, _, _} <- Loaded] end,
-                fun() -> [{App, Dep} ||
-                             {App, Deps} <- [{App, app_dependencies(App)} ||
-                                                {App, _Desc, _Vsn} <- Loaded],
-                             Dep <- Deps]
-                end,
-                digraph:new()),
-    try
-        Deps = lists:foldl(
-                 fun(E, Acc) ->
-                         {_, _InVertex, OutVertex, _Label} = digraph:edge(G, E),
-                         case is_reachable(G, OutVertex, Root) of
-                             [] -> sets:add_element(OutVertex, Acc);
-                             _  -> Acc
-                         end
-                 end,
-                 sets:from_list([Root]),
-                 digraph:out_edges(G, Root)),
-        sets:to_list(Deps)
-    after
-        true = digraph:delete(G)
-    end.
-
-is_reachable(G, OutVertex, Root) ->
-    digraph_utils:reaching_neighbours([OutVertex], G) -- [Root].
-
 app_dependency_order(RootApps, StripUnreachable) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
@@ -126,11 +95,6 @@ app_dependency_order(RootApps, StripUnreachable) ->
 
 %%---------------------------------------------------------------------------
 %% Private API
-
-%% It might be worth documenting this on the plugin author's guide/page.
-%% A plugin should expect its boot steps to run /before/ the application
-%% is started, and its cleanup steps to run /after/ the application has
-%% fully stopped.
 
 wait_for_application(Application) ->
     case lists:keymember(Application, 1, rabbit_misc:which_applications()) of
