@@ -22,7 +22,6 @@
                     {mfa, {rabbit_registry, register,
                            [exchange_decorator, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
-                    % {requires, {hard, rabbit_federation_supervisor}},
                     {cleanup, {rabbit_registry, unregister,
                                [exchange_decorator, <<"federation">>]}},
                     {enables, recovery}]}).

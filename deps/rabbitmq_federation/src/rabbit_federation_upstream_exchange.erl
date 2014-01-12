@@ -21,6 +21,8 @@
                     {mfa, {rabbit_registry, register,
                            [exchange, <<"x-federation-upstream">>, ?MODULE]}},
                     {requires, rabbit_registry},
+                    {cleanup, {rabbit_registry, unregister,
+                               [exchange, <<"x-federation-upstream">>]}},
                     {enables, recovery}]}).
 
 -include_lib("rabbit_common/include/rabbit.hrl").

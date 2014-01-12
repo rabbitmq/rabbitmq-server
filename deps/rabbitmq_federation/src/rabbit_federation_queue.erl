@@ -21,7 +21,6 @@
                     {mfa, {rabbit_registry, register,
                            [queue_decorator, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
-                    % {requires, {hard, rabbit_federation_supervisor}},
                     {cleanup, {rabbit_registry, unregister,
                                [queue_decorator, <<"federation">>]}},
                     {enables, recovery}]}).
