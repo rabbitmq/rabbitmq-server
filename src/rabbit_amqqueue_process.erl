@@ -203,10 +203,8 @@ declare(Recover, From, State = #q{q                   = Q,
             {stop, normal, Err, State}
     end.
 
-recovery_status(new) ->
-    {false, new};
-recovery_status({Recover, _}) ->
-    {true, Recover}.
+recovery_status(new)          -> {false, new};
+recovery_status({Recover, _}) -> {true, Recover}.
 
 matches(false, Q1, Q2) ->
     %% i.e. not policy

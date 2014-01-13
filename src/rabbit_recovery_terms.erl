@@ -21,21 +21,11 @@
 
 -behaviour(gen_server).
 
--export([recover/0,
-         upgrade_recovery_terms/0,
-         start_link/0,
-         store/2,
-         read/1,
-         lookup/2,
-         clear/0,
-         flush/0]).
+-export([recover/0, upgrade_recovery_terms/0, start_link/0,
+         store/2, read/1, lookup/2, clear/0, flush/0]).
 
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
 
 -rabbit_upgrade({upgrade_recovery_terms, local, []}).
 
@@ -87,11 +77,9 @@ upgrade_recovery_terms() ->
         flush()
     end.
 
-start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+start_link() -> gen_server:start_link(?MODULE, [], []).
 
-store(QueueDir, Terms) ->
-    dets:insert(?MODULE, {to_key(QueueDir), Terms}).
+store(QueueDir, Terms) -> dets:insert(?MODULE, {to_key(QueueDir), Terms}).
 
 read(QueueDir) ->
     case dets:lookup(?MODULE, to_key(QueueDir)) of
@@ -111,14 +99,11 @@ init(_) ->
     create_table(),
     {ok, undefined}.
 
-handle_call(Msg, _, State) ->
-    {stop, {unexpected_call, Msg}, State}.
+handle_call(Msg, _, State) -> {stop, {unexpected_call, Msg}, State}.
 
-handle_cast(Msg, State) ->
-    {stop, {unexpected_cast, Msg}, State}.
+handle_cast(Msg, State) -> {stop, {unexpected_cast, Msg}, State}.
 
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_info(_Info, State) -> {noreply, State}.
 
 terminate(_Reason, _State) ->
     ok = flush(),
@@ -127,18 +112,13 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-flush() ->
-    dets:sync(?MODULE).
+flush() -> dets:sync(?MODULE).
 
 create_table() ->
-    File = dets_filename(),
-    {ok, _} = dets:open_file(?MODULE, [{file, File},
-                                       {ram_file, true},
+    File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
+    {ok, _} = dets:open_file(?MODULE, [{file,      File},
+                                       {ram_file,  true},
                                        {auto_save, infinity}]).
 
-to_key(QueueDir) ->
-    filename:basename(QueueDir).
-
-dets_filename() ->
-    filename:join(rabbit_mnesia:dir(), "recovery.dets").
+to_key(QueueDir) -> filename:basename(QueueDir).
 

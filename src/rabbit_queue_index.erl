@@ -264,8 +264,7 @@ recover(Name, {Recovery, Terms}, MsgStoreRecovered,
 
 terminate(Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
-    rabbit_recovery_terms:store(
-      Dir, [{segments, SegmentCounts} | Terms]),
+    rabbit_recovery_terms:store(Dir, [{segments, SegmentCounts} | Terms]),
     State1.
 
 delete_and_terminate(State) ->
@@ -383,10 +382,9 @@ recover(DurableQueues) ->
 
     %% Any queue directory we've not been asked to recover is considered garbage
     QueuesDir = queues_dir(),
-    lists:map(
+    lists:foreach(
       fun(QueueDir) ->
-              case dict:is_key(filename:basename(QueueDir),
-                               DurableDict) of
+              case dict:is_key(filename:basename(QueueDir), DurableDict) of
                   true  -> ok;
                   false -> ok = rabbit_file:recursive_delete([QueueDir])
               end
