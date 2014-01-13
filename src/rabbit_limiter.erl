@@ -69,7 +69,7 @@
 %%    about - and channel.flow blocking - that's what block/1,
 %%    unblock/1 and is_blocked/1 are for. They also tell the limiter
 %%    queue state (via the queue) about consumer credit changes -
-%%    that's what credit/4 is for.
+%%    that's what credit/5 is for.
 %%
 %% 2. Queues also tell the limiter queue state about the queue
 %%    becoming empty (via drained/1) and consumers leaving (via
@@ -117,9 +117,11 @@
 
 -module(rabbit_limiter).
 
+-include("rabbit.hrl").
+
 -behaviour(gen_server2).
 
--export([start_link/0]).
+-export([start_link/1]).
 %% channel API
 -export([new/1, limit_prefetch/3, unlimit_prefetch/1, block/1, unblock/1,
          is_prefetch_limited/1, is_blocked/1, is_active/1,
@@ -146,7 +148,8 @@
 -type(qstate() :: #qstate{pid :: pid(),
                           state :: 'dormant' | 'active' | 'suspended'}).
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/1 :: (rabbit_types:proc_name()) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(new/1 :: (pid()) -> lstate()).
 
 -spec(limit_prefetch/3      :: (lstate(), non_neg_integer(), non_neg_integer())
@@ -170,7 +173,7 @@
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
 -spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
 -spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean(),
-                   boolean()) -> qstate()).
+                   boolean()) -> {boolean(), qstate()}).
 -spec(ack_from_queue/3 :: (qstate(), rabbit_types:ctag(), non_neg_integer())
                           -> qstate()).
 -spec(drained/1 :: (qstate())
@@ -196,7 +199,7 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link() -> gen_server2:start_link(?MODULE, [], []).
+start_link(ProcName) -> gen_server2:start_link(?MODULE, [ProcName], []).
 
 new(Pid) ->
     %% this a 'call' to ensure that it is invoked at most once.
@@ -279,10 +282,14 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         {value, #credit{}}                      -> true
     end.
 
-credit(Limiter = #qstate{credits = Credits}, CTag, _Credit, true, true) ->
-    Limiter#qstate{credits = update_credit(CTag, 0, true, Credits)};
-credit(Limiter = #qstate{credits = Credits}, CTag, Credit, _IsEmpty, Drain) ->
-    Limiter#qstate{credits = update_credit(CTag, Credit, Drain, Credits)}.
+credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain, IsEmpty) ->
+    {Res, Cr} = case IsEmpty andalso Drain of
+                    true  -> {true,  make_credit(#credit{credit = 0,
+                                                         drain  = false})};
+                    false -> {false, make_credit(#credit{credit = Credit,
+                                                         drain  = Drain})}
+                end,
+    {Res, Limiter#qstate{credits = gb_trees:enter(CTag, Cr, Credits)}}.
 
 set_consumer_prefetch(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     Credits1 = gb_trees:enter(
@@ -293,10 +300,10 @@ ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     {Credits1, Unblocked} =
         case gb_trees:lookup(CTag, Credits) of
             {value, C = #credit{mode   = auto,
-                                credit = Credit0}} ->
-                {gb_trees:enter(
-                   CTag, C#credit{credit = Credit0 + Credit}, Credits),
-                 Credit0 =:= 0};
+                                credit = C0}} ->
+                {gb_trees:update(
+                   CTag, make_credit(C#credit{credit = C0 + Credit}), Credits),
+                 C0 =:= 0};
             _ ->
                 {Credits, false}
         end,
@@ -326,28 +333,30 @@ forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
 %% state for us (#qstate.credits), and maintain a fiction that the
 %% limiter is making the decisions...
 
+make_credit(C = #credit{credit = Credit, drain = Drain}) ->
+    %% Using up all credit implies no need to send a 'drained' event
+    C#credit{drain = Drain andalso Credit > 0}.
+
 decrement_credit(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
         {value, C = #credit{credit = Credit}} ->
-            gb_trees:enter(CTag, C#credit{credit = Credit - 1}, Credits);
+            C2 = make_credit(C#credit{credit = Credit - 1}),
+            gb_trees:update(CTag, C2, Credits);
         none ->
             Credits
     end.
 
 update_credit(CTag, Credit, Drain, Credits) ->
-    %% Using up all credit implies no need to send a 'drained' event
-    Drain1 = Drain andalso Credit > 0,
-    C = case gb_trees:lookup(CTag, Credits) of
-            {value, C0} -> C0;
-            none        -> #credit{}
-        end,
-    gb_trees:enter(CTag, C#credit{credit = Credit, drain = Drain1}, Credits).
+    C = gb_trees:get(CTag, Credits),
+    C2 = make_credit(C#credit{credit = Credit, drain = Drain}),
+    gb_trees:update(CTag, C2, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, #lim{}}.
+init([ProcName]) -> ?store_proc_name(ProcName),
+                    {ok, #lim{}}.
 
 prioritise_call(get_prefetch_limit, _From, _Len, _State) -> 9;
 prioritise_call(_Msg,               _From, _Len, _State) -> 0.

@@ -542,6 +542,7 @@ forget_group(GroupName) ->
     ok.
 
 init([GroupName, Module, Args, TxnFun]) ->
+    put(process_name, {?MODULE, GroupName}),
     {MegaSecs, Secs, MicroSecs} = now(),
     random:seed(MegaSecs, Secs, MicroSecs),
     Self = make_member(GroupName),
@@ -898,13 +899,10 @@ internal_broadcast(Msg, From, State = #state { self             = Self,
     State1 = State #state { pub_count        = PubCount1,
                             confirms         = Confirms1,
                             broadcast_buffer = Buffer1 },
-    case From =/= none of
-        true ->
-            handle_callback_result({Result, flush_broadcast_buffer(State1)});
-        false ->
-            handle_callback_result(
-              {Result, State1 #state { broadcast_buffer = Buffer1 }})
-    end.
+    handle_callback_result({Result, case From of
+                                        none -> State1;
+                                        _    -> flush_broadcast_buffer(State1)
+                                    end}).
 
 flush_broadcast_buffer(State = #state { broadcast_buffer = [] }) ->
     State;

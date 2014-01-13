@@ -145,7 +145,7 @@ sync_mirrors(HandleInfo, EmitStats,
     Log("~p messages to synchronise", [BQ:len(BQS)]),
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
     Ref = make_ref(),
-    Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, Log, SPids),
+    Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, QName, Log, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
     case rabbit_mirror_queue_sync:master_go(
