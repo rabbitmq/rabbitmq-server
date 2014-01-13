@@ -570,8 +570,8 @@ ack(AckTags, CTag, ChPid, State) ->
                           State1#q{backing_queue_state = BQS1}
                   end).
 
-requeue(AckTags, ChPid, State) ->
-    subtract_acks(ChPid, fixme, AckTags, State,
+requeue(AckTags, CTag, ChPid, State) ->
+    subtract_acks(ChPid, CTag, AckTags, State,
                   fun (State1) -> requeue_and_run(AckTags, State1) end).
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
@@ -989,9 +989,9 @@ handle_call(purge, _From, State = #q{backing_queue       = BQ,
     State1 = State#q{backing_queue_state = BQS1},
     reply({ok, Count}, maybe_send_drained(Count =:= 0, State1));
 
-handle_call({requeue, AckTags, ChPid}, From, State) ->
+handle_call({requeue, CTag, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
-    noreply(requeue(AckTags, ChPid, State));
+    noreply(requeue(AckTags, CTag, ChPid, State));
 
 handle_call(sync_mirrors, _From,
             State = #q{backing_queue       = rabbit_mirror_queue_master,
@@ -1056,18 +1056,18 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
 handle_cast({ack, CTag, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, CTag, ChPid, State));
 
-handle_cast({reject, AckTags, true, ChPid}, State) ->
-    noreply(requeue(AckTags, ChPid, State));
+handle_cast({reject, CTag, AckTags, true, ChPid}, State) ->
+    noreply(requeue(AckTags, CTag, ChPid, State));
 
-handle_cast({reject, AckTags, false, ChPid}, State) ->
+handle_cast({reject, CTag, AckTags, false, ChPid}, State) ->
     noreply(with_dlx(
               State#q.dlx,
-              fun (X) -> subtract_acks(ChPid, fixme, AckTags, State,
+              fun (X) -> subtract_acks(ChPid, CTag, AckTags, State,
                                        fun (State1) ->
                                                dead_letter_rejected_msgs(
                                                  AckTags, X, State1)
                                        end) end,
-              fun () -> ack(AckTags, fixme, ChPid, State) end));
+              fun () -> ack(AckTags, CTag, ChPid, State) end));
 
 handle_cast(delete_immediately, State) ->
     stop(State);

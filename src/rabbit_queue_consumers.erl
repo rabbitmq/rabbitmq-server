@@ -81,7 +81,8 @@
                      {'delivered',   boolean(), T, state()} |
                      {'undelivered', boolean(), state()}.
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
-%% -spec subtract_acks(ch(), [ack()]) -> 'not_found' | 'ok'.
+-spec subtract_acks(ch(), rabbit_types:ctag(), [ack()], state()) ->
+                           'not_found' | 'unchanged' | {'unblocked', state()}.
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
                               'unchanged' | {'unblocked', state()}.
 -spec resume_fun()                       -> cr_fun().
@@ -245,7 +246,7 @@ subtract_acks(ChPid, CTag, AckTags, State) ->
         not_found ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
-            {Lim2, Unblocked} =
+            {Unblocked, Lim2} =
                 rabbit_limiter:ack_from_queue(Lim, CTag, length(AckTags)),
             AckTags2 = subtract_acks0(AckTags, [], ChAckTags),
             C2 = C#cr{acktags = AckTags2, limiter = Lim2},

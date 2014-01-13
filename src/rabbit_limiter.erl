@@ -174,8 +174,10 @@
 -spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
 -spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean(),
                    boolean()) -> {boolean(), qstate()}).
+-spec(set_consumer_prefetch/4 :: (qstate(), rabbit_types:ctag(), boolean(),
+                                  non_neg_integer()) -> qstate()).
 -spec(ack_from_queue/3 :: (qstate(), rabbit_types:ctag(), non_neg_integer())
-                          -> qstate()).
+                          -> {boolean(), qstate()}).
 -spec(drained/1 :: (qstate())
                    -> {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}).
 -spec(forget_consumer/2 :: (qstate(), rabbit_types:ctag()) -> qstate()).
@@ -309,7 +311,7 @@ ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
             _ ->
                 {Credits, false}
         end,
-    {Limiter#qstate{credits = Credits1}, Unblocked}.
+    {Unblocked, Limiter#qstate{credits = Credits1}}.
 
 drained(Limiter = #qstate{credits = Credits}) ->
     {CTagCredits, Credits2} =
