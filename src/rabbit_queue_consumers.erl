@@ -134,7 +134,7 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, Args,
           none           -> C1;
           {credit, C, D} -> credit_and_drain(C1, ConsumerTag, C, D, IsEmpty);
           {prefetch, P}  -> Limiter2 = rabbit_limiter:set_consumer_prefetch(
-                                         Limiter1, ConsumerTag, P),
+                                         Limiter1, ConsumerTag, NoAck, P),
                             C1#cr{limiter = Limiter2}
       end),
     Consumer = #consumer{tag          = ConsumerTag,

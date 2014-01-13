@@ -129,7 +129,7 @@
 %% queue API
 -export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
          is_suspended/1, is_consumer_blocked/2, credit/5,
-         set_consumer_prefetch/3, ack_from_queue/3,
+         set_consumer_prefetch/4, ack_from_queue/3,
          drained/1, forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -291,10 +291,12 @@ credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain, IsEmpty) ->
                 end,
     {Res, Limiter#qstate{credits = gb_trees:enter(CTag, Cr, Credits)}}.
 
-set_consumer_prefetch(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
+set_consumer_prefetch(Lim, _CTag, true, _Credit) ->
+    Lim;
+set_consumer_prefetch(Lim = #qstate{credits = Credits}, CTag, false, Credit) ->
     Credits1 = gb_trees:enter(
                  CTag, #credit{credit = Credit, mode = auto}, Credits),
-    Limiter#qstate{credits = Credits1}.
+    Lim#qstate{credits = Credits1}.
 
 ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     {Credits1, Unblocked} =
