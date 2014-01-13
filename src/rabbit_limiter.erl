@@ -117,9 +117,11 @@
 
 -module(rabbit_limiter).
 
+-include("rabbit.hrl").
+
 -behaviour(gen_server2).
 
--export([start_link/0]).
+-export([start_link/1]).
 %% channel API
 -export([new/1, limit_prefetch/3, unlimit_prefetch/1, block/1, unblock/1,
          is_prefetch_limited/1, is_blocked/1, is_active/1,
@@ -145,7 +147,8 @@
 -type(qstate() :: #qstate{pid :: pid(),
                           state :: 'dormant' | 'active' | 'suspended'}).
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/1 :: (rabbit_types:proc_name()) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(new/1 :: (pid()) -> lstate()).
 
 -spec(limit_prefetch/3      :: (lstate(), non_neg_integer(), non_neg_integer())
@@ -193,7 +196,7 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link() -> gen_server2:start_link(?MODULE, [], []).
+start_link(ProcName) -> gen_server2:start_link(?MODULE, [ProcName], []).
 
 new(Pid) ->
     %% this a 'call' to ensure that it is invoked at most once.
@@ -326,7 +329,8 @@ update_credit(CTag, Credit, Drain, Credits) ->
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, #lim{}}.
+init([ProcName]) -> ?store_proc_name(ProcName),
+                    {ok, #lim{}}.
 
 prioritise_call(get_prefetch_limit, _From, _Len, _State) -> 9;
 prioritise_call(_Msg,               _From, _Len, _State) -> 0.

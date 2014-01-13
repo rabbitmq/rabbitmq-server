@@ -542,6 +542,7 @@ forget_group(GroupName) ->
     ok.
 
 init([GroupName, Module, Args, TxnFun]) ->
+    put(process_name, {?MODULE, GroupName}),
     {MegaSecs, Secs, MicroSecs} = now(),
     random:seed(MegaSecs, Secs, MicroSecs),
     Self = make_member(GroupName),

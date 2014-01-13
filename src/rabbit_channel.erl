@@ -194,6 +194,7 @@ force_event_refresh() ->
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid]) ->
     process_flag(trap_exit, true),
+    ?store_proc_name({ConnName, Channel}),
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
@@ -521,8 +522,8 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
-qbin_to_resource(QueueNameBin, #ch{virtual_host = VHostPath}) ->
-    rabbit_misc:r(VHostPath, queue, QueueNameBin).
+qbin_to_resource(QueueNameBin, State) ->
+    name_to_resource(queue, QueueNameBin, State).
 
 name_to_resource(Type, NameBin, #ch{virtual_host = VHostPath}) ->
     rabbit_misc:r(VHostPath, Type, NameBin).

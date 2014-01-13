@@ -111,3 +111,5 @@
 -define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
 -define(DELETED_HEADER, <<"BCC">>).
+
+-define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
