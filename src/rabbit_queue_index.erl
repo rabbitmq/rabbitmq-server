@@ -21,8 +21,6 @@
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, recover/1]).
 
--export([scan/3]).
-
 -export([add_queue_ttl/0, avoid_zeroes/0]).
 
 -define(CLEAN_FILENAME, "clean.dot").
@@ -161,7 +159,7 @@
 
 %%----------------------------------------------------------------------------
 
--record(qistate, { dir, segments, journal_handle, dirty_count,
+-record(qistate, { dir, qname, segments, journal_handle, dirty_count,
                    max_journal_entries, on_sync, unconfirmed }).
 
 -record(segment, { num, path, journal_entries, unacked }).
@@ -221,14 +219,8 @@
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 :: ([rabbit_amqqueue:name()]) ->
+-spec(recover/1 :: ([rabbit_types:amqqueue()]) ->
                         {[{file:filename(), [any()]}], {walker(A), A}}).
-
--spec(scan/3 :: (file:filename(),
-                 fun ((seq_id(), rabbit_types:msg_id(),
-                       rabbit_types:message_properties(), boolean(),
-                       ('del' | 'no_del'), ('ack' | 'no_ack'), A) -> A),
-                     A) -> A).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
@@ -262,9 +254,9 @@ recover(Name, {Recovery, Terms}, MsgStoreRecovered,
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
-terminate(Terms, State = #qistate { dir = Dir }) ->
+terminate(Terms, State = #qistate { qname = QueueName }) ->
     {SegmentCounts, State1} = terminate(State),
-    rabbit_recovery_terms:store(Dir, [{segments, SegmentCounts} | Terms]),
+    rabbit_recovery_terms:store(QueueName, [{segments, SegmentCounts} | Terms]),
     State1.
 
 delete_and_terminate(State) ->
@@ -365,19 +357,21 @@ recover(DurableQueues) ->
     DurableDict =
         dict:from_list(
           [ begin
-                DirName = rabbit_amqqueue:queue_name_to_dir_name(Queue),
+                #amqqueue{name = QueueName} = Queue,
+                DirName = queue_name_to_dir_name(QueueName),
                 {DirName, Queue}
             end || Queue <- DurableQueues ]),
 
     {DurableQueueNames, DurableTerms} =
         dict:fold(
-          fun (QueueDirName, QueueName, {DurableAcc, TermsAcc}) ->
-                  TermsAcc1 =
-                      case rabbit_recovery_terms:read(QueueDirName) of
-                          {error, _}  -> TermsAcc;
-                          {ok, Terms} -> [{QueueDirName, Terms} | TermsAcc]
+          fun (QueueDirName, Queue=#amqqueue{name = QName},
+               {DurableAcc, TermsAcc}) ->
+                  RecoveryInfo =
+                      case rabbit_recovery_terms:read(QName, QueueDirName) of
+                          {error, _}  -> {Queue, non_clean_shutdown};
+                          {ok, Terms} -> {Queue, Terms}
                       end,
-                  {[QueueName | DurableAcc], TermsAcc1}
+                  {[QName | DurableAcc], [RecoveryInfo | TermsAcc]}
           end, {[], []}, DurableDict),
 
     %% Any queue directory we've not been asked to recover is considered garbage
@@ -407,13 +401,15 @@ all_queue_directory_names(Dir) ->
 
 blank_state(QueueName) ->
     blank_state_dir(
+      QueueName,
       filename:join(queues_dir(),
-                    rabbit_amqqueue:queue_name_to_dir_name(QueueName))).
+                    queue_name_to_dir_name(QueueName))).
 
-blank_state_dir(Dir) ->
+blank_state_dir(QueueName, Dir) ->
     {ok, MaxJournal} =
         application:get_env(rabbit, queue_index_max_journal_entries),
     #qistate { dir                 = Dir,
+               qname               = QueueName,
                segments            = segments_new(),
                journal_handle      = undefined,
                dirty_count         = 0,
@@ -504,6 +500,10 @@ recover_message(false,     _,    del,  RelSeq, Segment) ->
 recover_message(false,     _, no_del,  RelSeq, Segment) ->
     add_to_journal(RelSeq, ack, add_to_journal(RelSeq, del, Segment)).
 
+queue_name_to_dir_name(Name = #resource { kind = queue }) ->
+    <<Num:128>> = erlang:md5(term_to_binary(Name)),
+    rabbit_misc:format("~.36B", [Num]).
+
 queues_dir() ->
     filename:join(rabbit_mnesia:dir(), "queues").
 
@@ -544,9 +544,6 @@ queue_index_walker_reader(QueueName, Gatherer) ->
                    Acc
            end, ok, State),
     ok = gatherer:finish(Gatherer).
-
-scan(Dir, Fun, Acc) ->
-    scan_segments(Fun, Acc, blank_state_dir(Dir)).
 
 scan_segments(Fun, Acc, State) ->
     State1 = #qistate { segments = Segments, dir = Dir } =

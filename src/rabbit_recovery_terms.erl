@@ -22,7 +22,7 @@
 -behaviour(gen_server).
 
 -export([recover/0, upgrade_recovery_terms/0, start_link/0,
-         store/2, read/1, lookup/2, clear/0, flush/0]).
+         store/2, read/2, lookup/2, clear/0, flush/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -35,7 +35,8 @@
 -spec(upgrade_recovery_terms() -> 'ok').
 -spec(start_link() -> rabbit_types:ok_pid_or_error()).
 -spec(store(file:filename(), term()) -> rabbit_types:ok_or_error(term())).
--spec(read(file:filename()) -> rabbit_types:ok_or_error(not_found)).
+-spec(read(rabbit_amqqueue:name(), file:filename()) ->
+             rabbit_types:ok_or_error(not_found)).
 -spec(lookup(file:filename(),
              [{file:filename(), [term()]}]) -> {'ok', [term()]} | 'false').
 -spec(clear() -> 'ok').
@@ -44,6 +45,7 @@
 
 -include("rabbit.hrl").
 -define(SERVER, ?MODULE).
+-define(UPGRADE_TABLE, rabbit_recovery_upgrades).
 
 recover() ->
     case supervisor:start_child(rabbit_sup,
@@ -56,33 +58,35 @@ recover() ->
     end.
 
 upgrade_recovery_terms() ->
-    create_table(),
-    try
-        QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
-        DotFiles = filelib:fold_files(QueuesDir, "clean.dot", true,
-                                      fun(F, Acc) -> [F|Acc] end, []),
-        [begin
-             {ok, Terms} = rabbit_file:read_term_file(File),
-             ok = store(filename:dirname(File), Terms),
-             case file:delete(File) of
-                 {error, E} ->
-                     rabbit_log:warning("Unable to delete recovery index"
-                                        "~s during upgrade: ~p~n", [File, E]);
-                 ok ->
-                     ok
-             end
-         end || File <- DotFiles],
-        ok
-    after
-        flush()
-    end.
+    create_tables(),
+    QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
+    DotFiles = filelib:fold_files(QueuesDir, "clean.dot", true,
+                                  fun(F, Acc) -> [F|Acc] end, []),
+    [begin
+         {ok, Terms} = rabbit_file:read_term_file(File),
+         ok = ets:insert_new(?UPGRADE_TABLE, {filename:dirname(File), Terms}),
+         case file:delete(File) of
+             {error, E} ->
+                 rabbit_log:warning("Unable to delete recovery index"
+                                    "~s during upgrade: ~p~n", [File, E]);
+             ok ->
+                 ok
+         end
+     end || File <- DotFiles],
+    ok.
 
 start_link() -> gen_server:start_link(?MODULE, [], []).
 
-store(QueueDir, Terms) -> dets:insert(?MODULE, {to_key(QueueDir), Terms}).
+store(QueueName, Terms) -> dets:insert(?MODULE, {QueueName, Terms}).
 
-read(QueueDir) ->
-    case dets:lookup(?MODULE, to_key(QueueDir)) of
+read(QueueName, QueueDir) ->
+    case dets:lookup(?MODULE, QueueName) of
+        [{_, Terms}] -> {ok, Terms};
+        _            -> read_from_upgrades(QueueDir)
+    end.
+
+read_from_upgrades(QueueDir) ->
+    case ets:lookup(?UPGRADE_TABLE, QueueDir) of
         [{_, Terms}] -> {ok, Terms};
         _            -> {error, not_found}
     end.
@@ -92,11 +96,12 @@ lookup(QueueName, Terms) ->
 
 clear() ->
     dets:delete_all_objects(?MODULE),
+    ets:delete_all_objects(?UPGRADE_TABLE),
     flush().
 
 init(_) ->
     process_flag(trap_exit, true),
-    create_table(),
+    create_tables(),
     {ok, undefined}.
 
 handle_call(Msg, _, State) -> {stop, {unexpected_call, Msg}, State}.
@@ -114,11 +119,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 flush() -> dets:sync(?MODULE).
 
-create_table() ->
+create_tables() ->
     File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
     {ok, _} = dets:open_file(?MODULE, [{file,      File},
                                        {ram_file,  true},
-                                       {auto_save, infinity}]).
+                                       {auto_save, infinity}]),
+    ets:new(?UPGRADE_TABLE, [set, public, named_table]),
+    ok.
 
 to_key(QueueDir) -> filename:basename(QueueDir).
 
