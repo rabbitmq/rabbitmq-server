@@ -194,6 +194,7 @@ force_event_refresh() ->
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid]) ->
     process_flag(trap_exit, true),
+    ?store_proc_name({ConnName, Channel}),
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
@@ -272,7 +273,9 @@ handle_cast({method, Method, Content, Flow},
         flow   -> credit_flow:ack(Reader);
         noflow -> ok
     end,
-    try handle_method(Method, Content, State) of
+    try handle_method(rabbit_channel_interceptor:intercept_method(
+                        expand_shortcuts(Method, State)),
+                      Content, State) of
         {reply, Reply, NewState} ->
             ok = send(Reply, NewState),
             noreply(NewState);
@@ -519,14 +522,19 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
+qbin_to_resource(QueueNameBin, State) ->
+    name_to_resource(queue, QueueNameBin, State).
+
+name_to_resource(Type, NameBin, #ch{virtual_host = VHostPath}) ->
+    rabbit_misc:r(VHostPath, Type, NameBin).
+
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
       not_found, "no previously declared queue", []);
-expand_queue_name_shortcut(<<>>, #ch{virtual_host = VHostPath,
-                                     most_recently_declared_queue = MRDQ}) ->
-    rabbit_misc:r(VHostPath, queue, MRDQ);
-expand_queue_name_shortcut(QueueNameBin, #ch{virtual_host = VHostPath}) ->
-    rabbit_misc:r(VHostPath, queue, QueueNameBin).
+expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = MRDQ}) ->
+    MRDQ;
+expand_queue_name_shortcut(QueueNameBin, _) ->
+    QueueNameBin.
 
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{most_recently_declared_queue = <<>>}) ->
@@ -538,12 +546,22 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
-expand_binding(queue, DestinationNameBin, RoutingKey, State) ->
-    {expand_queue_name_shortcut(DestinationNameBin, State),
-     expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State)};
-expand_binding(exchange, DestinationNameBin, RoutingKey, State) ->
-    {rabbit_misc:r(State#ch.virtual_host, exchange, DestinationNameBin),
-     RoutingKey}.
+expand_shortcuts(#'basic.get'    {queue = Q} = M, State) ->
+    M#'basic.get'    {queue = expand_queue_name_shortcut(Q, State)};
+expand_shortcuts(#'basic.consume'{queue = Q} = M, State) ->
+    M#'basic.consume'{queue = expand_queue_name_shortcut(Q, State)};
+expand_shortcuts(#'queue.delete' {queue = Q} = M, State) ->
+    M#'queue.delete' {queue = expand_queue_name_shortcut(Q, State)};
+expand_shortcuts(#'queue.purge'  {queue = Q} = M, State) ->
+    M#'queue.purge'  {queue = expand_queue_name_shortcut(Q, State)};
+expand_shortcuts(#'queue.bind'   {queue = Q, routing_key = K} = M, State) ->
+    M#'queue.bind'   {queue       = expand_queue_name_shortcut(Q, State),
+                      routing_key = expand_routing_key_shortcut(Q, K, State)};
+expand_shortcuts(#'queue.unbind' {queue = Q, routing_key = K} = M, State) ->
+    M#'queue.unbind' {queue       = expand_queue_name_shortcut(Q, State),
+                      routing_key = expand_routing_key_shortcut(Q, K, State)};
+expand_shortcuts(M, _State) ->
+    M.
 
 check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
     rabbit_misc:protocol_error(
@@ -714,7 +732,7 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
                              conn_pid   = ConnPid,
                              limiter    = Limiter,
                              next_tag   = DeliveryTag}) ->
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+    QueueName = qbin_to_resource(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
@@ -752,7 +770,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                              consumer_mapping = ConsumerMapping}) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
-            QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+            QueueName = qbin_to_resource(QueueNameBin, State),
             check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
@@ -1062,7 +1080,7 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
                               if_empty  = IfEmpty,
                               nowait    = NoWait},
               _, State = #ch{conn_pid = ConnPid}) ->
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+    QueueName = qbin_to_resource(QueueNameBin, State),
     check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with(
            QueueName,
@@ -1101,7 +1119,7 @@ handle_method(#'queue.unbind'{queue       = QueueNameBin,
 
 handle_method(#'queue.purge'{queue = QueueNameBin, nowait = NoWait},
               _, State = #ch{conn_pid = ConnPid}) ->
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
+    QueueName = qbin_to_resource(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     {ok, PurgedMessageCount} = rabbit_amqqueue:with_exclusive_access_or_die(
                                  QueueName, ConnPid,
@@ -1275,15 +1293,14 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host = VHostPath,
                            conn_pid     = ConnPid }) ->
-    {DestinationName, ActualRoutingKey} =
-        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
+    DestinationName = name_to_resource(DestinationType, DestinationNameBin, State),
     check_write_permitted(DestinationName, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     [check_not_default_exchange(N) || N <- [DestinationName, ExchangeName]],
     check_read_permitted(ExchangeName, State),
     case Fun(#binding{source      = ExchangeName,
                       destination = DestinationName,
-                      key         = ActualRoutingKey,
+                      key         = RoutingKey,
                       args        = Arguments},
              fun (_X, Q = #amqqueue{}) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ConnPid)

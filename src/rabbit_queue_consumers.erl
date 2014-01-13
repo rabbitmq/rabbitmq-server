@@ -20,8 +20,8 @@
          unacknowledged_message_count/0, add/9, remove/3, erase_ch/2,
          send_drained/0, deliver/3, record_ack/3, subtract_acks/2,
          possibly_unblock/3,
-         resume_fun/0, notify_sent_fun/1, activate_limit_fun/0, credit_fun/4,
-         utilisation/1]).
+         resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
+         credit/6, utilisation/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -84,11 +84,11 @@
 -spec subtract_acks(ch(), [ack()]) -> 'not_found' | 'ok'.
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
                               'unchanged' | {'unblocked', state()}.
--spec resume_fun()                                        -> cr_fun().
--spec notify_sent_fun(non_neg_integer())                  -> cr_fun().
--spec activate_limit_fun()                                -> cr_fun().
--spec credit_fun(boolean(), non_neg_integer(), boolean(),
-                 rabbit_types:ctag())                     -> cr_fun().
+-spec resume_fun()                       -> cr_fun().
+-spec notify_sent_fun(non_neg_integer()) -> cr_fun().
+-spec activate_limit_fun()               -> cr_fun().
+-spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
+             state()) -> 'unchanged' | {'unblocked', state()}.
 -spec utilisation(state()) -> ratio().
 
 -endif.
@@ -131,7 +131,7 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
     Limiter2 = case CreditArgs of
                    none         -> Limiter1;
                    {Crd, Drain} -> rabbit_limiter:credit(
-                                     Limiter1, ConsumerTag, Crd, IsEmpty, Drain)
+                                     Limiter1, ConsumerTag, Crd, Drain)
                end,
     C1 = C#cr{consumer_count = Count + 1,
               limiter        = Limiter2},
@@ -306,13 +306,24 @@ activate_limit_fun() ->
             C#cr{limiter = rabbit_limiter:activate(Limiter)}
     end.
 
-credit_fun(IsEmpty, Credit, Drain, CTag) ->
-    fun (C = #cr{limiter = Limiter}) ->
+credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            unchanged;
+        #cr{limiter = Limiter} = C ->
             C1 = C#cr{limiter = rabbit_limiter:credit(
-                                  Limiter, CTag, Credit, IsEmpty, Drain)},
-            case Drain andalso IsEmpty of
-                true  -> send_drained(C1);
-                false -> C1
+                                  Limiter, CTag, Credit, Drain)},
+            C2 = #cr{limiter = Limiter1} =
+                case Drain andalso IsEmpty of
+                    true  -> send_drained(C1);
+                    false -> C1
+                end,
+            case is_ch_blocked(C2) orelse
+                (not rabbit_limiter:is_consumer_blocked(Limiter, CTag)) orelse
+                rabbit_limiter:is_consumer_blocked(Limiter1, CTag) of
+                true  -> update_ch_record(C2),
+                         unchanged;
+                false -> unblock(C2, State)
             end
     end.
 

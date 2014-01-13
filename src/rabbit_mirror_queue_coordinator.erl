@@ -323,6 +323,7 @@ ensure_monitoring(CPid, Pids) ->
 %% ---------------------------------------------------------------------------
 
 init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
+    ?store_proc_name(QueueName),
     GM1 = case GM of
               undefined ->
                   {ok, GM2} = gm:start_link(
