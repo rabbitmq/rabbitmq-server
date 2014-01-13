@@ -132,11 +132,14 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, Args,
     C1 = C#cr{consumer_count = Count + 1, limiter = Limiter1},
     update_ch_record(
       case CreditArgs of
-          none           -> C1;
-          {credit, C, D} -> credit_and_drain(C1, ConsumerTag, C, D, IsEmpty);
-          {prefetch, P}  -> Limiter2 = rabbit_limiter:set_consumer_prefetch(
-                                         Limiter1, ConsumerTag, NoAck, P),
-                            C1#cr{limiter = Limiter2}
+          none ->
+              C1;
+          {credit, Credit, Drain} ->
+              credit_and_drain(C1, ConsumerTag, Credit, Drain, IsEmpty);
+          {prefetch, P} ->
+              Limiter2 = rabbit_limiter:set_consumer_prefetch(
+                           Limiter1, ConsumerTag, NoAck, P),
+              C1#cr{limiter = Limiter2}
       end),
     Consumer = #consumer{tag          = ConsumerTag,
                          ack_required = not NoAck,
