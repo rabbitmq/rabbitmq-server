@@ -388,7 +388,8 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                [FrameMax, ?FRAME_1_0_MIN_SIZE]);
            true ->
                 {ok, Collector} =
-                    rabbit_connection_helper_sup:start_queue_collector(HelperSupPid),
+                    rabbit_connection_helper_sup:start_queue_collector(
+                      HelperSupPid, <<"AMQP 1.0">>), %% TODO describe the connection
                 SendFun =
                     fun() ->
                             Frame =
