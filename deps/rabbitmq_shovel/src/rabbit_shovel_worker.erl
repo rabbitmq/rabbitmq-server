@@ -64,10 +64,14 @@ handle_cast(init, State = #state{config = Config}) ->
     create_resources(OutboundChan,
                      Destinations#endpoint.resource_declarations),
 
-    #'basic.qos_ok'{} =
-        amqp_channel:call(InboundChan,
-                          #'basic.qos'{
-                            prefetch_count = Config#shovel.prefetch_count}),
+    NoAck = Config#shovel.ack_mode =:= no_ack,
+    case NoAck of
+        false -> Prefetch = Config#shovel.prefetch_count,
+                 #'basic.qos_ok'{} =
+                     amqp_channel:call(
+                       InboundChan, #'basic.qos'{prefetch_count = Prefetch});
+        true  -> ok
+    end,
 
     ok = amqp_channel:register_flow_handler(OutboundChan, self()),
 
@@ -82,9 +86,8 @@ handle_cast(init, State = #state{config = Config}) ->
 
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(
-          InboundChan,
-          #'basic.consume'{queue  = Config#shovel.queue,
-                           no_ack = Config#shovel.ack_mode =:= no_ack},
+          InboundChan, #'basic.consume'{queue  = Config#shovel.queue,
+                                        no_ack = NoAck},
           self()),
 
     State1 =
