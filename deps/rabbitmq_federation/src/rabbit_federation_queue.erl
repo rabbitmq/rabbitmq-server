@@ -64,7 +64,14 @@ policy_changed_local(Q1, Q2) ->
     shutdown(Q1),
     startup(Q2).
 
-active_for(Q) -> rabbit_federation_upstream:federate(Q).
+active_for(Q = #amqqueue{arguments = Args}) ->
+    case rabbit_misc:table_lookup(Args, <<"x-internal-purpose">>) of
+        {longstr, _} -> false; %% [0]
+        _            -> rabbit_federation_upstream:federate(Q)
+    end.
+%% [0] Currently the only "internal purpose" is federation, but I
+%% suspect if we introduce another one it will also be for something
+%% that doesn't want to be federated.
 
 %% We need to reconsider whether we need to run or pause every time
 %% the consumer state changes in the queue. But why can the state
