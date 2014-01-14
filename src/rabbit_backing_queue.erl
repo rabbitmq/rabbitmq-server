@@ -42,7 +42,7 @@
 %% backing queue to perform any checking necessary for the consistency
 %% of those queues, or initialise any other shared resources.
 %%
-%% The list of queue recovery terms returned as {ok, Terms} MUST be given
+%% The list of queue recovery terms returned as {ok, Terms} must be given
 %% in the same order as the list of queue names supplied.
 %%
 -callback start([rabbit_amqqueue:name()]) -> rabbit_types:ok(recovery_terms()).

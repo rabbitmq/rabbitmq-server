@@ -196,7 +196,7 @@ recover() ->
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
 
-    %% We reply on BQ:start/1 returning the recovery terms in the same
+    %% We rely on BQ:start/1 returning the recovery terms in the same
     %% order as the supplied queue names, so that we can zip them together
     %% for further processing in recover_durable_queues.
     {ok, OrderedRecoveryTerms} =
