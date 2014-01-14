@@ -15,8 +15,8 @@
 %%
 
 -record(endpoint,
-        {amqp_params,
-         resource_declarations
+        {uris,
+         resource_declaration
         }).
 
 -record(shovel,

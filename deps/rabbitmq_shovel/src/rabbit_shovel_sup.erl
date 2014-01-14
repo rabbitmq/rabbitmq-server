@@ -35,10 +35,13 @@ init([Configurations]) ->
     Len = dict:size(Configurations),
     ChildSpecs = [{rabbit_shovel_status,
                    {rabbit_shovel_status, start_link, []},
-                   transient,
-                   16#ffffffff,
-                   worker,
-                   [rabbit_shovel_status]} | make_child_specs(Configurations)],
+                   transient, 16#ffffffff, worker,
+                   [rabbit_shovel_status]},
+                  {rabbit_shovel_dyn_worker_sup_sup,
+                   {rabbit_shovel_dyn_worker_sup_sup, start_link, []},
+                   transient, 16#ffffffff, supervisor,
+                   [rabbit_shovel_dyn_worker_sup_sup]} |
+                  make_child_specs(Configurations)],
     {ok, {{one_for_one, 2*Len, 2}, ChildSpecs}}.
 
 make_child_specs(Configurations) ->
