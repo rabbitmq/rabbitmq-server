@@ -395,9 +395,9 @@ start(DurableQueues) ->
 
 persistent_refs(Terms) -> lists:foldl(fun persistent_refs/2, [], Terms).
 
-persistent_refs({_, non_clean_shutdown}, Acc) ->
+persistent_refs(non_clean_shutdown, Acc) ->
     Acc;
-persistent_refs({_, Terms}, Acc) ->
+persistent_refs(Terms, Acc) ->
     Ref = proplists:get_value(persistent_ref, Terms),
     case Ref of
         undefined -> Acc;

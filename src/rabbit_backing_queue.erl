@@ -41,7 +41,11 @@
 %% aren't being started at this point, but this call allows the
 %% backing queue to perform any checking necessary for the consistency
 %% of those queues, or initialise any other shared resources.
--callback start([rabbit_types:amqqueue()]) -> rabbit_types:ok(recovery_terms()).
+%%
+%% The list of queue recovery terms returned as {ok, Terms} MUST be given
+%% in the same order as the list of queue names supplied.
+%%
+-callback start([rabbit_amqqueue:name()]) -> rabbit_types:ok(recovery_terms()).
 
 %% Called to tear down any state/resources. NB: Implementations should
 %% not depend on this function being called on shutdown and instead

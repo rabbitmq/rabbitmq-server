@@ -159,7 +159,7 @@
 
 %%----------------------------------------------------------------------------
 
--record(qistate, { dir, qname, segments, journal_handle, dirty_count,
+-record(qistate, { dir, segments, journal_handle, dirty_count,
                    max_journal_entries, on_sync, unconfirmed }).
 
 -record(segment, { num, path, journal_entries, unacked }).
@@ -219,8 +219,7 @@
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 :: ([rabbit_types:amqqueue()]) ->
-                        {[{file:filename(), [any()]}], {walker(A), A}}).
+-spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
@@ -254,9 +253,9 @@ recover(Name, {Recovery, Terms}, MsgStoreRecovered,
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
-terminate(Terms, State = #qistate { qname = QueueName }) ->
+terminate(Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
-    rabbit_recovery_terms:store(QueueName, [{segments, SegmentCounts} | Terms]),
+    rabbit_recovery_terms:store(Dir, [{segments, SegmentCounts} | Terms]),
     State1.
 
 delete_and_terminate(State) ->
@@ -352,40 +351,33 @@ bounds(State = #qistate { segments = Segments }) ->
         end,
     {LowSeqId, NextSeqId, State}.
 
-recover(DurableQueues) ->
+recover(DurableQueueNames) ->
     rabbit_recovery_terms:recover(),
-    DurableDict =
-        dict:from_list(
-          [ begin
-                #amqqueue{name = QueueName} = Queue,
-                DirName = queue_name_to_dir_name(QueueName),
-                {DirName, Queue}
-            end || Queue <- DurableQueues ]),
-
-    {DurableQueueNames, DurableTerms} =
-        dict:fold(
-          fun (QueueDirName, Queue=#amqqueue{name = QName},
-               {DurableAcc, TermsAcc}) ->
-                  RecoveryInfo =
-                      case rabbit_recovery_terms:read(QName, QueueDirName) of
-                          {error, _}  -> {Queue, non_clean_shutdown};
-                          {ok, Terms} -> {Queue, Terms}
-                      end,
-                  {[QName | DurableAcc], [RecoveryInfo | TermsAcc]}
-          end, {[], []}, DurableDict),
+    {DurableTerms, DurableDirectories} =
+        lists:foldl(
+          fun(QName, {RecoveryTerms, ValidDirectories}) ->
+                  DirName = queue_name_to_dir_name(QName),
+                  RecoveryInfo = case rabbit_recovery_terms:read(DirName) of
+                                     {error, _}  -> non_clean_shutdown;
+                                     {ok, Terms} -> Terms
+                                 end,
+                  {[RecoveryInfo | RecoveryTerms],
+                   sets:add_element(DirName, ValidDirectories)}
+          end, {[], sets:new()}, DurableQueueNames),
 
     %% Any queue directory we've not been asked to recover is considered garbage
     QueuesDir = queues_dir(),
-    lists:foreach(
-      fun(QueueDir) ->
-              case dict:is_key(filename:basename(QueueDir), DurableDict) of
-                  true  -> ok;
-                  false -> ok = rabbit_file:recursive_delete([QueueDir])
-              end
-      end, all_queue_directory_names(QueuesDir)),
+    [rabbit_file:recursive_delete([QueueDir]) ||
+        QueueDir <- all_queue_directory_names(QueuesDir),
+        not sets:is_element(filename:basename(QueueDir),
+                            DurableDirectories)],
 
     rabbit_recovery_terms:clear(),
-    {DurableTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+
+    %% The backing queue interface requires that the queue recovery terms
+    %% which come back from start/1 are in the same order as DurableQueueNames
+    OrderedTerms = lists:reverse(DurableTerms),
+    {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
 all_queue_directory_names(Dir) ->
     case rabbit_file:list_dir(Dir) of
@@ -401,15 +393,13 @@ all_queue_directory_names(Dir) ->
 
 blank_state(QueueName) ->
     blank_state_dir(
-      QueueName,
       filename:join(queues_dir(),
                     queue_name_to_dir_name(QueueName))).
 
-blank_state_dir(QueueName, Dir) ->
+blank_state_dir(Dir) ->
     {ok, MaxJournal} =
         application:get_env(rabbit, queue_index_max_journal_entries),
     #qistate { dir                 = Dir,
-               qname               = QueueName,
                segments            = segments_new(),
                journal_handle      = undefined,
                dirty_count         = 0,
