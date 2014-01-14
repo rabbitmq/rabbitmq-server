@@ -81,7 +81,7 @@
                      {'delivered',   boolean(), T, state()} |
                      {'undelivered', boolean(), state()}.
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
--spec subtract_acks(ch(), rabbit_types:ctag(), [ack()], state()) ->
+-spec subtract_acks([ack()], rabbit_types:ctag(), ch(), state()) ->
                            'not_found' | 'unchanged' | {'unblocked', state()}.
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
                               'unchanged' | {'unblocked', state()}.
@@ -244,7 +244,7 @@ record_ack(ChPid, LimiterPid, AckTag) ->
     update_ch_record(C#cr{acktags = queue:in(AckTag, ChAckTags)}),
     ok.
 
-subtract_acks(ChPid, CTag, AckTags, State) ->
+subtract_acks(AckTags, CTag, ChPid, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;

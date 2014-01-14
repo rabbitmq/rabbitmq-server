@@ -886,7 +886,7 @@ handle_method(#'basic.recover_async'{requeue = true},
               rabbit_misc:with_exit_handler(
                 OkFun,
                 fun () ->
-                        rabbit_amqqueue:requeue(QPid, CTag, MsgIds, self())
+                        rabbit_amqqueue:requeue(QPid, MsgIds, CTag, self())
                 end)
       end, lists:reverse(UAMQL)),
     ok = notify_limiter(Limiter, UAMQL),
@@ -1357,7 +1357,7 @@ reject(DeliveryTag, Requeue, Multiple,
 reject(Requeue, Acked, Limiter) ->
     foreach_per_consumer(
       fun ({QPid, CTag}, MsgIds) ->
-              rabbit_amqqueue:reject(QPid, CTag, MsgIds, Requeue, self())
+              rabbit_amqqueue:reject(QPid, Requeue, MsgIds, CTag, self())
       end, Acked),
     ok = notify_limiter(Limiter, Acked).
 
@@ -1417,7 +1417,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
 ack(Acked, State = #ch{queue_names = QNames}) ->
     foreach_per_consumer(
       fun ({QPid, CTag}, MsgIds) ->
-              ok = rabbit_amqqueue:ack(QPid, CTag, MsgIds, self()),
+              ok = rabbit_amqqueue:ack(QPid, MsgIds, CTag, self()),
               ?INCR_STATS(case dict:find(QPid, QNames) of
                               {ok, QName} -> Count = length(MsgIds),
                                              [{queue_stats, QName, Count}];

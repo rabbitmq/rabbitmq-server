@@ -142,9 +142,9 @@
                         {routing_result(), qpids()}).
 -spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
                              {routing_result(), qpids()}).
--spec(requeue/4 :: (pid(), rabbit_types:ctag(), [msg_id()],  pid()) -> 'ok').
--spec(ack/4 :: (pid(), rabbit_types:ctag(), [msg_id()], pid()) -> 'ok').
--spec(reject/5 :: (pid(), rabbit_types:ctag(), [msg_id()], boolean(), pid()) ->
+-spec(requeue/4 :: (pid(), [msg_id()], rabbit_types:ctag(), pid()) -> 'ok').
+-spec(ack/4 :: (pid(), [msg_id()], rabbit_types:ctag(), pid()) -> 'ok').
+-spec(reject/5 :: (pid(), boolean(), [msg_id()], rabbit_types:ctag(), pid()) ->
                        'ok').
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(activate_limit_all/2 :: (qpids(), pid()) -> ok_or_errors()).
@@ -547,14 +547,14 @@ deliver(Qs, Delivery) -> deliver(Qs, Delivery, noflow).
 
 deliver_flow(Qs, Delivery) -> deliver(Qs, Delivery, flow).
 
-requeue(QPid, CTag, MsgIds, ChPid) ->
-    delegate:call(QPid, {requeue, CTag, MsgIds, ChPid}).
+requeue(QPid, MsgIds, CTag, ChPid) ->
+    delegate:call(QPid, {requeue, MsgIds, CTag, ChPid}).
 
-ack(QPid, CTag, MsgIds, ChPid) ->
-    delegate:cast(QPid, {ack, CTag, MsgIds, ChPid}).
+ack(QPid, MsgIds, CTag, ChPid) ->
+    delegate:cast(QPid, {ack, MsgIds, CTag, ChPid}).
 
-reject(QPid, CTag, MsgIds, Requeue, ChPid) ->
-    delegate:cast(QPid, {reject, CTag, MsgIds, Requeue, ChPid}).
+reject(QPid, Requeue, MsgIds, CTag, ChPid) ->
+    delegate:cast(QPid, {reject, Requeue, MsgIds, CTag, ChPid}).
 
 notify_down_all(QPids, ChPid) ->
     {_, Bads} = delegate:call(QPids, {notify_down, ChPid}),

@@ -563,7 +563,7 @@ fetch(AckRequired, State = #q{backing_queue       = BQ,
     {Result, maybe_send_drained(Result =:= empty, State1)}.
 
 ack(AckTags, CTag, ChPid, State) ->
-    subtract_acks(ChPid, CTag, AckTags, State,
+    subtract_acks(AckTags, CTag, ChPid, State,
                   fun (State1 = #q{backing_queue       = BQ,
                                    backing_queue_state = BQS}) ->
                           {_Guids, BQS1} = BQ:ack(AckTags, BQS),
@@ -571,7 +571,7 @@ ack(AckTags, CTag, ChPid, State) ->
                   end).
 
 requeue(AckTags, CTag, ChPid, State) ->
-    subtract_acks(ChPid, CTag, AckTags, State,
+    subtract_acks(AckTags, CTag, ChPid, State,
                   fun (State1) -> requeue_and_run(AckTags, State1) end).
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
@@ -634,9 +634,9 @@ backing_queue_timeout(State = #q{backing_queue       = BQ,
                                  backing_queue_state = BQS}) ->
     State#q{backing_queue_state = BQ:timeout(BQS)}.
 
-subtract_acks(ChPid, CTag, AckTags, State = #q{consumers = Consumers}, Fun) ->
+subtract_acks(AckTags, CTag, ChPid, State = #q{consumers = Consumers}, Fun) ->
     case rabbit_queue_consumers:subtract_acks(
-           ChPid, CTag, AckTags, Consumers) of
+           AckTags, CTag, ChPid, Consumers) of
         not_found               -> State;
         unchanged               -> Fun(State);
         {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
@@ -989,7 +989,7 @@ handle_call(purge, _From, State = #q{backing_queue       = BQ,
     State1 = State#q{backing_queue_state = BQS1},
     reply({ok, Count}, maybe_send_drained(Count =:= 0, State1));
 
-handle_call({requeue, CTag, AckTags, ChPid}, From, State) ->
+handle_call({requeue, AckTags, CTag, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
     noreply(requeue(AckTags, CTag, ChPid, State));
 
@@ -1053,16 +1053,16 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
     State1 = State#q{senders = Senders1},
     noreply(deliver_or_enqueue(Delivery, Delivered, State1));
 
-handle_cast({ack, CTag, AckTags, ChPid}, State) ->
+handle_cast({ack, AckTags, CTag, ChPid}, State) ->
     noreply(ack(AckTags, CTag, ChPid, State));
 
-handle_cast({reject, CTag, AckTags, true, ChPid}, State) ->
+handle_cast({reject, true, AckTags, CTag, ChPid}, State) ->
     noreply(requeue(AckTags, CTag, ChPid, State));
 
-handle_cast({reject, CTag, AckTags, false, ChPid}, State) ->
+handle_cast({reject, false, AckTags, CTag, ChPid}, State) ->
     noreply(with_dlx(
               State#q.dlx,
-              fun (X) -> subtract_acks(ChPid, CTag, AckTags, State,
+              fun (X) -> subtract_acks(AckTags, CTag, ChPid, State,
                                        fun (State1) ->
                                                dead_letter_rejected_msgs(
                                                  AckTags, X, State1)
