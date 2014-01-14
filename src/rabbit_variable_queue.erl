@@ -389,20 +389,16 @@
 %%----------------------------------------------------------------------------
 
 start(DurableQueues) ->
-    {Terms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
-    start_msg_store(persistent_refs(Terms), StartFunState),
-    {ok, Terms}.
-
-persistent_refs(Terms) -> lists:foldl(fun persistent_refs/2, [], Terms).
-
-persistent_refs(non_clean_shutdown, Acc) ->
-    Acc;
-persistent_refs(Terms, Acc) ->
-    Ref = proplists:get_value(persistent_ref, Terms),
-    case Ref of
-        undefined -> Acc;
-        _         -> [Ref | Acc]
-    end.
+    {AllTerms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
+    start_msg_store(
+      [Ref || Terms <- AllTerms,
+              Terms /= non_clean_shutdown,
+              begin
+                  Ref = proplists:get_value(persistent_ref, Terms),
+                  Ref =/= undefined
+              end],
+      StartFunState),
+    {ok, AllTerms}.
 
 stop() -> stop_msg_store().
 

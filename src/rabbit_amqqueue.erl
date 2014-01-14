@@ -237,10 +237,8 @@ find_durable_queues() ->
 recover_durable_queues(QueuesAndRecoveryTerms) ->
     Qs = [{start_queue_process(node(), Q), Terms} ||
              {Q, Terms} <- QueuesAndRecoveryTerms],
-    [Q || {Q, Terms} <- Qs, queue_init(Q, Terms) == {new, Q}].
-
-queue_init(#amqqueue{ pid = Pid }, RecoveryTerms) ->
-    gen_server2:call(Pid, {init, {self(), RecoveryTerms}}, infinity).
+    [Q || {Q = #amqqueue{ pid = Pid }, Terms} <- Qs,
+          gen_server2:call(Pid, {init, {self(), Terms}}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
