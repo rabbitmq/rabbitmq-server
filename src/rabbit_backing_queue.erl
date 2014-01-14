@@ -44,7 +44,6 @@
 %%
 %% The list of queue recovery terms returned as {ok, Terms} must be given
 %% in the same order as the list of queue names supplied.
-%%
 -callback start([rabbit_amqqueue:name()]) -> rabbit_types:ok(recovery_terms()).
 
 %% Called to tear down any state/resources. NB: Implementations should

@@ -16,7 +16,7 @@
 
 -module(rabbit_queue_index).
 
--export([init/2, shutdown_terms/1, recover/5,
+-export([init/2, recover/5,
          terminate/2, delete_and_terminate/1,
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, recover/1]).
@@ -198,7 +198,6 @@
 -type(shutdown_terms() :: {recovery_type(), [any()]}).
 
 -spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
--spec(shutdown_terms/1 :: (rabbit_amqqueue:name()) -> shutdown_terms()).
 -spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate(), on_sync_fun()) ->
                         {'undefined' | non_neg_integer(), qistate()}).
@@ -234,13 +233,6 @@ init(Name, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
     State #qistate { on_sync = OnSyncFun }.
-
-shutdown_terms(Name) ->
-    #qistate { dir = Dir } = blank_state(Name),
-    case rabbit_recovery_terms:read(Dir) of
-        {error, _}   -> [];
-        {ok, Terms1} -> Terms1
-    end.
 
 recover(Name, {Recovery, Terms}, MsgStoreRecovered,
         ContainsCheckFun, OnSyncFun) ->
