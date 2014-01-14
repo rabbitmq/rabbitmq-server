@@ -32,7 +32,7 @@
                 config, route_state, reply_queues, frame_transformer,
                 adapter_info, send_fun, ssl_login_name}).
 
--record(subscription, {dest_hdr, channel, ack_mode, multi_ack, description}).
+-record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
 
 -define(FLUSH_TIMEOUT, 60000).
 
@@ -315,6 +315,7 @@ handle_frame(Command, _Frame, State) ->
 
 ack_action(Command, Frame,
            State = #state{subscriptions = Subs,
+                          channel       = Channel,
                           version       = Version}, MethodFun) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
     case rabbit_stomp_frame:header(Frame, AckHeader) of
@@ -322,15 +323,14 @@ ack_action(Command, Frame,
             case rabbit_stomp_util:parse_message_id(AckValue) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
                     case dict:find(ConsumerTag, Subs) of
-                        {ok, Sub = #subscription{channel = SubChannel}} ->
+                        {ok, Sub} ->
                             Method = MethodFun(DeliveryTag, Sub),
                             case transactional(Frame) of
                                 {yes, Transaction} ->
-                                    extend_transaction(Transaction,
-                                                       {SubChannel, Method},
-                                                       State);
+                                    extend_transaction(
+                                      Transaction, {Method}, State);
                                 no ->
-                                    amqp_channel:call(SubChannel, Method),
+                                    amqp_channel:call(Channel, Method),
                                     ok(State)
                             end;
                         error ->
@@ -389,7 +389,8 @@ cancel_subscription({error, _}, _Frame, State) ->
           State);
 
 cancel_subscription({ok, ConsumerTag, Description}, Frame,
-                    State = #state{subscriptions = Subs}) ->
+                    State = #state{subscriptions = Subs,
+                                   channel       = Channel}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
@@ -397,9 +398,8 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                   "Subscription to ~p not found.~n",
                   [Description],
                   State);
-        {ok, Subscription = #subscription{channel = SubChannel,
-                                          description = Descr}} ->
-            case amqp_channel:call(SubChannel,
+        {ok, Subscription = #subscription{description = Descr}} ->
+            case amqp_channel:call(Channel,
                                    #'basic.cancel'{
                                      consumer_tag = ConsumerTag}) of
                 #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
@@ -413,11 +413,8 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
             end
     end.
 
-tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr,
-                                                      channel = SubChannel},
-                           Frame, State = #state{channel = MainChannel,
-                                                 subscriptions = Subs}) ->
-    ok = ensure_subchannel_closed(SubChannel, MainChannel),
+tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
+                           Frame, State = #state{subscriptions = Subs}) ->
     Subs1 = dict:erase(ConsumerTag, Subs),
     {ok, Dest} = rabbit_routing_util:parse_endpoint(DestHdr),
     maybe_delete_durable_sub(Dest, Frame, State#state{subscriptions = Subs1}).
@@ -438,14 +435,6 @@ maybe_delete_durable_sub({topic, Name}, Frame,
     end;
 maybe_delete_durable_sub(_Destination, _Frame, State) ->
     ok(State).
-
-ensure_subchannel_closed(SubChannel, MainChannel)
-  when SubChannel == MainChannel ->
-    ok;
-
-ensure_subchannel_closed(SubChannel, _MainChannel) ->
-    amqp_channel:close(SubChannel),
-    ok.
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
@@ -543,22 +532,14 @@ server_header() ->
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
                             route_state   = RouteState,
-                            connection    = Connection,
-                            channel       = MainChannel}) ->
+                            channel       = Channel}) ->
     Prefetch =
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT,
                                           undefined),
-    Channel = case Prefetch of
-                  undefined ->
-                      MainChannel;
-                  _ ->
-                      {ok, Channel1} = amqp_connection:open_channel(Connection),
-                      amqp_channel:call(Channel1,
-                                        #'basic.qos'{prefetch_size  = 0,
-                                                     prefetch_count = Prefetch,
-                                                     global         = false}),
-                      Channel1
-              end,
+    Args = case Prefetch of
+               undefined -> [];
+               _         -> [{<<"x-prefetch">>, signedint, Prefetch}]
+           end,
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
     case ensure_endpoint(source, Destination, Frame, Channel, RouteState) of
         {ok, Queue, RouteState1} ->
@@ -570,7 +551,8 @@ do_subscribe(Destination, DestHdr, Frame,
                                      consumer_tag = ConsumerTag,
                                      no_local     = false,
                                      no_ack       = (AckMode == auto),
-                                     exclusive    = false},
+                                     exclusive    = false,
+                                     arguments    = Args},
                                    self()),
             ExchangeAndKey = rabbit_routing_util:parse_routing(Destination),
             ok = rabbit_routing_util:ensure_binding(
@@ -579,7 +561,6 @@ do_subscribe(Destination, DestHdr, Frame,
                                dict:store(
                                  ConsumerTag,
                                  #subscription{dest_hdr    = DestHdr,
-                                               channel     = Channel,
                                                ack_mode    = AckMode,
                                                multi_ack   = IsMulti,
                                                description = Description},
@@ -741,9 +722,8 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
 
             %% synthesise a subscription to the reply queue destination
             Subs1 = dict:store(ConsumerTag,
-                               #subscription{dest_hdr    = Destination,
-                                             channel     = Channel,
-                                             multi_ack   = false},
+                               #subscription{dest_hdr  = Destination,
+                                             multi_ack = false},
                                Subs),
 
             {Destination, State#state{
@@ -890,8 +870,6 @@ perform_transaction_action({callback, Callback, Action}, State) ->
     perform_transaction_action(Action, Callback(State));
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
-perform_transaction_action({Channel, Method}, State) ->
-    send_method(Method, Channel, State);
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
 
