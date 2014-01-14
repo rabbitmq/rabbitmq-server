@@ -319,8 +319,7 @@ username_to_dn(Username, LDAP, Attr) ->
                       [{base, env(dn_lookup_base)},
                        {filter, eldap:equalityMatch(Attr, Filled)},
                        {attributes, ["distinguishedName"]}]) of
-        {ok, #eldap_search_result{entries = [#eldap_entry{attributes = A}]}} ->
-            [DN] = pget("distinguishedName", A),
+        {ok, #eldap_search_result{entries = [#eldap_entry{object_name = DN}]}}->
             DN;
         {ok, #eldap_search_result{entries = Entries}} ->
             rabbit_log:warning("Searching for DN for ~s, got back ~p~n",
