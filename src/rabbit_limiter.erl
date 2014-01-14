@@ -293,6 +293,8 @@ credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain, IsEmpty) ->
 
 set_consumer_prefetch(Lim, _CTag, true, _Credit) ->
     Lim;
+set_consumer_prefetch(Lim, _CTag, _NoAck, 0) ->
+    Lim;
 set_consumer_prefetch(Lim = #qstate{credits = Credits}, CTag, false, Credit) ->
     Credits1 = gb_trees:enter(
                  CTag, #credit{credit = Credit, mode = auto}, Credits),
