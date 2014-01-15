@@ -128,8 +128,7 @@
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
 -export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
-         is_suspended/1, is_consumer_blocked/2, credit/5,
-         set_consumer_prefetch/4, ack_from_queue/3,
+         is_suspended/1, is_consumer_blocked/2, credit/6, ack_from_queue/3,
          drained/1, forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -147,6 +146,8 @@
                           blocked          :: boolean()}).
 -type(qstate() :: #qstate{pid :: pid(),
                           state :: 'dormant' | 'active' | 'suspended'}).
+
+-type(credit_mode() :: 'manual' | 'auto').
 
 -spec(start_link/1 :: (rabbit_types:proc_name()) ->
                            rabbit_types:ok_pid_or_error()).
@@ -172,10 +173,8 @@
 -spec(deactivate/1   :: (qstate()) -> qstate()).
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
 -spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
--spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean(),
-                   boolean()) -> {boolean(), qstate()}).
--spec(set_consumer_prefetch/4 :: (qstate(), rabbit_types:ctag(), boolean(),
-                                  non_neg_integer()) -> qstate()).
+-spec(credit/6 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean(),
+                   credit_mode(), boolean()) -> {boolean(), qstate()}).
 -spec(ack_from_queue/3 :: (qstate(), rabbit_types:ctag(), non_neg_integer())
                           -> {boolean(), qstate()}).
 -spec(drained/1 :: (qstate())
@@ -195,7 +194,7 @@
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
 
--record(credit, {credit = 0, drain = false, mode = manual}).
+-record(credit, {credit = 0, drain = false, mode}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -284,21 +283,13 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         {value, #credit{}}                      -> true
     end.
 
-credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain, IsEmpty) ->
-    {Res, Cr} = case IsEmpty andalso Drain of
-                    true  -> {true,  #credit{credit = 0,      drain = false}};
-                    false -> {false, #credit{credit = Credit, drain = Drain}}
-                end,
+credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Drain, Mode, IsEmpty) ->
+    {Res, Cr} =
+        case IsEmpty andalso Drain of
+            true  -> {true,  #credit{credit = 0,   drain = false, mode = Mode}};
+            false -> {false, #credit{credit = Crd, drain = Drain, mode = Mode}}
+        end,
     {Res, Limiter#qstate{credits = enter_credit(CTag, Cr, Credits)}}.
-
-set_consumer_prefetch(Lim, _CTag, true, _Credit) ->
-    Lim;
-set_consumer_prefetch(Lim, _CTag, _NoAck, 0) ->
-    Lim;
-set_consumer_prefetch(Lim = #qstate{credits = Credits}, CTag, false, Credit) ->
-    Credits1 = gb_trees:enter(
-                 CTag, #credit{credit = Credit, mode = auto}, Credits),
-    Lim#qstate{credits = Credits1}.
 
 ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     {Credits1, Unblocked} =
