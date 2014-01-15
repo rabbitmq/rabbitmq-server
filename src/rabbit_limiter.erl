@@ -17,8 +17,8 @@
 %% The purpose of the limiter is to stem the flow of messages from
 %% queues to channels, in order to act upon various protocol-level
 %% flow control mechanisms, specifically AMQP 0-9-1's basic.qos
-%% prefetch_count and channel.flow, and AMQP 1.0's link (aka consumer)
-%% credit mechanism.
+%% prefetch_count, channel.flow, and our consumer prefetch extension,
+%% and AMQP 1.0's link (aka consumer) credit mechanism.
 %%
 %% Each channel has an associated limiter process, created with
 %% start_link/1, which it passes to queues on consumer creation with
@@ -55,11 +55,15 @@
 %% inactive. In practice it is rare for that to happen, though we
 %% could optimise this case in the future.
 %%
-%% In addition, the consumer credit bookkeeping is local to queues, so
-%% it is not necessary to store information about it in the limiter
-%% process. But for abstraction we hide it from the queue behind the
-%% limiter API, and it therefore becomes part of the queue local
-%% state.
+%% Consumer credit (for AMQP 1.0) and per-consumer prefetch (for AMQP
+%% 0-9-1) are treated as essentially the same thing, but with the
+%% exception that per-consumer prefetch gets an auto-topup when
+%% acknowledgments come in.
+%%
+%% The bookkeeping for this is local to queues, so it is not necessary
+%% to store information about it in the limiter process. But for
+%% abstraction we hide it from the queue behind the limiter API, and
+%% it therefore becomes part of the queue local state.
 %%
 %% The interactions with the limiter are as follows:
 %%
@@ -68,8 +72,9 @@
 %%    is_prefetch_limited/1, get_prefetch_limit/1 API functions are
 %%    about - and channel.flow blocking - that's what block/1,
 %%    unblock/1 and is_blocked/1 are for. They also tell the limiter
-%%    queue state (via the queue) about consumer credit changes -
-%%    that's what credit/5 is for.
+%%    queue state (via the queue) about consumer credit changes and
+%%    messaeg acknowledgement - that's what credit/5 and
+%%    ack_from_queue/3 are for.
 %%
 %% 2. Queues also tell the limiter queue state about the queue
 %%    becoming empty (via drained/1) and consumers leaving (via
