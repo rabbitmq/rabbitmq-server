@@ -27,7 +27,8 @@
         ('empty' | {rabbit_types:basic_message(), boolean(), Ack})).
 -type(drop_result(Ack) ::
         ('empty' | {rabbit_types:msg_id(), Ack})).
--type(attempt_recovery() :: boolean()).
+-type(recovery_terms() :: [term()] | 'non_clean_shutdown').
+-type(recovery_info() :: 'new' | recovery_terms()).
 -type(purged_msg_count() :: non_neg_integer()).
 -type(async_callback() ::
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
@@ -40,7 +41,10 @@
 %% aren't being started at this point, but this call allows the
 %% backing queue to perform any checking necessary for the consistency
 %% of those queues, or initialise any other shared resources.
--callback start([rabbit_amqqueue:name()]) -> 'ok'.
+%%
+%% The list of queue recovery terms returned as {ok, Terms} must be given
+%% in the same order as the list of queue names supplied.
+-callback start([rabbit_amqqueue:name()]) -> rabbit_types:ok(recovery_terms()).
 
 %% Called to tear down any state/resources. NB: Implementations should
 %% not depend on this function being called on shutdown and instead
@@ -51,15 +55,19 @@
 %%
 %% Takes
 %% 1. the amqqueue record
-%% 2. a boolean indicating whether the queue is an existing queue that
-%%    should be recovered
+%% 2. a term indicating whether the queue is an existing queue that
+%%    should be recovered or not. When 'new' is given, no recovery is
+%%    taking place, otherwise a tuple containing the process id of a
+%%    "barrier process" (on which to wait for a {BarrierPid, 'go'}
+%%    notification) is passed as the first element, whilst the second
+%%    holds either a list of recovery terms or the atom 'non_clean_shutdown'.
 %% 3. an asynchronous callback which accepts a function of type
 %%    backing-queue-state to backing-queue-state. This callback
 %%    function can be safely invoked from any process, which makes it
 %%    useful for passing messages back into the backing queue,
 %%    especially as the backing queue does not have control of its own
 %%    mailbox.
--callback init(rabbit_types:amqqueue(), attempt_recovery(),
+-callback init(rabbit_types:amqqueue(), recovery_info(),
                async_callback()) -> state().
 
 %% Called on queue shutdown when queue isn't being deleted.
