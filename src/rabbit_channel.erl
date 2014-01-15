@@ -1143,7 +1143,7 @@ handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
 handle_method(#'channel.flow'{active = true}, _, State) ->
     {reply, #'channel.flow_ok'{active = true}, State};
 
-handle_method(#'channel.flow'{active = false}, _, State) ->
+handle_method(#'channel.flow'{active = false}, _, _State) ->
     rabbit_misc:protocol_error(not_implemented, "active=false", []);
 
 handle_method(#'basic.credit'{consumer_tag = CTag,
