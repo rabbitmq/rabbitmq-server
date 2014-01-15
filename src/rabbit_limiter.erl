@@ -128,7 +128,7 @@
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
 -export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
-         is_suspended/1, is_consumer_blocked/2, credit/6, ack_from_queue/3,
+         is_suspended/1, is_consumer_blocked/2, credit/5, ack_from_queue/3,
          drained/1, forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -147,7 +147,7 @@
 -type(qstate() :: #qstate{pid :: pid(),
                           state :: 'dormant' | 'active' | 'suspended'}).
 
--type(credit_mode() :: 'manual' | 'auto').
+-type(credit_mode() :: 'manual' | 'drain' | 'auto').
 
 -spec(start_link/1 :: (rabbit_types:proc_name()) ->
                            rabbit_types:ok_pid_or_error()).
@@ -173,7 +173,7 @@
 -spec(deactivate/1   :: (qstate()) -> qstate()).
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
 -spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
--spec(credit/6 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean(),
+-spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(),
                    credit_mode(), boolean()) -> {boolean(), qstate()}).
 -spec(ack_from_queue/3 :: (qstate(), rabbit_types:ctag(), non_neg_integer())
                           -> {boolean(), qstate()}).
@@ -194,7 +194,7 @@
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
 
--record(credit, {credit = 0, drain = false, mode}).
+-record(credit, {credit = 0, mode}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -283,11 +283,11 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         {value, #credit{}}                      -> true
     end.
 
-credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Drain, Mode, IsEmpty) ->
+credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Mode, IsEmpty) ->
     {Res, Cr} =
-        case IsEmpty andalso Drain of
-            true  -> {true,  #credit{credit = 0,   drain = false, mode = Mode}};
-            false -> {false, #credit{credit = Crd, drain = Drain, mode = Mode}}
+        case IsEmpty andalso Mode =:= drain of
+            true  -> {true,  #credit{credit = 0,   mode = manual}};
+            false -> {false, #credit{credit = Crd, mode = Mode}}
         end,
     {Res, Limiter#qstate{credits = enter_credit(CTag, Cr, Credits)}}.
 
@@ -304,12 +304,12 @@ ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     {Unblocked, Limiter#qstate{credits = Credits1}}.
 
 drained(Limiter = #qstate{credits = Credits}) ->
-    Drain = fun(C) -> C#credit{credit = 0, drain = false} end,
+    Drain = fun(C) -> C#credit{credit = 0, mode = manual} end,
     {CTagCredits, Credits2} =
         rabbit_misc:gb_trees_fold(
-          fun (CTag, C = #credit{credit = Crd, drain = true},  {Acc, Creds0}) ->
+          fun (CTag, C = #credit{credit = Crd, mode = drain},  {Acc, Creds0}) ->
                   {[{CTag, Crd} | Acc], update_credit(CTag, Drain(C), Creds0)};
-              (_CTag,   #credit{credit = _Crd, drain = false}, {Acc, Creds0}) ->
+              (_CTag,   #credit{credit = _Crd, mode = _Mode}, {Acc, Creds0}) ->
                   {Acc, Creds0}
           end, {[], Credits}, Credits),
     {CTagCredits, Limiter#qstate{credits = Credits2}}.
@@ -342,9 +342,11 @@ enter_credit(CTag, C, Credits) ->
 update_credit(CTag, C, Credits) ->
     gb_trees:update(CTag, ensure_credit_invariant(C), Credits).
 
-ensure_credit_invariant(C = #credit{credit = Credit, drain = Drain}) ->
+ensure_credit_invariant(C = #credit{credit = 0, mode = drain}) ->
     %% Using up all credit implies no need to send a 'drained' event
-    C#credit{drain = Drain andalso Credit > 0}.
+    C#credit{mode = manual};
+ensure_credit_invariant(C) ->
+    C.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

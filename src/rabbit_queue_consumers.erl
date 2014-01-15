@@ -120,7 +120,7 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 unacknowledged_message_count() ->
     lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]).
 
-add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, Args, IsEmpty,
+add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Args, IsEmpty,
     State = #state{consumers = Consumers}) ->
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
@@ -131,14 +131,13 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, Args, IsEmpty,
     C1 = C#cr{consumer_count = Count + 1, limiter = Limiter1},
     update_ch_record(
       case parse_credit_args(Args) of
-          none                              -> C1;
-          {0,      _Drain, auto}            -> C1;
-          {Credit, _Drain, auto} when NoAck -> C1;
-          {Credit,  Drain, Mode}            -> credit_and_drain(
-                                                 C1, ConsumerTag, Credit,
-                                                 Drain, Mode, IsEmpty)
+          none                       -> C1;
+          {0,       auto}            -> C1;
+          {_Credit, auto} when NoAck -> C1;
+          {Credit,  Mode}            -> credit_and_drain(
+                                          C1, CTag, Credit, Mode, IsEmpty)
       end),
-    Consumer = #consumer{tag          = ConsumerTag,
+    Consumer = #consumer{tag          = CTag,
                          ack_required = not NoAck,
                          args         = Args},
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers)}.
@@ -147,11 +146,11 @@ parse_credit_args(Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
         {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
                             rabbit_misc:table_lookup(T, <<"drain">>)} of
-                          {{long, C}, {bool, D}} -> {C, D, manual};
+                          {{long, C}, {bool, D}} -> {C, drain_mode(D)};
                           _                      -> none
                       end;
         undefined  -> case rabbit_misc:table_lookup(Args, <<"x-prefetch">>) of
-                          {_, Prefetch} -> {Prefetch, false, auto};
+                          {_, Prefetch} -> {Prefetch, auto};
                           _             -> none
                       end
     end.
@@ -330,7 +329,7 @@ credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
             unchanged;
         #cr{limiter = Limiter} = C ->
             C1 = #cr{limiter = Limiter1} =
-                credit_and_drain(C, CTag, Credit, Drain, manual, IsEmpty),
+                credit_and_drain(C, CTag, Credit, drain_mode(Drain), IsEmpty),
             case is_ch_blocked(C1) orelse
                 (not rabbit_limiter:is_consumer_blocked(Limiter, CTag)) orelse
                 rabbit_limiter:is_consumer_blocked(Limiter1, CTag) of
@@ -339,6 +338,9 @@ credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
                 false -> unblock(C1, State)
             end
     end.
+
+drain_mode(true)  -> drain;
+drain_mode(false) -> manual.
 
 utilisation(#state{use = {active, Since, Avg}}) ->
     use_avg(now_micros() - Since, 0, Avg);
@@ -405,8 +407,8 @@ send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
     end.
 
 credit_and_drain(C = #cr{ch_pid = ChPid, limiter = Limiter},
-                 CTag, Credit, Drain, Mode, IsEmpty) ->
-    case rabbit_limiter:credit(Limiter, CTag, Credit, Drain, Mode, IsEmpty) of
+                 CTag, Credit, Mode, IsEmpty) ->
+    case rabbit_limiter:credit(Limiter, CTag, Credit, Mode, IsEmpty) of
         {true,  Limiter1} -> rabbit_channel:send_drained(ChPid,
                                                          [{CTag, Credit}]),
                              C#cr{limiter = Limiter1};
