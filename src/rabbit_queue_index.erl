@@ -233,8 +233,7 @@ init(Name, OnSyncFun) ->
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
     State #qistate { on_sync = OnSyncFun }.
 
-recover(Name, Terms, MsgStoreRecovered,
-        ContainsCheckFun, OnSyncFun) ->
+recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
     CleanShutdown = Terms /= non_clean_shutdown,

@@ -455,7 +455,7 @@ process_recovery_terms(Terms=non_clean_shutdown) ->
 process_recovery_terms(Terms) ->
     case proplists:get_value(persistent_ref, Terms) of
         undefined -> {rabbit_guid:gen(), []};
-        PRef1     -> {PRef1, Terms}
+        PRef      -> {PRef, Terms}
     end.
 
 terminate(_Reason, State) ->
