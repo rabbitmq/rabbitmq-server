@@ -2132,7 +2132,7 @@ init_test_queue() ->
     PRef = rabbit_guid:gen(),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
-            TestQueue, {clean_shutdown, []}, false,
+            TestQueue, [], false,
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
@@ -2334,7 +2334,10 @@ test_queue_index() ->
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/2, fun nop/2, fun nop/1).
+      Q, case Recover of
+             true  -> non_clean_shutdown;
+             false -> new
+         end, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
@@ -2384,7 +2387,7 @@ with_fresh_variable_queue(Fun) ->
     %% bump_credit messages and we want to ignore them
     spawn_link(fun() ->
                        ok = empty_test_queue(),
-                       VQ = variable_queue_init(test_amqqueue(true), new),
+                       VQ = variable_queue_init(test_amqqueue(true), false),
                        S0 = rabbit_variable_queue:status(VQ),
                        assert_props(S0, [{q1, 0}, {q2, 0},
                                          {delta,
@@ -2773,8 +2776,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
     {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
-    VQ7 = variable_queue_init(test_amqqueue(true),
-                              {self(), non_clean_shutdown}),
+    VQ7 = variable_queue_init(test_amqqueue(true), true),
     {{_Msg1, true, _AckTag1}, VQ8} = rabbit_variable_queue:fetch(true, VQ7),
     Count1 = rabbit_variable_queue:len(VQ8),
     VQ9 = variable_queue_publish(false, 1, VQ8),
@@ -2791,8 +2793,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
         rabbit_variable_queue:requeue(AckTags, VQ3),
     VQ5 = rabbit_variable_queue:timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
-    VQ7 = variable_queue_init(test_amqqueue(true),
-                              {self(), non_clean_shutdown}),
+    VQ7 = variable_queue_init(test_amqqueue(true), true),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
 
@@ -2824,7 +2825,7 @@ test_queue_recover() ->
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
                   rabbit_amqqueue:basic_get(Q1, self(), false, Limiter),
               exit(QPid1, shutdown),
-              VQ1 = variable_queue_init(Q, {self(), non_clean_shutdown}),
+              VQ1 = variable_queue_init(Q, true),
               {{_Msg1, true, _AckTag1}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               CountMinusOne = rabbit_variable_queue:len(VQ2),

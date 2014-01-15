@@ -432,30 +432,30 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, new,
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback));
 
-init(#amqqueue { name = QueueName, durable = true }, {_, Terms},
+init(#amqqueue { name = QueueName, durable = true }, Terms,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
-    {PRef, Recovery, Terms1} = process_recovery_terms(Terms),
+    {PRef, RecoveryTerms} = process_recovery_terms(Terms),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
                                              MsgOnDiskFun, AsyncCallback),
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
                                              undefined, AsyncCallback),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
-          QueueName, {Recovery, Terms1},
+          QueueName, RecoveryTerms,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
           fun (MsgId) ->
                   rabbit_msg_store:contains(MsgId, PersistentClient)
           end,
           MsgIdxOnDiskFun),
-    init(true, IndexState, DeltaCount, Terms1,
+    init(true, IndexState, DeltaCount, RecoveryTerms,
          PersistentClient, TransientClient).
 
-process_recovery_terms(Recovery=non_clean_shutdown) ->
-    {rabbit_guid:gen(), Recovery, []};
+process_recovery_terms(Terms=non_clean_shutdown) ->
+    {rabbit_guid:gen(), Terms};
 process_recovery_terms(Terms) ->
     case proplists:get_value(persistent_ref, Terms) of
-        undefined -> {rabbit_guid:gen(), clean_shutdown, []};
-        PRef1     -> {PRef1, clean_shutdown, Terms}
+        undefined -> {rabbit_guid:gen(), []};
+        PRef1     -> {PRef1, Terms}
     end.
 
 terminate(_Reason, State) ->
@@ -1008,7 +1008,12 @@ init(IsDurable, IndexState, DeltaCount, Terms,
      PersistentClient, TransientClient) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
-    DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
+    DeltaCount1 =
+        case Terms of
+            non_clean_shutdown -> DeltaCount;
+            _                  -> proplists:get_value(persistent_count,
+                                                      Terms, DeltaCount)
+        end,
     Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
                 true  -> ?BLANK_DELTA;
                 false -> d(#delta { start_seq_id = LowSeqId,

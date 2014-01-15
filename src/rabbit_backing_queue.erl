@@ -28,7 +28,7 @@
 -type(drop_result(Ack) ::
         ('empty' | {rabbit_types:msg_id(), Ack})).
 -type(recovery_terms() :: [term()] | 'non_clean_shutdown').
--type(recovery_info() :: 'new' | {pid(), recovery_terms()}).
+-type(recovery_info() :: 'new' | recovery_terms()).
 -type(purged_msg_count() :: non_neg_integer()).
 -type(async_callback() ::
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).

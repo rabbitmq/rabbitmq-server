@@ -194,8 +194,7 @@
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
                                {rabbit_types:msg_id(), non_neg_integer(), A})).
--type(recovery_type() :: 'clean_shutdown' | 'non_clean_shutdown').
--type(shutdown_terms() :: {recovery_type(), [any()]}).
+-type(shutdown_terms() :: [any()] | 'non_clean_shutdown').
 
 -spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
 -spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
@@ -234,11 +233,11 @@ init(Name, OnSyncFun) ->
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
     State #qistate { on_sync = OnSyncFun }.
 
-recover(Name, {Recovery, Terms}, MsgStoreRecovered,
+recover(Name, Terms, MsgStoreRecovered,
         ContainsCheckFun, OnSyncFun) ->
     State = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
-    CleanShutdown = Recovery =/= non_clean_shutdown,
+    CleanShutdown = Terms /= non_clean_shutdown,
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);
