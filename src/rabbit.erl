@@ -20,8 +20,8 @@
 
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
-         is_running/1, environment/0, rotate_logs/1, force_event_refresh/0,
-         start_fhc/0]).
+         is_running/1, is_booting/0, is_booting/1, environment/0,
+         rotate_logs/1, force_event_refresh/0, start_fhc/0]).
 
 -export([start/2, stop/1]).
 
@@ -419,6 +419,10 @@ status() ->
 is_running() -> is_running(node()).
 
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
+
+is_booting() -> is_booting(node()).
+
+is_booting(Node) -> rabbit_nodes:is_process_running(Node, rabbit_boot).
 
 environment() ->
     lists:keysort(1, [P || P = {K, _} <- application:get_all_env(rabbit),
