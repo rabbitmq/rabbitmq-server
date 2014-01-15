@@ -789,8 +789,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                               Q, NoAck, self(),
                               rabbit_limiter:pid(Limiter),
                               rabbit_limiter:is_active(Limiter),
-                              ActualConsumerTag, ExclusiveConsume,
-                              parse_credit_args(Args), Args,
+                              ActualConsumerTag, ExclusiveConsume, Args,
                               ok_msg(NoWait, #'basic.consume_ok'{
                                        consumer_tag = ActualConsumerTag})),
                             Q}
@@ -1279,19 +1278,6 @@ handle_consuming_queue_down(QPid,
 
 handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
     State#ch{delivering_queues = sets:del_element(QPid, DQ)}.
-
-parse_credit_args(Args) ->
-    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
-        {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
-                            rabbit_misc:table_lookup(T, <<"drain">>)} of
-                          {{long, C}, {bool, D}} -> {credit, C, D};
-                          _                      -> none
-                      end;
-        undefined  -> case rabbit_misc:table_lookup(Args, <<"x-prefetch">>) of
-                          {_, P} when is_number(P) -> {prefetch, P};
-                          _                        -> none
-                      end
-    end.
 
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
