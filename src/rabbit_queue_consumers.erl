@@ -251,7 +251,7 @@ subtract_acks(AckTags, CTag, ChPid, State) ->
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
             {Unblocked, Lim2} =
                 rabbit_limiter:ack_from_queue(Lim, CTag, length(AckTags)),
-            AckTags2 = subtract_acks0(AckTags, [], ChAckTags),
+            AckTags2 = subtract_acks(AckTags, [], ChAckTags),
             C2 = C#cr{acktags = AckTags2, limiter = Lim2},
             case Unblocked of
                 true  -> unblock(C2, State);
@@ -260,14 +260,14 @@ subtract_acks(AckTags, CTag, ChPid, State) ->
             end
     end.
 
-subtract_acks0([], [], AckQ) ->
+subtract_acks([], [], AckQ) ->
     AckQ;
-subtract_acks0([], Prefix, AckQ) ->
+subtract_acks([], Prefix, AckQ) ->
     queue:join(queue:from_list(lists:reverse(Prefix)), AckQ);
-subtract_acks0([T | TL] = AckTags, Prefix, AckQ) ->
+subtract_acks([T | TL] = AckTags, Prefix, AckQ) ->
     case queue:out(AckQ) of
-        {{value,  T}, QTail} -> subtract_acks0(TL,             Prefix, QTail);
-        {{value, AT}, QTail} -> subtract_acks0(AckTags, [AT | Prefix], QTail)
+        {{value,  T}, QTail} -> subtract_acks(TL,             Prefix, QTail);
+        {{value, AT}, QTail} -> subtract_acks(AckTags, [AT | Prefix], QTail)
     end.
 
 possibly_unblock(Update, ChPid, State) ->
