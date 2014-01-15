@@ -21,8 +21,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, send_credit_reply/2, send_drained/2,
-         flushed/2]).
+-export([send_command/2, deliver/4, send_credit_reply/2, send_drained/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([force_event_refresh/0]).
@@ -37,7 +36,7 @@
              conn_name, limiter, tx, next_tag, unacked_message_q, user,
              virtual_host, most_recently_declared_queue,
              queue_names, queue_monitors, consumer_mapping,
-             blocking, queue_consumers, delivering_queues,
+             queue_consumers, delivering_queues,
              queue_collector_pid, stats_timer, confirm_enabled, publish_seqno,
              unconfirmed, confirmed, capabilities, trace_state}).
 
@@ -53,7 +52,6 @@
          messages_uncommitted,
          acks_uncommitted,
          prefetch_count,
-         client_flow_blocked,
          state]).
 
 -define(CREATION_EVENT_KEYS,
@@ -99,7 +97,6 @@
 -spec(send_credit_reply/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(send_drained/2 :: (pid(), [{rabbit_types:ctag(), non_neg_integer()}])
                         -> 'ok').
--spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -148,9 +145,6 @@ send_credit_reply(Pid, Len) ->
 
 send_drained(Pid, CTagCredit) ->
     gen_server2:cast(Pid, {send_drained, CTagCredit}).
-
-flushed(Pid, QPid) ->
-    gen_server2:cast(Pid, {flushed, QPid}).
 
 list() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
@@ -213,7 +207,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 queue_names             = dict:new(),
                 queue_monitors          = pmon:new(),
                 consumer_mapping        = dict:new(),
-                blocking                = sets:new(),
                 queue_consumers         = dict:new(),
                 delivering_queues       = sets:new(),
                 queue_collector_pid     = CollectorPid,
@@ -291,9 +284,6 @@ handle_cast({method, Method, Content, Flow},
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
 
-handle_cast({flushed, QPid}, State) ->
-    {noreply, queue_blocked(QPid, State), hibernate};
-
 handle_cast(ready_for_close, State = #ch{state      = closing,
                                          writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
@@ -368,8 +358,7 @@ handle_info(emit_stats, State) ->
 
 handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
-    State2 = queue_blocked(QPid, State1),
-    State3 = handle_consuming_queue_down(QPid, State2),
+    State3 = handle_consuming_queue_down(QPid, State1),
     State4 = handle_delivering_queue_down(QPid, State3),
     credit_flow:peer_down(QPid),
     #ch{queue_names = QNames, queue_monitors = QMons} = State4,
@@ -592,20 +581,6 @@ check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
       "~s name '~s' contains reserved prefix 'amq.*'",[Kind, NameBin]);
 check_name(_Kind, NameBin) ->
     NameBin.
-
-queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
-    case sets:is_element(QPid, Blocking) of
-        false -> State;
-        true  -> maybe_send_flow_ok(
-                   State#ch{blocking = sets:del_element(QPid, Blocking)})
-    end.
-
-maybe_send_flow_ok(State = #ch{blocking = Blocking}) ->
-    case sets:size(Blocking) of
-        0 -> ok = send(#'channel.flow_ok'{active = false}, State);
-        _ -> ok
-    end,
-    State.
 
 record_confirms([], State) ->
     State;
@@ -1165,36 +1140,11 @@ handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
     return_ok(State#ch{confirm_enabled = true},
               NoWait, #'confirm.select_ok'{});
 
-handle_method(#'channel.flow'{active = true},
-              _, State = #ch{limiter = Limiter}) ->
-    Limiter1 = rabbit_limiter:unblock(Limiter),
-    {reply, #'channel.flow_ok'{active = true},
-     maybe_limit_queues(Limiter, Limiter1, State#ch{limiter = Limiter1})};
+handle_method(#'channel.flow'{active = true}, _, State) ->
+    {reply, #'channel.flow_ok'{active = true}, State};
 
-handle_method(#'channel.flow'{active = false},
-              _, State = #ch{consumer_mapping = Consumers,
-                             limiter          = Limiter}) ->
-    case rabbit_limiter:is_blocked(Limiter) of
-        true  -> {noreply, maybe_send_flow_ok(State)};
-        false -> Limiter1 = rabbit_limiter:block(Limiter),
-                 State1 = maybe_limit_queues(Limiter, Limiter1,
-                                             State#ch{limiter = Limiter1}),
-                 %% The semantics of channel.flow{active=false}
-                 %% require that no messages are delivered after the
-                 %% channel.flow_ok has been sent. We accomplish that
-                 %% by "flushing" all messages in flight from the
-                 %% consumer queues to us. To do this we tell all the
-                 %% queues to invoke rabbit_channel:flushed/2, which
-                 %% will send us a {flushed, ...} message that appears
-                 %% *after* all the {deliver, ...} messages. We keep
-                 %% track of all the QPids thus asked, and once all of
-                 %% them have responded (or died) we send the
-                 %% channel.flow_ok.
-                 QPids = consumer_queues(Consumers),
-                 ok = rabbit_amqqueue:flush_all(QPids, self()),
-                 {noreply, maybe_send_flow_ok(
-                             State1#ch{blocking = sets:from_list(QPids)})}
-    end;
+handle_method(#'channel.flow'{active = false}, _, State) ->
+    rabbit_misc:protocol_error(not_implemented, "active=false", []);
 
 handle_method(#'basic.credit'{consumer_tag = CTag,
                               credit       = Credit,
@@ -1476,7 +1426,7 @@ consumer_queues(Consumers) ->
 notify_limiter(Limiter, Acked) ->
     %% optimisation: avoid the potentially expensive 'foldl' in the
     %% common case.
-     case rabbit_limiter:is_prefetch_limited(Limiter) of
+     case rabbit_limiter:is_active(Limiter) of
         false -> ok;
         true  -> case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
                                       ({_,    _, _}, Acc) -> Acc + 1
@@ -1644,8 +1594,6 @@ i(state,                   #ch{state = running})         -> credit_flow:state();
 i(state,                   #ch{state = State})            -> State;
 i(prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_prefetch_limit(Limiter);
-i(client_flow_blocked, #ch{limiter = Limiter}) ->
-    rabbit_limiter:is_blocked(Limiter);
 i(Item, _) ->
     throw({bad_argument, Item}).
 
