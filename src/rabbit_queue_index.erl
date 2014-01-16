@@ -194,7 +194,7 @@
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
                                {rabbit_types:msg_id(), non_neg_integer(), A})).
--type(shutdown_terms() :: [any()] | 'non_clean_shutdown').
+-type(shutdown_terms() :: [term()] | 'non_clean_shutdown').
 
 -spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
 -spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),

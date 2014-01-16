@@ -373,7 +373,7 @@ qc_default_exchange() ->
 
 qc_variable_queue_init(Q) ->
     {call, ?BQMOD, init,
-     [Q, {false, []}, function(2, ok)]}.
+     [Q, new, function(2, {ok, []})]}.
 
 qc_test_q() -> {call, rabbit_misc, r, [<<"/">>, queue, noshrink(binary(16))]}.
 
