@@ -359,8 +359,7 @@ recover(DurableQueueNames) ->
     QueuesDir = queues_dir(),
     [rabbit_file:recursive_delete([QueueDir]) ||
         QueueDir <- all_queue_directory_names(QueuesDir),
-        not sets:is_element(filename:basename(QueueDir),
-                            DurableDirectories)],
+        not sets:is_element(filename:basename(QueueDir), DurableDirectories)],
 
     rabbit_recovery_terms:clear(),
 
