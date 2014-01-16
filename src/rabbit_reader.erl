@@ -175,6 +175,7 @@ server_capabilities(rabbit_framing_amqp_0_9_1) ->
      {<<"consumer_cancel_notify">>,       bool, true},
      {<<"connection.blocked">>,           bool, true},
      {<<"consumer_priorities">>,          bool, true},
+     {<<"consumer_prefetch">>,            bool, true},
      {<<"authentication_failure_close">>, bool, true}];
 server_capabilities(_) ->
     [].
