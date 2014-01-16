@@ -679,6 +679,21 @@ drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
                          #message_properties{expiry = Exp} -> Exp
                      end, State1).
 
+drop_expired_queue_msgs(State = #q{backing_queue_state = BQS,
+                                  backing_queue       = BQ }) ->
+    case is_empty(State) of
+        true -> State;
+        false ->
+            ExpireAll = fun (_) -> true end,
+            {_, State1} =
+                with_dlx(
+                  State#q.dlx,
+                  fun (X) -> dead_letter_expired_msgs(ExpireAll, X, State) end,
+                  fun () -> {Next, BQS1} = BQ:dropwhile(ExpireAll, BQS),
+                            {Next, State#q{backing_queue_state = BQS1}} end),
+            State1
+    end.
+
 with_dlx(undefined, _With,  Without) -> Without();
 with_dlx(DLX,        With,  Without) -> case rabbit_exchange:lookup(DLX) of
                                             {ok, X}            -> With(X);
@@ -1141,7 +1156,9 @@ handle_cast(policy_changed, State = #q{q = #amqqueue{name = Name}}) ->
 
 handle_info({maybe_expire, Vsn}, State = #q{args_policy_version = Vsn}) ->
     case is_unused(State) of
-        true  -> stop(State);
+        true  -> 
+            State1 = drop_expired_queue_msgs(State),
+            stop(State1);
         false -> noreply(State#q{expiry_timer_ref = undefined})
     end;
 
