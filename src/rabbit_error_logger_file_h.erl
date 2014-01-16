@@ -94,7 +94,7 @@ handle_event(Event = {error, _, {emulator, _, ["Discarding message" ++ _]}},
         undefined -> put(discarding_message_seen, true),
                      error_logger_file_h:handle_event(Event, State)
     end;
-%% Clear this state if we log anything else (but not a progress report)
+%% Clear this state if we log anything else (but not a progress report).
 handle_event(Event = {info_msg, _, _}, State) ->
     erase(discarding_message_seen),
     error_logger_file_h:handle_event(Event, State);
