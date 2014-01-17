@@ -212,7 +212,8 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish, ChPid, MsgProps, Msg}, msg_size(Msg)),
+    ok = gm:broadcast(GM, {publish, ChPid, MsgProps, Msg},
+                      rabbit_basic:msg_size(Msg)),
     BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
@@ -223,7 +224,7 @@ publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                                           backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish_delivered, ChPid, MsgProps, Msg},
-                      msg_size(Msg)),
+                      rabbit_basic:msg_size(Msg)),
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     {AckTag, ensure_monitoring(ChPid, State1)}.
@@ -480,6 +481,3 @@ ensure_monitoring(ChPid, State = #state { coordinator = CPid,
                         CPid, [ChPid]),
                  State #state { known_senders = sets:add_element(ChPid, KS) }
     end.
-
-msg_size(#basic_message{content = #content{payload_fragments_rev = PFR}}) ->
-    iolist_size(PFR).

@@ -518,6 +518,14 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
+check_msg_size(Content) ->
+    Size = rabbit_basic:msg_size(Content),
+    case Size > ?MAX_MSG_SIZE of
+        true  -> precondition_failed("message size ~s larger than max size ~s",
+                                     [Size, ?MAX_MSG_SIZE]);
+        false -> ok
+    end.
+
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
       not_found, "no previously declared queue", []);
@@ -648,6 +656,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    tx              = Tx,
                                    confirm_enabled = ConfirmEnabled,
                                    trace_state     = TraceState}) ->
+    check_msg_size(Content),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
