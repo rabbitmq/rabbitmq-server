@@ -681,24 +681,36 @@ drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
 
 drop_expired_queue_msgs(State = #q{backing_queue_state = BQS,
                                   backing_queue       = BQ }) ->
-    case is_empty(State) of
-        true -> State;
-        false ->
-            ExpireAll = fun (_) -> true end,
-            {_, State1} =
-                with_dlx(
-                  State#q.dlx,
-                  fun (X) -> dead_letter_expired_msgs(ExpireAll, X, State) end,
-                  fun () -> {Next, BQS1} = BQ:dropwhile(ExpireAll, BQS),
-                            {Next, State#q{backing_queue_state = BQS1}} end),
-            State1
-    end.
+    ExpireAll = fun (_) -> true end,
+    {_, State1} =
+        with_dlx(
+          State#q.dlx,
+          fun (X) -> dead_letter_all_msgs(ExpireAll, X, State) end,
+          fun () -> {Next, BQS1} = BQ:dropwhile(ExpireAll, BQS),
+                    {Next, State#q{backing_queue_state = BQS1}} end),
+    State1.
 
 with_dlx(undefined, _With,  Without) -> Without();
 with_dlx(DLX,        With,  Without) -> case rabbit_exchange:lookup(DLX) of
                                             {ok, X}            -> With(X);
                                             {error, not_found} -> Without()
                                         end.
+
+dead_letter_all_msgs(ExpirePred, X, State = #q{backing_queue = BQ, q = #amqqueue{name = Name}}) ->
+    %% In the event that the dead letter exchange had previous bindings to the queue,
+    %% bindings are removed from the destination before dead-lettering.
+    %% A manual call to remove_bindings for the exchange is necessary for exchanges like
+    %% the consistent hash exchange because they also keep internal routes which
+    %% do not get removed as a result of removing the bindings from the queue.
+    Bindings = [ B || {binding, X#exchange.name, _, _, _}=B <- rabbit_binding:list_for_destination(Name)],
+    rabbit_misc:execute_mnesia_transaction(
+        fun() -> 
+            rabbit_binding:remove_for_destination(Name),
+            rabbit_exchange:callback(X, remove_bindings, transaction, [X, Bindings])
+        end),
+    dead_letter_msgs(fun (DLFun, Acc, BQS1) ->
+                             BQ:fetchwhile(ExpirePred, DLFun, Acc, BQS1)
+                     end, queue_expired, X, State).
 
 dead_letter_expired_msgs(ExpirePred, X, State = #q{backing_queue = BQ}) ->
     dead_letter_msgs(fun (DLFun, Acc, BQS1) ->
