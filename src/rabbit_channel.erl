@@ -522,6 +522,14 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
+check_msg_size(Content) ->
+    Size = rabbit_basic:msg_size(Content),
+    case Size > ?MAX_MSG_SIZE of
+        true  -> precondition_failed("message size ~B larger than max size ~B",
+                                     [Size, ?MAX_MSG_SIZE]);
+        false -> ok
+    end.
+
 qbin_to_resource(QueueNameBin, State) ->
     name_to_resource(queue, QueueNameBin, State).
 
@@ -679,6 +687,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    tx              = Tx,
                                    confirm_enabled = ConfirmEnabled,
                                    trace_state     = TraceState}) ->
+    check_msg_size(Content),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
