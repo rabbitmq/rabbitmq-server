@@ -77,7 +77,8 @@
         (rabbit_framing:amqp_property_record())
         -> rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any())).
 
--spec(msg_size/1 :: (rabbit_types:content()) -> non_neg_integer()).
+-spec(msg_size/1 :: (rabbit_types:content() | rabbit_types:message()) ->
+                         non_neg_integer()).
 
 -endif.
 
@@ -276,5 +277,5 @@ parse_expiration(#'P_basic'{expiration = Expiration}) ->
             {error, {leftover_string, S}}
     end.
 
-msg_size(#basic_message{content = #content{payload_fragments_rev = PFR}}) ->
-    iolist_size(PFR).
+msg_size(#content{payload_fragments_rev = PFR}) -> iolist_size(PFR);
+msg_size(#basic_message{content = Content})     -> msg_size(Content).
