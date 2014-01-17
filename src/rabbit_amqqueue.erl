@@ -113,9 +113,9 @@
                     -> [rabbit_types:infos()]).
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
--spec(consumers/1 ::
-        (rabbit_types:amqqueue())
-        -> [{pid(), rabbit_types:ctag(), boolean()}]).
+-spec(consumers/1 :: (rabbit_types:amqqueue())
+                     -> [{pid(), rabbit_types:ctag(), boolean(),
+                          rabbit_framing:amqp_table()}]).
 -spec(consumer_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(consumers_all/1 ::
         (rabbit_types:vhost())
