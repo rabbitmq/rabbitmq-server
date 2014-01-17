@@ -702,7 +702,8 @@ dead_letter_all_msgs(ExpirePred, X, State = #q{backing_queue = BQ, q = #amqqueue
     %% A manual call to remove_bindings for the exchange is necessary for exchanges like
     %% the consistent hash exchange because they also keep internal routes which
     %% do not get removed as a result of removing the bindings from the queue.
-    Bindings = [ B || {binding, X#exchange.name, _, _, _}=B <- rabbit_binding:list_for_destination(Name)],
+    DLX = X#exchange.name,
+    Bindings = [ B || {binding, DLX, _, _, _}=B <- rabbit_binding:list_for_destination(Name)],
     rabbit_misc:execute_mnesia_transaction(
         fun() -> 
             rabbit_binding:remove_for_destination(Name),
