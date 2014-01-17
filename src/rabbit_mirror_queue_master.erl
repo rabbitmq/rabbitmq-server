@@ -482,7 +482,4 @@ ensure_monitoring(ChPid, State = #state { coordinator = CPid,
     end.
 
 msg_size(#basic_message{content = #content{payload_fragments_rev = PFR}}) ->
-    msg_size(PFR, 0).
-
-msg_size([],    Size) -> Size;
-msg_size([H|T], Size) -> msg_size(T, Size + size(H)).
+    iolist_size(PFR).
