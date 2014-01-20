@@ -48,6 +48,11 @@
 %% in JMS Client.
 -define(RJMS_SELECTOR_ARG, <<"rjms_selector">>).
 
+%% Name of arg on binding used to specify erlang term -- string type
+%%      private static final String RJMS_COMPILED_SELECTOR_ARG = "rjms_erlang_selector";
+%% in JMS Client.
+-define(RJMS_COMPILED_SELECTOR_ARG, <<"rjms_erlang_selector">>).
+
 %% Name of type info argument on exchange; used to specify SQL identifier types.
 %% Constant (name of argument) defined as
 %%      private static final String RJMS_TYPE_INFO_ARG = "rjms_type_info";

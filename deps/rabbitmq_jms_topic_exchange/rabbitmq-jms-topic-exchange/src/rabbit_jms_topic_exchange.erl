@@ -215,20 +215,34 @@ get_headers(Content) ->
   end.
 
 % generate the function that checks the message against the SQL expression
-generate_binding_fun(SQL, TypeInfo) ->
+generate_binding_fun({sql, SQL}, TypeInfo) ->
   case compile_sql(SQL, TypeInfo) of
     error          -> error;
-    CompiledSQLExp -> { ok,
-                        fun(Headers) ->
-                          sql_match(CompiledSQLExp, Headers)
-                        end
-                      }
+    CompiledSQLExp -> check_fun(CompiledSQLExp)
+  end;
+generate_binding_fun({erlang, ERL}, _) ->
+  case decode_term(ERL) of
+    {error, Err}  -> error;
+    {ok, ErlTerm} -> check_fun(ErlTerm)
   end.
 
+% build checking function from compiled expression
+check_fun(CompiledExp) ->
+  { ok,
+    fun(Headers) ->
+      sql_match(CompiledExp, Headers)
+    end
+  }.
+
+% get sql string or erlang string from arguments
 get_sql_from_args(Args) ->
   case rabbit_misc:table_lookup(Args, ?RJMS_SELECTOR_ARG) of
-    {longstr, BinSQL} -> binary_to_list(BinSQL);
-    _                 -> ""  %% not found or wrong type
+    {longstr, BinSQL} -> {sql, binary_to_list(BinSQL)};
+    _                 ->
+      case rabbit_misc:table_lookup(Args, ?RJMS_COMPILED_SELECTOR_ARG) of
+        {longstr, BinERL} -> {erlang, binary_to_list(BinERL)};
+        _ -> not_found  %% nothing found of correct type
+      end
   end.
 
 % scan and parse SQL expression
@@ -236,6 +250,16 @@ compile_sql(SQL, TypeInfo) ->
   case sjx_dialect:analyze(TypeInfo, SQL) of
     error    -> error;
     Compiled -> Compiled
+  end.
+
+% get an erlang term from a string
+decode_term(Str) ->
+  try
+    {ok, Ts, _} = erl_scan:string(Str),
+    {ok, Term} = erl_parse:parse_term(Ts),
+    {ok, Term}
+  catch
+    Err -> {error, {invalid_erlang_term, Err}}
   end.
 
 % Evaluate the SQL parsed tree and check against the Headers
