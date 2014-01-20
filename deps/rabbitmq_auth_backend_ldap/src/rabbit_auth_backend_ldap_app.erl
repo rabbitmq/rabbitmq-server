@@ -25,7 +25,7 @@
 
 start(_Type, _StartArgs) ->
     {ok, Backends} = application:get_env(rabbit, auth_backends),
-    case lists:member(rabbit_auth_backend_ldap, Backends) of
+    case configured(rabbit_auth_backend_ldap, Backends) of
         true  -> ok;
         false -> rabbit_log:warning(
                    "LDAP plugin loaded, but rabbit_auth_backend_ldap is not "
@@ -35,6 +35,12 @@ start(_Type, _StartArgs) ->
 
 stop(_State) ->
     ok.
+
+configured(_M, [])        -> false;
+configured(M,  [M    |_]) -> true;
+configured(M,  [{M,_}|_]) -> true;
+configured(M,  [{_,M}|_]) -> true;
+configured(M,  [_    |T]) -> configured(M, T).
 
 %%----------------------------------------------------------------------------
 
