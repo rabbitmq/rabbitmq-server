@@ -282,8 +282,10 @@ recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
-    ok = rabbit_net:setopts(Sock, [{active, once}]),
-    mainloop(Deb, State#v1{pending_recv = true});
+    case rabbit_net:setopts(Sock, [{active, once}]) of
+        ok              -> mainloop(Deb, State#v1{pending_recv = true});
+        {error, Reason} -> stop(Reason, State)
+    end;
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of
                                     [B] -> B;
@@ -302,11 +304,9 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
         closed when State#v1.connection_state =:= closed ->
             ok;
         closed ->
-            maybe_emit_stats(State),
-            throw(connection_closed_abruptly);
+            stop(closed, State);
         {error, Reason} ->
-            maybe_emit_stats(State),
-            throw({inet_error, Reason});
+            stop(Reason, State);
         {other, {system, From, Request}} ->
             sys:handle_system_msg(Request, From, State#v1.parent,
                                   ?MODULE, Deb, State);
@@ -316,6 +316,11 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
                 NewState -> recvloop(Deb, NewState)
             end
     end.
+
+stop(closed, State) -> maybe_emit_stats(State),
+                       throw(connection_closed_abruptly);
+stop(Reason, State) -> maybe_emit_stats(State),
+                       throw({inet_error, Reason}).
 
 handle_other({conserve_resources, Source, Conserve},
              State = #v1{throttle = Throttle =
