@@ -21,7 +21,7 @@
                       await_recv,
                       connection_state,
                       keepalive,
-                      supervisor,
+                      keepalive_sup,
                       conserve,
                       parse_state,
                       proc_state }).

@@ -40,7 +40,7 @@ conserve_resources(Pid, _, Conserve) ->
 init([]) ->
     {ok, undefined, hibernate, {backoff, 1000, 1000, 10000}}.
 
-handle_call({go, Sock0, SockTransform, SupPid}, _From, undefined) ->
+handle_call({go, Sock0, SockTransform, KeepaliveSup}, _From, undefined) ->
     process_flag(trap_exit, true),
     {ok, Sock} = SockTransform(Sock0),
     case rabbit_net:connection_string(Sock, inbound) of
@@ -55,7 +55,7 @@ handle_call({go, Sock0, SockTransform, SupPid}, _From, undefined) ->
                        await_recv       = false,
                        connection_state = running,
                        keepalive        = {none, none},
-                       supervisor       = SupPid,
+                       keepalive_sup    = KeepaliveSup,
                        conserve         = false,
                        parse_state      = rabbit_mqtt_frame:initial_state(),
                        proc_state       = ProcessorState }),
@@ -118,13 +118,14 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     {noreply, control_throttle(State), hibernate};
 
-handle_info({keepalive, Keepalive}, State = #state { supervisor = SupPid,
-                                                     socket     = Sock }) ->
+handle_info({start_keepalives, Keepalive},
+            State = #state { keepalive_sup = KeepaliveSup, socket = Sock }) ->
+    %% Only the client has the responsibility for sending keepalives
     SendFun = fun() -> ok end,
     Parent = self(),
     ReceiveFun = fun() -> Parent ! keepalive_timeout end,
-    Heartbeater =
-      rabbit_heartbeat:start(SupPid, Sock, 0, SendFun, Keepalive, ReceiveFun),
+    Heartbeater = rabbit_heartbeat:start(
+                    KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
     {noreply, State #state { keepalive = Heartbeater }};
 
 handle_info(keepalive_timeout, State = #state { conn_name = ConnStr }) ->
@@ -180,7 +181,7 @@ callback_reply(State, {err, Reason, ProcState}) ->
     {stop, Reason, pstate(State, ProcState)}.
 
 start_keepalive(_,   0        ) -> ok;
-start_keepalive(Pid, Keepalive) -> Pid ! {keepalive, Keepalive}.
+start_keepalive(Pid, Keepalive) -> Pid ! {start_keepalives, Keepalive}.
 
 pstate(State = #state {}, PState = #proc_state{}) ->
     State #state{ proc_state = PState }.
@@ -223,4 +224,3 @@ control_throttle(State = #state{ connection_state = Flow,
                                                 connection_state = running });
         {_,            _} -> run_socket(State)
     end.
-
