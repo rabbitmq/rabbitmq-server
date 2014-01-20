@@ -118,3 +118,5 @@
 %% to allow plenty of leeway for the #basic_message{} and #content{}
 %% wrapping the message body).
 -define(MAX_MSG_SIZE, 2147383648).
+
+-define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
