@@ -52,11 +52,7 @@ check_user_pass_login(Username, Password) ->
 check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     lists:foldl(
-      fun (Mod, {refused, _, _}) when is_atom(Mod) ->
-              %% Same module for authN and authZ. Just take the result
-              %% it gives us
-              try_login(Mod, Username, AuthProps);
-          ({ModN, ModZ}, {refused, _, _}) ->
+      fun ({ModN, ModZ}, {refused, _, _}) ->
               %% Different modules for authN vs authZ. So authenticate
               %% with authN module, then if that succeeds do
               %% passwordless (i.e pre-authenticated) login with authZ
@@ -65,6 +61,10 @@ check_user_login(Username, AuthProps) ->
                   {ok, _} -> try_login(ModZ, Username, []);
                   Else    -> Else
               end;
+          (Mod, {refused, _, _}) ->
+              %% Same module for authN and authZ. Just take the result
+              %% it gives us
+              try_login(Mod, Username, AuthProps);
           (_, {ok, User}) ->
               %% We've successfully authenticated. Skip to the end...
               {ok, User}
