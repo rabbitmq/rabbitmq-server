@@ -54,7 +54,8 @@ process_request(?CONNECT,
                                           password   = Password,
                                           proto_ver  = ProtoVersion,
                                           clean_sess = CleanSess,
-                                          client_id  = ClientId } = Var}, PState) ->
+                                          client_id  = ClientId,
+                                          keep_alive = Keepalive} = Var}, PState) ->
     {ReturnCode, PState1} =
         case {ProtoVersion =:= ?MQTT_PROTO_MAJOR,
               rabbit_mqtt_util:valid_client_id(ClientId)} of
@@ -77,6 +78,7 @@ process_request(?CONNECT,
                                 Prefetch = rabbit_mqtt_util:env(prefetch),
                                 #'basic.qos_ok'{} = amqp_channel:call(
                                   Ch, #'basic.qos'{prefetch_count = Prefetch}),
+                                rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
                                 {?CONNACK_ACCEPT,
                                  maybe_clean_sess(
                                    PState #proc_state{ will_msg   = make_will_msg(Var),
