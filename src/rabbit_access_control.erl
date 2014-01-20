@@ -52,7 +52,7 @@ check_user_pass_login(Username, Password) ->
 check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     lists:foldl(
-      fun (Mod, {refused, _, _}) ->
+      fun (Mod, {refused, _, _}) when is_atom(Mod) ->
               %% Same module for authN and authZ. Just take the result
               %% it gives us
               try_login(Mod, Username, AuthProps);
