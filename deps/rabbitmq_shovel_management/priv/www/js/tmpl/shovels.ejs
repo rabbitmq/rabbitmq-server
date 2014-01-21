@@ -29,18 +29,16 @@
     <td><%= fmt_node(shovel.node) %></td>
 <% } %>
 <% if (shovel.state == 'terminated') { %>
-    <td colspan="3">
-       <div class="status-red"><%= shovel.state %></div>
-    </td>
+    <td colspan="6"><%= fmt_state('red', shovel.state) %></td>
     <td><%= shovel.timestamp %></td>
   </tr>
   <tr>
-    <td colspan="6">
+    <td colspan="9">
       <pre><%= fmt_string(shovel.reason) %></pre>
     </td>
   </tr>
 <% } else { %>
-    <td><div class="status-green"><%= shovel.state %></div></td>
+    <td><%= fmt_state('green', shovel.state) %></td>
     <% if (shovel.definition == undefined) { %>
       <td colspan="2"><%= fmt_string(shovel.src_uri) %></td>
       <td colspan="2"><%= fmt_string(shovel.dest_uri) %></td>
