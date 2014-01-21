@@ -35,7 +35,7 @@ function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
 }
 
 function fmt_memory(memory, key) {
-    return '<div class="colour-key memory_' + key + '"></div>' +
+    return '<span class="memory_' + key + '">&#x2b1b;</span> ' +
         fmt_bytes(memory[key]);
 }
 
@@ -482,13 +482,20 @@ function fmt_object_state(obj) {
         explanation = 'Publishing rate recently restricted by server.';
     }
 
+    return fmt_state(colour, text, explanation);
+}
+
+function fmt_state(colour, text, explanation) {
+    var key;
     if (explanation) {
-        return '<div class="status-' + colour + '"><acronym title="' +
-            explanation + '">' + text + '</acronym></div>';
+        key = '<acronym class="normal" title="' + explanation + '">' +
+            text + '</acronym>';
     }
     else {
-        return '<div class="status-' + colour + '">' + obj.state + '</div>';
+        key = text;
     }
+
+    return '<span class="status-' + colour + '">&#x2b1b;</span> ' + key;
 }
 
 function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
