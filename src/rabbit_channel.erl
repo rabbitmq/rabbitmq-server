@@ -469,9 +469,8 @@ check_resource_access(User, Resource, Perm) ->
                  put(permission_cache, [V | CacheTail])
     end.
 
-clear_permission_cache() ->
-    erase(permission_cache),
-    ok.
+clear_permission_cache() -> erase(permission_cache),
+                            ok.
 
 check_configure_permitted(Resource, #ch{user = User}) ->
     check_resource_access(User, Resource, configure).
@@ -511,6 +510,14 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
+check_msg_size(Content) ->
+    Size = rabbit_basic:msg_size(Content),
+    case Size > ?MAX_MSG_SIZE of
+        true  -> precondition_failed("message size ~B larger than max size ~B",
+                                     [Size, ?MAX_MSG_SIZE]);
+        false -> ok
+    end.
+
 qbin_to_resource(QueueNameBin, State) ->
     name_to_resource(queue, QueueNameBin, State).
 
@@ -518,8 +525,7 @@ name_to_resource(Type, NameBin, #ch{virtual_host = VHostPath}) ->
     rabbit_misc:r(VHostPath, Type, NameBin).
 
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
-    rabbit_misc:protocol_error(
-      not_found, "no previously declared queue", []);
+    rabbit_misc:protocol_error(not_found, "no previously declared queue", []);
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = MRDQ}) ->
     MRDQ;
 expand_queue_name_shortcut(QueueNameBin, _) ->
@@ -527,8 +533,7 @@ expand_queue_name_shortcut(QueueNameBin, _) ->
 
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{most_recently_declared_queue = <<>>}) ->
-    rabbit_misc:protocol_error(
-      not_found, "no previously declared queue", []);
+    rabbit_misc:protocol_error(not_found, "no previously declared queue", []);
 expand_routing_key_shortcut(<<>>, <<>>,
                             #ch{most_recently_declared_queue = MRDQ}) ->
     MRDQ;
@@ -654,6 +659,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    tx              = Tx,
                                    confirm_enabled = ConfirmEnabled,
                                    trace_state     = TraceState}) ->
+    check_msg_size(Content),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -1614,8 +1620,7 @@ update_measures(Type, Key, Inc, Measure) ->
           end,
     put({Type, Key}, orddict:store(Measure, Cur + Inc, Measures)).
 
-emit_stats(State) ->
-    emit_stats(State, []).
+emit_stats(State) -> emit_stats(State, []).
 
 emit_stats(State, Extra) ->
     Coarse = infos(?STATISTICS_KEYS, State),
