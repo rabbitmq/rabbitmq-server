@@ -703,11 +703,12 @@ pseudo_queue(QueueName, Pid) ->
               pid          = Pid,
               slave_pids   = []}.
 
-deliver([], #delivery{mandatory = false}, _Flow) ->
+deliver([], _Delivery, _Flow) ->
     %% /dev/null optimisation
-    {routed, []};
+    [];
 
-deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
+deliver(Qs, Delivery, Flow) ->
+    %% TODO simplify?
     %% optimisation: when Mandatory = false, rabbit_amqqueue:deliver
     %% will deliver the message to the queue process asynchronously,
     %% and return true, which means all the QPids will always be
@@ -730,19 +731,7 @@ deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
     SMsg = {deliver, Delivery, true,  Flow},
     delegate:cast(MPids, MMsg),
     delegate:cast(SPids, SMsg),
-    {routed, QPids};
-
-deliver(Qs, Delivery, _Flow) ->
-    {MPids, SPids} = qpids(Qs),
-    %% see comment above
-    MMsg = {deliver, Delivery, false},
-    SMsg = {deliver, Delivery, true},
-    {MRouted, _} = delegate:call(MPids, MMsg),
-    {SRouted, _} = delegate:call(SPids, SMsg),
-    case MRouted ++ SRouted of
-        [] -> {unroutable, []};
-        R  -> {routed,     [QPid || {QPid, ok} <- R]}
-    end.
+    QPids.
 
 qpids([]) -> {[], []}; %% optimisation
 qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[QPid], SPids}; %% opt
