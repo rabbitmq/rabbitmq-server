@@ -349,8 +349,8 @@ handle_cast(force_event_refresh, State) ->
     noreply(State);
 
 %% TODO duplication?
-handle_cast({mandatory_received, MsgSeqNo, From}, State) ->
-    State1 = #ch{mandatory = M} = handle_mandatory(MsgSeqNo, From, State),
+handle_cast({mandatory_received, MsgSeqNo}, State) ->
+    State1 = #ch{mandatory = M} = handle_mandatory(MsgSeqNo, State),
     Timeout = case M of [] -> hibernate; _ -> 0 end,
     %% NB: don't call noreply/1 since we don't want to send confirms.
     {noreply, ensure_stats_timer(State1), Timeout};
@@ -632,9 +632,9 @@ confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
     {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
     record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
-handle_mandatory(MsgSeqNo, QPid, State = #ch{mandatory = UC}) ->
-    {_MXs, UC1} = dtree:take([MsgSeqNo], QPid, UC),
-    State#ch{mandatory = UC1}.
+handle_mandatory(MsgSeqNo, State = #ch{mandatory = Mand}) ->
+    {_MMsgs, Mand1} = dtree:take_all([MsgSeqNo], Mand),
+    State#ch{mandatory = Mand1}.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     %% Don't leave "starting" as the state for 5s. TODO is this TRTTD?
@@ -1266,9 +1266,7 @@ monitor_delivering_queue(NoAck, QPid, QName,
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
                                                        mandatory   = Mand}) ->
-    %% TODO do we need take_all here?
     {MMsgs, Mand1} = dtree:take(QPid, Mand),
-    io:format("returning ~p~n", [MMsgs]),
     [basic_return(Msg, State, no_route) || {_, Msg} <- MMsgs],
     State1 = State#ch{mandatory = Mand1},
     case rabbit_misc:is_abnormal_exit(Reason) of

@@ -446,7 +446,7 @@ send_mandatory(#delivery{mandatory = false}) ->
 send_mandatory(#delivery{mandatory  = true,
                          sender     = SenderPid,
                          msg_seq_no = MsgSeqNo}) ->
-    gen_server2:cast(SenderPid, {mandatory_received, MsgSeqNo, self()}).
+    gen_server2:cast(SenderPid, {mandatory_received, MsgSeqNo}).
 
 discard(#delivery{sender     = SenderPid,
                   msg_seq_no = MsgSeqNo,
