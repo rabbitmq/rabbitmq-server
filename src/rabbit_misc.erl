@@ -681,7 +681,7 @@ sort_field_table(Arguments) ->
 %% regardless of what node we are running on. The representation also
 %% permits easy identification of the pid's node.
 %%
-%% com.rabbitmq.tools.Host#listConnections relies on this format.
+%% com.rabbitmq.tools.Host#listConnections in the Java client relies on this format.
 pid_to_string(Pid) when is_pid(Pid) ->
     %% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and
     %% 8.7)
