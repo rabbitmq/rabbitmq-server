@@ -349,9 +349,10 @@ handle_cast(force_event_refresh, State) ->
     noreply(State);
 
 %% TODO duplication?
-handle_cast({mandatory_received, MsgSeqNo}, State) ->
+handle_cast({mandatory_received, MsgSeqNo}, State = #ch{confirmed = C}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    {noreply, ensure_stats_timer(handle_mandatory(MsgSeqNo, State)), hibernate};
+    Timeout = case C of [] -> hibernate; _ -> 0 end,
+    {noreply, ensure_stats_timer(handle_mandatory(MsgSeqNo, State)), Timeout};
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
