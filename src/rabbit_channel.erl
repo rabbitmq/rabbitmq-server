@@ -856,8 +856,13 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
     %% unacked messages from basic.get too. Pretty obscure though.
     Limiter1 = rabbit_limiter:limit_prefetch(Limiter,
                                              PrefetchCount, queue:len(UAMQ)),
-    {reply, #'basic.qos_ok'{},
-     maybe_limit_queues(Limiter, Limiter1, State#ch{limiter = Limiter1})};
+    case ((not rabbit_limiter:is_active(Limiter)) andalso
+          rabbit_limiter:is_active(Limiter1)) of
+        true  -> rabbit_amqqueue:activate_limit_all(
+                   consumer_queues(State#ch.consumer_mapping), self());
+        false -> ok
+    end,
+    {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
 
 handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{unacked_message_q = UAMQ, limiter = Limiter}) ->
@@ -1411,15 +1416,6 @@ foreach_per_queue(F, UAL) ->
                             rabbit_misc:gb_trees_cons(QPid, MsgId, T)
                     end, gb_trees:empty(), UAL),
     rabbit_misc:gb_trees_foreach(F, T).
-
-maybe_limit_queues(OldLimiter, NewLimiter, State) ->
-    case ((not rabbit_limiter:is_active(OldLimiter)) andalso
-          rabbit_limiter:is_active(NewLimiter)) of
-        true  -> Queues = consumer_queues(State#ch.consumer_mapping),
-                 rabbit_amqqueue:activate_limit_all(Queues, self());
-        false -> ok
-    end,
-    State.
 
 consumer_queues(Consumers) ->
     lists:usort([QPid ||
