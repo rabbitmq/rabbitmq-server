@@ -322,8 +322,8 @@ utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
 
 %%----------------------------------------------------------------------------
 
-parse_credit_args(Arguments) ->
-    case rabbit_misc:table_lookup(Arguments, <<"x-credit">>) of
+parse_credit_args(Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
         {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
                             rabbit_misc:table_lookup(T, <<"drain">>)} of
                           {{long, Credit}, {bool, Drain}} -> {Credit, Drain};
