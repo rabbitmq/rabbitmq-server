@@ -31,8 +31,7 @@
 -type(properties_input() ::
         (rabbit_framing:amqp_property_record() | [{atom(), any()}])).
 -type(publish_result() ::
-        ({ok, rabbit_amqqueue:routing_result(), [pid()]}
-         | rabbit_types:error('not_found'))).
+        ({ok, [pid()]} | rabbit_types:error('not_found'))).
 -type(headers() :: rabbit_framing:amqp_table() | 'undefined').
 
 -type(exchange_input() :: (rabbit_types:exchange() | rabbit_exchange:name())).

@@ -2409,7 +2409,7 @@ publish_and_confirm(Q, Payload, Count) ->
                                     Payload),
          Delivery = #delivery{mandatory = false, sender = self(),
                               message = Msg, msg_seq_no = Seq},
-         {routed, _} = rabbit_amqqueue:deliver([Q], Delivery)
+          _QPids = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
 

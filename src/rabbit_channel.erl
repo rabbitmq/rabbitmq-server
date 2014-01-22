@@ -350,10 +350,8 @@ handle_cast(force_event_refresh, State) ->
 
 %% TODO duplication?
 handle_cast({mandatory_received, MsgSeqNo}, State) ->
-    State1 = #ch{mandatory = M} = handle_mandatory(MsgSeqNo, State),
-    Timeout = case M of [] -> hibernate; _ -> 0 end,
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    {noreply, ensure_stats_timer(State1), Timeout};
+    {noreply, ensure_stats_timer(handle_mandatory(MsgSeqNo, State)), hibernate};
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
@@ -1354,7 +1352,9 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
 basic_return(#basic_message{exchange_name = ExchangeName,
                             routing_keys  = [RoutingKey | _CcRoutes],
                             content       = Content},
-             #ch{protocol = Protocol, writer_pid = WriterPid}, Reason) ->
+             State = #ch{protocol = Protocol, writer_pid = WriterPid},
+             Reason) ->
+    ?INCR_STATS([{exchange_stats, ExchangeName, 1}], return_unroutable, State),
     {_Close, ReplyCode, ReplyText} = Protocol:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
            WriterPid,
@@ -1557,8 +1557,6 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                 publish, State1),
     State1.
 
-%% TODO unbreak basic.return stats
-
 process_routing_mandatory(_,     false, _MsgSeqNo, _Msg, State) ->
     State;
 process_routing_mandatory([],    true,  _MsgSeqNo,  Msg, State) ->
@@ -1575,14 +1573,6 @@ process_routing_confirm([],    true,   MsgSeqNo,  XName, State) ->
 process_routing_confirm(QPids, true,   MsgSeqNo,  XName, State) ->
     State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
                                         State#ch.unconfirmed)}.
-
-%% process_routing_result(unroutable, _, XName,  MsgSeqNo, Msg, State) ->
-%%     ok = basic_return(Msg, State, no_route),
-%%     ?INCR_STATS([{exchange_stats, XName, 1}], return_unroutable, State),
-%%     case MsgSeqNo of
-%%         undefined -> State;
-%%         _         -> record_confirms([{MsgSeqNo, XName}], State)
-%%     end.
 
 send_nacks([], State) ->
     State;
