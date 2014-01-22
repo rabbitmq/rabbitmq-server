@@ -153,7 +153,7 @@
                    non_neg_integer(), boolean()) -> 'ok').
 -spec(basic_consume/9 ::
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
-         rabbit_types:ctag(), boolean(), any(), any())
+         rabbit_types:ctag(), boolean(), rabbit_framing:amqp_table(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').

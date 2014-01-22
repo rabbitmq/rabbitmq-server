@@ -67,8 +67,7 @@
 -spec count() -> non_neg_integer().
 -spec unacknowledged_message_count() -> non_neg_integer().
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
-          rabbit_framing:amqp_table(), boolean(),
-          state()) -> state().
+          rabbit_framing:amqp_table(), boolean(), state()) -> state().
 -spec remove(ch(), rabbit_types:ctag(), state()) ->
                     'not_found' | state().
 -spec erase_ch(ch(), state()) ->
@@ -141,19 +140,6 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Args, IsEmpty,
                          ack_required = not NoAck,
                          args         = Args},
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers)}.
-
-parse_credit_args(Args) ->
-    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
-        {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
-                            rabbit_misc:table_lookup(T, <<"drain">>)} of
-                          {{long, C}, {bool, D}} -> {C, drain_mode(D)};
-                          _                      -> none
-                      end;
-        undefined  -> case rabbit_misc:table_lookup(Args, <<"x-prefetch">>) of
-                          {_, Prefetch} -> {Prefetch, auto};
-                          _             -> none
-                      end
-    end.
 
 remove(ChPid, ConsumerTag, State = #state{consumers = Consumers}) ->
     case lookup_ch(ChPid) of
@@ -348,6 +334,19 @@ utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
     use_avg(Active, now_micros() - Since, Avg).
 
 %%----------------------------------------------------------------------------
+
+parse_credit_args(Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
+        {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
+                            rabbit_misc:table_lookup(T, <<"drain">>)} of
+                          {{long, C}, {bool, D}} -> {C, drain_mode(D)};
+                          _                      -> none
+                      end;
+        undefined  -> case rabbit_misc:table_lookup(Args, <<"x-prefetch">>) of
+                          {_, Prefetch} -> {Prefetch, auto};
+                          _             -> none
+                      end
+    end.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
