@@ -20,7 +20,7 @@
 
 -export([publish/4, publish/5, publish/1,
          message/3, message/4, properties/1, prepend_table_header/3,
-         extract_headers/1, map_headers/2, delivery/3, header_routes/1,
+         extract_headers/1, map_headers/2, delivery/4, header_routes/1,
          parse_expiration/1]).
 -export([build_content/2, from_content/1, msg_size/1]).
 
@@ -46,8 +46,8 @@
          properties_input(), body_input()) -> publish_result()).
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
--spec(delivery/3 ::
-        (boolean(), rabbit_types:message(), undefined | integer()) ->
+-spec(delivery/4 ::
+        (boolean(), boolean(), rabbit_types:message(), undefined | integer()) ->
                          rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
@@ -93,10 +93,10 @@ publish(Exchange, RoutingKeyBin, Properties, Body) ->
 %% erlang distributed network.
 publish(X = #exchange{name = XName}, RKey, Mandatory, Props, Body) ->
     Message = message(XName, RKey, properties(Props), Body),
-    publish(X, delivery(Mandatory, Message, undefined));
+    publish(X, delivery(Mandatory, false, Message, undefined));
 publish(XName, RKey, Mandatory, Props, Body) ->
     Message = message(XName, RKey, properties(Props), Body),
-    publish(delivery(Mandatory, Message, undefined)).
+    publish(delivery(Mandatory, false, Message, undefined)).
 
 publish(Delivery = #delivery{
           message = #basic_message{exchange_name = XName}}) ->
@@ -110,8 +110,8 @@ publish(X, Delivery) ->
     DeliveredQPids = rabbit_amqqueue:deliver(Qs, Delivery),
     {ok, DeliveredQPids}.
 
-delivery(Mandatory, Message, MsgSeqNo) ->
-    #delivery{mandatory = Mandatory, sender = self(),
+delivery(Mandatory, Confirmed, Message, MsgSeqNo) ->
+    #delivery{mandatory = Mandatory, confirmed = Confirmed, sender = self(),
               message = Message, msg_seq_no = MsgSeqNo}.
 
 build_content(Properties, BodyBin) when is_binary(BodyBin) ->

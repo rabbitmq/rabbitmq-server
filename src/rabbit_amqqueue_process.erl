@@ -425,9 +425,10 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
     rabbit_misc:gb_trees_foreach(fun rabbit_misc:confirm_to_sender/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
 
-send_or_record_confirm(#delivery{msg_seq_no = undefined}, State) ->
+send_or_record_confirm(#delivery{confirmed  = false}, State) ->
     {never, State};
-send_or_record_confirm(#delivery{sender     = SenderPid,
+send_or_record_confirm(#delivery{confirmed  = true,
+                                 sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
                                    is_persistent = true,
@@ -436,7 +437,8 @@ send_or_record_confirm(#delivery{sender     = SenderPid,
                                   msg_id_to_channel = MTC}) ->
     MTC1 = gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC),
     {eventually, State#q{msg_id_to_channel = MTC1}};
-send_or_record_confirm(#delivery{sender     = SenderPid,
+send_or_record_confirm(#delivery{confirmed  = true,
+                                 sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo}, State) ->
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
