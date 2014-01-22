@@ -348,17 +348,13 @@ handle_cast(force_event_refresh, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     noreply(State);
 
-%% TODO duplication?
-handle_cast({mandatory_received, MsgSeqNo}, State = #ch{confirmed = C}) ->
+handle_cast({mandatory_received, MsgSeqNo}, State) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    Timeout = case C of [] -> hibernate; _ -> 0 end,
-    {noreply, ensure_stats_timer(handle_mandatory(MsgSeqNo, State)), Timeout};
+    noreply_coalesce(handle_mandatory(MsgSeqNo, State));
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
-    State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
-    Timeout = case C of [] -> hibernate; _ -> 0 end,
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    {noreply, ensure_stats_timer(State1), Timeout}.
+    noreply_coalesce(confirm(MsgSeqNos, From, State)).
 
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
@@ -423,6 +419,10 @@ reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
 noreply(NewState) -> {noreply, next_state(NewState), hibernate}.
 
 next_state(State) -> ensure_stats_timer(send_confirms(State)).
+
+noreply_coalesce(State = #ch{confirmed = C}) ->
+    Timeout = case C of [] -> hibernate; _ -> 0 end,
+    {noreply, ensure_stats_timer(State), Timeout}.
 
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #ch.stats_timer, emit_stats).
