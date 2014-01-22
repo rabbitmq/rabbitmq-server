@@ -425,7 +425,7 @@ declare_args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
-     {<<"x-max-length">>,              fun check_max_length_arg/2}].
+     {<<"x-max-length">>,              fun check_non_neg_int_arg/2}].
 
 consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
 
@@ -435,7 +435,7 @@ check_int_arg({Type, _}, _) ->
         false -> {error, {unacceptable_type, Type}}
     end.
 
-check_max_length_arg({Type, Val}, Args) ->
+check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
         ok when Val >= 0 -> ok;
         ok               -> {error, {value_negative, Val}};
