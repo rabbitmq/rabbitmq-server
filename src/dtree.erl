@@ -124,9 +124,9 @@ take_all(SK, {P, S}) ->
 %% Drop all entries for the given primary key (which does not have to exist).
 drop(PK, {P, S}) ->
     case gb_trees:lookup(PK, P) of
-        none         -> {P, S};
-        {value, SKS} -> {gb_trees:delete(PK, P),
-                         prune(SKS, gb_sets:singleton(PK), S)}
+        none               -> {P, S};
+        {value, {SKS, _V}} -> {gb_trees:delete(PK, P),
+                               prune(SKS, gb_sets:singleton(PK), S)}
     end.
 
 is_defined(SK, {_P, S}) -> gb_trees:is_defined(SK, S).
