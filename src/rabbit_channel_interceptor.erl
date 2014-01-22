@@ -32,7 +32,7 @@
 
 -callback description() -> [proplists:property()].
 
--callback intercept(original_method()) ->
+-callback intercept(original_method(), rabbit_types:vhost()) ->
     rabbit_types:ok_or_error2(processed_method(), any()).
 
 %% Whether the interceptor wishes to intercept the amqp method
@@ -43,7 +43,7 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {intercept, 1}, {applies_to, 1}];
+    [{description, 0}, {intercept, 2}, {applies_to, 1}];
 behaviour_info(_Other) ->
     undefined.
 
