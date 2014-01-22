@@ -5,7 +5,7 @@
 
 -behaviour(rabbit_channel_interceptor).
 
--export([description/0, intercept/1, applies_to/1]).
+-export([description/0, intercept/2, applies_to/1]).
 
 -import(rabbit_sharding_util, [a2b/1]).
 
@@ -19,15 +19,15 @@
 description() ->
     [{description, <<"Sharding interceptor for channel methods">>}].
 
-intercept(#'basic.consume'{queue = QName} = Method) ->
+intercept(#'basic.consume'{queue = QName} = Method, _Vhost) ->
     {ok, QName2} = queue_name(QName),
     {ok, Method#'basic.consume'{queue = QName2}};
 
-intercept(#'basic.get'{queue = QName} = Method) ->
+intercept(#'basic.get'{queue = QName} = Method, _Vhost) ->
     {ok, QName2} = queue_name(QName),
     {ok, Method#'basic.get'{queue = QName2}};
 
-intercept(#'queue.delete'{queue = QName} = Method) ->
+intercept(#'queue.delete'{queue = QName} = Method, _Vhost) ->
     case is_sharded(QName) of
         true ->
             {error, rabbit_misc:format("Can't delete sharded queue: ~p", [QName])};
@@ -35,7 +35,7 @@ intercept(#'queue.delete'{queue = QName} = Method) ->
             {ok, Method}
     end;
 
-intercept(#'queue.declare'{queue = QName} = Method) ->
+intercept(#'queue.declare'{queue = QName} = Method, _Vhost) ->
     case is_sharded(QName) of
         true ->
             {error, rabbit_misc:format("Can't declare sharded queue: ~p", [QName])};
@@ -43,7 +43,7 @@ intercept(#'queue.declare'{queue = QName} = Method) ->
             {ok, Method}
     end;
 
-intercept(#'queue.bind'{queue = QName} = Method) ->
+intercept(#'queue.bind'{queue = QName} = Method, _Vhost) ->
     case is_sharded(QName) of
         true ->
             {error, rabbit_misc:format("Can't bind sharded queue: ~p", [QName])};
@@ -51,7 +51,7 @@ intercept(#'queue.bind'{queue = QName} = Method) ->
             {ok, Method}
     end;
 
-intercept(#'queue.unbind'{queue = QName} = Method) ->
+intercept(#'queue.unbind'{queue = QName} = Method, _Vhost) ->
     case is_sharded(QName) of
         true ->
             {error, rabbit_misc:format("Can't unbind sharded queue: ~p", [QName])};
@@ -59,7 +59,7 @@ intercept(#'queue.unbind'{queue = QName} = Method) ->
             {ok, Method}
     end;
 
-intercept(#'queue.purge'{queue = QName} = Method) ->
+intercept(#'queue.purge'{queue = QName} = Method, _Vhost) ->
     case is_sharded(QName) of
         true ->
             {error, rabbit_misc:format("Can't purge sharded queue: ~p", [QName])};
