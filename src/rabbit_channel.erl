@@ -1302,7 +1302,7 @@ reject(DeliveryTag, Requeue, Multiple,
 reject(Requeue, Acked, Limiter) ->
     foreach_per_queue(
       fun (QPid, MsgIds) ->
-              rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
+              rabbit_amqqueue:reject(QPid, Requeue, MsgIds, self())
       end, Acked),
     ok = notify_limiter(Limiter, Acked).
 
