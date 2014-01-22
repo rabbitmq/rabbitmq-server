@@ -27,7 +27,7 @@
 -export([force_event_refresh/0, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/9, basic_cancel/4, notify_decorators/1]).
--export([notify_sent/2, notify_sent_queue_down/1, resume/2, flush_all/2]).
+-export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
@@ -113,10 +113,9 @@
                     -> [rabbit_types:infos()]).
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
--spec(consumers/1 ::
-        (rabbit_types:amqqueue())
-        -> [{pid(), rabbit_types:ctag(), boolean(),
-             rabbit_framing:amqp_table()}]).
+-spec(consumers/1 :: (rabbit_types:amqqueue())
+                     -> [{pid(), rabbit_types:ctag(), boolean(),
+                          rabbit_framing:amqp_table()}]).
 -spec(consumer_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(consumers_all/1 ::
         (rabbit_types:vhost())
@@ -162,7 +161,6 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(resume/2 :: (pid(), pid()) -> 'ok').
--spec(flush_all/2 :: (qpids(), pid()) -> 'ok').
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit() |
@@ -606,8 +604,6 @@ notify_sent_queue_down(QPid) ->
     ok.
 
 resume(QPid, ChPid) -> delegate:cast(QPid, {resume, ChPid}).
-
-flush_all(QPids, ChPid) -> delegate:cast(QPids, {flush, ChPid}).
 
 internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
