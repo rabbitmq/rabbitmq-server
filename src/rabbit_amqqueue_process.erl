@@ -1055,7 +1055,7 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
 handle_cast({ack, AckTags, CTag, ChPid}, State) ->
     noreply(ack(AckTags, CTag, ChPid, State));
 
-handle_cast({reject, true, AckTags, CTag, ChPid}, State) ->
+handle_cast({reject, true,  AckTags, CTag, ChPid}, State) ->
     noreply(requeue(AckTags, CTag, ChPid, State));
 
 handle_cast({reject, false, AckTags, CTag, ChPid}, State) ->
