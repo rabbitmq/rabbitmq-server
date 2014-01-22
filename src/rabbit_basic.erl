@@ -109,8 +109,8 @@ publish(X, Delivery) ->
     DeliveredQPids = rabbit_amqqueue:deliver(Qs, Delivery),
     {ok, DeliveredQPids}.
 
-delivery(Mandatory, Confirmed, Message, MsgSeqNo) ->
-    #delivery{mandatory = Mandatory, confirmed = Confirmed, sender = self(),
+delivery(Mandatory, Confirm, Message, MsgSeqNo) ->
+    #delivery{mandatory = Mandatory, confirm = Confirm, sender = self(),
               message = Message, msg_seq_no = MsgSeqNo}.
 
 build_content(Properties, BodyBin) when is_binary(BodyBin) ->

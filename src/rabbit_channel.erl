@@ -1521,7 +1521,7 @@ deliver_to_queues({#delivery{message    = #basic_message{exchange_name = XName},
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
                                         mandatory  = Mandatory,
-                                        confirmed  = Confirmed,
+                                        confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
                    DelQNames}, State = #ch{queue_names    = QNames,
                                            queue_monitors = QMons}) ->
@@ -1546,7 +1546,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                              end, pmon:monitor(QPid, QMons0)}
                     end, {QNames, pmon:monitor_all(DeliveredQPids, QMons)}, Qs),
     State1 = process_routing_confirm(
-               DeliveredQPids, Confirmed, MsgSeqNo, XName,
+               DeliveredQPids, Confirm, MsgSeqNo, XName,
                process_routing_mandatory(
                  DeliveredQPids, Mandatory, MsgSeqNo, Message,
                  State#ch{queue_names    = QNames1,

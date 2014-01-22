@@ -2408,7 +2408,7 @@ publish_and_confirm(Q, Payload, Count) ->
                                     <<>>, #'P_basic'{delivery_mode = 2},
                                     Payload),
          Delivery = #delivery{mandatory = false, sender = self(),
-                              message = Msg, msg_seq_no = Seq},
+                              confirm = true, message = Msg, msg_seq_no = Seq},
           _QPids = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
