@@ -707,13 +707,6 @@ deliver([], _Delivery, _Flow) ->
     [];
 
 deliver(Qs, Delivery, Flow) ->
-    %% TODO simplify?
-    %% optimisation: when Mandatory = false, rabbit_amqqueue:deliver
-    %% will deliver the message to the queue process asynchronously,
-    %% and return true, which means all the QPids will always be
-    %% returned. It is therefore safe to use a fire-and-forget cast
-    %% here and return the QPids - the semantics is preserved. This
-    %% scales much better than the case below.
     {MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
     case Flow of
