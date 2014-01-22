@@ -352,9 +352,10 @@ handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
     noreply_coalesce(State#ch{mandatory = dtree:drop(MsgSeqNo, Mand)});
 
-handle_cast({confirm, MsgSeqNos, From}, State) ->
+handle_cast({confirm, MsgSeqNos, QPid}, State = #ch{unconfirmed = UC}) ->
+    {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    noreply_coalesce(confirm(MsgSeqNos, From, State)).
+    noreply_coalesce(record_confirms(MXs, State#ch{unconfirmed = UC1})).
 
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
@@ -624,12 +625,6 @@ record_confirms([], State) ->
     State;
 record_confirms(MXs, State = #ch{confirmed = C}) ->
     State#ch{confirmed = [MXs | C]}.
-
-confirm([], _QPid, State) ->
-    State;
-confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
-    {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
-    record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     %% Don't leave "starting" as the state for 5s. TODO is this TRTTD?
