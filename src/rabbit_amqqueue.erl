@@ -26,7 +26,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
--export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
+-export([basic_get/4, basic_consume/9, basic_cancel/4, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
 -export([on_node_down/1]).
@@ -150,9 +150,9 @@
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(credit/5 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(),
                    non_neg_integer(), boolean()) -> 'ok').
--spec(basic_consume/10 ::
+-spec(basic_consume/9 ::
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
-         rabbit_types:ctag(), boolean(), {non_neg_integer(), boolean()} | 'none', any(), any())
+         rabbit_types:ctag(), boolean(), rabbit_framing:amqp_table(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
@@ -570,13 +570,11 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck, LimiterPid}).
 
-basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid,
-              LimiterPid, LimiterActive,
-              ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg) ->
-    ok = check_consume_arguments(QName, OtherArgs),
+basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid, LimiterPid,
+              LimiterActive, ConsumerTag, ExclusiveConsume, Args, OkMsg) ->
+    ok = check_consume_arguments(QName, Args),
     delegate:call(QPid, {basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-                         ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs,
-                         OkMsg}).
+                         ConsumerTag, ExclusiveConsume, Args, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     delegate:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
