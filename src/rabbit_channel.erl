@@ -1571,10 +1571,8 @@ process_routing_mandatory(QPids, true,   MsgSeqNo,  Msg, State) ->
 process_routing_confirm(_,     false, _MsgSeqNo, _XName, State) ->
     State;
 process_routing_confirm([],    true,   MsgSeqNo,  XName, State) ->
-    exit(bang),
     record_confirms([{MsgSeqNo, XName}], State);
 process_routing_confirm(QPids, true,   MsgSeqNo,  XName, State) ->
-    exit(bang),
     State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
                                         State#ch.unconfirmed)}.
 
