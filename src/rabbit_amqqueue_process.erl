@@ -1081,10 +1081,6 @@ handle_cast({activate_limit, ChPid}, State) ->
     noreply(possibly_unblock(rabbit_queue_consumers:activate_limit_fun(),
                              ChPid, State));
 
-handle_cast({flush, ChPid}, State) ->
-    ok = rabbit_channel:flushed(ChPid, self()),
-    noreply(State);
-
 handle_cast({set_ram_duration_target, Duration},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     BQS1 = BQ:set_ram_duration_target(Duration, BQS),

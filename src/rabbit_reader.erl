@@ -285,8 +285,11 @@ recvloop(Deb, Buf, BufLen, State = #v1{connection_state = {become, F}}) ->
     throw({become, F(Deb, Buf, BufLen, State)});
 recvloop(Deb, Buf, BufLen, State = #v1{sock = Sock, recv_len = RecvLen})
   when BufLen < RecvLen ->
-    ok = rabbit_net:setopts(Sock, [{active, once}]),
-    mainloop(Deb, Buf, BufLen, State#v1{pending_recv = true});
+    case rabbit_net:setopts(Sock, [{active, once}]) of
+        ok              -> mainloop(Deb, Buf, BufLen,
+                                    State#v1{pending_recv = true});
+        {error, Reason} -> stop(Reason, State)
+    end;
 recvloop(Deb, [B], _BufLen, State) ->
     {Rest, State1} = handle_input(State#v1.callback, B, State),
     recvloop(Deb, [Rest], size(Rest), State1);
@@ -312,11 +315,9 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock}) ->
         closed when State#v1.connection_state =:= closed ->
             ok;
         closed ->
-            maybe_emit_stats(State),
-            throw(connection_closed_abruptly);
+            stop(closed, State);
         {error, Reason} ->
-            maybe_emit_stats(State),
-            throw({inet_error, Reason});
+            stop(Reason, State);
         {other, {system, From, Request}} ->
             sys:handle_system_msg(Request, From, State#v1.parent,
                                   ?MODULE, Deb, {Buf, BufLen, State});
@@ -326,6 +327,11 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock}) ->
                 NewState -> recvloop(Deb, Buf, BufLen, NewState)
             end
     end.
+
+stop(closed, State) -> maybe_emit_stats(State),
+                       throw(connection_closed_abruptly);
+stop(Reason, State) -> maybe_emit_stats(State),
+                       throw({inet_error, Reason}).
 
 handle_other({conserve_resources, Source, Conserve},
              State = #v1{throttle = Throttle =
