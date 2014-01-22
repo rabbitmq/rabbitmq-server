@@ -267,13 +267,14 @@ handle_call(_Request, _From, State) ->
     noreply(State).
 
 handle_cast({method, Method, Content, Flow},
-            State = #ch{reader_pid = Reader}) ->
+            State = #ch{reader_pid   = Reader, 
+                        virtual_host = VHost}) ->
     case Flow of
         flow   -> credit_flow:ack(Reader);
         noflow -> ok
     end,
     try handle_method(rabbit_channel_interceptor:intercept_method(
-                        expand_shortcuts(Method, State)),
+                        expand_shortcuts(Method, State), VHost),
                       Content, State) of
         {reply, Reply, NewState} ->
             ok = send(Reply, NewState),
