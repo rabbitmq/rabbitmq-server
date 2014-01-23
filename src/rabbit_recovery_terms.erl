@@ -67,11 +67,18 @@ upgrade_recovery_terms() ->
     open_table(),
     try
         QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
-        DotFiles = filelib:fold_files(QueuesDir, "clean.dot", true,
+        DotFiles = filelib:fold_files(QueuesDir, "^clean\.dot$", false,
                                       fun(F, Acc) -> [F|Acc] end, []),
         [begin
-             {ok, Terms} = rabbit_file:read_term_file(File),
-             ok = store(filename:basename(filename:dirname(File)), Terms),
+             case rabbit_file:read_term_file(File) of
+                 {ok, Terms} ->
+                     rabbit_log:info("Read ~s ok~n", [File]),
+                     ok = store(filename:basename(filename:dirname(File)),
+                                Terms);
+                 Err ->
+                     rabbit_log:warning("Error reading recovery file ~s: ~p~n",
+                                        [File, Err])
+             end,
              case file:delete(File) of
                  {error, E} ->
                      rabbit_log:warning("Unable to delete recovery index"
@@ -82,7 +89,7 @@ upgrade_recovery_terms() ->
          end || File <- DotFiles],
         ok
     after
-        flush()
+        close_table()
     end.
 
 start_link() -> gen_server:start_link(?MODULE, [], []).
@@ -101,8 +108,7 @@ handle_cast(Msg, State) -> {stop, {unexpected_cast, Msg}, State}.
 handle_info(_Info, State) -> {noreply, State}.
 
 terminate(_Reason, _State) ->
-    ok = flush(),
-    ok = dets:close(?MODULE).
+    close_table().
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -116,3 +122,8 @@ open_table() ->
                                        {auto_save, infinity}]).
 
 flush() -> dets:sync(?MODULE).
+
+close_table() ->
+    ok = flush(),
+    ok = dets:close(?MODULE).
+
