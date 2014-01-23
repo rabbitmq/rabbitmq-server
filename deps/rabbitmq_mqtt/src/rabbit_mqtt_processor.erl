@@ -54,7 +54,8 @@ process_request(?CONNECT,
                                           password   = Password,
                                           proto_ver  = ProtoVersion,
                                           clean_sess = CleanSess,
-                                          client_id  = ClientId } = Var}, PState) ->
+                                          client_id  = ClientId,
+                                          keep_alive = Keepalive} = Var}, PState) ->
     {ReturnCode, PState1} =
         case {ProtoVersion =:= ?MQTT_PROTO_MAJOR,
               rabbit_mqtt_util:valid_client_id(ClientId)} of
@@ -77,6 +78,7 @@ process_request(?CONNECT,
                                 Prefetch = rabbit_mqtt_util:env(prefetch),
                                 #'basic.qos_ok'{} = amqp_channel:call(
                                   Ch, #'basic.qos'{prefetch_count = Prefetch}),
+                                rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
                                 {?CONNACK_ACCEPT,
                                  maybe_clean_sess(
                                    PState #proc_state{ will_msg   = make_will_msg(Var),
@@ -320,9 +322,9 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
 
 process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
                                              socket    = Sock }) ->
-     VHost = rabbit_mqtt_util:env(vhost),
+     {VHost, UsernameBin} = get_vhost_username(UserBin),
      case amqp_connection:start(#amqp_params_direct{
-                                  username     = UserBin,
+                                  username     = UsernameBin,
                                   password     = PassBin,
                                   virtual_host = VHost,
                                   adapter_info = adapter_info(Sock)}) of
@@ -338,6 +340,13 @@ process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
                                 [binary_to_list(UserBin)]),
              ?CONNACK_AUTH
       end.
+
+get_vhost_username(UserBin) ->
+    %% split at the last colon, disallowing colons in username
+    case re:split(UserBin, ":(?!.*?:)") of
+        [Vhost, UserName] -> {Vhost,  UserName};
+        [UserBin]         -> {rabbit_mqtt_util:env(vhost), UserBin}
+    end.
 
 creds(User, Pass) ->
     DefaultUser = rabbit_mqtt_util:env(default_user),

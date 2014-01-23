@@ -20,6 +20,8 @@
                       conn_name,
                       await_recv,
                       connection_state,
+                      keepalive,
+                      keepalive_sup,
                       conserve,
                       parse_state,
                       proc_state }).
