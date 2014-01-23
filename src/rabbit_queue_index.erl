@@ -19,7 +19,7 @@
 -export([init/2, recover/5,
          terminate/2, delete_and_terminate/1,
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
-         read/3, next_segment_boundary/1, bounds/1, recover/1]).
+         read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0]).
 
@@ -217,7 +217,7 @@
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
+-spec(start/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
@@ -342,8 +342,8 @@ bounds(State = #qistate { segments = Segments }) ->
         end,
     {LowSeqId, NextSeqId, State}.
 
-recover(DurableQueueNames) ->
-    ok = rabbit_recovery_terms:recover(),
+start(DurableQueueNames) ->
+    ok = rabbit_recovery_terms:start(),
     {DurableTerms, DurableDirectories} =
         lists:foldl(
           fun(QName, {RecoveryTerms, ValidDirectories}) ->
@@ -368,6 +368,8 @@ recover(DurableQueueNames) ->
     %% which come back from start/1 are in the same order as DurableQueueNames
     OrderedTerms = lists:reverse(DurableTerms),
     {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+
+stop() -> rabbit_recovery_terms:stop().
 
 all_queue_directory_names(Dir) ->
     case rabbit_file:list_dir(Dir) of

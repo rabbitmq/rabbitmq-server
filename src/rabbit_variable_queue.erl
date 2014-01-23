@@ -389,7 +389,7 @@
 %%----------------------------------------------------------------------------
 
 start(DurableQueues) ->
-    {AllTerms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
+    {AllTerms, StartFunState} = rabbit_queue_index:start(DurableQueues),
     start_msg_store(
       [Ref || Terms <- AllTerms,
               Terms /= non_clean_shutdown,
@@ -400,7 +400,9 @@ start(DurableQueues) ->
       StartFunState),
     {ok, AllTerms}.
 
-stop() -> stop_msg_store().
+stop() ->
+    ok = stop_msg_store(),
+    ok = rabbit_queue_index:stop().
 
 start_msg_store(Refs, StartFunState) ->
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,

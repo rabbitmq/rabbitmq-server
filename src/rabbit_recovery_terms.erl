@@ -21,7 +21,7 @@
 
 -behaviour(gen_server).
 
--export([recover/0, store/2, read/1, clear/0]).
+-export([start/0, stop/0, store/2, read/1, clear/0]).
 
 -export([upgrade_recovery_terms/0, start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -33,7 +33,8 @@
 
 -ifdef(use_specs).
 
--spec(recover() -> 'ok').
+-spec(start() -> rabbit_types:ok_or_error(term())).
+-spec(stop() -> rabbit_types:ok_or_error(term())).
 -spec(store(file:filename(), term()) -> rabbit_types:ok_or_error(term())).
 -spec(read(file:filename()) -> rabbit_types:ok_or_error2(term(), not_found)).
 -spec(clear() -> 'ok').
@@ -44,12 +45,9 @@
 
 -define(SERVER, ?MODULE).
 
-recover() ->
-    case rabbit_sup:start_child(?MODULE) of
-        ok                            -> ok;
-        {error, {already_started, _}} -> ok;
-        {error, _}=Err                -> Err
-    end.
+start() -> rabbit_sup:start_child(?MODULE).
+
+stop() -> rabbit_sup:stop_child(?MODULE).
 
 store(DirBaseName, Terms) -> dets:insert(?MODULE, {DirBaseName, Terms}).
 
