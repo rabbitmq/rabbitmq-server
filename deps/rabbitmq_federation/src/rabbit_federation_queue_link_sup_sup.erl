@@ -63,7 +63,7 @@ init([]) ->
 %% entire queue around rather than just take its name since we will
 %% want to know its policy to determine how to federate it, and its
 %% immutable properties in case we want to redeclare it upstream. We
-%% don't just take its anem and look it up again since that would
+%% don't just take its name and look it up again since that would
 %% introduce race conditions when policies change frequently.  Note
 %% that since we take down all the links and start again when policies
 %% change, the policy will always be correct, so we don't clear it out
