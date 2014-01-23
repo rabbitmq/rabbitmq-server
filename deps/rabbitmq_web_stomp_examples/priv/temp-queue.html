@@ -82,7 +82,7 @@
           id = client.subscribe("/queue/test", function(m) {
             // reply by sending the reversed text to the temp queue defined in the "reply-to" header
             var reversedText = m.body.split("").reverse().join("");
-            client.send(m.headers['reply-to'], {}, reversedText);
+            client.send(m.headers['reply-to'], {"content-type":"text/plain"}, reversedText);
           });
       };
       var on_error =  function() {

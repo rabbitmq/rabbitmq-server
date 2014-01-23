@@ -89,7 +89,7 @@
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {
-          client.send('/topic/test', {}, data);
+          client.send('/topic/test', {"content-type":"text/plain"}, data);
       });
       var on_connect = function(x) {
           id = client.subscribe("/topic/test", function(d) {
