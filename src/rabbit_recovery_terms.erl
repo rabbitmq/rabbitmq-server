@@ -45,11 +45,8 @@
 -define(SERVER, ?MODULE).
 
 recover() ->
-    case supervisor:start_child(rabbit_sup,
-                                {?SERVER, {?MODULE, start_link, []},
-                                 permanent, 16#ffffffff, worker,
-                                 [?SERVER]}) of
-        {ok, _}                       -> ok;
+    case rabbit_sup:start_child(?MODULE) of
+        ok                            -> ok;
         {error, {already_started, _}} -> ok;
         {error, _}=Err                -> Err
     end.

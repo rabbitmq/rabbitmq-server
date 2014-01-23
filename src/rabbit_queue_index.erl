@@ -343,7 +343,7 @@ bounds(State = #qistate { segments = Segments }) ->
     {LowSeqId, NextSeqId, State}.
 
 recover(DurableQueueNames) ->
-    rabbit_recovery_terms:recover(),
+    ok = rabbit_recovery_terms:recover(),
     {DurableTerms, DurableDirectories} =
         lists:foldl(
           fun(QName, {RecoveryTerms, ValidDirectories}) ->
