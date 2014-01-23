@@ -69,18 +69,7 @@ params_to_string(#upstream_params{safe_uri = SafeURI,
     print("~s on ~s", [rabbit_misc:rs(r(XorQ)), SafeURI]).
 
 remove_credentials(URI) ->
-    Props = uri_parser:parse(binary_to_list(URI),
-                             [{host, undefined}, {path, undefined},
-                              {port, undefined}, {'query', []}]),
-    PortPart = case pget(port, Props) of
-                   undefined -> "";
-                   Port      -> rabbit_misc:format(":~B", [Port])
-               end,
-    PGet = fun(K, P) -> case pget(K, P) of undefined -> ""; R -> R end end,
-    list_to_binary(
-      rabbit_misc:format(
-        "~s://~s~s~s", [pget(scheme, Props), PGet(host, Props),
-                        PortPart,            PGet(path, Props)])).
+    list_to_binary(amqp_uri:remove_credentials(binary_to_list(URI))).
 
 to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
     random:seed(now()),
