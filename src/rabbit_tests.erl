@@ -1172,7 +1172,7 @@ test_server_status() ->
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, Limiter, false, <<"ctag">>, true, none, [], undefined),
+           Q, true, Ch, Limiter, false, <<"ctag">>, true, [], undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -1262,7 +1262,7 @@ test_writer(Pid) ->
 test_channel() ->
     Me = self(),
     Writer = spawn(fun () -> test_writer(Me) end),
-    {ok, Limiter} = rabbit_limiter:start_link(),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
                  user(<<"guest">>), <<"/">>, [], Me, Limiter),
@@ -2815,7 +2815,7 @@ test_queue_recover() ->
     end,
     rabbit_amqqueue:stop(),
     rabbit_amqqueue:start(rabbit_amqqueue:recover()),
-    {ok, Limiter} = rabbit_limiter:start_link(),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
     rabbit_amqqueue:with_or_die(
       QName,
       fun (Q1 = #amqqueue { pid = QPid1 }) ->
@@ -2842,7 +2842,7 @@ test_variable_queue_delete_msg_store_files_callback() ->
 
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 
-    {ok, Limiter} = rabbit_limiter:start_link(),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
 
     CountMinusOne = Count - 1,
     {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}} =
