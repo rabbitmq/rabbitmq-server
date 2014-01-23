@@ -188,6 +188,10 @@ start_link() ->
     %% mirrored_supervisor to maintain the uniqueness of this process.
     case gen_server2:start_link(?MODULE, [], []) of
         {ok, Pid} -> yes = global:re_register_name(?MODULE, Pid),
+                     %% For debugging it's helpful to locally register the
+                     %% name too since that shows up in places global names
+                     %% don't.
+                     register(?MODULE, Pid),
                      rabbit:force_event_refresh(),
                      {ok, Pid};
         Else      -> Else
@@ -436,7 +440,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:timestamp/1, [idle_since]},
-                  {fun rabbit_mgmt_format:queue_status/1, [status]}],
+                  {fun rabbit_mgmt_format:queue_state/1, [state]}],
                  [messages, messages_ready, messages_unacknowledged], State);
 
 handle_event(Event = #event{type = queue_deleted,
