@@ -425,9 +425,10 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
     rabbit_misc:gb_trees_foreach(fun rabbit_misc:confirm_to_sender/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
 
-send_or_record_confirm(#delivery{msg_seq_no = undefined}, State) ->
+send_or_record_confirm(#delivery{confirm    = false}, State) ->
     {never, State};
-send_or_record_confirm(#delivery{sender     = SenderPid,
+send_or_record_confirm(#delivery{confirm    = true,
+                                 sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
                                    is_persistent = true,
@@ -436,10 +437,18 @@ send_or_record_confirm(#delivery{sender     = SenderPid,
                                   msg_id_to_channel = MTC}) ->
     MTC1 = gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC),
     {eventually, State#q{msg_id_to_channel = MTC1}};
-send_or_record_confirm(#delivery{sender     = SenderPid,
+send_or_record_confirm(#delivery{confirm    = true,
+                                 sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo}, State) ->
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
+
+send_mandatory(#delivery{mandatory = false}) ->
+    ok;
+send_mandatory(#delivery{mandatory  = true,
+                         sender     = SenderPid,
+                         msg_seq_no = MsgSeqNo}) ->
+    gen_server2:cast(SenderPid, {mandatory_received, MsgSeqNo}).
 
 discard(#delivery{sender     = SenderPid,
                   msg_seq_no = MsgSeqNo,
@@ -496,6 +505,7 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
 deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
                    Delivered, State = #q{backing_queue       = BQ,
                                          backing_queue_state = BQS}) ->
+    send_mandatory(Delivery), %% must do this before confirms
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
     Props = message_properties(Message, Confirm, State),
     {IsDuplicate, BQS1} = BQ:is_duplicate(Message, BQS),
@@ -884,11 +894,6 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State = #q{consumers = Consumers}) ->
     reply(rabbit_queue_consumers:all(Consumers), State);
 
-handle_call({deliver, Delivery, Delivered}, From, State) ->
-    %% Synchronous, "mandatory" deliver mode.
-    gen_server2:reply(From, ok),
-    noreply(deliver_or_enqueue(Delivery, Delivered, State));
-
 handle_call({notify_down, ChPid}, _From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
     %% are no longer visible by the time we send a response to the
@@ -1040,7 +1045,6 @@ handle_cast({run_backing_queue, Mod, Fun},
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
             State = #q{senders = Senders}) ->
-    %% Asynchronous, non-"mandatory" deliver mode.
     Senders1 = case Flow of
                    flow   -> credit_flow:ack(Sender),
                              pmon:monitor(Sender, Senders);

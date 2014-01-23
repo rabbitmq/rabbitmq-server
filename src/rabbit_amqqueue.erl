@@ -51,7 +51,7 @@
 
 -ifdef(use_specs).
 
--export_type([name/0, qmsg/0, routing_result/0]).
+-export_type([name/0, qmsg/0]).
 
 -type(name() :: rabbit_types:r('queue')).
 -type(qpids() :: [pid()]).
@@ -61,7 +61,6 @@
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(routing_result() :: 'routed' | 'unroutable').
 -type(queue_or_absent() :: rabbit_types:amqqueue() |
                            {'absent', rabbit_types:amqqueue()}).
 -type(not_found_or_absent() :: 'not_found' |
@@ -138,9 +137,9 @@
 -spec(purge/1 :: (rabbit_types:amqqueue()) -> qlen()).
 -spec(forget_all_durable/1 :: (node()) -> 'ok').
 -spec(deliver/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
-                        {routing_result(), qpids()}).
+                        qpids()).
 -spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
-                             {routing_result(), qpids()}).
+                             qpids()).
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
@@ -698,17 +697,11 @@ pseudo_queue(QueueName, Pid) ->
               pid          = Pid,
               slave_pids   = []}.
 
-deliver([], #delivery{mandatory = false}, _Flow) ->
+deliver([], _Delivery, _Flow) ->
     %% /dev/null optimisation
-    {routed, []};
+    [];
 
-deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
-    %% optimisation: when Mandatory = false, rabbit_amqqueue:deliver
-    %% will deliver the message to the queue process asynchronously,
-    %% and return true, which means all the QPids will always be
-    %% returned. It is therefore safe to use a fire-and-forget cast
-    %% here and return the QPids - the semantics is preserved. This
-    %% scales much better than the case below.
+deliver(Qs, Delivery, Flow) ->
     {MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
     case Flow of
@@ -725,19 +718,7 @@ deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
     SMsg = {deliver, Delivery, true,  Flow},
     delegate:cast(MPids, MMsg),
     delegate:cast(SPids, SMsg),
-    {routed, QPids};
-
-deliver(Qs, Delivery, _Flow) ->
-    {MPids, SPids} = qpids(Qs),
-    %% see comment above
-    MMsg = {deliver, Delivery, false},
-    SMsg = {deliver, Delivery, true},
-    {MRouted, _} = delegate:call(MPids, MMsg),
-    {SRouted, _} = delegate:call(SPids, SMsg),
-    case MRouted ++ SRouted of
-        [] -> {unroutable, []};
-        R  -> {routed,     [QPid || {QPid, ok} <- R]}
-    end.
+    QPids.
 
 qpids([]) -> {[], []}; %% optimisation
 qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[QPid], SPids}; %% opt

@@ -38,7 +38,7 @@
              queue_names, queue_monitors, consumer_mapping,
              queue_consumers, delivering_queues,
              queue_collector_pid, stats_timer, confirm_enabled, publish_seqno,
-             unconfirmed, confirmed, capabilities, trace_state}).
+             unconfirmed, confirmed, mandatory, capabilities, trace_state}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -214,6 +214,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 publish_seqno           = 1,
                 unconfirmed             = dtree:empty(),
                 confirmed               = [],
+                mandatory               = dtree:empty(),
                 capabilities            = Capabilities,
                 trace_state             = rabbit_trace:init(VHost)},
     State1 = rabbit_event:init_stats_timer(State, #ch.stats_timer),
@@ -232,8 +233,9 @@ prioritise_call(Msg, _From, _Len, _State) ->
 
 prioritise_cast(Msg, _Len, _State) ->
     case Msg of
-        {confirm, _MsgSeqNos, _QPid} -> 5;
-        _                            -> 0
+        {confirm,            _MsgSeqNos, _QPid} -> 5;
+        {mandatory_received, _MsgSeqNo,  _QPid} -> 5;
+        _                                       -> 0
     end.
 
 prioritise_info(Msg, _Len, _State) ->
@@ -336,11 +338,14 @@ handle_cast(force_event_refresh, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     noreply(State);
 
-handle_cast({confirm, MsgSeqNos, From}, State) ->
-    State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
-    Timeout = case C of [] -> hibernate; _ -> 0 end,
+handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    {noreply, ensure_stats_timer(State1), Timeout}.
+    noreply_coalesce(State#ch{mandatory = dtree:drop(MsgSeqNo, Mand)});
+
+handle_cast({confirm, MsgSeqNos, QPid}, State = #ch{unconfirmed = UC}) ->
+    {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
+    %% NB: don't call noreply/1 since we don't want to send confirms.
+    noreply_coalesce(record_confirms(MXs, State#ch{unconfirmed = UC1})).
 
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
@@ -404,6 +409,10 @@ reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
 noreply(NewState) -> {noreply, next_state(NewState), hibernate}.
 
 next_state(State) -> ensure_stats_timer(send_confirms(State)).
+
+noreply_coalesce(State = #ch{confirmed = C}) ->
+    Timeout = case C of [] -> hibernate; _ -> 0 end,
+    {noreply, ensure_stats_timer(State), Timeout}.
 
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #ch.stats_timer, emit_stats).
@@ -592,12 +601,6 @@ record_confirms([], State) ->
 record_confirms(MXs, State = #ch{confirmed = C}) ->
     State#ch{confirmed = [MXs | C]}.
 
-confirm([], _QPid, State) ->
-    State;
-confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
-    {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
-    record_confirms(MXs, State#ch{unconfirmed = UC1}).
-
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     %% Don't leave "starting" as the state for 5s. TODO is this TRTTD?
     State1 = State#ch{state = running},
@@ -670,16 +673,18 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         rabbit_binary_parser:ensure_content_decoded(Content),
     check_user_id_header(Props, State),
     check_expiration_header(Props),
+    DoConfirm = Tx =/= none orelse ConfirmEnabled,
     {MsgSeqNo, State1} =
-        case {Tx, ConfirmEnabled} of
-            {none, false} -> {undefined, State};
-            {_, _}        -> SeqNo = State#ch.publish_seqno,
-                             {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
+        case DoConfirm orelse Mandatory of
+            false -> {undefined, State};
+            true  -> SeqNo = State#ch.publish_seqno,
+                     {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
             rabbit_trace:tap_in(Message, TraceState),
-            Delivery = rabbit_basic:delivery(Mandatory, Message, MsgSeqNo),
+            Delivery = rabbit_basic:delivery(
+                         Mandatory, DoConfirm, Message, MsgSeqNo),
             QNames = rabbit_exchange:route(Exchange, Delivery),
             DQ = {Delivery, QNames},
             {noreply, case Tx of
@@ -1204,12 +1209,17 @@ monitor_delivering_queue(NoAck, QPid, QName,
                                      false -> sets:add_element(QPid, DQ)
                                  end}.
 
-handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
+handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
+                                                       mandatory   = Mand}) ->
+    {MMsgs, Mand1} = dtree:take(QPid, Mand),
+    [basic_return(Msg, State, no_route) || {_, Msg} <- MMsgs],
+    State1 = State#ch{mandatory = Mand1},
     case rabbit_misc:is_abnormal_exit(Reason) of
         true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
-                 send_nacks(MXs, State#ch{unconfirmed = UC1});
+                 send_nacks(MXs, State1#ch{unconfirmed = UC1});
         false -> {MXs, UC1} = dtree:take(QPid, UC),
-                 record_confirms(MXs, State#ch{unconfirmed = UC1})
+                              record_confirms(MXs, State1#ch{unconfirmed = UC1})
+
     end.
 
 handle_consuming_queue_down(QPid,
@@ -1277,7 +1287,9 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
 basic_return(#basic_message{exchange_name = ExchangeName,
                             routing_keys  = [RoutingKey | _CcRoutes],
                             content       = Content},
-             #ch{protocol = Protocol, writer_pid = WriterPid}, Reason) ->
+             State = #ch{protocol = Protocol, writer_pid = WriterPid},
+             Reason) ->
+    ?INCR_STATS([{exchange_stats, ExchangeName, 1}], return_unroutable, State),
     {_Close, ReplyCode, ReplyText} = Protocol:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
            WriterPid,
@@ -1427,18 +1439,19 @@ notify_limiter(Limiter, Acked) ->
     end.
 
 deliver_to_queues({#delivery{message    = #basic_message{exchange_name = XName},
-                             msg_seq_no = undefined,
                              mandatory  = false},
                    []}, State) -> %% optimisation
     ?INCR_STATS([{exchange_stats, XName, 1}], publish, State),
     State;
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
+                                        mandatory  = Mandatory,
+                                        confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
                    DelQNames}, State = #ch{queue_names    = QNames,
                                            queue_monitors = QMons}) ->
     Qs = rabbit_amqqueue:lookup(DelQNames),
-    {RoutingRes, DeliveredQPids} = rabbit_amqqueue:deliver_flow(Qs, Delivery),
+    DeliveredQPids = rabbit_amqqueue:deliver_flow(Qs, Delivery),
     %% The pmon:monitor_all/2 monitors all queues to which we
     %% delivered. But we want to monitor even queues we didn't deliver
     %% to, since we need their 'DOWN' messages to clean
@@ -1457,31 +1470,37 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                  false -> dict:store(QPid, QName, QNames0)
                              end, pmon:monitor(QPid, QMons0)}
                     end, {QNames, pmon:monitor_all(DeliveredQPids, QMons)}, Qs),
-    State1 = process_routing_result(RoutingRes, DeliveredQPids,
-                                    XName, MsgSeqNo, Message,
-                                    State#ch{queue_names    = QNames1,
-                                             queue_monitors = QMons1}),
+    State1 = State#ch{queue_names    = QNames1,
+                      queue_monitors = QMons1},
+    %% NB: the order here is important since basic.returns must be
+    %% sent before confirms.
+    State2 = process_routing_mandatory(Mandatory, DeliveredQPids, MsgSeqNo,
+                                       Message, State1),
+    State3 = process_routing_confirm(  Confirm,   DeliveredQPids, MsgSeqNo,
+                                       XName,   State2),
     ?INCR_STATS([{exchange_stats, XName, 1} |
                  [{queue_exchange_stats, {QName, XName}, 1} ||
                      QPid        <- DeliveredQPids,
                      {ok, QName} <- [dict:find(QPid, QNames1)]]],
-                publish, State1),
-    State1.
+                publish, State3),
+    State3.
 
-process_routing_result(routed,     _,     _, undefined,   _, State) ->
+process_routing_mandatory(false,     _, _MsgSeqNo, _Msg, State) ->
     State;
-process_routing_result(routed,    [], XName,  MsgSeqNo,   _, State) ->
-    record_confirms([{MsgSeqNo, XName}], State);
-process_routing_result(routed, QPids, XName,  MsgSeqNo,   _, State) ->
-    State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
-                                        State#ch.unconfirmed)};
-process_routing_result(unroutable, _, XName,  MsgSeqNo, Msg, State) ->
+process_routing_mandatory(true,     [], _MsgSeqNo,  Msg, State) ->
     ok = basic_return(Msg, State, no_route),
-    ?INCR_STATS([{exchange_stats, XName, 1}], return_unroutable, State),
-    case MsgSeqNo of
-        undefined -> State;
-        _         -> record_confirms([{MsgSeqNo, XName}], State)
-    end.
+    State;
+process_routing_mandatory(true,  QPids,  MsgSeqNo,  Msg, State) ->
+    State#ch{mandatory = dtree:insert(MsgSeqNo, QPids, Msg,
+                                      State#ch.mandatory)}.
+
+process_routing_confirm(false,    _, _MsgSeqNo, _XName, State) ->
+    State;
+process_routing_confirm(true,    [],  MsgSeqNo,  XName, State) ->
+    record_confirms([{MsgSeqNo, XName}], State);
+process_routing_confirm(true, QPids,  MsgSeqNo,  XName, State) ->
+    State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
+                                        State#ch.unconfirmed)}.
 
 send_nacks([], State) ->
     State;

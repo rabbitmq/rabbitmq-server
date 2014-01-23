@@ -34,7 +34,7 @@
 
 publish(Msg, Reason, X, RK, QName) ->
     DLMsg = make_msg(Msg, Reason, X#exchange.name, RK, QName),
-    Delivery = rabbit_basic:delivery(false, DLMsg, undefined),
+    Delivery = rabbit_basic:delivery(false, false, DLMsg, undefined),
     {Queues, Cycles} = detect_cycles(Reason, DLMsg,
                                      rabbit_exchange:route(X, Delivery)),
     lists:foreach(fun log_cycle_once/1, Cycles),
