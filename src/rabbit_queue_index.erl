@@ -245,7 +245,8 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
 
 terminate(Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
-    rabbit_recovery_terms:store(Dir, [{segments, SegmentCounts} | Terms]),
+    rabbit_recovery_terms:store(filename:basename(Dir),
+                                [{segments, SegmentCounts} | Terms]),
     State1.
 
 delete_and_terminate(State) ->

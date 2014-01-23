@@ -21,48 +21,62 @@
 
 -behaviour(gen_server).
 
--export([recover/0, upgrade_recovery_terms/0, start_link/0,
-         store/2, read/1, clear/0, flush/0]).
+-export([recover/0, store/2, read/1, clear/0]).
 
+-export([upgrade_recovery_terms/0, start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -rabbit_upgrade({upgrade_recovery_terms, local, []}).
 
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -spec(recover() -> 'ok').
--spec(upgrade_recovery_terms() -> 'ok').
--spec(start_link() -> rabbit_types:ok_pid_or_error()).
 -spec(store(file:filename(), term()) -> rabbit_types:ok_or_error(term())).
 -spec(read(file:filename()) -> rabbit_types:ok_or_error2(term(), not_found)).
 -spec(clear() -> 'ok').
 
 -endif. % use_specs
 
--include("rabbit.hrl").
+%%----------------------------------------------------------------------------
+
 -define(SERVER, ?MODULE).
--define(UPGRADE_TABLE, rabbit_recovery_upgrades).
 
 recover() ->
     case supervisor:start_child(rabbit_sup,
                                 {?SERVER, {?MODULE, start_link, []},
-                                 permanent, ?MAX_WAIT, worker,
+                                 permanent, 16#ffffffff, worker,
                                  [?SERVER]}) of
         {ok, _}                       -> ok;
         {error, {already_started, _}} -> ok;
         {error, _}=Err                -> Err
     end.
 
+store(DirBaseName, Terms) -> dets:insert(?MODULE, {DirBaseName, Terms}).
+
+read(DirBaseName) ->
+    case dets:lookup(?MODULE, DirBaseName) of
+        [{_, Terms}] -> {ok, Terms};
+        _            -> {error, not_found}
+    end.
+
+clear() ->
+    dets:delete_all_objects(?MODULE),
+    flush().
+
+%%----------------------------------------------------------------------------
+
 upgrade_recovery_terms() ->
-    create_table(),
+    open_table(),
     try
         QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
         DotFiles = filelib:fold_files(QueuesDir, "clean.dot", true,
                                       fun(F, Acc) -> [F|Acc] end, []),
         [begin
              {ok, Terms} = rabbit_file:read_term_file(File),
-             ok = store(filename:dirname(File), Terms),
+             ok = store(filename:basename(filename:dirname(File)), Terms),
              case file:delete(File) of
                  {error, E} ->
                      rabbit_log:warning("Unable to delete recovery index"
@@ -78,21 +92,11 @@ upgrade_recovery_terms() ->
 
 start_link() -> gen_server:start_link(?MODULE, [], []).
 
-store(QueueDir, Terms) -> dets:insert(?MODULE, {to_key(QueueDir), Terms}).
-
-read(QueueDir) ->
-    case dets:lookup(?MODULE, QueueDir) of
-        [{_, Terms}] -> {ok, Terms};
-        _            -> {error, not_found}
-    end.
-
-clear() ->
-    dets:delete_all_objects(?MODULE),
-    flush().
+%%----------------------------------------------------------------------------
 
 init(_) ->
     process_flag(trap_exit, true),
-    create_table(),
+    open_table(),
     {ok, undefined}.
 
 handle_call(Msg, _, State) -> {stop, {unexpected_call, Msg}, State}.
@@ -108,13 +112,12 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-flush() -> dets:sync(?MODULE).
+%%----------------------------------------------------------------------------
 
-create_table() ->
+open_table() ->
     File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
     {ok, _} = dets:open_file(?MODULE, [{file,      File},
                                        {ram_file,  true},
                                        {auto_save, infinity}]).
 
-to_key(QueueDir) -> filename:basename(QueueDir).
-
+flush() -> dets:sync(?MODULE).
