@@ -60,4 +60,5 @@ stop_child(X) ->
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
+%% See comment in rabbit_federation_queue_link_sup_sup:id/1
 id(X = #exchange{}) -> X#exchange{scratches = undefined}.
