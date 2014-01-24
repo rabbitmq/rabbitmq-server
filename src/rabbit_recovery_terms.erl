@@ -71,21 +71,11 @@ upgrade_recovery_terms() ->
                                       fun(F, Acc) -> [F|Acc] end, []),
         [begin
              case rabbit_file:read_term_file(File) of
-                 {ok, Terms} ->
-                     rabbit_log:info("Read ~s ok~n", [File]),
-                     ok = store(filename:basename(filename:dirname(File)),
-                                Terms);
-                 Err ->
-                     rabbit_log:warning("Error reading recovery file ~s: ~p~n",
-                                        [File, Err])
+                 {ok, Terms} -> Key = filename:basename(filename:dirname(File)),
+                                ok  = store(Key, Terms);
+                 _           -> ok
              end,
-             case file:delete(File) of
-                 {error, E} ->
-                     rabbit_log:warning("Unable to delete recovery index"
-                                        "~s during upgrade: ~p~n", [File, E]);
-                 ok ->
-                     ok
-             end
+             file:delete(File)
          end || File <- DotFiles],
         ok
     after
