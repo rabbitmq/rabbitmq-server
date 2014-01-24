@@ -22,7 +22,7 @@
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
--define(CONSUMER_BIAS,                 0.8).
+-define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
 -export([start_link/1, info_keys/0]).
 
@@ -855,10 +855,12 @@ prioritise_cast(Msg, _Len, State) ->
 
 consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}) ->
     {Ingress, Egress} = BQ:msg_rates(BQS),
-    case ?CONSUMER_BIAS of
-        B when B > 0.0 andalso Ingress >= (1.0 - B) * Egress  -> +1;
-        B when B < 0.0 andalso Egress  >= (1.0 + B) * Ingress -> -1;
-        _                                                     -> 0
+    case Ingress of
+        0.0 -> 0;
+        _   -> case Egress / Ingress < ?CONSUMER_BIAS_RATIO of
+                   true  -> +1;
+                   false -> 0
+               end
     end.
 
 prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
