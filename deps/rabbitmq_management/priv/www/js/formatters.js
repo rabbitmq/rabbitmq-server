@@ -35,7 +35,7 @@ function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
 }
 
 function fmt_memory(memory, key) {
-    return '<span class="memory_' + key + '">&#x2b1b;</span> ' +
+    return '<div class="colour-key memory_' + key + '"></div>' +
         fmt_bytes(memory[key]);
 }
 
@@ -495,7 +495,7 @@ function fmt_state(colour, text, explanation) {
         key = text;
     }
 
-    return '<span class="status-' + colour + '">&#x2b1b;</span> ' + key;
+    return '<div class="colour-key status-key-' + colour + '"></div>' + key;
 }
 
 function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {

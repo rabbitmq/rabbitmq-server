@@ -76,6 +76,7 @@ div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
 div.memory-bar { margin: 10px 0 5px 0; border-radius: 5px; border: 1px solid #ddd; float: left; }
 div.memory-section { float: left; height: 30px; }
+div.colour-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 div.memory-info { float: left; padding: 10px 10px 0 0; }
 button.memory-button { margin-top: 10px; }
 
@@ -91,19 +92,6 @@ div.memory_binary           { background: #666; }
 div.memory_code             { background: #999; }
 div.memory_atom             { background: #bbb; }
 div.memory_other_system     { background: #ddd; }
-
-span.memory_connection_procs { color: #955300; }
-span.memory_queue_procs      { color: #da7900; }
-span.memory_plugins          { color: #ffc884; }
-span.memory_other_proc       { color: #fff4e7; }
-span.memory_mnesia           { color: #005395; }
-span.memory_msg_index        { color: #0079da; }
-span.memory_mgmt_db          { color: #84c8ff; }
-span.memory_other_ets        { color: #e7f4ff; }
-span.memory_binary           { color: #666; }
-span.memory_code             { color: #999; }
-span.memory_atom             { color: #bbb; }
-span.memory_other_system     { color: #ddd; }
 
 sub { display: block; font-size: 0.8em; color: #888; }
 small { font-size: 0.8em; color: #888; }
@@ -138,10 +126,10 @@ div.status-bar .red-dark { background: #e24545; color: white; }
 /* yellow-dark and green-dark can never happen */
 div.status-bar .red *, div.status-bar .red-dark *, div.status-red * { color: white; }
 
-span.status-grey   { color: #ddd !important; }
-span.status-red    { color: #ff7a7a !important; }
-span.status-yellow { color: #ffff7b !important; }
-span.status-green  { color: #98f898 !important; }
+div.status-key-grey { background: #ddd; }
+div.status-key-red { background: #ff7a7a; color: white; }
+div.status-key-yellow { background: #ffff7b; }
+div.status-key-green { background: #98f898; }
 
 .l { text-align: left !important; }
 .c { text-align: center !important; }
