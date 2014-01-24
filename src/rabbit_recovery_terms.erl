@@ -67,16 +67,18 @@ upgrade_recovery_terms() ->
     open_table(),
     try
         QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
-        DotFiles = filelib:fold_files(QueuesDir, "^clean\.dot$", false,
-                                      fun(F, Acc) -> [F|Acc] end, []),
+        Dirs = case rabbit_file:list_dir(QueuesDir) of
+                   {ok, Entries} -> Entries;
+                   {error, _}    -> []
+               end,
         [begin
+             File = filename:join([QueuesDir, Dir, "clean.dot"]),
              case rabbit_file:read_term_file(File) of
-                 {ok, Terms} -> Key = filename:basename(filename:dirname(File)),
-                                ok  = store(Key, Terms);
-                 _           -> ok
+                 {ok, Terms} -> ok  = store(Dir, Terms);
+                 {error, _}  -> ok
              end,
              file:delete(File)
-         end || File <- DotFiles],
+         end || Dir <- Dirs],
         ok
     after
         close_table()
