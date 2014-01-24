@@ -53,18 +53,14 @@
 <% } %>
 <% if (link.error) { %>
     <td>
-       <div class="status-red"><acronym title="<%= fmt_escape_html_one_line(link.error) %>"><%= link.status %></acronym></div>
+      <%= fmt_state('red', link.status, fmt_escape_html_one_line(link.error)) %>
     </td>
     <td></td>
     <td><%= link.timestamp %></td>
   </tr>
 <% } else { %>
     <td>
-       <% if (link.status == 'starting') { %>
-         <div class="status-yellow"><%= link.status %></div>
-       <% } else { %>
-         <div class="status-green"><%= link.status %></div>
-      <% } %>
+      <%= fmt_state(link.status == 'starting' ? 'yellow' : 'green', link.status) %>
     </td>
     <td class="r">
       <% if (link.local_channel) { %>
