@@ -17,8 +17,7 @@
 %% The purpose of the limiter is to stem the flow of messages from
 %% queues to channels, in order to act upon various protocol-level
 %% flow control mechanisms, specifically AMQP 0-9-1's basic.qos
-%% prefetch_count and channel.flow, and AMQP 1.0's link (aka consumer)
-%% credit mechanism.
+%% prefetch_count and AMQP 1.0's link (aka consumer) credit mechanism.
 %%
 %% Each channel has an associated limiter process, created with
 %% start_link/1, which it passes to queues on consumer creation with
@@ -65,11 +64,9 @@
 %%
 %% 1. Channels tell the limiter about basic.qos prefetch counts -
 %%    that's what the limit_prefetch/3, unlimit_prefetch/1,
-%%    is_prefetch_limited/1, get_prefetch_limit/1 API functions are
-%%    about - and channel.flow blocking - that's what block/1,
-%%    unblock/1 and is_blocked/1 are for. They also tell the limiter
-%%    queue state (via the queue) about consumer credit changes -
-%%    that's what credit/4 is for.
+%%    get_prefetch_limit/1 API functions are about. They also tell the
+%%    limiter queue state (via the queue) about consumer credit
+%%    changes - that's what credit/5 is for.
 %%
 %% 2. Queues also tell the limiter queue state about the queue
 %%    becoming empty (via drained/1) and consumers leaving (via
@@ -83,12 +80,11 @@
 %%
 %% 5. Queues ask the limiter for permission (with can_send/3) whenever
 %%    they want to deliver a message to a channel. The limiter checks
-%%    whether a) the channel isn't blocked by channel.flow, b) the
-%%    volume has not yet reached the prefetch limit, and c) whether
-%%    the consumer has enough credit. If so it increments the volume
-%%    and tells the queue to proceed. Otherwise it marks the queue as
-%%    requiring notification (see below) and tells the queue not to
-%%    proceed.
+%%    whether a) the volume has not yet reached the prefetch limit,
+%%    and b) whether the consumer has enough credit. If so it
+%%    increments the volume and tells the queue to proceed. Otherwise
+%%    it marks the queue as requiring notification (see below) and
+%%    tells the queue not to proceed.
 %%
 %% 6. A queue that has been told to proceed (by the return value of
 %%    can_send/3) sends the message to the channel. Conversely, a
@@ -117,16 +113,17 @@
 
 -module(rabbit_limiter).
 
+-include("rabbit.hrl").
+
 -behaviour(gen_server2).
 
--export([start_link/0]).
+-export([start_link/1]).
 %% channel API
--export([new/1, limit_prefetch/3, unlimit_prefetch/1, block/1, unblock/1,
-         is_prefetch_limited/1, is_blocked/1, is_active/1,
+-export([new/1, limit_prefetch/3, unlimit_prefetch/1, is_active/1,
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
 -export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
-         is_suspended/1, is_consumer_blocked/2, credit/4, drained/1,
+         is_suspended/1, is_consumer_blocked/2, credit/5, drained/1,
          forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -134,27 +131,23 @@
 
 %%----------------------------------------------------------------------------
 
--record(lstate, {pid, prefetch_limited, blocked}).
+-record(lstate, {pid, prefetch_limited}).
 -record(qstate, {pid, state, credits}).
 
 -ifdef(use_specs).
 
 -type(lstate() :: #lstate{pid              :: pid(),
-                          prefetch_limited :: boolean(),
-                          blocked          :: boolean()}).
+                          prefetch_limited :: boolean()}).
 -type(qstate() :: #qstate{pid :: pid(),
                           state :: 'dormant' | 'active' | 'suspended'}).
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/1 :: (rabbit_types:proc_name()) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(new/1 :: (pid()) -> lstate()).
 
 -spec(limit_prefetch/3      :: (lstate(), non_neg_integer(), non_neg_integer())
                                -> lstate()).
 -spec(unlimit_prefetch/1    :: (lstate()) -> lstate()).
--spec(block/1               :: (lstate()) -> lstate()).
--spec(unblock/1             :: (lstate()) -> lstate()).
--spec(is_prefetch_limited/1 :: (lstate()) -> boolean()).
--spec(is_blocked/1          :: (lstate()) -> boolean()).
 -spec(is_active/1           :: (lstate()) -> boolean()).
 -spec(get_prefetch_limit/1  :: (lstate()) -> non_neg_integer()).
 -spec(ack/2                 :: (lstate(), non_neg_integer()) -> 'ok').
@@ -168,8 +161,8 @@
 -spec(deactivate/1   :: (qstate()) -> qstate()).
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
 -spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
--spec(credit/4 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean())
-                  -> qstate()).
+-spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean(),
+                   boolean()) -> {boolean(), qstate()}).
 -spec(drained/1 :: (qstate())
                    -> {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}).
 -spec(forget_consumer/2 :: (qstate(), rabbit_types:ctag()) -> qstate()).
@@ -180,7 +173,6 @@
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
-              blocked = false,
               queues = orddict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
 %% 'Notify' is a boolean that indicates whether a queue should be
@@ -193,12 +185,12 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link() -> gen_server2:start_link(?MODULE, [], []).
+start_link(ProcName) -> gen_server2:start_link(?MODULE, [ProcName], []).
 
 new(Pid) ->
     %% this a 'call' to ensure that it is invoked at most once.
     ok = gen_server:call(Pid, {new, self()}, infinity),
-    #lstate{pid = Pid, prefetch_limited = false, blocked = false}.
+    #lstate{pid = Pid, prefetch_limited = false}.
 
 limit_prefetch(L, PrefetchCount, UnackedCount) when PrefetchCount > 0 ->
     ok = gen_server:call(
@@ -210,19 +202,7 @@ unlimit_prefetch(L) ->
     ok = gen_server:call(L#lstate.pid, unlimit_prefetch, infinity),
     L#lstate{prefetch_limited = false}.
 
-block(L) ->
-    ok = gen_server:call(L#lstate.pid, block, infinity),
-    L#lstate{blocked = true}.
-
-unblock(L) ->
-    ok = gen_server:call(L#lstate.pid, unblock, infinity),
-    L#lstate{blocked = false}.
-
-is_prefetch_limited(#lstate{prefetch_limited = Limited}) -> Limited.
-
-is_blocked(#lstate{blocked = Blocked}) -> Blocked.
-
-is_active(L) -> is_prefetch_limited(L) orelse is_blocked(L).
+is_active(#lstate{prefetch_limited = Limited}) -> Limited.
 
 get_prefetch_limit(#lstate{prefetch_limited = false}) -> 0;
 get_prefetch_limit(L) ->
@@ -245,9 +225,9 @@ can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
     case is_consumer_blocked(L, CTag) of
         false -> case (State =/= active orelse
                        safe_call(Pid, {can_send, self(), AckRequired}, true)) of
-                     true  -> {continue, L#qstate{
-                                credits = record_send_q(CTag, Credits)}};
-                     false -> {suspend, L#qstate{state = suspended}}
+                     true  -> Credits1 = decrement_credit(CTag, Credits),
+                              {continue, L#qstate{credits = Credits1}};
+                     false -> {suspend,  L#qstate{state = suspended}}
                  end;
         true  -> {suspend, L}
     end.
@@ -271,13 +251,17 @@ is_suspended(#qstate{})                  -> false.
 
 is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
     case gb_trees:lookup(CTag, Credits) of
+        none                                    -> false;
         {value, #credit{credit = C}} when C > 0 -> false;
-        {value, #credit{}}                      -> true;
-        none                                    -> false
+        {value, #credit{}}                      -> true
     end.
 
-credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain) ->
-    Limiter#qstate{credits = update_credit(CTag, Credit, Drain, Credits)}.
+credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain, IsEmpty) ->
+    {Res, Cr} = case IsEmpty andalso Drain of
+                    true  -> {true,  make_credit(0,      false)};
+                    false -> {false, make_credit(Credit, Drain)}
+                end,
+    {Res, Limiter#qstate{credits = gb_trees:enter(CTag, Cr, Credits)}}.
 
 drained(Limiter = #qstate{credits = Credits}) ->
     {CTagCredits, Credits2} =
@@ -303,7 +287,11 @@ forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
 %% state for us (#qstate.credits), and maintain a fiction that the
 %% limiter is making the decisions...
 
-record_send_q(CTag, Credits) ->
+make_credit(Credit, Drain) ->
+    %% Using up all credit implies no need to send a 'drained' event
+    #credit{credit = Credit, drain = Drain andalso Credit > 0}.
+
+decrement_credit(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
         {value, #credit{credit = Credit, drain = Drain}} ->
             update_credit(CTag, Credit - 1, Drain, Credits);
@@ -312,15 +300,14 @@ record_send_q(CTag, Credits) ->
     end.
 
 update_credit(CTag, Credit, Drain, Credits) ->
-    %% Using up all credit implies no need to send a 'drained' event
-    Drain1 = Drain andalso Credit > 0,
-    gb_trees:enter(CTag, #credit{credit = Credit, drain = Drain1}, Credits).
+    gb_trees:update(CTag, make_credit(Credit, Drain), Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, #lim{}}.
+init([ProcName]) -> ?store_proc_name(ProcName),
+                    {ok, #lim{}}.
 
 prioritise_call(get_prefetch_limit, _From, _Len, _State) -> 9;
 prioritise_call(_Msg,               _From, _Len, _State) -> 0.
@@ -339,19 +326,10 @@ handle_call(unlimit_prefetch, _From, State) ->
     {reply, ok, maybe_notify(State, State#lim{prefetch_count = 0,
                                               volume         = 0})};
 
-handle_call(block, _From, State) ->
-    {reply, ok, State#lim{blocked = true}};
-
-handle_call(unblock, _From, State) ->
-    {reply, ok, maybe_notify(State, State#lim{blocked = false})};
-
 handle_call(get_prefetch_limit, _From,
             State = #lim{prefetch_count = PrefetchCount}) ->
     {reply, PrefetchCount, State};
 
-handle_call({can_send, QPid, _AckRequired}, _From,
-            State = #lim{blocked = true}) ->
-    {reply, false, limit_queue(QPid, State)};
 handle_call({can_send, QPid, AckRequired}, _From,
             State = #lim{volume = Volume}) ->
     case prefetch_limit_reached(State) of
@@ -387,16 +365,14 @@ code_change(_, State, _) ->
 %%----------------------------------------------------------------------------
 
 maybe_notify(OldState, NewState) ->
-    case (prefetch_limit_reached(OldState) orelse blocked(OldState)) andalso
-        not (prefetch_limit_reached(NewState) orelse blocked(NewState)) of
+    case prefetch_limit_reached(OldState) andalso
+        not prefetch_limit_reached(NewState) of
         true  -> notify_queues(NewState);
         false -> NewState
     end.
 
 prefetch_limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
-
-blocked(#lim{blocked = Blocked}) -> Blocked.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
     case orddict:is_key(QPid, Queues) of
