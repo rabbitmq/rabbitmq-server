@@ -192,13 +192,18 @@ recover() ->
     on_node_down(node()),
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-    ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
+
+    %% We rely on BQ:start/1 returning the recovery terms in the same
+    %% order as the supplied queue names, so that we can zip them together
+    %% for further processing in recover_durable_queues.
+    {ok, OrderedRecoveryTerms} =
+        BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
-    recover_durable_queues(DurableQueues).
+    recover_durable_queues(lists:zip(DurableQueues, OrderedRecoveryTerms)).
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
@@ -226,10 +231,11 @@ find_durable_queues() ->
                                 node(Pid) == Node]))
       end).
 
-recover_durable_queues(DurableQueues) ->
-    Qs = [start_queue_process(node(), Q) || Q <- DurableQueues],
-    [Q || Q = #amqqueue{pid = Pid} <- Qs,
-          gen_server2:call(Pid, {init, self()}, infinity) == {new, Q}].
+recover_durable_queues(QueuesAndRecoveryTerms) ->
+    Qs = [{start_queue_process(node(), Q), Terms} ||
+             {Q, Terms} <- QueuesAndRecoveryTerms],
+    [Q || {Q = #amqqueue{ pid = Pid }, Terms} <- Qs,
+          gen_server2:call(Pid, {init, {self(), Terms}}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),

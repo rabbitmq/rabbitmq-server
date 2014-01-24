@@ -173,9 +173,10 @@ code_change(_OldVsn, State, _Extra) ->
 declare(Recover, From, State = #q{q                   = Q,
                                   backing_queue       = undefined,
                                   backing_queue_state = undefined}) ->
-    case rabbit_amqqueue:internal_declare(Q, Recover =/= new) of
+    {Recovery, TermsOrNew} = recovery_status(Recover),
+    case rabbit_amqqueue:internal_declare(Q, Recovery /= new) of
         #amqqueue{} = Q1 ->
-            case matches(Recover, Q, Q1) of
+            case matches(Recovery, Q, Q1) of
                 true ->
                     gen_server2:reply(From, {new, Q}),
                     ok = file_handle_cache:register_callback(
@@ -184,8 +185,8 @@ declare(Recover, From, State = #q{q                   = Q,
                            self(), {rabbit_amqqueue,
                                     set_ram_duration_target, [self()]}),
                     BQ = backing_queue_module(Q1),
-                    BQS = bq_init(BQ, Q, Recover),
-                    recovery_barrier(Recover),
+                    BQS = bq_init(BQ, Q, TermsOrNew),
+                    recovery_barrier(Recovery),
                     State1 = process_args_policy(
                                State#q{backing_queue       = BQ,
                                        backing_queue_state = BQS}),
@@ -201,6 +202,9 @@ declare(Recover, From, State = #q{q                   = Q,
         Err ->
             {stop, normal, Err, State}
     end.
+
+recovery_status(new)              -> {new,     new};
+recovery_status({Recover, Terms}) -> {Recover, Terms}.
 
 matches(new, Q1, Q2) ->
     %% i.e. not policy
@@ -237,7 +241,7 @@ decorator_callback(QName, F, A) ->
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
-    BQ:init(Q, Recover =/= new,
+    BQ:init(Q, Recover,
             fun (Mod, Fun) ->
                     rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
@@ -865,7 +869,7 @@ handle_call({init, Recover}, From,
 %% You used to be able to declare an exclusive durable queue. Sadly we
 %% need to still tidy up after that case, there could be the remnants
 %% of one left over from an upgrade. So that's why we don't enforce
-%% Recover = false here.
+%% Recover = new here.
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
     case rabbit_misc:is_process_alive(Owner) of
@@ -876,7 +880,8 @@ handle_call({init, Recover}, From,
                     q                   = Q} = State,
                  gen_server2:reply(From, {owner_died, Q}),
                  BQ = backing_queue_module(Q),
-                 BQS = bq_init(BQ, Q, Recover),
+                 {_, Terms} = recovery_status(Recover),
+                 BQS = bq_init(BQ, Q, Terms),
                  %% Rely on terminate to delete the queue.
                  {stop, {shutdown, missing_owner},
                   State#q{backing_queue = BQ, backing_queue_state = BQS}}
