@@ -267,7 +267,7 @@ handle_call(_Request, _From, State) ->
     noreply(State).
 
 handle_cast({method, Method, Content, Flow},
-            State = #ch{reader_pid   = Reader, 
+            State = #ch{reader_pid   = Reader,
                         virtual_host = VHost}) ->
     case Flow of
         flow   -> credit_flow:ack(Reader);
