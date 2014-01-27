@@ -190,6 +190,7 @@
          cast/2, reply/2,
          abcast/2, abcast/3,
          multi_call/2, multi_call/3, multi_call/4,
+         mcall/1,
          with_state/2,
          enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/1]).
 
@@ -388,6 +389,58 @@ multi_call(Nodes, Name, Req, infinity) ->
 multi_call(Nodes, Name, Req, Timeout)
   when is_list(Nodes), is_atom(Name), is_integer(Timeout), Timeout >= 0 ->
     do_multi_call(Nodes, Name, Req, Timeout).
+
+%%% -----------------------------------------------------------------
+%%% Make multiple calls to multiple servers, given pairs of servers
+%%% and messages.
+%%% Returns: {[{Pid, Reply}], [{Pid, Error}]}
+%%%
+%%% A middleman process is used to avoid clogging up the callers
+%%% message queue.
+%%% -----------------------------------------------------------------
+mcall(CallSpecs) ->
+    {Receiver, MRef} = spawn_monitor(
+                         fun() ->
+                                 Refs = lists:foldl(fun do_mcall/2, dict:new(),
+                                                    CallSpecs),
+                                 collect_replies(Refs, [], [])
+                         end),
+    receive
+        {'DOWN', MRef, _, _, {Receiver, Result}} -> Result;
+        {'DOWN', MRef, _, _, Reason}             -> exit(Reason)
+    end.
+
+do_mcall({Pid, Request}, Dict) ->
+    MRef = erlang:monitor(process, Pid),
+    catch erlang:send(Pid, {'$gen_call', {self(), MRef}, Request},
+                      [noconnect]),
+    dict:store(MRef, Pid, Dict).
+
+collect_replies(Refs, Replies, Errors) ->
+    case dict:size(Refs) of
+        0 -> exit({self(), {Replies, Errors}});
+        _ -> receive
+                 {MRef, Reply} ->
+                     {Refs1, Replies1} = handle_call_result(MRef, Reply,
+                                                            Refs, Replies),
+                     collect_replies(Refs1, Replies1, Errors);
+                 {'DOWN', MRef, _, _, Reason} ->
+                     Reason1 = case Reason of
+                                   noconnection -> nodedown;
+                                   _            -> Reason
+                               end,
+                     {Refs1, Errors1} = handle_call_result(MRef, Reason1,
+                                                           Refs, Errors),
+                     collect_replies(Refs1, Replies, Errors1)
+             end
+    end.
+
+handle_call_result(MRef, Result, Refs, AccList) ->
+    %% we use fetch instead of find, because we *do* want to crash if some
+    %% unexpected monitor signal arrives in our inbox!
+    Pid = dict:fetch(MRef, Refs),
+    erlang:demonitor(MRef, [flush]),
+    {dict:erase(MRef, Refs), [{Pid, Result}|AccList]}.
 
 %% -----------------------------------------------------------------
 %% Apply a function to a generic server's state.

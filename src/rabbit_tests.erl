@@ -66,6 +66,7 @@ all_tests() ->
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed = test_with_state(),
+    passed = test_mcall(),
     passed =
         do_if_secondary_node(
           fun run_cluster_dependent_tests/1,
@@ -1367,6 +1368,28 @@ test_with_state() ->
     fhc_state = gen_server2:with_state(file_handle_cache,
                                        fun (S) -> element(1, S) end),
     passed.
+
+test_mcall() ->
+    Pids = [spawn_link(fun gs2_test_listener/0) || _ <- lists:seq(1, 250)],
+    BadPids = [spawn(fun gs2_test_crasher/0) || _ <- lists:seq(1, 10)],
+    {Replies, Errors} = gen_server2:mcall([{P, hello} || P <- Pids ++ BadPids]),
+    true = lists:sort(Replies) == lists:sort([{Pid, goodbye} || Pid <- Pids]),
+    true = lists:sort(Errors) == lists:sort([{Pid, boom} || Pid <- BadPids]),
+    passed.
+
+gs2_test_crasher() ->
+    receive
+        {'$gen_call', _From, hello} -> exit(boom)
+    end.
+
+gs2_test_listener() ->
+    receive
+        {'$gen_call', From, hello} ->
+            gen_server2:reply(From, goodbye),
+            gs2_test_listener();
+        Other ->
+            exit(Other)
+    end.
 
 test_statistics_event_receiver(Pid) ->
     receive
