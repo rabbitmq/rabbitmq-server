@@ -1065,10 +1065,10 @@ blank_rates(Now, IngressLength) ->
              out_count     = 0,
              ack_in_count  = 0,
              ack_out_count = 0,
-             in_avg        = 0,
-             out_avg       = 0,
-             ack_in_avg    = 0,
-             ack_out_avg   = 0,
+             in_avg        = 0.0,
+             out_avg       = 0.0,
+             ack_in_avg    = 0.0,
+             ack_out_avg   = 0.0,
              timestamp     = Now,
              old_timestamp = Now}.
 
