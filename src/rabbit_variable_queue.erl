@@ -724,17 +724,16 @@ maybe_update_rates(State = #vqstate { in_counter      = InCount,
         false -> State
     end.
 
-update_rates(State = #vqstate{in_counter      = In,
-                              out_counter     = Out,
-                              ack_in_counter  = AckIn,
-                              ack_out_counter = AckOut,
-                              rates =
-                                  #rates{in_count      = In0,
-                                         out_count     = Out0,
-                                         ack_in_count  = AckIn0,
-                                         ack_out_count = AckOut0,
-                                         timestamp     = TS,
-                                         old_timestamp = OldTS}}) ->
+update_rates(State = #vqstate{ in_counter      = In,
+                               out_counter     = Out,
+                               ack_in_counter  = AckIn,
+                               ack_out_counter = AckOut,
+                               rates = #rates{ in_count      = In0,
+                                               out_count     = Out0,
+                                               ack_in_count  = AckIn0,
+                                               ack_out_count = AckOut0,
+                                               timestamp     = TS,
+                                               old_timestamp = OldTS }}) ->
     Now = erlang:now(),
 
     Rates = #rates { out_count     = Out,
