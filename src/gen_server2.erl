@@ -399,15 +399,16 @@ multi_call(Nodes, Name, Req, Timeout)
 %%% message queue.
 %%% -----------------------------------------------------------------
 mcall(CallSpecs) ->
-    {Receiver, MRef} = spawn_monitor(
-                         fun() ->
-                                 Refs = lists:foldl(fun do_mcall/2, dict:new(),
-                                                    CallSpecs),
-                                 collect_replies(Refs, [], [])
-                         end),
+    Tag = make_ref(),
+    {_, MRef} = spawn_monitor(
+                  fun() ->
+                          Refs = lists:foldl(fun do_mcall/2, dict:new(),
+                                             CallSpecs),
+                          collect_replies(Tag, Refs, [], [])
+                  end),
     receive
-        {'DOWN', MRef, _, _, {Receiver, Result}} -> Result;
-        {'DOWN', MRef, _, _, Reason}             -> exit(Reason)
+        {'DOWN', MRef, _, _, {Tag, Result}} -> Result;
+        {'DOWN', MRef, _, _, Reason}        -> exit(Reason)
     end.
 
 do_mcall({Pid, Request}, Dict) ->
@@ -416,14 +417,14 @@ do_mcall({Pid, Request}, Dict) ->
                       [noconnect]),
     dict:store(MRef, Pid, Dict).
 
-collect_replies(Refs, Replies, Errors) ->
+collect_replies(Tag, Refs, Replies, Errors) ->
     case dict:size(Refs) of
-        0 -> exit({self(), {Replies, Errors}});
+        0 -> exit({Tag, {Replies, Errors}});
         _ -> receive
                  {MRef, Reply} ->
                      {Refs1, Replies1} = handle_call_result(MRef, Reply,
                                                             Refs, Replies),
-                     collect_replies(Refs1, Replies1, Errors);
+                     collect_replies(Tag, Refs1, Replies1, Errors);
                  {'DOWN', MRef, _, _, Reason} ->
                      Reason1 = case Reason of
                                    noconnection -> nodedown;
@@ -431,16 +432,17 @@ collect_replies(Refs, Replies, Errors) ->
                                end,
                      {Refs1, Errors1} = handle_call_result(MRef, Reason1,
                                                            Refs, Errors),
-                     collect_replies(Refs1, Replies, Errors1)
+                     collect_replies(Tag, Refs1, Replies, Errors1)
              end
     end.
 
 handle_call_result(MRef, Result, Refs, AccList) ->
-    %% we use fetch instead of find, because we *do* want to crash if some
-    %% unexpected monitor signal arrives in our inbox!
-    Pid = dict:fetch(MRef, Refs),
-    erlang:demonitor(MRef, [flush]),
-    {dict:erase(MRef, Refs), [{Pid, Result}|AccList]}.
+    %% we avoid the mailbox scanning cost of a call to erlang:demonitor/{1,2}
+    %% here, so we must cope with MRefs that we've already seen and erased
+    case dict:find(MRef, Refs) of
+        {ok, Pid} -> {dict:erase(MRef, Refs), [{Pid, Result}|AccList]};
+        _         -> {Refs, AccList}
+    end.
 
 %% -----------------------------------------------------------------
 %% Apply a function to a generic server's state.
