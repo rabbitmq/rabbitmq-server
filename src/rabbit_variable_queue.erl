@@ -383,11 +383,14 @@
                                          end_seq_id   = Z }).
 
 -define(MICROS_PER_SECOND, 1000000.0).
--define(SECONDS_FOR_RATE_AVG, 10.0).
+
+%% We're sampling every 5s for RAM duration; a half life that is of
+%% the same order of magnitude is probably about right.
+-define(RATE_AVG_HALF_LIFE, 5.0).
 
 %% We will recalculate the #rates{} every time we get asked for our
 %% RAM duration, or every N messages, whichever is sooner. We do this
-%% since the priority calcuations in rabbit_amqqueue_process need
+%% since the priority calculations in rabbit_amqqueue_process need
 %% fairly fresh rates.
 -define(MSGS_PER_RATE_CALC, 1000).
 
@@ -749,11 +752,9 @@ update_rates(State = #vqstate{ in_counter      = InCount,
                    ack_out_counter = 0,
                    rates           = Rates }.
 
-update_rate(Now, TS, Count, Rate0) ->
+update_rate(Now, TS, Count, Rate) ->
     Time = timer:now_diff(Now, TS) / ?MICROS_PER_SECOND,
-    Rate = Count / Time,
-    Weight = erlang:min(1, Time / ?SECONDS_FOR_RATE_AVG),
-    Rate * Weight + Rate0 * (1 - Weight).
+    rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE, Count / Time, Rate).
 
 ram_duration(State0) ->
     State = #vqstate {
