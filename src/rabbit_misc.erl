@@ -252,7 +252,8 @@
 -spec(get_parent/0 :: () -> pid()).
 -spec(store_proc_name/2 :: (atom(), rabbit_types:proc_name()) -> ok).
 -spec(store_proc_name/1 :: (rabbit_types:proc_type_and_name()) -> ok).
--spec(moving_average/4 :: (float(), float(), float(), float()) -> float()).
+-spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
+                          -> float()).
 -endif.
 
 %%----------------------------------------------------------------------------
