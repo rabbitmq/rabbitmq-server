@@ -393,7 +393,10 @@ multi_call(Nodes, Name, Req, Timeout)
 %%% -----------------------------------------------------------------
 %%% Make multiple calls to multiple servers, given pairs of servers
 %%% and messages.
-%%% Returns: {[{Pid, Reply}], [{Pid, Error}]}
+%%% Returns: {[{Dest, Reply}], [{Dest, Error}]}
+%%%
+%%% Dest can be pid() | RegName :: atom() |
+%%%             {Name :: atom(), Node :: atom()} | {global, Name :: atom()}
 %%%
 %%% A middleman process is used to avoid clogging up the callers
 %%% message queue.
@@ -411,11 +414,35 @@ mcall(CallSpecs) ->
         {'DOWN', MRef, _, _, Reason}        -> exit(Reason)
     end.
 
-do_mcall({Pid, Request}, Dict) ->
-    MRef = erlang:monitor(process, Pid),
-    catch erlang:send(Pid, {'$gen_call', {self(), MRef}, Request},
-                      [noconnect]),
-    dict:store(MRef, Pid, Dict).
+do_mcall({Dest={global, Name}, Request}, Dict) ->
+    %% whereis_name is simply an ets lookup, and is precisely what
+    %% global:send/2 does, yet we need a Ref to put in the call to the
+    %% server, so invoking whereis_name makes a lot more sense here.
+    GRef = case global:whereis_name(Name) of
+               Pid when is_pid(Pid) ->
+                   MRef = erlang:monitor(process, Pid),
+                   catch msend(Pid, MRef, Request),
+                   MRef;
+               undefined ->
+                   Ref = make_ref(),
+                   self() ! {'DOWN', Ref, process, Dest, unknown_name},
+                   Ref
+           end,
+    dict:store(GRef, Dest, Dict);
+
+do_mcall({Dest, Request}, Dict) ->
+    MRef = case Dest of
+               {Name, Node} when is_atom(Name), is_atom(Node) ->
+                   {_Node, Ref} = start_monitor(Node, Name),
+                   Ref;
+               _PidOrRegName ->
+                   erlang:monitor(process, Dest)
+           end,
+    catch msend(Dest, MRef, Request),
+    dict:store(MRef, Dest, Dict).
+
+msend(Dest, MRef, Request) ->
+    erlang:send(Dest, {'$gen_call', {self(), MRef}, Request}, [noconnect]).
 
 collect_replies(Tag, Refs, Replies, Errors) ->
     case dict:size(Refs) of

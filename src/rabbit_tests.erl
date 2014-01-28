@@ -1370,11 +1370,21 @@ test_with_state() ->
     passed.
 
 test_mcall() ->
-    Pids = [spawn_link(fun gs2_test_listener/0) || _ <- lists:seq(1, 250)],
-    BadPids = [spawn(fun gs2_test_crasher/0) || _ <- lists:seq(1, 10)],
+    Pids1 = [spawn_link(fun gs2_test_listener/0) || _ <- lists:seq(1, 5)],
+    Pids2 = [spawn_link(fun() ->
+                                register(cottontail, self()),
+                                gs2_test_listener()
+                        end)],
+    Pids = Pids1 ++ Pids2,
+    BadPids1 = [spawn(fun gs2_test_crasher/0) || _ <- lists:seq(1, 10)],
+    BadPids2 = [{global, foo}, {nonode@nohost, bar}],
+    BadPids = BadPids1 ++ BadPids2,
     {Replies, Errors} = gen_server2:mcall([{P, hello} || P <- Pids ++ BadPids]),
     true = lists:sort(Replies) == lists:sort([{Pid, goodbye} || Pid <- Pids]),
-    true = lists:sort(Errors) == lists:sort([{Pid, boom} || Pid <- BadPids]),
+    true = lists:sort(Errors) ==
+        lists:sort([{Pid, boom} || Pid <- BadPids1] ++
+                       [{{nonode@nohost,bar},nodedown},
+                        {{global,foo},unknown_name}]),
     passed.
 
 gs2_test_crasher() ->
