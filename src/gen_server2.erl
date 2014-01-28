@@ -42,6 +42,11 @@
 %% this timeout has occurred, hibernation will occur as normal. Upon
 %% awaking, a new current timeout value will be calculated.
 %%
+%% 7) an mcall/1 function has been added, to facilitate running
+%% gen_server:call/3 in parallel to multiple servers and awaiting all
+%% the results. This differs from multi_call in that it can operate
+%% on targets on any combination of nodes (or just the local node).
+%%
 %% The purpose is that the gen_server2 takes care of adjusting the
 %% current timeout value such that the process will increase the
 %% timeout value repeatedly if it is unable to sleep for the
