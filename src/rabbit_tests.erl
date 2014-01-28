@@ -39,7 +39,6 @@ all_tests() ->
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
     passed = test_version_equivalance(),
-    passed = test_multi_call(),
     passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_rabbit_basic_header_handling(),
@@ -66,6 +65,7 @@ all_tests() ->
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed = test_with_state(),
+    passed = test_gs2_multi_call(),
     passed = test_mcall(),
     passed =
         do_if_secondary_node(
@@ -157,7 +157,7 @@ test_version_equivalance() ->
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
     passed.
 
-test_multi_call() ->
+test_gs2_multi_call() ->
     Fun = fun() ->
                   receive
                       {'$gen_call', {From, Mref}, request} ->
@@ -171,8 +171,12 @@ test_multi_call() ->
     Pid2 = spawn(Fun),
     Pid3 = spawn(Fun),
     exit(Pid2, bang),
-    {[{Pid1, response}, {Pid3, response}], [{Pid2, _Fail}]} =
-        rabbit_misc:multi_call([Pid1, Pid2, Pid3], request),
+    {Results, Errors} = gen_server2:mcall([{Pid1, request},
+                                           {Pid2, request},
+                                           {Pid3, request}]),
+    true =
+        lists:sort([{Pid1, response}, {Pid3, response}]) == lists:sort(Results),
+    true = [{Pid2, noproc}] == Errors,
     exit(Pid1, bang),
     exit(Pid3, bang),
     passed.
