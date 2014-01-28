@@ -60,8 +60,9 @@ evaluate( {'and', Exp1, Exp2 },            Headers ) -> and3(evaluate(Exp1, Head
 evaluate( {'or', Exp1, Exp2 },             Headers ) -> or3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
 evaluate( {'like', LHS, Patt },            Headers ) -> isLike(val_of(LHS, Headers), Patt);
 evaluate( {'not_like', LHS, Patt },        Headers ) -> not3(isLike(val_of(LHS, Headers), Patt));
-evaluate( {'between', Exp, {range, From, To} },     Hs ) -> between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs));
-evaluate( {'not_between', Exp, {range, From, To} }, Hs ) -> not3(between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs)));
+evaluate( { Op, Exp, {range, From, To} },  Headers ) -> evaluate({ Op, Exp, From, To }, Headers);
+evaluate( {'between', Exp, From, To},           Hs ) -> between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs));
+evaluate( {'not_between', Exp, From, To},       Hs ) -> not3(between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs)));
 evaluate( { Op, LHS, RHS },                Headers ) -> do_bin_op(Op, evaluate(LHS, Headers), evaluate(RHS, Headers));
 
 evaluate( Value,                          _Headers ) -> Value.

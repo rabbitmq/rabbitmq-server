@@ -28,8 +28,6 @@
 all_tests() ->
     test_default_topic_selection(),
     test_topic_selection(),
-    test_queue_selection(),
-    test_multiple_queue_selection(),
     ok.
 
 test_topic_selection() ->
@@ -64,61 +62,6 @@ test_default_topic_selection() ->
     close_channel_and_connection(Connection, Channel),
     ok.
 
-test_queue_selection() ->
-    {Connection, Channel} = open_connection_and_channel(),
-
-    Exchange = declare_rjms_exchange(Channel, "rjms_test_queue_selector_exchange", [?XPOLICYARG(<<"jms-queue">>)]),
-
-    %% Declare a base queue and bind it
-    Q = declare_queue(Channel),
-    bind_queue(Channel, Q, Exchange),
-
-    publish_two_messages(Channel, Exchange, Q),
-
-    get_and_check(Channel, Q, 1, <<"false">>),
-    get_and_check(Channel, Q, 0, <<"true">>),
-
-    %% Declare a selector queue and bind it with SQL
-    SelQ = declare_queue(Channel),
-    bind_queue(Channel, SelQ, Exchange, Q, [?BSELECTARG(<<"boolVal">>)]),
-
-    publish_two_messages(Channel, Exchange, Q),
-
-    get_and_check(Channel, SelQ, 0, <<"true">>),
-    get_and_check(Channel, Q, 0, <<"false">>),
-
-    close_channel_and_connection(Connection, Channel),
-    ok.
-
-test_multiple_queue_selection() ->
-    {Connection, Channel} = open_connection_and_channel(),
-
-    Exchange = declare_rjms_exchange(Channel, "rjms_test_queue_selector_exchange", [?XPOLICYARG(<<"jms-queue">>)]),
-
-    %% Declare a base queue and selector queue
-    Q1 = declare_queue(Channel),
-    SelQ1 = declare_queue(Channel),
-    bind_queue(Channel, Q1, Exchange),
-    bind_queue(Channel, SelQ1, Exchange, Q1, [?BSELECTARG(<<"boolVal">>)]),
-
-    %% Declare another base queue and selector queue
-    Q2 = declare_queue(Channel),
-    SelQ2 = declare_queue(Channel),
-    bind_queue(Channel, Q2, Exchange),
-    bind_queue(Channel, SelQ2, Exchange, Q2, [?BSELECTARG(<<"boolVal">>)]),
-
-    publish_two_messages(Channel, Exchange, Q1),
-    publish_two_messages(Channel, Exchange, Q2),
-
-    get_and_check(Channel, SelQ2, 0, <<"true">>),
-    get_and_check(Channel, SelQ1, 0, <<"true">>),
-
-    get_and_check(Channel, Q1, 0, <<"false">>),
-    get_and_check(Channel, Q2, 0, <<"false">>),
-
-    close_channel_and_connection(Connection, Channel),
-    ok.
-
 %% Close the channel and connection
 close_channel_and_connection(Connection, Channel) ->
     amqp_channel:close(Channel),
@@ -139,9 +82,6 @@ declare_rjms_exchange(Ch, XNameStr, XArgs) ->
                               , arguments = XArgs },
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, Decl),
     Exchange.
-
-%% Bind a base queue to a 'jms-queue' policy exchange
-bind_queue(Ch, Q, Ex) -> bind_queue(Ch, Q, Ex, Q, []).
 
 %% Bind a selector queue to an exchange
 bind_queue(Ch, Q, Ex, RKey, Args) ->

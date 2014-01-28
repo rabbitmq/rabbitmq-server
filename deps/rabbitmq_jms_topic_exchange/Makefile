@@ -50,7 +50,7 @@ $(UMBRELLA).co:
 	cd $(UMBRELLA); hg up $(RMQ_VERSION_TAG)
 	touch $@
 
-$(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/*
+$(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/* $(EXCHANGE)/test/src/* $(EXCHANGE)/include/*
 	rm -rf $(UMBRELLA)/$(EXCHANGE)
 	cp -R $(EXCHANGE) $(UMBRELLA)/.
 	sed -e 's|@RJMS_VERSION@|$(RJMS_VERSION)|' <$(RJMS_APP_SRC) >$(UMBRELLA)/$(RJMS_APP_SRC)

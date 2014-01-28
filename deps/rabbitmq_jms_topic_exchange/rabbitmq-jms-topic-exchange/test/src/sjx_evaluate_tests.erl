@@ -68,6 +68,7 @@ basic_evaluate_test_() ->
     , ?_assert(    eval(Hs, " weight between 0 and 2501                        "))
     , ?_assert(    eval(Hs, " weight between 2500 and 2501                     "))
     , ?_assert(    eval(Hs, " 17 between 17 and 18                             "))
+    , ?_assert(    eval(Hs, " 17 Between 17 And 17                             "))
     , ?_assert(    eval(Hs, " 16 not between 17 and 18                         "))
     , ?_assert(    eval(Hs, " 2500 < weight                                    "))
     , ?_assert(    eval(Hs, " 2502 > weight                                    "))
