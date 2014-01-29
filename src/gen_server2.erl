@@ -422,7 +422,7 @@ mcall(CallSpecs) ->
         {'DOWN', MRef, _, _, Reason}        -> exit(Reason)
     end.
 
-do_mcall({Dest={global, Name}, Request}, Dict) ->
+do_mcall({{global,Name}=Dest, Request}, Dict) ->
     %% whereis_name is simply an ets lookup, and is precisely what
     %% global:send/2 does, yet we need a Ref to put in the call to the
     %% server, so invoking whereis_name makes a lot more sense here.
@@ -437,15 +437,12 @@ do_mcall({Dest={global, Name}, Request}, Dict) ->
                    Ref
            end,
     dict:store(GRef, Dest, Dict);
-
-do_mcall({Dest, Request}, Dict) ->
-    MRef = case Dest of
-               {Name, Node} when is_atom(Name), is_atom(Node) ->
-                   {_Node, Ref} = start_monitor(Node, Name),
-                   Ref;
-               _PidOrRegName ->
-                   erlang:monitor(process, Dest)
-           end,
+do_mcall({{Name,Node}=Dest, Request}, Dict) when is_atom(Name), is_atom(Node) ->
+    {_Node, MRef} = start_monitor(Node, Name),
+    catch msend(Dest, MRef, Request),
+    dict:store(MRef, Dest, Dict);
+do_mcall({Dest, Request}, Dict) when is_atom(Dest); is_pid(Dest) ->
+    MRef = erlang:monitor(process, Dest),
     catch msend(Dest, MRef, Request),
     dict:store(MRef, Dest, Dict).
 
