@@ -74,29 +74,31 @@ start_other_node({Name, Port}, Config) ->
                      os:getenv("RABBITMQ_ENABLED_PLUGINS_FILE")).
 
 start_other_node({Name, Port}, Config, PluginsFile) ->
-    %% ?assertCmd seems to hang if you background anything. Bah!
-    Res = os:cmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                     " OTHER_PORT=" ++ integer_to_list(Port) ++
-                     " OTHER_CONFIG=" ++ Config ++
-                     " OTHER_PLUGINS=" ++ PluginsFile ++
-                     " start-other-node ; echo $?"),
-    case lists:reverse(string:tokens(Res, "\n")) of
-        ["0" | _] -> ok;
-        _         -> exit(broker_start_failed, Res)
-    end,
+    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                " OTHER_PORT=" ++ integer_to_list(Port) ++
+                " OTHER_CONFIG=" ++ Config ++
+                " OTHER_PLUGINS=" ++ PluginsFile ++
+                " start-other-node"),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Ch.
 
 stop_other_node({Name, _Port}) ->
-    ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                      " stop-other-node"),
+    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                " stop-other-node"),
     timer:sleep(1000).
 
 rabbitmqctl(Args) ->
-    ?assertCmd(
-       plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
+    execute(plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
     timer:sleep(100).
+
+%% ?assertCmd seems to hang if you background anything. Bah!
+execute(Cmd) ->
+    Res = os:cmd(Cmd ++ " ; echo $?"),
+    case lists:reverse(string:tokens(Res, "\n")) of
+        ["0" | _] -> ok;
+        _         -> exit({command_failed, Cmd, Res})
+    end.
 
 policy(UpstreamSet) ->
     rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
