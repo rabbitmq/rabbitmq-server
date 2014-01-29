@@ -1387,7 +1387,7 @@ test_mcall() ->
     true = lists:sort(Replies) == lists:sort([{Pid, goodbye} || Pid <- Pids]),
     true = lists:sort(Errors) ==
         lists:sort([{Pid, boom} || Pid <- BadPids1] ++
-                       [{{global,foo},unknown_name},
+                       [{{global,foo},noproc},
                         {{nonode@nohost,bar},nodedown}]),
     passed.
 

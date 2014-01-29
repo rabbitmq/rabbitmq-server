@@ -430,7 +430,7 @@ do_mcall({Dest={global, Name}, Request}, Dict) ->
                    MRef;
                undefined ->
                    Ref = make_ref(),
-                   self() ! {'DOWN', Ref, process, Dest, unknown_name},
+                   self() ! {'DOWN', Ref, process, Dest, noproc},
                    Ref
            end,
     dict:store(GRef, Dest, Dict);
