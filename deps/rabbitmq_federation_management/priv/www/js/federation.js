@@ -41,9 +41,6 @@ dispatcher_add(function(sammy) {
 NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', "monitoring"];
 NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', "policymaker"];
 
-HELP['federation-explicit-identity'] =
-    'Each broker in a federated set of brokers needs a name. If you leave this blank RabbitMQ will generate one. If you set this, ensure that each broker has a unique name. Note that you <b>must</b> set this when using federation combined with clustering.';
-
 HELP['federation-local-username'] =
     'The name of a local user which can be used to publish messages received over federated links.';
 
