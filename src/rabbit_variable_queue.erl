@@ -392,7 +392,7 @@
 %% RAM duration, or every N messages, whichever is sooner. We do this
 %% since the priority calculations in rabbit_amqqueue_process need
 %% fairly fresh rates.
--define(MSGS_PER_RATE_CALC, 1000).
+-define(MSGS_PER_RATE_CALC, 100).
 
 %%----------------------------------------------------------------------------
 %% Public API
