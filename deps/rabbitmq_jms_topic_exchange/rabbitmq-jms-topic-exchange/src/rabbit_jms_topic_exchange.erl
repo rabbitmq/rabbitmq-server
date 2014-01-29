@@ -335,7 +335,7 @@ exchange_state_corrupt_error(#resource{name = XName}) ->
 % parsing error
 parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
   rabbit_misc:protocol_error( precondition_failed
-                            , "cannot parse selector '~s' binding destination '~s' to exchange '~s'"
+                            , "cannot parse selector '~p' binding destination '~s' to exchange '~s'"
                             , [S, DestName, XName] ).
 
 %%----------------------------------------------------------------------------
