@@ -157,30 +157,6 @@ test_version_equivalance() ->
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
     passed.
 
-test_gs2_multi_call() ->
-    Fun = fun() ->
-                  receive
-                      {'$gen_call', {From, Mref}, request} ->
-                          From ! {Mref, response}
-                  end,
-                  receive
-                      never -> ok
-                  end
-          end,
-    Pid1 = spawn(Fun),
-    Pid2 = spawn(Fun),
-    Pid3 = spawn(Fun),
-    exit(Pid2, bang),
-    {Results, Errors} = gen_server2:mcall([{Pid1, request},
-                                           {Pid2, request},
-                                           {Pid3, request}]),
-    true =
-        lists:sort([{Pid1, response}, {Pid3, response}]) == lists:sort(Results),
-    true = [{Pid2, noproc}] == Errors,
-    exit(Pid1, bang),
-    exit(Pid3, bang),
-    passed.
-
 test_rabbit_basic_header_handling() ->
     passed = write_table_with_invalid_existing_type_test(),
     passed = invalid_existing_headers_test(),
@@ -1373,6 +1349,30 @@ test_with_state() ->
                                        fun (S) -> element(1, S) end),
     passed.
 
+test_gs2_multi_call() ->
+    Fun = fun() ->
+                  receive
+                      {'$gen_call', {From, Mref}, request} ->
+                          From ! {Mref, response}
+                  end,
+                  receive
+                      never -> ok
+                  end
+          end,
+    Pid1 = spawn(Fun),
+    Pid2 = spawn(Fun),
+    Pid3 = spawn(Fun),
+    exit(Pid2, bang),
+    {Results, Errors} = gen_server2:mcall([{Pid1, request},
+                                           {Pid2, request},
+                                           {Pid3, request}]),
+    true =
+        lists:sort([{Pid1, response}, {Pid3, response}]) == lists:sort(Results),
+    true = [{Pid2, noproc}] == Errors,
+    exit(Pid1, bang),
+    exit(Pid3, bang),
+    passed.
+
 test_mcall() ->
     Pids1 = [spawn_link(fun gs2_test_listener/0) || _ <- lists:seq(1, 5)],
     Pids2 = [spawn_link(fun() ->
@@ -1387,8 +1387,8 @@ test_mcall() ->
     true = lists:sort(Replies) == lists:sort([{Pid, goodbye} || Pid <- Pids]),
     true = lists:sort(Errors) ==
         lists:sort([{Pid, boom} || Pid <- BadPids1] ++
-                       [{{nonode@nohost,bar},nodedown},
-                        {{global,foo},unknown_name}]),
+                       [{{global,foo},unknown_name},
+                        {{nonode@nohost,bar},nodedown}]),
     passed.
 
 gs2_test_crasher() ->
