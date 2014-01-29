@@ -65,7 +65,6 @@ all_tests() ->
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed = test_with_state(),
-    passed = test_gs2_multi_call(),
     passed = test_mcall(),
     passed =
         do_if_secondary_node(
@@ -1349,46 +1348,49 @@ test_with_state() ->
                                        fun (S) -> element(1, S) end),
     passed.
 
-test_gs2_multi_call() ->
-    Fun = fun() ->
-                  receive
-                      {'$gen_call', {From, Mref}, request} ->
-                          From ! {Mref, response}
-                  end,
-                  receive
-                      never -> ok
-                  end
-          end,
-    Pid1 = spawn(Fun),
-    Pid2 = spawn(Fun),
-    Pid3 = spawn(Fun),
-    exit(Pid2, bang),
-    {Results, Errors} = gen_server2:mcall([{Pid1, request},
-                                           {Pid2, request},
-                                           {Pid3, request}]),
-    true =
-        lists:sort([{Pid1, response}, {Pid3, response}]) == lists:sort(Results),
-    true = [{Pid2, noproc}] == Errors,
-    exit(Pid1, bang),
-    exit(Pid3, bang),
-    passed.
-
 test_mcall() ->
-    Pids1 = [spawn_link(fun gs2_test_listener/0) || _ <- lists:seq(1, 5)],
-    Pids2 = [spawn_link(fun() ->
-                                register(cottontail, self()),
-                                gs2_test_listener()
-                        end)],
-    Pids = Pids1 ++ Pids2,
-    BadPids1 = [spawn(fun gs2_test_crasher/0) || _ <- lists:seq(1, 10)],
-    BadPids2 = [{global, foo}, {nonode@nohost, bar}],
-    BadPids = BadPids1 ++ BadPids2,
-    {Replies, Errors} = gen_server2:mcall([{P, hello} || P <- Pids ++ BadPids]),
-    true = lists:sort(Replies) == lists:sort([{Pid, goodbye} || Pid <- Pids]),
-    true = lists:sort(Errors) ==
-        lists:sort([{Pid, boom} || Pid <- BadPids1] ++
-                       [{{global,foo},noproc},
-                        {{nonode@nohost,bar},nodedown}]),
+    P1 = spawn_link(fun() -> register(foo, self()), gs2_test_listener() end),
+    global:register_name(gfoo, P1),
+    P2 = spawn(fun() -> register(bar, self()), exit(bang) end),
+    P3 = spawn(fun gs2_test_crasher/0),
+
+    %% since P2 crashes almost immediately and P3 after receiving its first
+    %% message, we have to spawn a few more processes to handle the additional
+    %% cases we're interested in here
+    spawn(fun() -> register(baz, self()), gs2_test_crasher() end),
+    spawn(fun() -> register(bog, self()), gs2_test_crasher() end),
+    global:register_name(gbaz, spawn(fun gs2_test_crasher/0)),
+
+    Targets =
+        %% pids
+        [P1, P2, P3]
+        ++
+        %% registered names
+        [foo, bar, baz]
+        ++
+        %% {Name, Node} pairs
+        [{foo, node()}, {bar, node()}, {bog, node()}, {foo, nonode@nohost}]
+        ++
+        %% {global, Name}
+        [{global, gfoo}, {global, gbar}, {global, gbaz}],
+
+    GoodResults = [{D, goodbye} || D <- [P1, foo,
+                                         {foo, node()},
+                                         {global, gfoo}]],
+
+    BadResults  = [{P2,                   noproc},
+                   {P3,                   boom},
+                   {bar,                  noproc},
+                   {baz,                  boom},
+                   {{bar, node()},        noproc},
+                   {{bog, node()},        boom},
+                   {{foo, nonode@nohost}, nodedown},
+                   {{global, gbar},       noproc},
+                   {{global, gbaz},       boom}],
+
+    {Replies, Errors} = gen_server2:mcall([{T, hello} || T <- Targets]),
+    true = lists:sort(Replies) == lists:sort(GoodResults),
+    true = lists:sort(Errors)  == lists:sort(BadResults),
     passed.
 
 gs2_test_crasher() ->
