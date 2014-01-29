@@ -19,17 +19,12 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([local_nodename/1, should_forward/2, find_upstreams/2]).
+-export([should_forward/2, find_upstreams/2]).
 -export([validate_arg/3, fail/2, name/1, vhost/1, r/1]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
 
 %%----------------------------------------------------------------------------
-
-local_nodename(VHost) ->
-    rabbit_runtime_parameters:value(
-      VHost, <<"federation">>, <<"local-nodename">>,
-      rabbit_nodes:fqdn_nodename()).
 
 should_forward(undefined, _MaxHops) ->
     true;

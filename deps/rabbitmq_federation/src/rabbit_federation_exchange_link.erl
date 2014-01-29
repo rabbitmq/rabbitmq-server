@@ -340,7 +340,7 @@ update_binding(Args, #state{downstream_exchange = X,
            end,
     case Hops of
         0 -> ignore;
-        _ -> Node = rabbit_federation_util:local_nodename(vhost(X)),
+        _ -> Node = rabbit_nodes:cluster_name(),
              ABSuffix = rabbit_federation_db:get_active_suffix(
                           X, Upstream, <<"A">>),
              DVHost = vhost(X),
@@ -499,7 +499,7 @@ ensure_internal_exchange(IntXNameBin,
 
 upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                                                virtual_host = DownVHost}) ->
-    Node = rabbit_federation_util:local_nodename(DownVHost),
+    Node = rabbit_nodes:cluster_name(),
     DownPart = case DownVHost of
                    VHost -> case DownXNameBin of
                                 XNameBin -> <<"">>;
