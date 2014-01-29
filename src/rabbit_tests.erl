@@ -1349,16 +1349,26 @@ test_with_state() ->
     passed.
 
 test_mcall() ->
-    P1 = spawn_link(fun() -> register(foo, self()), gs2_test_listener() end),
+    P1 = spawn(fun gs2_test_listener/0),
+    register(foo, P1),
     global:register_name(gfoo, P1),
-    P2 = spawn(fun() -> register(bar, self()), exit(bang) end),
+
+    P2 = spawn(fun() -> exit(bang) end),
+
+    %% ensure P2 is dead before we continue
+    MRef = erlang:monitor(process, P2),
+    receive
+        {'DOWN', MRef, _, _, _} -> ok
+    end,
+
+
     P3 = spawn(fun gs2_test_crasher/0),
 
     %% since P2 crashes almost immediately and P3 after receiving its first
     %% message, we have to spawn a few more processes to handle the additional
     %% cases we're interested in here
-    spawn(fun() -> register(baz, self()), gs2_test_crasher() end),
-    spawn(fun() -> register(bog, self()), gs2_test_crasher() end),
+    register(baz, spawn(fun gs2_test_crasher/0)),
+    register(bog, spawn(fun gs2_test_crasher/0)),
     global:register_name(gbaz, spawn(fun gs2_test_crasher/0)),
 
     Targets =
@@ -1378,19 +1388,21 @@ test_mcall() ->
                                          {foo, node()},
                                          {global, gfoo}]],
 
-    BadResults  = [{P2,                   noproc},
-                   {P3,                   boom},
-                   {bar,                  noproc},
-                   {baz,                  boom},
-                   {{bar, node()},        noproc},
-                   {{bog, node()},        boom},
-                   {{foo, nonode@nohost}, nodedown},
-                   {{global, gbar},       noproc},
-                   {{global, gbaz},       boom}],
+    BadResults  = [{P2,                   noproc},   % died before use
+                   {P3,                   boom},     % died on first use
+                   {bar,                  noproc},   % never registered
+                   {baz,                  boom},     % died on first use
+                   {{bar, node()},        noproc},   % never registered
+                   {{bog, node()},        boom},     % died on first use
+                   {{foo, nonode@nohost}, nodedown}, % invalid node
+                   {{global, gbar},       noproc},   % never registered globally
+                   {{global, gbaz},       boom}],    % died on first use
 
     {Replies, Errors} = gen_server2:mcall([{T, hello} || T <- Targets]),
     true = lists:sort(Replies) == lists:sort(GoodResults),
     true = lists:sort(Errors)  == lists:sort(BadResults),
+
+    exit(P1, bang),
     passed.
 
 gs2_test_crasher() ->
