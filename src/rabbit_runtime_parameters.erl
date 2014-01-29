@@ -22,6 +22,8 @@
          list_component/1, list/2, list_formatted/1, lookup/3,
          value/3, value/4, info_keys/0]).
 
+-export([set_global/2, value_global/1, value_global/2]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -74,6 +76,12 @@ set(_, <<"policy">>, _, _) ->
 set(VHost, Component, Name, Term) ->
     set_any(VHost, Component, Name, Term).
 
+set_global(Name, Term) ->
+    case mnesia_update(Name, Term) of
+        {old, Term} -> ok;
+        _           -> ok %% TODO notify
+    end.
+
 format_error(L) ->
     {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
 
@@ -100,16 +108,22 @@ set_any0(VHost, Component, Name, Term) ->
             E
     end.
 
+mnesia_update(Key, Term) ->
+    rabbit_misc:execute_mnesia_transaction(mnesia_update_fun(Key, Term)).
+
 mnesia_update(VHost, Comp, Name, Term) ->
-    F = fun () ->
-                Res = case mnesia:read(?TABLE, {VHost, Comp, Name}, read) of
-                          []       -> new;
-                          [Params] -> {old, Params#runtime_parameters.value}
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_vhost:with(VHost, mnesia_update_fun({VHost, Comp, Name}, Term))).
+
+mnesia_update_fun(Key, Term) ->
+    fun () ->
+            Res = case mnesia:read(?TABLE, Key, read) of
+                      []       -> new;
+                      [Params] -> {old, Params#runtime_parameters.value}
                       end,
-                ok = mnesia:write(?TABLE, c(VHost, Comp, Name, Term), write),
-                Res
-        end,
-    rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
+            ok = mnesia:write(?TABLE, c(Key, Term), write),
+            Res
+    end.
 
 clear(_, <<"policy">> , _) ->
     {error_string, "policies may not be cleared using this method"};
@@ -159,43 +173,43 @@ list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
 
 lookup(VHost, Component, Name) ->
-    case lookup0(VHost, Component, Name, rabbit_misc:const(not_found)) of
+    case lookup0({VHost, Component, Name}, rabbit_misc:const(not_found)) of
         not_found -> not_found;
         Params    -> p(Params)
     end.
 
-value(VHost, Component, Name) ->
-    case lookup0(VHost, Component, Name, rabbit_misc:const(not_found)) of
+value(VHost, Comp, Name)      -> value_global({VHost, Comp, Name}).
+value(VHost, Comp, Name, Def) -> value_global({VHost, Comp, Name}, Def).
+
+value_global(Key) ->
+    case lookup0(Key, rabbit_misc:const(not_found)) of
         not_found -> not_found;
         Params    -> Params#runtime_parameters.value
     end.
 
-value(VHost, Component, Name, Default) ->
-    Params = lookup0(VHost, Component, Name,
-                     fun () ->
-                             lookup_missing(VHost, Component, Name, Default)
-                     end),
+value_global(Key, Default) ->
+    Params = lookup0(Key, fun () -> lookup_missing(Key, Default) end),
     Params#runtime_parameters.value.
 
-lookup0(VHost, Component, Name, DefaultFun) ->
-    case mnesia:dirty_read(?TABLE, {VHost, Component, Name}) of
+lookup0(Key, DefaultFun) ->
+    case mnesia:dirty_read(?TABLE, Key) of
         []  -> DefaultFun();
         [R] -> R
     end.
 
-lookup_missing(VHost, Component, Name, Default) ->
+lookup_missing(Key, Default) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:read(?TABLE, {VHost, Component, Name}, read) of
-                  []  -> Record = c(VHost, Component, Name, Default),
+              case mnesia:read(?TABLE, Key, read) of
+                  []  -> Record = c(Key, Default),
                          mnesia:write(?TABLE, Record, write),
                          Record;
                   [R] -> R
               end
       end).
 
-c(VHost, Component, Name, Default) ->
-    #runtime_parameters{key = {VHost, Component, Name},
+c(Key, Default) ->
+    #runtime_parameters{key   = Key,
                         value = Default}.
 
 p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->

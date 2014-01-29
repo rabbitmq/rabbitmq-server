@@ -90,6 +90,7 @@
          status,
          environment,
          report,
+         set_cluster_name,
          eval,
 
          close_connection,
@@ -526,6 +527,10 @@ action(report, Node, _Args, _Opts, Inform) ->
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
     ok;
+
+action(set_cluster_name, Node, [Name], _Opts, Inform) ->
+    Inform("Setting cluster name to ~s", [Name]),
+    rpc_call(Node, rabbit_nodes, set_cluster_name, [list_to_binary(Name)]);
 
 action(eval, Node, [Expr], _Opts, _Inform) ->
     case erl_scan:string(Expr) of

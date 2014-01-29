@@ -17,7 +17,8 @@
 -module(rabbit_nodes).
 
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
-         is_running/2, is_process_running/2, fqdn_nodename/0]).
+         is_running/2, is_process_running/2,
+         cluster_name/0, set_cluster_name/1]).
 
 -include_lib("kernel/include/inet.hrl").
 
@@ -37,7 +38,8 @@
 -spec(cookie_hash/0 :: () -> string()).
 -spec(is_running/2 :: (node(), atom()) -> boolean()).
 -spec(is_process_running/2 :: (node(), atom()) -> boolean()).
--spec(fqdn_nodename/0 :: () -> binary()).
+-spec(cluster_name/0 :: () -> binary()).
+-spec(set_cluster_name/1 :: (binary()) -> 'ok').
 
 -endif.
 
@@ -111,8 +113,15 @@ is_process_running(Node, Process) ->
         P when is_pid(P) -> true
     end.
 
-fqdn_nodename() ->
+cluster_name() ->
+    rabbit_runtime_parameters:value_global(
+      cluster_name, cluster_name_default()).
+
+cluster_name_default() ->
     {ID, _} = rabbit_nodes:parts(node()),
     {ok, Host} = inet:gethostname(),
     {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
     list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN}))).
+
+set_cluster_name(Name) ->
+    rabbit_runtime_parameters:set_global(cluster_name, Name).
