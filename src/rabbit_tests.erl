@@ -1402,7 +1402,13 @@ test_mcall() ->
     true = lists:sort(Replies) == lists:sort(GoodResults),
     true = lists:sort(Errors)  == lists:sort(BadResults),
 
-    exit(P1, bang),
+    %% cleanup
+    P1 ! stop,
+    MRef1 = erlang:monitor(process, P1),
+    receive
+        {'DOWN', MRef1, _, _, _} -> ok
+    end,
+
     passed.
 
 gs2_test_crasher() ->
@@ -1415,8 +1421,8 @@ gs2_test_listener() ->
         {'$gen_call', From, hello} ->
             gen_server2:reply(From, goodbye),
             gs2_test_listener();
-        Other ->
-            exit(Other)
+        stop ->
+            ok
     end.
 
 test_statistics_event_receiver(Pid) ->
