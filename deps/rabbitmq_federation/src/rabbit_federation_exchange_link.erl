@@ -29,10 +29,12 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1, vhost/1]).
 
 -record(state, {upstream,
                 upstream_params,
+                upstream_name,
                 connection,
                 channel,
                 consumer_tag,
@@ -129,6 +131,7 @@ handle_info({#'basic.deliver'{routing_key  = Key,
             State = #state{
               upstream            = Upstream = #upstream{max_hops = MaxH},
               upstream_params     = UParams,
+              upstream_name       = UName,
               downstream_exchange = #resource{name = XNameBin},
               downstream_channel  = DCh,
               channel             = Ch,
@@ -136,10 +139,13 @@ handle_info({#'basic.deliver'{routing_key  = Key,
     PublishMethod = #'basic.publish'{exchange    = XNameBin,
                                      routing_key = Key},
     %% TODO add user information here?
-    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, H) end,
+    HeadersFun = fun (H) -> update_headers(UParams, UName, Redelivered, H) end,
     %% We need to check should_forward/2 here in case the upstream
     %% does not have federation and thus is using a fanout exchange.
-    ForwardFun = fun (H) -> rabbit_federation_util:should_forward(H, MaxH) end,
+    ForwardFun = fun (H) ->
+                         DName = rabbit_nodes:cluster_name(),
+                         rabbit_federation_util:should_forward(H, MaxH, DName)
+                 end,
     Unacked1 = rabbit_federation_link_util:forward(
                  Upstream, DeliverMethod, Ch, DCh, PublishMethod,
                  HeadersFun, ForwardFun, Msg, Unacked),
@@ -365,6 +371,13 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     Unacked = rabbit_federation_link_util:unacked_new(),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
+              Props = pget(server_properties,
+                           amqp_connection:info(Conn, [server_properties])),
+              UName = case rabbit_misc:table_lookup(
+                             Props, <<"cluster_name">>) of
+                          {longstr, N} -> N;
+                          _            -> unknown
+                      end,
               {Serial, Bindings} =
                   rabbit_misc:execute_mnesia_transaction(
                     fun () ->
@@ -383,6 +396,7 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                         consume_from_upstream_queue(
                           #state{upstream              = Upstream,
                                  upstream_params       = UParams,
+                                 upstream_name         = UName,
                                  connection            = Conn,
                                  channel               = Ch,
                                  next_serial           = Serial,
@@ -487,9 +501,11 @@ ensure_internal_exchange(IntXNameBin,
                                internal    = true,
                                auto_delete = true},
     Purpose = [{<<"x-internal-purpose">>, longstr, <<"federation">>}],
+    XFUArgs = [{?MAX_HOPS_ARG,  long,    MaxHops},
+               {?NODE_NAME_ARG, longstr, rabbit_nodes:cluster_name()}
+               | Purpose],
     XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
-                                  arguments = [{?MAX_HOPS_ARG, long, MaxHops} |
-                                               Purpose]},
+                                  arguments = XFUArgs},
     Fan = Base#'exchange.declare'{type      = <<"fanout">>,
                                   arguments = Purpose},
     rabbit_federation_link_util:disposable_connection_call(
@@ -518,7 +534,11 @@ delete_upstream_exchange(Conn, XNameBin) ->
     rabbit_federation_link_util:disposable_channel_call(
       Conn, #'exchange.delete'{exchange = XNameBin}).
 
-update_headers(#upstream_params{table = Table}, Redelivered, Headers) ->
+update_headers(#upstream_params{table = Table}, UName, Redelivered, Headers) ->
     rabbit_basic:prepend_table_header(
-      ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered}],
+      ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered}] ++
+          header_for_name(UName),
       Headers).
+
+header_for_name(unknown) -> [];
+header_for_name(Name)    -> [{<<"cluster-name">>, longstr, Name}].
