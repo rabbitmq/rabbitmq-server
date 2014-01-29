@@ -413,8 +413,10 @@ mcall(CallSpecs) ->
     Tag = make_ref(),
     {_, MRef} = spawn_monitor(
                   fun() ->
-                          Refs = lists:foldl(fun do_mcall/2, dict:new(),
-                                             CallSpecs),
+                          Refs = lists:foldl(
+                                   fun ({Dest, _Request}=S, Dict) ->
+                                           dict:store(do_mcall(S), Dest, Dict)
+                                   end, dict:new(), CallSpecs),
                           collect_replies(Tag, Refs, [], [])
                   end),
     receive
@@ -422,29 +424,28 @@ mcall(CallSpecs) ->
         {'DOWN', MRef, _, _, Reason}        -> exit(Reason)
     end.
 
-do_mcall({{global,Name}=Dest, Request}, Dict) ->
+do_mcall({{global,Name}=Dest, Request}) ->
     %% whereis_name is simply an ets lookup, and is precisely what
     %% global:send/2 does, yet we need a Ref to put in the call to the
     %% server, so invoking whereis_name makes a lot more sense here.
-    GRef = case global:whereis_name(Name) of
-               Pid when is_pid(Pid) ->
-                   MRef = erlang:monitor(process, Pid),
-                   catch msend(Pid, MRef, Request),
-                   MRef;
-               undefined ->
-                   Ref = make_ref(),
-                   self() ! {'DOWN', Ref, process, Dest, noproc},
-                   Ref
-           end,
-    dict:store(GRef, Dest, Dict);
-do_mcall({{Name,Node}=Dest, Request}, Dict) when is_atom(Name), is_atom(Node) ->
-    {_Node, MRef} = start_monitor(Node, Name),
+    case global:whereis_name(Name) of
+        Pid when is_pid(Pid) ->
+            MRef = erlang:monitor(process, Pid),
+            catch msend(Pid, MRef, Request),
+            MRef;
+        undefined ->
+            Ref = make_ref(),
+            self() ! {'DOWN', Ref, process, Dest, noproc},
+            Ref
+    end;
+do_mcall({{Name,Node}=Dest, Request}) when is_atom(Name), is_atom(Node) ->
+    {_Node, MRef} = start_monitor(Node, Name), %% NB: we don't handle R6
     catch msend(Dest, MRef, Request),
-    dict:store(MRef, Dest, Dict);
-do_mcall({Dest, Request}, Dict) when is_atom(Dest); is_pid(Dest) ->
+    MRef;
+do_mcall({Dest, Request}) when is_atom(Dest); is_pid(Dest) ->
     MRef = erlang:monitor(process, Dest),
     catch msend(Dest, MRef, Request),
-    dict:store(MRef, Dest, Dict).
+    MRef.
 
 msend(Dest, MRef, Request) ->
     erlang:send(Dest, {'$gen_call', {self(), MRef}, Request}, [noconnect]).
