@@ -335,6 +335,7 @@ dn_lookup(Username, LDAP) ->
                                   env(dn_lookup_attribute), Filled)},
                        {attributes, ["distinguishedName"]}]) of
         {ok, #eldap_search_result{entries = [#eldap_entry{object_name = DN}]}}->
+            ?L1("DN lookup: ~s -> ~s", [Username, DN]),
             DN;
         {ok, #eldap_search_result{entries = Entries}} ->
             rabbit_log:warning("Searching for DN for ~s, got back ~p~n",
