@@ -854,13 +854,10 @@ prioritise_cast(Msg, _Len, State) ->
     end.
 
 consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}) ->
-    {Ingress, Egress} = BQ:msg_rates(BQS),
-    case Ingress of
-        0.0 -> 0;
-        _   -> case Egress / Ingress < ?CONSUMER_BIAS_RATIO of
-                   true  -> +1;
-                   false -> 0
-               end
+    case BQ:msg_rates(BQS) of
+        {0.0,          _} -> 0;
+        {Ingress, Egress} when Egress / Ingress < ?CONSUMER_BIAS_RATIO -> 1;
+        {_,            _} -> 0
     end.
 
 prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->

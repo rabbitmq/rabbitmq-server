@@ -704,7 +704,7 @@ set_ram_duration_target(
                                      in      = AvgIngressRate,
                                      ack_out = AvgAckEgressRate,
                                      ack_in  = AvgAckIngressRate },
-                             target_ram_count = TargetRamCount }) ->
+                    target_ram_count = TargetRamCount }) ->
     Rate =
         AvgEgressRate + AvgIngressRate + AvgAckEgressRate + AvgAckIngressRate,
     TargetRamCount1 =
@@ -756,16 +756,16 @@ update_rate(Now, TS, Count, Rate) ->
     Time = timer:now_diff(Now, TS) / ?MICROS_PER_SECOND,
     rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE, Count / Time, Rate).
 
-ram_duration(State0) ->
-    State = #vqstate {
-               rates              = #rates { out     = AvgEgressRate,
-                                             in      = AvgIngressRate,
-                                             ack_out = AvgAckEgressRate,
-                                             ack_in  = AvgAckIngressRate },
-               ram_msg_count      = RamMsgCount,
-               ram_msg_count_prev = RamMsgCountPrev,
-               ram_pending_ack    = RPA,
-               ram_ack_count_prev = RamAckCountPrev } = update_rates(State0),
+ram_duration(State) ->
+    State1 = #vqstate { rates = #rates { out     = AvgEgressRate,
+                                         in      = AvgIngressRate,
+                                         ack_out = AvgAckEgressRate,
+                                         ack_in  = AvgAckIngressRate },
+                        ram_msg_count      = RamMsgCount,
+                        ram_msg_count_prev = RamMsgCountPrev,
+                        ram_pending_ack    = RPA,
+                        ram_ack_count_prev = RamAckCountPrev } =
+        update_rates(State),
 
     RamAckCount = gb_trees:size(RPA),
 
@@ -779,7 +779,7 @@ ram_duration(State0) ->
                                    AvgAckEgressRate + AvgAckIngressRate))
         end,
 
-    {Duration, State}.
+    {Duration, State1}.
 
 needs_timeout(State = #vqstate { index_state      = IndexState,
                                  target_ram_count = TargetRamCount }) ->
@@ -1539,11 +1539,10 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
                     ram_pending_ack  = RPA,
                     ram_msg_count    = RamMsgCount,
                     target_ram_count = TargetRamCount,
-                    rates          = #rates { in      = AvgIngress,
-                                              out     = AvgEgress,
-                                              ack_in  = AvgAckIngress,
-                                              ack_out = AvgAckEgress }
-                   }) ->
+                    rates            = #rates { in      = AvgIngress,
+                                                out     = AvgEgress,
+                                                ack_in  = AvgAckIngress,
+                                                ack_out = AvgAckEgress } }) ->
 
     {Reduce, State1 = #vqstate { q2 = Q2, q3 = Q3 }} =
         case chunk_size(RamMsgCount + gb_trees:size(RPA), TargetRamCount) of
