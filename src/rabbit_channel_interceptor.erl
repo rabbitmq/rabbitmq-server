@@ -22,7 +22,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([intercept_method/1]).
+-export([intercept_method/2]).
 
 -ifdef(use_specs).
 
@@ -32,7 +32,7 @@
 
 -callback description() -> [proplists:property()].
 
--callback intercept(original_method()) ->
+-callback intercept(original_method(), rabbit_types:vhost()) ->
     rabbit_types:ok_or_error2(processed_method(), any()).
 
 %% Whether the interceptor wishes to intercept the amqp method
@@ -43,7 +43,7 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {intercept, 1}, {applies_to, 1}];
+    [{description, 0}, {intercept, 2}, {applies_to, 1}];
 behaviour_info(_Other) ->
     undefined.
 
@@ -51,15 +51,15 @@ behaviour_info(_Other) ->
 
 %%----------------------------------------------------------------------------
 
-intercept_method(#'basic.publish'{} = M) ->
+intercept_method(#'basic.publish'{} = M, _VHost) ->
     M;
-intercept_method(M) ->
-    intercept_method(M, select(rabbit_misc:method_record_type(M))).
+intercept_method(M, VHost) ->
+    intercept_method(M, VHost, select(rabbit_misc:method_record_type(M))).
 
-intercept_method(M, []) ->
+intercept_method(M, _VHost, []) ->
     M;
-intercept_method(M, [I]) ->
-    case I:intercept(M) of
+intercept_method(M, VHost, [I]) ->
+    case I:intercept(M, VHost) of
         {ok, M2} ->
             case validate_method(M, M2) of
                 true ->
@@ -74,7 +74,7 @@ intercept_method(M, [I]) ->
             internal_error("Interceptor: ~p failed with reason: ~p",
                            [I, Reason])
     end;
-intercept_method(M, Is) ->
+intercept_method(M, _VHost, Is) ->
     internal_error("More than one interceptor for method: ~p -- ~p",
                    [rabbit_misc:method_record_type(M), Is]).
 
