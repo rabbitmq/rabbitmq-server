@@ -87,7 +87,7 @@ publish1(RoutingKey, Format, Data, LogExch) ->
     %% 0-9-1 says the timestamp is a "64 bit POSIX timestamp". That's
     %% second resolution, not millisecond.
     Timestamp = rabbit_misc:now_ms() div 1000,
-    {ok, _RoutingRes, _DeliveredQPids} =
+    {ok, _DeliveredQPids} =
         rabbit_basic:publish(LogExch, RoutingKey,
                              #'P_basic'{content_type = <<"text/plain">>,
                                         timestamp    = Timestamp},

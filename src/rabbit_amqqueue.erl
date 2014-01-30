@@ -26,8 +26,8 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
--export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
--export([notify_sent/2, notify_sent_queue_down/1, resume/2, flush_all/2]).
+-export([basic_get/4, basic_consume/9, basic_cancel/4, notify_decorators/1]).
+-export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
@@ -51,7 +51,7 @@
 
 -ifdef(use_specs).
 
--export_type([name/0, qmsg/0, routing_result/0]).
+-export_type([name/0, qmsg/0]).
 
 -type(name() :: rabbit_types:r('queue')).
 -type(qpids() :: [pid()]).
@@ -61,7 +61,6 @@
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(routing_result() :: 'routed' | 'unroutable').
 -type(queue_or_absent() :: rabbit_types:amqqueue() |
                            {'absent', rabbit_types:amqqueue()}).
 -type(not_found_or_absent() :: 'not_found' |
@@ -113,10 +112,9 @@
                     -> [rabbit_types:infos()]).
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
--spec(consumers/1 ::
-        (rabbit_types:amqqueue())
-        -> [{pid(), rabbit_types:ctag(), boolean(),
-             rabbit_framing:amqp_table()}]).
+-spec(consumers/1 :: (rabbit_types:amqqueue())
+                     -> [{pid(), rabbit_types:ctag(), boolean(),
+                          rabbit_framing:amqp_table()}]).
 -spec(consumer_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(consumers_all/1 ::
         (rabbit_types:vhost())
@@ -139,9 +137,9 @@
 -spec(purge/1 :: (rabbit_types:amqqueue()) -> qlen()).
 -spec(forget_all_durable/1 :: (node()) -> 'ok').
 -spec(deliver/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
-                        {routing_result(), qpids()}).
+                        qpids()).
 -spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
-                             {routing_result(), qpids()}).
+                             qpids()).
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
@@ -151,9 +149,9 @@
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(credit/5 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(),
                    non_neg_integer(), boolean()) -> 'ok').
--spec(basic_consume/10 ::
+-spec(basic_consume/9 ::
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
-         rabbit_types:ctag(), boolean(), {non_neg_integer(), boolean()} | 'none', any(), any())
+         rabbit_types:ctag(), boolean(), rabbit_framing:amqp_table(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
@@ -161,7 +159,6 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(resume/2 :: (pid(), pid()) -> 'ok').
--spec(flush_all/2 :: (qpids(), pid()) -> 'ok').
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit() |
@@ -433,7 +430,7 @@ declare_args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
-     {<<"x-max-length">>,              fun check_max_length_arg/2}].
+     {<<"x-max-length">>,              fun check_non_neg_int_arg/2}].
 
 consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
 
@@ -443,7 +440,7 @@ check_int_arg({Type, _}, _) ->
         false -> {error, {unacceptable_type, Type}}
     end.
 
-check_max_length_arg({Type, Val}, Args) ->
+check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
         ok when Val >= 0 -> ok;
         ok               -> {error, {value_negative, Val}};
@@ -556,8 +553,8 @@ requeue(QPid, MsgIds, ChPid) -> delegate:call(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, MsgIds, ChPid) -> delegate:cast(QPid, {ack, MsgIds, ChPid}).
 
-reject(QPid, MsgIds, Requeue, ChPid) ->
-    delegate:cast(QPid, {reject, MsgIds, Requeue, ChPid}).
+reject(QPid, Requeue, MsgIds, ChPid) ->
+    delegate:cast(QPid, {reject, Requeue, MsgIds, ChPid}).
 
 notify_down_all(QPids, ChPid) ->
     {_, Bads} = delegate:call(QPids, {notify_down, ChPid}),
@@ -578,13 +575,11 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck, LimiterPid}).
 
-basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid,
-              LimiterPid, LimiterActive,
-              ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg) ->
-    ok = check_consume_arguments(QName, OtherArgs),
+basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid, LimiterPid,
+              LimiterActive, ConsumerTag, ExclusiveConsume, Args, OkMsg) ->
+    ok = check_consume_arguments(QName, Args),
     delegate:call(QPid, {basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-                         ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs,
-                         OkMsg}).
+                         ConsumerTag, ExclusiveConsume, Args, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     delegate:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
@@ -610,8 +605,6 @@ notify_sent_queue_down(QPid) ->
     ok.
 
 resume(QPid, ChPid) -> delegate:cast(QPid, {resume, ChPid}).
-
-flush_all(QPids, ChPid) -> delegate:cast(QPids, {flush, ChPid}).
 
 internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
@@ -710,17 +703,11 @@ pseudo_queue(QueueName, Pid) ->
               pid          = Pid,
               slave_pids   = []}.
 
-deliver([], #delivery{mandatory = false}, _Flow) ->
+deliver([], _Delivery, _Flow) ->
     %% /dev/null optimisation
-    {routed, []};
+    [];
 
-deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
-    %% optimisation: when Mandatory = false, rabbit_amqqueue:deliver
-    %% will deliver the message to the queue process asynchronously,
-    %% and return true, which means all the QPids will always be
-    %% returned. It is therefore safe to use a fire-and-forget cast
-    %% here and return the QPids - the semantics is preserved. This
-    %% scales much better than the case below.
+deliver(Qs, Delivery, Flow) ->
     {MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
     case Flow of
@@ -737,19 +724,7 @@ deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
     SMsg = {deliver, Delivery, true,  Flow},
     delegate:cast(MPids, MMsg),
     delegate:cast(SPids, SMsg),
-    {routed, QPids};
-
-deliver(Qs, Delivery, _Flow) ->
-    {MPids, SPids} = qpids(Qs),
-    %% see comment above
-    MMsg = {deliver, Delivery, false},
-    SMsg = {deliver, Delivery, true},
-    {MRouted, _} = delegate:call(MPids, MMsg),
-    {SRouted, _} = delegate:call(SPids, SMsg),
-    case MRouted ++ SRouted of
-        [] -> {unroutable, []};
-        R  -> {routed,     [QPid || {QPid, ok} <- R]}
-    end.
+    QPids.
 
 qpids([]) -> {[], []}; %% optimisation
 qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[QPid], SPids}; %% opt

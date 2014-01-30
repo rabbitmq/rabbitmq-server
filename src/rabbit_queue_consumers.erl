@@ -17,7 +17,7 @@
 -module(rabbit_queue_consumers).
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
-         unacknowledged_message_count/0, add/9, remove/3, erase_ch/2,
+         unacknowledged_message_count/0, add/8, remove/3, erase_ch/2,
          send_drained/0, deliver/3, record_ack/3, subtract_acks/2,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
@@ -57,7 +57,6 @@
 -type ch() :: pid().
 -type ack() :: non_neg_integer().
 -type cr_fun() :: fun ((#cr{}) -> #cr{}).
--type credit_args() :: {non_neg_integer(), boolean()} | 'none'.
 -type fetch_result() :: {rabbit_types:basic_message(), boolean(), ack()}.
 
 -spec new() -> state().
@@ -68,8 +67,7 @@
 -spec count() -> non_neg_integer().
 -spec unacknowledged_message_count() -> non_neg_integer().
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
-          credit_args(), rabbit_framing:amqp_table(), boolean(),
-          state()) -> state().
+          rabbit_framing:amqp_table(), boolean(), state()) -> state().
 -spec remove(ch(), rabbit_types:ctag(), state()) ->
                     'not_found' | state().
 -spec erase_ch(ch(), state()) ->
@@ -120,8 +118,8 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 unacknowledged_message_count() ->
     lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]).
 
-add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
-    IsEmpty, State = #state{consumers = Consumers}) ->
+add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Args, IsEmpty,
+    State = #state{consumers = Consumers}) ->
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
     Limiter1 = case LimiterActive of
@@ -129,34 +127,34 @@ add(ChPid, ConsumerTag, NoAck, LimiterPid, LimiterActive, CreditArgs, OtherArgs,
                    false -> Limiter
                end,
     C1 = C#cr{consumer_count = Count + 1, limiter = Limiter1},
-    update_ch_record(case CreditArgs of
+    update_ch_record(case parse_credit_args(Args) of
                          none         -> C1;
                          {Crd, Drain} -> credit_and_drain(
-                                           C1, ConsumerTag, Crd, Drain, IsEmpty)
+                                           C1, CTag, Crd, Drain, IsEmpty)
                      end),
-    Consumer = #consumer{tag          = ConsumerTag,
+    Consumer = #consumer{tag          = CTag,
                          ack_required = not NoAck,
-                         args         = OtherArgs},
+                         args         = Args},
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers)}.
 
-remove(ChPid, ConsumerTag, State = #state{consumers = Consumers}) ->
+remove(ChPid, CTag, State = #state{consumers = Consumers}) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
         C = #cr{consumer_count    = Count,
                 limiter           = Limiter,
                 blocked_consumers = Blocked} ->
-            Blocked1 = remove_consumer(ChPid, ConsumerTag, Blocked),
+            Blocked1 = remove_consumer(ChPid, CTag, Blocked),
             Limiter1 = case Count of
                            1 -> rabbit_limiter:deactivate(Limiter);
                            _ -> Limiter
                        end,
-            Limiter2 = rabbit_limiter:forget_consumer(Limiter1, ConsumerTag),
+            Limiter2 = rabbit_limiter:forget_consumer(Limiter1, CTag),
             update_ch_record(C#cr{consumer_count    = Count - 1,
                                   limiter           = Limiter2,
                                   blocked_consumers = Blocked1}),
             State#state{consumers =
-                            remove_consumer(ChPid, ConsumerTag, Consumers)}
+                            remove_consumer(ChPid, CTag, Consumers)}
     end.
 
 erase_ch(ChPid, State = #state{consumers = Consumers}) ->
@@ -215,14 +213,14 @@ deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
     end.
 
 deliver_to_consumer(FetchFun,
-                    #consumer{tag          = ConsumerTag,
+                    #consumer{tag          = CTag,
                               ack_required = AckRequired},
                     C = #cr{ch_pid               = ChPid,
                             acktags              = ChAckTags,
                             unsent_message_count = Count},
                     QName) ->
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
-    rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
+    rabbit_channel:deliver(ChPid, CTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
                      true  -> queue:in(AckTag, ChAckTags);
@@ -324,6 +322,16 @@ utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
 
 %%----------------------------------------------------------------------------
 
+parse_credit_args(Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
+        {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
+                            rabbit_misc:table_lookup(T, <<"drain">>)} of
+                          {{long, Credit}, {bool, Drain}} -> {Credit, Drain};
+                          _                               -> none
+                      end;
+        undefined  -> none
+    end.
+
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of
         undefined -> not_found;
@@ -399,9 +407,9 @@ add_consumer({ChPid, Consumer = #consumer{args = Args}}, Queue) ->
                end,
     priority_queue:in({ChPid, Consumer}, Priority, Queue).
 
-remove_consumer(ChPid, ConsumerTag, Queue) ->
-    priority_queue:filter(fun ({CP, #consumer{tag = CTag}}) ->
-                                  (CP /= ChPid) or (CTag /= ConsumerTag)
+remove_consumer(ChPid, CTag, Queue) ->
+    priority_queue:filter(fun ({CP, #consumer{tag = CT}}) ->
+                                  (CP /= ChPid) or (CT /= CTag)
                           end, Queue).
 
 remove_consumers(ChPid, Queue) ->

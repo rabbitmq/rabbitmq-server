@@ -20,9 +20,9 @@
 
 -export([publish/4, publish/5, publish/1,
          message/3, message/4, properties/1, prepend_table_header/3,
-         extract_headers/1, map_headers/2, delivery/3, header_routes/1,
+         extract_headers/1, map_headers/2, delivery/4, header_routes/1,
          parse_expiration/1]).
--export([build_content/2, from_content/1]).
+-export([build_content/2, from_content/1, msg_size/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -31,8 +31,7 @@
 -type(properties_input() ::
         (rabbit_framing:amqp_property_record() | [{atom(), any()}])).
 -type(publish_result() ::
-        ({ok, rabbit_amqqueue:routing_result(), [pid()]}
-         | rabbit_types:error('not_found'))).
+        ({ok, [pid()]} | rabbit_types:error('not_found'))).
 -type(headers() :: rabbit_framing:amqp_table() | 'undefined').
 
 -type(exchange_input() :: (rabbit_types:exchange() | rabbit_exchange:name())).
@@ -46,8 +45,8 @@
          properties_input(), body_input()) -> publish_result()).
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
--spec(delivery/3 ::
-        (boolean(), rabbit_types:message(), undefined | integer()) ->
+-spec(delivery/4 ::
+        (boolean(), boolean(), rabbit_types:message(), undefined | integer()) ->
                          rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
@@ -77,6 +76,9 @@
         (rabbit_framing:amqp_property_record())
         -> rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any())).
 
+-spec(msg_size/1 :: (rabbit_types:content() | rabbit_types:message()) ->
+                         non_neg_integer()).
+
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -90,10 +92,10 @@ publish(Exchange, RoutingKeyBin, Properties, Body) ->
 %% erlang distributed network.
 publish(X = #exchange{name = XName}, RKey, Mandatory, Props, Body) ->
     Message = message(XName, RKey, properties(Props), Body),
-    publish(X, delivery(Mandatory, Message, undefined));
+    publish(X, delivery(Mandatory, false, Message, undefined));
 publish(XName, RKey, Mandatory, Props, Body) ->
     Message = message(XName, RKey, properties(Props), Body),
-    publish(delivery(Mandatory, Message, undefined)).
+    publish(delivery(Mandatory, false, Message, undefined)).
 
 publish(Delivery = #delivery{
           message = #basic_message{exchange_name = XName}}) ->
@@ -104,11 +106,11 @@ publish(Delivery = #delivery{
 
 publish(X, Delivery) ->
     Qs = rabbit_amqqueue:lookup(rabbit_exchange:route(X, Delivery)),
-    {RoutingRes, DeliveredQPids} = rabbit_amqqueue:deliver(Qs, Delivery),
-    {ok, RoutingRes, DeliveredQPids}.
+    DeliveredQPids = rabbit_amqqueue:deliver(Qs, Delivery),
+    {ok, DeliveredQPids}.
 
-delivery(Mandatory, Message, MsgSeqNo) ->
-    #delivery{mandatory = Mandatory, sender = self(),
+delivery(Mandatory, Confirm, Message, MsgSeqNo) ->
+    #delivery{mandatory = Mandatory, confirm = Confirm, sender = self(),
               message = Message, msg_seq_no = MsgSeqNo}.
 
 build_content(Properties, BodyBin) when is_binary(BodyBin) ->
@@ -274,3 +276,5 @@ parse_expiration(#'P_basic'{expiration = Expiration}) ->
             {error, {leftover_string, S}}
     end.
 
+msg_size(#content{payload_fragments_rev = PFR}) -> iolist_size(PFR);
+msg_size(#basic_message{content = Content})     -> msg_size(Content).

@@ -1172,7 +1172,7 @@ test_server_status() ->
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, Limiter, false, <<"ctag">>, true, none, [], undefined),
+           Q, true, Ch, Limiter, false, <<"ctag">>, true, [], undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -2410,8 +2410,8 @@ publish_and_confirm(Q, Payload, Count) ->
                                     <<>>, #'P_basic'{delivery_mode = 2},
                                     Payload),
          Delivery = #delivery{mandatory = false, sender = self(),
-                              message = Msg, msg_seq_no = Seq},
-         {routed, _} = rabbit_amqqueue:deliver([Q], Delivery)
+                              confirm = true, message = Msg, msg_seq_no = Seq},
+          _QPids = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
 
