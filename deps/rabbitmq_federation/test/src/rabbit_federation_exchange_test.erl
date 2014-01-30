@@ -396,8 +396,8 @@ binding_propagation_test() ->
     Q2 = bind_queue(Bugs,    <<"x">>, <<"bugs">>),
     Q3 = bind_queue(Jessica, <<"x">>, <<"jessica">>),
 
-    await_bindings(?DYLAN,   <<"x">>, [<<"jessica">>, <<"jessica">>,
-                                         <<"bugs">>, <<"dylan">>]),
+    await_binding( ?DYLAN,   <<"x">>, <<"jessica">>, 2),
+    await_bindings(?DYLAN,   <<"x">>, [<<"bugs">>, <<"dylan">>]),
     await_bindings(?BUGS,    <<"x">>, [<<"jessica">>, <<"bugs">>]),
     await_bindings(?JESSICA, <<"x">>, [<<"dylan">>, <<"jessica">>]),
 
