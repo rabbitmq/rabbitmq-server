@@ -1354,13 +1354,8 @@ test_mcall() ->
     global:register_name(gfoo, P1),
 
     P2 = spawn(fun() -> exit(bang) end),
-
-    %% ensure P2 is dead before we continue
-    MRef = erlang:monitor(process, P2),
-    receive
-        {'DOWN', MRef, _, _, _} -> ok
-    end,
-
+    %% ensure P2 is dead (ignore the race setting up the monitor)
+    await_exit(P2),
 
     P3 = spawn(fun gs2_test_crasher/0),
 
@@ -1371,6 +1366,9 @@ test_mcall() ->
     register(bog, spawn(fun gs2_test_crasher/0)),
     global:register_name(gbaz, spawn(fun gs2_test_crasher/0)),
 
+    {ok, Hostname} = inet:gethostname(),
+    NoNode = list_to_atom("nonode@" ++ Hostname),
+
     Targets =
         %% pids
         [P1, P2, P3]
@@ -1379,7 +1377,7 @@ test_mcall() ->
         [foo, bar, baz]
         ++
         %% {Name, Node} pairs
-        [{foo, node()}, {bar, node()}, {bog, node()}, {foo, nonode@nohost}]
+        [{foo, node()}, {bar, node()}, {bog, node()}, {foo, NoNode}]
         ++
         %% {global, Name}
         [{global, gfoo}, {global, gbar}, {global, gbaz}],
@@ -1388,28 +1386,30 @@ test_mcall() ->
                                          {foo, node()},
                                          {global, gfoo}]],
 
-    BadResults  = [{P2,                   noproc},   % died before use
-                   {P3,                   boom},     % died on first use
-                   {bar,                  noproc},   % never registered
-                   {baz,                  boom},     % died on first use
-                   {{bar, node()},        noproc},   % never registered
-                   {{bog, node()},        boom},     % died on first use
-                   {{foo, nonode@nohost}, nodedown}, % invalid node
-                   {{global, gbar},       noproc},   % never registered globally
-                   {{global, gbaz},       boom}],    % died on first use
+    BadResults  = [{P2,             noproc},   % died before use
+                   {P3,             boom},     % died on first use
+                   {bar,            noproc},   % never registered
+                   {baz,            boom},     % died on first use
+                   {{bar, node()},  noproc},   % never registered
+                   {{bog, node()},  boom},     % died on first use
+                   {{foo, NoNode},  nodedown}, % invalid node
+                   {{global, gbar}, noproc},   % never registered globally
+                   {{global, gbaz}, boom}],    % died on first use
 
     {Replies, Errors} = gen_server2:mcall([{T, hello} || T <- Targets]),
     true = lists:sort(Replies) == lists:sort(GoodResults),
     true = lists:sort(Errors)  == lists:sort(BadResults),
 
-    %% cleanup
+    %% cleanup (ignore the race setting up the monitor)
     P1 ! stop,
-    MRef1 = erlang:monitor(process, P1),
-    receive
-        {'DOWN', MRef1, _, _, _} -> ok
-    end,
-
+    await_exit(P1),
     passed.
+
+await_exit(Pid) ->
+    MRef = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', MRef, _, _, _} -> ok
+    end.
 
 gs2_test_crasher() ->
     receive
