@@ -209,6 +209,10 @@
 %% Called immediately before the queue hibernates.
 -callback handle_pre_hibernate(state()) -> state().
 
+%% Used to help prioritisation in rabbit_amqqueue_process. The rate of
+%% inbound messages and outbound messages at the moment.
+-callback msg_rates(state()) -> {float(), float()}.
+
 %% Exists for debugging purposes, to be able to expose state via
 %% rabbitmqctl list_queues backing_queue_status
 -callback status(state()) -> [{atom(), any()}].
@@ -236,7 +240,8 @@ behaviour_info(callbacks) ->
      {fetch, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
-     {handle_pre_hibernate, 1}, {status, 1}, {invoke, 3}, {is_duplicate, 2}] ;
+     {handle_pre_hibernate, 1}, {msg_rates, 1}, {status, 1},
+     {invoke, 3}, {is_duplicate, 2}] ;
 behaviour_info(_Other) ->
     undefined.
 

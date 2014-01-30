@@ -22,6 +22,7 @@
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+-define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
 -export([start_link/1, info_keys/0]).
 
@@ -833,22 +834,34 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
 
 %%----------------------------------------------------------------------------
 
-prioritise_call(Msg, _From, _Len, _State) ->
+prioritise_call(Msg, _From, _Len, State) ->
     case Msg of
-        info                                 -> 9;
-        {info, _Items}                       -> 9;
-        consumers                            -> 9;
-        stat                                 -> 7;
-        _                                    -> 0
+        info                                       -> 9;
+        {info, _Items}                             -> 9;
+        consumers                                  -> 9;
+        stat                                       -> 7;
+        {basic_consume, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
+        {basic_cancel, _, _, _}                    -> consumer_bias(State);
+        _                                          -> 0
     end.
 
-prioritise_cast(Msg, _Len, _State) ->
+prioritise_cast(Msg, _Len, State) ->
     case Msg of
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
+        {ack, _AckTags, _ChPid}              -> consumer_bias(State);
+        {notify_sent, _ChPid, _Credit}       -> consumer_bias(State);
+        {resume, _ChPid}                     -> consumer_bias(State);
         _                                    -> 0
+    end.
+
+consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    case BQ:msg_rates(BQS) of
+        {0.0,          _} -> 0;
+        {Ingress, Egress} when Egress / Ingress < ?CONSUMER_BIAS_RATIO -> 1;
+        {_,            _} -> 0
     end.
 
 prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
