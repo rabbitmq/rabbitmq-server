@@ -1366,8 +1366,7 @@ test_mcall() ->
     register(bog, spawn(fun gs2_test_crasher/0)),
     global:register_name(gbaz, spawn(fun gs2_test_crasher/0)),
 
-    {ok, Hostname} = inet:gethostname(),
-    NoNode = list_to_atom("nonode@" ++ Hostname),
+    NoNode = rabbit_nodes:make("nonode"),
 
     Targets =
         %% pids
