@@ -26,11 +26,13 @@
 -import(rabbit_federation_test_util,
         [expect/3, expect_empty/2, set_param/3, clear_param/2,
          set_pol/3, clear_pol/1, plugin_dir/0, policy/1,
-         start_other_node/1, start_other_node/2, start_other_node/3,
-         stop_other_node/1]).
+         start_other_node/1, start_other_node/2, start_other_node/3]).
 
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               x(<<"fed.downstream">>)]).
+
+%% Used everywhere
+-define(RABBIT,     {"rabbit-test",       5672}).
 
 %% Used in restart_upstream_test
 -define(HARE,       {"hare",       5673}).
@@ -49,6 +51,7 @@ simple_test() ->
     with_ch(
       fun (Ch) ->
               Q = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
+              await_binding(<<"upstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
       end, ?UPSTREAM_DOWNSTREAM).
 
@@ -56,6 +59,8 @@ multiple_upstreams_test() ->
     with_ch(
       fun (Ch) ->
               Q = bind_queue(Ch, <<"fed12.downstream">>, <<"key">>),
+              await_binding(<<"upstream">>, <<"key">>),
+              await_binding(<<"upstream2">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>),
               publish_expect(Ch, <<"upstream2">>, <<"key">>, Q, <<"HELLO2">>)
       end, [x(<<"upstream">>),
@@ -88,13 +93,13 @@ kill_only_connection(Node) ->
     case connection_pids(Node) of
         [Pid] -> rabbit_networking:close_connection(Pid, "why not?"),
                  wait_for_pid_to_die(Node, Pid);
-        _     -> timer:sleep(1000),
+        _     -> timer:sleep(100),
                  kill_only_connection(Node)
     end.
 
 wait_for_pid_to_die(Node, Pid) ->
     case connection_pids(Node) of
-        [Pid] -> timer:sleep(1000),
+        [Pid] -> timer:sleep(100),
                  wait_for_pid_to_die(Node, Pid);
         _     -> ok
     end.
@@ -105,6 +110,8 @@ multiple_downstreams_test() ->
       fun (Ch) ->
               Q1 = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
               Q12 = bind_queue(Ch, <<"fed12.downstream2">>, <<"key">>),
+              await_binding(<<"upstream">>, <<"key">>, 2),
+              await_binding(<<"upstream2">>, <<"key">>),
               publish(Ch, <<"upstream">>, <<"key">>, <<"HELLO1">>),
               publish(Ch, <<"upstream2">>, <<"key">>, <<"HELLO2">>),
               expect(Ch, Q1, [<<"HELLO1">>]),
@@ -118,6 +125,7 @@ e2e_test() ->
       fun (Ch) ->
               bind_exchange(Ch, <<"downstream2">>, <<"fed.downstream">>,
                             <<"key">>),
+              await_binding(<<"upstream">>, <<"key">>),
               Q = bind_queue(Ch, <<"downstream2">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>)
       end, ?UPSTREAM_DOWNSTREAM ++ [x(<<"downstream2">>)]).
@@ -127,6 +135,7 @@ unbind_on_delete_test() ->
       fun (Ch) ->
               Q1 = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
               Q2 = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
+              await_binding(<<"upstream">>, <<"key">>),
               delete_queue(Ch, Q2),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>)
       end, ?UPSTREAM_DOWNSTREAM).
@@ -136,6 +145,7 @@ unbind_on_unbind_test() ->
       fun (Ch) ->
               Q1 = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
               Q2 = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
+              await_binding(<<"upstream">>, <<"key">>),
               unbind_queue(Ch, Q2, <<"fed.downstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>),
               delete_queue(Ch, Q2)
@@ -154,6 +164,7 @@ user_id_test() ->
               declare_exchange(Ch2, x(<<"upstream">>)),
               declare_exchange(Ch, x(<<"hare.downstream">>)),
               Q = bind_queue(Ch, <<"hare.downstream">>, <<"key">>),
+              await_binding(?HARE, <<"upstream">>, <<"key">>),
 
               Msg = #amqp_msg{props   = #'P_basic'{user_id = <<"hare-user">>},
                               payload = <<"HELLO">>},
@@ -207,6 +218,8 @@ unbind_gets_transmitted_test() ->
               Q12 = bind_queue(Ch, <<"fed.downstream">>, <<"key1">>),
               Q21 = bind_queue(Ch, <<"fed.downstream">>, <<"key2">>),
               Q22 = bind_queue(Ch, <<"fed.downstream">>, <<"key2">>),
+              await_binding(<<"upstream">>, <<"key1">>),
+              await_binding(<<"upstream">>, <<"key2">>),
               [delete_queue(Ch, Q) || Q <- [Q12, Q21, Q22]],
               publish(Ch, <<"upstream">>, <<"key1">>, <<"YES">>),
               publish(Ch, <<"upstream">>, <<"key2">>, <<"NO">>),
@@ -220,6 +233,8 @@ no_loop_test() ->
       fun (Ch) ->
               Q1 = bind_queue(Ch, <<"one">>, <<"key">>),
               Q2 = bind_queue(Ch, <<"two">>, <<"key">>),
+              await_binding(<<"one">>, <<"key">>, 2),
+              await_binding(<<"two">>, <<"key">>, 2),
               publish(Ch, <<"one">>, <<"key">>, <<"Hello from one">>),
               publish(Ch, <<"two">>, <<"key">>, <<"Hello from two">>),
               expect(Ch, Q1, [<<"Hello from one">>, <<"Hello from two">>]),
@@ -242,13 +257,15 @@ binding_recovery_test() ->
     bind_queue(Ch, Q, <<"fed.downstream">>, <<"key">>),
     timer:sleep(100), %% To get the suffix written
 
-    stop_other_node(?HARE),
+    %% i.e. don't clean up
+    rabbit_federation_test_util:stop_other_node(?HARE),
     start_other_node(?HARE, "hare-two-upstreams"),
 
     ?assert(none =/= suffix(?HARE, "upstream")),
     ?assert(none =/= suffix(?HARE, "upstream2")),
 
-    stop_other_node(?HARE),
+    %% again don't clean up
+    rabbit_federation_test_util:stop_other_node(?HARE),
 
     Ch2 = start_other_node(?HARE),
 
@@ -291,12 +308,11 @@ restart_upstream_test() ->
               unbind_queue(
                 Downstream, Qgoes, <<"hare.downstream">>, <<"goes">>),
               Upstream1 = start_other_node(?HARE),
+
               publish(Upstream1, <<"upstream">>, <<"goes">>, <<"GOES">>),
               publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
-              %% Give the link a chance to come up and for this binding
-              %% to be transferred
-              timer:sleep(1000),
               publish(Upstream1, <<"upstream">>, <<"comes">>, <<"COMES">>),
+
               expect(Downstream, Qstays, [<<"STAYS">>]),
               expect(Downstream, Qcomes, [<<"COMES">>]),
               expect_empty(Downstream, Qgoes),
@@ -321,8 +337,9 @@ max_hops_test() ->
     Q2 = bind_queue(Mopsy,      <<"ring">>, <<"key">>),
     Q3 = bind_queue(Cottontail, <<"ring">>, <<"key">>),
 
-    %% Wait for federation to come up on all nodes
-    timer:sleep(5000),
+    await_binding(?FLOPSY,     <<"ring">>, <<"key">>, 3),
+    await_binding(?MOPSY,      <<"ring">>, <<"key">>, 3),
+    await_binding(?COTTONTAIL, <<"ring">>, <<"key">>, 3),
 
     publish(Flopsy,     <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
     publish(Mopsy,      <<"ring">>, <<"key">>, <<"HELLO mopsy">>),
@@ -379,24 +396,18 @@ binding_propagation_test() ->
     Q2 = bind_queue(Bugs,    <<"x">>, <<"bugs">>),
     Q3 = bind_queue(Jessica, <<"x">>, <<"jessica">>),
 
-    %% Wait for bindings to propagate
-    timer:sleep(5000),
-
-    assert_bindings("dylan",   <<"x">>, [<<"jessica">>, <<"jessica">>,
+    await_bindings(?DYLAN,   <<"x">>, [<<"jessica">>, <<"jessica">>,
                                          <<"bugs">>, <<"dylan">>]),
-    assert_bindings("bugs",    <<"x">>, [<<"jessica">>, <<"bugs">>]),
-    assert_bindings("jessica", <<"x">>, [<<"dylan">>, <<"jessica">>]),
+    await_bindings(?BUGS,    <<"x">>, [<<"jessica">>, <<"bugs">>]),
+    await_bindings(?JESSICA, <<"x">>, [<<"dylan">>, <<"jessica">>]),
 
     delete_queue(Dylan,   Q1),
     delete_queue(Bugs,    Q2),
     delete_queue(Jessica, Q3),
 
-    %% Wait for bindings to propagate
-    timer:sleep(5000),
-
-    assert_bindings("dylan",   <<"x">>, []),
-    assert_bindings("bugs",    <<"x">>, []),
-    assert_bindings("jessica", <<"x">>, []),
+    await_bindings(?DYLAN,   <<"x">>, []),
+    await_bindings(?BUGS,    <<"x">>, []),
+    await_bindings(?JESSICA, <<"x">>, []),
 
     stop_other_node(?DYLAN),
     stop_other_node(?BUGS),
@@ -412,6 +423,7 @@ upstream_has_no_federation_test() ->
               declare_exchange(Upstream, x(<<"upstream">>)),
               declare_exchange(Downstream, x(<<"hare.downstream">>)),
               Q = bind_queue(Downstream, <<"hare.downstream">>, <<"routing">>),
+              await_binding(?HARE, <<"upstream">>, <<"routing">>),
               publish(Upstream, <<"upstream">>, <<"routing">>, <<"HELLO">>),
               expect(Downstream, Q, [<<"HELLO">>]),
               delete_exchange(Downstream, <<"hare.downstream">>),
@@ -507,7 +519,22 @@ with_ch(Fun, Xs) ->
     Fun(Ch),
     delete_all(Ch, Xs),
     amqp_connection:close(Conn),
+    cleanup(?RABBIT),
     ok.
+
+cleanup({Nodename, _}) ->
+    [rpc:call(n(Nodename), rabbit_amqqueue, delete, [Q, false, false]) ||
+        Q <- queues(Nodename)].
+
+queues(Nodename) ->
+    case rpc:call(n(Nodename), rabbit_amqqueue, list, [<<"/">>]) of
+        {badrpc, _} -> [];
+        Qs          -> Qs
+    end.
+
+stop_other_node(Node) ->
+    cleanup(Node),
+    rabbit_federation_test_util:stop_other_node(Node).
 
 declare_all(Ch, Xs) -> [declare_exchange(Ch, X) || X <- Xs].
 delete_all(Ch, Xs) ->
@@ -556,37 +583,36 @@ delete_exchange(Ch, X) ->
 delete_queue(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
+await_binding(X, Key)             -> await_binding(?RABBIT, X, Key, 1).
+await_binding(B = {_, _}, X, Key) -> await_binding(B,       X, Key, 1);
+await_binding(X, Key, Count)      -> await_binding(?RABBIT, X, Key, Count).
+
+await_binding(Broker = {Nodename, _Port}, X, Key, Count) ->
+    Bs = bindings_from(Nodename, X),
+    case [K || #binding{key = K} <- Bs, K =:= Key] of
+        L when length(L) <   Count -> timer:sleep(100),
+                                      await_binding(Broker, X, Key, Count);
+        L when length(L) =:= Count -> ok;
+        L                          -> exit({too_many_bindings,
+                                            X, Key, Count, L, Bs})
+    end.
+
+await_bindings(Broker, X, Keys) ->
+    [await_binding(Broker, X, Key) || Key <- Keys].
+
+bindings_from(Nodename, X) ->
+    rpc:call(n(Nodename), rabbit_binding, list_for_source, [r(X)]).
+
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->
     publish(Ch, X, Key, #amqp_msg{payload = Payload});
 
 publish(Ch, X, Key, Msg = #amqp_msg{}) ->
-    %% The trouble is that we transmit bindings upstream asynchronously...
-    timer:sleep(5000),
     amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
                                            routing_key = Key}, Msg).
 
 publish_expect(Ch, X, Key, Q, Payload) ->
     publish(Ch, X, Key, Payload),
     expect(Ch, Q, [Payload]).
-
-assert_bindings(Nodename, X, BindingsExp) ->
-    Bindings0 = rpc:call(n(Nodename), rabbit_binding, list_for_source, [r(X)]),
-    BindingsAct = [Key || #binding{key = Key} <- Bindings0],
-    assert_list(BindingsExp, BindingsAct).
-
-assert_list(Exp, Act) ->
-    case assert_list0(Exp, Act) of
-        ok   -> ok;
-        fail -> exit({assert_failed, Exp, Act})
-    end.
-
-assert_list0([],  [])      -> ok;
-assert_list0(Exp, [])      -> fail;
-assert_list0([],  Act)     -> fail;
-assert_list0(Exp, [H | T]) -> case lists:member(H, Exp) of
-                                  true  -> assert_list0(Exp -- [H], T);
-                                  false -> fail
-                              end.
 
 %%----------------------------------------------------------------------------
 
