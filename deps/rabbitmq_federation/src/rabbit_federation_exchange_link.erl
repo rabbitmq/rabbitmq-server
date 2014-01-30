@@ -335,26 +335,31 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
 %% restrictive max_hops we have yet passed through.
 
 update_binding(Args, #state{downstream_exchange = X,
-                            upstream            = Upstream}) ->
+                            upstream            = Upstream,
+                            upstream_name       = UName}) ->
     #upstream{max_hops = MaxHops} = Upstream,
     Hops = case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
                undefined    -> MaxHops;
                {array, All} -> [{table, Prev} | _] = All,
                                {short, PrevHops} =
                                    rabbit_misc:table_lookup(Prev, <<"hops">>),
-                               lists:min([PrevHops - 1, MaxHops])
+                               case rabbit_federation_util:already_seen(
+                                      UName, All) of
+                                   true  -> 0;
+                                   false -> lists:min([PrevHops - 1, MaxHops])
+                               end
            end,
     case Hops of
         0 -> ignore;
-        _ -> Node = rabbit_nodes:cluster_name(),
+        _ -> Cluster = rabbit_nodes:cluster_name(),
              ABSuffix = rabbit_federation_db:get_active_suffix(
                           X, Upstream, <<"A">>),
              DVHost = vhost(X),
              DName = name(X),
-             Down = <<Node/binary, ":", DVHost/binary,":", DName/binary, " ",
-                      ABSuffix/binary>>,
-             Info = [{<<"downstream">>, longstr, Down},
-                     {<<"hops">>,       short,   Hops}],
+             Down = <<DVHost/binary,":", DName/binary, " ", ABSuffix/binary>>,
+             Info = [{<<"cluster-name">>, longstr, Cluster},
+                     {<<"exchange">>,     longstr, Down},
+                     {<<"hops">>,         short,   Hops}],
              rabbit_basic:prepend_table_header(?BINDING_HEADER, Info, Args)
     end.
 

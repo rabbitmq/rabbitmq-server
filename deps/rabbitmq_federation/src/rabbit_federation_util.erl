@@ -19,7 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([should_forward/3, find_upstreams/2]).
+-export([should_forward/3, find_upstreams/2, already_seen/2]).
 -export([validate_arg/3, fail/2, name/1, vhost/1, r/1]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
