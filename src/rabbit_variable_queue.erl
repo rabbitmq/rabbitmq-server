@@ -543,15 +543,18 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                  false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
                  true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
              end,
-    PCount1 = PCount + one_if(IsPersistent1),
+    InCount1 = InCount + 1,
+    PCount1  = PCount  + one_if(IsPersistent1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    a(reduce_memory_use(
-        maybe_update_rates(
-          inc_ram_msg_count(State2 #vqstate { next_seq_id      = SeqId   + 1,
-                                              len              = Len     + 1,
-                                              in_counter       = InCount + 1,
-                                              persistent_count = PCount1,
-                                              unconfirmed      = UC1 })))).
+    State3 = inc_ram_msg_count(State2 #vqstate { next_seq_id      = SeqId + 1,
+                                                 len              = Len   + 1,
+                                                 in_counter       = InCount1,
+                                                 persistent_count = PCount1,
+                                                 unconfirmed      = UC1 }),
+    a(reduce_memory_use(case InCount1 > ?MSGS_PER_RATE_CALC of
+                            true  -> update_rates(State3);
+                            false -> State3
+                        end)).
 
 publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
                                          id = MsgId },
@@ -719,12 +722,6 @@ set_ram_duration_target(
           true  -> State1;
           false -> reduce_memory_use(State1)
       end).
-
-maybe_update_rates(State = #vqstate { in_counter = InCount }) ->
-    case InCount > ?MSGS_PER_RATE_CALC of
-        true  -> update_rates(State);
-        false -> State
-    end.
 
 update_rates(State = #vqstate{ in_counter      = InCount,
                                out_counter     = OutCount,
