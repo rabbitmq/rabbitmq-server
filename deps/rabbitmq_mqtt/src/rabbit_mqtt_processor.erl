@@ -363,6 +363,9 @@ supported_subs_qos(?QOS_0) -> ?QOS_0;
 supported_subs_qos(?QOS_1) -> ?QOS_1;
 supported_subs_qos(?QOS_2) -> ?QOS_1.
 
+delivery_mode(?QOS_0) -> 1;
+delivery_mode(?QOS_1) -> 2.
+
 %% different qos subscriptions are received in different queues
 %% with appropriate durability and timeout arguments
 %% this will lead to duplicate messages for overlapping subscriptions
@@ -444,7 +447,8 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
                                    rabbit_mqtt_util:mqtt2amqp(Topic)},
     Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
                {<<"x-mqtt-dup">>, bool, Dup}],
-    Msg = #amqp_msg{ props   = #'P_basic'{ headers = Headers },
+    Msg = #amqp_msg{ props   = #'P_basic'{ headers       = Headers,
+                                           delivery_mode = delivery_mode(Qos)},
                      payload = Payload },
     {UnackedPubs1, Ch, SeqNo1} =
         case Qos =:= ?QOS_1 andalso MessageId =/= undefined of
