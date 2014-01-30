@@ -234,7 +234,7 @@ format_mochiweb_option_list(C) ->
 format_mochiweb_option(ssl_opts, V) ->
     format_mochiweb_option_list(V);
 format_mochiweb_option(ciphers, V) ->
-    list_to_binary(rabbit_misc:format("~p", [V]));
+    list_to_binary(rabbit_misc:format("~w", [V]));
 format_mochiweb_option(_K, V) when is_list(V) ->
     list_to_binary(V);
 format_mochiweb_option(_K, V) ->
