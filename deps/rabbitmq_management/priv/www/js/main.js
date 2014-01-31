@@ -50,14 +50,14 @@ function start_app_login() {
 }
 
 function check_login() {
-    var user = JSON.parse(sync_get('/whoami'));
+    user = JSON.parse(sync_get('/whoami'));
     if (user == false) {
         document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         replace_content('login-status', '<p>Login failed</p>');
     }
     else {
         replace_content('outer', format('layout', {}));
-        setup_global_vars(user);
+        setup_global_vars();
         setup_constant_events();
         update_vhosts();
         update_interval();
