@@ -53,10 +53,20 @@
 <% } %>
 <% if (link.error) { %>
     <td>
-      <%= fmt_state('red', link.status, fmt_escape_html_one_line(link.error)) %>
+      <%= fmt_state('red', link.status) %>
     </td>
     <td></td>
     <td><%= link.timestamp %></td>
+  </tr>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <td colspan="7">
+<% } else { %>
+    <td colspan="6">
+<% } %>
+      Error detail:
+      <pre><%= fmt_escape_html(link.error) %></pre>
+    </td>
   </tr>
 <% } else { %>
     <td>
