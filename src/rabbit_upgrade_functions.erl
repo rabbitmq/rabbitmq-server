@@ -47,6 +47,7 @@
 -rabbit_upgrade({policy_apply_to,       mnesia, [runtime_parameters]}).
 -rabbit_upgrade({queue_decorators,      mnesia, [gm_pids]}).
 -rabbit_upgrade({internal_system_x,     mnesia, [exchange_decorators]}).
+-rabbit_upgrade({cluster_name,          mnesia, [runtime_parameters]}).
 
 %% -------------------------------------------------------------------
 
@@ -354,6 +355,25 @@ internal_system_x() ->
       end,
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        decorators]).
+
+cluster_name() ->
+    {atomic, ok} = mnesia:transaction(fun cluster_name_tx/0),
+    ok.
+
+cluster_name_tx() ->
+    %% mnesia:transform_table/4 does not let us delete records
+    T = rabbit_runtime_parameters,
+    mnesia:write_lock_table(T),
+    Ks = [K || {_VHost, <<"federation">>, <<"local-nodename">>} = K
+                   <- mnesia:all_keys(T)],
+    case Ks of
+        []    -> ok;
+        [K|_] -> [{runtime_parameters, _K, Name}] = mnesia:read(T, K, write),
+                 R = {runtime_parameters, cluster_name, Name},
+                 mnesia:write(T, R, write)
+    end,
+    [mnesia:delete(T, K, write) || K <- Ks],
+    ok.
 
 %%--------------------------------------------------------------------
 
