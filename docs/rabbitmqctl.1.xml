@@ -508,7 +508,7 @@
             <para>
               Sets the cluster name. The cluster name is announced to
               clients on connection, and used by the federation and
-              shovel plugins to describe where a message has been. The
+              shovel plugins to record where a message has been. The
               cluster name is by default derived from the hostname of
               the first node in the cluster, but can be changed.
             </para>
