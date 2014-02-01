@@ -277,8 +277,7 @@ credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Mode, IsEmpty) ->
 ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     {Credits1, Unblocked} =
         case gb_trees:lookup(CTag, Credits) of
-            {value, C = #credit{mode   = auto,
-                                credit = C0}} ->
+            {value, C = #credit{mode = auto, credit = C0}} ->
                 {update_credit(CTag, C#credit{credit = C0 + Credit}, Credits),
                  C0 =:= 0};
             _ ->
