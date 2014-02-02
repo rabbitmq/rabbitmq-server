@@ -51,8 +51,11 @@ behaviour_info(_Other) ->
 
 %%----------------------------------------------------------------------------
 
-intercept_method(#'basic.publish'{} = M, _VHost) ->
-    M;
+intercept_method(#'basic.publish'{} = M, _VHost) -> M;
+intercept_method(#'basic.ack'{}     = M, _VHost) -> M;
+intercept_method(#'basic.nack'{}    = M, _VHost) -> M;
+intercept_method(#'basic.reject'{}  = M, _VHost) -> M;
+intercept_method(#'basic.credit'{}  = M, _VHost) -> M;
 intercept_method(M, VHost) ->
     intercept_method(M, VHost, select(rabbit_misc:method_record_type(M))).
 
