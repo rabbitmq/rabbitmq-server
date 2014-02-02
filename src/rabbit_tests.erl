@@ -1042,6 +1042,9 @@ test_user_management() ->
     ok = control_action(add_vhost, ["/testhost"]),
     ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
                         [{"-p", "/testhost"}]),
+    {new, _} = rabbit_amqqueue:declare(
+                 rabbit_misc:r(<<"/testhost">>, queue, <<"test">>),
+                 true, false, [], none),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
