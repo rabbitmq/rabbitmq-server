@@ -79,6 +79,25 @@ init_file(File, PrevHandler) ->
 %% filter out "application: foo; exited: stopped; type: temporary"
 handle_event({info_report, _, {_, std_info, _}}, State) ->
     {ok, State};
+%% When a node restarts quickly it is possible the rest of the cluster
+%% will not have had the chance to remove its queues from
+%% Mnesia. That's why rabbit_amqqueue:recover/0 invokes
+%% on_node_down(node()). But before we get there we can receive lots
+%% of messages intended for the old version of the node. The emulator
+%% logs an event for every one of those messages; in extremis this can
+%% bring the server to its knees just logging "Discarding..."
+%% again and again. So just log the first one, then go silent.
+handle_event(Event = {error, _, {emulator, _, ["Discarding message" ++ _]}},
+             State) ->
+    case get(discarding_message_seen) of
+        true      -> {ok, State};
+        undefined -> put(discarding_message_seen, true),
+                     error_logger_file_h:handle_event(Event, State)
+    end;
+%% Clear this state if we log anything else (but not a progress report).
+handle_event(Event = {info_msg, _, _}, State) ->
+    erase(discarding_message_seen),
+    error_logger_file_h:handle_event(Event, State);
 handle_event(Event, State) ->
     error_logger_file_h:handle_event(Event, State).
 

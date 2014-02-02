@@ -90,5 +90,7 @@ select(Method)  ->
 validate_method(M, M2) ->
     rabbit_misc:method_record_type(M) =:= rabbit_misc:method_record_type(M2).
 
+%% keep dialyzer happy
+-spec internal_error(string(), [any()]) -> no_return().
 internal_error(Format, Args) ->
     rabbit_misc:protocol_error(internal_error, Format, Args).

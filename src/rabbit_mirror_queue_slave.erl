@@ -79,6 +79,7 @@ set_maximum_since_use(QPid, Age) ->
 info(QPid) -> gen_server2:call(QPid, info, infinity).
 
 init(Q) ->
+    ?store_proc_name(Q#amqqueue.name),
     {ok, {not_started, Q}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
       ?DESIRED_HIBERNATE}}.
@@ -114,7 +115,7 @@ handle_go(Q = #amqqueue{name = QName}) ->
                    Self, {rabbit_amqqueue, set_ram_duration_target, [Self]}),
             {ok, BQ} = application:get_env(backing_queue_module),
             Q1 = Q #amqqueue { pid = QPid },
-            BQS = bq_init(BQ, Q1, false),
+            BQS = bq_init(BQ, Q1, new),
             State = #state { q                   = Q1,
                              gm                  = GM,
                              backing_queue       = BQ,
@@ -616,6 +617,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     KS1 = lists:foldl(fun (ChPid0, KS0) ->
                               pmon:demonitor(ChPid0, KS0)
                       end, KS, AwaitGmDown),
+    rabbit_misc:store_proc_name(rabbit_amqqueue_process, QName),
     rabbit_amqqueue_process:init_with_backing_queue_state(
       Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS1,
       MTC).
