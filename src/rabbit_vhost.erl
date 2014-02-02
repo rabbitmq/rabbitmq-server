@@ -77,22 +77,52 @@ add(VHostPath) ->
     R.
 
 delete(VHostPath) ->
-    %% FIXME: We are forced to delete the queues and exchanges outside
-    %% the TX below. Queue deletion involves sending messages to the queue
-    %% process, which in turn results in further mnesia actions and
-    %% eventually the termination of that process. Exchange deletion causes
-    %% notifications which must be sent outside the TX
     rabbit_log:info("Deleting vhost '~s'~n", [VHostPath]),
-    [{ok,_} = rabbit_amqqueue:delete(Q, false, false) ||
-        Q <- rabbit_amqqueue:list(VHostPath)],
-    [ok = rabbit_exchange:delete(Name, false) ||
-        #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
-    R = rabbit_misc:execute_mnesia_transaction(
-          with(VHostPath, fun () ->
-                                  ok = internal_delete(VHostPath)
-                          end)),
-    ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
-    R.
+    %% We get hold of all the exchanges and queues in a vhost and then
+    %% delete the vhost; all in one tx. This reduces the paths by
+    %% which new exchanges and queues can be created in that vhost.
+    %%
+    %% TODO It is still possible for resources to get created in the
+    %% deleted vhost via existing connections, which is effectively a
+    %% leak and there is no way to subsequently delete those
+    %% resources, at least not via AMQP & ctl. To prevent that we
+    %% should really first remove the vhost entry, then close all
+    %% connections associated with the vhost, and only then list the
+    %% resources.
+    case rabbit_misc:execute_mnesia_transaction(
+           with(VHostPath, fun () ->
+                                   Xs = rabbit_exchange:list(VHostPath),
+                                   Qs = rabbit_amqqueue:list(VHostPath),
+                                   ok = internal_delete(VHostPath),
+                                   {ok, Xs, Qs}
+                           end)) of
+        {ok, Xs, Qs} ->
+            %% we need to cope with (by ignoring) concurrent deletion
+            %% of exchanges/queues.
+            [assert_benign(rabbit_exchange:delete(Name, false)) ||
+                #exchange{name = Name} <- Xs],
+            %% TODO: for efficiency, perform these deletions in parallel
+            [assert_benign(rabbit_amqqueue:with(
+                             Name, fun (Q) -> rabbit_amqqueue:delete(
+                                                Q, false, false)
+                                   end)) ||
+                #amqqueue{name = Name} <- Qs],
+            ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]);
+        Other ->
+            Other
+    end.
+
+assert_benign(ok)                   -> ok;
+assert_benign({ok, _})              -> ok;
+assert_benign({error, not_found})   -> ok;
+assert_benign({error, {absent, Q}}) ->
+    %% We have a durable queue on a down node. Removing the mnesia
+    %% entries here is safe. If/when the down node restarts, it will
+    %% clear out the on-disk storage of the queue.
+    case rabbit_amqqueue:internal_delete(Q#amqqueue.name) of
+        ok                 -> ok;
+        {error, not_found} -> ok
+    end.
 
 internal_delete(VHostPath) ->
     [ok = rabbit_auth_backend_internal:clear_permissions(
