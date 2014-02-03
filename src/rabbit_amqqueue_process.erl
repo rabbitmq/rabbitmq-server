@@ -460,16 +460,13 @@ send_mandatory(#delivery{mandatory  = true,
 
 discard(#delivery{confirm = Confirm,
                   sender  = SenderPid,
-                  message = #basic_message{id = MsgId}},
-        State = #q{backing_queue       = BQ,
-                   backing_queue_state = BQS,
-                   msg_id_to_channel   = MTC}) ->
+                  message = #basic_message{id = MsgId}}, BQ, BQS, MTC) ->
     MTC1 = case Confirm of
                true  -> confirm_messages([MsgId], MTC);
                false -> MTC
            end,
     BQS1 = BQ:discard(MsgId, SenderPid, BQS),
-    State#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1}.
+    {BQS1, MTC1}.
 
 run_message_queue(State) -> run_message_queue(false, State).
 
@@ -492,20 +489,22 @@ run_message_queue(ActiveConsumersChanged, State) ->
 
 attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
-                                              backing_queue_state = BQS}) ->
+                                              backing_queue_state = BQS,
+                                              msg_id_to_channel   = MTC}) ->
     case rabbit_queue_consumers:deliver(
            fun (true)  -> true = BQ:is_empty(BQS),
                           {AckTag, BQS1} = BQ:publish_delivered(
                                              Message, Props, SenderPid, BQS),
-                          {{Message, Delivered, AckTag},
-                           State#q{backing_queue_state = BQS1}};
+                          {{Message, Delivered, AckTag}, {BQS1, MTC}};
                (false) -> {{Message, Delivered, undefined},
-                           discard(Delivery, State)}
+                           discard(Delivery, BQ, BQS, MTC)}
            end, qname(State), State#q.consumers) of
-        {delivered, ActiveConsumersChanged, State1, Consumers} ->
+        {delivered, ActiveConsumersChanged, {BQS1, MTC1}, Consumers} ->
             {delivered,   maybe_notify_decorators(
                             ActiveConsumersChanged,
-                            State1#q{consumers = Consumers})};
+                            State#q{backing_queue_state = BQS1,
+                                    msg_id_to_channel   = MTC1,
+                                    consumers           = Consumers})};
         {undelivered, ActiveConsumersChanged, Consumers} ->
             {undelivered, maybe_notify_decorators(
                             ActiveConsumersChanged,
@@ -527,8 +526,11 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
         {delivered, State3} ->
             State3;
         %% The next one is an optimisation
-        {undelivered, State3 = #q{ttl = 0, dlx = undefined}} ->
-            discard(Delivery, State3);
+        {undelivered, State3 = #q{ttl = 0, dlx = undefined,
+                                  backing_queue_state = BQS2,
+                                  msg_id_to_channel   = MTC}} ->
+            {BQS3, MTC1} = discard(Delivery, BQ, BQS2, MTC),
+            State3#q{backing_queue_state = BQS3, msg_id_to_channel = MTC1};
         {undelivered, State3 = #q{backing_queue_state = BQS2}} ->
             BQS3 = BQ:publish(Message, Props, Delivered, SenderPid, BQS2),
             {Dropped, State4 = #q{backing_queue_state = BQS4}} =
