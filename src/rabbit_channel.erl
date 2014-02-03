@@ -1505,6 +1505,7 @@ notify_limiter(Limiter, Acked) ->
     end.
 
 deliver_to_queues({#delivery{message    = #basic_message{exchange_name = XName},
+                             confirm    = false,
                              mandatory  = false},
                    []}, State) -> %% optimisation
     ?INCR_STATS([{exchange_stats, XName, 1}], publish, State),
