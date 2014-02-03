@@ -450,13 +450,13 @@ send_mandatory(#delivery{mandatory  = true,
                          msg_seq_no = MsgSeqNo}) ->
     gen_server2:cast(SenderPid, {mandatory_received, MsgSeqNo}).
 
-discard(#delivery{sender     = SenderPid,
-                  msg_seq_no = MsgSeqNo,
-                  message    = #basic_message{id = MsgId}}, State) ->
+discard(#delivery{confirm = Confirm,
+                  sender  = SenderPid,
+                  message = #basic_message{id = MsgId}}, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        case MsgSeqNo of
-            undefined -> State;
-            _         -> confirm_messages([MsgId], State)
+        case Confirm of
+            true  -> confirm_messages([MsgId], State);
+            false -> State
         end,
     BQS1 = BQ:discard(MsgId, SenderPid, BQS),
     State1#q{backing_queue_state = BQS1}.
