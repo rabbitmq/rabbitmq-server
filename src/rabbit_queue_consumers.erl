@@ -18,7 +18,7 @@
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
          unacknowledged_message_count/0, add/8, remove/3, erase_ch/2,
-         send_drained/0, deliver/3, record_ack/3, subtract_acks/4,
+         send_drained/0, deliver/3, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
          credit/6, utilisation/1]).
@@ -82,7 +82,7 @@
                      {'delivered',   boolean(), T, state()} |
                      {'undelivered', boolean(), state()}.
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
--spec subtract_acks([ack()], rabbit_types:ctag(), ch(), state()) ->
+-spec subtract_acks(ch(), [ack()], state()) ->
                            'not_found' | 'unchanged' | {'unblocked', state()}.
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
                               'unchanged' | {'unblocked', state()}.
@@ -173,7 +173,7 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
                 blocked_consumers = BlockedQ} ->
             AllConsumers = priority_queue:join(Consumers, BlockedQ),
             ok = erase_ch_record(C),
-            {queue:to_list(ChAckTags),
+            {[AckTag || {AckTag, _CTag} <- queue:to_list(ChAckTags)],
              tags(priority_queue:to_list(AllConsumers)),
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
@@ -230,7 +230,7 @@ deliver_to_consumer(FetchFun,
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
-                     true  -> queue:in(AckTag, ChAckTags);
+                     true  -> queue:in({AckTag, CTag}, ChAckTags);
                      false -> ChAckTags
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
@@ -239,17 +239,22 @@ deliver_to_consumer(FetchFun,
 
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
-    update_ch_record(C#cr{acktags = queue:in(AckTag, ChAckTags)}),
+    update_ch_record(C#cr{acktags = queue:in({AckTag, none}, ChAckTags)}),
     ok.
 
-subtract_acks(AckTags, CTag, ChPid, State) ->
+subtract_acks(ChPid, AckTags, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
+            {CTagCounts, AckTags2} = subtract_acks(AckTags, [], [], ChAckTags),
             {Unblocked, Lim2} =
-                rabbit_limiter:ack_from_queue(Lim, CTag, length(AckTags)),
-            AckTags2 = subtract_acks(AckTags, [], ChAckTags),
+                lists:foldl(
+                  fun ({CTag, Count}, {UnblockedN, LimN}) ->
+                          {Unblocked1, LimN1} =
+                              rabbit_limiter:ack_from_queue(LimN, CTag, Count),
+                          {UnblockedN orelse Unblocked1, LimN1}
+                  end, {false, Lim}, CTagCounts),
             C2 = C#cr{acktags = AckTags2, limiter = Lim2},
             case Unblocked of
                 true  -> unblock(C2, State);
@@ -258,15 +263,28 @@ subtract_acks(AckTags, CTag, ChPid, State) ->
             end
     end.
 
-subtract_acks([], [], AckQ) ->
-    AckQ;
-subtract_acks([], Prefix, AckQ) ->
-    queue:join(queue:from_list(lists:reverse(Prefix)), AckQ);
-subtract_acks([T | TL] = AckTags, Prefix, AckQ) ->
+subtract_acks([], [], CTagCounts, AckQ) ->
+    {CTagCounts, AckQ};
+subtract_acks([], Prefix, CTagCounts, AckQ) ->
+    {CTagCounts, queue:join(queue:from_list(lists:reverse(Prefix)), AckQ)};
+subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
     case queue:out(AckQ) of
-        {{value,  T}, QTail} -> subtract_acks(TL,             Prefix, QTail);
-        {{value, AT}, QTail} -> subtract_acks(AckTags, [AT | Prefix], QTail)
+        {{value,  {T, CTag}}, QTail} ->
+            subtract_acks(TL, Prefix,
+                          incr_ctag_count(CTag, CTagCounts), QTail);
+        {{value, {AT, CTag}}, QTail} ->
+            subtract_acks(AckTags, [AT | Prefix],
+                          incr_ctag_count(CTag, CTagCounts), QTail)
     end.
+
+incr_ctag_count(CTag, [])          -> [{CTag, 1}];
+incr_ctag_count(CTag, [{CTag, N}]) -> [{CTag, N + 1}];
+incr_ctag_count(CTag, CTagCounts)  -> case lists:keyfind(CTag, 1, CTagCounts) of
+                                          false     -> [{CTag, 1} | CTagCounts];
+                                          {CTag, N} -> [{CTag, N + 1} |
+                                                        lists:keydelete(
+                                                          CTag, 1, CTagCounts)]
+                                      end.
 
 possibly_unblock(Update, ChPid, State) ->
     case lookup_ch(ChPid) of

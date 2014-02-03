@@ -577,16 +577,16 @@ fetch(AckRequired, State = #q{backing_queue       = BQ,
     State1 = drop_expired_msgs(State#q{backing_queue_state = BQS1}),
     {Result, maybe_send_drained(Result =:= empty, State1)}.
 
-ack(AckTags, CTag, ChPid, State) ->
-    subtract_acks(AckTags, CTag, ChPid, State,
+ack(AckTags, ChPid, State) ->
+    subtract_acks(ChPid, AckTags, State,
                   fun (State1 = #q{backing_queue       = BQ,
                                    backing_queue_state = BQS}) ->
                           {_Guids, BQS1} = BQ:ack(AckTags, BQS),
                           State1#q{backing_queue_state = BQS1}
                   end).
 
-requeue(AckTags, CTag, ChPid, State) ->
-    subtract_acks(AckTags, CTag, ChPid, State,
+requeue(AckTags, ChPid, State) ->
+    subtract_acks(ChPid, AckTags, State,
                   fun (State1) -> requeue_and_run(AckTags, State1) end).
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
@@ -649,9 +649,8 @@ backing_queue_timeout(State = #q{backing_queue       = BQ,
                                  backing_queue_state = BQS}) ->
     State#q{backing_queue_state = BQ:timeout(BQS)}.
 
-subtract_acks(AckTags, CTag, ChPid, State = #q{consumers = Consumers}, Fun) ->
-    case rabbit_queue_consumers:subtract_acks(
-           AckTags, CTag, ChPid, Consumers) of
+subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
+    case rabbit_queue_consumers:subtract_acks(ChPid, AckTags, Consumers) of
         not_found               -> State;
         unchanged               -> Fun(State);
         {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
@@ -1011,9 +1010,9 @@ handle_call(purge, _From, State = #q{backing_queue       = BQ,
     State1 = State#q{backing_queue_state = BQS1},
     reply({ok, Count}, maybe_send_drained(Count =:= 0, State1));
 
-handle_call({requeue, AckTags, CTag, ChPid}, From, State) ->
+handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
-    noreply(requeue(AckTags, CTag, ChPid, State));
+    noreply(requeue(AckTags, ChPid, State));
 
 handle_call(sync_mirrors, _From,
             State = #q{backing_queue       = rabbit_mirror_queue_master,
@@ -1074,21 +1073,21 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
     State1 = State#q{senders = Senders1},
     noreply(deliver_or_enqueue(Delivery, Delivered, State1));
 
-handle_cast({ack, AckTags, CTag, ChPid}, State) ->
-    noreply(ack(AckTags, CTag, ChPid, State));
+handle_cast({ack, AckTags, ChPid}, State) ->
+    noreply(ack(AckTags, ChPid, State));
 
-handle_cast({reject, true,  AckTags, CTag, ChPid}, State) ->
-    noreply(requeue(AckTags, CTag, ChPid, State));
+handle_cast({reject, true,  AckTags, ChPid}, State) ->
+    noreply(requeue(AckTags, ChPid, State));
 
-handle_cast({reject, false, AckTags, CTag, ChPid}, State) ->
+handle_cast({reject, false, AckTags, ChPid}, State) ->
     noreply(with_dlx(
               State#q.dlx,
-              fun (X) -> subtract_acks(AckTags, CTag, ChPid, State,
+              fun (X) -> subtract_acks(ChPid, AckTags, State,
                                        fun (State1) ->
                                                dead_letter_rejected_msgs(
                                                  AckTags, X, State1)
                                        end) end,
-              fun () -> ack(AckTags, CTag, ChPid, State) end));
+              fun () -> ack(AckTags, ChPid, State) end));
 
 handle_cast(delete_immediately, State) ->
     stop(State);
