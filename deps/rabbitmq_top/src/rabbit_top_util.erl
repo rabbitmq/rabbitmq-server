@@ -85,14 +85,19 @@ fmt_process_name({Type, #resource{virtual_host = VHost,
 fmt_process_name({Type, ConnName}) when is_binary(ConnName) ->
     [{supertype,       connection},
      {type,            Type},
-     {connection_name, ConnName}].
+     {connection_name, ConnName}];
+
+fmt_process_name({Type, unknown}) -> %% probably some adapter thing
+    [{supertype,       connection},
+     {type,            Type},
+     {connection_name, unknown}].
 
 obtain_from_initial_call(Pid) ->
     case initial_call(Pid) of
-        fail -> [{type, unidentified},
+        fail -> [{type, starting},
                  {name, fmt(Pid)}];
         MFA  -> case guess_initial_call(MFA) of
-                    fail -> [{type, guessed},
+                    fail -> [{type, unknown},
                              {name, fmt(MFA)}];
                     Name -> [{type, known},
                              {name, Name}]
@@ -119,6 +124,8 @@ initial_call_dict(Pid) ->
             fail
     end.
 
+guess_initial_call({supervisor, _F, _A})        -> supervisor;
+guess_initial_call({supervisor2, _F, _A})       -> supervisor;
 guess_initial_call({mochiweb_acceptor, _F, _A}) -> mochiweb_http;
 guess_initial_call(_MFA)                        -> fail.
 
