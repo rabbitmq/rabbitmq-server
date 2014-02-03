@@ -872,11 +872,13 @@ handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{unacked_message_q = UAMQ, limiter = Limiter}) ->
     OkFun = fun () -> ok end,
     UAMQL = queue:to_list(UAMQ),
-    foreach_per_queue(
-      fun (QPid, MsgIds) ->
+    foreach_per_consumer(
+      fun ({QPid, CTag}, MsgIds) ->
               rabbit_misc:with_exit_handler(
                 OkFun,
-                fun () -> rabbit_amqqueue:requeue(QPid, MsgIds, self()) end)
+                fun () ->
+                        rabbit_amqqueue:requeue(QPid, MsgIds, CTag, self())
+                end)
       end, lists:reverse(UAMQL)),
     ok = notify_limiter(Limiter, UAMQL),
     %% No answer required - basic.recover is the newer, synchronous
@@ -1313,9 +1315,9 @@ reject(DeliveryTag, Requeue, Multiple,
 
 %% NB: Acked is in youngest-first order
 reject(Requeue, Acked, Limiter) ->
-    foreach_per_queue(
-      fun (QPid, MsgIds) ->
-              rabbit_amqqueue:reject(QPid, Requeue, MsgIds, self())
+    foreach_per_consumer(
+      fun ({QPid, CTag}, MsgIds) ->
+              rabbit_amqqueue:reject(QPid, Requeue, MsgIds, CTag, self())
       end, Acked),
     ok = notify_limiter(Limiter, Acked).
 
@@ -1373,9 +1375,9 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
 
 %% NB: Acked is in youngest-first order
 ack(Acked, State = #ch{queue_names = QNames}) ->
-    foreach_per_queue(
-      fun (QPid, MsgIds) ->
-              ok = rabbit_amqqueue:ack(QPid, MsgIds, self()),
+    foreach_per_consumer(
+      fun ({QPid, CTag}, MsgIds) ->
+              ok = rabbit_amqqueue:ack(QPid, MsgIds, CTag, self()),
               ?INCR_STATS(case dict:find(QPid, QNames) of
                               {ok, QName} -> Count = length(MsgIds),
                                              [{queue_stats, QName, Count}];
@@ -1406,15 +1408,15 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
               sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
     {rabbit_amqqueue:notify_down_all(QPids, self()), State#ch{state = closing}}.
 
-foreach_per_queue(_F, []) ->
+foreach_per_consumer(_F, []) ->
     ok;
-foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}]) -> %% common case
-    F(QPid, [MsgId]);
+foreach_per_consumer(F, [{_DTag, CTag, {QPid, MsgId}}]) -> %% common case
+    F({QPid, CTag}, [MsgId]);
 %% NB: UAL should be in youngest-first order; the tree values will
 %% then be in oldest-first order
-foreach_per_queue(F, UAL) ->
-    T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) ->
-                            rabbit_misc:gb_trees_cons(QPid, MsgId, T)
+foreach_per_consumer(F, UAL) ->
+    T = lists:foldl(fun ({_DTag, CTag, {QPid, MsgId}}, T) ->
+                            rabbit_misc:gb_trees_cons({QPid, CTag}, MsgId, T)
                     end, gb_trees:empty(), UAL),
     rabbit_misc:gb_trees_foreach(F, T).
 

@@ -22,7 +22,7 @@
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
+         stat/1, deliver/2, deliver_flow/2, requeue/4, ack/4, reject/5]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
@@ -140,9 +140,10 @@
                         qpids()).
 -spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
                              qpids()).
--spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
--spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
--spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
+-spec(requeue/4 :: (pid(), [msg_id()], rabbit_types:ctag(), pid()) -> 'ok').
+-spec(ack/4 :: (pid(), [msg_id()], rabbit_types:ctag(), pid()) -> 'ok').
+-spec(reject/5 :: (pid(), boolean(), [msg_id()], rabbit_types:ctag(), pid()) ->
+                       'ok').
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(activate_limit_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(basic_get/4 :: (rabbit_types:amqqueue(), pid(), boolean(), pid()) ->
@@ -432,7 +433,8 @@ declare_args() ->
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2}].
 
-consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
+consume_args() -> [{<<"x-priority">>, fun check_int_arg/2},
+                   {<<"x-prefetch">>, fun check_non_neg_int_arg/2}].
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
@@ -549,12 +551,14 @@ deliver(Qs, Delivery) -> deliver(Qs, Delivery, noflow).
 
 deliver_flow(Qs, Delivery) -> deliver(Qs, Delivery, flow).
 
-requeue(QPid, MsgIds, ChPid) -> delegate:call(QPid, {requeue, MsgIds, ChPid}).
+requeue(QPid, MsgIds, CTag, ChPid) ->
+    delegate:call(QPid, {requeue, MsgIds, CTag, ChPid}).
 
-ack(QPid, MsgIds, ChPid) -> delegate:cast(QPid, {ack, MsgIds, ChPid}).
+ack(QPid, MsgIds, CTag, ChPid) ->
+    delegate:cast(QPid, {ack, MsgIds, CTag, ChPid}).
 
-reject(QPid, Requeue, MsgIds, ChPid) ->
-    delegate:cast(QPid, {reject, Requeue, MsgIds, ChPid}).
+reject(QPid, Requeue, MsgIds, CTag, ChPid) ->
+    delegate:cast(QPid, {reject, Requeue, MsgIds, CTag, ChPid}).
 
 notify_down_all(QPids, ChPid) ->
     {_, Bads} = delegate:call(QPids, {notify_down, ChPid}),
