@@ -578,33 +578,38 @@ test_topic_matching() ->
                          key = list_to_binary(Key),
                          destination = #resource{virtual_host = <<"/">>,
                                                  kind = queue,
-                                                 name = list_to_binary(Q)}} ||
-                   {Key, Q} <- [{"a.b.c",         "t1"},
-                                {"a.*.c",         "t2"},
-                                {"a.#.b",         "t3"},
-                                {"a.b.b.c",       "t4"},
-                                {"#",             "t5"},
-                                {"#.#",           "t6"},
-                                {"#.b",           "t7"},
-                                {"*.*",           "t8"},
-                                {"a.*",           "t9"},
-                                {"*.b.c",         "t10"},
-                                {"a.#",           "t11"},
-                                {"a.#.#",         "t12"},
-                                {"b.b.c",         "t13"},
-                                {"a.b.b",         "t14"},
-                                {"a.b",           "t15"},
-                                {"b.c",           "t16"},
-                                {"",              "t17"},
-                                {"*.*.*",         "t18"},
-                                {"vodka.martini", "t19"},
-                                {"a.b.c",         "t20"},
-                                {"*.#",           "t21"},
-                                {"#.*.#",         "t22"},
-                                {"*.#.#",         "t23"},
-                                {"#.#.#",         "t24"},
-                                {"*",             "t25"},
-                                {"#.b.#",         "t26"}]],
+                                                 name = list_to_binary(Q)},
+                         args = Args} ||
+                   {Key, Q, Args} <- [{"a.b.c",         "t1",  []},
+                                      {"a.*.c",         "t2",  []},
+                                      {"a.#.b",         "t3",  []},
+                                      {"a.b.b.c",       "t4",  []},
+                                      {"#",             "t5",  []},
+                                      {"#.#",           "t6",  []},
+                                      {"#.b",           "t7",  []},
+                                      {"*.*",           "t8",  []},
+                                      {"a.*",           "t9",  []},
+                                      {"*.b.c",         "t10", []},
+                                      {"a.#",           "t11", []},
+                                      {"a.#.#",         "t12", []},
+                                      {"b.b.c",         "t13", []},
+                                      {"a.b.b",         "t14", []},
+                                      {"a.b",           "t15", []},
+                                      {"b.c",           "t16", []},
+                                      {"",              "t17", []},
+                                      {"*.*.*",         "t18", []},
+                                      {"vodka.martini", "t19", []},
+                                      {"a.b.c",         "t20", []},
+                                      {"*.#",           "t21", []},
+                                      {"#.*.#",         "t22", []},
+                                      {"*.#.#",         "t23", []},
+                                      {"#.#.#",         "t24", []},
+                                      {"*",             "t25", []},
+                                      {"#.b.#",         "t26", []},
+                                      {"args-test",     "t27",
+                                       [{<<"foo">>, longstr, <<"bar">>}]},
+                                      {"args-test",     "t27", %% Note aliasing
+                                       [{<<"foo">>, longstr, <<"baz">>}]}]],
     lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
                   Bindings),
 
@@ -631,12 +636,13 @@ test_topic_matching() ->
                                    "t22", "t23", "t24", "t26"]},
           {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
           {"oneword",             ["t5", "t6", "t21", "t22", "t23", "t24",
-                                   "t25"]}]),
-
+                                   "t25"]},
+          {"args-test",           ["t5", "t6", "t21", "t22", "t23", "t24",
+                                   "t25", "t27"]}]),
     %% remove some bindings
     RemovedBindings = [lists:nth(1, Bindings), lists:nth(5, Bindings),
                        lists:nth(11, Bindings), lists:nth(19, Bindings),
-                       lists:nth(21, Bindings)],
+                       lists:nth(21, Bindings), lists:nth(28, Bindings)],
     exchange_op_callback(X, remove_bindings, [RemovedBindings]),
     RemainingBindings = ordsets:to_list(
                           ordsets:subtract(ordsets:from_list(Bindings),
@@ -659,7 +665,8 @@ test_topic_matching() ->
        {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
                                 "t24", "t26"]},
        {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
-       {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
+       {"oneword",             ["t6", "t22", "t23", "t24", "t25"]},
+       {"args-test",           ["t6", "t22", "t23", "t24", "t25", "t27"]}]),
 
     %% remove the entire exchange
     exchange_op_callback(X, delete, [RemainingBindings]),
@@ -1172,7 +1179,7 @@ test_server_status() ->
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, Limiter, false, <<"ctag">>, true, none, [], undefined),
+           Q, true, Ch, Limiter, false, <<"ctag">>, true, [], undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -2129,11 +2136,10 @@ test_queue() ->
 
 init_test_queue() ->
     TestQueue = test_queue(),
-    Terms = rabbit_queue_index:shutdown_terms(TestQueue),
-    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:gen()),
+    PRef = rabbit_guid:gen(),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
-            TestQueue, Terms, false,
+            TestQueue, [], false,
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
@@ -2144,12 +2150,12 @@ init_test_queue() ->
 restart_test_queue(Qi) ->
     _ = rabbit_queue_index:terminate([], Qi),
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([test_queue()]),
+    {ok, _} = rabbit_variable_queue:start([test_queue()]),
     init_test_queue().
 
 empty_test_queue() ->
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
     {0, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
@@ -2205,7 +2211,7 @@ test_queue_index_props() ->
       end),
 
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
 
@@ -2329,13 +2335,16 @@ test_queue_index() ->
       end),
 
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/2, fun nop/2, fun nop/1).
+      Q, case Recover of
+             true  -> non_clean_shutdown;
+             false -> new
+         end, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).

@@ -957,6 +957,9 @@ validate_negotiated_integer_value(Field, Min, ClientValue) ->
             ok
     end.
 
+%% keep dialyzer happy
+-spec fail_negotiation(atom(), 'min' | 'max', integer(), integer()) ->
+                              no_return().
 fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
     {S1, S2} = case MinOrMax of
                    min -> {lower,  minimum};
