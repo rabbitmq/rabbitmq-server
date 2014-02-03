@@ -22,7 +22,7 @@ endef
 
 .PHONY: test
 test: $(TEST_CLASSES) build_java_amqp
-	$(foreach test,$(TEST_CLASSES),CLASSPATH=$(CP) junit -text $(call class_from_path,$(test)))
+	$(foreach test,$(TEST_CLASSES),CLASSPATH=$(CP) java  junit.textui.TestRunner -text $(call class_from_path,$(test)))
 
 clean:
 	rm -rf $(PAHO_JAR) $(ALL_CLASSES)
