@@ -443,7 +443,7 @@ send_or_record_confirm(#delivery{confirm    = true,
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
 
-send_mandatory(#delivery{mandatory = false}) ->
+send_mandatory(#delivery{mandatory  = false}) ->
     ok;
 send_mandatory(#delivery{mandatory  = true,
                          sender     = SenderPid,
