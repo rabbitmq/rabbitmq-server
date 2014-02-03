@@ -1172,7 +1172,7 @@ test_server_status() ->
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, Limiter, false, <<"ctag">>, true, none, [], undefined),
+           Q, true, Ch, Limiter, false, <<"ctag">>, true, [], undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -2129,11 +2129,10 @@ test_queue() ->
 
 init_test_queue() ->
     TestQueue = test_queue(),
-    Terms = rabbit_queue_index:shutdown_terms(TestQueue),
-    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:gen()),
+    PRef = rabbit_guid:gen(),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
-            TestQueue, Terms, false,
+            TestQueue, [], false,
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
@@ -2144,12 +2143,12 @@ init_test_queue() ->
 restart_test_queue(Qi) ->
     _ = rabbit_queue_index:terminate([], Qi),
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([test_queue()]),
+    {ok, _} = rabbit_variable_queue:start([test_queue()]),
     init_test_queue().
 
 empty_test_queue() ->
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
     {0, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
@@ -2205,7 +2204,7 @@ test_queue_index_props() ->
       end),
 
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
 
@@ -2329,13 +2328,16 @@ test_queue_index() ->
       end),
 
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/2, fun nop/2, fun nop/1).
+      Q, case Recover of
+             true  -> non_clean_shutdown;
+             false -> new
+         end, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).

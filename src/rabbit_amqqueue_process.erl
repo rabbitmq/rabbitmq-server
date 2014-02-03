@@ -22,6 +22,7 @@
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+-define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
 -export([start_link/1, info_keys/0]).
 
@@ -173,9 +174,10 @@ code_change(_OldVsn, State, _Extra) ->
 declare(Recover, From, State = #q{q                   = Q,
                                   backing_queue       = undefined,
                                   backing_queue_state = undefined}) ->
-    case rabbit_amqqueue:internal_declare(Q, Recover =/= new) of
+    {Recovery, TermsOrNew} = recovery_status(Recover),
+    case rabbit_amqqueue:internal_declare(Q, Recovery /= new) of
         #amqqueue{} = Q1 ->
-            case matches(Recover, Q, Q1) of
+            case matches(Recovery, Q, Q1) of
                 true ->
                     gen_server2:reply(From, {new, Q}),
                     ok = file_handle_cache:register_callback(
@@ -184,8 +186,8 @@ declare(Recover, From, State = #q{q                   = Q,
                            self(), {rabbit_amqqueue,
                                     set_ram_duration_target, [self()]}),
                     BQ = backing_queue_module(Q1),
-                    BQS = bq_init(BQ, Q, Recover),
-                    recovery_barrier(Recover),
+                    BQS = bq_init(BQ, Q, TermsOrNew),
+                    recovery_barrier(Recovery),
                     State1 = process_args_policy(
                                State#q{backing_queue       = BQ,
                                        backing_queue_state = BQS}),
@@ -201,6 +203,9 @@ declare(Recover, From, State = #q{q                   = Q,
         Err ->
             {stop, normal, Err, State}
     end.
+
+recovery_status(new)              -> {new,     new};
+recovery_status({Recover, Terms}) -> {Recover, Terms}.
 
 matches(new, Q1, Q2) ->
     %% i.e. not policy
@@ -237,7 +242,7 @@ decorator_callback(QName, F, A) ->
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
-    BQ:init(Q, Recover =/= new,
+    BQ:init(Q, Recover,
             fun (Mod, Fun) ->
                     rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
@@ -507,7 +512,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
                                          backing_queue_state = BQS}) ->
     send_mandatory(Delivery), %% must do this before confirms
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
-    Props = message_properties(Message, Confirm, State),
+    Props = message_properties(Message, Confirm, State1),
     {IsDuplicate, BQS1} = BQ:is_duplicate(Message, BQS),
     State2 = State1#q{backing_queue_state = BQS1},
     case IsDuplicate orelse attempt_delivery(Delivery, Props, Delivered,
@@ -829,22 +834,34 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
 
 %%----------------------------------------------------------------------------
 
-prioritise_call(Msg, _From, _Len, _State) ->
+prioritise_call(Msg, _From, _Len, State) ->
     case Msg of
-        info                                 -> 9;
-        {info, _Items}                       -> 9;
-        consumers                            -> 9;
-        stat                                 -> 7;
-        _                                    -> 0
+        info                                       -> 9;
+        {info, _Items}                             -> 9;
+        consumers                                  -> 9;
+        stat                                       -> 7;
+        {basic_consume, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
+        {basic_cancel, _, _, _}                    -> consumer_bias(State);
+        _                                          -> 0
     end.
 
-prioritise_cast(Msg, _Len, _State) ->
+prioritise_cast(Msg, _Len, State) ->
     case Msg of
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
+        {ack, _AckTags, _ChPid}              -> consumer_bias(State);
+        {notify_sent, _ChPid, _Credit}       -> consumer_bias(State);
+        {resume, _ChPid}                     -> consumer_bias(State);
         _                                    -> 0
+    end.
+
+consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    case BQ:msg_rates(BQS) of
+        {0.0,          _} -> 0;
+        {Ingress, Egress} when Egress / Ingress < ?CONSUMER_BIAS_RATIO -> 1;
+        {_,            _} -> 0
     end.
 
 prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -865,7 +882,7 @@ handle_call({init, Recover}, From,
 %% You used to be able to declare an exclusive durable queue. Sadly we
 %% need to still tidy up after that case, there could be the remnants
 %% of one left over from an upgrade. So that's why we don't enforce
-%% Recover = false here.
+%% Recover = new here.
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
     case rabbit_misc:is_process_alive(Owner) of
@@ -876,7 +893,8 @@ handle_call({init, Recover}, From,
                     q                   = Q} = State,
                  gen_server2:reply(From, {owner_died, Q}),
                  BQ = backing_queue_module(Q),
-                 BQS = bq_init(BQ, Q, Recover),
+                 {_, Terms} = recovery_status(Recover),
+                 BQS = bq_init(BQ, Q, Terms),
                  %% Rely on terminate to delete the queue.
                  {stop, {shutdown, missing_owner},
                   State#q{backing_queue = BQ, backing_queue_state = BQS}}
@@ -924,7 +942,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg},
+             ConsumerTag, ExclusiveConsume, Args, OkMsg},
             _From, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
@@ -932,8 +950,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
         ok     -> Consumers1 = rabbit_queue_consumers:add(
                                  ChPid, ConsumerTag, NoAck,
                                  LimiterPid, LimiterActive,
-                                 CreditArgs, OtherArgs,
-                                 is_empty(State), Consumers),
+                                 Args, is_empty(State), Consumers),
                   ExclusiveConsumer =
                       if ExclusiveConsume -> {ChPid, ConsumerTag};
                          true             -> Holder
@@ -943,7 +960,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                                    exclusive_consumer = ExclusiveConsumer},
                   ok = maybe_send_reply(ChPid, OkMsg),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                        not NoAck, qname(State1), OtherArgs),
+                                        not NoAck, qname(State1), Args),
                   notify_decorators(State1),
                   reply(ok, run_message_queue(State1))
     end;
@@ -1057,10 +1074,10 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));
 
-handle_cast({reject, AckTags, true, ChPid}, State) ->
+handle_cast({reject, true,  AckTags, ChPid}, State) ->
     noreply(requeue(AckTags, ChPid, State));
 
-handle_cast({reject, AckTags, false, ChPid}, State) ->
+handle_cast({reject, false, AckTags, ChPid}, State) ->
     noreply(with_dlx(
               State#q.dlx,
               fun (X) -> subtract_acks(ChPid, AckTags, State,
@@ -1084,10 +1101,6 @@ handle_cast({notify_sent, ChPid, Credit}, State) ->
 handle_cast({activate_limit, ChPid}, State) ->
     noreply(possibly_unblock(rabbit_queue_consumers:activate_limit_fun(),
                              ChPid, State));
-
-handle_cast({flush, ChPid}, State) ->
-    ok = rabbit_channel:flushed(ChPid, self()),
-    noreply(State);
 
 handle_cast({set_ram_duration_target, Duration},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
