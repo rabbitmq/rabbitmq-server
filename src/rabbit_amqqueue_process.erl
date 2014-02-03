@@ -512,7 +512,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
                                          backing_queue_state = BQS}) ->
     send_mandatory(Delivery), %% must do this before confirms
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
-    Props = message_properties(Message, Confirm, State),
+    Props = message_properties(Message, Confirm, State1),
     {IsDuplicate, BQS1} = BQ:is_duplicate(Message, BQS),
     State2 = State1#q{backing_queue_state = BQS1},
     case IsDuplicate orelse attempt_delivery(Delivery, Props, Delivered,
