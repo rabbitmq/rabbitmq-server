@@ -367,10 +367,17 @@ cluster_name_tx() ->
     Ks = [K || {_VHost, <<"federation">>, <<"local-nodename">>} = K
                    <- mnesia:all_keys(T)],
     case Ks of
-        []    -> ok;
-        [K|_] -> [{runtime_parameters, _K, Name}] = mnesia:read(T, K, write),
-                 R = {runtime_parameters, cluster_name, Name},
-                 mnesia:write(T, R, write)
+        []     -> ok;
+        [K|Tl] -> [{runtime_parameters, _K, Name}] = mnesia:read(T, K, write),
+                  R = {runtime_parameters, cluster_name, Name},
+                  mnesia:write(T, R, write),
+                  case Tl of
+                      [] -> ok;
+                      _  -> {VHost, _, _} = K,
+                            error_logger:warning_msg(
+                              "Multiple local-nodenames found, picking '~s' "
+                              "from '~s' for cluster name~n", [Name, VHost])
+                  end
     end,
     [mnesia:delete(T, K, write) || K <- Ks],
     ok.
