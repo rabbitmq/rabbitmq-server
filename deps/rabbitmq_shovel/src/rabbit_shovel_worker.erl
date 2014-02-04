@@ -49,13 +49,17 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(init, State = #state{config = Config}) ->
-    process_flag(trap_exit, true),
     random:seed(now()),
     #shovel{sources = Sources, destinations = Destinations} = Config,
     {InboundConn, InboundChan, InboundURI} =
         make_conn_and_chan(Sources#endpoint.uris),
     {OutboundConn, OutboundChan, OutboundURI} =
         make_conn_and_chan(Destinations#endpoint.uris),
+
+    %% Don't trap exits until we have established connections so that
+    %% if we try to shut down while waiting for a connection to be
+    %% established then we don't block
+    process_flag(trap_exit, true),
 
     (Sources#endpoint.resource_declaration)(InboundConn, InboundChan),
     (Destinations#endpoint.resource_declaration)(OutboundConn, OutboundChan),
