@@ -643,6 +643,31 @@ drop(AckRequired, State) ->
 
 ack([], State) ->
     {[], State};
+%% optimisation: this head is essentially a partial evaluation of the
+%% general case below, for the single-ack case.
+ack([SeqId], State) ->
+    {#msg_status { msg_id        = MsgId,
+                   is_persistent = IsPersistent,
+                   msg_on_disk   = MsgOnDisk,
+                   index_on_disk = IndexOnDisk },
+     State1 = #vqstate { index_state       = IndexState,
+                         msg_store_clients = MSCState,
+                         persistent_count  = PCount,
+                         ack_out_counter   = AckOutCount }} =
+        remove_pending_ack(SeqId, State),
+    IndexState1 = case IndexOnDisk of
+                      true  -> rabbit_queue_index:ack([SeqId], IndexState);
+                      false -> IndexState
+                  end,
+    case MsgOnDisk of
+        true  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]);
+        false -> ok
+    end,
+    PCount1 = PCount - one_if(IsPersistent),
+    {[MsgId],
+     a(State1 #vqstate { index_state      = IndexState1,
+                         persistent_count = PCount1,
+                         ack_out_counter  = AckOutCount + 1 })};
 ack(AckTags, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,
