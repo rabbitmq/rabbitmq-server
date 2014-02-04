@@ -247,10 +247,11 @@ subtract_acks(ChPid, AckTags, State) ->
         not_found ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
-            {CTagCounts, AckTags2} = subtract_acks(AckTags, [], [], ChAckTags),
+            {CTagCounts, AckTags2} = subtract_acks(
+                                       AckTags, [], orddict:new(), ChAckTags),
             {Unblocked, Lim2} =
-                lists:foldl(
-                  fun ({CTag, Count}, {UnblockedN, LimN}) ->
+                orddict:fold(
+                  fun (CTag, Count, {UnblockedN, LimN}) ->
                           {Unblocked1, LimN1} =
                               rabbit_limiter:ack_from_queue(LimN, CTag, Count),
                           {UnblockedN orelse Unblocked1, LimN1}
@@ -271,20 +272,11 @@ subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
     case queue:out(AckQ) of
         {{value,  {T, CTag}}, QTail} ->
             subtract_acks(TL, Prefix,
-                          incr_ctag_count(CTag, CTagCounts), QTail);
+                          orddict:update_counter(CTag, 1, CTagCounts), QTail);
         {{value, {AT, CTag}}, QTail} ->
             subtract_acks(AckTags, [AT | Prefix],
-                          incr_ctag_count(CTag, CTagCounts), QTail)
+                          orddict:update_counter(CTag, 1, CTagCounts), QTail)
     end.
-
-incr_ctag_count(CTag, [])          -> [{CTag, 1}];
-incr_ctag_count(CTag, [{CTag, N}]) -> [{CTag, N + 1}];
-incr_ctag_count(CTag, CTagCounts)  -> case lists:keyfind(CTag, 1, CTagCounts) of
-                                          false     -> [{CTag, 1} | CTagCounts];
-                                          {CTag, N} -> [{CTag, N + 1} |
-                                                        lists:keydelete(
-                                                          CTag, 1, CTagCounts)]
-                                      end.
 
 possibly_unblock(Update, ChPid, State) ->
     case lookup_ch(ChPid) of
