@@ -47,7 +47,6 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(init, State = #state{config = Config}) ->
-    process_flag(trap_exit, true),
     %% TODO when we move to minimum R13B01:
     %% random:seed(now()),
     {A, B, C} = now(),
@@ -57,6 +56,11 @@ handle_cast(init, State = #state{config = Config}) ->
         make_conn_and_chan(Sources#endpoint.amqp_params),
     {OutboundConn, OutboundChan, OutboundParams} =
         make_conn_and_chan(Destinations#endpoint.amqp_params),
+
+    %% Don't trap exits until we have established connections so that
+    %% if we try to shut down while waiting for a connection to be
+    %% established then we don't block
+    process_flag(trap_exit, true),
 
     create_resources(InboundChan,
                      Sources#endpoint.resource_declarations),
