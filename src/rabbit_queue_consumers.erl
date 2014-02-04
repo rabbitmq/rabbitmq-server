@@ -270,12 +270,11 @@ subtract_acks([], Prefix, CTagCounts, AckQ) ->
     {CTagCounts, queue:join(queue:from_list(lists:reverse(Prefix)), AckQ)};
 subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
     case queue:out(AckQ) of
-        {{value,  {T, CTag}}, QTail} ->
+        {{value, {T, CTag}}, QTail} ->
             subtract_acks(TL, Prefix,
                           orddict:update_counter(CTag, 1, CTagCounts), QTail);
-        {{value, {AT, CTag}}, QTail} ->
-            subtract_acks(AckTags, [AT | Prefix],
-                          orddict:update_counter(CTag, 1, CTagCounts), QTail)
+        {{value, V}, QTail} ->
+            subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail)
     end.
 
 possibly_unblock(Update, ChPid, State) ->
