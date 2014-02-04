@@ -49,6 +49,8 @@ DEFAULT_NODE_PORT=5672
 
 [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 
+[ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_NAME_TYPE=-name || RABBITMQ_NAME_TYPE=-sname
+
 ## Log rotation
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
@@ -87,7 +89,7 @@ if ! ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
 	    -noinput \
 	    -hidden \
 	    -s rabbit_prelaunch \
-	    -sname rabbitmqprelaunch$$ \
+	    $RABBITMQ_NAME_TYPE rabbitmqprelaunch$$ \
 	    -extra "${RABBITMQ_NODENAME}";
     then
         exit 1;
@@ -107,7 +109,7 @@ set -f
 exec ${ERL_DIR}erl \
     -pa ${RABBITMQ_EBIN_ROOT} \
     ${RABBITMQ_START_RABBIT} \
-    -sname ${RABBITMQ_NODENAME} \
+    $RABBITMQ_NAME_TYPE ${RABBITMQ_NODENAME} \
     -boot "${SASL_BOOT_FILE}" \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
