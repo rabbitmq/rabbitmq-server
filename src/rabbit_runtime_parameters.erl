@@ -179,16 +179,19 @@ lookup(VHost, Component, Name) ->
         Params    -> p(Params)
     end.
 
-value(VHost, Comp, Name)      -> value_global({VHost, Comp, Name}).
-value(VHost, Comp, Name, Def) -> value_global({VHost, Comp, Name}, Def).
+value(VHost, Comp, Name)      -> value0({VHost, Comp, Name}).
+value(VHost, Comp, Name, Def) -> value0({VHost, Comp, Name}, Def).
 
-value_global(Key) ->
+value_global(Key)          -> value0(Key).
+value_global(Key, Default) -> value0(Key, Default).
+
+value0(Key) ->
     case lookup0(Key, rabbit_misc:const(not_found)) of
         not_found -> not_found;
         Params    -> Params#runtime_parameters.value
     end.
 
-value_global(Key, Default) ->
+value0(Key, Default) ->
     Params = lookup0(Key, fun () -> lookup_missing(Key, Default) end),
     Params#runtime_parameters.value.
 
