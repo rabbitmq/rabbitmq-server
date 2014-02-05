@@ -232,21 +232,15 @@ find_durable_queues() ->
       end).
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
-    {QsInit, QueuesDict} =
-        lists:foldl(
-          fun({Q, Terms}, {Qs, Dict}) ->
-                  Q1 = #amqqueue{ pid = Pid } = start_queue_process(node(), Q),
-                  {[{Pid, Terms}|Qs], dict:store(Pid, Q1, Dict)}
-          end, {[], dict:new()}, QueuesAndRecoveryTerms),
-
     {Results, Failures} =
-        gen_server2:mcall([{Pid, {init, {self(), Terms}}} ||
-                              {Pid, Terms} <- QsInit]),
-
-    %% TODO: get the queue name somehow, without doing *yet another* traversal..
+        gen_server2:mcall([begin
+                               #amqqueue{ pid = Pid } =
+                                   start_queue_process(node(), Q),
+                               {Pid, {init, {self(), Terms}}}
+                           end || {Q, Terms} <- QueuesAndRecoveryTerms]),
     [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
                       [Pid, Error]) || {Pid, Error} <- Failures],
-    [dict:fetch(Pid, QueuesDict) || {Pid, {new, _Q}} <- Results].
+    [Q || {_, {new, Q}} <- Results].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
