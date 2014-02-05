@@ -19,20 +19,26 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([should_forward/2, find_upstreams/2]).
+-export([should_forward/3, find_upstreams/2, already_seen/2]).
 -export([validate_arg/3, fail/2, name/1, vhost/1, r/1]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
 
 %%----------------------------------------------------------------------------
 
-should_forward(undefined, _MaxHops) ->
+should_forward(undefined, _MaxHops, _DName) ->
     true;
-should_forward(Headers, MaxHops) ->
+should_forward(Headers, MaxHops, DName) ->
     case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
-        {array, A} -> length(A) < MaxHops;
+        {array, A} -> length(A) < MaxHops andalso not already_seen(DName, A);
         _          -> true
     end.
+
+already_seen(Name, Array) ->
+    lists:any(fun ({table, T}) -> {longstr, Name} =:= rabbit_misc:table_lookup(
+                                                        T, <<"cluster-name">>);
+                  (_)          -> false
+              end, Array).
 
 find_upstreams(Name, Upstreams) ->
     [U || U = #upstream{name = Name2} <- Upstreams,
