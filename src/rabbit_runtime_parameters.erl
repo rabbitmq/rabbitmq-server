@@ -36,6 +36,7 @@
                -> ok_or_error_string()).
 -spec(set_any/4 :: (rabbit_types:vhost(), binary(), binary(), term())
                    -> ok_or_error_string()).
+-spec(set_global/2 :: (atom(), term()) -> 'ok').
 -spec(clear/3 :: (rabbit_types:vhost(), binary(), binary())
                  -> ok_or_error_string()).
 -spec(clear_any/3 :: (rabbit_types:vhost(), binary(), binary())
@@ -50,6 +51,8 @@
                   -> rabbit_types:infos() | 'not_found').
 -spec(value/3 :: (rabbit_types:vhost(), binary(), binary()) -> term()).
 -spec(value/4 :: (rabbit_types:vhost(), binary(), binary(), term()) -> term()).
+-spec(value_global/1 :: (atom()) -> term() | 'not_found').
+-spec(value_global/2 :: (atom(), term()) -> term()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 
 -endif.
@@ -77,10 +80,8 @@ set(VHost, Component, Name, Term) ->
     set_any(VHost, Component, Name, Term).
 
 set_global(Name, Term) ->
-    case mnesia_update(Name, Term) of
-        {old, Term} -> ok;
-        _           -> ok %% TODO notify
-    end.
+    mnesia_update(Name, Term),
+    ok.
 
 format_error(L) ->
     {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
