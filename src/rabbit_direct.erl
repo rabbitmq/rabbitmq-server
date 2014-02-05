@@ -31,7 +31,7 @@
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
--spec(connect/5 :: ((rabbit_types:username() | rabbit_types:user() |
+-spec(connect/5 :: (('nouser' |
                      {rabbit_types:username(), rabbit_types:password()}),
                     rabbit_types:vhost(), rabbit_types:protocol(), pid(),
                     rabbit_event:event_props()) ->
@@ -67,7 +67,27 @@ list() ->
 
 %%----------------------------------------------------------------------------
 
-connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
+connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
+    connect0(fun () -> rabbit_access_control:check_user_pass_login(
+                         Username, Password) end,
+             VHost, Protocol, Pid, Infos);
+
+connect(nouser, VHost, Protocol, Pid, Infos) ->
+    connect0(fun () -> {ok, rabbit_auth_backend_dummy:user()} end,
+             VHost, Protocol, Pid, Infos).
+
+connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
+    case rabbit:is_running() of
+        true  -> case AuthFun() of
+                     {ok, User} ->
+                         connect1(User, VHost, Protocol, Pid, Infos);
+                     {refused, _M, _A} ->
+                         {error, {auth_failure, "Refused"}}
+                 end;
+        false -> {error, broker_not_found_on_node}
+    end.
+
+connect1(User, VHost, Protocol, Pid, Infos) ->
     try rabbit_access_control:check_vhost_access(User, VHost) of
         ok -> ok = pg_local:join(rabbit_direct, Pid),
               rabbit_event:notify(connection_created, Infos),
@@ -75,29 +95,7 @@ connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
     catch
         exit:#amqp_error{name = access_refused} ->
             {error, access_refused}
-    end;
-
-connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> rabbit_access_control:check_user_pass_login(
-                         Username, Password) end,
-             VHost, Protocol, Pid, Infos);
-
-connect(Username, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> rabbit_access_control:check_user_login(
-                         Username, []) end,
-             VHost, Protocol, Pid, Infos).
-
-connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
-    case rabbit:is_running() of
-        true  -> case AuthFun() of
-                     {ok, User} ->
-                         connect(User, VHost, Protocol, Pid, Infos);
-                     {refused, _M, _A} ->
-                         {error, {auth_failure, "Refused"}}
-                 end;
-        false -> {error, broker_not_found_on_node}
     end.
-
 
 start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
               VHost, Capabilities, Collector) ->
