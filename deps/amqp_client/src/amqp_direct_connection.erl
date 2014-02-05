@@ -90,8 +90,7 @@ terminate(_Reason, #state{node = Node}) ->
 i(type, _State) -> direct;
 i(pid,  _State) -> self();
 %% AMQP Params
-i(user, #state{params=#amqp_params_direct{username=#user{username=U}}}) -> U;
-i(user, #state{params=#amqp_params_direct{username=U}}) -> U;
+i(user,              #state{params = P}) -> P#amqp_params_direct.username;
 i(vhost,             #state{params = P}) -> P#amqp_params_direct.virtual_host;
 i(client_properties, #state{params = P}) ->
     P#amqp_params_direct.client_properties;
@@ -124,8 +123,8 @@ connect(Params = #amqp_params_direct{username     = Username,
                          vhost        = VHost,
                          params       = Params,
                          adapter_info = ensure_adapter_info(Info)},
-    AuthToken = case Password of
-                    none -> Username;
+    AuthToken = case Username of
+                    none -> nouser;
                     _    -> {Username, Password}
                 end,
     case rpc:call(Node, rabbit_direct, connect,
