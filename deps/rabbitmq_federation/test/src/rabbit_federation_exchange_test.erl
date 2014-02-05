@@ -438,10 +438,6 @@ dynamic_reconfiguration_test() ->
               %% Left from the conf we set up for previous tests
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
-              %% Test this at least does not blow up
-              set_param("federation", "local-nodename", "\"test\""),
-              assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
-
               %% Test that clearing connections works
               clear_param("federation-upstream", "localhost"),
               clear_param("federation-upstream", "local5673"),
