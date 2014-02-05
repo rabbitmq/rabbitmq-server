@@ -46,16 +46,21 @@ check_user_login(Username, []) ->
     %% Without password, e.g. EXTERNAL
     ?L("CHECK: passwordless login for ~s", [Username]),
     R = with_ldap(creds(none),
-                  fun(LDAP) -> do_login(Username, none, LDAP) end),
+                  fun(LDAP) -> do_login(Username, unknown, none, LDAP) end),
     ?L("DECISION: passwordless login for ~s: ~p",
        [Username, log_result(R)]),
     R;
 
-check_user_login(Username, [{password, Password}]) ->
-    ?L("CHECK: login for ~s", [Username]),
-    R = with_ldap({ok, {fill_user_dn_pattern(Username), Password}},
-                  fun(LDAP) -> do_login(Username, Password, LDAP) end),
-    ?L("DECISION: login for ~s: ~p", [Username, log_result(R)]),
+check_user_login(User, [{password, PW}]) ->
+    ?L("CHECK: login for ~s", [User]),
+    R = case dn_lookup_when() of
+            prebind -> UserDN = username_to_dn_prebind(User),
+                       with_ldap({ok, {UserDN, PW}},
+                                 fun(L) -> do_login(User, UserDN,  PW, L) end);
+            _       -> with_ldap({ok, {fill_user_dn_pattern(User), PW}},
+                                 fun(L) -> do_login(User, unknown, PW, L) end)
+        end,
+    ?L("DECISION: login for ~s: ~p", [User, log_result(R)]),
     R;
 
 check_user_login(Username, AuthProps) ->
@@ -287,13 +292,15 @@ env(F) ->
     {ok, V} = application:get_env(rabbitmq_auth_backend_ldap, F),
     V.
 
-do_login(Username, Password, LDAP) ->
-    UserDN = username_to_dn(Username, LDAP),
+do_login(Username, PrebindUserDN, Password, LDAP) ->
+    UserDN = case PrebindUserDN of
+                 unknown -> username_to_dn(Username, LDAP, dn_lookup_when());
+                 _       -> PrebindUserDN
+             end,
     User = #user{username     = Username,
                  auth_backend = ?MODULE,
                  impl         = #impl{user_dn  = UserDN,
                                       password = Password}},
-
     TagRes = [begin
                   ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
                   R = evaluate(Q, [{username, Username},
@@ -307,19 +314,28 @@ do_login(Username, Password, LDAP) ->
         [E | _] -> E
     end.
 
-username_to_dn(Username, LDAP) ->
-    username_to_dn(Username, LDAP, env(dn_lookup_attribute)).
+dn_lookup_when() -> case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
+                        {none, _}       -> never;
+                        {_,    as_user} -> postbind;
+                        {_,    _}       -> prebind
+                    end.
 
-username_to_dn(Username, _LDAP, none) ->
-    fill_user_dn_pattern(Username);
+username_to_dn_prebind(Username) ->
+    with_ldap({ok, env(dn_lookup_bind)},
+              fun (LDAP) -> dn_lookup(Username, LDAP) end).
 
-username_to_dn(Username, LDAP, Attr) ->
+username_to_dn(Username, LDAP,  postbind) -> dn_lookup(Username, LDAP);
+username_to_dn(Username, _LDAP, _When)    -> fill_user_dn_pattern(Username).
+
+dn_lookup(Username, LDAP) ->
     Filled = fill_user_dn_pattern(Username),
     case eldap:search(LDAP,
                       [{base, env(dn_lookup_base)},
-                       {filter, eldap:equalityMatch(Attr, Filled)},
+                       {filter, eldap:equalityMatch(
+                                  env(dn_lookup_attribute), Filled)},
                        {attributes, ["distinguishedName"]}]) of
         {ok, #eldap_search_result{entries = [#eldap_entry{object_name = DN}]}}->
+            ?L1("DN lookup: ~s -> ~s", [Username, DN]),
             DN;
         {ok, #eldap_search_result{entries = Entries}} ->
             rabbit_log:warning("Searching for DN for ~s, got back ~p~n",
