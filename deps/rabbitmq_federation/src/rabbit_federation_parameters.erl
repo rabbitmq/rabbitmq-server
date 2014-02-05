@@ -50,9 +50,6 @@ validate(_VHost, <<"federation-upstream">>, Name, Term) ->
       Name, [{<<"uri">>, fun validate_uri/2, mandatory} |
             shared_validation()], Term);
 
-validate(_VHost, <<"federation">>, <<"local-nodename">>, Term) ->
-    rabbit_parameter_validation:binary(<<"local-nodename">>, Term);
-
 validate(_VHost, _Component, Name, _Term) ->
     {error, "name not recognised: ~p", [Name]}.
 
@@ -60,19 +57,13 @@ notify(_VHost, <<"federation-upstream-set">>, Name, _Term) ->
     adjust({upstream_set, Name});
 
 notify(_VHost, <<"federation-upstream">>, Name, _Term) ->
-    adjust({upstream, Name});
-
-notify(_VHost, <<"federation">>, <<"local-nodename">>, _Term) ->
-    adjust(everything).
+    adjust({upstream, Name}).
 
 notify_clear(_VHost, <<"federation-upstream-set">>, Name) ->
     adjust({clear_upstream_set, Name});
 
 notify_clear(_VHost, <<"federation-upstream">>, Name) ->
-    adjust({clear_upstream, Name});
-
-notify_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
-    adjust(everything).
+    adjust({clear_upstream, Name}).
 
 adjust(Thing) ->
     rabbit_federation_exchange_link_sup_sup:adjust(Thing),
