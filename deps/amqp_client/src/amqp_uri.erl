@@ -65,15 +65,7 @@ remove_credentials(URI) ->
 parse(Uri) -> parse(Uri, <<"/">>).
 
 parse(Uri, DefaultVHost) ->
-    try case parse1(Uri, DefaultVHost) of
-            {ok, #amqp_params_network{host         = undefined,
-                                      username     = User,
-                                      virtual_host = Vhost}} ->
-                return({ok, #amqp_params_direct{username     = User,
-                                                virtual_host = Vhost}});
-            {ok, Params} ->
-                return({ok, Params})
-        end
+    try return(parse1(Uri, DefaultVHost))
     catch throw:Err -> {error, {Err, Uri}};
           error:Err -> {error, {Err, Uri}}
     end.
@@ -125,18 +117,37 @@ build_broker(ParsedUri, DefaultVHost) ->
                              end
             end,
     UserInfo = proplists:get_value(userinfo, ParsedUri),
-    Ps = #amqp_params_network{host            = unescape_string(Host),
-                              port            = Port,
-                              virtual_host    = VHost,
-                              auth_mechanisms = mechanisms(ParsedUri)},
+    set_user_info(case unescape_string(Host) of
+                      undefined -> #amqp_params_direct{virtual_host = VHost};
+                      Host1     -> Mech = mechanisms(ParsedUri),
+                                   #amqp_params_network{host            = Host1,
+                                                        port            = Port,
+                                                        virtual_host    = VHost,
+                                                        auth_mechanisms = Mech}
+                  end, UserInfo).
+
+set_user_info(Ps, UserInfo) ->
     case UserInfo of
-        [U, P | _] -> Ps#amqp_params_network{
-                        username = list_to_binary(unescape_string(U)),
-                        password = list_to_binary(unescape_string(P))};
-        [U | _]    -> Ps#amqp_params_network{
-                        username = list_to_binary(unescape_string(U))};
-        _          -> Ps
+        [U, P | _] -> set([{username, list_to_binary(unescape_string(U))},
+                           {password, list_to_binary(unescape_string(P))}], Ps);
+
+        [U]        -> set([{username, list_to_binary(unescape_string(U))}], Ps);
+        []         -> Ps
     end.
+
+set(KVs, Ps = #amqp_params_direct{}) ->
+    set(KVs, Ps, record_info(fields, amqp_params_direct));
+set(KVs, Ps = #amqp_params_network{}) ->
+    set(KVs, Ps, record_info(fields, amqp_params_network)).
+
+set(KVs, Ps, Fields) ->
+    {Ps1, _Ix} = lists:foldl(fun (Field, {PsN, Ix}) ->
+                                     {case lists:keyfind(Field, 1, KVs) of
+                                          false  -> PsN;
+                                          {_, V} -> setelement(Ix, PsN, V)
+                                      end, Ix + 1}
+                             end, {Ps, 2}, Fields),
+    Ps1.
 
 build_ssl_broker(ParsedUri, DefaultVHost) ->
     Params = build_broker(ParsedUri, DefaultVHost),
@@ -163,6 +174,8 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
           []),
     Params#amqp_params_network{ssl_options = SSLOptions}.
 
+broker_add_query(Params = #amqp_params_direct{}, Uri) ->
+    broker_add_query(Params, Uri, record_info(fields, amqp_params_direct));
 broker_add_query(Params = #amqp_params_network{}, Uri) ->
     broker_add_query(Params, Uri, record_info(fields, amqp_params_network)).
 
