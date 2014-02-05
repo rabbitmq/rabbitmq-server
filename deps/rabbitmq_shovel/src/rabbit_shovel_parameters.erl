@@ -151,7 +151,7 @@ parse({VHost, Name}, Def) ->
                      end
              end,
     AddHeaders = pget(<<"add-forward-headers">>, Def, false),
-    Table0 = [{<<"shovel-host">>,  rabbit_nodes:fqdn_nodename()},
+    Table0 = [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
               {<<"shovel-name">>,  Name},
               {<<"shovel-vhost">>, VHost}],
     PubPropsFun = fun (SrcURI, DestURI, P = #'P_basic'{headers = H}) ->
