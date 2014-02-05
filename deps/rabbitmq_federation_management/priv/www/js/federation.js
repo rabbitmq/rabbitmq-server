@@ -16,13 +16,6 @@ dispatcher_add(function(sammy) {
             render({'upstream': '/parameters/federation-upstream/' + esc(this.params['vhost']) + '/' + esc(this.params['id'])},
                    'federation-upstream', '#/federation');
         });
-    sammy.put('#/fed-globals', function() {
-            if (this.params.value == '') this.params.value = null;
-
-            if (sync_put(this, '/parameters/:component/:vhost/:name'))
-                update();
-            return false;
-        });
     sammy.put('#/fed-parameters', function() {
             var num_keys = ['expires', 'message-ttl', 'max-hops',
                             'prefetch-count', 'reconnect-delay'];
@@ -40,9 +33,6 @@ dispatcher_add(function(sammy) {
 
 NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', "monitoring"];
 NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', "policymaker"];
-
-HELP['federation-local-username'] =
-    'The name of a local user which can be used to publish messages received over federated links.';
 
 HELP['federation-uri'] =
     'URI to connect to. If upstream is a cluster and can have several URIs, you can enter them here separated by spaces.';
