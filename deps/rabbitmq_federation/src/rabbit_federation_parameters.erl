@@ -53,9 +53,6 @@ validate(_VHost, <<"federation-upstream">>, Name, Term) ->
 validate(_VHost, <<"federation">>, <<"local-nodename">>, Term) ->
     rabbit_parameter_validation:binary(<<"local-nodename">>, Term);
 
-validate(_VHost, <<"federation">>, <<"local-username">>, Term) ->
-    rabbit_parameter_validation:binary(<<"local-username">>, Term);
-
 validate(_VHost, _Component, Name, _Term) ->
     {error, "name not recognised: ~p", [Name]}.
 
@@ -66,9 +63,6 @@ notify(_VHost, <<"federation-upstream">>, Name, _Term) ->
     adjust({upstream, Name});
 
 notify(_VHost, <<"federation">>, <<"local-nodename">>, _Term) ->
-    adjust(everything);
-
-notify(_VHost, <<"federation">>, <<"local-username">>, _Term) ->
     adjust(everything).
 
 notify_clear(_VHost, <<"federation-upstream-set">>, Name) ->
@@ -78,9 +72,6 @@ notify_clear(_VHost, <<"federation-upstream">>, Name) ->
     adjust({clear_upstream, Name});
 
 notify_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
-    adjust(everything);
-
-notify_clear(_VHost, <<"federation">>, <<"local-username">>) ->
     adjust(everything).
 
 adjust(Thing) ->
