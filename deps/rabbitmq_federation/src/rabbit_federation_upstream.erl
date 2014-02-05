@@ -55,13 +55,12 @@ upstreams(XorQ) ->
         {_,         undefined} -> [[{<<"upstream">>, UName}]]
     end.
 
-params_table(SafeURI, Params, XorQ) ->
+params_table(SafeURI, XorQ) ->
     Key = case XorQ of
               #exchange{} -> <<"exchange">>;
               #amqqueue{} -> <<"queue">>
           end,
     [{<<"uri">>,          longstr, SafeURI},
-     {<<"virtual_host">>, longstr, vhost(Params)},
      {Key,                longstr, name(XorQ)}].
 
 params_to_string(#upstream_params{safe_uri = SafeURI,
@@ -81,7 +80,7 @@ to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
                      uri      = URI,
                      x_or_q   = XorQ1,
                      safe_uri = SafeURI,
-                     table    = params_table(SafeURI, Params, XorQ)}.
+                     table    = params_table(SafeURI, XorQ)}.
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 

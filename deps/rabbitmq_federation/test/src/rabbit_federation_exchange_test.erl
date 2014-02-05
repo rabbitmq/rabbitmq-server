@@ -47,6 +47,10 @@
 -define(BUGS,    {"bugs",    5675}).
 -define(JESSICA, {"jessica", 5676}).
 
+%% Used in cycle_detection_test
+-define(CYCLE1,   {"cycle1", 5674}).
+-define(CYCLE2,   {"cycle2", 5675}).
+
 simple_test() ->
     with_ch(
       fun (Ch) ->
@@ -356,6 +360,39 @@ max_hops_test() ->
     stop_other_node(?FLOPSY),
     stop_other_node(?MOPSY),
     stop_other_node(?COTTONTAIL),
+    ok.
+
+%% Two nodes, both federated with each other, and max_hops set to a
+%% high value. Things should not get out of hand.
+cycle_detection_test() ->
+    Cycle1 = start_other_node(?CYCLE1),
+    Cycle2 = start_other_node(?CYCLE2),
+
+    declare_exchange(Cycle1, x(<<"cycle">>)),
+    declare_exchange(Cycle2, x(<<"cycle">>)),
+
+    Q1 = bind_queue(Cycle1, <<"cycle">>, <<"key">>),
+    Q2 = bind_queue(Cycle2, <<"cycle">>, <<"key">>),
+
+    %% Wait for federation to come up on all nodes
+    timer:sleep(5000),
+
+    %% "key" listed twice because once for the local queue and once
+    %% for federation in each case
+    assert_bindings(?CYCLE1, <<"cycle">>, [<<"key">>, <<"key">>]),
+    assert_bindings(?CYCLE2, <<"cycle">>, [<<"key">>, <<"key">>]),
+
+    publish(Cycle1, <<"cycle">>, <<"key">>, <<"HELLO1">>),
+    publish(Cycle2, <<"cycle">>, <<"key">>, <<"HELLO2">>),
+
+    Msgs = [<<"HELLO1">>, <<"HELLO2">>],
+    expect(Cycle1, Q1, Msgs),
+    expect(Cycle2, Q2, Msgs),
+    expect_empty(Cycle1, Q1),
+    expect_empty(Cycle2, Q2),
+
+    stop_other_node(?CYCLE1),
+    stop_other_node(?CYCLE2),
     ok.
 
 %% Arrows indicate message flow. Numbers indicate max_hops.
