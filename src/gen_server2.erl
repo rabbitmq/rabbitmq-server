@@ -82,12 +82,12 @@
 %% can be invoked on the state, get back the result. The state is not
 %% modified.
 %%
-%% 10) an mcall/1 function has been added, to facilitate running
-%% gen_server:call/3 in parallel to multiple servers and awaiting all
-%% the results. Unlike multi_call, which operates on same-named
-%% processes residing on a list of nodes, it operates on a list of
-%% processes that can be supplied as pid, global name, local name, or
-%% local-name-on-a-particular-node, just as call/3 does.
+%% 10) an mcall/1 function has been added for performing multiple
+%% call/3 in parallel. Unlike multi_call, which sends the same request
+%% to same-named processes residing on a supplied list of nodes, it
+%% operates on name/request pairs, where name is anything accepted by
+%% call/3, i.e. a pid, global name, local name, or local name on a
+%% particular node.
 %%
 
 %% All modifications are (C) 2009-2013 GoPivotal, Inc.
