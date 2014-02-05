@@ -14,6 +14,16 @@ dispatcher_add(function(sammy) {
             render(reqs, 'overview', '#/');
         });
     sammy.get('#/login/:username/:password', login_route);
+
+    path('#/cluster-name', {'cluster_name': '/cluster-name'}, 'cluster-name');
+    sammy.put('#/cluster-name', function() {
+            if (sync_put(this, '/cluster-name')) {
+                setup_global_vars();
+                update();
+            }
+            return false;
+        });
+
     sammy.get('#/nodes/:name', function() {
             var name = esc(this.params['name']);
             render({'node': '/nodes/' + name},

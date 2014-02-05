@@ -35,6 +35,15 @@ overview_test() ->
     %%http_get(""),
     ok.
 
+cluster_name_test() ->
+    http_put("/users/myuser", [{password, <<"myuser">>},
+                               {tags,     <<"management">>}], ?NO_CONTENT),
+    http_put("/cluster-name", [{name, "foo"}], "myuser", "myuser", ?NOT_AUTHORISED),
+    http_put("/cluster-name", [{name, "foo"}], ?NO_CONTENT),
+    [{name, "foo"}] = http_get("/cluster-name", "myuser", "myuser", ?OK),
+    http_delete("/users/myuser", ?NO_CONTENT),
+    ok.
+
 nodes_test() ->
     http_put("/users/user", [{password, <<"user">>},
                              {tags, <<"management">>}], ?NO_CONTENT),
