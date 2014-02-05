@@ -78,10 +78,6 @@ dynamic_reconfiguration_test() ->
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
 
-              %% Test this at least does not blow up
-              set_param("federation", "local-nodename", "\"test\""),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
-
               %% Test that clearing connections works
               clear_param("federation-upstream", "localhost"),
               expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
