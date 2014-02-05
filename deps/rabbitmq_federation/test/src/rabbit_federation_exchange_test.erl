@@ -374,13 +374,10 @@ cycle_detection_test() ->
     Q1 = bind_queue(Cycle1, <<"cycle">>, <<"key">>),
     Q2 = bind_queue(Cycle2, <<"cycle">>, <<"key">>),
 
-    %% Wait for federation to come up on all nodes
-    timer:sleep(5000),
-
-    %% "key" listed twice because once for the local queue and once
+    %% "key" present twice because once for the local queue and once
     %% for federation in each case
-    assert_bindings(?CYCLE1, <<"cycle">>, [<<"key">>, <<"key">>]),
-    assert_bindings(?CYCLE2, <<"cycle">>, [<<"key">>, <<"key">>]),
+    await_binding(?CYCLE1, <<"cycle">>, <<"key">>, 2),
+    await_binding(?CYCLE2, <<"cycle">>, <<"key">>, 2),
 
     publish(Cycle1, <<"cycle">>, <<"key">>, <<"HELLO1">>),
     publish(Cycle2, <<"cycle">>, <<"key">>, <<"HELLO2">>),
