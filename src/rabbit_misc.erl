@@ -70,6 +70,7 @@
 -export([ensure_timer/4, stop_timer/2]).
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2]).
+-export([moving_average/4]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -248,6 +249,8 @@
 -spec(get_parent/0 :: () -> pid()).
 -spec(store_proc_name/2 :: (atom(), rabbit_types:proc_name()) -> ok).
 -spec(store_proc_name/1 :: (rabbit_types:proc_type_and_name()) -> ok).
+-spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
+                          -> float()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -1059,6 +1062,12 @@ stop_timer(State, Idx) ->
 
 store_proc_name(Type, ProcName) -> store_proc_name({Type, ProcName}).
 store_proc_name(TypeProcName)   -> put(process_name, TypeProcName).
+
+moving_average(_Time, _HalfLife, Next, undefined) ->
+    Next;
+moving_average(Time,  HalfLife,  Next, Current) ->
+    Weight = math:exp(Time * math:log(0.5) / HalfLife),
+    Next * (1 - Weight) + Current * Weight.
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl

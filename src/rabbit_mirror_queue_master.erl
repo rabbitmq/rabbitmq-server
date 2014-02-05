@@ -22,7 +22,7 @@
          len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2]).
+         msg_rates/1, status/1, invoke/3, is_duplicate/2]).
 
 -export([start/1, stop/0]).
 
@@ -352,6 +352,9 @@ timeout(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
 handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:handle_pre_hibernate(BQS) }.
+
+msg_rates(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:msg_rates(BQS).
 
 status(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:status(BQS) ++
