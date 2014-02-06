@@ -53,7 +53,7 @@
 -export([parse_arguments/3]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
--export([const_ok/0, const/1]).
+-export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2, pset/3]).
@@ -218,7 +218,6 @@
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
--spec(const_ok/0 :: () -> 'ok').
 -spec(const/1 :: (A) -> thunk(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
@@ -888,7 +887,6 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
             {error, Reason}
     end.
 
-const_ok() -> ok.
 const(X) -> fun () -> X end.
 
 %% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
