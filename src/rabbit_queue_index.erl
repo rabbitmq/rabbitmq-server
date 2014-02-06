@@ -465,17 +465,17 @@ recover_segment(ContainsCheckFun, CleanShutdown,
         segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
       fun (RelSeq, {{MsgId, _MsgProps, _IsPersistent}, Del, no_ack},
-           Segment1) ->
+           SegmentAndDirtyCount) ->
               recover_message(ContainsCheckFun(MsgId), CleanShutdown,
-                              Del, RelSeq, Segment1)
+                              Del, RelSeq, SegmentAndDirtyCount)
       end,
       {Segment #segment { unacked = UnackedCount + UnackedCountDelta }, 0},
       SegEntries1).
 
-recover_message( true,  true,   _Del, _RelSeq, Segment) ->
-    Segment;
-recover_message( true, false,    del, _RelSeq, Segment) ->
-    Segment;
+recover_message( true,  true,   _Del, _RelSeq, SegmentAndDirtyCount) ->
+    SegmentAndDirtyCount;
+recover_message( true, false,    del, _RelSeq, SegmentAndDirtyCount) ->
+    SegmentAndDirtyCount;
 recover_message( true, false, no_del,  RelSeq, {Segment, DirtyCount}) ->
     {add_to_journal(RelSeq, del, Segment), DirtyCount + 1};
 recover_message(false,     _,    del,  RelSeq, {Segment, DirtyCount}) ->
@@ -483,7 +483,7 @@ recover_message(false,     _,    del,  RelSeq, {Segment, DirtyCount}) ->
 recover_message(false,     _, no_del,  RelSeq, {Segment, DirtyCount}) ->
     {add_to_journal(RelSeq, ack,
                     add_to_journal(RelSeq, del, Segment)),
-     DirtyCount + 1}.
+     DirtyCount + 2}.
 
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     <<Num:128>> = erlang:md5(term_to_binary(Name)),
