@@ -1,0 +1,7 @@
+{application, rabbitmq_event_exchange,
+ [{description, "Event Exchange Type"},
+  {vsn, "%%VSN%%"},
+  {modules, []},
+  {registered, []},
+  {env, []},
+  {applications, [rabbit]}]}.
