@@ -18,8 +18,8 @@
 
 -include("rabbit.hrl").
 
--export([parse_set/4, set/4, set_any/4, clear/3, clear_any/3, list/0, list/1,
-         list_component/1, list/2, list_formatted/1, lookup/3,
+-export([parse_set/4, set/4, set_any/4, clear/3, clear_any/3, clear_vhost/1,
+         list/0, list/1, list_component/1, list/2, list_formatted/1, lookup/3,
          value/3, value/4, info_keys/0]).
 
 -export([set_global/2, value_global/1, value_global/2]).
@@ -41,6 +41,7 @@
                  -> ok_or_error_string()).
 -spec(clear_any/3 :: (rabbit_types:vhost(), binary(), binary())
                      -> ok_or_error_string()).
+-spec(clear_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(list/0 :: () -> [rabbit_types:infos()]).
 -spec(list/1 :: (rabbit_types:vhost() | '_') -> [rabbit_types:infos()]).
 -spec(list_component/1 :: (binary()) -> [rabbit_types:infos()]).
@@ -146,6 +147,14 @@ mnesia_clear(VHost, Component, Name) ->
                 ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
         end,
     ok = rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
+
+%% must be run inside a tx
+%% NB: this does not issue notifications, unlike clear/3
+%% NB: this does delete policies too,     unlike clear/3
+clear_vhost(VHost) ->
+    [ok = mnesia:delete_object(?TABLE, R, write) ||
+        R <- mnesia:match_object(?TABLE, c({VHost, '_', '_'}, '_'), write)],
+    ok.
 
 list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-

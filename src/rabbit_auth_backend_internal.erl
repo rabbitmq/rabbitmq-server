@@ -25,7 +25,8 @@
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
          hash_password/1, change_password_hash/2,
-         set_tags/2, set_permissions/5, clear_permissions/2]).
+         set_tags/2, set_permissions/5, clear_permissions/2,
+         clear_vhost_permissions/1]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0,
@@ -56,6 +57,7 @@
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (rabbit_types:username(), rabbit_types:vhost())
                              -> 'ok').
+-spec(clear_vhost_permissions/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(user_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(user_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -253,6 +255,18 @@ clear_permissions(Username, VHostPath) ->
                                     #user_vhost{username     = Username,
                                                 virtual_host = VHostPath}})
         end)).
+
+%% must be run inside a tx
+clear_vhost_permissions(VHostPath) ->
+    [ok = mnesia:delete_object(rabbit_user_permission, R, write) ||
+        R <- mnesia:match_object(
+               rabbit_user_permission,
+               #user_permission{user_vhost = #user_vhost{
+                                                username = '_',
+                                                virtual_host = VHostPath},
+                                permission = '_'},
+               write)],
+    ok.
 
 update_user(Username, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
