@@ -20,8 +20,9 @@
 
 -behaviour(gen_server2).
 
--define(SYNC_INTERVAL,                 25). %% milliseconds
--define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+-define(SYNC_ON_IDLE_AFTER,             25). %% milliseconds
+-define(SYNC_INTERVAL,                 200).
+-define(RAM_DURATION_UPDATE_INTERVAL, 5000).
 -define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
 -export([start_link/1, info_keys/0]).
@@ -336,9 +337,9 @@ next_state(State = #q{backing_queue       = BQ,
     MTC1 = confirm_messages(MsgIds, MTC),
     State1 = State#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1},
     case BQ:needs_timeout(BQS1) of
-        false -> {stop_sync_timer(State1),   hibernate     };
-        idle  -> {stop_sync_timer(State1),   ?SYNC_INTERVAL};
-        timed -> {ensure_sync_timer(State1), 0             }
+        false -> {stop_sync_timer(State1),             hibernate};
+        idle  -> {stop_sync_timer(State1),   ?SYNC_ON_IDLE_AFTER};
+        timed -> {ensure_sync_timer(State1),                   0}
     end.
 
 backing_queue_module(Q) ->
