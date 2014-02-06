@@ -20,8 +20,8 @@
 
 -behaviour(gen_server2).
 
--define(SYNC_INTERVAL,                 25). %% milliseconds
--define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+-define(SYNC_INTERVAL,                 200). %% milliseconds
+-define(RAM_DURATION_UPDATE_INTERVAL, 5000).
 -define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
 -export([start_link/1, info_keys/0]).
