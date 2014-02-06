@@ -60,7 +60,7 @@
 
 -record(trie_node, {exchange_name, node_id}).
 -record(trie_edge, {exchange_name, node_id, word}).
--record(trie_binding, {exchange_name, node_id, destination}).
+-record(trie_binding, {exchange_name, node_id, destination, arguments}).
 
 -record(listener, {node, protocol, host, ip_address, port}).
 

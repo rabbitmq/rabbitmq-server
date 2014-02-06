@@ -506,8 +506,8 @@ force_event_refresh() -> force_event_refresh([Q#amqqueue.name || Q <- list()]).
 
 force_event_refresh(QNames) ->
     Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
-    {_, Bad} = rabbit_misc:multi_call(
-                 [Q#amqqueue.pid || Q <- Qs], force_event_refresh),
+    {_, Bad} = gen_server2:mcall(
+                 [{Q#amqqueue.pid, force_event_refresh} || Q <- Qs]),
     FailedPids = [Pid || {Pid, _Reason} <- Bad],
     Failed = [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
                       lists:member(Pid, FailedPids)],
