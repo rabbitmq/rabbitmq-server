@@ -254,7 +254,8 @@ lifecycle_test() ->
     ok.
 
 direct_no_password_test() ->
-    {ok, Connection} = new_connection(just_direct, [{password, none}]),
+    {ok, Connection} = new_connection(just_direct, [{username, none},
+                                                    {password, none}]),
     amqp_connection:close(Connection),
     wait_for_death(Connection).
 
