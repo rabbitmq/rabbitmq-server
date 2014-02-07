@@ -159,6 +159,8 @@ main_test() ->
 
     ok = application:start(rabbitmq_shovel),
 
+    await_running_shovel(test_shovel),
+
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
 
@@ -235,3 +237,11 @@ test_broken_shovel_sources(Sources) ->
                                    {destinations, [{broker, "amqp://"}]},
                                    {queue, <<"">>}]),
     Error.
+
+await_running_shovel(Name) ->
+    case [Name || {Name, _, {running, _}, _}
+                      <- rabbit_shovel_status:status()] of
+        [_] -> ok;
+        _   -> timer:sleep(100),
+               await_running_shovel(Name)
+    end.
