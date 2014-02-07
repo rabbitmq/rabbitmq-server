@@ -17,6 +17,7 @@
 -module(rabbit_shovel_test).
 -export([test/0]).
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -define(EXCHANGE,    <<"test_exchange">>).
 -define(TO_SHOVEL,   <<"to_the_shovel">>).
@@ -25,7 +26,7 @@
 -define(SHOVELLED,   <<"shovelled">>).
 -define(TIMEOUT,     1000).
 
-test() ->
+main_test() ->
     %% it may already be running. Stop if possible
     application:stop(rabbitmq_shovel),
 
