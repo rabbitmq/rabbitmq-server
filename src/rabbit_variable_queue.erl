@@ -755,20 +755,20 @@ set_ram_duration_target(
           false -> reduce_memory_use(State1)
       end).
 
-update_rates(State = #vqstate{ in_counter      = InCount,
-                               out_counter     = OutCount,
-                               ack_in_counter  = AckInCount,
+update_rates(State = #vqstate{ in_counter      =     InCount,
+                               out_counter     =    OutCount,
+                               ack_in_counter  =  AckInCount,
                                ack_out_counter = AckOutCount,
-                               rates = #rates{ in        = InRate,
-                                               out       = OutRate,
-                                               ack_in    = AckInRate,
+                               rates = #rates{ in        =     InRate,
+                                               out       =    OutRate,
+                                               ack_in    =  AckInRate,
                                                ack_out   = AckOutRate,
                                                timestamp = TS }}) ->
     Now = erlang:now(),
 
-    Rates = #rates { in        = update_rate(Now, TS, InCount,     InRate),
-                     out       = update_rate(Now, TS, OutCount,    OutRate),
-                     ack_in    = update_rate(Now, TS, AckInCount,  AckInRate),
+    Rates = #rates { in        = update_rate(Now, TS,     InCount,     InRate),
+                     out       = update_rate(Now, TS,    OutCount,    OutRate),
+                     ack_in    = update_rate(Now, TS,  AckInCount,  AckInRate),
                      ack_out   = update_rate(Now, TS, AckOutCount, AckOutRate),
                      timestamp = Now },
 

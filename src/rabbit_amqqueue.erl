@@ -354,14 +354,14 @@ with(Name, F, E) ->
         {ok, Q = #amqqueue{pid = QPid}} ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
-            %% with the QPid.
+            %% with the QPid. F() should be written s.t. that this
+            %% cannot happen, so we bail if it does since that
+            %% indicates a code bug and we don't want to get stuck in
+            %% the retry loop.
             rabbit_misc:with_exit_handler(
-              fun () ->
-                      case rabbit_misc:is_process_alive(QPid) of
-                          true  -> E(not_found_or_absent_dirty(Name));
-                          false -> timer:sleep(25),
-                                   with(Name, F, E)
-                      end
+              fun () -> false = rabbit_misc:is_process_alive(QPid),
+                        timer:sleep(25),
+                        with(Name, F, E)
               end, fun () -> F(Q) end);
         {error, not_found} ->
             E(not_found_or_absent_dirty(Name))
@@ -506,8 +506,8 @@ force_event_refresh() -> force_event_refresh([Q#amqqueue.name || Q <- list()]).
 
 force_event_refresh(QNames) ->
     Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
-    {_, Bad} = rabbit_misc:multi_call(
-                 [Q#amqqueue.pid || Q <- Qs], force_event_refresh),
+    {_, Bad} = gen_server2:mcall(
+                 [{Q#amqqueue.pid, force_event_refresh} || Q <- Qs]),
     FailedPids = [Pid || {Pid, _Reason} <- Bad],
     Failed = [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
                       lists:member(Pid, FailedPids)],

@@ -39,7 +39,6 @@ all_tests() ->
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
     passed = test_version_equivalance(),
-    passed = test_multi_call(),
     passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_rabbit_basic_header_handling(),
@@ -66,6 +65,7 @@ all_tests() ->
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed = test_with_state(),
+    passed = test_mcall(),
     passed =
         do_if_secondary_node(
           fun run_cluster_dependent_tests/1,
@@ -154,26 +154,6 @@ test_version_equivalance() ->
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
-    passed.
-
-test_multi_call() ->
-    Fun = fun() ->
-                  receive
-                      {'$gen_call', {From, Mref}, request} ->
-                          From ! {Mref, response}
-                  end,
-                  receive
-                      never -> ok
-                  end
-          end,
-    Pid1 = spawn(Fun),
-    Pid2 = spawn(Fun),
-    Pid3 = spawn(Fun),
-    exit(Pid2, bang),
-    {[{Pid1, response}, {Pid3, response}], [{Pid2, _Fail}]} =
-        rabbit_misc:multi_call([Pid1, Pid2, Pid3], request),
-    exit(Pid1, bang),
-    exit(Pid3, bang),
     passed.
 
 test_rabbit_basic_header_handling() ->
@@ -1049,6 +1029,9 @@ test_user_management() ->
     ok = control_action(add_vhost, ["/testhost"]),
     ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
                         [{"-p", "/testhost"}]),
+    {new, _} = rabbit_amqqueue:declare(
+                 rabbit_misc:r(<<"/testhost">>, queue, <<"test">>),
+                 true, false, [], none),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
@@ -1374,6 +1357,82 @@ test_with_state() ->
     fhc_state = gen_server2:with_state(file_handle_cache,
                                        fun (S) -> element(1, S) end),
     passed.
+
+test_mcall() ->
+    P1 = spawn(fun gs2_test_listener/0),
+    register(foo, P1),
+    global:register_name(gfoo, P1),
+
+    P2 = spawn(fun() -> exit(bang) end),
+    %% ensure P2 is dead (ignore the race setting up the monitor)
+    await_exit(P2),
+
+    P3 = spawn(fun gs2_test_crasher/0),
+
+    %% since P2 crashes almost immediately and P3 after receiving its first
+    %% message, we have to spawn a few more processes to handle the additional
+    %% cases we're interested in here
+    register(baz, spawn(fun gs2_test_crasher/0)),
+    register(bog, spawn(fun gs2_test_crasher/0)),
+    global:register_name(gbaz, spawn(fun gs2_test_crasher/0)),
+
+    NoNode = rabbit_nodes:make("nonode"),
+
+    Targets =
+        %% pids
+        [P1, P2, P3]
+        ++
+        %% registered names
+        [foo, bar, baz]
+        ++
+        %% {Name, Node} pairs
+        [{foo, node()}, {bar, node()}, {bog, node()}, {foo, NoNode}]
+        ++
+        %% {global, Name}
+        [{global, gfoo}, {global, gbar}, {global, gbaz}],
+
+    GoodResults = [{D, goodbye} || D <- [P1, foo,
+                                         {foo, node()},
+                                         {global, gfoo}]],
+
+    BadResults  = [{P2,             noproc},   % died before use
+                   {P3,             boom},     % died on first use
+                   {bar,            noproc},   % never registered
+                   {baz,            boom},     % died on first use
+                   {{bar, node()},  noproc},   % never registered
+                   {{bog, node()},  boom},     % died on first use
+                   {{foo, NoNode},  nodedown}, % invalid node
+                   {{global, gbar}, noproc},   % never registered globally
+                   {{global, gbaz}, boom}],    % died on first use
+
+    {Replies, Errors} = gen_server2:mcall([{T, hello} || T <- Targets]),
+    true = lists:sort(Replies) == lists:sort(GoodResults),
+    true = lists:sort(Errors)  == lists:sort(BadResults),
+
+    %% cleanup (ignore the race setting up the monitor)
+    P1 ! stop,
+    await_exit(P1),
+    passed.
+
+await_exit(Pid) ->
+    MRef = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', MRef, _, _, _} -> ok
+    end.
+
+gs2_test_crasher() ->
+    receive
+        {'$gen_call', _From, hello} -> exit(boom)
+    end.
+
+gs2_test_listener() ->
+    receive
+        {'$gen_call', From, hello} ->
+            gen_server2:reply(From, goodbye),
+            gs2_test_listener();
+        stop ->
+            ok
+    end.
 
 test_statistics_event_receiver(Pid) ->
     receive
