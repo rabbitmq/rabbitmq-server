@@ -558,10 +558,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                                                  in_counter       = InCount1,
                                                  persistent_count = PCount1,
                                                  unconfirmed      = UC1 }),
-    a(reduce_memory_use(case InCount1 > ?MSGS_PER_RATE_CALC of
-                            true  -> update_rates(State3);
-                            false -> State3
-                        end)).
+    a(reduce_memory_use(maybe_update_rates(State3))).
 
 publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
                                          id = MsgId },
@@ -579,12 +576,12 @@ publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    {SeqId, a(reduce_memory_use(
-                State2 #vqstate { next_seq_id      = SeqId    + 1,
-                                  out_counter      = OutCount + 1,
-                                  in_counter       = InCount  + 1,
-                                  persistent_count = PCount1,
-                                  unconfirmed      = UC1 }))}.
+    State3 = State2 #vqstate { next_seq_id      = SeqId    + 1,
+                               out_counter      = OutCount + 1,
+                               in_counter       = InCount  + 1,
+                               persistent_count = PCount1,
+                               unconfirmed      = UC1 },
+    {SeqId, a(reduce_memory_use(maybe_update_rates(State3)))}.
 
 discard(_MsgId, _ChPid, State) -> State.
 
@@ -704,11 +701,12 @@ requeue(AckTags, #vqstate { delta      = Delta,
                                                   State2),
     MsgCount = length(MsgIds2),
     {MsgIds2, a(reduce_memory_use(
-                  State3 #vqstate { delta      = Delta1,
-                                    q3         = Q3a,
-                                    q4         = Q4a,
-                                    in_counter = InCounter + MsgCount,
-                                    len        = Len + MsgCount }))}.
+                  maybe_update_rates(
+                    State3 #vqstate { delta      = Delta1,
+                                      q3         = Q3a,
+                                      q4         = Q4a,
+                                      in_counter = InCounter + MsgCount,
+                                      len        = Len + MsgCount })))}.
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
@@ -754,6 +752,13 @@ set_ram_duration_target(
           true  -> State1;
           false -> reduce_memory_use(State1)
       end).
+
+maybe_update_rates(State = #vqstate{ in_counter  = InCount,
+                                     out_counter = OutCount })
+  when InCount + OutCount > ?MSGS_PER_RATE_CALC ->
+    update_rates(State);
+maybe_update_rates(State) ->
+    State.
 
 update_rates(State = #vqstate{ in_counter      =     InCount,
                                out_counter     =    OutCount,
@@ -1179,11 +1184,12 @@ remove(AckRequired, MsgStatus = #msg_status {
     PCount1      = PCount      - one_if(IsPersistent andalso not AckRequired),
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
-    {AckTag, State1 #vqstate {ram_msg_count    = RamMsgCount1,
-                              out_counter      = OutCount + 1,
-                              index_state      = IndexState2,
-                              len              = Len - 1,
-                              persistent_count = PCount1}}.
+    {AckTag, maybe_update_rates(
+               State1 #vqstate {ram_msg_count    = RamMsgCount1,
+                                out_counter      = OutCount + 1,
+                                index_state      = IndexState2,
+                                len              = Len - 1,
+                                persistent_count = PCount1})}.
 
 purge_betas_and_deltas(LensByStore,
                        State = #vqstate { q3                = Q3,
