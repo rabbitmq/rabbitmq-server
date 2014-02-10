@@ -113,7 +113,7 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
               end,
     {[], Brokers1} = run_state_monad(
                        lists:duplicate(length(Brokers),
-                                       fun parse_uri/1),
+                                       fun check_uri/1),
                        {Brokers, []}),
 
     ResourceDecls =
@@ -128,16 +128,20 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
           lists:duplicate(length(ResourceDecls), fun parse_declaration/1),
           {ResourceDecls, []}),
 
-    return({#endpoint{amqp_params = Brokers1,
-                      resource_declarations = lists:reverse(ResourceDecls1)},
+    DeclareFun =
+        fun (_Conn, Ch) ->
+                [amqp_channel:call(Ch, M) || M <- lists:reverse(ResourceDecls1)]
+        end,
+    return({#endpoint{uris = Brokers1,
+                      resource_declaration = DeclareFun},
             Pos});
 parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
 
-parse_uri({[Uri | Uris], Acc}) ->
+check_uri({[Uri | Uris], Acc}) ->
     case amqp_uri:parse(Uri) of
-        {ok, Params} ->
-            return({Uris, [Params | Acc]});
+        {ok, _Params} ->
+            return({Uris, [Uri | Acc]});
         {error, _} = Err ->
             throw(Err)
     end.
@@ -205,7 +209,7 @@ make_publish_fun(Fields, Pos, ValidFields) ->
     case SuppliedFields -- ValidFields of
         [] ->
             FieldIndices = make_field_indices(ValidFields, Fields),
-            Fun = fun (Publish) ->
+            Fun = fun (_SrcUri, _DestUri, Publish) ->
                           lists:foldl(fun ({Pos1, Value}, Pub) ->
                                               setelement(Pos1, Pub, Value)
                                       end, Publish, FieldIndices)
