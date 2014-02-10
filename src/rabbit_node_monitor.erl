@@ -201,7 +201,7 @@ init([]) ->
     %% writing out the cluster status files - bad things can then
     %% happen.
     process_flag(trap_exit, true),
-    net_kernel:monitor_nodes(true),
+    net_kernel:monitor_nodes(true, [nodedown_reason]),
     {ok, _} = mnesia:subscribe(system),
     {ok, #state{monitors    = pmon:new(),
                 subscribers = pmon:new(),
@@ -267,7 +267,9 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
-handle_info({nodedown, Node}, State) ->
+handle_info({nodedown, Node, Info}, State) ->
+    rabbit_log:info("node ~p down: ~p~n",
+                    [Node, proplists:get_value(nodedown_reason, Info)]),
     ok = handle_dead_node(Node),
     {noreply, State};
 
