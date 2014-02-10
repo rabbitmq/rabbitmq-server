@@ -66,9 +66,9 @@ open_channel_args(#state{node = Node,
 do(_Method, _State) ->
     ok.
 
-handle_message(force_event_refresh, State = #state{node = Node}) ->
+handle_message({force_event_refresh, Ref}, State = #state{node = Node}) ->
     rpc:call(Node, rabbit_event, notify,
-             [connection_created, connection_info(State)]),
+             [connection_created, connection_info(State), Ref]),
     {ok, State};
 handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
     {stop, {closing_timeout, Reason}, State};
