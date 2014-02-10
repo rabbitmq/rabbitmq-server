@@ -29,4 +29,6 @@ init([]) ->
     {ok, {{one_for_one, 10, 10}, [DB]}}.
 
 start_link() ->
-     mirrored_supervisor:start_link({local, ?MODULE}, ?MODULE, ?MODULE, []).
+     mirrored_supervisor:start_link(
+       {local, ?MODULE}, ?MODULE, fun rabbit_misc:execute_mnesia_transaction/1,
+       ?MODULE, []).
