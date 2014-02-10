@@ -24,7 +24,7 @@
 -export([send_command/2, deliver/4, send_credit_reply/2, send_drained/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
--export([force_event_refresh/0]).
+-export([force_event_refresh/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
@@ -106,7 +106,7 @@
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(refresh_config_local/0 :: () -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
--spec(force_event_refresh/0 :: () -> 'ok').
+-spec(force_event_refresh/1 :: (reference()) -> 'ok').
 
 -endif.
 
@@ -179,8 +179,8 @@ refresh_config_local() ->
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
-force_event_refresh() ->
-    [gen_server2:cast(C, force_event_refresh) || C <- list()],
+force_event_refresh(Ref) ->
+    [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
 
 %%---------------------------------------------------------------------------
@@ -335,8 +335,9 @@ handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
      || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
 
-handle_cast(force_event_refresh, State) ->
-    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
+handle_cast({force_event_refresh, Ref}, State) ->
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
+                        Ref),
     noreply(State);
 
 handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->

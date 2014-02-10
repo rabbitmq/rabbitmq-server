@@ -18,7 +18,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/1, info_keys/0, info/1, info/2, force_event_refresh/1,
+-export([start_link/1, info_keys/0, info/1, info/2, force_event_refresh/2,
          shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
@@ -77,7 +77,7 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
--spec(force_event_refresh/1 :: (pid()) -> 'ok').
+-spec(force_event_refresh/2 :: (pid(), reference()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_resources/3 :: (pid(), atom(), boolean()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
@@ -134,8 +134,8 @@ info(Pid, Items) ->
         {error, Error} -> throw(Error)
     end.
 
-force_event_refresh(Pid) ->
-    gen_server:cast(Pid, force_event_refresh).
+force_event_refresh(Pid, Ref) ->
+    gen_server:cast(Pid, {force_event_refresh, Ref}).
 
 conserve_resources(Pid, Source, Conserve) ->
     Pid ! {conserve_resources, Source, Conserve},
@@ -395,10 +395,11 @@ handle_other({'$gen_call', From, {info, Items}}, State) ->
                            catch Error -> {error, Error}
                            end),
     State;
-handle_other({'$gen_cast', force_event_refresh}, State)
+handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
   when ?IS_RUNNING(State) ->
-    rabbit_event:notify(connection_created,
-                        [{type, network} | infos(?CREATION_EVENT_KEYS, State)]),
+    rabbit_event:notify(
+      connection_created,
+      [{type, network} | infos(?CREATION_EVENT_KEYS, State)], Ref),
     State;
 handle_other({'$gen_cast', force_event_refresh}, State) ->
     %% Ignore, we will emit a created event once we start running.

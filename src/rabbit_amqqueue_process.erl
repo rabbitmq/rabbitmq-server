@@ -817,14 +817,15 @@ emit_stats(State, Extra) ->
                        not lists:member(K, ExtraKs)],
     rabbit_event:notify(queue_stats, Extra ++ Infos).
 
-emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, Args) ->
+emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, Args, Ref) ->
     rabbit_event:notify(consumer_created,
                         [{consumer_tag, CTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
                          {channel,      ChPid},
                          {queue,        QName},
-                         {arguments,    Args}]).
+                         {arguments,    Args}],
+                        Ref).
 
 emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
     rabbit_event:notify(consumer_deleted,
@@ -960,7 +961,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                                    exclusive_consumer = ExclusiveConsumer},
                   ok = maybe_send_reply(ChPid, OkMsg),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                        not NoAck, qname(State1), Args),
+                                        not NoAck, qname(State1), Args, none),
                   notify_decorators(State1),
                   reply(ok, run_message_queue(State1))
     end;
@@ -1041,19 +1042,19 @@ handle_call(sync_mirrors, _From, State) ->
 handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State);
 
-handle_call(force_event_refresh, _From,
+handle_call({force_event_refresh, Ref}, _From,
             State = #q{consumers          = Consumers,
                        exclusive_consumer = Exclusive}) ->
-    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
+    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State), Ref),
     QName = qname(State),
     AllConsumers = rabbit_queue_consumers:all(Consumers),
     case Exclusive of
         none       -> [emit_consumer_created(
-                         Ch, CTag, false, AckRequired, QName, Args) ||
+                         Ch, CTag, false, AckRequired, QName, Args, Ref) ||
                           {Ch, CTag, AckRequired, Args} <- AllConsumers];
         {Ch, CTag} -> [{Ch, CTag, AckRequired, Args}] = AllConsumers,
                       emit_consumer_created(
-                        Ch, CTag, true, AckRequired, QName, Args)
+                        Ch, CTag, true, AckRequired, QName, Args, Ref)
     end,
     reply(ok, State).
 

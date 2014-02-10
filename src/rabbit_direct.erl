@@ -16,7 +16,7 @@
 
 -module(rabbit_direct).
 
--export([boot/0, force_event_refresh/0, list/0, connect/5,
+-export([boot/0, force_event_refresh/1, list/0, connect/5,
          start_channel/9, disconnect/2]).
 %% Internal
 -export([list_local/0]).
@@ -28,7 +28,7 @@
 -ifdef(use_specs).
 
 -spec(boot/0 :: () -> 'ok').
--spec(force_event_refresh/0 :: () -> 'ok').
+-spec(force_event_refresh/1 :: (reference()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
 -spec(connect/5 :: ((rabbit_types:username() | rabbit_types:user() |
@@ -54,8 +54,8 @@ boot() -> rabbit_sup:start_supervisor_child(
             [{local, rabbit_direct_client_sup},
              {rabbit_channel_sup, start_link, []}]).
 
-force_event_refresh() ->
-    [Pid ! force_event_refresh || Pid<- list()],
+force_event_refresh(Ref) ->
+    [Pid ! {force_event_refresh, Ref} || Pid <- list()],
     ok.
 
 list_local() ->
