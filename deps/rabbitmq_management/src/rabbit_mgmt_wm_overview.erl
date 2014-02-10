@@ -40,6 +40,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {statistics_level,    StatsLevel},
                  {exchange_types,      ExchangeTypes},
                  {rabbitmq_version,    version(rabbit)},
+                 {cluster_name,        rabbit_nodes:cluster_name()},
                  {erlang_version,      erl_version(otp_release)},
                  {erlang_full_version, erl_version(system_version)}],
     Range = rabbit_mgmt_util:range(ReqData),

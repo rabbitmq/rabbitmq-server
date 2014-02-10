@@ -143,7 +143,7 @@ function fmt_mirrors(queue) {
     return res;
 }
 
-function fmt_sync_status(queue) {
+function fmt_sync_state(queue) {
     var res = '<p><b>Syncing: ';
     res += (queue.messages == 0) ? 100 : Math.round(100 * queue.sync_messages /
                                                     queue.messages);
@@ -197,6 +197,14 @@ function fmt_num_thousands(num) {
     num = '' + num;
     if (num.length < 4) return num;
     return fmt_num_thousands(num.slice(0, -3)) + ',' + num.slice(-3);
+}
+
+function fmt_percent(num) {
+    if (num === '') {
+        return 'N/A';
+    } else {
+        return Math.round(num * 100) + '%';
+    }
 }
 
 function fmt_rate(obj, name, mode) {
@@ -406,23 +414,6 @@ function fmt_rabbit_version(applications) {
     return 'unknown';
 }
 
-function fmt_idle(obj) {
-    if (obj.idle_since == undefined) {
-        return 'Active';
-    } else {
-        return '<acronym title="Idle since ' + obj.idle_since +
-            '">Idle</acronym>';
-    }
-}
-
-function fmt_idle_long(obj) {
-    if (obj.idle_since == undefined) {
-        return 'Active';
-    } else {
-        return 'Idle since<br/>' + obj.idle_since;
-    }
-}
-
 function fmt_escape_html(txt) {
     return fmt_escape_html0(txt).replace(/\n/g, '<br/>');
 }
@@ -465,37 +456,46 @@ function fmt_node(node_host) {
     return '<small>' + node + '@</small>' + host;
 }
 
-function fmt_connection_state(conn) {
-    if (conn.state == undefined) return '';
+function fmt_object_state(obj) {
+    if (obj.state == undefined) return '';
 
     var colour = 'green';
-    var text = conn.state;
+    var text = obj.state;
     var explanation;
 
-    if (conn.last_blocked_by == 'resource' && conn.state == 'blocked') {
+    if (obj.idle_since !== undefined) {
+        colour = 'grey';
+        explanation = 'Idle since ' + obj.idle_since;
+        text = 'idle';
+    }
+    // Only connections can be 'blocked' or 'blocking'
+    else if (obj.state == 'blocked') {
         colour = 'red';
-        explanation = 'Resource alarm: Connection blocked.';
+        explanation = 'Resource alarm: connection blocked.';
     }
-    else if (conn.state == 'blocking') {
+    else if (obj.state == 'blocking') {
         colour = 'yellow';
-        explanation = 'Resource alarm: Connection will block on publish.';
+        explanation = 'Resource alarm: connection will block on publish.';
     }
-    else if (conn.last_blocked_by == 'flow') {
-        var age = conn.last_blocked_age.toFixed();
-        if (age < 5) {
-            colour = 'yellow';
-            text = 'flow';
-            explanation = 'Publishing rate recently restricted by server.';
-        }
+    else if (obj.state == 'flow') {
+        colour = 'yellow';
+        explanation = 'Publishing rate recently restricted by server.';
     }
 
+    return fmt_state(colour, text, explanation);
+}
+
+function fmt_state(colour, text, explanation) {
+    var key;
     if (explanation) {
-        return '<div class="status-' + colour + '"><acronym title="' +
-            explanation + '">' + text + '</acronym></div>';
+        key = '<acronym class="normal" title="' + explanation + '">' +
+            text + '</acronym>';
     }
     else {
-        return '<div class="status-' + colour + '">' + text + '</div>';
+        key = text;
     }
+
+    return '<div class="colour-key status-key-' + colour + '"></div>' + key;
 }
 
 function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
@@ -641,8 +641,16 @@ function _link_to(name, url, highlight, args) {
 
 function fmt_highlight_filter(text) {
     if (current_filter == '') return fmt_escape_html(text);
-    var ix = text.toLowerCase().indexOf(current_filter.toLowerCase());
-    var l = current_filter.length;
+
+    var text_to_match = current_filter.toLowerCase();
+    if (current_filter_regex) {
+        var potential_match = current_filter_regex.exec(text.toLowerCase());
+        if (potential_match) {
+            text_to_match = potential_match[0];
+        }
+    }
+    var ix = text.toLowerCase().indexOf(text_to_match);
+    var l = text_to_match.length;
     if (ix == -1) {
         return fmt_escape_html(text);
     }
@@ -772,7 +780,11 @@ function filter_ui(items) {
         var items2 = [];
         for (var i in items) {
             var item = items[i];
-            if (item.name.toLowerCase().indexOf(current_filter.toLowerCase()) != -1) {
+            var item_name = item.name.toLowerCase();
+            if ((current_filter_regex_on &&
+                 current_filter_regex &&
+                 current_filter_regex.test(item_name)) ||
+                item_name.indexOf(current_filter.toLowerCase()) != -1) {
                 items2.push(item);
             }
         }
@@ -784,7 +796,11 @@ function filter_ui(items) {
         (current_filter == '' ? '' : ' class="filter-active"') +
         '><tr><th>Filter:</th>' +
         '<td><input id="filter" type="text" value="' +
-        fmt_escape_html(current_filter) + '"/></td></tr></table>';
+        fmt_escape_html(current_filter) + '"/>' +
+        '<input type="checkbox" name="filter-regex-mode" id="filter-regex-mode"' +
+        (current_filter_regex_on ? ' checked' : '') +
+        '/><label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span>' +
+        '</td></tr></table>';
 
     function items_desc(l) {
         return l == 1 ? (l + ' item') : (l + ' items');

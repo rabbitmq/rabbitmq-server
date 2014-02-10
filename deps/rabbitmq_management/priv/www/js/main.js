@@ -50,14 +50,14 @@ function start_app_login() {
 }
 
 function check_login() {
-    var user = JSON.parse(sync_get('/whoami'));
+    user = JSON.parse(sync_get('/whoami'));
     if (user == false) {
         document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         replace_content('login-status', '<p>Login failed</p>');
     }
     else {
         replace_content('outer', format('layout', {}));
-        setup_global_vars(user);
+        setup_global_vars();
         setup_constant_events();
         update_vhosts();
         update_interval();
@@ -489,13 +489,16 @@ function postprocess() {
             update_multifields();
         });
     $('.controls-appearance').change(function() {
-        var controls = $(this).attr('controls-divs');
-        if ($(this).val() == 'true') {
-            $('#' + controls + '-yes').slideDown(100);
-            $('#' + controls + '-no').slideUp(100);
-        } else {
-            $('#' + controls + '-yes').slideUp(100);
-            $('#' + controls + '-no').slideDown(100);
+        var params = $(this).get(0).options;
+        var selected = $(this).val();
+
+        for (i = 0; i < params.length; i++) {
+            var param = params[i].value;
+            if (param == selected) {
+                $('#' + param + '-div').slideDown(100);
+            } else {
+                $('#' + param + '-div').slideUp(100);
+            }
         }
     });
     setup_visibility();
@@ -527,6 +530,7 @@ function postprocess() {
         $(this).parents('form').submit();
     });
     $('#filter').die().live('keyup', debounce(update_filter, 500));
+    $('#filter-regex-mode').change(update_filter_regex_mode);
     $('#truncate').die().live('keyup', debounce(update_truncate, 500));
     if (! user_administrator) {
         $('.administrator-only').remove();
@@ -637,6 +641,25 @@ function multifield_input(prefix, suffix, type) {
     }
 }
 
+function update_filter_regex(jElem) {
+    current_filter_regex = null;
+    jElem.parents('.filter').children('.status-error').remove();
+    if (current_filter_regex_on && $.trim(current_filter).length > 0) {
+        try {
+            current_filter_regex = new RegExp(current_filter,'i');
+        } catch (e) {
+            jElem.parents('.filter').append('<p class="status-error">' +
+                                            e.message + '</p>');
+        }
+    }
+}
+
+function update_filter_regex_mode() {
+    current_filter_regex_on = $(this).is(':checked');
+    update_filter_regex($(this));
+    partial_update();
+}
+
 function update_filter() {
     current_filter = $(this).val();
     var table = $(this).parents('table').first();
@@ -644,6 +667,7 @@ function update_filter() {
     if ($(this).val() != '') {
         table.addClass('filter-active');
     }
+    update_filter_regex($(this));
     partial_update();
 }
 
@@ -1038,10 +1062,16 @@ function check_password(params) {
 
 function maybe_remove_fields(params) {
     $('.controls-appearance').each(function(index) {
-        if ($(this).val() == 'false') {
-            delete params[$(this).attr('param-name')];
-            delete params[$(this).attr('name')];
+        var options = $(this).get(0).options;
+        var selected = $(this).val();
+
+        for (i = 0; i < options.length; i++) {
+            var option = options[i].value;
+            if (option != selected) {
+                delete params[option];
+            }
         }
+        delete params[$(this).attr('name')];
     });
     return params;
 }

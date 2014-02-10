@@ -139,7 +139,8 @@
           gc_timer,
           gc_continuation,
           lookups,
-          interval}).
+          interval,
+          event_refresh_ref}).
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
@@ -186,9 +187,14 @@ start_link() ->
     %% invoke global:re_register_name/2 ourselves, and just steal the
     %% name if it existed before. We therefore rely on
     %% mirrored_supervisor to maintain the uniqueness of this process.
-    case gen_server2:start_link(?MODULE, [], []) of
+    Ref = make_ref(),
+    case gen_server2:start_link(?MODULE, [Ref], []) of
         {ok, Pid} -> yes = global:re_register_name(?MODULE, Pid),
-                     rabbit:force_event_refresh(),
+                     %% For debugging it's helpful to locally register the
+                     %% name too since that shows up in places global names
+                     %% don't.
+                     register(?MODULE, Pid),
+                     rabbit:force_event_refresh(Ref),
                      {ok, Pid};
         Else      -> Else
     end.
@@ -223,7 +229,7 @@ safe_call(Term, Item) ->
 %% Internal, gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([]) ->
+init([Ref]) ->
     %% When Rabbit is overloaded, it's usually especially important
     %% that the management plugin work.
     process_flag(priority, high),
@@ -238,7 +244,8 @@ init([]) ->
                     tables                 = Tables,
                     old_stats              = Table(),
                     aggregated_stats       = Table(),
-                    aggregated_stats_index = Table()})), hibernate,
+                    aggregated_stats_index = Table(),
+                    event_refresh_ref      = Ref})), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({augment_exchanges, Xs, Ranges, basic}, _From, State) ->
@@ -328,7 +335,14 @@ handle_call(reset_lookups, _From, State) ->
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
 
-handle_cast({event, Event}, State) ->
+%% Only handle events that are real, or pertain to a force-refresh
+%% that we instigated.
+handle_cast({event, Event = #event{reference = none}}, State) ->
+    handle_event(Event, State),
+    noreply(State);
+
+handle_cast({event, Event = #event{reference = Ref}},
+            State = #state{event_refresh_ref = Ref}) ->
     handle_event(Event, State),
     noreply(State);
 
@@ -436,7 +450,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:timestamp/1, [idle_since]},
-                  {fun rabbit_mgmt_format:queue_status/1, [status]}],
+                  {fun rabbit_mgmt_format:queue_state/1, [state]}],
                  [messages, messages_ready, messages_unacknowledged], State);
 
 handle_event(Event = #event{type = queue_deleted,

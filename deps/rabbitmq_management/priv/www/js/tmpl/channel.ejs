@@ -61,12 +61,8 @@
 
 <table class="facts">
   <tr>
-    <th>Blocked by client</th>
-    <td><%= fmt_boolean(channel.client_flow_blocked) %></td>
-  </tr>
-  <tr>
-    <th>Status</th>
-    <td><%= fmt_idle_long(channel) %></td>
+    <th>State</th>
+    <td><%= fmt_object_state(channel) %></td>
   </tr>
 </table>
 </div>

@@ -45,4 +45,4 @@ maybe_load_definitions() ->
 
 load_definitions(Body) ->
     rabbit_mgmt_wm_definitions:apply_defs(
-      Body, fun rabbit_misc:const_ok/0, fun (E) -> {error, E} end).
+      Body, fun () -> ok end, fun (E) -> {error, E} end).
