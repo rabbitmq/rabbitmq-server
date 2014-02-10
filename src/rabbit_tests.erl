@@ -1533,7 +1533,7 @@ test_refresh_events(SecondaryNode) ->
 
 expect_events(Tag, Key, Type) ->
     expect_event(Tag, Key, Type),
-    rabbit:force_event_refresh(),
+    rabbit:force_event_refresh(make_ref()),
     expect_event(Tag, Key, Type).
 
 expect_event(Tag, Key, Type) ->

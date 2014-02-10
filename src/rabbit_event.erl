@@ -59,7 +59,7 @@
 -spec(stats_level/2 :: (container(), pos()) -> level()).
 -spec(if_enabled/3 :: (container(), pos(), timer_fun()) -> 'ok').
 -spec(notify/2 :: (event_type(), event_props()) -> 'ok').
--spec(notify/3 :: (event_type(), event_props(), reference()) -> 'ok').
+-spec(notify/3 :: (event_type(), event_props(), reference() | 'none') -> 'ok').
 -spec(notify_if/3 :: (boolean(), event_type(), event_props()) -> 'ok').
 
 -endif.
