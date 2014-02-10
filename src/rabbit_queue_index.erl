@@ -656,12 +656,10 @@ get_journal_handle(State = #qistate { journal_handle = Hdl }) ->
 %% are 0 to start with.
 load_journal(State) ->
     case is_journal_present(State) of
-        true ->
-            {JournalHdl, State1} = get_journal_handle(State),
-            {ok, 0} = file_handle_cache:position(JournalHdl, 0),
-            load_journal_entries(State1);
-        false ->
-            State
+        true  -> {JournalHdl, State1} = get_journal_handle(State),
+                 {ok, 0} = file_handle_cache:position(JournalHdl, 0),
+                 load_journal_entries(State1);
+        false -> State
     end.
 
 is_journal_present(#qistate { journal_handle = undefined,
