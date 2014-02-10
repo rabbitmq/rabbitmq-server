@@ -60,7 +60,7 @@
 
 -record(trie_node, {exchange_name, node_id}).
 -record(trie_edge, {exchange_name, node_id, word}).
--record(trie_binding, {exchange_name, node_id, destination}).
+-record(trie_binding, {exchange_name, node_id, destination, arguments}).
 
 -record(listener, {node, protocol, host, ip_address, port}).
 
@@ -73,7 +73,7 @@
 -record(delivery, {mandatory, confirm, sender, message, msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
--record(event, {type, props, timestamp}).
+-record(event, {type, props, reference = undefined, timestamp}).
 
 -record(message_properties, {expiry, needs_confirming = false}).
 

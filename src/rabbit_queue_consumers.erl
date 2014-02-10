@@ -27,6 +27,9 @@
 
 -define(UNSENT_MESSAGE_LIMIT,          200).
 
+%% Utilisation average calculations are all in μs.
+-define(USE_AVG_HALF_LIFE, 1000000.0).
+
 -record(state, {consumers, use}).
 
 -record(consumer, {tag, ack_required, args}).
@@ -430,11 +433,6 @@ update_use({inactive, Since, Active, Avg},   active) ->
 
 use_avg(Active, Inactive, Avg) ->
     Time = Inactive + Active,
-    Ratio = Active / Time,
-    Weight = erlang:min(1, Time / 1000000),
-    case Avg of
-        undefined -> Ratio;
-        _         -> Ratio * Weight + Avg * (1 - Weight)
-    end.
+    rabbit_misc:moving_average(Time, ?USE_AVG_HALF_LIFE, Active / Time, Avg).
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).

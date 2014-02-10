@@ -358,9 +358,10 @@ start(DurableQueueNames) ->
 
     %% Any queue directory we've not been asked to recover is considered garbage
     QueuesDir = queues_dir(),
-    [rabbit_file:recursive_delete([QueueDir]) ||
-        QueueDir <- all_queue_directory_names(QueuesDir),
-        not sets:is_element(filename:basename(QueueDir), DurableDirectories)],
+    rabbit_file:recursive_delete(
+      [filename:join(QueuesDir, DirName) ||
+          DirName <- all_queue_directory_names(QueuesDir),
+          not sets:is_element(DirName, DurableDirectories)]),
 
     rabbit_recovery_terms:clear(),
 
@@ -373,9 +374,8 @@ stop() -> rabbit_recovery_terms:stop().
 
 all_queue_directory_names(Dir) ->
     case rabbit_file:list_dir(Dir) of
-        {ok, Entries}   -> [ Entry || Entry <- Entries,
-                                      rabbit_file:is_dir(
-                                        filename:join(Dir, Entry)) ];
+        {ok, Entries}   -> [E || E <- Entries,
+                                 rabbit_file:is_dir(filename:join(Dir, E))];
         {error, enoent} -> []
     end.
 

@@ -24,7 +24,7 @@
 -export([send_command/2, deliver/4, send_credit_reply/2, send_drained/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
--export([force_event_refresh/0]).
+-export([force_event_refresh/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
@@ -106,7 +106,7 @@
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(refresh_config_local/0 :: () -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
--spec(force_event_refresh/0 :: () -> 'ok').
+-spec(force_event_refresh/1 :: (reference()) -> 'ok').
 
 -endif.
 
@@ -179,8 +179,8 @@ refresh_config_local() ->
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
-force_event_refresh() ->
-    [gen_server2:cast(C, force_event_refresh) || C <- list()],
+force_event_refresh(Ref) ->
+    [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
 
 %%---------------------------------------------------------------------------
@@ -335,8 +335,9 @@ handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
      || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
 
-handle_cast(force_event_refresh, State) ->
-    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
+handle_cast({force_event_refresh, Ref}, State) ->
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
+                        Ref),
     noreply(State);
 
 handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->
@@ -496,15 +497,14 @@ check_user_id_header(#'P_basic'{user_id = undefined}, _) ->
 check_user_id_header(#'P_basic'{user_id = Username},
                      #ch{user = #user{username = Username}}) ->
     ok;
+check_user_id_header(
+  #'P_basic'{}, #ch{user = #user{auth_backend = rabbit_auth_backend_dummy}}) ->
+    ok;
 check_user_id_header(#'P_basic'{user_id = Claimed},
-                     #ch{user = #user{username = Actual,
-                                      tags     = Tags}}) ->
-    case lists:member(impersonator, Tags) of
-        true  -> ok;
-        false -> precondition_failed(
-                   "user_id property set to '~s' but authenticated user was "
-                   "'~s'", [Claimed, Actual])
-    end.
+                     #ch{user = #user{username = Actual}}) ->
+    precondition_failed(
+      "user_id property set to '~s' but authenticated user was '~s'",
+      [Claimed, Actual]).
 
 check_expiration_header(Props) ->
     case rabbit_basic:parse_expiration(Props) of
@@ -1439,8 +1439,9 @@ notify_limiter(Limiter, Acked) ->
                  end
     end.
 
-deliver_to_queues({#delivery{message    = #basic_message{exchange_name = XName},
-                             mandatory  = false},
+deliver_to_queues({#delivery{message   = #basic_message{exchange_name = XName},
+                             confirm   = false,
+                             mandatory = false},
                    []}, State) -> %% optimisation
     ?INCR_STATS([{exchange_stats, XName, 1}], publish, State),
     State;

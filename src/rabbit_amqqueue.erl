@@ -24,7 +24,7 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
--export([force_event_refresh/0, notify_policy_changed/1]).
+-export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/9, basic_cancel/4, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
@@ -110,7 +110,7 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
                     -> [rabbit_types:infos()]).
--spec(force_event_refresh/0 :: () -> 'ok').
+-spec(force_event_refresh/1 :: (reference()) -> 'ok').
 -spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(consumers/1 :: (rabbit_types:amqqueue())
                      -> [{pid(), rabbit_types:ctag(), boolean(),
@@ -355,14 +355,14 @@ with(Name, F, E) ->
         {ok, Q = #amqqueue{pid = QPid}} ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
-            %% with the QPid.
+            %% with the QPid. F() should be written s.t. that this
+            %% cannot happen, so we bail if it does since that
+            %% indicates a code bug and we don't want to get stuck in
+            %% the retry loop.
             rabbit_misc:with_exit_handler(
-              fun () ->
-                      case rabbit_misc:is_process_alive(QPid) of
-                          true  -> E(not_found_or_absent_dirty(Name));
-                          false -> timer:sleep(25),
-                                   with(Name, F, E)
-                      end
+              fun () -> false = rabbit_misc:is_process_alive(QPid),
+                        timer:sleep(25),
+                        with(Name, F, E)
               end, fun () -> F(Q) end);
         {error, not_found} ->
             E(not_found_or_absent_dirty(Name))
@@ -503,19 +503,20 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 %% the first place since a node failed). Therefore we keep poking at
 %% the list of queues until we were able to talk to a live process or
 %% the queue no longer exists.
-force_event_refresh() -> force_event_refresh([Q#amqqueue.name || Q <- list()]).
+force_event_refresh(Ref) ->
+    force_event_refresh([Q#amqqueue.name || Q <- list()], Ref).
 
-force_event_refresh(QNames) ->
+force_event_refresh(QNames, Ref) ->
     Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
-    {_, Bad} = rabbit_misc:multi_call(
-                 [Q#amqqueue.pid || Q <- Qs], force_event_refresh),
+    {_, Bad} = gen_server2:mcall(
+                 [{Q#amqqueue.pid, {force_event_refresh, Ref}} || Q <- Qs]),
     FailedPids = [Pid || {Pid, _Reason} <- Bad],
     Failed = [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
                       lists:member(Pid, FailedPids)],
     case Failed of
         [] -> ok;
         _  -> timer:sleep(?FAILOVER_WAIT_MILLIS),
-              force_event_refresh(Failed)
+              force_event_refresh(Failed, Ref)
     end.
 
 notify_policy_changed(#amqqueue{pid = QPid}) ->
