@@ -314,7 +314,7 @@ policy_changed(Q1 = #amqqueue{decorators = Decorators1},
 
 start_queue_process(Node, Q) ->
     {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
-    Q#amqqueue{pid = Pid}.
+    Pid.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
     ExchangeName = rabbit_misc:r(QueueName, exchange, <<>>),
