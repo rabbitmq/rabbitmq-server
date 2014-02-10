@@ -497,15 +497,14 @@ check_user_id_header(#'P_basic'{user_id = undefined}, _) ->
 check_user_id_header(#'P_basic'{user_id = Username},
                      #ch{user = #user{username = Username}}) ->
     ok;
+check_user_id_header(
+  #'P_basic'{}, #ch{user = #user{auth_backend = rabbit_auth_backend_dummy}}) ->
+    ok;
 check_user_id_header(#'P_basic'{user_id = Claimed},
-                     #ch{user = #user{username = Actual,
-                                      tags     = Tags}}) ->
-    case lists:member(impersonator, Tags) of
-        true  -> ok;
-        false -> precondition_failed(
-                   "user_id property set to '~s' but authenticated user was "
-                   "'~s'", [Claimed, Actual])
-    end.
+                     #ch{user = #user{username = Actual}}) ->
+    precondition_failed(
+      "user_id property set to '~s' but authenticated user was '~s'",
+      [Claimed, Actual]).
 
 check_expiration_header(Props) ->
     case rabbit_basic:parse_expiration(Props) of
@@ -1440,8 +1439,9 @@ notify_limiter(Limiter, Acked) ->
                  end
     end.
 
-deliver_to_queues({#delivery{message    = #basic_message{exchange_name = XName},
-                             mandatory  = false},
+deliver_to_queues({#delivery{message   = #basic_message{exchange_name = XName},
+                             confirm   = false,
+                             mandatory = false},
                    []}, State) -> %% optimisation
     ?INCR_STATS([{exchange_stats, XName, 1}], publish, State),
     State;

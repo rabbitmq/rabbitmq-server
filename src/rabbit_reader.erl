@@ -156,18 +156,22 @@ server_properties(Protocol) ->
          [case X of
               {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
                                    longstr,
-                                   list_to_binary(Value)};
+                                   maybe_list_to_binary(Value)};
               {BinKey, Type, Value} -> {BinKey, Type, Value}
           end || X <- RawConfigServerProps ++
-                     [{product,     Product},
-                      {version,     Version},
-                      {platform,    "Erlang/OTP"},
-                      {copyright,   ?COPYRIGHT_MESSAGE},
-                      {information, ?INFORMATION_MESSAGE}]]],
+                     [{product,      Product},
+                      {version,      Version},
+                      {cluster_name, rabbit_nodes:cluster_name()},
+                      {platform,     "Erlang/OTP"},
+                      {copyright,    ?COPYRIGHT_MESSAGE},
+                      {information,  ?INFORMATION_MESSAGE}]]],
 
     %% Filter duplicated properties in favour of config file provided values
     lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
                 NormalizedConfigServerProps).
+
+maybe_list_to_binary(V) when is_binary(V) -> V;
+maybe_list_to_binary(V) when is_list(V)   -> list_to_binary(V).
 
 server_capabilities(rabbit_framing_amqp_0_9_1) ->
     [{<<"publisher_confirms">>,           bool, true},
@@ -958,6 +962,9 @@ validate_negotiated_integer_value(Field, Min, ClientValue) ->
             ok
     end.
 
+%% keep dialyzer happy
+-spec fail_negotiation(atom(), 'min' | 'max', integer(), integer()) ->
+                              no_return().
 fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
     {S1, S2} = case MinOrMax of
                    min -> {lower,  minimum};
