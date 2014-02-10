@@ -60,15 +60,17 @@ add(VHostPath) ->
               (ok, false) ->
                   [rabbit_exchange:declare(
                      rabbit_misc:r(VHostPath, exchange, Name),
-                     Type, true, false, false, []) ||
-                      {Name,Type} <-
-                          [{<<"">>,                   direct},
-                           {<<"amq.direct">>,         direct},
-                           {<<"amq.topic">>,          topic},
-                           {<<"amq.match">>,          headers}, %% per 0-9-1 pdf
-                           {<<"amq.headers">>,        headers}, %% per 0-9-1 xml
-                           {<<"amq.fanout">>,         fanout},
-                           {<<"amq.rabbitmq.trace">>, topic}]],
+                     Type, true, false, Internal, []) ||
+                      {Name, Type, Internal} <-
+                          [{<<"">>,                   direct,  false},
+                           {<<"amq.direct">>,         direct,  false},
+                           {<<"amq.topic">>,          topic,   false},
+                           %% per 0-9-1 pdf
+                           {<<"amq.match">>,          headers, false},
+                           %% per 0-9-1 xml
+                           {<<"amq.headers">>,        headers, false},
+                           {<<"amq.fanout">>,         fanout,  false},
+                           {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   ok
           end),
     rabbit_event:notify(vhost_created, info(VHostPath)),
@@ -81,9 +83,9 @@ delete(VHostPath) ->
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
     rabbit_log:info("Deleting vhost '~s'~n", [VHostPath]),
-    [{ok,_} = rabbit_amqqueue:delete(Q, false, false) ||
+    [assert_benign(rabbit_amqqueue:delete(Q, false, false)) ||
         Q <- rabbit_amqqueue:list(VHostPath)],
-    [ok = rabbit_exchange:delete(Name, false) ||
+    [assert_benign(rabbit_exchange:delete(Name, false)) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
     R = rabbit_misc:execute_mnesia_transaction(
           with(VHostPath, fun () ->
@@ -91,6 +93,18 @@ delete(VHostPath) ->
                           end)),
     ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
     R.
+
+assert_benign(ok)                   -> ok;
+assert_benign({ok, _})              -> ok;
+assert_benign({error, not_found})   -> ok;
+assert_benign({error, {absent, Q}}) ->
+    %% We have a durable queue on a down node. Removing the mnesia
+    %% entries here is safe. If/when the down node restarts, it will
+    %% clear out the on-disk storage of the queue.
+    case rabbit_amqqueue:internal_delete(Q#amqqueue.name) of
+        ok                 -> ok;
+        {error, not_found} -> ok
+    end.
 
 internal_delete(VHostPath) ->
     [ok = rabbit_auth_backend_internal:clear_permissions(

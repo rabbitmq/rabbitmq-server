@@ -39,7 +39,6 @@ all_tests() ->
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
     passed = test_version_equivalance(),
-    passed = test_multi_call(),
     passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_rabbit_basic_header_handling(),
@@ -66,6 +65,7 @@ all_tests() ->
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed = test_with_state(),
+    passed = test_mcall(),
     passed =
         do_if_secondary_node(
           fun run_cluster_dependent_tests/1,
@@ -154,26 +154,6 @@ test_version_equivalance() ->
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
-    passed.
-
-test_multi_call() ->
-    Fun = fun() ->
-                  receive
-                      {'$gen_call', {From, Mref}, request} ->
-                          From ! {Mref, response}
-                  end,
-                  receive
-                      never -> ok
-                  end
-          end,
-    Pid1 = spawn(Fun),
-    Pid2 = spawn(Fun),
-    Pid3 = spawn(Fun),
-    exit(Pid2, bang),
-    {[{Pid1, response}, {Pid3, response}], [{Pid2, _Fail}]} =
-        rabbit_misc:multi_call([Pid1, Pid2, Pid3], request),
-    exit(Pid1, bang),
-    exit(Pid3, bang),
     passed.
 
 test_rabbit_basic_header_handling() ->
@@ -578,33 +558,38 @@ test_topic_matching() ->
                          key = list_to_binary(Key),
                          destination = #resource{virtual_host = <<"/">>,
                                                  kind = queue,
-                                                 name = list_to_binary(Q)}} ||
-                   {Key, Q} <- [{"a.b.c",         "t1"},
-                                {"a.*.c",         "t2"},
-                                {"a.#.b",         "t3"},
-                                {"a.b.b.c",       "t4"},
-                                {"#",             "t5"},
-                                {"#.#",           "t6"},
-                                {"#.b",           "t7"},
-                                {"*.*",           "t8"},
-                                {"a.*",           "t9"},
-                                {"*.b.c",         "t10"},
-                                {"a.#",           "t11"},
-                                {"a.#.#",         "t12"},
-                                {"b.b.c",         "t13"},
-                                {"a.b.b",         "t14"},
-                                {"a.b",           "t15"},
-                                {"b.c",           "t16"},
-                                {"",              "t17"},
-                                {"*.*.*",         "t18"},
-                                {"vodka.martini", "t19"},
-                                {"a.b.c",         "t20"},
-                                {"*.#",           "t21"},
-                                {"#.*.#",         "t22"},
-                                {"*.#.#",         "t23"},
-                                {"#.#.#",         "t24"},
-                                {"*",             "t25"},
-                                {"#.b.#",         "t26"}]],
+                                                 name = list_to_binary(Q)},
+                         args = Args} ||
+                   {Key, Q, Args} <- [{"a.b.c",         "t1",  []},
+                                      {"a.*.c",         "t2",  []},
+                                      {"a.#.b",         "t3",  []},
+                                      {"a.b.b.c",       "t4",  []},
+                                      {"#",             "t5",  []},
+                                      {"#.#",           "t6",  []},
+                                      {"#.b",           "t7",  []},
+                                      {"*.*",           "t8",  []},
+                                      {"a.*",           "t9",  []},
+                                      {"*.b.c",         "t10", []},
+                                      {"a.#",           "t11", []},
+                                      {"a.#.#",         "t12", []},
+                                      {"b.b.c",         "t13", []},
+                                      {"a.b.b",         "t14", []},
+                                      {"a.b",           "t15", []},
+                                      {"b.c",           "t16", []},
+                                      {"",              "t17", []},
+                                      {"*.*.*",         "t18", []},
+                                      {"vodka.martini", "t19", []},
+                                      {"a.b.c",         "t20", []},
+                                      {"*.#",           "t21", []},
+                                      {"#.*.#",         "t22", []},
+                                      {"*.#.#",         "t23", []},
+                                      {"#.#.#",         "t24", []},
+                                      {"*",             "t25", []},
+                                      {"#.b.#",         "t26", []},
+                                      {"args-test",     "t27",
+                                       [{<<"foo">>, longstr, <<"bar">>}]},
+                                      {"args-test",     "t27", %% Note aliasing
+                                       [{<<"foo">>, longstr, <<"baz">>}]}]],
     lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
                   Bindings),
 
@@ -631,12 +616,13 @@ test_topic_matching() ->
                                    "t22", "t23", "t24", "t26"]},
           {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
           {"oneword",             ["t5", "t6", "t21", "t22", "t23", "t24",
-                                   "t25"]}]),
-
+                                   "t25"]},
+          {"args-test",           ["t5", "t6", "t21", "t22", "t23", "t24",
+                                   "t25", "t27"]}]),
     %% remove some bindings
     RemovedBindings = [lists:nth(1, Bindings), lists:nth(5, Bindings),
                        lists:nth(11, Bindings), lists:nth(19, Bindings),
-                       lists:nth(21, Bindings)],
+                       lists:nth(21, Bindings), lists:nth(28, Bindings)],
     exchange_op_callback(X, remove_bindings, [RemovedBindings]),
     RemainingBindings = ordsets:to_list(
                           ordsets:subtract(ordsets:from_list(Bindings),
@@ -659,7 +645,8 @@ test_topic_matching() ->
        {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
                                 "t24", "t26"]},
        {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
-       {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
+       {"oneword",             ["t6", "t22", "t23", "t24", "t25"]},
+       {"args-test",           ["t6", "t22", "t23", "t24", "t25", "t27"]}]),
 
     %% remove the entire exchange
     exchange_op_callback(X, delete, [RemainingBindings]),
@@ -1042,6 +1029,9 @@ test_user_management() ->
     ok = control_action(add_vhost, ["/testhost"]),
     ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
                         [{"-p", "/testhost"}]),
+    {new, _} = rabbit_amqqueue:declare(
+                 rabbit_misc:r(<<"/testhost">>, queue, <<"test">>),
+                 true, false, [], none),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
@@ -1172,7 +1162,7 @@ test_server_status() ->
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, Limiter, false, <<"ctag">>, true, none, [], undefined),
+           Q, true, Ch, Limiter, false, <<"ctag">>, true, [], undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -1262,7 +1252,7 @@ test_writer(Pid) ->
 test_channel() ->
     Me = self(),
     Writer = spawn(fun () -> test_writer(Me) end),
-    {ok, Limiter} = rabbit_limiter:start_link(),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
                  user(<<"guest">>), <<"/">>, [], Me, Limiter),
@@ -1368,6 +1358,82 @@ test_with_state() ->
                                        fun (S) -> element(1, S) end),
     passed.
 
+test_mcall() ->
+    P1 = spawn(fun gs2_test_listener/0),
+    register(foo, P1),
+    global:register_name(gfoo, P1),
+
+    P2 = spawn(fun() -> exit(bang) end),
+    %% ensure P2 is dead (ignore the race setting up the monitor)
+    await_exit(P2),
+
+    P3 = spawn(fun gs2_test_crasher/0),
+
+    %% since P2 crashes almost immediately and P3 after receiving its first
+    %% message, we have to spawn a few more processes to handle the additional
+    %% cases we're interested in here
+    register(baz, spawn(fun gs2_test_crasher/0)),
+    register(bog, spawn(fun gs2_test_crasher/0)),
+    global:register_name(gbaz, spawn(fun gs2_test_crasher/0)),
+
+    NoNode = rabbit_nodes:make("nonode"),
+
+    Targets =
+        %% pids
+        [P1, P2, P3]
+        ++
+        %% registered names
+        [foo, bar, baz]
+        ++
+        %% {Name, Node} pairs
+        [{foo, node()}, {bar, node()}, {bog, node()}, {foo, NoNode}]
+        ++
+        %% {global, Name}
+        [{global, gfoo}, {global, gbar}, {global, gbaz}],
+
+    GoodResults = [{D, goodbye} || D <- [P1, foo,
+                                         {foo, node()},
+                                         {global, gfoo}]],
+
+    BadResults  = [{P2,             noproc},   % died before use
+                   {P3,             boom},     % died on first use
+                   {bar,            noproc},   % never registered
+                   {baz,            boom},     % died on first use
+                   {{bar, node()},  noproc},   % never registered
+                   {{bog, node()},  boom},     % died on first use
+                   {{foo, NoNode},  nodedown}, % invalid node
+                   {{global, gbar}, noproc},   % never registered globally
+                   {{global, gbaz}, boom}],    % died on first use
+
+    {Replies, Errors} = gen_server2:mcall([{T, hello} || T <- Targets]),
+    true = lists:sort(Replies) == lists:sort(GoodResults),
+    true = lists:sort(Errors)  == lists:sort(BadResults),
+
+    %% cleanup (ignore the race setting up the monitor)
+    P1 ! stop,
+    await_exit(P1),
+    passed.
+
+await_exit(Pid) ->
+    MRef = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', MRef, _, _, _} -> ok
+    end.
+
+gs2_test_crasher() ->
+    receive
+        {'$gen_call', _From, hello} -> exit(boom)
+    end.
+
+gs2_test_listener() ->
+    receive
+        {'$gen_call', From, hello} ->
+            gen_server2:reply(From, goodbye),
+            gs2_test_listener();
+        stop ->
+            ok
+    end.
+
 test_statistics_event_receiver(Pid) ->
     receive
         Foo -> Pid ! Foo, test_statistics_event_receiver(Pid)
@@ -1467,7 +1533,7 @@ test_refresh_events(SecondaryNode) ->
 
 expect_events(Tag, Key, Type) ->
     expect_event(Tag, Key, Type),
-    rabbit:force_event_refresh(),
+    rabbit:force_event_refresh(make_ref()),
     expect_event(Tag, Key, Type).
 
 expect_event(Tag, Key, Type) ->
@@ -2129,11 +2195,10 @@ test_queue() ->
 
 init_test_queue() ->
     TestQueue = test_queue(),
-    Terms = rabbit_queue_index:shutdown_terms(TestQueue),
-    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:gen()),
+    PRef = rabbit_guid:gen(),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
-            TestQueue, Terms, false,
+            TestQueue, [], false,
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
@@ -2144,12 +2209,12 @@ init_test_queue() ->
 restart_test_queue(Qi) ->
     _ = rabbit_queue_index:terminate([], Qi),
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([test_queue()]),
+    {ok, _} = rabbit_variable_queue:start([test_queue()]),
     init_test_queue().
 
 empty_test_queue() ->
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
     {0, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
@@ -2205,7 +2270,7 @@ test_queue_index_props() ->
       end),
 
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
 
@@ -2329,13 +2394,16 @@ test_queue_index() ->
       end),
 
     ok = rabbit_variable_queue:stop(),
-    ok = rabbit_variable_queue:start([]),
+    {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/2, fun nop/2, fun nop/1).
+      Q, case Recover of
+             true  -> non_clean_shutdown;
+             false -> new
+         end, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
@@ -2408,8 +2476,8 @@ publish_and_confirm(Q, Payload, Count) ->
                                     <<>>, #'P_basic'{delivery_mode = 2},
                                     Payload),
          Delivery = #delivery{mandatory = false, sender = self(),
-                              message = Msg, msg_seq_no = Seq},
-         {routed, _} = rabbit_amqqueue:deliver([Q], Delivery)
+                              confirm = true, message = Msg, msg_seq_no = Seq},
+          _QPids = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
 
@@ -2815,7 +2883,7 @@ test_queue_recover() ->
     end,
     rabbit_amqqueue:stop(),
     rabbit_amqqueue:start(rabbit_amqqueue:recover()),
-    {ok, Limiter} = rabbit_limiter:start_link(),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
     rabbit_amqqueue:with_or_die(
       QName,
       fun (Q1 = #amqqueue { pid = QPid1 }) ->
@@ -2842,7 +2910,7 @@ test_variable_queue_delete_msg_store_files_callback() ->
 
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 
-    {ok, Limiter} = rabbit_limiter:start_link(),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
 
     CountMinusOne = Count - 1,
     {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}} =
