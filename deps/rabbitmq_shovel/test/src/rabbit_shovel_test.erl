@@ -17,6 +17,7 @@
 -module(rabbit_shovel_test).
 -export([test/0]).
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -define(EXCHANGE,    <<"test_exchange">>).
 -define(TO_SHOVEL,   <<"to_the_shovel">>).
@@ -25,7 +26,7 @@
 -define(SHOVELLED,   <<"shovelled">>).
 -define(TIMEOUT,     1000).
 
-test() ->
+main_test() ->
     %% it may already be running. Stop if possible
     application:stop(rabbitmq_shovel),
 
@@ -158,6 +159,8 @@ test() ->
 
     ok = application:start(rabbitmq_shovel),
 
+    await_running_shovel(test_shovel),
+
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
 
@@ -199,8 +202,7 @@ test() ->
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)
     end,
 
-    [{test_shovel,
-      {running, {source, _Source}, {destination, _Destination}}, _Time}] =
+    [{test_shovel, static, {running, _Info}, _Time}] =
         rabbit_shovel_status:status(),
 
     receive
@@ -217,7 +219,6 @@ test() ->
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
 
-    ok = application:stop(rabbitmq_shovel),
     ok.
 
 test_broken_shovel_configs(Configs) ->
@@ -236,3 +237,11 @@ test_broken_shovel_sources(Sources) ->
                                    {destinations, [{broker, "amqp://"}]},
                                    {queue, <<"">>}]),
     Error.
+
+await_running_shovel(Name) ->
+    case [Name || {Name, _, {running, _}, _}
+                      <- rabbit_shovel_status:status()] of
+        [_] -> ok;
+        _   -> timer:sleep(100),
+               await_running_shovel(Name)
+    end.

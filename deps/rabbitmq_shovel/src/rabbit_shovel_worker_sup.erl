@@ -26,9 +26,9 @@ start_link(ShovelName, ShovelConfig) ->
                                    fun rabbit_misc:execute_mnesia_transaction/1,
                                    ?MODULE, [ShovelName, ShovelConfig]).
 
-init([ShovelName, Config]) ->
-    ChildSpecs = [{ShovelName,
-                   {rabbit_shovel_worker, start_link, [ShovelName, Config]},
+init([Name, Config]) ->
+    ChildSpecs = [{Name,
+                   {rabbit_shovel_worker, start_link, [static, Name, Config]},
                    case proplists:get_value(reconnect_delay, Config, none) of
                        N when is_integer(N) andalso N > 0 -> {permanent, N};
                        _                                  -> temporary
