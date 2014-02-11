@@ -31,7 +31,7 @@
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
--spec(connect/5 :: (('nouser' |
+-spec(connect/5 :: (({'none', 'none'} | {rabbit_types:username(), 'none'} |
                      {rabbit_types:username(), rabbit_types:password()}),
                     rabbit_types:vhost(), rabbit_types:protocol(), pid(),
                     rabbit_event:event_props()) ->
@@ -67,13 +67,17 @@ list() ->
 
 %%----------------------------------------------------------------------------
 
+connect({none, _}, VHost, Protocol, Pid, Infos) ->
+    connect0(fun () -> {ok, rabbit_auth_backend_dummy:user()} end,
+             VHost, Protocol, Pid, Infos);
+
+connect({Username, none}, VHost, Protocol, Pid, Infos) ->
+    connect0(fun () -> rabbit_access_control:check_user_login(Username, []) end,
+             VHost, Protocol, Pid, Infos);
+
 connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
     connect0(fun () -> rabbit_access_control:check_user_pass_login(
                          Username, Password) end,
-             VHost, Protocol, Pid, Infos);
-
-connect(nouser, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> {ok, rabbit_auth_backend_dummy:user()} end,
              VHost, Protocol, Pid, Infos).
 
 connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
