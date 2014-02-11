@@ -95,11 +95,16 @@ expect_uris(URIs) -> [Link] = rabbit_federation_status:status(),
 
 kill_only_connection(Node) ->
     case connection_pids(Node) of
-        [Pid] -> rabbit_networking:close_connection(Pid, "why not?"),
+        [Pid] -> catch rabbit_networking:close_connection(Pid, "boom"), %% [1]
                  wait_for_pid_to_die(Node, Pid);
         _     -> timer:sleep(100),
                  kill_only_connection(Node)
     end.
+
+%% [1] the catch is because we could still see a connection from a
+%% previous time round. If so that's fine (we'll just loop around
+%% again) but we don't want the test to fail because a connection
+%% closed as we were trying to close it.
 
 wait_for_pid_to_die(Node, Pid) ->
     case connection_pids(Node) of
