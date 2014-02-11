@@ -138,6 +138,11 @@
    %%
    %% {frame_max, 131072},
 
+   %% Set the max permissible number of channels per connection.
+   %% 0 means "no limit".
+   %%
+   %% {channel_max, 128},
+
    %% Customising Socket Options.
    %%
    %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for

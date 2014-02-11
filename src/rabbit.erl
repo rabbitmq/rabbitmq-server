@@ -20,7 +20,7 @@
 
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
-         is_running/1, environment/0, rotate_logs/1, force_event_refresh/0,
+         is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
 
 -export([start/2, stop/1]).
@@ -227,7 +227,7 @@
 -spec(is_running/1 :: (node()) -> boolean()).
 -spec(environment/0 :: () -> [{param(), term()}]).
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
--spec(force_event_refresh/0 :: () -> 'ok').
+-spec(force_event_refresh/1 :: (reference()) -> 'ok').
 
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
@@ -696,11 +696,11 @@ log_rotation_result(ok, {error, SaslLogError}) ->
 log_rotation_result(ok, ok) ->
     ok.
 
-force_event_refresh() ->
-    rabbit_direct:force_event_refresh(),
-    rabbit_networking:force_connection_event_refresh(),
-    rabbit_channel:force_event_refresh(),
-    rabbit_amqqueue:force_event_refresh().
+force_event_refresh(Ref) ->
+    rabbit_direct:force_event_refresh(Ref),
+    rabbit_networking:force_connection_event_refresh(Ref),
+    rabbit_channel:force_event_refresh(Ref),
+    rabbit_amqqueue:force_event_refresh(Ref).
 
 %%---------------------------------------------------------------------------
 %% misc

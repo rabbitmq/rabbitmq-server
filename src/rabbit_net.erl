@@ -222,10 +222,9 @@ maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.
 
 rdns(Addr) ->
-    {ok, Lookup} = application:get_env(rabbit, reverse_dns_lookups),
-    case Lookup of
-        true -> list_to_binary(rabbit_networking:tcp_host(Addr));
-        _    -> Addr
+    case application:get_env(rabbit, reverse_dns_lookups) of
+        {ok, true} -> list_to_binary(rabbit_networking:tcp_host(Addr));
+        _          -> Addr
     end.
 
 sock_funs(inbound)  -> {fun peername/1, fun sockname/1};
