@@ -305,76 +305,40 @@ ensure_application_loaded() ->
     end.
 
 start() ->
-    start_it(fun() ->
-                     %% We do not want to HiPE compile or upgrade
-                     %% mnesia after just restarting the app
-                     ok = ensure_application_loaded(),
-                     ok = ensure_working_log_handlers(),
-                     rabbit_node_monitor:prepare_cluster_status_files(),
-                     rabbit_mnesia:check_cluster_consistency(),
-                     ok = app_utils:start_applications(
-                            app_startup_order(), fun handle_app_error/2),
-                     ok = log_broker_started(rabbit_plugins:active())
-             end).
+    rabbit_boot:boot_with(
+      fun() ->
+              %% We do not want to HiPE compile or upgrade
+              %% mnesia after just restarting the app
+              ok = ensure_application_loaded(),
+              ok = ensure_working_log_handlers(),
+              rabbit_node_monitor:prepare_cluster_status_files(),
+              rabbit_mnesia:check_cluster_consistency(),
+              ok = rabbit_boot:start(app_startup_order()),
+              ok = log_broker_started(rabbit_plugins:active())
+      end).
 
 boot() ->
-    start_it(fun() ->
-                     ok = ensure_application_loaded(),
-                     Success = maybe_hipe_compile(),
-                     ok = ensure_working_log_handlers(),
-                     warn_if_hipe_compilation_failed(Success),
-                     rabbit_node_monitor:prepare_cluster_status_files(),
-                     ok = rabbit_upgrade:maybe_upgrade_mnesia(),
-                     %% It's important that the consistency check happens after
-                     %% the upgrade, since if we are a secondary node the
-                     %% primary node will have forgotten us
-                     rabbit_mnesia:check_cluster_consistency(),
-                     Plugins = rabbit_plugins:setup(),
-                     ToBeLoaded = Plugins ++ ?APPS,
-                     ok = app_utils:load_applications(ToBeLoaded),
-                     StartupApps = app_utils:app_dependency_order(ToBeLoaded,
-                                                                  false),
-                     ok = app_utils:start_applications(
-                            StartupApps, fun handle_app_error/2),
-                     ok = log_broker_started(Plugins)
-             end).
-
-handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
-    throw({could_not_start, App, Reason});
-
-handle_app_error(App, Reason) ->
-    throw({could_not_start, App, Reason}).
-
-start_it(StartFun) ->
-    Marker = spawn_link(fun() -> receive stop -> ok end end),
-    case catch register(rabbit_boot, Marker) of
-        true -> try
-                    case is_running() of
-                        true  -> ok;
-                        false -> StartFun()
-                    end
-                catch
-                    throw:{could_not_start, _App, _Reason}=Err ->
-                        boot_error(Err, not_available);
-                    _:Reason ->
-                        boot_error(Reason, erlang:get_stacktrace())
-                after
-                    unlink(Marker),
-                    Marker ! stop,
-                    %% give the error loggers some time to catch up
-                    timer:sleep(100)
-                end;
-        _    -> unlink(Marker),
-                Marker ! stop
-    end.
+    rabbit_boot:boot_with(
+      fun() ->
+              ok = ensure_application_loaded(),
+              Success = maybe_hipe_compile(),
+              ok = ensure_working_log_handlers(),
+              warn_if_hipe_compilation_failed(Success),
+              rabbit_node_monitor:prepare_cluster_status_files(),
+              ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+              %% It's important that the consistency check happens after
+              %% the upgrade, since if we are a secondary node the
+              %% primary node will have forgotten us
+              rabbit_mnesia:check_cluster_consistency(),
+              Plugins = rabbit_plugins:setup(),
+              ToBeLoaded = Plugins ++ ?APPS,
+              ok = rabbit_boot:start(ToBeLoaded),
+              ok = log_broker_started(Plugins)
+      end).
 
 stop() ->
-    case whereis(rabbit_boot) of
-        undefined -> ok;
-        _         -> await_startup()
-    end,
     rabbit_log:info("Stopping RabbitMQ~n"),
-    ok = app_utils:stop_applications(app_shutdown_order()).
+    rabbit_boot:shutdown(app_shutdown_order()).
 
 stop_and_halt() ->
     try
@@ -447,7 +411,7 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
-            [ok = run_boot_step(Step) || Step <- boot_steps()],
+            rabbit_boot:run_boot_steps(),
             {ok, SupPid};
         Error ->
             Error
@@ -459,6 +423,7 @@ stop(_State) ->
              true  -> rabbit_amqqueue:on_node_down(node());
              false -> rabbit_table:clear_ram_only_tables()
          end,
+    ok = rabbit_boot:shutdown(),
     ok.
 
 %%---------------------------------------------------------------------------
@@ -471,120 +436,6 @@ app_startup_order() ->
 app_shutdown_order() ->
     Apps = ?APPS ++ rabbit_plugins:active(),
     app_utils:app_dependency_order(Apps, true).
-
-%%---------------------------------------------------------------------------
-%% boot step logic
-
-run_boot_step({_StepName, Attributes}) ->
-    case [MFA || {mfa, MFA} <- Attributes] of
-        [] ->
-            ok;
-        MFAs ->
-            [try
-                 apply(M,F,A)
-             of
-                 ok ->              ok;
-                 {error, Reason} -> boot_error(Reason, not_available)
-             catch
-                 _:Reason -> boot_error(Reason, erlang:get_stacktrace())
-             end || {M,F,A} <- MFAs],
-            ok
-    end.
-
-boot_steps() ->
-    sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)).
-
-vertices(_Module, Steps) ->
-    [{StepName, {StepName, Atts}} || {StepName, Atts} <- Steps].
-
-edges(_Module, Steps) ->
-    [case Key of
-         requires -> {StepName, OtherStep};
-         enables  -> {OtherStep, StepName}
-     end || {StepName, Atts} <- Steps,
-            {Key, OtherStep} <- Atts,
-            Key =:= requires orelse Key =:= enables].
-
-sort_boot_steps(UnsortedSteps) ->
-    case rabbit_misc:build_acyclic_graph(fun vertices/2, fun edges/2,
-                                         UnsortedSteps) of
-        {ok, G} ->
-            %% Use topological sort to find a consistent ordering (if
-            %% there is one, otherwise fail).
-            SortedSteps = lists:reverse(
-                            [begin
-                                 {StepName, Step} = digraph:vertex(G,
-                                                                   StepName),
-                                 Step
-                             end || StepName <- digraph_utils:topsort(G)]),
-            digraph:delete(G),
-            %% Check that all mentioned {M,F,A} triples are exported.
-            case [{StepName, {M,F,A}} ||
-                     {StepName, Attributes} <- SortedSteps,
-                     {mfa, {M,F,A}}         <- Attributes,
-                     not erlang:function_exported(M, F, length(A))] of
-                []               -> SortedSteps;
-                MissingFunctions -> basic_boot_error(
-                                      {missing_functions, MissingFunctions},
-                                      "Boot step functions not exported: ~p~n",
-                                      [MissingFunctions])
-            end;
-        {error, {vertex, duplicate, StepName}} ->
-            basic_boot_error({duplicate_boot_step, StepName},
-                             "Duplicate boot step name: ~w~n", [StepName]);
-        {error, {edge, Reason, From, To}} ->
-            basic_boot_error(
-              {invalid_boot_step_dependency, From, To},
-              "Could not add boot step dependency of ~w on ~w:~n~s",
-              [To, From,
-               case Reason of
-                   {bad_vertex, V} ->
-                       io_lib:format("Boot step not registered: ~w~n", [V]);
-                   {bad_edge, [First | Rest]} ->
-                       [io_lib:format("Cyclic dependency: ~w", [First]),
-                        [io_lib:format(" depends on ~w", [Next]) ||
-                            Next <- Rest],
-                        io_lib:format(" depends on ~w~n", [First])]
-               end])
-    end.
-
--ifdef(use_specs).
--spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
--endif.
-boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
-    AllNodes = rabbit_mnesia:cluster_nodes(all),
-    {Err, Nodes} =
-        case AllNodes -- [node()] of
-            [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
-                   " shut down forcefully~nit cannot determine which nodes"
-                   " are timing out.~n", []};
-            Ns -> {rabbit_misc:format(
-                     "Timeout contacting cluster nodes: ~p.~n", [Ns]),
-                   Ns}
-        end,
-    basic_boot_error(Term,
-                     Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
-boot_error(Reason, Stacktrace) ->
-    Fmt = "Error description:~n   ~p~n~n" ++
-        "Log files (may contain more information):~n   ~s~n   ~s~n~n",
-    Args = [Reason, log_location(kernel), log_location(sasl)],
-    boot_error(Reason, Fmt, Args, Stacktrace).
-
--ifdef(use_specs).
--spec(boot_error/4 :: (term(), string(), [any()], not_available | [tuple()])
-                      -> no_return()).
--endif.
-boot_error(Reason, Fmt, Args, not_available) ->
-    basic_boot_error(Reason, Fmt, Args);
-boot_error(Reason, Fmt, Args, Stacktrace) ->
-    basic_boot_error(Reason, Fmt ++ "Stack trace:~n   ~p~n~n",
-                     Args ++ [Stacktrace]).
-
-basic_boot_error(Reason, Format, Args) ->
-    io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
-    rabbit_misc:local_info_msg(Format, Args),
-    timer:sleep(1000),
-    exit({?MODULE, failure_during_boot, Reason}).
 
 %%---------------------------------------------------------------------------
 %% boot step functions
@@ -607,12 +458,12 @@ maybe_insert_default_data() ->
     end.
 
 insert_default_data() ->
-    {ok, DefaultUser} = application:get_env(default_user),
-    {ok, DefaultPass} = application:get_env(default_pass),
-    {ok, DefaultTags} = application:get_env(default_user_tags),
-    {ok, DefaultVHost} = application:get_env(default_vhost),
+    {ok, DefaultUser} = application:get_env(rabbit, default_user),
+    {ok, DefaultPass} = application:get_env(rabbit, default_pass),
+    {ok, DefaultTags} = application:get_env(rabbit, default_user_tags),
+    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
     {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
-        application:get_env(default_permissions),
+        application:get_env(rabbit, default_permissions),
     ok = rabbit_vhost:add(DefaultVHost),
     ok = rabbit_auth_backend_internal:add_user(DefaultUser, DefaultPass),
     ok = rabbit_auth_backend_internal:set_tags(DefaultUser, DefaultTags),
