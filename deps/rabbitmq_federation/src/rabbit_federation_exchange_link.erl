@@ -355,13 +355,6 @@ update_binding(Args, #state{downstream_exchange = X,
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
 go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
-    %% We trap exits so terminate/2 gets called. Note that this is not
-    %% in init() since we need to cope with the link getting restarted
-    %% during shutdown (when a broker federates with itself), which
-    %% means we hang in federation_up() and the supervisor must force
-    %% us to exit. We can therefore only trap exits when past that
-    %% point. Bug 24372 may help us do something nicer.
-    process_flag(trap_exit, true),
     Unacked = rabbit_federation_link_util:unacked_new(),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
