@@ -179,19 +179,14 @@ prioritise_cast(_Msg, _Len, _State) ->
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    %% When failing over it is possible that the mirrored_supervisor
-    %% might hear of the death of the old DB, and start a new one,
-    %% before the global name server notices. Therefore rather than
-    %% telling gen_server:start_link/4 to register it for us, we
-    %% invoke global:re_register_name/2 ourselves, and just steal the
-    %% name if it existed before. We therefore rely on
-    %% mirrored_supervisor to maintain the uniqueness of this process.
-    case gen_server2:start_link(?MODULE, [], []) of
-        {ok, Pid} -> yes = global:re_register_name(?MODULE, Pid),
+    case gen_server2:start_link({global, ?MODULE}, ?MODULE, [], []) of
+        {ok, Pid} -> register(?MODULE, Pid), %% [1]
                      rabbit:force_event_refresh(),
                      {ok, Pid};
         Else      -> Else
     end.
+%% [1] For debugging it's helpful to locally register the name too
+%% since that shows up in places global names don't.
 
 %% R = Ranges, M = Mode
 augment_exchanges(Xs, R, M) -> safe_call({augment_exchanges, Xs, R, M}, Xs).
@@ -211,12 +206,19 @@ get_overview(R)             -> safe_call({get_overview, all, R}).
 override_lookups(Lookups)   -> safe_call({override_lookups, Lookups}).
 reset_lookups()             -> safe_call(reset_lookups).
 
-safe_call(Term) -> safe_call(Term, []).
+safe_call(Term)          -> safe_call(Term, []).
+safe_call(Term, Default) -> safe_call(Term, Default, 1).
 
-safe_call(Term, Item) ->
+%% See rabbit_mgmt_sup_sup for a discussion of the retry logic.
+safe_call(Term, Default, Retries) ->
     try
         gen_server2:call({global, ?MODULE}, Term, infinity)
-    catch exit:{noproc, _} -> Item
+    catch exit:{noproc, _} ->
+            case Retries of
+                0 -> Default;
+                _ -> rabbit_mgmt_sup_sup:start_child(),
+                     safe_call(Term, Default, Retries - 1)
+            end
     end.
 
 %%----------------------------------------------------------------------------
