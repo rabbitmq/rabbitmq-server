@@ -78,10 +78,6 @@ dynamic_reconfiguration_test() ->
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
 
-              %% Test this at least does not blow up
-              set_param("federation", "local-nodename", "\"test\""),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
-
               %% Test that clearing connections works
               clear_param("federation-upstream", "localhost"),
               expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
@@ -160,7 +156,8 @@ with_ch(Fun, Qs) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_all(Ch, Qs),
     timer:sleep(1000), %% Time for statuses to get updated
-    rabbit_federation_test_util:assert_status(Qs),
+    rabbit_federation_test_util:assert_status(
+      Qs, {queue, upstream_queue}),
     Fun(Ch),
     delete_all(Ch, Qs),
     amqp_connection:close(Conn),

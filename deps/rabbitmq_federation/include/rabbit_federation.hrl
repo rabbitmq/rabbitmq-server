@@ -38,5 +38,6 @@
 
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(BINDING_HEADER, <<"x-bound-from">>).
--define(MAX_HOPS_ARG, <<"x-max-hops">>).
+-define(MAX_HOPS_ARG,   <<"x-max-hops">>).
+-define(NODE_NAME_ARG,  <<"x-downstream-name">>).
 -define(DEF_PREFETCH, 1000).
