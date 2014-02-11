@@ -70,6 +70,19 @@
 %%    application should invoke create_tables() (or table_definitions()
 %%    if it wants to manage table creation itself).
 %%
+%% The TxFun parameter to start_link/{4,5} is a function which the
+%% mirrored supervisor can use to execute Mnesia transactions. In the
+%% RabbitMQ server this goes via a worker pool; in other cases a
+%% function like:
+%%
+%%  tx_fun(Fun) ->
+%%      case mnesia:sync_transaction(Fun) of
+%%          {atomic,  Result}         -> Result;
+%%          {aborted, Reason}         -> throw({error, Reason})
+%%      end.
+%%
+%% could be used.
+%%
 %% Internals
 %% ---------
 %%
@@ -161,7 +174,7 @@
 
 -type group_name() :: any().
 
--type(tx_fun() :: fun((fun(() -> any())) -> any())).
+-type(tx_fun() :: fun((fun(() -> A)) -> A)).
 
 -spec start_link(GroupName, TxFun, Module, Args) -> startlink_ret() when
       GroupName :: group_name(),
