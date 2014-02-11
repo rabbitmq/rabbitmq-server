@@ -147,9 +147,6 @@
 %% running in the same process space.  If the port is set to 'undefined',
 %% the default ports will be selected depending on whether this is a
 %% normal or an SSL connection.
-start(#amqp_params_direct{username = Username, password = none})
-  when Username =/= none ->
-    exit(direct_connection_with_user_but_without_password);
 start(AmqpParams) ->
     ensure_started(),
     AmqpParams1 =

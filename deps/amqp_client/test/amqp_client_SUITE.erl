@@ -49,6 +49,7 @@ consume_notification_test_()            -> ?RUN([]).
 basic_nack_test_()                      -> ?RUN([]).
 large_content_test_()                   -> ?RUN([]).
 lifecycle_test_()                       -> ?RUN([]).
+direct_no_user_test_()                  -> ?RUN([]).
 direct_no_password_test_()              -> ?RUN([]).
 nowait_exchange_declare_test_()         -> ?RUN([]).
 channel_repeat_open_close_test_()       -> ?RUN([]).

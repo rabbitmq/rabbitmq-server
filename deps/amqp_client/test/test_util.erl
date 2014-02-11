@@ -253,8 +253,14 @@ lifecycle_test() ->
     teardown(Connection, Channel),
     ok.
 
-direct_no_password_test() ->
+direct_no_user_test() ->
     {ok, Connection} = new_connection(just_direct, [{username, none},
+                                                    {password, none}]),
+    amqp_connection:close(Connection),
+    wait_for_death(Connection).
+
+direct_no_password_test() ->
+    {ok, Connection} = new_connection(just_direct, [{username, <<"guest">>},
                                                     {password, none}]),
     amqp_connection:close(Connection),
     wait_for_death(Connection).

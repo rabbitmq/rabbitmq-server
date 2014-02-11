@@ -123,12 +123,8 @@ connect(Params = #amqp_params_direct{username     = Username,
                          vhost        = VHost,
                          params       = Params,
                          adapter_info = ensure_adapter_info(Info)},
-    AuthToken = case Username of
-                    none -> nouser;
-                    _    -> {Username, Password}
-                end,
     case rpc:call(Node, rabbit_direct, connect,
-                  [AuthToken, VHost, ?PROTOCOL, self(),
+                  [{Username, Password}, VHost, ?PROTOCOL, self(),
                    connection_info(State1)]) of
         {ok, {User, ServerProperties}} ->
             {ok, ChMgr, Collector} = SIF(i(name, State1)),
