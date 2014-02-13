@@ -221,36 +221,37 @@ start(Qs) ->
 
 find_durable_queues() ->
     Node = node(),
-    %% TODO: use dirty ops instead
-    rabbit_misc:execute_mnesia_transaction(
+    mnesia:async_dirty(
       fun () ->
               qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
                                               pid  = Pid}
                                     <- mnesia:table(rabbit_durable_queue),
-                                mnesia:read(rabbit_queue, Name, read) =:= [],
-                                node(Pid) == Node]))
+                                node(Pid) == Node,
+                                mnesia:read(rabbit_queue, Name, read) =:= []]))
       end).
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
-    Qs = [{start_queue_process(node(), Q), Terms} ||
-             {Q, Terms} <- QueuesAndRecoveryTerms],
-    [Q || {Q = #amqqueue{ pid = Pid }, Terms} <- Qs,
-          gen_server2:call(Pid, {init, {self(), Terms}}, infinity) == {new, Q}].
+    {Results, Failures} =
+        gen_server2:mcall([{start_queue_process(node(), Q),
+                            {init, {self(), Terms}}} ||
+                              {Q, Terms} <- QueuesAndRecoveryTerms]),
+    [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
+                      [Pid, Error]) || {Pid, Error} <- Failures],
+    [Q || {_, {new, Q}} <- Results].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
-    Q0 = rabbit_policy:set(#amqqueue{name            = QueueName,
-                                     durable         = Durable,
-                                     auto_delete     = AutoDelete,
-                                     arguments       = Args,
-                                     exclusive_owner = Owner,
-                                     pid             = none,
-                                     slave_pids      = [],
-                                     sync_slave_pids = [],
-                                     gm_pids         = []}),
-    {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
-    Q1 = start_queue_process(Node, Q0),
-    gen_server2:call(Q1#amqqueue.pid, {init, new}, infinity).
+    Q = rabbit_policy:set(#amqqueue{name            = QueueName,
+                                    durable         = Durable,
+                                    auto_delete     = AutoDelete,
+                                    arguments       = Args,
+                                    exclusive_owner = Owner,
+                                    pid             = none,
+                                    slave_pids      = [],
+                                    sync_slave_pids = [],
+                                    gm_pids         = []}),
+    {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
+    gen_server2:call(start_queue_process(Node, Q), {init, new}, infinity).
 
 internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
@@ -313,7 +314,7 @@ policy_changed(Q1 = #amqqueue{decorators = Decorators1},
 
 start_queue_process(Node, Q) ->
     {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
-    Q#amqqueue{pid = Pid}.
+    Pid.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
     ExchangeName = rabbit_misc:r(QueueName, exchange, <<>>),
