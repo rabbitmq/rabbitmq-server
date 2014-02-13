@@ -169,7 +169,7 @@ add(Binding, InnerFun) ->
                           ok ->
                               case mnesia:read({rabbit_route, B}) of
                                   []  -> add(Src, Dst, B);
-                                  [_] -> fun rabbit_misc:const_ok/0
+                                  [_] -> fun () -> ok end
                               end;
                           {error, _} = Err ->
                               rabbit_misc:const(Err)

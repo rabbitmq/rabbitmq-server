@@ -60,7 +60,7 @@
 
 -record(trie_node, {exchange_name, node_id}).
 -record(trie_edge, {exchange_name, node_id, word}).
--record(trie_binding, {exchange_name, node_id, destination}).
+-record(trie_binding, {exchange_name, node_id, destination, arguments}).
 
 -record(listener, {node, protocol, host, ip_address, port}).
 
@@ -70,10 +70,10 @@
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
--record(delivery, {mandatory, sender, message, msg_seq_no}).
+-record(delivery, {mandatory, confirm, sender, message, msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
--record(event, {type, props, timestamp}).
+-record(event, {type, props, reference = undefined, timestamp}).
 
 -record(message_properties, {expiry, needs_confirming = false}).
 
@@ -118,3 +118,5 @@
 %% to allow plenty of leeway for the #basic_message{} and #content{}
 %% wrapping the message body).
 -define(MAX_MSG_SIZE, 2147383648).
+
+-define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
