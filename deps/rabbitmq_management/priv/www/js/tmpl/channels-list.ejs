@@ -32,7 +32,7 @@
     <th><%= fmt_sort('Prefetch',        'prefetch_count') %></th>
     <th><%= fmt_sort('Unacked',         'messages_unacknowledged') %></th>
     <th><%= fmt_sort('Unconfirmed',     'messages_unconfirmed') %></th>
-    <th><%= fmt_sort('Status',          'idle_since') %></th>
+    <th><%= fmt_sort('State',           'state') %></th>
 <% if (statistics_level == 'fine') { %>
     <th><%= fmt_sort('publish', 'message_stats.publish_details.rate') %></th>
     <th><%= fmt_sort('confirm', 'message_stats.confirm_details.rate') %></th>
@@ -54,7 +54,7 @@
     <th>Prefetch</th>
     <th>Unacked</th>
     <th>Unconfirmed</th>
-    <th>Status</th>
+    <th>State</th>
 <% if (statistics_level == 'fine') { %>
     <th>publish</th>
     <th>confirm</th>
@@ -99,7 +99,7 @@
     <td class="c"><%= channel.prefetch_count %></td>
     <td class="c"><%= channel.messages_unacknowledged %></td>
     <td class="c"><%= channel.messages_unconfirmed %></td>
-    <td class="c"><%= fmt_idle(channel) %></td>
+    <td class="c"><%= fmt_object_state(channel) %></td>
 <% if (statistics_level == 'fine') { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'publish') %></td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'confirm') %></td>

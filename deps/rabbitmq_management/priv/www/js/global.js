@@ -75,15 +75,18 @@ var app;
 // Used for the new exchange form, and to display broken exchange types
 var exchange_types;
 
-// Used for access control to the menu
+// Used for access control
 var user_tags;
+var user;
 
 // Set up the above vars
-function setup_global_vars(user) {
+function setup_global_vars() {
     var overview = JSON.parse(sync_get('/overview'));
     statistics_level = overview.statistics_level;
     replace_content('login-details',
                     '<p>User: <b>' + user.name + '</b></p>' +
+                    '<p>Cluster: <b>' + overview.cluster_name + '</b> ' +
+                    '(<a href="#/cluster-name">change</a>)</p>' +
                     '<p>RabbitMQ ' + overview.rabbitmq_version +
                     ', <acronym class="normal" title="' +
                     overview.erlang_full_version + '">Erlang ' +
@@ -152,6 +155,8 @@ var current_sort;
 var current_sort_reverse = false;
 
 var current_filter = '';
+var current_filter_regex_on = false;
+var current_filter_regex;
 var current_truncate;
 
 // The timer object for auto-updates, and how often it goes off

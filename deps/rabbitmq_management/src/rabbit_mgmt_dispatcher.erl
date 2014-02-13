@@ -37,6 +37,7 @@ web_ui()     -> [{javascript, <<"dispatcher.js">>}].
 
 dispatcher() ->
     [{["overview"],                                                rabbit_mgmt_wm_overview, []},
+     {["cluster-name"],                                            rabbit_mgmt_wm_cluster_name, []},
      {["nodes"],                                                   rabbit_mgmt_wm_nodes, []},
      {["nodes", node],                                             rabbit_mgmt_wm_node, []},
      {["extensions"],                                              rabbit_mgmt_wm_extensions, []},
