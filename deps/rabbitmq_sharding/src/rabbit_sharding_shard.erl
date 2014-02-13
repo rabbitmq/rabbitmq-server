@@ -4,7 +4,7 @@
 -include("rabbit_sharding.hrl").
 
 -export([maybe_shard_exchanges/0, ensure_sharded_queues/1]). 
--export([update_shards/2, update_shard/2, update_named_shards/2]).
+-export([update_shards/2, update_shard/2, update_named_shard/2]).
 
 -rabbit_boot_step({rabbit_sharding_maybe_shard,
                    [{description, "rabbit sharding maybe shard"},
@@ -13,6 +13,7 @@
                     {enables,     networking}]}).
 
 -import(rabbit_sharding_util, [a2b/1, exchange_name/1]).
+-import(rabbit_misc, [r/3]).
 
 maybe_shard_exchanges() ->
     [maybe_shard_exchanges(V) || V <- rabbit_vhost:list()],
@@ -22,7 +23,7 @@ maybe_shard_exchanges(VHost) ->
     [rabbit_sharding_util:rpc_call(ensure_sharded_queues, [X]) || 
         X <- rabbit_sharding_util:sharded_exchanges(VHost)].
 
-update_named_shards(VHost, Name) ->
+update_named_shard(VHost, Name) ->
     [rabbit_sharding_util:rpc_call(update_shard, [X, all]) || 
         X <- rabbit_sharding_util:sharded_exchanges(VHost), 
         rabbit_sharding_util:get_policy(X) =:= Name].
@@ -80,21 +81,21 @@ unbind_sharded_queues(Old, #exchange{name = XName} = X) ->
 
 %%----------------------------------------------------------------------------
 
-internal_update_shard(#exchange{name = #resource{name = XBin}} = X) ->
+internal_update_shard(#exchange{name = XName} = X) ->
     case rabbit_sharding_util:get_policy(X) of
         undefined  -> {error, "Policy Not Found"};
-        PolicyName ->
+        _PolicyName ->
             rabbit_misc:execute_mnesia_transaction(
                 fun () ->
-                    case mnesia:read(?SHARDING_TABLE, PolicyName, write) of
+                    case mnesia:read(?SHARDING_TABLE, X, write) of
                         [] ->
                             {error, "Shard not found"};
                         [#sharding{} = Old] -> 
                             SPN = rabbit_sharding_util:shards_per_node(X),
                             RK = rabbit_sharding_util:routing_key(X),
-                            New = #sharding{name = XBin,
-                                          shards_per_node = SPN,
-                                          routing_key     = RK},
+                            New = #sharding{name = XName,
+                                            shards_per_node = SPN,
+                                            routing_key     = RK},
                             mnesia:write(?SHARDING_TABLE, New, write),
                             {ok, Old, New}
                     end

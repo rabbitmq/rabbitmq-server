@@ -33,8 +33,7 @@ rpc_call(F, Args) ->
         Node <- rabbit_mnesia:cluster_nodes(running)].
 
 make_queue_name(QBin, NodeBin, QNum) ->
-    %% we do this to prevent unprintable characters that might bork the
-    %% management pluing when listing queues.
+    %% we do this to prevent unprintable characters in queue names
     QNumBin = list_to_binary(lists:flatten(io_lib:format("~p", [QNum]))),
     <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
 
@@ -55,8 +54,6 @@ routing_key(X) ->
 username(X) ->
     {ok, DefaultUser} = application:get_env(rabbit, default_user),
     get_parameter(<<"local-username">>, X, DefaultUser).
-
-%%----------------------------------------------------------------------------
 
 vhost(                 #resource{virtual_host = VHost})  -> VHost;
 vhost(#exchange{name = #resource{virtual_host = VHost}}) -> VHost.

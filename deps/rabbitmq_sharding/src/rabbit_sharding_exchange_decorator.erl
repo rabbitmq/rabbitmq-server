@@ -68,15 +68,15 @@ policy_changed(OldX, NewX) ->
 
 %%----------------------------------------------------------------------------
 
-maybe_start(#exchange{name = #resource{name = XBin}} = X)->
+maybe_start(#exchange{name = XName} = X)->
     case shard(X) of
         true  -> 
             SPN = rabbit_sharding_util:shards_per_node(X),
             RK  = rabbit_sharding_util:routing_key(X),
-            rabbit_misc:execute_mnesia_transaction(
+            Res = rabbit_misc:execute_mnesia_transaction(
               fun () ->
                   mnesia:write(?SHARDING_TABLE,
-                               #sharding{name            = XBin,
+                               #sharding{name            = XName,
                                          shards_per_node = SPN,
                                          routing_key     = RK},
                                write)
@@ -86,12 +86,12 @@ maybe_start(#exchange{name = #resource{name = XBin}} = X)->
         false -> ok
     end.
 
-maybe_stop(#exchange{name = #resource{name = XBin}} = X) ->
+maybe_stop(#exchange{name = XName} = X) ->
   case shard(X) of
     true  -> 
       rabbit_misc:execute_mnesia_transaction(
         fun () ->
-            mnesia:delete({?SHARDING_TABLE, XBin})
+            mnesia:delete({?SHARDING_TABLE, XName})
         end),
       ok;
     false -> ok

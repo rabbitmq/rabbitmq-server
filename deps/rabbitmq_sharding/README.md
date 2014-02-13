@@ -116,12 +116,12 @@ You could repeat the previous two steps to start a couple more nodes. Don't forg
 
 So far we have a RabbitMQ cluster. Now it's time to add a policy to tell RabbitMQ to make some exchanges as shards.
 
-First we will add a `shard-definition` parameter that will tell the plugin which `user` to use when declaring queues, how many `shards-per-node`
+First we will add a `sharding-definition` parameter that will tell the plugin which `user` to use when declaring queues, how many `shards-per-node`
 we want to create, and what's the routing key to use when binding the sharded queues to our exchange. If you use the consistent hash exchange
 then the routing keys need to be "an integer as a string", since routing keys in AMQP must be strings.
 
 ```bash
-../rabbitmq-server/scripts/rabbitmqctl set_parameter shard-definition my_shard '{"local-username": "guest", "shards-per-node": 2, "routing-key": "1234"}'
+../rabbitmq-server/scripts/rabbitmqctl set_parameter sharding-definition my_shard '{"local-username": "guest", "shards-per-node": 2, "routing-key": "1234"}'
 ```
 That parameter will tell the plugin to connect to RabbitMQ using the `guest`  username. It will then create 2 sharded queues per node. Based on the number
 of cores in your server, you need to decide how many `shards-per-node` you want. And finally the routing key used in this case will be `"1234"`. That 
@@ -130,10 +130,10 @@ routing key will apply in the context of a consistent hash exchange.
 Let's add our policy now:
 
 ```bash
-../rabbitmq-server/scripts/rabbitmqctl -n rabbit-test@hostname set_policy my_shard "^shard\." '{"shard-definition": "my_shard"}'
+../rabbitmq-server/scripts/rabbitmqctl -n rabbit-test@hostname set_policy my_shard "^shard\." '{"sharding-definition": "my_shard"}'
 ```
 
-That policy will create a shard called `my_shard` for all exchanges whose name start with `shard.`, whose `shard-definition` will be the one called
+That policy will create a shard called `my_shard` for all exchanges whose name start with `shard.`, whose `sharding-definition` will be the one called
 `my_shard` that we've just defined.
 
 Then if you declare an exchange called for example `shard.logs_shard` the plugin will create two queues per node in the cluster.
@@ -166,7 +166,7 @@ The following configuration parameters affect the plugin behaviour:
 - `shards-per-node`: How many sharded queues to create per node. This depends on the amount of cores in your server. Defaults to `1`.
 - `routing-key`: The routing key used when the plugin binds the queues to the shard exchange. Defaults to `"10000"`.
 
-First the parameters specified in the `shard-definition` applies, if not set there, then the plugin defaults to global parameters. Finally it will use the default plugin values.
+First the parameters specified in the `sharding-definition` applies, if not set there, then the plugin defaults to global parameters. Finally it will use the default plugin values.
 
 To set a parameter for the plugin, you could use the following command:
 

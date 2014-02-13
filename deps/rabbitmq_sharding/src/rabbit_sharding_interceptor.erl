@@ -8,6 +8,7 @@
 -export([description/0, intercept/2, applies_to/1]).
 
 -import(rabbit_sharding_util, [a2b/1]).
+-import(rabbit_misc, [r/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "sharding interceptor"},
@@ -19,48 +20,48 @@
 description() ->
     [{description, <<"Sharding interceptor for channel methods">>}].
 
-intercept(#'basic.consume'{queue = QName} = Method, _Vhost) ->
-    {ok, QName2} = queue_name(QName),
+intercept(#'basic.consume'{queue = QName} = Method, VHost) ->
+    {ok, QName2} = queue_name(VHost, QName),
     {ok, Method#'basic.consume'{queue = QName2}};
 
-intercept(#'basic.get'{queue = QName} = Method, _Vhost) ->
-    {ok, QName2} = queue_name(QName),
+intercept(#'basic.get'{queue = QName} = Method, VHost) ->
+    {ok, QName2} = queue_name(VHost, QName),
     {ok, Method#'basic.get'{queue = QName2}};
 
-intercept(#'queue.delete'{queue = QName} = Method, _Vhost) ->
-    case is_sharded(QName) of
+intercept(#'queue.delete'{queue = QName} = Method, VHost) ->
+    case is_sharded(VHost, QName) of
         true ->
             {error, rabbit_misc:format("Can't delete sharded queue: ~p", [QName])};
         _    ->
             {ok, Method}
     end;
 
-intercept(#'queue.declare'{queue = QName} = Method, _Vhost) ->
-    case is_sharded(QName) of
+intercept(#'queue.declare'{queue = QName} = Method, VHost) ->
+    case is_sharded(VHost, QName) of
         true ->
             {error, rabbit_misc:format("Can't declare sharded queue: ~p", [QName])};
         _    ->
             {ok, Method}
     end;
 
-intercept(#'queue.bind'{queue = QName} = Method, _Vhost) ->
-    case is_sharded(QName) of
+intercept(#'queue.bind'{queue = QName} = Method, VHost) ->
+    case is_sharded(VHost, QName) of
         true ->
             {error, rabbit_misc:format("Can't bind sharded queue: ~p", [QName])};
         _    ->
             {ok, Method}
     end;
 
-intercept(#'queue.unbind'{queue = QName} = Method, _Vhost) ->
-    case is_sharded(QName) of
+intercept(#'queue.unbind'{queue = QName} = Method, VHost) ->
+    case is_sharded(VHost, QName) of
         true ->
             {error, rabbit_misc:format("Can't unbind sharded queue: ~p", [QName])};
         _    ->
             {ok, Method}
     end;
 
-intercept(#'queue.purge'{queue = QName} = Method, _Vhost) ->
-    case is_sharded(QName) of
+intercept(#'queue.purge'{queue = QName} = Method, VHost) ->
+    case is_sharded(VHost, QName) of
         true ->
             {error, rabbit_misc:format("Can't purge sharded queue: ~p", [QName])};
         _    ->
@@ -78,8 +79,8 @@ applies_to(_Other) -> false.
 
 %%----------------------------------------------------------------------------
 
-queue_name(QBin) ->
-    case mnesia:dirty_read(?SHARDING_TABLE, QBin) of
+queue_name(VHost, QBin) ->
+    case mnesia:dirty_read(?SHARDING_TABLE, r(VHost, exchange, QBin)) of
         []  ->
             %% Queue is not part of a shard, return unmodified name
             {ok, QBin};
@@ -88,8 +89,8 @@ queue_name(QBin) ->
             {ok, rabbit_sharding_util:make_queue_name(QBin, a2b(node()), Rand)}
     end.
 
-is_sharded(QBin) ->
-    case mnesia:dirty_read(?SHARDING_TABLE, QBin) of
+is_sharded(VHost, QBin) ->
+    case mnesia:dirty_read(?SHARDING_TABLE, r(VHost, exchange, QBin)) of
         []  ->
             %% Queue is not part of a shard
             false;
