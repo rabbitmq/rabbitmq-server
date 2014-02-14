@@ -2,7 +2,7 @@
 
 -export([shard/1, rpc_call/2, find_exchanges/1, sharded_exchanges/1]).
 -export([get_policy/1, exchange_name/1, make_queue_name/3, a2b/1]).
--export([shards_per_node/1, routing_key/1, username/1]).
+-export([shards_per_node/1, routing_key/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include ("rabbit_sharding.hrl").
@@ -50,10 +50,6 @@ shards_per_node(X) ->
 %% Move routing key to sharding-definition
 routing_key(X) ->
     get_parameter(<<"routing-key">>, X, ?DEFAULT_RK).
-
-username(X) ->
-    {ok, DefaultUser} = application:get_env(rabbit, default_user),
-    get_parameter(<<"local-username">>, X, DefaultUser).
 
 vhost(                 #resource{virtual_host = VHost})  -> VHost;
 vhost(#exchange{name = #resource{virtual_host = VHost}}) -> VHost.

@@ -27,14 +27,10 @@ validate(_VHost, <<"shard">>, <<"shards-per-node">>, Term) ->
 validate(_VHost, <<"shard">>, <<"routing-key">>, Term) ->
     rabbit_parameter_validation:binary(<<"routing-key">>, Term);
 
-validate(_VHost, <<"shard">>, <<"local-username">>, Term) ->
-    rabbit_parameter_validation:binary(<<"local-username">>, Term);
-
 validate(_VHost, <<"sharding-definition">>, Name, Term) ->
     rabbit_parameter_validation:proplist(
        Name,
-       [{<<"local-username">>, fun rabbit_parameter_validation:binary/2, mandatory},
-        {<<"shards-per-node">>, fun validate_shards_per_node/2, optional},
+       [{<<"shards-per-node">>, fun validate_shards_per_node/2, optional},
         {<<"routing-key">>, fun rabbit_parameter_validation:binary/2, optional}],
       Term);
 

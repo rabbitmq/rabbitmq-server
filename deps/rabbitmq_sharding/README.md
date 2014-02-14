@@ -121,11 +121,11 @@ we want to create, and what's the routing key to use when binding the sharded qu
 then the routing keys need to be "an integer as a string", since routing keys in AMQP must be strings.
 
 ```bash
-../rabbitmq-server/scripts/rabbitmqctl set_parameter sharding-definition my_shard '{"local-username": "guest", "shards-per-node": 2, "routing-key": "1234"}'
+../rabbitmq-server/scripts/rabbitmqctl set_parameter sharding-definition my_shard '{"shards-per-node": 2, "routing-key": "1234"}'
 ```
-That parameter will tell the plugin to connect to RabbitMQ using the `guest`  username. It will then create 2 sharded queues per node. Based on the number
-of cores in your server, you need to decide how many `shards-per-node` you want. And finally the routing key used in this case will be `"1234"`. That 
-routing key will apply in the context of a consistent hash exchange.
+That parameter will tell the plugin to create 2 sharded queues per node. Based on the number of cores in your server, you need to decide 
+how many `shards-per-node` you want. And finally the routing key used in this case will be `"1234"`. That routing key will apply in the 
+context of a consistent hash exchange.
 
 Let's add our policy now:
 
@@ -162,7 +162,6 @@ selecting queues. A valid strategy could be to choose the queue with least consu
 
 The following configuration parameters affect the plugin behaviour:
 
-- `local-username`: The username the plugin should use when connecting to RabbitMQ. The plugin connects to RabbitMQ to declare queues, for example. Defaults to RabbitMQ's `default_user`
 - `shards-per-node`: How many sharded queues to create per node. This depends on the amount of cores in your server. Defaults to `1`.
 - `routing-key`: The routing key used when the plugin binds the queues to the shard exchange. Defaults to `"10000"`.
 
