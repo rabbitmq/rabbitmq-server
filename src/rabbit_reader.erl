@@ -1011,29 +1011,12 @@ auth_mechanisms_binary(Sock) ->
 auth_phase(Response,
            State = #v1{connection = Connection =
                            #connection{protocol       = Protocol,
-                                       capabilities   = Capabilities,
                                        auth_mechanism = {Name, AuthMechanism},
                                        auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Msg, Args} ->
-            AmqpError = rabbit_misc:amqp_error(
-                          access_refused, "~s login refused: ~s",
-                          [Name, io_lib:format(Msg, Args)], none),
-            case rabbit_misc:table_lookup(Capabilities,
-                                          <<"authentication_failure_close">>) of
-                {bool, true} ->
-                    SafeMsg = io_lib:format(
-                                "Login was refused using authentication "
-                                "mechanism ~s. For details see the broker "
-                                "logfile.", [Name]),
-                    AmqpError1 = AmqpError#amqp_error{explanation = SafeMsg},
-                    {0, CloseMethod} = rabbit_binary_generator:map_exception(
-                                         0, AmqpError1, Protocol),
-                    ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol);
-                _ -> ok
-            end,
-            rabbit_misc:protocol_error(AmqpError);
+            auth_fail(Msg, Args, Name, State);
         {protocol_error, Msg, Args} ->
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
@@ -1041,7 +1024,12 @@ auth_phase(Response,
             ok = send_on_channel0(Sock, Secure, Protocol),
             State#v1{connection = Connection#connection{
                                     auth_state = AuthState1}};
-        {ok, User} ->
+        {ok, User = #user{username = Username}} ->
+            case rabbit_access_control:check_user_socket(Username, Sock) of
+                ok          -> ok;
+                not_allowed -> auth_fail("user '~s' can only connect via "
+                                         "localhost", [Username], Name, State)
+            end,
             Tune = #'connection.tune'{frame_max   = get_env(frame_max),
                                       channel_max = get_env(channel_max),
                                       heartbeat   = get_env(heartbeat)},
@@ -1050,6 +1038,27 @@ auth_phase(Response,
                      connection = Connection#connection{user       = User,
                                                         auth_state = none}}
     end.
+
+auth_fail(Msg, Args, AuthName,
+          State = #v1{connection = #connection{protocol     = Protocol,
+                                               capabilities = Capabilities}}) ->
+    AmqpError = rabbit_misc:amqp_error(
+                  access_refused, "~s login refused: ~s",
+                  [AuthName, io_lib:format(Msg, Args)], none),
+    case rabbit_misc:table_lookup(Capabilities,
+                                  <<"authentication_failure_close">>) of
+        {bool, true} ->
+            SafeMsg = io_lib:format(
+                        "Login was refused using authentication "
+                        "mechanism ~s. For details see the broker "
+                        "logfile.", [AuthName]),
+            AmqpError1 = AmqpError#amqp_error{explanation = SafeMsg},
+            {0, CloseMethod} = rabbit_binary_generator:map_exception(
+                                 0, AmqpError1, Protocol),
+            ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol);
+        _ -> ok
+    end,
+    rabbit_misc:protocol_error(AmqpError).
 
 %%--------------------------------------------------------------------------
 
