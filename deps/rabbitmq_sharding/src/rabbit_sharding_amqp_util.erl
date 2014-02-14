@@ -27,7 +27,7 @@ ensure_connection_closed(Conn) ->
 %%----------------------------------------------------------------------------
 
 open(X) ->
-    case amqp_connection:start(local_params(X)) of
+    case amqp_connection:start(params(X)) of
         {ok, Conn} -> case amqp_connection:open_channel(Conn) of
                           {ok, Ch} -> {ok, Conn, Ch};
                           E        -> catch amqp_connection:close(Conn),
@@ -36,10 +36,5 @@ open(X) ->
         E -> E
     end.
 
-local_params(#exchange{name = #resource{virtual_host = VHost}} = X) ->
-    Username = rabbit_sharding_util:username(X),
-    case rabbit_access_control:check_user_login(Username, []) of
-        {ok, _User}        -> #amqp_params_direct{username     = Username,
-                                                  virtual_host = VHost};
-        {refused, _M, _A}  -> exit({error, user_does_not_exist})
-    end.
+params(#exchange{name = #resource{virtual_host = VHost}} = X) ->
+    #amqp_params_direct{virtual_host = VHost}.

@@ -50,6 +50,7 @@ ensure_sharded_queues(#exchange{name = XName} = X) ->
                 {error, Code, Text}
              end,
     SPN = rabbit_sharding_util:shards_per_node(X),
+    
     rabbit_sharding_amqp_util:disposable_connection_calls(X, 
         lists:flatten(do_n(F, SPN)), ErrFun).
 

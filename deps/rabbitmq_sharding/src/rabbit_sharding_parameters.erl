@@ -44,6 +44,8 @@ validate(_VHost, _Component, Name, _Term) ->
 %% If the user wants to reduce the shards number, we can't
 %% delete queues, but when adding new nodes, those nodes will
 %% have the new parameter.
+%% perhaps queues names above the "shards-per-node" value should
+%% be unbinded from the exchange.
 notify(VHost, <<"shard">>, <<"shards-per-node">>, _Term) ->
     rabbit_sharding_shard:update_shards(VHost, shards_per_node),
     ok;
