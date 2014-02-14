@@ -88,7 +88,7 @@ internal_update_shard(#exchange{name = XName} = X) ->
         _PolicyName ->
             rabbit_misc:execute_mnesia_transaction(
                 fun () ->
-                    case mnesia:read(?SHARDING_TABLE, X, write) of
+                    case mnesia:read(?SHARDING_TABLE, XName, write) of
                         [] ->
                             {error, "Shard not found"};
                         [#sharding{} = Old] -> 
