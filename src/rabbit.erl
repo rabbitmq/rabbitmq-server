@@ -232,11 +232,11 @@
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -spec(start/2 :: ('normal',[]) ->
-                     {'error',
-                      {'erlang_version_too_old',
-                       {'found',[any()]},
-                       {'required',[any(),...]}}} |
-                     {'ok',pid()}).
+		      {'error',
+		       {'erlang_version_too_old',
+			{'found',[any()]},
+			{'required',[any(),...]}}} |
+		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
 
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
@@ -394,7 +394,7 @@ status() ->
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
-          {alarms,               format_alarms(rabbit_alarm:get_alarms())}],
+          {alarms,               rabbit_alarm:get_alarms()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -782,7 +782,3 @@ start_fhc() ->
     rabbit_sup:start_restartable_child(
       file_handle_cache,
       [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]).
-
-format_alarms(Alarms) ->
-    %% [{{resource_limit,memory,rabbit@mercurio},[]}]
-    [Limit || {{resource_limit, Limit, _}, _} <- Alarms].
