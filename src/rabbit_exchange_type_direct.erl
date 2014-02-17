@@ -38,7 +38,6 @@ serialise_events() -> false.
 
 route(#exchange{name = Name},
       #delivery{message = #basic_message{routing_keys = Routes}}) ->
-    timer:sleep(10000),
     rabbit_router:match_routing_key(Name, Routes).
 
 validate(_X) -> ok.
