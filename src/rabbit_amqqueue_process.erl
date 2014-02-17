@@ -20,8 +20,9 @@
 
 -behaviour(gen_server2).
 
--define(SYNC_INTERVAL,                 25). %% milliseconds
--define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+-define(SYNC_INTERVAL,                 200). %% milliseconds
+-define(RAM_DURATION_UPDATE_INTERVAL, 5000).
+-define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
 -export([start_link/1, info_keys/0]).
 
@@ -173,9 +174,10 @@ code_change(_OldVsn, State, _Extra) ->
 declare(Recover, From, State = #q{q                   = Q,
                                   backing_queue       = undefined,
                                   backing_queue_state = undefined}) ->
-    case rabbit_amqqueue:internal_declare(Q, Recover =/= new) of
+    {Recovery, TermsOrNew} = recovery_status(Recover),
+    case rabbit_amqqueue:internal_declare(Q, Recovery /= new) of
         #amqqueue{} = Q1 ->
-            case matches(Recover, Q, Q1) of
+            case matches(Recovery, Q, Q1) of
                 true ->
                     gen_server2:reply(From, {new, Q}),
                     ok = file_handle_cache:register_callback(
@@ -184,8 +186,8 @@ declare(Recover, From, State = #q{q                   = Q,
                            self(), {rabbit_amqqueue,
                                     set_ram_duration_target, [self()]}),
                     BQ = backing_queue_module(Q1),
-                    BQS = bq_init(BQ, Q, Recover),
-                    recovery_barrier(Recover),
+                    BQS = bq_init(BQ, Q, TermsOrNew),
+                    recovery_barrier(Recovery),
                     State1 = process_args_policy(
                                State#q{backing_queue       = BQ,
                                        backing_queue_state = BQS}),
@@ -201,6 +203,9 @@ declare(Recover, From, State = #q{q                   = Q,
         Err ->
             {stop, normal, Err, State}
     end.
+
+recovery_status(new)              -> {new,     new};
+recovery_status({Recover, Terms}) -> {Recover, Terms}.
 
 matches(new, Q1, Q2) ->
     %% i.e. not policy
@@ -237,7 +242,7 @@ decorator_callback(QName, F, A) ->
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
-    BQ:init(Q, Recover =/= new,
+    BQ:init(Q, Recover,
             fun (Mod, Fun) ->
                     rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
@@ -323,10 +328,13 @@ noreply(NewState) ->
     {NewState1, Timeout} = next_state(NewState),
     {noreply, ensure_stats_timer(ensure_rate_timer(NewState1)), Timeout}.
 
-next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+next_state(State = #q{backing_queue       = BQ,
+                      backing_queue_state = BQS,
+                      msg_id_to_channel   = MTC}) ->
     assert_invariant(State),
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
-    State1 = confirm_messages(MsgIds, State#q{backing_queue_state = BQS1}),
+    MTC1 = confirm_messages(MsgIds, MTC),
+    State1 = State#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1},
     case BQ:needs_timeout(BQS1) of
         false -> {stop_sync_timer(State1),   hibernate     };
         idle  -> {stop_sync_timer(State1),   ?SYNC_INTERVAL};
@@ -407,9 +415,9 @@ maybe_send_drained(WasEmpty, State) ->
     end,
     State.
 
-confirm_messages([], State) ->
-    State;
-confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
+confirm_messages([], MTC) ->
+    MTC;
+confirm_messages(MsgIds, MTC) ->
     {CMs, MTC1} =
         lists:foldl(
           fun(MsgId, {CMs, MTC0}) ->
@@ -423,11 +431,12 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
                   end
           end, {gb_trees:empty(), MTC}, MsgIds),
     rabbit_misc:gb_trees_foreach(fun rabbit_misc:confirm_to_sender/2, CMs),
-    State#q{msg_id_to_channel = MTC1}.
+    MTC1.
 
-send_or_record_confirm(#delivery{msg_seq_no = undefined}, State) ->
+send_or_record_confirm(#delivery{confirm    = false}, State) ->
     {never, State};
-send_or_record_confirm(#delivery{sender     = SenderPid,
+send_or_record_confirm(#delivery{confirm    = true,
+                                 sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
                                    is_persistent = true,
@@ -436,21 +445,28 @@ send_or_record_confirm(#delivery{sender     = SenderPid,
                                   msg_id_to_channel = MTC}) ->
     MTC1 = gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC),
     {eventually, State#q{msg_id_to_channel = MTC1}};
-send_or_record_confirm(#delivery{sender     = SenderPid,
+send_or_record_confirm(#delivery{confirm    = true,
+                                 sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo}, State) ->
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
 
-discard(#delivery{sender     = SenderPid,
-                  msg_seq_no = MsgSeqNo,
-                  message    = #basic_message{id = MsgId}}, State) ->
-    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        case MsgSeqNo of
-            undefined -> State;
-            _         -> confirm_messages([MsgId], State)
-        end,
+send_mandatory(#delivery{mandatory  = false}) ->
+    ok;
+send_mandatory(#delivery{mandatory  = true,
+                         sender     = SenderPid,
+                         msg_seq_no = MsgSeqNo}) ->
+    gen_server2:cast(SenderPid, {mandatory_received, MsgSeqNo}).
+
+discard(#delivery{confirm = Confirm,
+                  sender  = SenderPid,
+                  message = #basic_message{id = MsgId}}, BQ, BQS, MTC) ->
+    MTC1 = case Confirm of
+               true  -> confirm_messages([MsgId], MTC);
+               false -> MTC
+           end,
     BQS1 = BQ:discard(MsgId, SenderPid, BQS),
-    State1#q{backing_queue_state = BQS1}.
+    {BQS1, MTC1}.
 
 run_message_queue(State) -> run_message_queue(false, State).
 
@@ -473,20 +489,22 @@ run_message_queue(ActiveConsumersChanged, State) ->
 
 attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
-                                              backing_queue_state = BQS}) ->
+                                              backing_queue_state = BQS,
+                                              msg_id_to_channel   = MTC}) ->
     case rabbit_queue_consumers:deliver(
            fun (true)  -> true = BQ:is_empty(BQS),
                           {AckTag, BQS1} = BQ:publish_delivered(
                                              Message, Props, SenderPid, BQS),
-                          {{Message, Delivered, AckTag},
-                           State#q{backing_queue_state = BQS1}};
+                          {{Message, Delivered, AckTag}, {BQS1, MTC}};
                (false) -> {{Message, Delivered, undefined},
-                           discard(Delivery, State)}
+                           discard(Delivery, BQ, BQS, MTC)}
            end, qname(State), State#q.consumers) of
-        {delivered, ActiveConsumersChanged, State1, Consumers} ->
+        {delivered, ActiveConsumersChanged, {BQS1, MTC1}, Consumers} ->
             {delivered,   maybe_notify_decorators(
                             ActiveConsumersChanged,
-                            State1#q{consumers = Consumers})};
+                            State#q{backing_queue_state = BQS1,
+                                    msg_id_to_channel   = MTC1,
+                                    consumers           = Consumers})};
         {undelivered, ActiveConsumersChanged, Consumers} ->
             {undelivered, maybe_notify_decorators(
                             ActiveConsumersChanged,
@@ -496,8 +514,9 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
 deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
                    Delivered, State = #q{backing_queue       = BQ,
                                          backing_queue_state = BQS}) ->
+    send_mandatory(Delivery), %% must do this before confirms
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
-    Props = message_properties(Message, Confirm, State),
+    Props = message_properties(Message, Confirm, State1),
     {IsDuplicate, BQS1} = BQ:is_duplicate(Message, BQS),
     State2 = State1#q{backing_queue_state = BQS1},
     case IsDuplicate orelse attempt_delivery(Delivery, Props, Delivered,
@@ -507,8 +526,11 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
         {delivered, State3} ->
             State3;
         %% The next one is an optimisation
-        {undelivered, State3 = #q{ttl = 0, dlx = undefined}} ->
-            discard(Delivery, State3);
+        {undelivered, State3 = #q{ttl = 0, dlx = undefined,
+                                  backing_queue_state = BQS2,
+                                  msg_id_to_channel   = MTC}} ->
+            {BQS3, MTC1} = discard(Delivery, BQ, BQS2, MTC),
+            State3#q{backing_queue_state = BQS3, msg_id_to_channel = MTC1};
         {undelivered, State3 = #q{backing_queue_state = BQS2}} ->
             BQS3 = BQ:publish(Message, Props, Delivered, SenderPid, BQS2),
             {Dropped, State4 = #q{backing_queue_state = BQS4}} =
@@ -802,14 +824,15 @@ emit_stats(State, Extra) ->
                        not lists:member(K, ExtraKs)],
     rabbit_event:notify(queue_stats, Extra ++ Infos).
 
-emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, Args) ->
+emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, Args, Ref) ->
     rabbit_event:notify(consumer_created,
                         [{consumer_tag, CTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
                          {channel,      ChPid},
                          {queue,        QName},
-                         {arguments,    Args}]).
+                         {arguments,    Args}],
+                        Ref).
 
 emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
     rabbit_event:notify(consumer_deleted,
@@ -819,22 +842,34 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
 
 %%----------------------------------------------------------------------------
 
-prioritise_call(Msg, _From, _Len, _State) ->
+prioritise_call(Msg, _From, _Len, State) ->
     case Msg of
-        info                                 -> 9;
-        {info, _Items}                       -> 9;
-        consumers                            -> 9;
-        stat                                 -> 7;
-        _                                    -> 0
+        info                                       -> 9;
+        {info, _Items}                             -> 9;
+        consumers                                  -> 9;
+        stat                                       -> 7;
+        {basic_consume, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
+        {basic_cancel, _, _, _}                    -> consumer_bias(State);
+        _                                          -> 0
     end.
 
-prioritise_cast(Msg, _Len, _State) ->
+prioritise_cast(Msg, _Len, State) ->
     case Msg of
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
+        {ack, _AckTags, _ChPid}              -> consumer_bias(State);
+        {notify_sent, _ChPid, _Credit}       -> consumer_bias(State);
+        {resume, _ChPid}                     -> consumer_bias(State);
         _                                    -> 0
+    end.
+
+consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    case BQ:msg_rates(BQS) of
+        {0.0,          _} -> 0;
+        {Ingress, Egress} when Egress / Ingress < ?CONSUMER_BIAS_RATIO -> 1;
+        {_,            _} -> 0
     end.
 
 prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -855,7 +890,7 @@ handle_call({init, Recover}, From,
 %% You used to be able to declare an exclusive durable queue. Sadly we
 %% need to still tidy up after that case, there could be the remnants
 %% of one left over from an upgrade. So that's why we don't enforce
-%% Recover = false here.
+%% Recover = new here.
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
     case rabbit_misc:is_process_alive(Owner) of
@@ -866,7 +901,8 @@ handle_call({init, Recover}, From,
                     q                   = Q} = State,
                  gen_server2:reply(From, {owner_died, Q}),
                  BQ = backing_queue_module(Q),
-                 BQS = bq_init(BQ, Q, Recover),
+                 {_, Terms} = recovery_status(Recover),
+                 BQS = bq_init(BQ, Q, Terms),
                  %% Rely on terminate to delete the queue.
                  {stop, {shutdown, missing_owner},
                   State#q{backing_queue = BQ, backing_queue_state = BQS}}
@@ -883,11 +919,6 @@ handle_call({info, Items}, _From, State) ->
 
 handle_call(consumers, _From, State = #q{consumers = Consumers}) ->
     reply(rabbit_queue_consumers:all(Consumers), State);
-
-handle_call({deliver, Delivery, Delivered}, From, State) ->
-    %% Synchronous, "mandatory" deliver mode.
-    gen_server2:reply(From, ok),
-    noreply(deliver_or_enqueue(Delivery, Delivered, State));
 
 handle_call({notify_down, ChPid}, _From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
@@ -919,7 +950,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg},
+             ConsumerTag, ExclusiveConsume, Args, OkMsg},
             _From, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
@@ -927,8 +958,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
         ok     -> Consumers1 = rabbit_queue_consumers:add(
                                  ChPid, ConsumerTag, NoAck,
                                  LimiterPid, LimiterActive,
-                                 CreditArgs, OtherArgs,
-                                 is_empty(State), Consumers),
+                                 Args, is_empty(State), Consumers),
                   ExclusiveConsumer =
                       if ExclusiveConsume -> {ChPid, ConsumerTag};
                          true             -> Holder
@@ -938,7 +968,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                                    exclusive_consumer = ExclusiveConsumer},
                   ok = maybe_send_reply(ChPid, OkMsg),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                        not NoAck, qname(State1), OtherArgs),
+                                        not NoAck, qname(State1), Args, none),
                   notify_decorators(State1),
                   reply(ok, run_message_queue(State1))
     end;
@@ -1019,19 +1049,19 @@ handle_call(sync_mirrors, _From, State) ->
 handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State);
 
-handle_call(force_event_refresh, _From,
+handle_call({force_event_refresh, Ref}, _From,
             State = #q{consumers          = Consumers,
                        exclusive_consumer = Exclusive}) ->
-    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
+    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State), Ref),
     QName = qname(State),
     AllConsumers = rabbit_queue_consumers:all(Consumers),
     case Exclusive of
         none       -> [emit_consumer_created(
-                         Ch, CTag, false, AckRequired, QName, Args) ||
+                         Ch, CTag, false, AckRequired, QName, Args, Ref) ||
                           {Ch, CTag, AckRequired, Args} <- AllConsumers];
         {Ch, CTag} -> [{Ch, CTag, AckRequired, Args}] = AllConsumers,
                       emit_consumer_created(
-                        Ch, CTag, true, AckRequired, QName, Args)
+                        Ch, CTag, true, AckRequired, QName, Args, Ref)
     end,
     reply(ok, State).
 
@@ -1041,7 +1071,6 @@ handle_cast({run_backing_queue, Mod, Fun},
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
             State = #q{senders = Senders}) ->
-    %% Asynchronous, non-"mandatory" deliver mode.
     Senders1 = case Flow of
                    flow   -> credit_flow:ack(Sender),
                              pmon:monitor(Sender, Senders);
@@ -1053,10 +1082,10 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));
 
-handle_cast({reject, AckTags, true, ChPid}, State) ->
+handle_cast({reject, true,  AckTags, ChPid}, State) ->
     noreply(requeue(AckTags, ChPid, State));
 
-handle_cast({reject, AckTags, false, ChPid}, State) ->
+handle_cast({reject, false, AckTags, ChPid}, State) ->
     noreply(with_dlx(
               State#q.dlx,
               fun (X) -> subtract_acks(ChPid, AckTags, State,
@@ -1080,10 +1109,6 @@ handle_cast({notify_sent, ChPid, Credit}, State) ->
 handle_cast({activate_limit, ChPid}, State) ->
     noreply(possibly_unblock(rabbit_queue_consumers:activate_limit_fun(),
                              ChPid, State));
-
-handle_cast({flush, ChPid}, State) ->
-    ok = rabbit_channel:flushed(ChPid, self()),
-    noreply(State);
 
 handle_cast({set_ram_duration_target, Duration},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->

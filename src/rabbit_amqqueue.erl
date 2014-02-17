@@ -24,10 +24,10 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
--export([force_event_refresh/0, notify_policy_changed/1]).
+-export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
--export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
--export([notify_sent/2, notify_sent_queue_down/1, resume/2, flush_all/2]).
+-export([basic_get/4, basic_consume/9, basic_cancel/4, notify_decorators/1]).
+-export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
@@ -51,7 +51,7 @@
 
 -ifdef(use_specs).
 
--export_type([name/0, qmsg/0, routing_result/0]).
+-export_type([name/0, qmsg/0]).
 
 -type(name() :: rabbit_types:r('queue')).
 -type(qpids() :: [pid()]).
@@ -61,7 +61,6 @@
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(routing_result() :: 'routed' | 'unroutable').
 -type(queue_or_absent() :: rabbit_types:amqqueue() |
                            {'absent', rabbit_types:amqqueue()}).
 -type(not_found_or_absent() :: 'not_found' |
@@ -111,12 +110,11 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
                     -> [rabbit_types:infos()]).
--spec(force_event_refresh/0 :: () -> 'ok').
+-spec(force_event_refresh/1 :: (reference()) -> 'ok').
 -spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
--spec(consumers/1 ::
-        (rabbit_types:amqqueue())
-        -> [{pid(), rabbit_types:ctag(), boolean(),
-             rabbit_framing:amqp_table()}]).
+-spec(consumers/1 :: (rabbit_types:amqqueue())
+                     -> [{pid(), rabbit_types:ctag(), boolean(),
+                          rabbit_framing:amqp_table()}]).
 -spec(consumer_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(consumers_all/1 ::
         (rabbit_types:vhost())
@@ -139,9 +137,9 @@
 -spec(purge/1 :: (rabbit_types:amqqueue()) -> qlen()).
 -spec(forget_all_durable/1 :: (node()) -> 'ok').
 -spec(deliver/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
-                        {routing_result(), qpids()}).
+                        qpids()).
 -spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
-                             {routing_result(), qpids()}).
+                             qpids()).
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
@@ -151,9 +149,9 @@
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(credit/5 :: (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(),
                    non_neg_integer(), boolean()) -> 'ok').
--spec(basic_consume/10 ::
+-spec(basic_consume/9 ::
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
-         rabbit_types:ctag(), boolean(), {non_neg_integer(), boolean()} | 'none', any(), any())
+         rabbit_types:ctag(), boolean(), rabbit_framing:amqp_table(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
@@ -161,7 +159,6 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(resume/2 :: (pid(), pid()) -> 'ok').
--spec(flush_all/2 :: (qpids(), pid()) -> 'ok').
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit() |
@@ -195,13 +192,18 @@ recover() ->
     on_node_down(node()),
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-    ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
+
+    %% We rely on BQ:start/1 returning the recovery terms in the same
+    %% order as the supplied queue names, so that we can zip them together
+    %% for further processing in recover_durable_queues.
+    {ok, OrderedRecoveryTerms} =
+        BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
-    recover_durable_queues(DurableQueues).
+    recover_durable_queues(lists:zip(DurableQueues, OrderedRecoveryTerms)).
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
@@ -219,35 +221,37 @@ start(Qs) ->
 
 find_durable_queues() ->
     Node = node(),
-    %% TODO: use dirty ops instead
-    rabbit_misc:execute_mnesia_transaction(
+    mnesia:async_dirty(
       fun () ->
               qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
                                               pid  = Pid}
                                     <- mnesia:table(rabbit_durable_queue),
-                                mnesia:read(rabbit_queue, Name, read) =:= [],
-                                node(Pid) == Node]))
+                                node(Pid) == Node,
+                                mnesia:read(rabbit_queue, Name, read) =:= []]))
       end).
 
-recover_durable_queues(DurableQueues) ->
-    Qs = [start_queue_process(node(), Q) || Q <- DurableQueues],
-    [Q || Q = #amqqueue{pid = Pid} <- Qs,
-          gen_server2:call(Pid, {init, self()}, infinity) == {new, Q}].
+recover_durable_queues(QueuesAndRecoveryTerms) ->
+    {Results, Failures} =
+        gen_server2:mcall([{start_queue_process(node(), Q),
+                            {init, {self(), Terms}}} ||
+                              {Q, Terms} <- QueuesAndRecoveryTerms]),
+    [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
+                      [Pid, Error]) || {Pid, Error} <- Failures],
+    [Q || {_, {new, Q}} <- Results].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
-    Q0 = rabbit_policy:set(#amqqueue{name            = QueueName,
-                                     durable         = Durable,
-                                     auto_delete     = AutoDelete,
-                                     arguments       = Args,
-                                     exclusive_owner = Owner,
-                                     pid             = none,
-                                     slave_pids      = [],
-                                     sync_slave_pids = [],
-                                     gm_pids         = []}),
-    {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
-    Q1 = start_queue_process(Node, Q0),
-    gen_server2:call(Q1#amqqueue.pid, {init, new}, infinity).
+    Q = rabbit_policy:set(#amqqueue{name            = QueueName,
+                                    durable         = Durable,
+                                    auto_delete     = AutoDelete,
+                                    arguments       = Args,
+                                    exclusive_owner = Owner,
+                                    pid             = none,
+                                    slave_pids      = [],
+                                    sync_slave_pids = [],
+                                    gm_pids         = []}),
+    {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
+    gen_server2:call(start_queue_process(Node, Q), {init, new}, infinity).
 
 internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
@@ -310,7 +314,7 @@ policy_changed(Q1 = #amqqueue{decorators = Decorators1},
 
 start_queue_process(Node, Q) ->
     {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
-    Q#amqqueue{pid = Pid}.
+    Pid.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
     ExchangeName = rabbit_misc:r(QueueName, exchange, <<>>),
@@ -351,14 +355,14 @@ with(Name, F, E) ->
         {ok, Q = #amqqueue{pid = QPid}} ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
-            %% with the QPid.
+            %% with the QPid. F() should be written s.t. that this
+            %% cannot happen, so we bail if it does since that
+            %% indicates a code bug and we don't want to get stuck in
+            %% the retry loop.
             rabbit_misc:with_exit_handler(
-              fun () ->
-                      case rabbit_misc:is_process_alive(QPid) of
-                          true  -> E(not_found_or_absent_dirty(Name));
-                          false -> timer:sleep(25),
-                                   with(Name, F, E)
-                      end
+              fun () -> false = rabbit_misc:is_process_alive(QPid),
+                        timer:sleep(25),
+                        with(Name, F, E)
               end, fun () -> F(Q) end);
         {error, not_found} ->
             E(not_found_or_absent_dirty(Name))
@@ -427,7 +431,7 @@ declare_args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
-     {<<"x-max-length">>,              fun check_max_length_arg/2}].
+     {<<"x-max-length">>,              fun check_non_neg_int_arg/2}].
 
 consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
 
@@ -437,7 +441,7 @@ check_int_arg({Type, _}, _) ->
         false -> {error, {unacceptable_type, Type}}
     end.
 
-check_max_length_arg({Type, Val}, Args) ->
+check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
         ok when Val >= 0 -> ok;
         ok               -> {error, {value_negative, Val}};
@@ -499,19 +503,20 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 %% the first place since a node failed). Therefore we keep poking at
 %% the list of queues until we were able to talk to a live process or
 %% the queue no longer exists.
-force_event_refresh() -> force_event_refresh([Q#amqqueue.name || Q <- list()]).
+force_event_refresh(Ref) ->
+    force_event_refresh([Q#amqqueue.name || Q <- list()], Ref).
 
-force_event_refresh(QNames) ->
+force_event_refresh(QNames, Ref) ->
     Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
-    {_, Bad} = rabbit_misc:multi_call(
-                 [Q#amqqueue.pid || Q <- Qs], force_event_refresh),
+    {_, Bad} = gen_server2:mcall(
+                 [{Q#amqqueue.pid, {force_event_refresh, Ref}} || Q <- Qs]),
     FailedPids = [Pid || {Pid, _Reason} <- Bad],
     Failed = [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
                       lists:member(Pid, FailedPids)],
     case Failed of
         [] -> ok;
         _  -> timer:sleep(?FAILOVER_WAIT_MILLIS),
-              force_event_refresh(Failed)
+              force_event_refresh(Failed, Ref)
     end.
 
 notify_policy_changed(#amqqueue{pid = QPid}) ->
@@ -550,8 +555,8 @@ requeue(QPid, MsgIds, ChPid) -> delegate:call(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, MsgIds, ChPid) -> delegate:cast(QPid, {ack, MsgIds, ChPid}).
 
-reject(QPid, MsgIds, Requeue, ChPid) ->
-    delegate:cast(QPid, {reject, MsgIds, Requeue, ChPid}).
+reject(QPid, Requeue, MsgIds, ChPid) ->
+    delegate:cast(QPid, {reject, Requeue, MsgIds, ChPid}).
 
 notify_down_all(QPids, ChPid) ->
     {_, Bads} = delegate:call(QPids, {notify_down, ChPid}),
@@ -572,13 +577,11 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
     delegate:call(QPid, {basic_get, ChPid, NoAck, LimiterPid}).
 
-basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid,
-              LimiterPid, LimiterActive,
-              ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs, OkMsg) ->
-    ok = check_consume_arguments(QName, OtherArgs),
+basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid, LimiterPid,
+              LimiterActive, ConsumerTag, ExclusiveConsume, Args, OkMsg) ->
+    ok = check_consume_arguments(QName, Args),
     delegate:call(QPid, {basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-                         ConsumerTag, ExclusiveConsume, CreditArgs, OtherArgs,
-                         OkMsg}).
+                         ConsumerTag, ExclusiveConsume, Args, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     delegate:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
@@ -604,8 +607,6 @@ notify_sent_queue_down(QPid) ->
     ok.
 
 resume(QPid, ChPid) -> delegate:cast(QPid, {resume, ChPid}).
-
-flush_all(QPids, ChPid) -> delegate:cast(QPids, {flush, ChPid}).
 
 internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
@@ -704,17 +705,11 @@ pseudo_queue(QueueName, Pid) ->
               pid          = Pid,
               slave_pids   = []}.
 
-deliver([], #delivery{mandatory = false}, _Flow) ->
+deliver([], _Delivery, _Flow) ->
     %% /dev/null optimisation
-    {routed, []};
+    [];
 
-deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
-    %% optimisation: when Mandatory = false, rabbit_amqqueue:deliver
-    %% will deliver the message to the queue process asynchronously,
-    %% and return true, which means all the QPids will always be
-    %% returned. It is therefore safe to use a fire-and-forget cast
-    %% here and return the QPids - the semantics is preserved. This
-    %% scales much better than the case below.
+deliver(Qs, Delivery, Flow) ->
     {MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
     case Flow of
@@ -731,19 +726,7 @@ deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
     SMsg = {deliver, Delivery, true,  Flow},
     delegate:cast(MPids, MMsg),
     delegate:cast(SPids, SMsg),
-    {routed, QPids};
-
-deliver(Qs, Delivery, _Flow) ->
-    {MPids, SPids} = qpids(Qs),
-    %% see comment above
-    MMsg = {deliver, Delivery, false},
-    SMsg = {deliver, Delivery, true},
-    {MRouted, _} = delegate:call(MPids, MMsg),
-    {SRouted, _} = delegate:call(SPids, SMsg),
-    case MRouted ++ SRouted of
-        [] -> {unroutable, []};
-        R  -> {routed,     [QPid || {QPid, ok} <- R]}
-    end.
+    QPids.
 
 qpids([]) -> {[], []}; %% optimisation
 qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[QPid], SPids}; %% opt

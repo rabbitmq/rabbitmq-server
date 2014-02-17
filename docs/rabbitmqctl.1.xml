@@ -502,6 +502,23 @@
             </para>
           </listitem>
         </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_cluster_name</command> <arg choice="req">name</arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Sets the cluster name. The cluster name is announced to
+              clients on connection, and used by the federation and
+              shovel plugins to record where a message has been. The
+              cluster name is by default derived from the hostname of
+              the first node in the cluster, but can be changed.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_cluster_name london</screen>
+            <para role="example">
+              This sets the cluster name to "london".
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 
@@ -1558,14 +1575,6 @@
               <varlistentry>
                 <term>prefetch_count</term>
                 <listitem><para>QoS prefetch count limit in force, 0 if unlimited.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>client_flow_blocked</term>
-                <listitem><para>True if the client issued a
-                    <command>channel.flow{active=false}</command>
-                    command, blocking the server from delivering
-                    messages to the channel's consumers.
-                    </para></listitem>
               </varlistentry>
             </variablelist>
             <para>
