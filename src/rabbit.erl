@@ -417,6 +417,11 @@ status() ->
                              end}],
     S1 ++ S2 ++ S3 ++ S4.
 
+format_alarms(Alarms) ->
+    N = node(),
+    %% [{{resource_limit,memory,rabbit@mercurio},[]}]
+    [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
+
 is_running() -> is_running(node()).
 
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
@@ -782,8 +787,3 @@ start_fhc() ->
     rabbit_sup:start_restartable_child(
       file_handle_cache,
       [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]).
-
-format_alarms(Alarms) ->
-    N = node(),
-    %% [{{resource_limit,memory,rabbit@mercurio},[]}]
-    [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
