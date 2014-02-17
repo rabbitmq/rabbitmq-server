@@ -784,5 +784,6 @@ start_fhc() ->
       [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]).
 
 format_alarms(Alarms) ->
+    N = node(),
     %% [{{resource_limit,memory,rabbit@mercurio},[]}]
-    [Limit || {{resource_limit, Limit, _}, _} <- Alarms].
+    [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
