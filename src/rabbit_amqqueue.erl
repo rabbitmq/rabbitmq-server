@@ -113,9 +113,9 @@
                     -> [rabbit_types:infos()]).
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
--spec(consumers/1 ::
-        (rabbit_types:amqqueue())
-        -> [{pid(), rabbit_types:ctag(), boolean()}]).
+-spec(consumers/1 :: (rabbit_types:amqqueue())
+                     -> [{pid(), rabbit_types:ctag(), boolean(),
+                          rabbit_framing:amqp_table()}]).
 -spec(consumer_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(consumers_all/1 ::
         (rabbit_types:vhost())
@@ -466,10 +466,16 @@ check_dlxrk_arg({Type,    _}, _Args) ->
 
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
+%% Not dirty_match_object since that would not be transactional when used in a
+%% tx context
 list(VHostPath) ->
-    mnesia:dirty_match_object(
-      rabbit_queue,
-      #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'}).
+    mnesia:async_dirty(
+      fun () ->
+              mnesia:match_object(
+                rabbit_queue,
+                #amqqueue{name = rabbit_misc:r(VHostPath, queue), _ = '_'},
+                read)
+      end).
 
 info_keys() -> rabbit_amqqueue_process:info_keys().
 

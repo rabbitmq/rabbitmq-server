@@ -282,8 +282,10 @@ recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
-    ok = rabbit_net:setopts(Sock, [{active, once}]),
-    mainloop(Deb, State#v1{pending_recv = true});
+    case rabbit_net:setopts(Sock, [{active, once}]) of
+        ok              -> mainloop(Deb, State#v1{pending_recv = true});
+        {error, Reason} -> stop(Reason, State)
+    end;
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of
                                     [B] -> B;
@@ -302,11 +304,9 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
         closed when State#v1.connection_state =:= closed ->
             ok;
         closed ->
-            maybe_emit_stats(State),
-            throw(connection_closed_abruptly);
+            stop(closed, State);
         {error, Reason} ->
-            maybe_emit_stats(State),
-            throw({inet_error, Reason});
+            stop(Reason, State);
         {other, {system, From, Request}} ->
             sys:handle_system_msg(Request, From, State#v1.parent,
                                   ?MODULE, Deb, State);
@@ -316,6 +316,11 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
                 NewState -> recvloop(Deb, NewState)
             end
     end.
+
+stop(closed, State) -> maybe_emit_stats(State),
+                       throw(connection_closed_abruptly);
+stop(Reason, State) -> maybe_emit_stats(State),
+                       throw({inet_error, Reason}).
 
 handle_other({conserve_resources, Source, Conserve},
              State = #v1{throttle = Throttle =
@@ -724,6 +729,14 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
                                         Type, Channel, Payload, State)
     end;
 
+handle_input(handshake, <<"AMQP", A, B, C, D>>, State) ->
+    handshake({A, B, C, D}, State);
+handle_input(handshake, Other, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_header, Other});
+
+handle_input(Callback, Data, _State) ->
+    throw({bad_input, Callback, Data}).
+
 %% The two rules pertaining to version negotiation:
 %%
 %% * If the server cannot support the protocol specified in the
@@ -732,37 +745,31 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
 %%
 %% * The server MUST provide a protocol version that is lower than or
 %% equal to that requested by the client in the protocol header.
-handle_input(handshake, <<"AMQP", 0, 0, 9, 1>>, State) ->
+handshake({0, 0, 9, 1}, State) ->
     start_connection({0, 9, 1}, rabbit_framing_amqp_0_9_1, State);
 
 %% This is the protocol header for 0-9, which we can safely treat as
 %% though it were 0-9-1.
-handle_input(handshake, <<"AMQP", 1, 1, 0, 9>>, State) ->
+handshake({1, 1, 0, 9}, State) ->
     start_connection({0, 9, 0}, rabbit_framing_amqp_0_9_1, State);
 
 %% This is what most clients send for 0-8.  The 0-8 spec, confusingly,
 %% defines the version as 8-0.
-handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
+handshake({1, 1, 8, 0}, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
 %% The 0-8 spec as on the AMQP web site actually has this as the
 %% protocol header; some libraries e.g., py-amqplib, send it when they
 %% want 0-8.
-handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
+handshake({1, 1, 9, 1}, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
-%% ... and finally, the 1.0 spec is crystal clear!  Note that the
-handle_input(handshake, <<"AMQP", Id, 1, 0, 0>>, State) ->
+%% ... and finally, the 1.0 spec is crystal clear!
+handshake({Id, 1, 0, 0}, State) ->
     become_1_0(Id, State);
 
-handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_version, {A, B, C, D}});
-
-handle_input(handshake, Other, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_header, Other});
-
-handle_input(Callback, Data, _State) ->
-    throw({bad_input, Callback, Data}).
+handshake(Vsn, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_version, Vsn}).
 
 %% Offer a protocol version to the client.  Connection.start only
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
@@ -806,7 +813,10 @@ handle_method0(MethodName, FieldsBin,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
                        State)
-    catch exit:#amqp_error{method = none} = Reason ->
+    catch throw:{inet_error, closed} ->
+            maybe_emit_stats(State),
+            throw(connection_closed_abruptly);
+          exit:#amqp_error{method = none} = Reason ->
             handle_exception(State, 0, Reason#amqp_error{method = MethodName});
           Type:Reason ->
             Stack = erlang:get_stacktrace(),
@@ -1073,8 +1083,18 @@ maybe_emit_stats(State) ->
                             fun() -> emit_stats(State) end).
 
 emit_stats(State) ->
-    rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),
-    rabbit_event:reset_stats_timer(State, #v1.stats_timer).
+    Infos = infos(?STATISTICS_KEYS, State),
+    rabbit_event:notify(connection_stats, Infos),
+    State1 = rabbit_event:reset_stats_timer(State, #v1.stats_timer),
+    %% If we emit an event which looks like we are in flow control, it's not a
+    %% good idea for it to be our last even if we go idle. Keep emitting
+    %% events, either we stay busy or we drop out of flow control.
+    %% The 5 is to match the test in formatters.js:fmt_connection_state().
+    %% This magic number will go away when bug 24829 is merged.
+    case proplists:get_value(last_blocked_age, Infos) < 5 of
+        true -> ensure_stats_timer(State1);
+        _    -> State1
+    end.
 
 %% 1.0 stub
 -ifdef(use_specs).

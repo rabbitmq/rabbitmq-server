@@ -244,10 +244,16 @@ lookup_or_die(Name) ->
         {error, not_found} -> rabbit_misc:not_found(Name)
     end.
 
+%% Not dirty_match_object since that would not be transactional when used in a
+%% tx context
 list(VHostPath) ->
-    mnesia:dirty_match_object(
-      rabbit_exchange,
-      #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+    mnesia:async_dirty(
+      fun () ->
+              mnesia:match_object(
+                rabbit_exchange,
+                #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'},
+                read)
+      end).
 
 lookup_scratch(Name, App) ->
     case lookup(Name) of

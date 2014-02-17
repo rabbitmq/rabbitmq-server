@@ -808,6 +808,7 @@ test_log_management_during_startup() ->
     %% start application with logging to non-existing directory
     TmpLog = "/tmp/rabbit-tests/test.log",
     delete_file(TmpLog),
+    ok = control_action(stop_app, []),
     ok = application:set_env(rabbit, error_logger, {file, TmpLog}),
 
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
@@ -816,6 +817,7 @@ test_log_management_during_startup() ->
 
     %% start application with logging to directory with no
     %% write permissions
+    ok = control_action(stop_app, []),
     TmpDir = "/tmp/rabbit-tests",
     ok = set_permissions(TmpDir, 8#00400),
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
@@ -830,6 +832,7 @@ test_log_management_during_startup() ->
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
+    ok = control_action(stop_app, []),
     TmpTestDir = "/tmp/rabbit-tests/no-permission/test/log",
     ok = application:set_env(rabbit, error_logger, {file, TmpTestDir}),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
@@ -849,12 +852,13 @@ test_log_management_during_startup() ->
 
     %% start application with standard error_logger_file_h
     %% handler not installed
+    ok = control_action(stop_app, []),
     ok = application:set_env(rabbit, error_logger, {file, MainLog}),
     ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
 
     %% start application with standard sasl handler not installed
     %% and rabbit main log handler installed correctly
+    ok = control_action(stop_app, []),
     ok = delete_log_handlers([rabbit_sasl_report_file_h]),
     ok = control_action(start_app, []),
     passed.
@@ -1038,6 +1042,9 @@ test_user_management() ->
     ok = control_action(add_vhost, ["/testhost"]),
     ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
                         [{"-p", "/testhost"}]),
+    {new, _} = rabbit_amqqueue:declare(
+                 rabbit_misc:r(<<"/testhost">>, queue, <<"test">>),
+                 true, false, [], none),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion

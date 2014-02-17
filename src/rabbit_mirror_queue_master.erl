@@ -110,7 +110,13 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
                           Q1#amqqueue{gm_pids = [{GM, Self} | GMPids]})
            end),
     {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
-    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
+    %% We need synchronous add here (i.e. do not return until the
+    %% slave is running) so that when queue declaration is finished
+    %% all slaves are up; we don't want to end up with unsynced slaves
+    %% just by declaring a new queue. But add can't be synchronous all
+    %% the time as it can be called by slaves and that's
+    %% deadlock-prone.
+    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes, sync),
     #state { name                = QName,
              gm                  = GM,
              coordinator         = CPid,
@@ -206,7 +212,8 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish, ChPid, MsgProps, Msg}),
+    ok = gm:broadcast(GM, {publish, ChPid, MsgProps, Msg},
+                      rabbit_basic:msg_size(Msg)),
     BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
@@ -216,7 +223,8 @@ publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                                           backing_queue       = BQ,
                                           backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish_delivered, ChPid, MsgProps, Msg}),
+    ok = gm:broadcast(GM, {publish_delivered, ChPid, MsgProps, Msg},
+                      rabbit_basic:msg_size(Msg)),
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     {AckTag, ensure_monitoring(ChPid, State1)}.

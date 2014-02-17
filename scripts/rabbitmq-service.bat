@@ -22,8 +22,16 @@ rem enabling delayed expansion
 set TN0=%~n0
 set TDP0=%~dp0
 set P1=%1
-set STAR=%*
 setlocal enabledelayedexpansion
+
+set STARVAR=
+shift
+:loop1
+if "%1"=="" goto after_loop
+	set STARVAR=%STARVAR% %1
+	shift
+goto loop1
+:after_loop
 
 if "!RABBITMQ_SERVICENAME!"=="" (
     set RABBITMQ_SERVICENAME=RabbitMQ
@@ -200,7 +208,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
-!STAR!
+!STARVAR!
 
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
