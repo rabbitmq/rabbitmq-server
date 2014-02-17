@@ -214,7 +214,7 @@ reload_all(Modules) ->
     [begin
          case code:soft_purge(Mod) of
              true  -> load_mod(Mod);
-             false -> io:format("unable to purge ~p~n", [Mod])
+             false -> ok
          end
      end || Mod <- Modules].
 
