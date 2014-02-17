@@ -220,9 +220,8 @@ reload_all(Modules) ->
 
 load_mod(Mod) ->
     case code:is_loaded(Mod) of
-        {file, preloaded} -> code:load_file(Mod);
-        {file, Path}      -> code:load_abs(Path);
-        false             -> code:load_file(Mod)
+        {file, Path} when Path /= 'preloaded' -> code:load_abs(Path);
+        _                                     -> code:load_file(Mod)
     end.
 
 await_startup(Apps) ->
