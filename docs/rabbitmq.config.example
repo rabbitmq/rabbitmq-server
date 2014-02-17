@@ -341,7 +341,7 @@
      %% {reconnect_delay, 2.5}
 
      %% ]} %% End of my_first_shovel
-    ]},
+    ]}
    %% Rather than specifying some values per-shovel, you can specify
    %% them for all shovels here.
    %%

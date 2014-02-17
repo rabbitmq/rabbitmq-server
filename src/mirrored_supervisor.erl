@@ -245,7 +245,9 @@ count_children(Sup)         -> fold(count_children, Sup, fun add_proplists/2).
 check_childspecs(Specs)     -> ?SUPERVISOR:check_childspecs(Specs).
 
 call(Sup, Msg) -> ?GEN_SERVER:call(mirroring(Sup), Msg, infinity).
-cast(Sup, Msg) -> ?GEN_SERVER:cast(mirroring(Sup), Msg).
+cast(Sup, Msg) -> with_exit_handler(
+                    fun() -> ok end,
+                    fun() -> ?GEN_SERVER:cast(mirroring(Sup), Msg) end).
 
 find_call(Sup, Id, Msg) ->
     Group = call(Sup, group),
@@ -369,7 +371,7 @@ handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
 handle_info({'DOWN', _Ref, process, Pid, Reason},
-            State = #state{overall = Pid, group = Group}) ->
+            State = #state{delegate = Pid, group = Group}) ->
     %% Since the delegate is temporary, its death won't cause us to
     %% die. Since the overall supervisor kills processes in reverse
     %% order when shutting down "from above" and we started after the

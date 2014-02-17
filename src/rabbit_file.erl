@@ -94,9 +94,12 @@ ensure_dir_internal(File) ->
     end.
 
 wildcard(Pattern, Dir) ->
-    {ok, Files} = list_dir(Dir),
-    {ok, RE} = re:compile(Pattern, [anchored]),
-    [File || File <- Files, match =:= re:run(File, RE, [{capture, none}])].
+    case list_dir(Dir) of
+        {ok, Files} -> {ok, RE} = re:compile(Pattern, [anchored]),
+                       [File || File <- Files,
+                                match =:= re:run(File, RE, [{capture, none}])];
+        {error, _}  -> []
+    end.
 
 list_dir(Dir) -> with_fhc_handle(fun () -> prim_file:list_dir(Dir) end).
 
