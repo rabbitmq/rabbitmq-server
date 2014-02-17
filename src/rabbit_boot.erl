@@ -286,7 +286,7 @@ run_boot_step({_, StepName, Attributes}) ->
     case catch already_run(StepName) of
         false -> ok = run_step_name(Attributes, mfa),
                  mark_complete(StepName);
-        true  -> ok
+        _     -> ok
     end,
     ok.
 
