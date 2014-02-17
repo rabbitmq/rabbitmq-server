@@ -268,8 +268,7 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
 handle_info({nodedown, Node}, State) ->
-    ok = handle_dead_node(Node),
-    {noreply, State};
+    {noreply, handle_dead_node(Node, State)};
 
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
@@ -341,7 +340,7 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_mnesia:on_node_down(Node),
     ok.
 
-handle_dead_node(_Node) ->
+handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     %% In general in rabbit_node_monitor we care about whether the
     %% rabbit application is up rather than the node; we do this so
     %% that we can respond in the same way to "rabbitmqctl stop_app"
@@ -354,17 +353,17 @@ handle_dead_node(_Node) ->
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
             case majority() of
-                true  -> ok;
-                false -> await_cluster_recovery()
+                true  -> State;
+                false -> await_cluster_recovery() %% Does not really return
             end;
         {ok, ignore} ->
-            ok;
+            State;
         {ok, autoheal} ->
-            ok;
+            State#state{autoheal = rabbit_autoheal:node_down(Node, Autoheal)};
         {ok, Term} ->
             rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
                                "assuming 'ignore'~n", [Term]),
-            ok
+            State
     end.
 
 await_cluster_recovery() ->
@@ -397,8 +396,7 @@ wait_for_cluster_recovery(Nodes) ->
                  wait_for_cluster_recovery(Nodes)
     end.
 
-handle_dead_rabbit_state(Node, State = #state{partitions = Partitions,
-                                              autoheal   = Autoheal}) ->
+handle_dead_rabbit_state(_Node, State = #state{partitions = Partitions}) ->
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
     %% that we do not attempt to deal with individual (other) partitions
@@ -408,9 +406,8 @@ handle_dead_rabbit_state(Node, State = #state{partitions = Partitions,
                       [] -> [];
                       _  -> Partitions
                   end,
-    ensure_ping_timer(
-      State#state{partitions = Partitions1,
-                  autoheal   = rabbit_autoheal:node_down(Node, Autoheal)}).
+    ensure_ping_timer(State#state{partitions = Partitions1}).
+
 
 ensure_ping_timer(State) ->
     rabbit_misc:ensure_timer(

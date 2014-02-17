@@ -75,8 +75,6 @@ maybe_start(State) ->
 enabled() ->
     {ok, autoheal} =:= application:get_env(rabbit, cluster_partition_handling).
 
-node_down(_Node, {winner_waiting, _Nodes, _Notify} = Autoheal) ->
-    Autoheal;
 node_down(_Node, not_healing) ->
     not_healing;
 node_down(Node, _State) ->
