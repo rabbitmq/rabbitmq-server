@@ -1073,10 +1073,12 @@ i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
 i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
 i(channels,           #v1{channel_count = ChannelCount}) -> ChannelCount;
 i(state, #v1{connection_state = ConnectionState,
-             throttle         = #throttle{last_blocked_by = WasBlockedBy,
+             throttle         = #throttle{alarmed_by      = Alarms,
+                                          last_blocked_by = WasBlockedBy,
                                           last_blocked_at = T}}) ->
     Recently = T =/= never andalso timer:now_diff(erlang:now(), T) < 5000000,
-    case {credit_flow:blocked(), WasBlockedBy, Recently} of
+    case {credit_flow:blocked() andalso Alarms =:= [],
+          WasBlockedBy, Recently} of
         {true,  _,    _}    -> flow;
         {false, flow, true} -> flow;
         {_,     _,    _}    -> ConnectionState
