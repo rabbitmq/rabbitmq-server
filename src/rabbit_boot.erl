@@ -340,8 +340,7 @@ edges(Type) ->
     %% When running "boot" steps, both hard _and_ soft dependencies are
     %% considered equally. When running "cleanup" steps however, we only
     %% consider /hard/ dependencies (i.e., of the form
-    %% {DependencyType, {hard, StepName}}) as needing to run before or after
-    %% our own cleanup actions.
+    %% {DependencyType, {hard, StepName}}) as dependencies.
     fun (_Module, {_AppName, Steps}) ->
             [case Key of
                  requires -> {StepName, strip_type(OtherStep)};
@@ -406,5 +405,3 @@ sort_boot_steps(Type, UnsortedSteps) ->
                         io_lib:format(" depends on ~w~n", [First])]
                end])
     end.
-
-
