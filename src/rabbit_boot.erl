@@ -40,14 +40,13 @@
 %% When the broker is starting, we must run all the boot steps within the
 %% rabbit:start/2 application callback, after rabbit_sup has started and
 %% before any plugin applications begin to start. To achieve this, we process
-%% the boot steps from all loaded applications and run them in dependent
-%% order.
+%% the boot steps from all loaded applications.
 %%
-%% When the broker is already running, we must run all the boot steps for
-%% each application/plugin we're starting, plus any other (dependent) steps
-%% that have not been run. To achieve this, we process the boot steps from
-%% all loaded applications, but skip those that have already been run (i.e.,
-%% steps that have been run once whilst or since the broker started).
+%% If the broker is already running however, we must run all boot steps for
+%% each application/plugin we're starting, plus any other (dependent) steps.
+%% To achieve this, we process the boot steps from all loaded applications,
+%% but skip those that have already been run (i.e., steps that have been run
+%% once whilst, or even since the broker started).
 %%
 %% Tracking which boot steps have already been run is done via an ets table.
 %% Because we frequently find ourselves needing to query this table without
@@ -57,8 +56,6 @@
 %% stopped cleanly, the file is deleted. When a node is in the process of
 %% starting, the file is also removed and replaced (since we do not want to
 %% track boot steps from a previous incarnation of the node).
-%%
-%% Cleanup steps...
 %%
 
 %%---------------------------------------------------------------------------
