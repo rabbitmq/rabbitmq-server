@@ -393,7 +393,8 @@ status() ->
           {running_applications, rabbit_misc:which_applications()},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
-          {memory,               rabbit_vm:memory()}],
+          {memory,               rabbit_vm:memory()},
+          {alarms,               format_alarms(rabbit_alarm:get_alarms())}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -415,6 +416,11 @@ status() ->
                                  T div 1000
                              end}],
     S1 ++ S2 ++ S3 ++ S4.
+
+format_alarms(Alarms) ->
+    N = node(),
+    %% [{{resource_limit,memory,rabbit@mercurio},[]}]
+    [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
 
 is_running() -> is_running(node()).
 
