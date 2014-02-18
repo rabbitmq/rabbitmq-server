@@ -22,7 +22,7 @@
          connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
-         close_connection/2, force_connection_event_refresh/0, tcp_host/1]).
+         close_connection/2, force_connection_event_refresh/1, tcp_host/1]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/6,
@@ -80,7 +80,7 @@
 -spec(connection_info_all/1 ::
         (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
--spec(force_connection_event_refresh/0 :: () -> 'ok').
+-spec(force_connection_event_refresh/1 :: (reference()) -> 'ok').
 
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(tcp_listener_addresses/1 :: (listener_config()) -> [address()]).
@@ -331,8 +331,8 @@ close_connection(Pid, Explanation) ->
         false -> throw({error, {not_a_connection_pid, Pid}})
     end.
 
-force_connection_event_refresh() ->
-    [rabbit_reader:force_event_refresh(C) || C <- connections()],
+force_connection_event_refresh(Ref) ->
+    [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
     ok.
 
 %%--------------------------------------------------------------------

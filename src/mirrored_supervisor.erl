@@ -57,10 +57,10 @@
 %% This is basically the same as for supervisor, except that:
 %%
 %% 1) start_link(Module, Args) becomes
-%%    start_link(Group, Module, Args).
+%%    start_link(Group, TxFun, Module, Args).
 %%
 %% 2) start_link({local, Name}, Module, Args) becomes
-%%    start_link({local, Name}, Group, Module, Args).
+%%    start_link({local, Name}, Group, TxFun, Module, Args).
 %%
 %% 3) start_link({global, Name}, Module, Args) is not available.
 %%
@@ -69,6 +69,19 @@
 %% 5) Mnesia is used to hold global state. At some point your
 %%    application should invoke create_tables() (or table_definitions()
 %%    if it wants to manage table creation itself).
+%%
+%% The TxFun parameter to start_link/{4,5} is a function which the
+%% mirrored supervisor can use to execute Mnesia transactions. In the
+%% RabbitMQ server this goes via a worker pool; in other cases a
+%% function like:
+%%
+%%  tx_fun(Fun) ->
+%%      case mnesia:sync_transaction(Fun) of
+%%          {atomic,  Result}         -> Result;
+%%          {aborted, Reason}         -> throw({error, Reason})
+%%      end.
+%%
+%% could be used.
 %%
 %% Internals
 %% ---------
@@ -115,7 +128,7 @@
           {attributes, record_info(fields, mirrored_sup_childspec)}]}).
 -define(TABLE_MATCH, {match, #mirrored_sup_childspec{ _ = '_' }}).
 
--export([start_link/3, start_link/4,
+-export([start_link/4, start_link/5,
          start_child/2, restart_child/2,
          delete_child/2, terminate_child/2,
          which_children/1, count_children/1, check_childspecs/1]).
@@ -126,7 +139,7 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3,
          handle_cast/2]).
 
--export([start_internal/2]).
+-export([start_internal/3]).
 -export([create_tables/0, table_definitions/0]).
 
 -record(mirrored_sup_childspec, {key, mirroring_pid, childspec}).
@@ -134,6 +147,7 @@
 -record(state, {overall,
                 delegate,
                 group,
+                tx_fun,
                 initial_childspecs}).
 
 %%----------------------------------------------------------------------------
@@ -160,19 +174,25 @@
 
 -type group_name() :: any().
 
--spec start_link(GroupName, Module, Args) -> startlink_ret() when
+-type(tx_fun() :: fun((fun(() -> A)) -> A)).
+
+-spec start_link(GroupName, TxFun, Module, Args) -> startlink_ret() when
       GroupName :: group_name(),
+      TxFun :: tx_fun(),
       Module :: module(),
       Args :: term().
 
--spec start_link(SupName, GroupName, Module, Args) -> startlink_ret() when
+-spec start_link(SupName, GroupName, TxFun, Module, Args) ->
+                        startlink_ret() when
       SupName :: supervisor2:sup_name(),
       GroupName :: group_name(),
+      TxFun :: tx_fun(),
       Module :: module(),
       Args :: term().
 
--spec start_internal(Group, ChildSpecs) -> Result when
+-spec start_internal(Group, TxFun, ChildSpecs) -> Result when
       Group :: group_name(),
+      TxFun :: tx_fun(),
       ChildSpecs :: [supervisor2:child_spec()],
       Result :: {'ok', pid()} | {'error', term()}.
 
@@ -190,18 +210,18 @@ behaviour_info(_Other)    -> undefined.
 
 %%----------------------------------------------------------------------------
 
-start_link(Group, Mod, Args) ->
-    start_link0([], Group, init(Mod, Args)).
+start_link(Group, TxFun, Mod, Args) ->
+    start_link0([], Group, TxFun, init(Mod, Args)).
 
-start_link({local, SupName}, Group, Mod, Args) ->
-    start_link0([{local, SupName}], Group, init(Mod, Args));
+start_link({local, SupName}, Group, TxFun, Mod, Args) ->
+    start_link0([{local, SupName}], Group, TxFun, init(Mod, Args));
 
-start_link({global, _SupName}, _Group, _Mod, _Args) ->
+start_link({global, _SupName}, _Group, _TxFun, _Mod, _Args) ->
     erlang:error(badarg).
 
-start_link0(Prefix, Group, Init) ->
+start_link0(Prefix, Group, TxFun, Init) ->
     case apply(?SUPERVISOR, start_link,
-               Prefix ++ [?MODULE, {overall, Group, Init}]) of
+               Prefix ++ [?MODULE, {overall, Group, TxFun, Init}]) of
         {ok, Pid} -> case catch call(Pid, {init, Pid}) of
                          ok -> {ok, Pid};
                          E  -> E
@@ -225,7 +245,9 @@ count_children(Sup)         -> fold(count_children, Sup, fun add_proplists/2).
 check_childspecs(Specs)     -> ?SUPERVISOR:check_childspecs(Specs).
 
 call(Sup, Msg) -> ?GEN_SERVER:call(mirroring(Sup), Msg, infinity).
-cast(Sup, Msg) -> ?GEN_SERVER:cast(mirroring(Sup), Msg).
+cast(Sup, Msg) -> with_exit_handler(
+                    fun() -> ok end,
+                    fun() -> ?GEN_SERVER:cast(mirroring(Sup), Msg) end).
 
 find_call(Sup, Id, Msg) ->
     Group = call(Sup, group),
@@ -257,14 +279,14 @@ mirroring(Sup) -> child(Sup, mirroring).
 
 %%----------------------------------------------------------------------------
 
-start_internal(Group, ChildSpecs) ->
-    ?GEN_SERVER:start_link(?MODULE, {mirroring, Group, ChildSpecs},
+start_internal(Group, TxFun, ChildSpecs) ->
+    ?GEN_SERVER:start_link(?MODULE, {mirroring, Group, TxFun, ChildSpecs},
                            [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
-init({overall, _Group, ignore}) -> ignore;
-init({overall,  Group, {ok, {Restart, ChildSpecs}}}) ->
+init({overall, _Group, _TxFun, ignore}) -> ignore;
+init({overall,  Group,  TxFun, {ok, {Restart, ChildSpecs}}}) ->
     %% Important: Delegate MUST start before Mirroring so that when we
     %% shut down from above it shuts down last, so Mirroring does not
     %% see it die.
@@ -273,27 +295,30 @@ init({overall,  Group, {ok, {Restart, ChildSpecs}}}) ->
     {ok, {{one_for_all, 0, 1},
           [{delegate, {?SUPERVISOR, start_link, [?MODULE, {delegate, Restart}]},
             temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
-           {mirroring, {?MODULE, start_internal, [Group, ChildSpecs]},
+           {mirroring, {?MODULE, start_internal, [Group, TxFun, ChildSpecs]},
             permanent, 16#ffffffff, worker, [?MODULE]}]}};
 
 
 init({delegate, Restart}) ->
     {ok, {Restart, []}};
 
-init({mirroring, Group, ChildSpecs}) ->
-    {ok, #state{group = Group, initial_childspecs = ChildSpecs}}.
+init({mirroring, Group, TxFun, ChildSpecs}) ->
+    {ok, #state{group              = Group,
+                tx_fun             = TxFun,
+                initial_childspecs = ChildSpecs}}.
 
 handle_call({init, Overall}, _From,
             State = #state{overall            = undefined,
                            delegate           = undefined,
                            group              = Group,
+                           tx_fun             = TxFun,
                            initial_childspecs = ChildSpecs}) ->
     process_flag(trap_exit, true),
     ?PG2:create(Group),
     ok = ?PG2:join(Group, Overall),
     Rest = ?PG2:get_members(Group) -- [Overall],
     case Rest of
-        [] -> {atomic, _} = mnesia:transaction(fun() -> delete_all(Group) end);
+        [] -> TxFun(fun() -> delete_all(Group) end);
         _  -> ok
     end,
     [begin
@@ -303,7 +328,8 @@ handle_call({init, Overall}, _From,
     Delegate = delegate(Overall),
     erlang:monitor(process, Delegate),
     State1 = State#state{overall = Overall, delegate = Delegate},
-    case errors([maybe_start(Group, Overall, Delegate, S) || S <- ChildSpecs]) of
+    case errors([maybe_start(Group, TxFun, Overall, Delegate, S)
+                 || S <- ChildSpecs]) of
         []     -> {reply, ok, State1};
         Errors -> {stop, {shutdown, Errors}, State1}
     end;
@@ -311,16 +337,18 @@ handle_call({init, Overall}, _From,
 handle_call({start_child, ChildSpec}, _From,
             State = #state{overall  = Overall,
                            delegate = Delegate,
-                           group    = Group}) ->
-    {reply, case maybe_start(Group, Overall, Delegate, ChildSpec) of
+                           group    = Group,
+                           tx_fun   = TxFun}) ->
+    {reply, case maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) of
                 already_in_mnesia        -> {error, already_present};
                 {already_in_mnesia, Pid} -> {error, {already_started, Pid}};
                 Else                     -> Else
             end, State};
 
 handle_call({delete_child, Id}, _From, State = #state{delegate = Delegate,
-                                                      group    = Group}) ->
-    {reply, stop(Group, Delegate, Id), State};
+                                                      group    = Group,
+                                                      tx_fun   = TxFun}) ->
+    {reply, stop(Group, TxFun, Delegate, Id), State};
 
 handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
     {reply, apply(?SUPERVISOR, F, [Delegate | A]), State};
@@ -343,7 +371,7 @@ handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
 handle_info({'DOWN', _Ref, process, Pid, Reason},
-            State = #state{overall = Pid, group = Group}) ->
+            State = #state{delegate = Pid, group = Group}) ->
     %% Since the delegate is temporary, its death won't cause us to
     %% die. Since the overall supervisor kills processes in reverse
     %% order when shutting down "from above" and we started after the
@@ -357,14 +385,15 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
     {stop, Reason, State};
 
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
-            State = #state{delegate = Delegate, group = Group,
-                           overall = O}) ->
+            State = #state{delegate = Delegate,
+                           group    = Group,
+                           tx_fun   = TxFun,
+                           overall  = O}) ->
     %% TODO load balance this
     %% No guarantee pg2 will have received the DOWN before us.
     R = case lists:sort(?PG2:get_members(Group)) -- [Pid] of
-            [O | _] -> {atomic, ChildSpecs} =
-                           mnesia:transaction(
-                             fun() -> update_all(O, Pid) end),
+            [O | _] -> ChildSpecs =
+                           TxFun(fun() -> update_all(O, Pid) end),
                        [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
             _       -> []
         end,
@@ -387,14 +416,14 @@ code_change(_OldVsn, State, _Extra) ->
 tell_all_peers_to_die(Group, Reason) ->
     [cast(P, {die, Reason}) || P <- ?PG2:get_members(Group) -- [self()]].
 
-maybe_start(Group, Overall, Delegate, ChildSpec) ->
-    case mnesia:transaction(
-           fun() -> check_start(Group, Overall, Delegate, ChildSpec) end) of
-        {atomic, start}     -> start(Delegate, ChildSpec);
-        {atomic, undefined} -> already_in_mnesia;
-        {atomic, Pid}       -> {already_in_mnesia, Pid};
+maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
+    try TxFun(fun() -> check_start(Group, Overall, Delegate, ChildSpec) end) of
+        start      -> start(Delegate, ChildSpec);
+        undefined  -> already_in_mnesia;
+        Pid        -> {already_in_mnesia, Pid}
+    catch
         %% If we are torn down while in the transaction...
-        {aborted, E}        -> {error, E}
+        {error, E} -> {error, E}
     end.
 
 check_start(Group, Overall, Delegate, ChildSpec) ->
@@ -429,11 +458,12 @@ delete(Group, Id) ->
 start(Delegate, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
-stop(Group, Delegate, Id) ->
-    case mnesia:transaction(fun() -> check_stop(Group, Delegate, Id) end) of
-        {atomic, deleted} -> apply(?SUPERVISOR, delete_child, [Delegate, Id]);
-        {atomic, running} -> {error, running};
-        {aborted, E}      -> {error, E}
+stop(Group, TxFun, Delegate, Id) ->
+    try TxFun(fun() -> check_stop(Group, Delegate, Id) end) of
+        deleted    -> apply(?SUPERVISOR, delete_child, [Delegate, Id]);
+        running    -> {error, running}
+    catch
+        {error, E} -> {error, E}
     end.
 
 check_stop(Group, Delegate, Id) ->

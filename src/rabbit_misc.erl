@@ -53,13 +53,12 @@
 -export([parse_arguments/3]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
--export([const_ok/0, const/1]).
+-export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2, pset/3]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
--export([multi_call/2]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
 -export([version/0, which_applications/0]).
@@ -219,7 +218,6 @@
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
--spec(const_ok/0 :: () -> 'ok').
 -spec(const/1 :: (A) -> thunk(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
@@ -230,8 +228,6 @@
 -spec(pset/3 :: (term(), term(), [term()]) -> term()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
--spec(multi_call/2 ::
-        ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 -spec(version/0 :: () -> string()).
@@ -891,7 +887,6 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
             {error, Reason}
     end.
 
-const_ok() -> ok.
 const(X) -> fun () -> X end.
 
 %% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
@@ -949,31 +944,6 @@ append_rpc_all_nodes(Nodes, M, F, A) ->
                       {badrpc, _} -> [];
                       _           -> Res
                   end || Res <- ResL]).
-
-%% A simplified version of gen_server:multi_call/2 with a sane
-%% API. This is not in gen_server2 as there is no useful
-%% infrastructure there to share.
-multi_call(Pids, Req) ->
-    MonitorPids = [start_multi_call(Pid, Req) || Pid <- Pids],
-    receive_multi_call(MonitorPids, [], []).
-
-start_multi_call(Pid, Req) when is_pid(Pid) ->
-    Mref = erlang:monitor(process, Pid),
-    Pid ! {'$gen_call', {self(), Mref}, Req},
-    {Mref, Pid}.
-
-receive_multi_call([], Good, Bad) ->
-    {lists:reverse(Good), lists:reverse(Bad)};
-receive_multi_call([{Mref, Pid} | MonitorPids], Good, Bad) ->
-    receive
-        {Mref, Reply} ->
-            erlang:demonitor(Mref, [flush]),
-            receive_multi_call(MonitorPids, [{Pid, Reply} | Good], Bad);
-        {'DOWN', Mref, _, _, noconnection} ->
-            receive_multi_call(MonitorPids, Good, [{Pid, nodedown} | Bad]);
-        {'DOWN', Mref, _, _, Reason} ->
-            receive_multi_call(MonitorPids, Good, [{Pid, Reason} | Bad])
-    end.
 
 os_cmd(Command) ->
     case os:type() of

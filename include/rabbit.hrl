@@ -73,7 +73,7 @@
 -record(delivery, {mandatory, confirm, sender, message, msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
--record(event, {type, props, timestamp}).
+-record(event, {type, props, reference = undefined, timestamp}).
 
 -record(message_properties, {expiry, needs_confirming = false}).
 

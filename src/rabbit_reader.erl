@@ -18,7 +18,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/1, info_keys/0, info/1, info/2, force_event_refresh/1,
+-export([start_link/1, info_keys/0, info/1, info/2, force_event_refresh/2,
          shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
@@ -77,7 +77,7 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
--spec(force_event_refresh/1 :: (pid()) -> 'ok').
+-spec(force_event_refresh/2 :: (pid(), reference()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_resources/3 :: (pid(), atom(), boolean()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
@@ -134,8 +134,8 @@ info(Pid, Items) ->
         {error, Error} -> throw(Error)
     end.
 
-force_event_refresh(Pid) ->
-    gen_server:cast(Pid, force_event_refresh).
+force_event_refresh(Pid, Ref) ->
+    gen_server:cast(Pid, {force_event_refresh, Ref}).
 
 conserve_resources(Pid, Source, Conserve) ->
     Pid ! {conserve_resources, Source, Conserve},
@@ -156,18 +156,22 @@ server_properties(Protocol) ->
          [case X of
               {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
                                    longstr,
-                                   list_to_binary(Value)};
+                                   maybe_list_to_binary(Value)};
               {BinKey, Type, Value} -> {BinKey, Type, Value}
           end || X <- RawConfigServerProps ++
-                     [{product,     Product},
-                      {version,     Version},
-                      {platform,    "Erlang/OTP"},
-                      {copyright,   ?COPYRIGHT_MESSAGE},
-                      {information, ?INFORMATION_MESSAGE}]]],
+                     [{product,      Product},
+                      {version,      Version},
+                      {cluster_name, rabbit_nodes:cluster_name()},
+                      {platform,     "Erlang/OTP"},
+                      {copyright,    ?COPYRIGHT_MESSAGE},
+                      {information,  ?INFORMATION_MESSAGE}]]],
 
     %% Filter duplicated properties in favour of config file provided values
     lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
                 NormalizedConfigServerProps).
+
+maybe_list_to_binary(V) when is_binary(V) -> V;
+maybe_list_to_binary(V) when is_list(V)   -> list_to_binary(V).
 
 server_capabilities(rabbit_framing_amqp_0_9_1) ->
     [{<<"publisher_confirms">>,           bool, true},
@@ -396,10 +400,11 @@ handle_other({'$gen_call', From, {info, Items}}, State) ->
                            catch Error -> {error, Error}
                            end),
     State;
-handle_other({'$gen_cast', force_event_refresh}, State)
+handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
   when ?IS_RUNNING(State) ->
-    rabbit_event:notify(connection_created,
-                        [{type, network} | infos(?CREATION_EVENT_KEYS, State)]),
+    rabbit_event:notify(
+      connection_created,
+      [{type, network} | infos(?CREATION_EVENT_KEYS, State)], Ref),
     State;
 handle_other({'$gen_cast', force_event_refresh}, State) ->
     %% Ignore, we will emit a created event once we start running.
@@ -1069,12 +1074,16 @@ i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
 i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
 i(channels,           #v1{channel_count = ChannelCount}) -> ChannelCount;
 i(state, #v1{connection_state = ConnectionState,
-             throttle         = #throttle{last_blocked_by  = BlockedBy,
-                                          last_blocked_at  = T}}) ->
-    Recent = T =/= never andalso timer:now_diff(erlang:now(), T) < 5000000,
-    case {BlockedBy, Recent} of
-        {flow, true} -> flow;
-        {_,    _}    -> ConnectionState
+             throttle         = #throttle{alarmed_by      = Alarms,
+                                          last_blocked_by = WasBlockedBy,
+                                          last_blocked_at = T}}) ->
+    case Alarms =:= [] andalso %% not throttled by resource alarms
+        (credit_flow:blocked() %% throttled by flow now
+         orelse                %% throttled by flow recently
+           (WasBlockedBy =:= flow andalso T =/= never andalso
+            timer:now_diff(erlang:now(), T) < 5000000)) of
+        true  -> flow;
+        false -> ConnectionState
     end;
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
