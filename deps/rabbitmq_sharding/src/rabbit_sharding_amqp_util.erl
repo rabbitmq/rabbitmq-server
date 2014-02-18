@@ -36,5 +36,5 @@ open(X) ->
         E -> E
     end.
 
-params(#exchange{name = #resource{virtual_host = VHost}} = X) ->
+params(#exchange{name = #resource{virtual_host = VHost}}) ->
     #amqp_params_direct{virtual_host = VHost}.
