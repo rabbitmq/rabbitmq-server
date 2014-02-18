@@ -329,7 +329,15 @@ process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
                                   virtual_host = VHost,
                                   adapter_info = adapter_info(Sock)}) of
         {ok, Connection} ->
-            {?CONNACK_ACCEPT, Connection};
+            case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
+                ok          -> {?CONNACK_ACCEPT, Connection};
+                not_allowed -> amqp_connection:close(Connection),
+                               rabbit_log:warning(
+                                 "MQTT login failed for ~p access_refused "
+                                 "(access must be from localhost)~n",
+                                 [binary_to_list(UsernameBin)]),
+                               ?CONNACK_AUTH
+            end;
         {error, {auth_failure, Explanation}} ->
             rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
                              [binary_to_list(UserBin), Explanation]),
