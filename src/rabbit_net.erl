@@ -231,17 +231,16 @@ rdns(Addr) ->
 sock_funs(inbound)  -> {fun peername/1, fun sockname/1};
 sock_funs(outbound) -> {fun sockname/1, fun peername/1}.
 
-is_loopback(Sock) ->
+is_loopback(Sock) when is_port(Sock) ; ?IS_SSL(Sock) ->
     case sockname(Sock) of
-        {ok, {Addr, _Port}} -> is_loopback_addr(Addr);
+        {ok, {Addr, _Port}} -> is_loopback(Addr);
         {error, _}          -> false
-    end.
-
+    end;
 %% We could parse the results of inet:getifaddrs() instead. But that
 %% would be more complex and less maybe Windows-compatible...
-is_loopback_addr({127,_,_,_})             -> true;
-is_loopback_addr({0,0,0,0,0,0,0,1})       -> true;
-is_loopback_addr({0,0,0,0,0,65535,AB,CD}) -> is_loopback_addr(ipv4(AB, CD));
-is_loopback_addr(_)                       -> false.
+is_loopback({127,_,_,_})             -> true;
+is_loopback({0,0,0,0,0,0,0,1})       -> true;
+is_loopback({0,0,0,0,0,65535,AB,CD}) -> is_loopback(ipv4(AB, CD));
+is_loopback(_)                       -> false.
 
 ipv4(AB, CD) -> {AB bsr 8, AB band 255, CD bsr 8, CD band 255}.

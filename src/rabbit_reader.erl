@@ -1025,7 +1025,7 @@ auth_phase(Response,
             State#v1{connection = Connection#connection{
                                     auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
-            case rabbit_access_control:check_user_socket(Username, Sock) of
+            case rabbit_access_control:check_user_loopback(Username, Sock) of
                 ok          -> ok;
                 not_allowed -> auth_fail("user '~s' can only connect via "
                                          "localhost", [Username], Name, State)
