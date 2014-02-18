@@ -85,8 +85,7 @@ queue_name(VHost, QBin) ->
             %% Queue is not part of a shard, return unmodified name
             {ok, QBin};
         [#sharding{shards_per_node = N}] ->
-            Rand = crypto:rand_uniform(0, N),
-            {ok, rabbit_sharding_util:make_queue_name(QBin, a2b(node()), Rand)}
+            {ok, least_consumers(VHost, QBin, N)}
     end.
 
 is_sharded(VHost, QBin) ->
@@ -97,3 +96,41 @@ is_sharded(VHost, QBin) ->
         [#sharding{}] ->
             true
     end.
+
+%% returns the original queue name if it fails to find a proper queue.
+least_consumers(VHost, QBin, N) ->
+    F = fun(QNum) ->
+                QBin2 = rabbit_sharding_util:make_queue_name(
+                          QBin, a2b(node()), QNum),
+                case consumer_count(rabbit_misc:r(VHost, queue, QBin2)) of
+                    {error, E}       -> {error, E};
+                    [{consumers, C}] -> {C, QBin2}
+                end
+
+        end,
+    case do_n(F, N) of
+        []     ->
+            QBin;
+        Queues ->
+            [{_, QBin3} | _ ] = lists:sort(Queues),
+            QBin3
+    end.
+
+consumer_count(QName) ->
+    rabbit_amqqueue:with(
+      QName,
+      fun(Q) ->
+              rabbit_amqqueue:info(Q, [consumers])
+      end).
+
+do_n(F, N) ->
+    do_n(F, 0, N, []).
+
+do_n(_F, N, N, Acc) ->
+    Acc;
+do_n(F, Count, N, Acc) ->
+    Acc2 = case F(Count) of
+               {error, _} -> Acc;
+               Ret        -> [Ret|Acc]
+           end,
+    do_n(F, Count+1, N, Acc2).

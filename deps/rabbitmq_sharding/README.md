@@ -18,8 +18,8 @@ those queues.
 
 ## Auto-scaling ##
 
-One interesting property of this plugin, is that if you add more nodes to your RabbitMQ cluster, then the plugin will automatically create more shards in the new 
-node. Say you had a shard with 4 queues in `node a` and `node b` just joined the cluster. The plugin will automatically create 4 queues in `node b` and join them 
+One interesting property of this plugin, is that if you add more nodes to your RabbitMQ cluster, then the plugin will automatically create more shards in the new
+node. Say you had a shard with 4 queues in `node a` and `node b` just joined the cluster. The plugin will automatically create 4 queues in `node b` and join them
 to the shard partition. Already delivered messages _will not_ be rebalanced, but newly arriving messages will be partitioned to the new queues.
 
 ## Partitioning Messages ##
@@ -33,7 +33,7 @@ The first one has the advantage of shipping directly with RabbitMQ.
 
 While the plugin creates a bunch of queues behind the scenes, the idea is that those queues act like a big logical queue where you consume messages from. The
 plugin uses a new Erlang behaviour introduced introduce in the latest development version of RabbitMQ that allows the plugin to re-route calls to _basic.consume_
-to a different queue from the original one required by the user. 
+to a different queue from the original one required by the user.
 
 An example should illustrate this better: let's say you declared the exchange _images_ to be a
 sharded exchange. Then RabbitMQ created behind the scenes queues _shard: - nodename images 1_, _shard: - nodename images 2_, _shard: - nodename images 3_ and
@@ -42,8 +42,7 @@ a `basic.consume('images')` and let RabbitMQ figure out the rest. This plugin do
 
 TL;DR: if you have a shard called _images_, then you can directly consume from a queue called _images_.
 
-How does it work? The plugin will chose a random queue from the shard, provided the queue contents are local to the broker you are connected to. In the future we
-might provide different strategies for choosing a queue, for example, the one with `"least-consumers"` could be an option.
+How does it work? The plugin will chose the queue from the shard with the _least amount of consumers_, provided the queue contents are local to the broker you are connected to.
 
 ## Why? ##
 
@@ -57,7 +56,7 @@ On the other hand, the producers don't need to care about what's behind the exch
 All the plumbing to __automatically maintain__ the shard queues is done by the plugin. If you add more nodes to the cluster, then the plugin
 will __automatically create queues in those nodes__.
 
-If you remove nodes from the cluster then RabbitMQ will take care of taking them out of the list of bound queues. Message loss can happen in the case 
+If you remove nodes from the cluster then RabbitMQ will take care of taking them out of the list of bound queues. Message loss can happen in the case
 where a race occurs from a node going away and your message arriving to the shard exchange. If you can't afford to lose a message then you can use
 [publisher confirms](http://www.rabbitmq.com/confirms.html) to prevent message loss.
 
@@ -123,8 +122,8 @@ then the routing keys need to be "an integer as a string", since routing keys in
 ```bash
 ../rabbitmq-server/scripts/rabbitmqctl set_parameter sharding-definition my_shard '{"shards-per-node": 2, "routing-key": "1234"}'
 ```
-That parameter will tell the plugin to create 2 sharded queues per node. Based on the number of cores in your server, you need to decide 
-how many `shards-per-node` you want. And finally the routing key used in this case will be `"1234"`. That routing key will apply in the 
+That parameter will tell the plugin to create 2 sharded queues per node. Based on the number of cores in your server, you need to decide
+how many `shards-per-node` you want. And finally the routing key used in this case will be `"1234"`. That routing key will apply in the
 context of a consistent hash exchange.
 
 Let's add our policy now:
@@ -154,9 +153,9 @@ starting at zero.
 
 ### What strategy is used for picking the queue name ###
 
-When you issue a `basic.consume`, the plugin will randomly choose a local sharded queue to return from. Of course the local sharded queue
-will be part of the set of queues that belong to the chosen shard. In the future the plugin would allow users to specify different strategies for
-selecting queues. A valid strategy could be to choose the queue with least consumers.
+When you issue a `basic.consume`, the plugin will choose the queue with the least amount of consumers.
+The queue will be local to the broker your client is connected to. Of course the local sharded queue
+will be part of the set of queues that belong to the chosen shard.
 
 ## Configuration parameters ##
 
@@ -194,8 +193,8 @@ doesn't make much sense when there's actually a sharded queue by that name. In t
 
 At the moment these are the AMPQ methods intercepted by the plugin, and the respective behaviour:
 
-- `'basic.consume', QueueName`: The plugin will randomly pick a sharded queue from the `QueueName` shard.
-- `'basic.get', QueueName`: The plugin will randomly pick a sharded queue from the `QueueName` shard.
+- `'basic.consume', QueueName`: The plugin will pick the sharded queue with the least amount of consumers from the `QueueName` shard.
+- `'basic.get', QueueName`: The plugin will pick the sharded queue with the least amount of consumers from the `QueueName` shard.
 - `'queue.declare', QueueName`: The plugin forbids declaring queues with the same name of an existing shard, since `basic.consume` behaviour would be undefined.
 - `'queue.bind', QueueName`: since there isn't an actual `QueueName` queue, this method returns a channel error.
 - `'queue.unbind', QueueName`: since there isn't an actual `QueueName` queue, this method returns a channel error.
