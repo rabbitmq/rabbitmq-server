@@ -6,7 +6,7 @@
                            [exchange_decorator, <<"sharding">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
-                    
+
 -rabbit_boot_step({rabbit_sharding_exchange_decorator_mnesia,
                    [{description, "rabbit sharding exchange decorator: mnesia"},
                     {mfa, {?MODULE, setup_schema, []}},
@@ -57,50 +57,50 @@ active_for(X) ->
 
 %% we have to remove the policy from ?SHARDING_TABLE
 delete(transaction, _X, _Bs) -> ok;
-delete(none, X, _Bs) -> 
-  maybe_stop(X).
+delete(none, X, _Bs) ->
+    maybe_stop(X).
 
 %% we have to remove the old policy from ?SHARDING_TABLE
 %% and then add the new one.
-policy_changed(OldX, NewX) -> 
-  maybe_stop(OldX),
-  maybe_start(NewX).
+policy_changed(OldX, NewX) ->
+    maybe_stop(OldX),
+    maybe_start(NewX).
 
 %%----------------------------------------------------------------------------
 
 maybe_start(#exchange{name = XName} = X)->
     case shard(X) of
-        true  -> 
+        true  ->
             SPN = rabbit_sharding_util:shards_per_node(X),
             RK  = rabbit_sharding_util:routing_key(X),
             Res = rabbit_misc:execute_mnesia_transaction(
-              fun () ->
-                  mnesia:write(?SHARDING_TABLE,
-                               #sharding{name            = XName,
-                                         shards_per_node = SPN,
-                                         routing_key     = RK},
-                               write)
-              end),
+                    fun () ->
+                            mnesia:write(?SHARDING_TABLE,
+                                         #sharding{name            = XName,
+                                                   shards_per_node = SPN,
+                                                   routing_key     = RK},
+                                         write)
+                    end),
             rabbit_sharding_util:rpc_call(ensure_sharded_queues, [X]),
             ok;
         false -> ok
     end.
 
 maybe_stop(#exchange{name = XName} = X) ->
-  case shard(X) of
-    true  -> 
-      rabbit_misc:execute_mnesia_transaction(
-        fun () ->
-            mnesia:delete({?SHARDING_TABLE, XName})
-        end),
-      ok;
-    false -> ok
-  end.
+    case shard(X) of
+        true  ->
+            rabbit_misc:execute_mnesia_transaction(
+              fun () ->
+                      mnesia:delete({?SHARDING_TABLE, XName})
+              end),
+            ok;
+        false -> ok
+    end.
 
 shard(X) ->
-    case sharding_up() of 
+    case sharding_up() of
         true -> rabbit_sharding_util:shard(X);
         false -> false
     end.
-    
+
 sharding_up() -> is_pid(whereis(rabbit_sharding_app)).
