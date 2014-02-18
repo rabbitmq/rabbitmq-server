@@ -16,13 +16,11 @@
 
 -module(rabbit_boot).
 
+-export([prepare_boot_table/0]).
 -export([boot_with/1, shutdown/1]).
--export([start_link/0, start/1, stop/1]).
+-export([start/1, stop/1]).
 -export([run_boot_steps/0]).
 -export([boot_error/2, boot_error/4]).
-
--export([init/1, handle_call/3, handle_cast/2,
-         handle_info/2, terminate/2, code_change/3]).
 
 -ifdef(use_specs).
 
@@ -37,12 +35,6 @@
 
 -endif.
 
--define(BOOT_FILE, "boot.info").
-
--define(INIT_SERVER, rabbit_boot_table_initial).
--define(SERVER, rabbit_boot_table).
-
-%%
 %% When the broker is starting, we must run all the boot steps within the
 %% rabbit:start/2 application callback, after rabbit_sup has started and
 %% before any plugin applications begin to start. To achieve this, we process
@@ -50,60 +42,17 @@
 %%
 %% If the broker is already running however, we must run all boot steps for
 %% each application/plugin we're starting, plus any other (dependent) steps.
-%% To achieve this, we process the boot steps from all loaded applications,
-%% but skip those that have already been run (i.e., steps that have been run
-%% once whilst, or even since the broker started).
-%%
-%% Tracking which boot steps have already been run is done via an ets table.
-%% Because we frequently find ourselves needing to query this table without
-%% the rabbit application running (e.g., during the initial boot sequence
-%% and when we've "cold started" a node without any running applications),
-%% this table is serialized to a file after each operation. When the node is
-%% stopped cleanly, the file is deleted. When a node is in the process of
-%% starting, the file is also removed and replaced (since we do not want to
-%% track boot steps from a previous incarnation of the node).
-%%
-
-%%---------------------------------------------------------------------------
-%% gen_server API - we use a gen_server to keep our ets table around for the
-%% lifetime of the broker. Since we can't add a gen_server to rabbit_sup
-%% during the initial boot phase (because boot-steps need evaluating prior to
-%% starting rabbit_sup), we overload the gen_server init/2 callback, providing
-%% an initial table owner and subsequent heir that gets hooked into rabbit_sup
-%% once it has started.
-
-start_link() -> gen_server:start_link(?MODULE, [?SERVER], []).
-
-init([?INIT_SERVER]) ->
-    ets:new(?MODULE, [named_table, public, ordered_set]),
-    {ok, ?INIT_SERVER};
-init(_) ->
-    %% if we crash (?), we'll need to re-create our ets table when rabbit_sup
-    %% restarts us, so there's no guarantee that the INIT_SERVER will be
-    %% alive when we get here!
-    case catch gen_server:call(?INIT_SERVER, {inheritor, self()}) of
-        {'EXIT', {noproc, _}} -> init([?INIT_SERVER]);
-        ok                    -> ok
-    end,
-    {ok, ?SERVER}.
-
-handle_call({inheritor, Pid}, From, ?INIT_SERVER) ->
-    %% setting the hier seems simpler than using give_away here
-    ets:setopts(?MODULE, [{heir, Pid, []}]),
-    gen_server:reply(From, ok),
-    {stop, normal, ?INIT_SERVER};
-handle_call(_, _From, ?SERVER) ->
-    {noreply, ?SERVER}.
-
-handle_cast(_, State) -> {noreply, State}.
-handle_info(_, State) -> {noreply, State}.
-terminate(_, _)       -> ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+%% To achieve this, we process boot steps as usual, but skip those that have
+%% already run (i.e., whilst, or even since the broker started).
+%% 
+%% Tracking which boot steps have run is done via a shared ets table, owned
+%% by the "rabbit" process.
 
 %%---------------------------------------------------------------------------
 %% Public API
+
+prepare_boot_table() ->
+    ets:new(?MODULE, [named_table, public, ordered_set]).
 
 boot_with(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
@@ -138,7 +87,6 @@ shutdown(Apps) ->
     ok = app_utils:stop_applications(Apps).
 
 start(Apps) ->
-    ensure_boot_table(),
     force_reload(Apps),
     StartupApps = app_utils:app_dependency_order(Apps, false),
     case whereis(?MODULE) of
@@ -149,7 +97,6 @@ start(Apps) ->
                                       handle_app_error(could_not_start)).
 
 stop(Apps) ->
-    ensure_boot_table(),
     try
         ok = app_utils:stop_applications(
                Apps, handle_app_error(error_during_shutdown))
@@ -254,13 +201,6 @@ load_mod(Mod) ->
 
 await_startup(Apps) ->
     app_utils:wait_for_applications(Apps).
-
-ensure_boot_table() ->
-    case ets:info(?MODULE) of
-        undefined -> gen_server:start({local, ?INIT_SERVER}, ?MODULE,
-                                      [?INIT_SERVER], []);
-        _Pid      -> ok
-    end.
 
 handle_app_error(Term) ->
     fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->

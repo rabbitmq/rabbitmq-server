@@ -41,12 +41,6 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
--rabbit_boot_step({boot_table,
-                   [{mfa,         {rabbit_sup, start_child,
-                                   [rabbit_boot_table, rabbit_boot, []]}},
-                    {requires,    file_handle_cache},
-                    {enables,     external_infrastructure}]}).
-
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {requires,    file_handle_cache},
@@ -425,6 +419,7 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
+            rabbit_boot:prepare_boot_table(),
             rabbit_boot:run_boot_steps(),
             {ok, SupPid};
         Error ->
