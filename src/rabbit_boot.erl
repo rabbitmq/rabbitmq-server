@@ -17,9 +17,12 @@
 -module(rabbit_boot).
 
 -export([boot_with/1, shutdown/1]).
--export([start/1, stop/1]).
+-export([start_link/0, start/1, stop/1]).
 -export([run_boot_steps/0]).
 -export([boot_error/2, boot_error/4]).
+
+-export([init/1, handle_call/3, handle_cast/2,
+         handle_info/2, terminate/2, code_change/3]).
 
 -ifdef(use_specs).
 
@@ -35,6 +38,9 @@
 -endif.
 
 -define(BOOT_FILE, "boot.info").
+
+-define(INIT_SERVER, rabbit_boot_table_initial).
+-define(SERVER, rabbit_boot_table).
 
 %%
 %% When the broker is starting, we must run all the boot steps within the
@@ -59,10 +65,47 @@
 %%
 
 %%---------------------------------------------------------------------------
+%% gen_server API - we use a gen_server to keep our ets table around for the
+%% lifetime of the broker. Since we can't add a gen_server to rabbit_sup
+%% during the initial boot phase (because boot-steps need evaluating prior to
+%% starting rabbit_sup), we overload the gen_server init/2 callback, providing
+%% an initial table owner and subsequent heir that gets hooked into rabbit_sup
+%% once it has started.
+
+start_link() -> gen_server:start_link(?MODULE, [?SERVER], []).
+
+init([?INIT_SERVER]) ->
+    ets:new(?MODULE, [named_table, public, ordered_set]),
+    {ok, ?INIT_SERVER};
+init(_) ->
+    %% if we crash (?), we'll need to re-create our ets table when rabbit_sup
+    %% restarts us, so there's no guarantee that the INIT_SERVER will be
+    %% alive when we get here!
+    case catch gen_server:call(?INIT_SERVER, {inheritor, self()}) of
+        {'EXIT', {noproc, _}} -> init([?INIT_SERVER]);
+        ok                    -> ok
+    end,
+    {ok, ?SERVER}.
+
+handle_call({inheritor, Pid}, From, ?INIT_SERVER) ->
+    %% setting the hier seems simpler than using give_away here
+    ets:setopts(?MODULE, [{heir, Pid, []}]),
+    gen_server:reply(From, ok),
+    {stop, normal, ?INIT_SERVER};
+handle_call(_, _From, ?SERVER) ->
+    {noreply, ?SERVER}.
+
+handle_cast(_, State) -> {noreply, State}.
+handle_info(_, State) -> {noreply, State}.
+terminate(_, _)       -> ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%---------------------------------------------------------------------------
 %% Public API
 
 boot_with(StartFun) ->
-    %% TODO: this should be done with monitors, not links, I think
     Marker = spawn_link(fun() -> receive stop -> ok end end),
     case catch register(rabbit_boot, Marker) of
         true -> try
@@ -86,32 +129,24 @@ boot_with(StartFun) ->
     end.
 
 shutdown(Apps) ->
-    try
-        case whereis(?MODULE) of
-            undefined -> ok;
-            _         -> await_startup(Apps)
-        end,
-        %% TODO: put this back in somewhere sensible...
-        %% rabbit_log:info("Stopping RabbitMQ~n"),
-        ok = app_utils:stop_applications(Apps)
-    after
-        delete_boot_table()
-    end.
+    case whereis(?MODULE) of
+        undefined -> ok;
+        _         -> await_startup(Apps)
+    end,
+    %% TODO: put this back in somewhere sensible...
+    %% rabbit_log:info("Stopping RabbitMQ~n"),
+    ok = app_utils:stop_applications(Apps).
 
 start(Apps) ->
-    try
-        ensure_boot_table(),
-        force_reload(Apps),
-        StartupApps = app_utils:app_dependency_order(Apps, false),
-        case whereis(?MODULE) of
-            undefined -> run_boot_steps();
-            _         -> ok
-        end,
-        ok = app_utils:start_applications(StartupApps,
-                                          handle_app_error(could_not_start))
-    after
-        save_boot_table()
-    end.
+    ensure_boot_table(),
+    force_reload(Apps),
+    StartupApps = app_utils:app_dependency_order(Apps, false),
+    case whereis(?MODULE) of
+        undefined -> run_boot_steps();
+        _         -> ok
+    end,
+    ok = app_utils:start_applications(StartupApps,
+                                      handle_app_error(could_not_start)).
 
 stop(Apps) ->
     ensure_boot_table(),
@@ -119,15 +154,11 @@ stop(Apps) ->
         ok = app_utils:stop_applications(
                Apps, handle_app_error(error_during_shutdown))
     after
-        try
-            BootSteps = load_steps(boot),
-            ToDelete = [Step || {App, _, _}=Step <- BootSteps,
-                                lists:member(App, Apps)],
-            [ets:delete(?MODULE, Step) || {_, Step, _} <- ToDelete],
-            run_cleanup_steps(Apps)
-        after
-            save_boot_table()
-        end,
+        BootSteps = load_steps(boot),
+        ToDelete = [Step || {App, _, _}=Step <- BootSteps,
+                            lists:member(App, Apps)],
+        [ets:delete(?MODULE, Step) || {_, Step, _} <- ToDelete],
+        run_cleanup_steps(Apps),
         [begin
              {ok, Mods} = application:get_key(App, modules),
              [begin
@@ -224,49 +255,12 @@ load_mod(Mod) ->
 await_startup(Apps) ->
     app_utils:wait_for_applications(Apps).
 
-delete_boot_table() ->
-    case filelib:is_file(boot_file()) of
-        true  -> file:delete(boot_file());
-        false -> ok
-    end.
-
 ensure_boot_table() ->
-    case whereis(?MODULE) of
-        undefined ->
-            case filelib:is_file(boot_file()) of
-                true  -> load_table();
-                false -> clean_table()
-            end;
-        _Pid ->
-            clean_table()
-    end.
-
-clean_table() ->
-    delete_boot_table(),
     case ets:info(?MODULE) of
-        undefined ->
-            ets:new(?MODULE, [named_table, public, ordered_set]);
-        _ ->
-            ok
+        undefined -> gen_server:start({local, ?INIT_SERVER}, ?MODULE,
+                                      [?INIT_SERVER], []);
+        _Pid      -> ok
     end.
-
-load_table() ->
-    case ets:file2tab(boot_file(), [{verify, true}]) of
-        {error, _} -> clean_table();
-        {ok, _Tab} -> ok
-    end.
-
-save_boot_table() ->
-    delete_boot_table(),
-    case ets:info(?MODULE) of
-        undefined -> ok;
-        _         -> ets:tab2file(?MODULE, boot_file(),
-                                  [{extended_info, [object_count]}]),
-                     ets:delete(?MODULE)
-    end.
-
-boot_file() ->
-    filename:join(rabbit_mnesia:dir(), ?BOOT_FILE).
 
 handle_app_error(Term) ->
     fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
@@ -275,18 +269,18 @@ handle_app_error(Term) ->
             throw({Term, App, Reason})
     end.
 
-run_cleanup_step({_, _, Attributes}) ->
-    run_step_name(Attributes, cleanup).
+run_cleanup_step({_, StepName, Attributes}) ->
+    run_step_name(StepName, Attributes, cleanup).
 
 run_boot_step({_, StepName, Attributes}) ->
     case catch already_run(StepName) of
-        false -> ok = run_step_name(Attributes, mfa),
+        false -> ok = run_step_name(StepName, Attributes, mfa),
                  mark_complete(StepName);
         _     -> ok
     end,
     ok.
 
-run_step_name(Attributes, AttributeName) ->
+run_step_name(StepName, Attributes, AttributeName) ->
     case [MFA || {Key, MFA} <- Attributes,
                  Key =:= AttributeName] of
         [] ->
@@ -296,9 +290,11 @@ run_step_name(Attributes, AttributeName) ->
                  apply(M,F,A)
              of
                  ok              -> ok;
-                 {error, Reason} -> boot_error(Reason, not_available)
+                 {error, Reason} -> boot_error({boot_step, StepName, Reason},
+                                               not_available)
              catch
-                 _:Reason -> boot_error(Reason, erlang:get_stacktrace())
+                 _:Reason -> boot_error({boot_step, StepName, Reason},
+                                        erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             ok
     end.
