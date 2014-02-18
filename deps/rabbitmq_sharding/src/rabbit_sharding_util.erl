@@ -1,8 +1,9 @@
 -module(rabbit_sharding_util).
 
--export([shard/1, rpc_call/2, sharded_exchanges/1]).
--export([get_policy/1, exchange_bin/1, make_queue_name/3, a2b/1]).
--export([shards_per_node/1, routing_key/1]).
+-export([shard/1, sharded_exchanges/1]).
+-export([get_policy/1, shards_per_node/1, routing_key/1]).
+-export([exchange_bin/1, make_queue_name/3]).
+-export([a2b/1, rpc_call/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include ("rabbit_sharding.hrl").
@@ -23,14 +24,8 @@ shard0(X) ->
 sharded_exchanges(VHost) ->
     [X || X <- find_exchanges(VHost), shard(X)].
 
-rpc_call(F, Args) ->
-    [rpc:call(Node, rabbit_sharding_shard, F, Args) ||
-        Node <- rabbit_mnesia:cluster_nodes(running)].
-
-make_queue_name(QBin, NodeBin, QNum) ->
-    %% we do this to prevent unprintable characters in queue names
-    QNumBin = list_to_binary(lists:flatten(io_lib:format("~p", [QNum]))),
-    <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
+get_policy(X) ->
+    rabbit_policy:get(<<"sharding-definition">>, X).
 
 shards_per_node(X) ->
     get_parameter(<<"shards-per-node">>, X, ?DEFAULT_SHARDS_NUM).
@@ -39,10 +34,16 @@ shards_per_node(X) ->
 routing_key(X) ->
     get_parameter(<<"routing-key">>, X, ?DEFAULT_RK).
 
-get_policy(X) ->
-    rabbit_policy:get(<<"sharding-definition">>, X).
-
 exchange_bin(#resource{name = XBin}) -> XBin.
+
+make_queue_name(QBin, NodeBin, QNum) ->
+    %% we do this to prevent unprintable characters in queue names
+    QNumBin = list_to_binary(lists:flatten(io_lib:format("~p", [QNum]))),
+    <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
+
+rpc_call(F, Args) ->
+    [rpc:call(Node, rabbit_sharding_shard, F, Args) ||
+        Node <- rabbit_mnesia:cluster_nodes(running)].
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
@@ -59,7 +60,7 @@ get_parameter_value(Comp, Param, X, Default) ->
         undefined -> Default;
         Name      ->
             case rabbit_runtime_parameters:value(
-                   vhos2t(X), Comp, Name) of
+                   vhost(X), Comp, Name) of
                 not_found -> Default;
                 Value     -> pget(Param, Value, Default)
             end
