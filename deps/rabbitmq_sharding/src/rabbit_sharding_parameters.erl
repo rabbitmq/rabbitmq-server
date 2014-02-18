@@ -29,9 +29,9 @@ validate(_VHost, <<"shard">>, <<"routing-key">>, Term) ->
 
 validate(_VHost, <<"sharding-definition">>, Name, Term) ->
     rabbit_parameter_validation:proplist(
-       Name,
-       [{<<"shards-per-node">>, fun validate_shards_per_node/2, optional},
-        {<<"routing-key">>, fun rabbit_parameter_validation:binary/2, optional}],
+      Name,
+      [{<<"shards-per-node">>, fun validate_shards_per_node/2, optional},
+       {<<"routing-key">>, fun rabbit_parameter_validation:binary/2, optional}],
       Term);
 
 validate(_VHost, _Component, Name, _Term) ->
@@ -53,7 +53,7 @@ notify(VHost, <<"shard">>, <<"routing-key">>, _Term) ->
 notify(_VHost, <<"shard">>, _Name, _Term) ->
     ok;
 
-%% Maybe increase shard number by declaring new queues 
+%% Maybe increase shard number by declaring new queues
 %% in case shards-per-node increased.
 %% We can't delete extra queues because the user might have messages on them.
 %% We just ensure that there are SPN number of queues.
