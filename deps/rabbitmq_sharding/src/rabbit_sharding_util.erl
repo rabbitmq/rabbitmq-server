@@ -37,10 +37,6 @@ make_queue_name(QBin, NodeBin, QNum) ->
     QNumBin = list_to_binary(lists:flatten(io_lib:format("~p", [QNum]))),
     <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
 
-exchange_bin(#resource{name = XBin}) -> XBin.
-
-a2b(A) -> list_to_binary(atom_to_list(A)).
-
 shards_per_node(X) ->
     get_parameter(<<"shards-per-node">>, X, ?DEFAULT_SHARDS_NUM).
 
@@ -71,6 +67,10 @@ get_parameter_value(Comp, Param, X, Default) ->
                 Value     -> pget(Param, Value, Default)
             end
     end.
+
+exchange_bin(#resource{name = XBin}) -> XBin.
+
+a2b(A) -> list_to_binary(atom_to_list(A)).
 
 %%----------------------------------------------------------------------------
 
