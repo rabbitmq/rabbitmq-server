@@ -24,14 +24,15 @@
 
 -ifdef(use_specs).
 
--spec(boot_with/1      :: (fun(() -> 'ok')) -> 'ok').
--spec(shutdown/1       :: ([atom()]) -> 'ok').
--spec(start/1          :: ([atom()]) -> 'ok').
--spec(stop/1           :: ([atom()]) -> 'ok').
--spec(run_boot_steps/0 :: () -> 'ok').
--spec(boot_error/2     :: (term(), not_available | [tuple()]) -> no_return()).
--spec(boot_error/4     :: (term(), string(), [any()], not_available | [tuple()])
-                          -> no_return()).
+-spec(prepare_boot_table/0 :: () -> 'ok').
+-spec(boot_with/1          :: (fun(() -> 'ok')) -> 'ok').
+-spec(shutdown/1           :: ([atom()]) -> 'ok').
+-spec(start/1              :: ([atom()]) -> 'ok').
+-spec(stop/1               :: ([atom()]) -> 'ok').
+-spec(run_boot_steps/0     :: () -> 'ok').
+-spec(boot_error/2         :: (term(), not_available | [tuple()]) -> no_return()).
+-spec(boot_error/4         :: (term(), string(), [any()], not_available | [tuple()])
+                              -> no_return()).
 
 -endif.
 
