@@ -1076,9 +1076,9 @@ i(state, #v1{connection_state = ConnectionState,
              throttle         = #throttle{alarmed_by      = Alarms,
                                           last_blocked_by = WasBlockedBy,
                                           last_blocked_at = T}}) ->
-    case Alarms =:= [] andalso %% not blocked by resource alarms
-        (credit_flow:blocked() %% blocked by flow now
-         orelse                %% blocked by flow recently
+    case Alarms =:= [] andalso %% not throttled by resource alarms
+        (credit_flow:blocked() %% throttled by flow now
+         orelse                %% throttled by flow recently
            (WasBlockedBy =:= flow andalso T =/= never andalso
             timer:now_diff(erlang:now(), T) < 5000000)) of
         true  -> flow;
