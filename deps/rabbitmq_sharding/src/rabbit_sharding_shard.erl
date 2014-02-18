@@ -15,6 +15,8 @@
 -import(rabbit_sharding_util, [a2b/1, exchange_name/1]).
 -import(rabbit_misc, [r/3]).
 
+%% We make sure the sharded queues are created when
+%% RabbitMQ starts.
 maybe_shard_exchanges() ->
     [maybe_shard_exchanges(V) || V <- rabbit_vhost:list()],
     ok.
@@ -23,20 +25,24 @@ maybe_shard_exchanges(VHost) ->
     [rabbit_sharding_util:rpc_call(ensure_sharded_queues, [X]) || 
         X <- rabbit_sharding_util:sharded_exchanges(VHost)].
 
+%% A particular sharding-definition has changed, we need to update
+%% the shard. See rabbit_sharding_parameters:notify/4 and 
+%% rabbit_sharding_parameters:notify_clear/3 for more docs.
 update_named_shard(VHost, Name) ->
     [rabbit_sharding_util:rpc_call(update_shard, [X, all]) || 
         X <- rabbit_sharding_util:sharded_exchanges(VHost), 
         rabbit_sharding_util:get_policy(X) =:= Name].
 
+%% Either the shards-per-node or routing-key parameters got
+%% updated or cleared
 update_shards(VHost, What) ->
     [rabbit_sharding_util:rpc_call(update_shard, [X, What]) || 
         X <- rabbit_sharding_util:sharded_exchanges(VHost)].
-
+%% queue needs to be started on the respective node.
+%% connection will be local.
+%% each rabbit_sharding_shard will receive the event
+%% and can declare the queue locally
 ensure_sharded_queues(#exchange{name = XName} = X) ->
-    %% queue needs to be started on the respective node.
-    %% connection will be local.
-    %% each rabbit_sharding_shard will receive the event
-    %% and can declare the queue locally
     RKey = rabbit_sharding_util:routing_key(X),
     F = fun (N) ->
             QBin = rabbit_sharding_util:make_queue_name(
@@ -54,6 +60,9 @@ ensure_sharded_queues(#exchange{name = XName} = X) ->
     rabbit_sharding_amqp_util:disposable_connection_calls(X, 
         lists:flatten(do_n(F, SPN)), ErrFun).
 
+%% we either need to update all the shard parametes or just the
+%% shards_per_node. When updating all we need to unbind the queues 
+%% from the older routing key
 update_shard(X, all) ->
     {ok, Old, _New} = internal_update_shard(X),
     unbind_sharded_queues(Old, X),
