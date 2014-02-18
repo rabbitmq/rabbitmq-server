@@ -12,7 +12,7 @@
                     {requires,    direct_client},
                     {enables,     networking}]}).
 
--import(rabbit_sharding_util, [a2b/1, exchange_name/1]).
+-import(rabbit_sharding_util, [a2b/1, exchange_bin/1]).
 -import(rabbit_misc, [r/3]).
 
 %% We make sure the sharded queues are created when
@@ -46,9 +46,9 @@ ensure_sharded_queues(#exchange{name = XName} = X) ->
     RKey = rabbit_sharding_util:routing_key(X),
     F = fun (N) ->
             QBin = rabbit_sharding_util:make_queue_name(
-                       exchange_name(XName), a2b(node()), N),
+                       exchange_bin(XName), a2b(node()), N),
             [#'queue.declare'{queue = QBin, durable = true},
-             #'queue.bind'{exchange = exchange_name(XName), 
+             #'queue.bind'{exchange = exchange_bin(XName), 
                            queue = QBin, 
                            routing_key = RKey}]
         end,
@@ -73,7 +73,7 @@ update_shard(X, shards_per_node) ->
     ensure_sharded_queues(X).
 
 unbind_sharded_queues(Old, #exchange{name = XName} = X) ->
-    XBin = exchange_name(XName),
+    XBin = exchange_bin(XName),
     OldSPN = Old#sharding.shards_per_node,
     OldRKey = Old#sharding.routing_key,
     F = fun (N) ->

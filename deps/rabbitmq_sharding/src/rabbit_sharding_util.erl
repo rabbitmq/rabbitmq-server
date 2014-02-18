@@ -1,7 +1,7 @@
 -module(rabbit_sharding_util).
 
 -export([shard/1, rpc_call/2, sharded_exchanges/1]).
--export([get_policy/1, exchange_name/1, make_queue_name/3, a2b/1]).
+-export([get_policy/1, exchange_bin/1, make_queue_name/3, a2b/1]).
 -export([shards_per_node/1, routing_key/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -37,7 +37,7 @@ make_queue_name(QBin, NodeBin, QNum) ->
     QNumBin = list_to_binary(lists:flatten(io_lib:format("~p", [QNum]))),
     <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
 
-exchange_name(#resource{name = XBin}) -> XBin.
+exchange_bin(#resource{name = XBin}) -> XBin.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
