@@ -50,9 +50,14 @@ get_policy(X) ->
 get_parameter(Parameter, X, Default) ->
     Default2 = rabbit_runtime_parameters:value(
                  vhost(X), <<"sharding">>, Parameter, Default),
-    get_parameter_value(<<"sharding-definition">>, Parameter, 
-        X, Default2).
+    get_parameter_value(<<"sharding-definition">>, Parameter,
+                        X, Default2).
 
+exchange_bin(#resource{name = XBin}) -> XBin.
+
+a2b(A) -> list_to_binary(atom_to_list(A)).
+
+%%----------------------------------------------------------------------------
 
 get_parameter_value(Comp, Param, X, Default) ->
     case get_policy(X) of
@@ -64,12 +69,6 @@ get_parameter_value(Comp, Param, X, Default) ->
                 Value     -> pget(Param, Value, Default)
             end
     end.
-
-exchange_bin(#resource{name = XBin}) -> XBin.
-
-a2b(A) -> list_to_binary(atom_to_list(A)).
-
-%%----------------------------------------------------------------------------
 
 find_exchanges(VHost) ->
     rabbit_exchange:list(VHost).
