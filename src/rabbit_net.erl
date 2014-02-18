@@ -77,7 +77,7 @@
         (socket(), 'inbound' | 'outbound')
         -> ok_val_or_error({host_or_ip(), rabbit_networking:ip_port(),
                             host_or_ip(), rabbit_networking:ip_port()})).
--spec(is_loopback/1 :: (socket()) -> boolean()).
+-spec(is_loopback/1 :: (socket() | inet:ip_address()) -> boolean()).
 
 -endif.
 
