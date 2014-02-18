@@ -1,6 +1,6 @@
 -module(rabbit_sharding_util).
 
--export([shard/1, rpc_call/2, find_exchanges/1, sharded_exchanges/1]).
+-export([shard/1, rpc_call/2, sharded_exchanges/1]).
 -export([get_policy/1, exchange_name/1, make_queue_name/3, a2b/1]).
 -export([shards_per_node/1, routing_key/1]).
 
@@ -39,9 +39,6 @@ make_queue_name(QBin, NodeBin, QNum) ->
 
 exchange_name(#resource{name = XBin}) -> XBin.
 
-find_exchanges(VHost) ->
-    rabbit_exchange:list(VHost).
-
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
 shards_per_node(X) ->
@@ -74,3 +71,8 @@ get_parameter_value(Comp, Param, X, Default) ->
                 Value     -> pget(Param, Value, Default)
             end
     end.
+
+%%----------------------------------------------------------------------------
+
+find_exchanges(VHost) ->
+    rabbit_exchange:list(VHost).
