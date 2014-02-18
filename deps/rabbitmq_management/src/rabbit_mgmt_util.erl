@@ -112,14 +112,23 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
     ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
     case rabbit_access_control:check_user_pass_login(Username, Password) of
         {ok, User = #user{tags = Tags}} ->
-            case is_mgmt_user(Tags) of
-                true  -> case Fun(User) of
-                             true  -> {true, ReqData,
-                                       Context#context{user     = User,
-                                                       password = Password}};
-                             false -> ErrFun(ErrorMsg)
-                         end;
-                false -> ErrFun(<<"Not management user">>)
+            IPStr = wrq:peer(ReqData),
+            {ok, IP} = inet:parse_address(IPStr),
+            case rabbit_access_control:check_user_loopback(Username, IP) of
+                ok ->
+                    case is_mgmt_user(Tags) of
+                        true ->
+                            case Fun(User) of
+                                true  -> {true, ReqData,
+                                          Context#context{user     = User,
+                                                          password = Password}};
+                                false -> ErrFun(ErrorMsg)
+                            end;
+                        false ->
+                            ErrFun(<<"Not management user">>)
+                    end;
+                not_allowed ->
+                    ErrFun(<<"User can only log in via localhost">>)
             end;
         _ ->
             ErrFun(<<"Login failed">>)
