@@ -20,7 +20,6 @@
 -export([shutdown/1]).
 -export([start/1, stop/1]).
 -export([already_run/1, mark_complete/1]).
--export([load_steps/1]).
 
 -ifdef(use_specs).
 
@@ -30,7 +29,6 @@
 -spec(shutdown/1           :: ([atom()]) -> 'ok').
 -spec(start/1              :: ([atom()]) -> 'ok').
 -spec(stop/1               :: ([atom()]) -> 'ok').
--spec(run_boot_steps/0     :: () -> 'ok').
 
 -endif.
 

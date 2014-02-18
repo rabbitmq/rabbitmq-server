@@ -22,7 +22,7 @@
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
-
+-export([run_boot_steps/0, load_steps/1, run_step/3]).
 -export([start/2, stop/1]).
 
 -export([log_location/1]). %% for testing
@@ -305,7 +305,7 @@ ensure_application_loaded() ->
     end.
 
 start() ->
-    rabbit_boot:boot_with(
+    boot_with(
       fun() ->
               %% We do not want to HiPE compile or upgrade
               %% mnesia after just restarting the app
@@ -335,12 +335,6 @@ boot() ->
               ok = rabbit_boot:start(ToBeLoaded),
               ok = log_broker_started(Plugins)
       end).
-
-handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
-    throw({could_not_start, App, Reason});
-
-handle_app_error(App, Reason) ->
-    throw({could_not_start, App, Reason}).
 
 boot_with(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
@@ -479,7 +473,7 @@ app_shutdown_order() ->
 %% boot step logic
 
 run_boot_steps() ->
-    Steps = rabbit_boot:load_steps(boot),
+    Steps = load_steps(boot),
     [ok = run_boot_step(Step) || Step <- Steps],
     ok.
 
@@ -667,19 +661,6 @@ insert_default_data() ->
 
 %%---------------------------------------------------------------------------
 %% logging
-
-log_location(Type) ->
-    case application:get_env(rabbit, case Type of
-                                         kernel -> error_logger;
-                                         sasl   -> sasl_error_logger
-                                     end) of
-        {ok, {file, File}} -> File;
-        {ok, false}        -> undefined;
-        {ok, tty}          -> tty;
-        {ok, silent}       -> undefined;
-        {ok, Bad}          -> throw({error, {cannot_log_to_file, Bad}});
-        _                  -> undefined
-    end.
 
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
