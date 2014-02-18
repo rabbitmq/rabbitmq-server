@@ -73,7 +73,7 @@ maybe_start(#exchange{name = XName} = X)->
         true  ->
             SPN = rabbit_sharding_util:shards_per_node(X),
             RK  = rabbit_sharding_util:routing_key(X),
-            Res = rabbit_misc:execute_mnesia_transaction(
+            rabbit_misc:execute_mnesia_transaction(
                     fun () ->
                             mnesia:write(?SHARDING_TABLE,
                                          #sharding{name            = XName,
