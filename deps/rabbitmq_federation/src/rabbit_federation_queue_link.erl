@@ -210,7 +210,11 @@ go(S0 = #not_started{run             = Run,
                                                      durable     = Durable,
                                                      auto_delete = AutoDelete,
                                                      arguments   = Args}),
-              amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch}),
+              case Upstream#upstream.ack_mode of
+                  'no-ack' -> ok;
+                  _        -> amqp_channel:call(
+                                Ch, #'basic.qos'{prefetch_count = Prefetch})
+              end,
               amqp_selective_consumer:register_default_consumer(Ch, self()),
               case Run of
                   true  -> consume(Ch, Upstream, UQueue);

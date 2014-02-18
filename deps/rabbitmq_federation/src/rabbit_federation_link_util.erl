@@ -36,14 +36,7 @@
 
 start_conn_ch(Fun, Upstream, UParams,
               XorQName = #resource{virtual_host = DownVHost}, State) ->
-    %% We trap exits so terminate/2 gets called. Note that this is not
-    %% in init() since we need to cope with the link getting restarted
-    %% during shutdown (when a broker federates with itself), which
-    %% means we hang in federation_up() and the supervisor must force
-    %% us to exit. We can therefore only trap exits when past that
-    %% point. Bug 24372 may help us do something nicer.
-    process_flag(trap_exit, true),
-    case open_monitor(local_params(Upstream, DownVHost)) of
+    case open_monitor(#amqp_params_direct{virtual_host = DownVHost}) of
         {ok, DConn, DCh} ->
             case Upstream#upstream.ack_mode of
                 'on-confirm' ->
@@ -55,6 +48,12 @@ start_conn_ch(Fun, Upstream, UParams,
             end,
             case open_monitor(UParams#upstream_params.params) of
                 {ok, Conn, Ch} ->
+                    %% Don't trap exits until we have established
+                    %% connections so that if we try to delete
+                    %% federation upstreams while waiting for a
+                    %% connection to be established then we don't
+                    %% block
+                    process_flag(trap_exit, true),
                     try
                         R = Fun(Conn, Ch, DConn, DCh),
                         rabbit_log:info(
@@ -285,21 +284,4 @@ disposable_connection_call(Params, Method, ErrFun) ->
             end;
         E ->
             E
-    end.
-
-local_params(#upstream{trust_user_id = Trust}, VHost) ->
-    {ok, DefaultUser} = application:get_env(rabbit, default_user),
-    Username = rabbit_runtime_parameters:value(
-                 VHost, <<"federation">>, <<"local-username">>, DefaultUser),
-    case rabbit_access_control:check_user_login(Username, []) of
-        {ok, User0}        -> User = maybe_impersonator(Trust, User0),
-                              #amqp_params_direct{username     = User,
-                                                  virtual_host = VHost};
-        {refused, _M, _A}  -> exit({error, user_does_not_exist})
-    end.
-
-maybe_impersonator(Trust, User = #user{tags = Tags}) ->
-    case Trust andalso not lists:member(impersonator, Tags) of
-        true  -> User#user{tags = [impersonator | Tags]};
-        false -> User
     end.

@@ -30,8 +30,9 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    mirrored_supervisor:start_link({local, ?SUPERVISOR},
-                                   ?SUPERVISOR, ?MODULE, []).
+    mirrored_supervisor:start_link({local, ?SUPERVISOR}, ?SUPERVISOR,
+                                   fun rabbit_misc:execute_mnesia_transaction/1,
+                                   ?MODULE, []).
 
 %% Note that the next supervisor down, rabbit_federation_link_sup, is common
 %% between exchanges and queues.
@@ -60,4 +61,5 @@ stop_child(X) ->
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
-id(X = #exchange{}) -> X#exchange{scratches = undefined}.
+%% See comment in rabbit_federation_queue_link_sup_sup:id/1
+id(X = #exchange{}) -> X#exchange{scratches = none}.
