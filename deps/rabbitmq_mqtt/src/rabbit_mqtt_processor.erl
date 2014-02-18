@@ -322,24 +322,24 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
 
 process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
                                              socket    = Sock }) ->
-     {VHost, UsernameBin} = get_vhost_username(UserBin),
-     case amqp_connection:start(#amqp_params_direct{
+    {VHost, UsernameBin} = get_vhost_username(UserBin),
+    case amqp_connection:start(#amqp_params_direct{
                                   username     = UsernameBin,
                                   password     = PassBin,
                                   virtual_host = VHost,
                                   adapter_info = adapter_info(Sock)}) of
-         {ok, Connection} ->
-             {?CONNACK_ACCEPT, Connection};
-         {error, {auth_failure, Explanation}} ->
-             rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
-                              [binary_to_list(UserBin), Explanation]),
-             ?CONNACK_CREDENTIALS;
-         {error, access_refused} ->
-             rabbit_log:warning("MQTT login failed for ~p access_refused "
-                                "(vhost access not allowed)~n",
-                                [binary_to_list(UserBin)]),
-             ?CONNACK_AUTH
-      end.
+        {ok, Connection} ->
+            {?CONNACK_ACCEPT, Connection};
+        {error, {auth_failure, Explanation}} ->
+            rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
+                             [binary_to_list(UserBin), Explanation]),
+            ?CONNACK_CREDENTIALS;
+        {error, access_refused} ->
+            rabbit_log:warning("MQTT login failed for ~p access_refused "
+                               "(vhost access not allowed)~n",
+                               [binary_to_list(UserBin)]),
+            ?CONNACK_AUTH
+    end.
 
 get_vhost_username(UserBin) ->
     %% split at the last colon, disallowing colons in username
