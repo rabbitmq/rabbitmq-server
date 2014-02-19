@@ -649,7 +649,14 @@ auth_phase_1_0(Response,
             ok = send_on_channel0(Sock, Secure, rabbit_amqp1_0_sasl),
             State#v1{connection = Connection =
                          #connection{auth_state = AuthState1}};
-        {ok, User} ->
+        {ok, User = #user{username = Username}} ->
+            case rabbit_access_control:check_user_loopback(Username, Sock) of
+                ok          -> ok;
+                not_allowed -> protocol_error(
+                                 ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                                 "user '~s' can only connect via localhost",
+                                 [Username])
+            end,
             Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 0}},
             ok = send_on_channel0(Sock, Outcome, rabbit_amqp1_0_sasl),
             switch_callback(
