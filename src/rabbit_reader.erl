@@ -1162,7 +1162,7 @@ become_1_0(Id, State = #v1{sock = Sock}) ->
                              {rabbit_amqp1_0_reader, init,
                               [Mode, pack_for_1_0(Buf, BufLen, S)]}
                      end,
-                 State = #v1{connection_state = {become, F}}
+                 State#v1{connection_state = {become, F}}
     end.
 
 pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
