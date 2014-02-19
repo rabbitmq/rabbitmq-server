@@ -441,7 +441,7 @@ control_throttle(State = #v1{connection_state = CS, throttle = Throttle}) ->
 maybe_block(State = #v1{connection_state = blocking,
                         throttle         = Throttle}) ->
     ok = rabbit_heartbeat:pause_monitor(State#v1.heartbeater),
-    Sent = maybe_send_blocked(State),
+    maybe_send_blocked(State),
     State#v1{connection_state = blocked,
              throttle = update_last_blocked_by(
                           Throttle#throttle{last_blocked_at = erlang:now()})};
