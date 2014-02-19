@@ -248,18 +248,23 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                 {_,  lt} -> exit({ssl_options_requires_min_r16a});
                 {_,  _}  -> [{sslopts, SSLOpts} | Opts0]
             end,
-    Opts = case env(log) of
+    Opts2 = case env(log) of
     %% We can't just pass through [] as sslopts in the old case, eldap
     %% exit()s when you do that.
-               network ->
-                   Pre = "    LDAP network traffic: ",
-                   rabbit_log:info(
-                     "    LDAP connecting to servers: ~p~n", [Servers]),
-                   [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
-                             (2, S, A) -> rabbit_log:info   (Pre ++ S, A)
-                          end} | Opts1];
-               _ ->
-                   Opts1
+                network ->
+                    Pre = "    LDAP network traffic: ",
+                    rabbit_log:info(
+                      "    LDAP connecting to servers: ~p~n", [Servers]),
+                    [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
+                              (2, S, A) -> rabbit_log:info   (Pre ++ S, A)
+                           end} | Opts1];
+                _ ->
+                    Opts1
+            end,
+    %% eldap defaults to 'infinity' but doesn't allow you to set that. Harrumph.
+    Opts = case env(timeout) of
+               infinity -> Opts2;
+               MS       -> [{timeout, MS} | Opts2]
            end,
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
