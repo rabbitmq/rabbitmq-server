@@ -318,6 +318,10 @@ restart_upstream_test() ->
                 Downstream, Qgoes, <<"hare.downstream">>, <<"goes">>),
               Upstream1 = start_other_node(?HARE),
 
+              %% Wait for the link to come up and for these bindings
+              %% to be transferred
+              await_binding(?HARE, <<"upstream">>, <<"comes">>, 1),
+
               publish(Upstream1, <<"upstream">>, <<"goes">>, <<"GOES">>),
               publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
               publish(Upstream1, <<"upstream">>, <<"comes">>, <<"COMES">>),
