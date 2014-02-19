@@ -81,6 +81,14 @@
 %% process as sys:get_status/1 would). Pass through a function which
 %% can be invoked on the state, get back the result. The state is not
 %% modified.
+%%
+%% 10) an mcall/1 function has been added for performing multiple
+%% call/3 in parallel. Unlike multi_call, which sends the same request
+%% to same-named processes residing on a supplied list of nodes, it
+%% operates on name/request pairs, where name is anything accepted by
+%% call/3, i.e. a pid, global name, local name, or local name on a
+%% particular node.
+%%
 
 %% All modifications are (C) 2009-2013 GoPivotal, Inc.
 
@@ -190,6 +198,7 @@
          cast/2, reply/2,
          abcast/2, abcast/3,
          multi_call/2, multi_call/3, multi_call/4,
+         mcall/1,
          with_state/2,
          enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/1]).
 
@@ -388,6 +397,85 @@ multi_call(Nodes, Name, Req, infinity) ->
 multi_call(Nodes, Name, Req, Timeout)
   when is_list(Nodes), is_atom(Name), is_integer(Timeout), Timeout >= 0 ->
     do_multi_call(Nodes, Name, Req, Timeout).
+
+%%% -----------------------------------------------------------------
+%%% Make multiple calls to multiple servers, given pairs of servers
+%%% and messages.
+%%% Returns: {[{Dest, Reply}], [{Dest, Error}]}
+%%%
+%%% Dest can be pid() | RegName :: atom() |
+%%%             {Name :: atom(), Node :: atom()} | {global, Name :: atom()}
+%%%
+%%% A middleman process is used to avoid clogging up the callers
+%%% message queue.
+%%% -----------------------------------------------------------------
+mcall(CallSpecs) ->
+    Tag = make_ref(),
+    {_, MRef} = spawn_monitor(
+                  fun() ->
+                          Refs = lists:foldl(
+                                   fun ({Dest, _Request}=S, Dict) ->
+                                           dict:store(do_mcall(S), Dest, Dict)
+                                   end, dict:new(), CallSpecs),
+                          collect_replies(Tag, Refs, [], [])
+                  end),
+    receive
+        {'DOWN', MRef, _, _, {Tag, Result}} -> Result;
+        {'DOWN', MRef, _, _, Reason}        -> exit(Reason)
+    end.
+
+do_mcall({{global,Name}=Dest, Request}) ->
+    %% whereis_name is simply an ets lookup, and is precisely what
+    %% global:send/2 does, yet we need a Ref to put in the call to the
+    %% server, so invoking whereis_name makes a lot more sense here.
+    case global:whereis_name(Name) of
+        Pid when is_pid(Pid) ->
+            MRef = erlang:monitor(process, Pid),
+            catch msend(Pid, MRef, Request),
+            MRef;
+        undefined ->
+            Ref = make_ref(),
+            self() ! {'DOWN', Ref, process, Dest, noproc},
+            Ref
+    end;
+do_mcall({{Name,Node}=Dest, Request}) when is_atom(Name), is_atom(Node) ->
+    {_Node, MRef} = start_monitor(Node, Name), %% NB: we don't handle R6
+    catch msend(Dest, MRef, Request),
+    MRef;
+do_mcall({Dest, Request}) when is_atom(Dest); is_pid(Dest) ->
+    MRef = erlang:monitor(process, Dest),
+    catch msend(Dest, MRef, Request),
+    MRef.
+
+msend(Dest, MRef, Request) ->
+    erlang:send(Dest, {'$gen_call', {self(), MRef}, Request}, [noconnect]).
+
+collect_replies(Tag, Refs, Replies, Errors) ->
+    case dict:size(Refs) of
+        0 -> exit({Tag, {Replies, Errors}});
+        _ -> receive
+                 {MRef, Reply} ->
+                     {Refs1, Replies1} = handle_call_result(MRef, Reply,
+                                                            Refs, Replies),
+                     collect_replies(Tag, Refs1, Replies1, Errors);
+                 {'DOWN', MRef, _, _, Reason} ->
+                     Reason1 = case Reason of
+                                   noconnection -> nodedown;
+                                   _            -> Reason
+                               end,
+                     {Refs1, Errors1} = handle_call_result(MRef, Reason1,
+                                                           Refs, Errors),
+                     collect_replies(Tag, Refs1, Replies, Errors1)
+             end
+    end.
+
+handle_call_result(MRef, Result, Refs, AccList) ->
+    %% we avoid the mailbox scanning cost of a call to erlang:demonitor/{1,2}
+    %% here, so we must cope with MRefs that we've already seen and erased
+    case dict:find(MRef, Refs) of
+        {ok, Pid} -> {dict:erase(MRef, Refs), [{Pid, Result}|AccList]};
+        _         -> {Refs, AccList}
+    end.
 
 %% -----------------------------------------------------------------
 %% Apply a function to a generic server's state.

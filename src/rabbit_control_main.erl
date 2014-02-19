@@ -90,6 +90,7 @@
          status,
          environment,
          report,
+         set_cluster_name,
          eval,
 
          close_connection,
@@ -527,6 +528,10 @@ action(report, Node, _Args, _Opts, Inform) ->
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
     ok;
 
+action(set_cluster_name, Node, [Name], _Opts, Inform) ->
+    Inform("Setting cluster name to ~s", [Name]),
+    rpc_call(Node, rabbit_nodes, set_cluster_name, [list_to_binary(Name)]);
+
 action(eval, Node, [Expr], _Opts, _Inform) ->
     case erl_scan:string(Expr) of
         {ok, Scanned, _} ->
@@ -706,7 +711,14 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
     end.
 
 call(Node, {Mod, Fun, Args}) ->
-    rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary/1, Args)).
+    rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args)).
+
+list_to_binary_utf8(L) ->
+    B = list_to_binary(L),
+    case rabbit_binary_parser:validate_utf8(B) of
+        ok    -> B;
+        error -> throw({error, {not_utf_8, L}})
+    end.
 
 rpc_call(Node, Mod, Fun, Args) ->
     rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
