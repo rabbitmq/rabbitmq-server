@@ -98,13 +98,6 @@ server_properties() ->
     {map, [{{symbol, binary_to_list(K)}, {utf8, V}}
            || {K, longstr, V}  <- Raw]}.
 
-%% TODO copypasta from rabbit_federation_util:local_nodename_implicit/0. Unify.
-container_id() ->
-    {ID, _} = rabbit_nodes:parts(node()),
-    {ok, Host} = inet:gethostname(),
-    {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
-    {utf8, list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN})))}.
-
 %%--------------------------------------------------------------------------
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
@@ -423,7 +416,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
            #'v1_0.open'{channel_max    = ClientChannelMax,
                         max_frame_size = ClientFrameMax,
                         idle_time_out  = {uint, HeartbeatSec * 1000},
-                        container_id   = container_id(),
+                        container_id   = {utf8, rabbit_nodes:cluster_name()},
                         properties     = server_properties()}),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     control_throttle(
