@@ -331,7 +331,10 @@ handle_other({conserve_resources, Source, Conserve},
     Throttle1 = Throttle#throttle{alarmed_by = CR1},
     State1 = control_throttle(State#v1{throttle = Throttle1}),
     case {CS, State1#v1.connection_state, (CR =/= []), (CR1 =:= [])} of
-        {blocked, running, true, true} ->
+        {blocked, running, _, _} ->
+            send_unblocked(State1),
+            ok;
+        {blocked, blocked, true, true} ->
             send_unblocked(State1),
             ok;
         {_, _, _, _} ->
