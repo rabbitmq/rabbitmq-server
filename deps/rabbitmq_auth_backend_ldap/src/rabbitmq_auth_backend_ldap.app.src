@@ -17,5 +17,6 @@
           {use_ssl,               false},
           {ssl_options,           []},
           {port,                  389},
+          {timeout,               infinity},
           {log,                   false} ] },
   {applications, [kernel, stdlib, eldap, rabbit]}]}.
