@@ -494,6 +494,10 @@
    %%
    %% {port, 389},
 
+   %% LDAP connection timeout, in milliseconds or 'infinity'
+   %%
+   %% {timeout, infinity},
+
    %% Enable logging of LDAP queries.
    %% One of
    %%   - false (no logging is performed)
