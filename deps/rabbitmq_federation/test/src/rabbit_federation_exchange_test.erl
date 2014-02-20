@@ -321,6 +321,7 @@ restart_upstream_test() ->
               %% Wait for the link to come up and for these bindings
               %% to be transferred
               await_binding(?HARE, <<"upstream">>, <<"comes">>, 1),
+              await_binding(?HARE, <<"upstream">>, <<"stays">>, 1),
 
               publish(Upstream1, <<"upstream">>, <<"goes">>, <<"GOES">>),
               publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
