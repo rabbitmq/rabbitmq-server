@@ -125,12 +125,12 @@ boot() ->
     ok = boot_ssl().
 
 boot_tcp() ->
-    {ok, TcpListeners} = application:get_env(tcp_listeners),
+    {ok, TcpListeners} = application:get_env(rabbit, tcp_listeners),
     [ok = start_tcp_listener(Listener) || Listener <- TcpListeners],
     ok.
 
 boot_ssl() ->
-    case application:get_env(ssl_listeners) of
+    case application:get_env(rabbit, ssl_listeners) of
         {ok, []} ->
             ok;
         {ok, SslListeners} ->
