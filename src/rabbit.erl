@@ -305,42 +305,40 @@ ensure_application_loaded() ->
     end.
 
 start() ->
-    boot_with(
-      fun() ->
-              %% We do not want to HiPE compile or upgrade
-              %% mnesia after just restarting the app
-              ok = ensure_application_loaded(),
-              ok = ensure_working_log_handlers(),
-              rabbit_node_monitor:prepare_cluster_status_files(),
-              rabbit_mnesia:check_cluster_consistency(),
-              ok = rabbit_boot:start(app_startup_order()),
-              ok = log_broker_started(rabbit_plugins:active())
-      end).
+    boot_with(fun() ->
+                      %% We do not want to HiPE compile or upgrade
+                      %% mnesia after just restarting the app
+                      ok = ensure_application_loaded(),
+                      ok = ensure_working_log_handlers(),
+                      rabbit_node_monitor:prepare_cluster_status_files(),
+                      rabbit_mnesia:check_cluster_consistency(),
+                      ok = rabbit_boot:start(app_startup_order()),
+                      ok = log_broker_started(rabbit_plugins:active())
+              end).
 
 boot() ->
-    boot_with(
-      fun() ->
-              ok = ensure_application_loaded(),
-              Success = maybe_hipe_compile(),
-              ok = ensure_working_log_handlers(),
-              warn_if_hipe_compilation_failed(Success),
-              rabbit_node_monitor:prepare_cluster_status_files(),
-              ok = rabbit_upgrade:maybe_upgrade_mnesia(),
-              %% It's important that the consistency check happens after
-              %% the upgrade, since if we are a secondary node the
-              %% primary node will have forgotten us
-              rabbit_mnesia:check_cluster_consistency(),
-              Plugins = rabbit_plugins:setup(),
-              ToBeLoaded = Plugins ++ ?APPS,
-              ok = rabbit_boot:start(ToBeLoaded),
-              ok = log_broker_started(Plugins)
-      end).
+    boot_with(fun() ->
+                      ok = ensure_application_loaded(),
+                      Success = maybe_hipe_compile(),
+                      ok = ensure_working_log_handlers(),
+                      warn_if_hipe_compilation_failed(Success),
+                      rabbit_node_monitor:prepare_cluster_status_files(),
+                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+                      %% It's important that the consistency check happens after
+                      %% the upgrade, since if we are a secondary node the
+                      %% primary node will have forgotten us
+                      rabbit_mnesia:check_cluster_consistency(),
+                      Plugins = rabbit_plugins:setup(),
+                      ToBeLoaded = Plugins ++ ?APPS,
+                      ok = rabbit_boot:start(ToBeLoaded),
+                      ok = log_broker_started(Plugins)
+              end).
 
 boot_with(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
     case catch register(rabbit_boot, Marker) of
         true -> try
-                    case rabbit:is_running() of
+                    case is_running() of
                         true  -> ok;
                         false -> StartFun()
                     end
@@ -455,7 +453,6 @@ stop(_State) ->
              true  -> rabbit_amqqueue:on_node_down(node());
              false -> rabbit_table:clear_ram_only_tables()
          end,
-    ok = rabbit_boot:shutdown(),
     ok.
 
 %%---------------------------------------------------------------------------

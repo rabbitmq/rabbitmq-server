@@ -69,6 +69,7 @@ stop_applications(Apps, ErrorHandler) ->
                         ErrorHandler,
                         Apps).
 
+
 wait_for_applications(Apps) ->
     [wait_for_application(App) || App <- Apps], ok.
 
@@ -80,9 +81,8 @@ app_dependency_order(RootApps, StripUnreachable) ->
                     {App, _Desc, _Vsn} <- application:loaded_applications()]),
     try
         case StripUnreachable of
-            true  -> digraph:del_vertices(
-                       G, digraph:vertices(G) --
-                           digraph_utils:reachable(RootApps, G));
+            true  -> digraph:del_vertices(G, digraph:vertices(G) --
+                      digraph_utils:reachable(RootApps, G));
             false -> ok
         end,
         digraph_utils:topsort(G)
