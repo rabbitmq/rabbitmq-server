@@ -23,7 +23,6 @@ class TestRabbitMQAdmin(unittest.TestCase):
     def test_host(self):
         self.run_success(['show', 'overview'])
         self.run_success(['--host', 'localhost', 'show', 'overview'])
-        self.run_success(['--host', socket.gethostname(), 'show', 'overview'])
         self.run_fail(['--host', 'some-host-that-does-not-exist', 'show', 'overview'])
 
     def test_port(self):
