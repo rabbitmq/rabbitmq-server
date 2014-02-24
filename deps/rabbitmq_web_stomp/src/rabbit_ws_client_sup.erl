@@ -60,7 +60,8 @@ start_proc(SupPid, Conn) ->
                    intrinsic, ?MAX_WAIT, worker,
                    [rabbit_stomp_processor]}),
     rabbit_stomp_processor:init_arg(
-      Processor, [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end, none]),
+      Processor, [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end, none,
+                  PeerAddr]),
     {ok, Processor}.
 
 client_spec(Processor, Conn) ->
