@@ -162,8 +162,9 @@ processor_args(SupPid, Configuration, Sock) ->
                 rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
                                        SendFin, ReceiveTimeout, ReceiveFun)
         end,
+    {ok, {PeerAddr, _PeerPort}} = rabbit_net:sockname(Sock),
     [SendFun, adapter_info(Sock), StartHeartbeatFun,
-     ssl_login_name(Sock, Configuration)].
+     ssl_login_name(Sock, Configuration), PeerAddr].
 
 adapter_info(Sock) ->
     amqp_connection:socket_adapter_info(Sock, {'STOMP', 0}).
