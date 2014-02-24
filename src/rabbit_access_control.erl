@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([check_user_pass_login/2, check_user_login/2,
+-export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
          check_vhost_access/2, check_resource_access/3]).
 
 %%----------------------------------------------------------------------------
@@ -35,6 +35,9 @@
 -spec(check_user_login/2 ::
         (rabbit_types:username(), [{atom(), any()}])
         -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
+-spec(check_user_loopback/2 :: (rabbit_types:username(),
+                                rabbit_net:socket() | inet:ip_address())
+        -> 'ok' | 'not_allowed').
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
@@ -75,6 +78,14 @@ try_login(Module, Username, AuthProps) ->
         {error, E} -> {refused, "~s failed authenticating ~s: ~p~n",
                        [Module, Username, E]};
         Else       -> Else
+    end.
+
+check_user_loopback(Username, SockOrAddr) ->
+    {ok, Users} = application:get_env(rabbit, loopback_users),
+    case rabbit_net:is_loopback(SockOrAddr)
+        orelse not lists:member(Username, Users) of
+        true  -> ok;
+        false -> not_allowed
     end.
 
 check_vhost_access(User = #user{ username     = Username,
