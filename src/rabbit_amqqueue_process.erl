@@ -859,11 +859,20 @@ prioritise_cast(Msg, _Len, State) ->
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
-        {ack, _AckTags, _ChPid}              -> consumer_bias(State);
+        {ack, _AckTags, _ChPid}              -> 3; %% [1]
+        {resume, _ChPid}                     -> 2;
         {notify_sent, _ChPid, _Credit}       -> consumer_bias(State);
-        {resume, _ChPid}                     -> consumer_bias(State);
         _                                    -> 0
     end.
+
+%% [1] It should be safe to always prioritise ack / resume since they
+%% will be rate limited by how fast consumers receive messages -
+%% i.e. by notify_sent. We prioritise ack and resume to discourage
+%% starvation caused by prioritising notify_sent. We don't vary their
+%% prioritiy since acks should stay in order (some parts of the queue
+%% stack are optimised for that) and to make things easier to reason
+%% about. Finally, we prioritise ack over resume since it should
+%% always reduce memory use.
 
 consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}) ->
     case BQ:msg_rates(BQS) of
