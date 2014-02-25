@@ -392,9 +392,9 @@ sync_async_method_serialization_test() ->
                 true = amqp_channel:wait_for_confirms(Channel),
                 lists:foreach(
                     fun (Q) ->
-                            #'queue.purge_ok'{message_count = 1} =
+                            #'queue.declare_ok'{message_count = 1} =
                                 amqp_channel:call(
-                                  Channel, #'queue.purge'{queue = Q})
+                                  Channel, #'queue.declare'{queue = Q})
                     end, lists:flatten(MultiOpRet))
         end).
 
