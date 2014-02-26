@@ -30,7 +30,7 @@
 
 -define(DEFAULT_CREDIT, {200, 50}).
 
--export([send/1, send/2, ack/1, ack/2, handle_bump_msg/1, blocked/0]).
+-export([send/1, send/2, ack/1, ack/2, handle_bump_msg/1, blocked/0, state/0]).
 -export([peer_down/1]).
 
 %%----------------------------------------------------------------------------
@@ -110,6 +110,18 @@ blocked() -> case get(credit_blocked) of
                  _         -> true
              end.
 
+state() -> case blocked() of
+               true  -> flow;
+               false -> case get(credit_blocked_at) of
+                            undefined -> running;
+                            B         -> Diff = timer:now_diff(erlang:now(), B),
+                                         case Diff < 5000000 of
+                                             true  -> flow;
+                                             false -> running
+                                         end
+                        end
+           end.
+
 peer_down(Peer) ->
     %% In theory we could also remove it from credit_deferred here, but it
     %% doesn't really matter; at some point later we will drain
@@ -128,7 +140,12 @@ grant(To, Quantity) ->
         true  -> ?UPDATE(credit_deferred, [], Deferred, [{To, Msg} | Deferred])
     end.
 
-block(From) -> ?UPDATE(credit_blocked, [], Blocks, [From | Blocks]).
+block(From) ->
+    case blocked() of
+        false -> put(credit_blocked_at, erlang:now());
+        true  -> ok
+    end,
+    ?UPDATE(credit_blocked, [], Blocks, [From | Blocks]).
 
 unblock(From) ->
     ?UPDATE(credit_blocked, [], Blocks, Blocks -- [From]),

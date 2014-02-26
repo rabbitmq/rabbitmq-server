@@ -201,7 +201,7 @@ init([]) ->
     %% writing out the cluster status files - bad things can then
     %% happen.
     process_flag(trap_exit, true),
-    net_kernel:monitor_nodes(true),
+    net_kernel:monitor_nodes(true, [nodedown_reason]),
     {ok, _} = mnesia:subscribe(system),
     {ok, #state{monitors    = pmon:new(),
                 subscribers = pmon:new(),
@@ -257,9 +257,8 @@ handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
-    ok = handle_dead_rabbit(Node),
     [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
-    {noreply, handle_dead_rabbit_state(
+    {noreply, handle_dead_rabbit(
                 Node,
                 State#state{monitors = pmon:erase({rabbit, Node}, Monitors)})};
 
@@ -267,7 +266,9 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
-handle_info({nodedown, Node}, State) ->
+handle_info({nodedown, Node, Info}, State) ->
+    rabbit_log:info("node ~p down: ~p~n",
+                    [Node, proplists:get_value(nodedown_reason, Info)]),
     {noreply, handle_dead_node(Node, State)};
 
 handle_info({mnesia_system_event,
@@ -330,16 +331,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% Functions that call the module specific hooks when nodes go up/down
 %%----------------------------------------------------------------------------
 
-%% TODO: This may turn out to be a performance hog when there are lots
-%% of nodes.  We really only need to execute some of these statements
-%% on *one* node, rather than all of them.
-handle_dead_rabbit(Node) ->
-    ok = rabbit_networking:on_node_down(Node),
-    ok = rabbit_amqqueue:on_node_down(Node),
-    ok = rabbit_alarm:on_node_down(Node),
-    ok = rabbit_mnesia:on_node_down(Node),
-    ok.
-
 handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     %% In general in rabbit_node_monitor we care about whether the
     %% rabbit application is up rather than the node; we do this so
@@ -396,7 +387,14 @@ wait_for_cluster_recovery(Nodes) ->
                  wait_for_cluster_recovery(Nodes)
     end.
 
-handle_dead_rabbit_state(_Node, State = #state{partitions = Partitions}) ->
+handle_dead_rabbit(Node, State = #state{partitions = Partitions}) ->
+    %% TODO: This may turn out to be a performance hog when there are
+    %% lots of nodes.  We really only need to execute some of these
+    %% statements on *one* node, rather than all of them.
+    ok = rabbit_networking:on_node_down(Node),
+    ok = rabbit_amqqueue:on_node_down(Node),
+    ok = rabbit_alarm:on_node_down(Node),
+    ok = rabbit_mnesia:on_node_down(Node),
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
     %% that we do not attempt to deal with individual (other) partitions

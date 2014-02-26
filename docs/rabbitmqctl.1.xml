@@ -502,6 +502,23 @@
             </para>
           </listitem>
         </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_cluster_name</command> <arg choice="req">name</arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Sets the cluster name. The cluster name is announced to
+              clients on connection, and used by the federation and
+              shovel plugins to record where a message has been. The
+              cluster name is by default derived from the hostname of
+              the first node in the cluster, but can be changed.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_cluster_name london</screen>
+            <para role="example">
+              This sets the cluster name to "london".
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 
@@ -1135,6 +1152,13 @@
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>consumer_utilisation</term>
+                <listitem><para>Fraction of the time (between 0.0 and 1.0)
+                that the queue is able to immediately deliver messages to
+                consumers. This can be less than 1.0 if consumers are limited
+                by network congestion or prefetch count.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>memory</term>
                 <listitem><para>Bytes of memory consumed by the Erlang process associated with the
                   queue, including stack, heap and internal structures.</para></listitem>
@@ -1390,24 +1414,9 @@
               </varlistentry>
 
               <varlistentry>
-                <term>last_blocked_by</term>
-                <listitem><para>The reason for which this connection
-                    was last blocked. One of 'resource' - due to a memory
-                    or disk alarm, 'flow' - due to internal flow control, or
-                    'none' if the connection was never
-                    blocked.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>last_blocked_age</term>
-                <listitem><para>Time, in seconds, since this
-                    connection was last blocked, or
-                    'infinity'.</para></listitem>
-              </varlistentry>
-
-              <varlistentry>
                 <term>state</term>
                 <listitem><para>Connection state (one of [<command>starting</command>, <command>tuning</command>,
-                  <command>opening</command>, <command>running</command>, <command>blocking</command>, <command>blocked</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
+                  <command>opening</command>, <command>running</command>, <command>flow</command>, <command>blocking</command>, <command>blocked</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>channels</term>
@@ -1436,6 +1445,10 @@
               <varlistentry>
                 <term>frame_max</term>
                 <listitem><para>Maximum frame size (bytes).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>channel_max</term>
+                <listitem><para>Maximum number of channels on this connection.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>client_properties</term>
@@ -1562,14 +1575,6 @@
               <varlistentry>
                 <term>prefetch_count</term>
                 <listitem><para>QoS prefetch count limit in force, 0 if unlimited.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>client_flow_blocked</term>
-                <listitem><para>True if the client issued a
-                    <command>channel.flow{active=false}</command>
-                    command, blocking the server from delivering
-                    messages to the channel's consumers.
-                    </para></listitem>
               </varlistentry>
             </variablelist>
             <para>

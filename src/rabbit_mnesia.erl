@@ -327,6 +327,7 @@ status() ->
         case is_running() of
             true  -> RunningNodes = cluster_nodes(running),
                      [{running_nodes, RunningNodes},
+                      {cluster_name,  rabbit_nodes:cluster_name()},
                       {partitions,    mnesia_partitions(RunningNodes)}];
             false -> []
         end.

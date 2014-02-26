@@ -51,7 +51,7 @@ stop() ->
 init([DefaultVHost]) ->
     #exchange{} = rabbit_exchange:declare(
                     rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
-                    topic, true, false, false, []),
+                    topic, true, false, true, []),
     {ok, #resource{virtual_host = DefaultVHost,
                    kind = exchange,
                    name = ?LOG_EXCH_NAME}}.
@@ -87,7 +87,7 @@ publish1(RoutingKey, Format, Data, LogExch) ->
     %% 0-9-1 says the timestamp is a "64 bit POSIX timestamp". That's
     %% second resolution, not millisecond.
     Timestamp = rabbit_misc:now_ms() div 1000,
-    {ok, _RoutingRes, _DeliveredQPids} =
+    {ok, _DeliveredQPids} =
         rabbit_basic:publish(LogExch, RoutingKey,
                              #'P_basic'{content_type = <<"text/plain">>,
                                         timestamp    = Timestamp},
