@@ -29,24 +29,24 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(SupPid, ProcessorPid, Configuration) ->
+start_link(SupHelperPid, ProcessorPid, Configuration) ->
         {ok, proc_lib:spawn_link(?MODULE, init,
-                                 [SupPid, ProcessorPid, Configuration])}.
+                                 [SupHelperPid, ProcessorPid, Configuration])}.
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init(SupPid, ProcessorPid, Configuration) ->
-    Reply = go(SupPid, ProcessorPid, Configuration),
+init(SupHelperPid, ProcessorPid, Configuration) ->
+    Reply = go(SupHelperPid, ProcessorPid, Configuration),
     rabbit_stomp_processor:flush_and_die(ProcessorPid),
     Reply.
 
-go(SupPid, ProcessorPid, Configuration) ->
+go(SupHelperPid, ProcessorPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
             {ok, Sock} = SockTransform(Sock0),
             case rabbit_net:connection_string(Sock, inbound) of
                 {ok, ConnStr} ->
-                    ProcInitArgs = processor_args(SupPid, Configuration, Sock),
+                    ProcInitArgs = processor_args(SupHelperPid, Configuration, Sock),
                     rabbit_stomp_processor:init_arg(ProcessorPid, ProcInitArgs),
                     log(info, "accepting STOMP connection ~p (~s)~n",
                         [self(), ConnStr]),

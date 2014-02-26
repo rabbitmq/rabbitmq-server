@@ -22,6 +22,12 @@
 
 start_link(Configuration) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, HelperPid} =
+        supervisor2:start_child(SupPid,
+                                {rabbit_stomp_heartbeat_sup,
+                                 {rabbit_connection_helper_sup, start_link, []},
+                                 intrinsic, infinity, supervisor,
+                                 [rabbit_connection_helper_sup]}),
     %% The processor is intrinsic. When it exits, the supervisor goes too.
     {ok, ProcessorPid} =
         supervisor2:start_child(SupPid,
@@ -38,7 +44,7 @@ start_link(Configuration) ->
                         SupPid,
                         {rabbit_stomp_reader,
                          {rabbit_stomp_reader,
-                          start_link, [SupPid, ProcessorPid, Configuration]},
+                          start_link, [HelperPid, ProcessorPid, Configuration]},
                          transient, ?MAX_WAIT, worker,
                          [rabbit_stomp_reader]}),
 
