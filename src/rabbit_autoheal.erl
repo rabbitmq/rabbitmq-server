@@ -77,6 +77,14 @@ enabled() ->
 
 node_down(_Node, not_healing) ->
     not_healing;
+
+node_down(Node, {winner_waiting, _, Notify}) ->
+    rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
+    %% Make sure any nodes waiting for us start - it won't necessarily
+    %% heal the partition but at least they won't get stuck.
+    notify_safe(Notify),
+    not_healing;
+
 node_down(Node, _State) ->
     rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
     not_healing.
@@ -142,7 +150,7 @@ handle_msg({winner_is, Winner},
 handle_msg({node_stopped, Node},
            {winner_waiting, [Node], Notify}, _Partitions) ->
     rabbit_log:info("Autoheal: final node has stopped, starting...~n",[]),
-    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
+    notify_safe(Notify),
     not_healing;
 
 handle_msg({node_stopped, Node},
@@ -160,6 +168,9 @@ handle_msg({node_stopped, _Node}, State, _Partitions) ->
 %%----------------------------------------------------------------------------
 
 send(Node, Msg) -> {?SERVER, Node} ! {autoheal_msg, Msg}.
+
+notify_safe(Notify) ->
+    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify].
 
 make_decision(AllPartitions) ->
     Sorted = lists:sort([{partition_value(P), P} || P <- AllPartitions]),
