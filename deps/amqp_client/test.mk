@@ -15,7 +15,7 @@
 #
 
 IS_SUCCESS:=egrep "(All .+ tests (successful|passed).|Test passed.)"
-TESTING_MESSAGE:=-eval 'error_logger:tty(false), io:format("~nTesting in progress. Please wait...~n~n").'
+TESTING_MESSAGE:=-eval "error_logger:tty(false), error_logger:logfile({open, \"$(TMPDIR)/erlang-client-tests.log\"}), io:format(\"~nTesting in progress. Please wait...~n~n\")."
 
 prepare_tests: compile compile_tests
 

@@ -209,7 +209,7 @@ handle_cast({hard_error_in_channel, _Pid, Reason}, State) ->
 handle_cast({channel_internal_error, Pid, Reason}, State) ->
     ?LOG_WARN("Connection (~p) closing: internal error in channel (~p): ~p~n",
               [self(), Pid, Reason]),
-    internal_error(State);
+    internal_error(Pid, Reason, State);
 handle_cast({server_misbehaved, AmqpError}, State) ->
     server_misbehaved_close(AmqpError, State);
 handle_cast({server_close, #'connection.close'{} = Close}, State) ->
@@ -307,8 +307,9 @@ app_initiated_close(Close, From, Timeout, State) ->
                                       close = Close,
                                       from = From}, State).
 
-internal_error(State) ->
-    Close = #'connection.close'{reply_text = <<>>,
+internal_error(Pid, Reason, State) ->
+    Str = list_to_binary(rabbit_misc:format("~p:~p", [Pid, Reason])),
+    Close = #'connection.close'{reply_text = Str,
                                 reply_code = ?INTERNAL_ERROR,
                                 class_id = 0,
                                 method_id = 0},
