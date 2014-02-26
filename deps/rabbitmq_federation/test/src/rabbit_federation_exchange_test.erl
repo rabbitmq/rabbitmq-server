@@ -321,6 +321,7 @@ restart_upstream_test() ->
               %% Wait for the link to come up and for these bindings
               %% to be transferred
               await_binding(?HARE, <<"upstream">>, <<"comes">>, 1),
+              await_binding_absent(?HARE, <<"upstream">>, <<"goes">>),
               await_binding(?HARE, <<"upstream">>, <<"stays">>, 1),
 
               publish(Upstream1, <<"upstream">>, <<"goes">>, <<"GOES">>),
@@ -628,20 +629,28 @@ await_binding(B = {_, _}, X, Key) -> await_binding(B,       X, Key, 1);
 await_binding(X, Key, Count)      -> await_binding(?RABBIT, X, Key, Count).
 
 await_binding(Broker = {Nodename, _Port}, X, Key, Count) ->
-    Bs = bindings_from(Nodename, X),
-    case [K || #binding{key = K} <- Bs, K =:= Key] of
+    case bound_keys_from(Nodename, X, Key) of
         L when length(L) <   Count -> timer:sleep(100),
                                       await_binding(Broker, X, Key, Count);
         L when length(L) =:= Count -> ok;
         L                          -> exit({too_many_bindings,
-                                            X, Key, Count, L, Bs})
+                                            X, Key, Count, L})
     end.
 
 await_bindings(Broker, X, Keys) ->
     [await_binding(Broker, X, Key) || Key <- Keys].
 
-bindings_from(Nodename, X) ->
-    rpc:call(n(Nodename), rabbit_binding, list_for_source, [r(X)]).
+await_binding_absent(Broker = {Nodename, _Port}, X, Key) ->
+    case bound_keys_from(Nodename, X, Key) of
+        [] -> ok;
+        _  -> timer:sleep(100),
+              await_binding_absent(Broker, X, Key)
+    end.
+
+bound_keys_from(Nodename, X, Key) ->
+    [K || #binding{key = K} <-
+              rpc:call(n(Nodename), rabbit_binding, list_for_source, [r(X)]),
+          K =:= Key].
 
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->
     publish(Ch, X, Key, #amqp_msg{payload = Payload});
