@@ -16,7 +16,7 @@
 
 -module(rabbit_autoheal).
 
--export([init/0, maybe_start/1, node_down/2, handle_msg/3]).
+-export([init/0, maybe_start/1, rabbit_down/2, node_down/2, handle_msg/3]).
 
 %% The named process we are running in.
 -define(SERVER, rabbit_node_monitor).
@@ -75,6 +75,21 @@ maybe_start(State) ->
 enabled() ->
     {ok, autoheal} =:= application:get_env(rabbit, cluster_partition_handling).
 
+
+%% This is the winner receiving its last notification that a node has
+%% stopped - all nodes can now start again
+rabbit_down(Node, {winner_waiting, [Node], Notify}) ->
+    rabbit_log:info("Autoheal: final node has stopped, starting...~n",[]),
+    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
+    not_healing;
+
+rabbit_down(Node, {winner_waiting, WaitFor, Notify}) ->
+    {winner_waiting, WaitFor -- [Node], Notify};
+
+rabbit_down(_Node, State) ->
+    %% ignore, we already cancelled the autoheal process
+    State.
+
 node_down(_Node, not_healing) ->
     not_healing;
 node_down(Node, _State) ->
@@ -127,7 +142,6 @@ handle_msg({winner_is, Winner},
       fun () ->
               MRef = erlang:monitor(process, {?SERVER, Winner}),
               rabbit:stop(),
-              send(Winner, {node_stopped, node()}),
               receive
                   {'DOWN', MRef, process, {?SERVER, Winner}, _Reason} -> ok;
                   autoheal_safe_to_start                              -> ok
@@ -137,25 +151,9 @@ handle_msg({winner_is, Winner},
       end),
     restarting;
 
-%% This is the winner receiving its last notification that a node has
-%% stopped - all nodes can now start again
-handle_msg({node_stopped, Node},
-           {winner_waiting, [Node], Notify}, _Partitions) ->
-    rabbit_log:info("Autoheal: final node has stopped, starting...~n",[]),
-    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
-    not_healing;
-
-handle_msg({node_stopped, Node},
-           {winner_waiting, WaitFor, Notify}, _Partitions) ->
-    {winner_waiting, WaitFor -- [Node], Notify};
-
 handle_msg(_, restarting, _Partitions) ->
     %% ignore, we can contribute no further
-    restarting;
-
-handle_msg({node_stopped, _Node}, State, _Partitions) ->
-    %% ignore, we already cancelled the autoheal process
-    State.
+    restarting.
 
 %%----------------------------------------------------------------------------
 

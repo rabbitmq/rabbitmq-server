@@ -387,7 +387,8 @@ wait_for_cluster_recovery(Nodes) ->
                  wait_for_cluster_recovery(Nodes)
     end.
 
-handle_dead_rabbit(Node, State = #state{partitions = Partitions}) ->
+handle_dead_rabbit(Node, State = #state{partitions = Partitions,
+                                        autoheal   = Autoheal}) ->
     %% TODO: This may turn out to be a performance hog when there are
     %% lots of nodes.  We really only need to execute some of these
     %% statements on *one* node, rather than all of them.
@@ -404,8 +405,9 @@ handle_dead_rabbit(Node, State = #state{partitions = Partitions}) ->
                       [] -> [];
                       _  -> Partitions
                   end,
-    ensure_ping_timer(State#state{partitions = Partitions1}).
-
+    ensure_ping_timer(
+      State#state{partitions = Partitions1,
+                  autoheal   = rabbit_autoheal:rabbit_down(Node, Autoheal)}).
 
 ensure_ping_timer(State) ->
     rabbit_misc:ensure_timer(
