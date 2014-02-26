@@ -16,15 +16,15 @@
 
 register() ->
     [rabbit_registry:register(Class, Name, ?MODULE) ||
-        {Class, Name} <- [{runtime_parameter, <<"shard">>},
+        {Class, Name} <- [{runtime_parameter, <<"sharding">>},
                           {runtime_parameter, <<"sharding-definition">>},
                           {policy_validator,  <<"sharding-definition">>}]],
     ok.
 
-validate(_VHost, <<"shard">>, <<"shards-per-node">>, Term) ->
+validate(_VHost, <<"sharding">>, <<"shards-per-node">>, Term) ->
     validate_shards_per_node(<<"shards-per-node">>, Term);
 
-validate(_VHost, <<"shard">>, <<"routing-key">>, Term) ->
+validate(_VHost, <<"sharding">>, <<"routing-key">>, Term) ->
     rabbit_parameter_validation:binary(<<"routing-key">>, Term);
 
 validate(_VHost, <<"sharding-definition">>, Name, Term) ->
@@ -42,15 +42,15 @@ validate(_VHost, _Component, Name, _Term) ->
 %% have the new parameter.
 %% perhaps queues names above the "shards-per-node" value should
 %% be unbinded from the exchange.
-notify(VHost, <<"shard">>, <<"shards-per-node">>, _Term) ->
+notify(VHost, <<"sharding">>, <<"shards-per-node">>, _Term) ->
     rabbit_sharding_shard:update_shards(VHost, shards_per_node),
     ok;
 
-notify(VHost, <<"shard">>, <<"routing-key">>, _Term) ->
+notify(VHost, <<"sharding">>, <<"routing-key">>, _Term) ->
     rabbit_sharding_shard:update_shards(VHost, all),
     ok;
 
-notify(_VHost, <<"shard">>, _Name, _Term) ->
+notify(_VHost, <<"sharding">>, _Name, _Term) ->
     ok;
 
 %% Maybe increase shard number by declaring new queues
@@ -61,11 +61,11 @@ notify(VHost, <<"sharding-definition">>, Name, _Term) ->
     rabbit_sharding_shard:update_named_shard(VHost, Name),
     ok.
 
-notify_clear(VHost, <<"shard">>, <<"shards-per-node">>) ->
+notify_clear(VHost, <<"sharding">>, <<"shards-per-node">>) ->
     rabbit_sharding_shard:update_shards(VHost, shards_per_node),
     ok;
 
-notify_clear(VHost, <<"shard">>, <<"routing-key">>) ->
+notify_clear(VHost, <<"sharding">>, <<"routing-key">>) ->
     rabbit_sharding_shard:update_shards(VHost, all),
     ok;
 
