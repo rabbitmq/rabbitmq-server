@@ -37,10 +37,13 @@
 %% selected as the first node in the cluster.
 %%
 %% To coordinate the restarting nodes we pick a special node from the
-%% winning partition - the "winner". Restarting nodes then stop, tell
-%% the winner they have done so, and wait for it to tell them it is
-%% safe to start again. The winner and the leader are not necessarily
-%% the same node.
+%% winning partition - the "winner". Restarting nodes then stop, and
+%% wait for it to tell them it is safe to start again. The winner
+%% determines that a node has stopped just by seeing if its rabbit app
+%% stops - if a node stops for any other reason it just gets a message
+%% it will ignore, and otherwise we carry on.
+%%
+%% The winner and the leader are not necessarily the same node.
 %%
 %% Possible states:
 %%
