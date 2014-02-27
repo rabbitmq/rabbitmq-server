@@ -57,9 +57,8 @@ start_conn_ch(Fun, Upstream, UParams,
                     try
                         R = Fun(Conn, Ch, DConn, DCh),
                         log_info(
-                          "Federation ~s connected to ~s~n",
-                          [rabbit_misc:rs(XorQName),
-                           rabbit_federation_upstream:params_to_string(
+                          XorQName, "connected to ~s~n",
+                          [rabbit_federation_upstream:params_to_string(
                              UParams)]),
                         Name = pget(name, amqp_connection:info(DConn, [name])),
                         rabbit_federation_status:report(
@@ -108,32 +107,28 @@ ensure_connection_closed(Conn) ->
 connection_error(remote_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_warning("Federation ~s did not connect to ~s~n~p~n",
-                [rabbit_misc:rs(XorQName),
-                 rabbit_federation_upstream:params_to_string(UParams),
+    log_warning(XorQName, "did not connect to ~s~n~p~n",
+                [rabbit_federation_upstream:params_to_string(UParams),
                  E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(remote, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_info("Federation ~s disconnected from ~s~n~p~n",
-             [rabbit_misc:rs(XorQName),
-              rabbit_federation_upstream:params_to_string(UParams), E]),
+    log_info(XorQName, "~s disconnected from ~s~n~p~n",
+             [rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(local, basic_cancel, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, {error, basic_cancel}),
-    log_info("Federation ~s received 'basic.cancel'~n",
-             [rabbit_misc:rs(XorQName)]),
+    log_info(XorQName, "received 'basic.cancel'~n", []),
     {stop, {shutdown, restart}, State};
 
 connection_error(local_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_warning("Federation ~s did not connect locally~n~p~n",
-                [rabbit_misc:rs(XorQName), E]),
+    log_warning(XorQName, "did not connect locally~n~p~n", [E]),
     {stop, {shutdown, restart}, State}.
 
 %% If we terminate due to a gen_server call exploding (almost
@@ -245,9 +240,8 @@ log_terminate(shutdown, Upstream, UParams, XorQName) ->
     %% the link because configuration has changed. So try to shut down
     %% nicely so that we do not cause unacked messages to be
     %% redelivered.
-    log_info("Federation ~s disconnecting from ~s~n",
-             [rabbit_misc:rs(XorQName),
-              rabbit_federation_upstream:params_to_string(UParams)]),
+    log_info(XorQName, "disconnecting from ~s~n",
+             [rabbit_federation_upstream:params_to_string(UParams)]),
     rabbit_federation_status:remove(Upstream, XorQName);
 
 log_terminate(Reason, Upstream, UParams, XorQName) ->
@@ -256,8 +250,12 @@ log_terminate(Reason, Upstream, UParams, XorQName) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(Reason)).
 
-log_info   (Fmt, Args) -> rabbit_log:log(federation, info,    Fmt, Args).
-log_warning(Fmt, Args) -> rabbit_log:log(federation, warning, Fmt, Args).
+log_info   (XorQName, Fmt, Args) -> log(info,    XorQName, Fmt, Args).
+log_warning(XorQName, Fmt, Args) -> log(warning, XorQName, Fmt, Args).
+
+log(Level, XorQName, Fmt, Args) ->
+    rabbit_log:log(federation, Level, "Federation ~s " ++ Fmt,
+                   [rabbit_misc:rs(XorQName) | Args]).
 
 %%----------------------------------------------------------------------------
 
