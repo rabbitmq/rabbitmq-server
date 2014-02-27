@@ -91,7 +91,7 @@ shard_change_routing_key_param_test() ->
                 teardown(Ch, [<<"sharding.test">>], ["rkey"], ["rkey"])
             end).
 
-%% Setting the routing-key parameter *shoul* affect a sharding policy
+%% Setting the routing-key parameter *should* affect a sharding policy
 %% that *doesn't* provide a routing-key
 shard_change_routing_key_param_2_test() ->
     with_ch(fun (Ch) ->
