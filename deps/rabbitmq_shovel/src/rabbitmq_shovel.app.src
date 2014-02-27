@@ -3,7 +3,7 @@
   {vsn, "%%VSN%%"},
   {modules, []},
   {registered, []},
-  {env, [{defaults, [{prefetch_count,     0},
+  {env, [{defaults, [{prefetch_count,     1000},
                      {ack_mode,           on_confirm},
                      {publish_fields,     []},
                      {publish_properties, []},
