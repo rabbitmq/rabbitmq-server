@@ -173,6 +173,8 @@ handle_channel_down(Pid, Number, Reason, State) ->
 
 maybe_report_down(_Pid, normal, _State) ->
     ok;
+maybe_report_down(_Pid, shutdown, _State) ->
+    ok;
 maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {server_initiated_close, _, _}, _State) ->
