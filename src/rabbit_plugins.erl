@@ -38,20 +38,27 @@
 
 %%----------------------------------------------------------------------------
 
-enable(Plugins) ->
-    setup(),
-    rabbit_boot:start(Plugins).
+enable(Enabled) ->
+    prepare_plugins(Enabled),
+    rabbit_boot:start(Enabled).
 
 disable(Plugins) ->
-    setup(),
     rabbit_boot:stop(Plugins).
 
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
-    {ok, PluginDir}   = application:get_env(rabbit, plugins_dir),
     {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
+
+    %% Eliminate the contents of the destination directory
+    case delete_recursively(ExpandDir) of
+        ok          -> ok;
+        {error, E1} -> throw({error, {cannot_delete_plugins_expand_dir,
+                                      [ExpandDir, E1]}})
+    end,
+
     {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
-    prepare_plugins(EnabledFile, PluginDir, ExpandDir).
+    Enabled = read_enabled(EnabledFile),
+    prepare_plugins(Enabled).
 
 %% @doc Lists the plugins which are currently running.
 active() ->
@@ -114,9 +121,11 @@ dependencies(Reverse, Sources, AllPlugins) ->
 
 %%----------------------------------------------------------------------------
 
-prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
+prepare_plugins(Enabled) ->
+    {ok, PluginsDistDir} = application:get_env(rabbit, plugins_dir),
+    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+
     AllPlugins = list(PluginsDistDir),
-    Enabled = read_enabled(EnabledFile),
     ToUnpack = dependencies(false, Enabled, AllPlugins),
     ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
 
@@ -127,12 +136,6 @@ prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
                      [Missing])
     end,
 
-    %% Eliminate the contents of the destination directory
-    case delete_recursively(ExpandDir) of
-        ok          -> ok;
-        {error, E1} -> throw({error, {cannot_delete_plugins_expand_dir,
-                                      [ExpandDir, E1]}})
-    end,
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
         {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
