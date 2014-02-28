@@ -27,7 +27,12 @@
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
-                name, type, config, inbound_uri, outbound_uri, unacked}).
+                name, type, config, inbound_uri, outbound_uri, unacked,
+                remaining, %% [1]
+                remaining_unacked}). %% [2]
+
+%% [1] Counts down until we shut down in all modes
+%% [2] Counts down until we stop publishing in on-confirm mode
 
 start_link(Type, Name, Config) ->
     ok = rabbit_shovel_status:report(Name, Type, starting),
@@ -82,6 +87,8 @@ handle_cast(init, State = #state{config = Config}) ->
             ok
     end,
 
+    Remaining = remaining(InboundChan, Config),
+
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(
           InboundChan, #'basic.consume'{queue  = Config#shovel.queue,
@@ -93,6 +100,8 @@ handle_cast(init, State = #state{config = Config}) ->
                     outbound_conn = OutboundConn, outbound_ch = OutboundChan,
                     inbound_uri = InboundURI,
                     outbound_uri = OutboundURI,
+                    remaining = Remaining,
+                    remaining_unacked = Remaining,
                     unacked = gb_trees:empty()},
     ok = report_running(State1),
     {noreply, State1}.
@@ -145,6 +154,7 @@ terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
     rabbit_shovel_status:report(Name, Type, {terminated, Reason}),
     ok;
 terminate(Reason, State) ->
+    maybe_autodelete(Reason, State),
     catch amqp_connection:close(State#state.inbound_conn,
                                 ?MAX_CONNECTION_CLOSE_TIMEOUT),
     catch amqp_connection:close(State#state.outbound_conn,
@@ -164,18 +174,18 @@ confirm_to_inbound(MsgCtr, Seq, Multiple, State =
                        #state{inbound_ch = InboundChan, unacked = Unacked}) ->
     ok = amqp_channel:cast(
            InboundChan, MsgCtr(gb_trees:get(Seq, Unacked), Multiple)),
-    Unacked1 = remove_delivery_tags(Seq, Multiple, Unacked),
-    State#state{unacked = Unacked1}.
+    {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
+    decr_remaining(Removed, State#state{unacked = Unacked1}).
 
-remove_delivery_tags(Seq, false, Unacked) ->
-    gb_trees:delete(Seq, Unacked);
-remove_delivery_tags(Seq, true, Unacked) ->
+remove_delivery_tags(Seq, false, Unacked, 0) ->
+    {gb_trees:delete(Seq, Unacked), 1};
+remove_delivery_tags(Seq, true, Unacked, Count) ->
     case gb_trees:is_empty(Unacked) of
-        true  -> Unacked;
+        true  -> {Unacked, Count};
         false -> {Smallest, _Val, Unacked1} = gb_trees:take_smallest(Unacked),
                  case Smallest > Seq of
-                     true  -> Unacked;
-                     false -> remove_delivery_tags(Seq, true, Unacked1)
+                     true  -> {Unacked, Count};
+                     false -> remove_delivery_tags(Seq, true, Unacked1, Count+1)
                  end
     end.
 
@@ -187,6 +197,13 @@ report_running(State) ->
                  {dest_uri,     State#state.outbound_uri},
                  {dest_channel, State#state.outbound_ch}]}).
 
+publish(_Tag, _Method, _Msg, State = #state{remaining_unacked = 0}) ->
+    %% We are in on-confirm mode, and are autodelete. We have
+    %% published all the messages we need to; we just wait for acks to
+    %% come back. So drop subsequent messages on the floor to be
+    %% requeued later.
+    State;
+
 publish(Tag, Method, Msg,
         State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
                        config = Config, unacked = Unacked}) ->
@@ -195,13 +212,15 @@ publish(Tag, Method, Msg,
               _           -> undefined
           end,
     ok = amqp_channel:call(OutboundChan, Method, Msg),
-    case Config#shovel.ack_mode of
-        no_ack     -> State;
-        on_confirm -> State#state{unacked = gb_trees:insert(Seq, Tag, Unacked)};
-        on_publish -> ok = amqp_channel:cast(
-                             InboundChan, #'basic.ack'{delivery_tag = Tag}),
-                      State
-    end.
+    decr_remaining_unacked(
+      case Config#shovel.ack_mode of
+          no_ack     -> decr_remaining(1, State);
+          on_confirm -> State#state{unacked = gb_trees:insert(
+                                                Seq, Tag, Unacked)};
+          on_publish -> ok = amqp_channel:cast(
+                               InboundChan, #'basic.ack'{delivery_tag = Tag}),
+                        decr_remaining(1, State)
+      end).
 
 make_conn_and_chan(URIs) ->
     URI = lists:nth(random:uniform(length(URIs)), URIs),
@@ -210,3 +229,36 @@ make_conn_and_chan(URIs) ->
     link(Conn),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     {Conn, Chan, amqp_uri:remove_credentials(URI)}.
+
+remaining(Ch, #shovel{delete_after = never}) ->
+    unlimited;
+remaining(Ch, #shovel{delete_after = 'queue-length', queue = Queue}) ->
+    #'queue.declare_ok'{message_count = N} =
+        amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
+                                               passive = true}),
+    N;
+remaining(Ch, #shovel{delete_after = Count}) ->
+    Count.
+
+decr_remaining(_N, State = #state{remaining = unlimited}) ->
+    State;
+decr_remaining(N,  State = #state{remaining = M}) ->
+    case M > N of
+        true  -> State#state{remaining = M - N};
+        false -> exit({shutdown, autodelete})
+    end.
+
+decr_remaining_unacked(State = #state{remaining_unacked = unlimited}) ->
+    State;
+decr_remaining_unacked(State = #state{remaining_unacked = 0}) ->
+    State;
+decr_remaining_unacked(State = #state{remaining_unacked = N}) ->
+    State#state{remaining_unacked = N - 1}.
+
+maybe_autodelete({shutdown, autodelete}, #state{name = {VHost, Name},
+                                                type = dynamic}) ->
+    %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
+    put(shovel_worker_autodelete, true),
+    rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name);
+maybe_autodelete(_Reason, _State) ->
+    ok.

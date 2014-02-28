@@ -50,9 +50,20 @@ child_exists(Name) ->
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 stop_child(Name) ->
-    ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Name),
-    ok = mirrored_supervisor:delete_child(?SUPERVISOR, Name),
-    rabbit_shovel_status:remove(Name).
+    case get(shovel_worker_autodelete) of
+        true -> ok; %% [1]
+        _    -> ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Name),
+                ok = mirrored_supervisor:delete_child(?SUPERVISOR, Name),
+                rabbit_shovel_status:remove(Name)
+    end.
+
+%% [1] An autodeleting worker removes its own parameter, and thus ends
+%% up here via the parameter callback. It is a transient worker that
+%% is just about to terminate normally - so we don't need to tell the
+%% supervisor to stop us - and as usual if we call into our own
+%% supervisor we risk deadlock.
+%%
+%% See rabbit_shovel_worker:maybe_autodelete/1
 
 %%----------------------------------------------------------------------------
 

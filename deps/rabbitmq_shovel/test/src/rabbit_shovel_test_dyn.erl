@@ -85,6 +85,32 @@ change_definition_test() ->
               expect_empty(Ch, <<"dest2">>)
       end).
 
+autodelete_test_() ->
+    [autodelete_case({<<"on-confirm">>, <<"queue-length">>,  0, 100}),
+     autodelete_case({<<"on-confirm">>, 50,                 50,  50}),
+     autodelete_case({<<"on-publish">>, <<"queue-length">>,  0, 100}),
+     autodelete_case({<<"on-publish">>, 50,                 50,  50}),
+     %% no-ack is not compatible with explicit count
+     autodelete_case({<<"no-ack">>,     <<"queue-length">>,  0, 100})].
+
+autodelete_case(Args) ->
+    fun () -> with_ch(autodelete_do(Args)) end.
+
+autodelete_do({AckMode, After, ExpSrc, ExpDest}) ->
+    fun (Ch) ->
+            amqp_channel:call(Ch, #'confirm.select'{}),
+            amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
+            publish_count(Ch, <<>>, <<"src">>, <<"hello">>, 100),
+            amqp_channel:wait_for_confirms(Ch),
+            set_param_nowait(<<"test">>, [{<<"src-queue">>,    <<"src">>},
+                                          {<<"dest-queue">>,   <<"dest">>},
+                                          {<<"ack-mode">>,     AckMode},
+                                          {<<"delete-after">>, After}]),
+            await_autodelete(<<"test">>),
+            expect_count(Ch, <<"src">>, <<"hello">>, ExpSrc),
+            expect_count(Ch, <<"dest">>, <<"hello">>, ExpDest)
+    end.
+
 validation_test() ->
     URIs = [{<<"src-uri">>,  <<"amqp://">>},
             {<<"dest-uri">>, <<"amqp://">>}],
@@ -113,6 +139,11 @@ validation_test() ->
     invalid_param([{<<"prefetch-count">>,  <<"three">>} | QURIs]),
     invalid_param([{<<"reconnect-delay">>, <<"three">>} | QURIs]),
     invalid_param([{<<"ack-mode">>,        <<"whenever">>} | QURIs]),
+    invalid_param([{<<"delete-after">>,    <<"whenever">>} | QURIs]),
+
+    %% Can't use explicit message count and no-ack together
+    invalid_param([{<<"delete-after">>,    1},
+                   {<<"ack-mode">>,        <<"no-ack">>} | QURIs]),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -154,12 +185,22 @@ expect_empty(Ch, Q) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
+publish_count(Ch, X, Key, M, Count) ->
+    [publish(Ch, X, Key, M) || _ <- lists:seq(1, Count)].
+
+expect_count(Ch, Q, M, Count) ->
+    [expect(Ch, Q, M) || _ <- lists:seq(1, Count)],
+    expect_empty(Ch, Q).
+
 set_param(Name, Value) ->
+    set_param_nowait(Name, Value),
+    await_shovel(Name).
+
+set_param_nowait(Name, Value) ->
     ok = rabbit_runtime_parameters:set(
            <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  <<"amqp://">>},
                                          {<<"dest-uri">>, [<<"amqp://">>]} |
-                                         Value]),
-    await_shovel(Name).
+                                         Value]).
 
 invalid_param(Value) ->
     {error_string, _} = rabbit_runtime_parameters:set(
@@ -168,15 +209,6 @@ invalid_param(Value) ->
 valid_param(Value) ->
     ok = rabbit_runtime_parameters:set(<<"/">>, <<"shovel">>, <<"a">>, Value),
     ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>).
-
-await_shovel(Name) ->
-    S = rabbit_shovel_status:status(),
-    Names = [N || {{<<"/">>, N}, dynamic, {running, _}, _} <- S],
-    case lists:member(Name, Names) of
-        true  -> ok;
-        false -> timer:sleep(100),
-                 await_shovel(Name)
-    end.
 
 clear_param(Name) ->
     rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, Name).
@@ -188,3 +220,24 @@ cleanup() ->
         P <- rabbit_runtime_parameters:list()],
     [rabbit_amqqueue:delete(Q, false, false) || Q <- rabbit_amqqueue:list()].
 
+await_shovel(Name) ->
+    await(fun () -> lists:member(Name, shovels_from_status()) end).
+
+await_autodelete(Name) ->
+    await(fun () -> not lists:member(Name, shovels_from_parameters()) end),
+    await(fun () -> not lists:member(Name, shovels_from_status()) end).
+
+await(Pred) ->
+    case Pred() of
+        true  -> ok;
+        false -> timer:sleep(100),
+                 await(Pred)
+    end.
+
+shovels_from_status() ->
+    S = rabbit_shovel_status:status(),
+    [N || {{<<"/">>, N}, dynamic, {running, _}, _} <- S].
+
+shovels_from_parameters() ->
+    L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),
+    [pget(name, Shovel) || Shovel <- L].

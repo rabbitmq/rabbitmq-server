@@ -22,6 +22,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
+-define(IGNORE_FIELDS, [delete_after]).
+
 parse(ShovelName, Config) ->
     {ok, Defaults} = application:get_env(defaults),
     try
@@ -54,7 +56,7 @@ enrich_shovel_config({Config, Defaults}) ->
 
 parse_shovel_config_proplist(Config) ->
     Dict = dict:from_list(Config),
-    Fields = record_info(fields, shovel),
+    Fields = record_info(fields, shovel) -- ?IGNORE_FIELDS,
     Keys = dict:fetch_keys(Dict),
     case {Keys -- Fields, Fields -- Keys} of
         {[], []}      -> {_Pos, Dict1} =

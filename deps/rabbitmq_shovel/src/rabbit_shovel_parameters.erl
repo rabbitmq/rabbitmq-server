@@ -46,6 +46,12 @@ validate(_VHost, <<"shovel">>, Name, Def) ->
          zero -> ok;
          one  -> ok;
          both -> {error, "Cannot specify 'dest-exchange' and 'dest-queue'", []}
+     end,
+     case {pget(<<"delete-after">>, Def), pget(<<"ack-mode">>, Def)} of
+         {N, <<"no-ack">>} when is_integer(N) ->
+             {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
+         _ ->
+             ok
      end | rabbit_parameter_validation:proplist(Name, validation(), Def)];
 
 validate(_VHost, _Component, Name, _Term) ->
@@ -80,7 +86,8 @@ validation() ->
      {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"ack-mode">>,        rabbit_parameter_validation:enum(
-                               ['no-ack', 'on-publish', 'on-confirm']), optional}
+                               ['no-ack', 'on-publish', 'on-confirm']), optional},
+     {<<"delete-after">>,    fun validate_delete_after/2, optional}
     ].
 
 %% TODO this function is duplicated from federation. Move to amqp_uri module?
@@ -102,6 +109,13 @@ validate_uri(Name, Term) ->
               end;
         E  -> E
     end.
+
+validate_delete_after(_Name, <<"never">>)          -> ok;
+validate_delete_after(_Name, <<"queue-length">>)   -> ok;
+validate_delete_after(_Name, N) when is_integer(N) -> ok;
+validate_delete_after(Name,  Term) ->
+    {error, "~s should be number, \"never\" or \"queue-length\", actually was "
+     "~p", [Name, Term]}.
 
 %%----------------------------------------------------------------------------
 
@@ -174,7 +188,9 @@ parse({VHost, Name}, Def) ->
        publish_fields     = PubFun,
        publish_properties = PubPropsFun,
        queue              = Queue,
-       reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1)}}.
+       reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1),
+       delete_after       = opt_b2a(pget(<<"delete-after">>, Def, <<"never">>))
+      }}.
 
 get_uris(Key, Def) ->
     URIs = case pget(Key, Def) of
@@ -208,3 +224,6 @@ update_headers(Table0, Table1, SrcURI, DestURI, Headers) ->
     rabbit_basic:prepend_table_header(
       ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
       Headers).
+
+opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
+opt_b2a(N)                   -> N.

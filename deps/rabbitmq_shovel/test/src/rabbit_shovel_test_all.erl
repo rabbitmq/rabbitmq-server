@@ -24,6 +24,10 @@ all_tests() ->
 
 tests(Module, Timeout) ->
     {foreach, fun() -> ok end,
-     [{timeout, Timeout, fun Module:F/0} ||
-         {F, _Arity} <- proplists:get_value(exports, Module:module_info()),
-         string:right(atom_to_list(F), 5) =:= "_test"]}.
+     [{timeout, Timeout, fun Module:F/0} || F <- funs(Module, "_test")] ++
+         [{timeout, Timeout, Fun} || Gen <- funs(Module, "_test_"),
+                                     Fun <- Module:Gen()]}.
+
+funs(Module, Suffix) ->
+    [F || {F, _Arity} <- proplists:get_value(exports, Module:module_info()),
+          string:right(atom_to_list(F), length(Suffix)) =:= Suffix].

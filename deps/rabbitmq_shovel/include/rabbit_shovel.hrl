@@ -27,5 +27,6 @@
          publish_fields,
          publish_properties,
          queue,
-         reconnect_delay
+         reconnect_delay,
+         delete_after = never
         }).

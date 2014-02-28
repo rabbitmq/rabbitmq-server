@@ -34,7 +34,7 @@ init([Name, Config]) ->
           [{Name,
             {rabbit_shovel_worker, start_link, [dynamic, Name, Config]},
             case pget(<<"reconnect-delay">>, Config, 1) of
-                N when is_integer(N) andalso N > 0 -> {permanent, N};
+                N when is_integer(N) andalso N > 0 -> {transient, N};
                 _                                  -> temporary
             end,
             16#ffffffff, worker, [rabbit_shovel_worker]}]}}.
