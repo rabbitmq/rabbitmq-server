@@ -5,5 +5,3 @@ WITH_BROKER_TEST_CONFIG:=$(PACKAGE_DIR)/etc/rabbit-test
 
 $(PACKAGE_DIR)+pre-test::
 	rm -rf tmp /tmp/rabbitmq-*-mnesia
-
-
