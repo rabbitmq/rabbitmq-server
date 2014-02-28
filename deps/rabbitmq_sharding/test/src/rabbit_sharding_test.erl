@@ -187,6 +187,51 @@ shard_update_routing_key_param_2_test() ->
                        ["rkey"])
       end).
 
+%% tests that the interceptor returns queue names
+%% sorted by consumer count and then by queue index.
+shard_basic_consume_interceptor_test() ->
+    with_ch(
+      fun (Ch) ->
+              Sh = <<"sharding.test">>,
+              exchange_op(Ch, x_declare(Sh)),
+              set_param("sharding-definition", "three",
+                        "{\"shards-per-node\": 3}"),
+              set_pol("three", "^sharding\\.", policy("three")),
+
+              start_consumer(Ch, Sh),
+              assert_consumers(Sh, 0, 1),
+              assert_consumers(Sh, 1, 0),
+              assert_consumers(Sh, 2, 0),
+
+              start_consumer(Ch, Sh),
+              assert_consumers(Sh, 0, 1),
+              assert_consumers(Sh, 1, 1),
+              assert_consumers(Sh, 2, 0),
+
+              start_consumer(Ch, Sh),
+              assert_consumers(Sh, 0, 1),
+              assert_consumers(Sh, 1, 1),
+              assert_consumers(Sh, 2, 1),
+
+              start_consumer(Ch, Sh),
+              assert_consumers(Sh, 0, 2),
+              assert_consumers(Sh, 1, 1),
+              assert_consumers(Sh, 2, 1),
+
+              teardown(Ch,
+                       [<<"sharding.test">>],
+                       [{"sharding-definition", "three"}],
+                       ["three"])
+      end).
+
+start_consumer(Ch, Shard) ->
+    amqp_channel:call(Ch, #'basic.consume'{queue = Shard}).
+
+assert_consumers(Shard, QInd, Count) ->
+    Q0 = q(shard_q(x(Shard), QInd)),
+    [{consumers, C0}] = rabbit_sharding_interceptor:consumer_count(Q0),
+    ?assertEqual(C0, Count).
+
 queues(Nodename) ->
     case rpc:call(n(Nodename), rabbit_amqqueue, list, [<<"/">>]) of
         {badrpc, _} -> [];
@@ -229,7 +274,12 @@ x_declare(Name, Type) ->
 x_delete(Name) ->
     #'exchange.delete'{exchange = Name}.
 
-r(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
+x(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
+q(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
+
+shard_q(X, N) ->
+    rabbit_sharding_util:make_queue_name(
+      exchange_bin(X), a2b(node()), N).
 
 n(Nodename) ->
     {_, NodeHost} = rabbit_nodes:parts(node()),

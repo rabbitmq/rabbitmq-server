@@ -7,6 +7,9 @@
 
 -export([description/0, intercept/2, applies_to/1]).
 
+%% exported for tests
+-export([consumer_count/1]).
+
 -import(rabbit_sharding_util, [a2b/1]).
 -import(rabbit_misc, [r/3]).
 
