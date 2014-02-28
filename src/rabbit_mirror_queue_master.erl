@@ -139,8 +139,8 @@ sync_mirrors(HandleInfo, EmitStats,
                               backing_queue       = BQ,
                               backing_queue_state = BQS }) ->
     Log = fun (Fmt, Params) ->
-                  rabbit_log:info("Synchronising ~s: " ++ Fmt ++ "~n",
-                                  [rabbit_misc:rs(QName) | Params])
+                  rabbit_mirror_queue_misc:log_info(
+                    QName, "Synchronising ~s: " ++ Fmt ++ "~n", Params)
           end,
     Log("~p messages to synchronise", [BQ:len(BQS)]),
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),

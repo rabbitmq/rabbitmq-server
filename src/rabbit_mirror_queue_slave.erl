@@ -136,9 +136,8 @@ handle_go(Q = #amqqueue{name = QName}) ->
             rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
             {ok, State};
         {stale, StalePid} ->
-            rabbit_log:warning("Detected stale HA master while adding "
-                               "mirror of ~s: ~p~n",
-                               [rabbit_misc:rs(QName), StalePid]),
+            rabbit_mirror_queue_misc:log_warning(
+              QName, "Detected stale HA master: ~p~n", [StalePid]),
             gm:leave(GM),
             {error, {stale_master_pid, StalePid}};
         duplicate_live_master ->
@@ -526,8 +525,8 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           msg_id_ack          = MA,
                           msg_id_status       = MS,
                           known_senders       = KS }) ->
-    rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
-                    [rabbit_misc:rs(QName), rabbit_misc:pid_to_string(self())]),
+    rabbit_mirror_queue_misc:log_info(QName, "Promoting slave ~s to master~n",
+                                      [rabbit_misc:pid_to_string(self())]),
     Q1 = Q #amqqueue { pid = self() },
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q1, GM, rabbit_mirror_queue_master:sender_death_fun(),
