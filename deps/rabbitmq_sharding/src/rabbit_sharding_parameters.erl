@@ -62,7 +62,7 @@ notify(VHost, <<"sharding-definition">>, Name, _Term) ->
     ok.
 
 notify_clear(VHost, <<"sharding">>, <<"shards-per-node">>) ->
-    rabbit_sharding_shard:update_shards(VHost, shards_per_node),
+    rabbit_sharding_shard:update_shards(VHost, all),
     ok;
 
 notify_clear(VHost, <<"sharding">>, <<"routing-key">>) ->
