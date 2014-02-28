@@ -251,7 +251,7 @@ update_headers(#upstream_params{table = Table}, Redelivered, X, K, Headers) ->
             undefined ->
                 %% We only want to record the original exchange and
                 %% routing key the first time a message gets
-                %% forwarded; after that it's known tthat they were
+                %% forwarded; after that it's known that they were
                 %% <<>> and QueueName respectively.
                 {rabbit_misc:set_table_value(
                    rabbit_misc:set_table_value(
