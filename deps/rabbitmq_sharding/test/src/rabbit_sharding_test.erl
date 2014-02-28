@@ -24,7 +24,7 @@ shard_queue_creation_test() ->
               ?assertEqual(3, length(queues("rabbit-test"))),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 3}],
                        [{"sharding-definition", "3_shard"}],
                        ["3_shard"])
       end).
@@ -44,7 +44,7 @@ shard_update_spn_test() ->
               ?assertEqual(5, length(queues("rabbit-test"))),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 5}],
                        [{"sharding-definition", "3_shard"}],
                        ["3_shard"])
       end).
@@ -62,7 +62,7 @@ shard_decrease_spn_keep_queues_test() ->
               ?assertEqual(5, length(queues("rabbit-test"))),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 5}],
                        [{"sharding-definition", "5_shard"}],
                        ["5_shard"])
       end).
@@ -89,7 +89,7 @@ shard_update_spn_param_test() ->
               ?assertEqual(3, length(bindings("rabbit-test", <<"sharding.test">>))),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 3}],
                        [{"sharding-definition", "spn_test"},
                         {"sharding", "shards-per-node"}],
                        ["spn_test"])
@@ -112,7 +112,7 @@ shard_clear_spn_param_test() ->
               ?assertEqual(1, length(bindings("rabbit-test", <<"sharding.test">>))),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 3}],
                        [{"sharding-definition", "spn_test"}],
                        ["spn_test"])
       end).
@@ -137,7 +137,7 @@ shard_update_routing_key_test() ->
               ?assert(Bs =/= Bs2),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 1}],
                        [{"sharding-definition", "rkey"}],
                        ["rkey"])
       end).
@@ -159,7 +159,7 @@ shard_update_routing_key_param_test() ->
               ?assert(Bs =:= Bs2),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 1}],
                        [{"sharding-definition", "rkey"}],
                        ["rkey"])
       end).
@@ -171,7 +171,7 @@ shard_update_routing_key_param_2_test() ->
       fun (Ch) ->
               exchange_op(Ch, x_declare(<<"sharding.test">>)),
               set_param("sharding-definition", "rkey",
-                        "{\"shards-per-node\": 3}"),
+                        "{\"shards-per-node\": 1}"),
               set_pol("rkey", "^sharding\\.", policy("rkey")),
               Bs = bindings("rabbit-test", <<"sharding.test">>),
 
@@ -181,7 +181,7 @@ shard_update_routing_key_param_2_test() ->
               ?assert(Bs =/= Bs2),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 1}],
                        [{"sharding-definition", "rkey"},
                         {"sharding", "routing-key"}],
                        ["rkey"])
@@ -219,7 +219,7 @@ shard_basic_consume_interceptor_test() ->
               assert_consumers(Sh, 2, 1),
 
               teardown(Ch,
-                       [<<"sharding.test">>],
+                       [{<<"sharding.test">>, 3}],
                        [{"sharding-definition", "three"}],
                        ["three"])
       end).
@@ -253,13 +253,19 @@ with_ch(Fun) ->
     ok.
 
 cleanup({Nodename, _}) ->
-    [rpc:call(n(Nodename), rabbit_amqqueue, delete, [Q, false, false]) ||
-        Q <- queues(Nodename)].
+    [rpc:call(n(Nodename), rabbit_amqqueue, delete, [Q, false, false])
+     || Q <- queues(Nodename)].
 
 teardown(Ch, Xs, Params, Policies) ->
-    [exchange_op(Ch, x_delete(XName)) || XName <- Xs],
+    [begin
+         exchange_op(Ch, x_delete(XName)),
+         delete_queues(Ch, XName, N)
+     end || {XName, N} <- Xs],
     [clear_param(Comp, Param) || {Comp, Param} <- Params],
     [clear_pol(Policy) || Policy <- Policies].
+
+delete_queues(Ch, Name, N) ->
+    [amqp_channel:call(Ch, q_delete(Name, QInd)) || QInd <- lists:seq(0, N-1)].
 
 exchange_op(Ch, Op) ->
     amqp_channel:call(Ch, Op).
@@ -273,6 +279,9 @@ x_declare(Name, Type) ->
 
 x_delete(Name) ->
     #'exchange.delete'{exchange = Name}.
+
+q_delete(Name, QInd) ->
+    #'queue.delete'{queue = shard_q(x(Name), QInd)}.
 
 x(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 q(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
