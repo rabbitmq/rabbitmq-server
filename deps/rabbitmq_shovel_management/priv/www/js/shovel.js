@@ -55,6 +55,13 @@ HELP['shovel-ack-mode'] =
        <dd>Message acknowledgements are not used. The fastest option, but may lose messages in the event of network or broker failures.</dd>\
 </dl>';
 
+HELP['shovel-delete-after'] =
+    '<dl>\
+       <dt><code>Never</code></dt>\
+       <dd>The shovel never deletes itself; it will persist until it is explicitly removed.</dd>\
+       <dt><code>After initial length transferred</code></dt>\
+       <dd>The shovel will check the length of the queue when it starts up. It will transfer that many messages, and then delete itself.</dd>\
+</dl>';
 
 function link_shovel(vhost, name) {
     return _link_to(fmt_escape_html(name), '#/dynamic-shovels/' + esc(vhost) + '/' + esc(name));
