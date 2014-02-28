@@ -169,7 +169,7 @@ First the parameters specified in the `sharding-definition` applies, if not set 
 To set a parameter for the plugin, you could use the following command:
 
 ```bash
-rabbitmqctl set_parameter shard routing-key '"4321"'
+rabbitmqctl set_parameter sharding routing-key '"4321"'
 ```
 
 That will set a global parameter for routing keys used by the plugin.
