@@ -275,7 +275,13 @@ update_headers(#upstream_params{table = Table}, Redelivered, X, K, Headers) ->
     rabbit_basic:prepend_table_header(
       ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered},
                                  {<<"visit-count">>, long, Count + 1}],
-      Headers1).
+      swap_cc_header(Headers1)).
+
+swap_cc_header(Table) ->
+    [{case K of
+          <<"CC">> -> <<"x-original-cc">>;
+          _        -> K
+      end, T, V} || {K, T, V} <- Table].
 
 visit_match({table, T}, Info) ->
     lists:all(fun (K) ->
