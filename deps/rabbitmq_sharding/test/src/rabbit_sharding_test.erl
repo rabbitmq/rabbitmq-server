@@ -6,6 +6,7 @@
 
 %% Used everywhere
 -define(RABBIT,     {"rabbit-test",       5672}).
+-define(TEST_X,     <<"sharding.test">>).
 
 -import(rabbit_sharding_test_util,
         [set_param/3, clear_param/2, set_pol/3, clear_pol/1,
@@ -17,14 +18,14 @@
 shard_queue_creation_test() ->
     with_ch(
       fun (Ch) ->
-              exchange_op(Ch, x_declare(<<"sharding.test">>)),
+              exchange_op(Ch, x_declare(?TEST_X)),
               set_param("sharding-definition", "3_shard",
                         "{\"shards-per-node\": 3}"),
               set_pol("3_shard", "^sharding\\.", policy("3_shard")),
               ?assertEqual(3, length(queues("rabbit-test"))),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 3}],
+                       [{?TEST_X, 3}],
                        [{"sharding-definition", "3_shard"}],
                        ["3_shard"])
       end).
@@ -33,7 +34,7 @@ shard_queue_creation_test() ->
 shard_update_spn_test() ->
     with_ch(
       fun (Ch) ->
-              exchange_op(Ch, x_declare(<<"sharding.test">>)),
+              exchange_op(Ch, x_declare(?TEST_X)),
               set_param("sharding-definition", "3_shard",
                         "{\"shards-per-node\": 3}"),
               set_pol("3_shard", "^sharding\\.", policy("3_shard")),
@@ -44,7 +45,7 @@ shard_update_spn_test() ->
               ?assertEqual(5, length(queues("rabbit-test"))),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 5}],
+                       [{?TEST_X, 5}],
                        [{"sharding-definition", "3_shard"}],
                        ["3_shard"])
       end).
@@ -52,7 +53,7 @@ shard_update_spn_test() ->
 shard_decrease_spn_keep_queues_test() ->
     with_ch(
       fun (Ch) ->
-              exchange_op(Ch, x_declare(<<"sharding.test">>)),
+              exchange_op(Ch, x_declare(?TEST_X)),
               set_param("sharding-definition", "5_shard",
                         "{\"shards-per-node\": 5}"),
               set_pol("5_shard", "^sharding\\.", policy("5_shard")),
@@ -62,7 +63,7 @@ shard_decrease_spn_keep_queues_test() ->
               ?assertEqual(5, length(queues("rabbit-test"))),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 5}],
+                       [{?TEST_X, 5}],
                        [{"sharding-definition", "5_shard"}],
                        ["5_shard"])
       end).
@@ -70,7 +71,7 @@ shard_decrease_spn_keep_queues_test() ->
 shard_update_spn_param_test() ->
     with_ch(
       fun (Ch) ->
-              exchange_op(Ch, x_declare(<<"sharding.test">>)),
+              exchange_op(Ch, x_declare(?TEST_X)),
               set_param("sharding-definition", "spn_test",
                         "{\"routing-key\": \"1234\"}"),
               set_pol("spn_test", "^sharding\\.", policy("spn_test")),
@@ -81,15 +82,15 @@ shard_update_spn_param_test() ->
               ?assertEqual(?DEFAULT_SHARDS_NUM,
                            length(queues("rabbit-test"))),
               ?assertEqual(?DEFAULT_SHARDS_NUM,
-                           length(bindings("rabbit-test", <<"sharding.test">>))),
+                           length(bindings("rabbit-test", ?TEST_X))),
 
               set_param("sharding", "shards-per-node", "3"),
 
               ?assertEqual(3, length(queues("rabbit-test"))),
-              ?assertEqual(3, length(bindings("rabbit-test", <<"sharding.test">>))),
+              ?assertEqual(3, length(bindings("rabbit-test", ?TEST_X))),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 3}],
+                       [{?TEST_X, 3}],
                        [{"sharding-definition", "spn_test"},
                         {"sharding", "shards-per-node"}],
                        ["spn_test"])
@@ -98,7 +99,7 @@ shard_update_spn_param_test() ->
 shard_clear_spn_param_test() ->
     with_ch(
       fun (Ch) ->
-              exchange_op(Ch, x_declare(<<"sharding.test">>)),
+              exchange_op(Ch, x_declare(?TEST_X)),
               set_param("sharding-definition", "spn_test",
                         "{\"routing-key\": \"1234\"}"),
               set_param("sharding", "shards-per-node", "3"),
@@ -108,11 +109,11 @@ shard_clear_spn_param_test() ->
               %% queues should keep being three, but only one queue
               %% should be bound to the exchange.
               ?assertEqual(3, length(queues("rabbit-test"))),
-              {ok, X} = rabbit_exchange:lookup(x(<<"sharding.test">>)),
-              ?assertEqual(1, length(bindings("rabbit-test", <<"sharding.test">>))),
+              {ok, X} = rabbit_exchange:lookup(x(?TEST_X)),
+              ?assertEqual(1, length(bindings("rabbit-test", ?TEST_X))),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 3}],
+                       [{?TEST_X, 3}],
                        [{"sharding-definition", "spn_test"}],
                        ["spn_test"])
       end).
@@ -124,20 +125,20 @@ shard_clear_spn_param_test() ->
 shard_update_routing_key_test() ->
     with_ch(
       fun (Ch) ->
-              exchange_op(Ch, x_declare(<<"sharding.test">>)),
+              exchange_op(Ch, x_declare(?TEST_X)),
               set_param("sharding-definition", "rkey",
                         "{\"routing-key\": \"1234\"}"),
               set_pol("rkey", "^sharding\\.", policy("rkey")),
-              Bs = bindings("rabbit-test", <<"sharding.test">>),
+              Bs = bindings("rabbit-test", ?TEST_X),
 
               set_param("sharding-definition", "rkey",
                         "{\"routing-key\": \"4321\"}"),
-              Bs2 = bindings("rabbit-test", <<"sharding.test">>),
+              Bs2 = bindings("rabbit-test", ?TEST_X),
 
               ?assert(Bs =/= Bs2),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 1}],
+                       [{?TEST_X, 1}],
                        [{"sharding-definition", "rkey"}],
                        ["rkey"])
       end).
@@ -147,19 +148,19 @@ shard_update_routing_key_test() ->
 shard_update_routing_key_param_test() ->
     with_ch(
       fun (Ch) ->
-              exchange_op(Ch, x_declare(<<"sharding.test">>)),
+              exchange_op(Ch, x_declare(?TEST_X)),
               set_param("sharding-definition", "rkey",
                         "{\"routing-key\": \"1234\"}"),
               set_pol("rkey", "^sharding\\.", policy("rkey")),
-              Bs = bindings("rabbit-test", <<"sharding.test">>),
+              Bs = bindings("rabbit-test", ?TEST_X),
 
               set_param("sharding", "routing-key", "\"4321\""),
-              Bs2 = bindings("rabbit-test", <<"sharding.test">>),
+              Bs2 = bindings("rabbit-test", ?TEST_X),
 
               ?assert(Bs =:= Bs2),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 1}],
+                       [{?TEST_X, 1}],
                        [{"sharding-definition", "rkey"}],
                        ["rkey"])
       end).
@@ -169,19 +170,19 @@ shard_update_routing_key_param_test() ->
 shard_update_routing_key_param_2_test() ->
     with_ch(
       fun (Ch) ->
-              exchange_op(Ch, x_declare(<<"sharding.test">>)),
+              exchange_op(Ch, x_declare(?TEST_X)),
               set_param("sharding-definition", "rkey",
                         "{\"shards-per-node\": 1}"),
               set_pol("rkey", "^sharding\\.", policy("rkey")),
-              Bs = bindings("rabbit-test", <<"sharding.test">>),
+              Bs = bindings("rabbit-test", ?TEST_X),
 
               set_param("sharding", "routing-key", "\"1234\""),
-              Bs2 = bindings("rabbit-test", <<"sharding.test">>),
+              Bs2 = bindings("rabbit-test", ?TEST_X),
 
               ?assert(Bs =/= Bs2),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 1}],
+                       [{?TEST_X, 1}],
                        [{"sharding-definition", "rkey"},
                         {"sharding", "routing-key"}],
                        ["rkey"])
@@ -192,7 +193,7 @@ shard_update_routing_key_param_2_test() ->
 shard_basic_consume_interceptor_test() ->
     with_ch(
       fun (Ch) ->
-              Sh = <<"sharding.test">>,
+              Sh = ?TEST_X,
               exchange_op(Ch, x_declare(Sh)),
               set_param("sharding-definition", "three",
                         "{\"shards-per-node\": 3}"),
@@ -219,7 +220,7 @@ shard_basic_consume_interceptor_test() ->
               assert_consumers(Sh, 2, 1),
 
               teardown(Ch,
-                       [{<<"sharding.test">>, 3}],
+                       [{?TEST_X, 3}],
                        [{"sharding-definition", "three"}],
                        ["three"])
       end).
