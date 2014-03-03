@@ -40,10 +40,18 @@
 
 enable(Enabled) ->
     prepare_plugins(Enabled),
-    rabbit_boot:start(Enabled).
+    app_utils:update_running_apps(
+      fun() -> rabbit_boot:start(Enabled) end,
+      fun(Diff) ->
+              ok = rabbit_event:notify(plugins_changed, [{enabled, Diff}])
+      end).
 
 disable(Plugins) ->
-    rabbit_boot:stop(Plugins).
+    app_utils:update_running_apps(
+      fun() -> rabbit_boot:stop(Plugins) end,
+      fun(Diff) ->
+              ok = rabbit_event:notify(plugins_changed, [{disabled, Diff}])
+      end).
 
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
