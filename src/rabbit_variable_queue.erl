@@ -164,13 +164,12 @@
 %% converting a batch stalls the queue for too long. Therefore, it
 %% must be just right.
 %%
-%% The conversion from alphas to betas is also chunked, but only to
-%% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
-%% any one time. This further smooths the effects of changes to the
-%% target_ram_count and ensures the queue remains responsive
-%% even when there is a large amount of IO work to do. The
-%% timeout callback is utilised to ensure that conversions are
-%% done as promptly as possible whilst ensuring the queue remains
+%% The conversion from alphas to betas is chunked due to the
+%% credit_flow limits of the msg_store. This further smooths the
+%% effects of changes to the target_ram_count and ensures the queue
+%% remains responsive even when there is a large amount of IO work to
+%% do. The 'resume' callback is utilised to ensure that conversions
+%% are done as promptly as possible whilst ensuring the queue remains
 %% responsive.
 %%
 %% In the queue we keep track of both messages that are pending
@@ -196,13 +195,7 @@
 %% The order in which alphas are pushed to betas and pending acks
 %% are pushed to disk is determined dynamically. We always prefer to
 %% push messages for the source (alphas or acks) that is growing the
-%% fastest (with growth measured as avg. ingress - avg. egress). In
-%% each round of memory reduction a chunk of messages at most
-%% ?IO_BATCH_SIZE in size is allocated to be pushed to disk. The
-%% fastest growing source will be reduced by as much of this chunk as
-%% possible. If there is any remaining allocation in the chunk after
-%% the first source has been reduced to zero, the second source will
-%% be reduced by as much of the remaining chunk as possible.
+%% fastest (with growth measured as avg. ingress - avg. egress).
 %%
 %% Notes on Clean Shutdown
 %% (This documents behaviour in variable_queue, queue_index and
