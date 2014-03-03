@@ -305,7 +305,7 @@
 %% all. This is both a minimum and a maximum - we don't write fewer
 %% than IO_BATCH_SIZE indices out in one go, and we don't write more -
 %% we can always come back on the next publish to do more.
--define(IO_BATCH_SIZE, 64).
+-define(IO_BATCH_SIZE, 1024).
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(QUEUE, lqueue).
@@ -1601,8 +1601,10 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
 
     case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
                     permitted_beta_count(State1)) of
-        ?IO_BATCH_SIZE = S2 -> {true, BetaDeltaFun(S2, State1)};
-        _                   -> {Reduce, State1}
+        S2 when S2 >= ?IO_BATCH_SIZE ->
+            {true, BetaDeltaFun(?IO_BATCH_SIZE, State1)};
+        _  ->
+            {Reduce, State1}
     end.
 
 limit_ram_acks(0, State) ->
@@ -1648,7 +1650,7 @@ chunk_size(Current, Permitted)
   when Permitted =:= infinity orelse Permitted >= Current ->
     0;
 chunk_size(Current, Permitted) ->
-    lists:min([Current - Permitted, ?IO_BATCH_SIZE]).
+    Current - Permitted.
 
 fetch_from_q3(State = #vqstate { q1    = Q1,
                                  q2    = Q2,
@@ -1754,17 +1756,22 @@ push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
        TargetRamCount >= RamMsgCount ->
     {Quota, State};
 push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
-    case Generator(Q) of
-        {empty, _Q} ->
-            {Quota, State};
-        {{value, MsgStatus}, Qa} ->
-            {MsgStatus1 = #msg_status { msg_on_disk = true },
-             State1 = #vqstate { ram_msg_count = RamMsgCount }} =
-                maybe_write_to_disk(true, false, MsgStatus, State),
-            MsgStatus2 = m(trim_msg_status(MsgStatus1)),
-            State2 = State1 #vqstate { ram_msg_count = RamMsgCount - 1 },
-            push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
-                                 Consumer(MsgStatus2, Qa, State2))
+    case credit_flow:blocked() of
+        true  -> {Quota, State};
+        false -> case Generator(Q) of
+                     {empty, _Q} ->
+                         {Quota, State};
+                     {{value, MsgStatus}, Qa} ->
+                         {MsgStatus1 = #msg_status { msg_on_disk = true },
+                          State1 = #vqstate { ram_msg_count = RamMsgCount }} =
+                             maybe_write_to_disk(true, false, MsgStatus, State),
+                         MsgStatus2 = m(trim_msg_status(MsgStatus1)),
+                         State2 = Consumer(MsgStatus2, Qa,
+                                           State1 #vqstate {
+                                             ram_msg_count = RamMsgCount - 1 }),
+                         push_alphas_to_betas(Generator, Consumer, Quota - 1,
+                                              Qa, State2)
+                 end
     end.
 
 push_betas_to_deltas(Quota, State = #vqstate { q2          = Q2,
