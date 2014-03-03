@@ -1537,27 +1537,9 @@ ifold(Fun, Acc, Its, State) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
-%% Determine whether a reduction in memory use is necessary, and call
-%% functions to perform the required phase changes. The function can
-%% also be used to just do the former, by passing in dummy phase
-%% change functions.
-%%
-%% The function does not report on any needed beta->delta conversions,
-%% though the conversion function for that is called as necessary. The
-%% reason is twofold. Firstly, this is safe because the conversion is
-%% only ever necessary just after a transition to a
-%% target_ram_count of zero or after an incremental alpha->beta
-%% conversion. In the former case the conversion is performed straight
-%% away (i.e. any betas present at the time are converted to deltas),
-%% and in the latter case the need for a conversion is flagged up
-%% anyway. Secondly, this is necessary because we do not have a
-%% precise and cheap predicate for determining whether a beta->delta
-%% conversion is necessary - due to the complexities of retaining up
-%% one segment's worth of messages in q3 - and thus would risk
-%% perpetually reporting the need for a conversion when no such
-%% conversion is needed. That in turn could cause an infinite loop.
-reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
-                  State = #vqstate {
+reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
+    State;
+reduce_memory_use(State = #vqstate {
                     ram_pending_ack  = RPA,
                     ram_msg_count    = RamMsgCount,
                     target_ram_count = TargetRamCount,
@@ -1566,30 +1548,32 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
                                                 ack_in  = AvgAckIngress,
                                                 ack_out = AvgAckEgress } }) ->
 
-    {Reduce, State1 = #vqstate { q2 = Q2, q3 = Q3 }} =
+    State1 = #vqstate { q2 = Q2, q3 = Q3 } =
         case chunk_size(RamMsgCount + gb_trees:size(RPA), TargetRamCount) of
-            0  -> {false, State};
+            0  -> State;
             %% Reduce memory of pending acks and alphas. The order is
             %% determined based on which is growing faster. Whichever
             %% comes second may very well get a quota of 0 if the
             %% first manages to push out the max number of messages.
             S1 -> Funs = case ((AvgAckIngress - AvgAckEgress) >
                                    (AvgIngress - AvgEgress)) of
-                             true  -> [AckFun, AlphaBetaFun];
-                             false -> [AlphaBetaFun, AckFun]
+                             true  -> [fun limit_ram_acks/2,
+                                       fun push_alphas_to_betas/2];
+                             false -> [fun push_alphas_to_betas/2,
+                                       fun limit_ram_acks/2]
                          end,
                   {_, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
                                                     ReduceFun(QuotaN, StateN)
                                             end, {S1, State}, Funs),
-                  {true, State2}
+                  State2
         end,
 
     case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
                     permitted_beta_count(State1)) of
         S2 when S2 >= ?IO_BATCH_SIZE ->
-            {true, BetaDeltaFun(?IO_BATCH_SIZE, State1)};
+            push_betas_to_deltas(?IO_BATCH_SIZE, State1);
         _  ->
-            {Reduce, State1}
+            State1
     end.
 
 limit_ram_acks(0, State) ->
@@ -1608,15 +1592,6 @@ limit_ram_acks(Quota, State = #vqstate { ram_pending_ack  = RPA,
                            State1 #vqstate { ram_pending_ack  = RPA1,
                                              disk_pending_ack = DPA1 })
     end.
-
-reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
-    State;
-reduce_memory_use(State) ->
-    {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
-                                    fun push_betas_to_deltas/2,
-                                    fun limit_ram_acks/2,
-                                    State),
-    State1.
 
 permitted_beta_count(#vqstate { len = 0 }) ->
     infinity;
