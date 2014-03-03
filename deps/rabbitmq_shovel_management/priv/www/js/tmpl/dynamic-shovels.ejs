@@ -16,6 +16,7 @@
     <th>Reconnect Delay</th>
     <th>Add headers</th>
     <th>Ack mode</th>
+    <th>Auto-delete</th>
   </tr>
  </thead>
  <tbody>
@@ -36,6 +37,7 @@
      <td class="r"><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
      <td class="c"><%= fmt_boolean(shovel.value['add-forward-headers']) %></td>
      <td class="c"><%= fmt_string(shovel.value['ack-mode']) %></td>
+     <td><%= fmt_string(shovel.value['delete-after']) %></td>
    </tr>
 <% } %>
  </tbody>
@@ -178,6 +180,20 @@
               <option value="on-confirm">On confirm</option>
               <option value="on-publish">On publish</option>
               <option value="no-ack">No ack</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Auto-delete
+              <span class="help" id="shovel-delete-after"></span>
+            </label>
+          </th>
+          <td>
+            <select name="delete-after">
+              <option value="never">Never</option>
+              <option value="queue-length">After initial length transferred</option>
             </select>
           </td>
         </tr>
