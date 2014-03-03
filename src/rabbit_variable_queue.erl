@@ -801,8 +801,9 @@ ram_duration(State) ->
     RamAckCount = gb_trees:size(RPA),
 
     Duration = %% msgs+acks / (msgs+acks/sec) == sec
-        case (AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
-              AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0) of
+        case lists:all(fun (X) -> X < 0.01 end,
+                       [AvgEgressRate, AvgIngressRate,
+                        AvgAckEgressRate, AvgAckIngressRate]) of
             true  -> infinity;
             false -> (RamMsgCountPrev + RamMsgCount +
                           RamAckCount + RamAckCountPrev) /
