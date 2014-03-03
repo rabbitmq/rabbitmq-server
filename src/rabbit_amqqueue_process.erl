@@ -1233,9 +1233,10 @@ handle_info(timeout, State) ->
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
-handle_info({bump_credit, Msg}, State) ->
+handle_info({bump_credit, Msg}, State = #q{backing_queue       = BQ,
+                                           backing_queue_state = BQS}) ->
     credit_flow:handle_bump_msg(Msg),
-    noreply(backing_queue_timeout(State));
+    noreply(State#q{backing_queue_state = BQ:resume(BQS)});
 
 handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.
