@@ -191,7 +191,7 @@ strategy could be that the plugin deletes the whole shard, including exchanges, 
 Also a plugin can decide that a certain AMQP method can't be performed on a queue that's managed by the plugin. In this case declared a queue called `my_shard`
 doesn't make much sense when there's actually a sharded queue by that name. In this case the plugin will return a channel error to the user.
 
-At the moment these are the AMPQ methods intercepted by the plugin, and the respective behaviour:
+These are the AMPQ methods intercepted by the plugin, and the respective behaviour:
 
 - `'basic.consume', QueueName`: The plugin will pick the sharded queue with the least amount of consumers from the `QueueName` shard.
 - `'basic.get', QueueName`: The plugin will pick the sharded queue with the least amount of consumers from the `QueueName` shard.
@@ -200,5 +200,3 @@ At the moment these are the AMPQ methods intercepted by the plugin, and the resp
 - `'queue.unbind', QueueName`: since there isn't an actual `QueueName` queue, this method returns a channel error.
 - `'queue.purge', QueueName`: since there isn't an actual `QueueName` queue, this method returns a channel error.
 - `'queue.delete', QueueName`: since there isn't an actual `QueueName` queue, this method returns a channel error.
-
-In the future, `queue.delete` and `queue.purge`, could delete the set of shards as a whole, and purge the set of shards as a whole, respectively.
