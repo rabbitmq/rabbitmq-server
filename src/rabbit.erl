@@ -377,7 +377,7 @@ start_it(StartFun) ->
 
 stop() ->
     Apps = app_shutdown_order(),
-    case whereis(?MODULE) of
+    case whereis(rabbit_boot) of
         undefined -> ok;
         _         -> app_utils:wait_for_applications(Apps)
     end,
