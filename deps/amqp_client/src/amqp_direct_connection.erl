@@ -60,16 +60,15 @@ init() ->
 open_channel_args(#state{node = Node,
                          user = User,
                          vhost = VHost,
-                         adapter_info = Info,
                          collector = Collector}) ->
-    [self(), Info#amqp_adapter_info.name, Node, User, VHost, Collector].
+    [self(), Node, User, VHost, Collector].
 
 do(_Method, _State) ->
     ok.
 
-handle_message(force_event_refresh, State = #state{node = Node}) ->
+handle_message({force_event_refresh, Ref}, State = #state{node = Node}) ->
     rpc:call(Node, rabbit_event, notify,
-             [connection_created, connection_info(State)]),
+             [connection_created, connection_info(State), Ref]),
     {ok, State};
 handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
     {stop, {closing_timeout, Reason}, State};
@@ -91,8 +90,7 @@ terminate(_Reason, #state{node = Node}) ->
 i(type, _State) -> direct;
 i(pid,  _State) -> self();
 %% AMQP Params
-i(user, #state{params=#amqp_params_direct{username=#user{username=U}}}) -> U;
-i(user, #state{params=#amqp_params_direct{username=U}}) -> U;
+i(user,              #state{params = P}) -> P#amqp_params_direct.username;
 i(vhost,             #state{params = P}) -> P#amqp_params_direct.virtual_host;
 i(client_properties, #state{params = P}) ->
     P#amqp_params_direct.client_properties;
@@ -125,18 +123,14 @@ connect(Params = #amqp_params_direct{username     = Username,
                          vhost        = VHost,
                          params       = Params,
                          adapter_info = ensure_adapter_info(Info)},
-    AuthToken = case Password of
-                    none -> Username;
-                    _    -> {Username, Password}
-                end,
     case rpc:call(Node, rabbit_direct, connect,
-                  [AuthToken, VHost, ?PROTOCOL, self(),
+                  [{Username, Password}, VHost, ?PROTOCOL, self(),
                    connection_info(State1)]) of
         {ok, {User, ServerProperties}} ->
-            {ok, Collector} = SIF(),
+            {ok, ChMgr, Collector} = SIF(i(name, State1)),
             State2 = State1#state{user      = User,
                                   collector = Collector},
-            {ok, {ServerProperties, 0, State2}};
+            {ok, {ServerProperties, 0, ChMgr, State2}};
         {error, _} = E ->
             E;
         {badrpc, nodedown} ->

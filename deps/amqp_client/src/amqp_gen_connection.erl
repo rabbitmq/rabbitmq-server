@@ -109,7 +109,7 @@ behaviour_info(callbacks) ->
      %%     {ok, ConnectParams} | {closing, ConnectParams, AmqpError, Reply} |
      %%         {error, Error}
      %% where
-     %%     ConnectParams = {ServerProperties, ChannelMax, NewState}
+     %%     ConnectParams = {ServerProperties, ChannelMax, ChMgr, NewState}
      {connect, 4},
 
      %% do(Method, State) -> Ignored
@@ -162,11 +162,10 @@ init({TypeSup, AMQPParams}) ->
 handle_call(connect, _From, {TypeSup, AMQPParams}) ->
     {Type, Mod} = amqp_connection_type_sup:type_module(AMQPParams),
     {ok, MState} = Mod:init(),
-    {ok, SIF, ChMgr} = amqp_connection_type_sup:start_infrastructure(
-                         TypeSup, self(), Type),
+    SIF = amqp_connection_type_sup:start_infrastructure_fun(
+            TypeSup, self(), Type),
     State = #state{module           = Mod,
                    module_state     = MState,
-                   channels_manager = ChMgr,
                    amqp_params      = AMQPParams,
                    block_handler    = none},
     case Mod:connect(AMQPParams, SIF, TypeSup, MState) of
@@ -189,15 +188,17 @@ handle_call({info, Items}, _From, State) ->
 handle_call(info_keys, _From, State = #state{module = Mod}) ->
     {reply, ?INFO_KEYS ++ Mod:info_keys(), State}.
 
-after_connect({ServerProperties, ChannelMax, NewMState},
-               State = #state{channels_manager = ChMgr}) ->
+after_connect({ServerProperties, ChannelMax, ChMgr, NewMState}, State) ->
     case ChannelMax of
         0 -> ok;
         _ -> amqp_channels_manager:set_channel_max(ChMgr, ChannelMax)
     end,
-    State#state{server_properties = ServerProperties,
-                channel_max       = ChannelMax,
-                module_state      = NewMState}.
+    State1 = State#state{server_properties = ServerProperties,
+                         channel_max       = ChannelMax,
+                         channels_manager  = ChMgr,
+                         module_state      = NewMState},
+    rabbit_misc:store_proc_name(?MODULE, i(name, State1)),
+    State1.
 
 handle_cast({method, Method, none, noflow}, State) ->
     handle_method(Method, State);
@@ -208,7 +209,7 @@ handle_cast({hard_error_in_channel, _Pid, Reason}, State) ->
 handle_cast({channel_internal_error, Pid, Reason}, State) ->
     ?LOG_WARN("Connection (~p) closing: internal error in channel (~p): ~p~n",
               [self(), Pid, Reason]),
-    internal_error(State);
+    internal_error(Pid, Reason, State);
 handle_cast({server_misbehaved, AmqpError}, State) ->
     server_misbehaved_close(AmqpError, State);
 handle_cast({server_close, #'connection.close'{} = Close}, State) ->
@@ -306,8 +307,9 @@ app_initiated_close(Close, From, Timeout, State) ->
                                       close = Close,
                                       from = From}, State).
 
-internal_error(State) ->
-    Close = #'connection.close'{reply_text = <<>>,
+internal_error(Pid, Reason, State) ->
+    Str = list_to_binary(rabbit_misc:format("~p:~p", [Pid, Reason])),
+    Close = #'connection.close'{reply_text = Str,
                                 reply_code = ?INTERNAL_ERROR,
                                 class_id = 0,
                                 method_id = 0},

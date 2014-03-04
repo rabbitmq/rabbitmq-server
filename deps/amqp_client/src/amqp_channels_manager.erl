@@ -21,7 +21,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/2, open_channel/4, set_channel_max/2, is_empty/1,
+-export([start_link/3, open_channel/4, set_channel_max/2, is_empty/1,
          num_channels/1, pass_frame/3, signal_connection_closing/3,
          process_channel_frame/4]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -38,12 +38,12 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Connection, ChSupSup) ->
-    gen_server:start_link(?MODULE, [Connection, ChSupSup], []).
+start_link(Connection, ConnName, ChSupSup) ->
+    gen_server:start_link(?MODULE, [Connection, ConnName, ChSupSup], []).
 
 open_channel(ChMgr, ProposedNumber, Consumer, InfraArgs) ->
     gen_server:call(ChMgr, {open_channel, ProposedNumber, Consumer, InfraArgs},
-                    infinity).
+                     infinity).
 
 set_channel_max(ChMgr, ChannelMax) ->
     gen_server:cast(ChMgr, {set_channel_max, ChannelMax}).
@@ -77,7 +77,8 @@ process_channel_frame(Frame, Channel, ChPid, AState) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Connection, ChSupSup]) ->
+init([Connection, ConnName, ChSupSup]) ->
+    ?store_proc_name(ConnName),
     {ok, #state{connection = Connection, channel_sup_sup = ChSupSup}}.
 
 terminate(_Reason, _State) ->

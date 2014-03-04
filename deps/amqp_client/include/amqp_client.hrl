@@ -38,7 +38,7 @@
                               client_properties  = [],
                               socket_options     = []}).
 
--record(amqp_params_direct, {username          = <<"guest">>,
+-record(amqp_params_direct, {username          = none,
                              password          = none,
                              virtual_host      = <<"/">>,
                              node              = node(),

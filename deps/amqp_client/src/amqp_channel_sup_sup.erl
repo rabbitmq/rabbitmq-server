@@ -21,15 +21,15 @@
 
 -behaviour(supervisor2).
 
--export([start_link/2, start_channel_sup/4]).
+-export([start_link/3, start_channel_sup/4]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Connection) ->
-    supervisor2:start_link(?MODULE, [Type, Connection]).
+start_link(Type, Connection, ConnName) ->
+    supervisor2:start_link(?MODULE, [Type, Connection, ConnName]).
 
 start_channel_sup(Sup, InfraArgs, ChannelNumber, Consumer) ->
     supervisor2:start_child(Sup, [InfraArgs, ChannelNumber, Consumer]).
@@ -38,7 +38,8 @@ start_channel_sup(Sup, InfraArgs, ChannelNumber, Consumer) ->
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Type, Connection]) ->
+init([Type, Connection, ConnName]) ->
     {ok, {{simple_one_for_one, 0, 1},
-          [{channel_sup, {amqp_channel_sup, start_link, [Type, Connection]},
+          [{channel_sup,
+            {amqp_channel_sup, start_link, [Type, Connection, ConnName]},
             temporary, brutal_kill, supervisor, [amqp_channel_sup]}]}}.

@@ -74,7 +74,7 @@
 -export([call_consumer/2, subscribe/3]).
 -export([next_publish_seqno/1, wait_for_confirms/1, wait_for_confirms/2,
          wait_for_confirms_or_die/1, wait_for_confirms_or_die/2]).
--export([start_link/4, set_writer/2, connection_closing/3, open/1]).
+-export([start_link/5, set_writer/2, connection_closing/3, open/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -335,9 +335,9 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, Connection, ChannelNumber, Consumer) ->
+start_link(Driver, Connection, ChannelNumber, Consumer, Identity) ->
     gen_server:start_link(
-        ?MODULE, [Driver, Connection, ChannelNumber, Consumer], []).
+      ?MODULE, [Driver, Connection, ChannelNumber, Consumer, Identity], []).
 
 set_writer(Pid, Writer) ->
     gen_server:cast(Pid, {set_writer, Writer}).
@@ -355,7 +355,8 @@ open(Pid) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Driver, Connection, ChannelNumber, Consumer]) ->
+init([Driver, Connection, ChannelNumber, Consumer, Identity]) ->
+    ?store_proc_name(Identity),
     {ok, #state{connection = Connection,
                 driver     = Driver,
                 number     = ChannelNumber,

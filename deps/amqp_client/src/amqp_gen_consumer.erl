@@ -31,7 +31,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/2, call_consumer/2, call_consumer/3]).
+-export([start_link/3, call_consumer/2, call_consumer/3]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_info/3]).
@@ -46,8 +46,9 @@
 %% @type ok_error() = {ok, state()} | {error, reason(), state()}.
 %% Denotes a successful or an error return from a consumer module call.
 
-start_link(ConsumerModule, ExtraParams) ->
-    gen_server2:start_link(?MODULE, [ConsumerModule, ExtraParams], []).
+start_link(ConsumerModule, ExtraParams, Identity) ->
+    gen_server2:start_link(
+      ?MODULE, [ConsumerModule, ExtraParams, Identity], []).
 
 %% @spec (Consumer, Msg) -> ok
 %% where
@@ -192,7 +193,8 @@ behaviour_info(_Other) ->
 %% gen_server2 callbacks
 %%---------------------------------------------------------------------------
 
-init([ConsumerModule, ExtraParams]) ->
+init([ConsumerModule, ExtraParams, Identity]) ->
+    ?store_proc_name(Identity),
     case ConsumerModule:init(ExtraParams) of
         {ok, MState} ->
             {ok, #state{module = ConsumerModule, module_state = MState}};
