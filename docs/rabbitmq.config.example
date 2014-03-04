@@ -138,6 +138,11 @@
    %%
    %% {frame_max, 131072},
 
+   %% Set the max permissible number of channels per connection.
+   %% 0 means "no limit".
+   %%
+   %% {channel_max, 128},
+
    %% Customising Socket Options.
    %%
    %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
@@ -488,6 +493,10 @@
    %% Specify the LDAP port to connect to
    %%
    %% {port, 389},
+
+   %% LDAP connection timeout, in milliseconds or 'infinity'
+   %%
+   %% {timeout, infinity},
 
    %% Enable logging of LDAP queries.
    %% One of
