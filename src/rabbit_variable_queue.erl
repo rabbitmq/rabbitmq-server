@@ -156,13 +156,12 @@
 %% (betas+gammas+delta)/(target_ram_count+betas+gammas+delta). I.e. as
 %% the target_ram_count shrinks to 0, so must betas and gammas.
 %%
-%% The conversion of betas to gammas is done in batches of exactly
+%% The conversion of betas to gammas is done in batches of at least
 %% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
 %% frequent operations on the queues of q2 and q3 will not be
 %% effectively amortised (switching the direction of queue access
-%% defeats amortisation), nor should it be too big, otherwise
-%% converting a batch stalls the queue for too long. Therefore, it
-%% must be just right.
+%% defeats amortisation). Note that there is a natural upper bound due
+%% to credit_flow limits on the alpha to beta conversion.
 %%
 %% The conversion from alphas to betas is chunked due to the
 %% credit_flow limits of the msg_store. This further smooths the
@@ -294,10 +293,7 @@
 
 %% When we discover that we should write some indices to disk for some
 %% betas, the IO_BATCH_SIZE sets the number of betas that we must be
-%% due to write indices for before we do any work at all. This is both
-%% a minimum and a maximum - we don't write fewer than IO_BATCH_SIZE
-%% indices out in one go, and we don't write more - we can always come
-%% back on the next publish to do more.
+%% due to write indices for before we do any work at all.
 -define(IO_BATCH_SIZE, 2048). %% next power-of-2 after ?CREDIT_DISC_BOUND
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
@@ -1571,7 +1567,13 @@ reduce_memory_use(State = #vqstate {
     case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
                     permitted_beta_count(State1)) of
         S2 when S2 >= ?IO_BATCH_SIZE ->
-            push_betas_to_deltas(?IO_BATCH_SIZE, State1);
+            %% There is an implicit, but subtle, upper bound here. We
+            %% may shuffle a lot of messages from Q2/3 into delta, but
+            %% the number of these that require any disk operation,
+            %% namely index writing, i.e. messages that are genuine
+            %% betas and not gammas, is bounded by the credit_flow
+            %% limiting of the alpha->beta conversion above.
+            push_betas_to_deltas(S2, State1);
         _  ->
             State1
     end.
