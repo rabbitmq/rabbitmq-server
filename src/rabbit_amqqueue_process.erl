@@ -846,13 +846,13 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
 
 prioritise_call(Msg, _From, _Len, State) ->
     case Msg of
-        info                                       -> 9;
-        {info, _Items}                             -> 9;
-        consumers                                  -> 9;
-        stat                                       -> 7;
-        {basic_consume, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
-        {basic_cancel, _, _, _}                    -> consumer_bias(State);
-        _                                          -> 0
+        info                                    -> 9;
+        {info, _Items}                          -> 9;
+        consumers                               -> 9;
+        stat                                    -> 7;
+        {basic_consume, _, _, _, _, _, _, _, _} -> consumer_bias(State);
+        {basic_cancel, _, _, _}                 -> consumer_bias(State);
+        _                                       -> 0
     end.
 
 prioritise_cast(Msg, _Len, State) ->
