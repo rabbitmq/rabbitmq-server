@@ -1,5 +1,6 @@
 include ../umbrella.mk
 
+RABBITMQCTL=../rabbitmq-server/scripts/rabbitmqctl
 NODENAME=rabbit-test
 MAIN_NODE=undefined
 OTHER_NODE=undefined
@@ -18,18 +19,19 @@ start-other-node:
 	RABBITMQ_PLUGINS_DIR=${TMPDIR}/rabbitmq-test/plugins \
 	RABBITMQ_PLUGINS_EXPAND_DIR=$(BASEDIR)/rabbitmq-$(OTHER_NODE)-plugins-expand \
 	RABBITMQ_PID_FILE=$(PID_FILE) \
-	../rabbitmq-server/scripts/rabbitmq-server &
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) wait $(PID_FILE)
+	../rabbitmq-server/scripts/rabbitmq-server >${TMPDIR}/$(OTHER_NODE).out 2>${TMPDIR}/$(OTHER_NODE).err &
+	$(RABBITMQCTL) -n $(OTHER_NODE) wait $(PID_FILE)
 
 stop-other-node:
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop 2> /dev/null || true
+	$(RABBITMQCTL) -n $(OTHER_NODE) stop
 
 cluster-other-node:
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop_app 2> /dev/null || true
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) join_cluster $(MAIN_NODE) 2> /dev/null || true
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) start_app 2> /dev/null || true
+	$(RABBITMQCTL) -n $(OTHER_NODE) stop_app
+	$(RABBITMQCTL) -n $(OTHER_NODE) reset
+	$(RABBITMQCTL) -n $(OTHER_NODE) join_cluster $(MAIN_NODE)
+	$(RABBITMQCTL) -n $(OTHER_NODE) start_app
 
 reset-other-node:
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop_app 2> /dev/null || true
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) reset 2> /dev/null || true
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) start_app 2> /dev/null || true
+	$(RABBITMQCTL) -n $(OTHER_NODE) stop_app
+	$(RABBITMQCTL) -n $(OTHER_NODE) reset
+	$(RABBITMQCTL) -n $(OTHER_NODE) start_app

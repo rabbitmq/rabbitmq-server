@@ -5,13 +5,14 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Used everywhere
--define(RABBIT,     {"rabbit-test",       5672}).
--define(TEST_X,     <<"sharding.test">>).
+-define(RABBIT, {"rabbit-test",       5672}).
+-define(HARE,   {"rabbit-hare",       5673}).
+-define(TEST_X, <<"sharding.test">>).
 
 -import(rabbit_sharding_test_util,
         [set_param/3, clear_param/2, set_pol/3, clear_pol/1,
          plugin_dir/0, policy/1, start_other_node/1, start_other_node/2,
-         start_other_node/3]).
+         start_other_node/3, cluster_other_node/2, reset_other_node/1, stop_other_node/1]).
 
 -import(rabbit_sharding_util, [a2b/1, exchange_bin/1]).
 
@@ -218,6 +219,31 @@ shard_basic_consume_interceptor_test() ->
               assert_consumers(Sh, 0, 2),
               assert_consumers(Sh, 1, 1),
               assert_consumers(Sh, 2, 1),
+
+              teardown(Ch,
+                       [{?TEST_X, 3}],
+                       [{"sharding-definition", "three"}],
+                       ["three"])
+      end).
+
+shard_auto_scale_cluster_test_() ->
+    with_ch(
+      fun (Ch) ->
+              Sh = ?TEST_X,
+              exchange_op(Ch, x_declare(Sh)),
+              set_param("sharding-definition", "three",
+                        "{\"shards-per-node\": 3}"),
+              set_pol("three", "^sharding\\.", policy("three")),
+
+              ?assertEqual(3, length(queues("rabbit-test"))),
+
+              start_other_node(?HARE),
+              cluster_other_node(?HARE, {"rabbit-test@avidela", 5672}),
+
+              ?assertEqual(6, length(queues("rabbit-test"))),
+
+              reset_other_node(?HARE),
+              stop_other_node(?HARE),
 
               teardown(Ch,
                        [{?TEST_X, 3}],

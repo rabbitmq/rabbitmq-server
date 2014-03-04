@@ -79,13 +79,22 @@ start_other_node({Name, Port}, Config, PluginsFile) ->
                 " OTHER_CONFIG=" ++ Config ++
                 " OTHER_PLUGINS=" ++ PluginsFile ++
                 " start-other-node"),
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    Ch.
+    timer:sleep(1000).
 
 stop_other_node({Name, _Port}) ->
     execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
                 " stop-other-node"),
+    timer:sleep(1000).
+
+reset_other_node({Name, _Port}) ->
+    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                " reset-other-node"),
+    timer:sleep(1000).
+
+cluster_other_node({Name, _Port}, {MainName, _Port2}) ->
+    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                " MAIN_NODE=" ++ MainName ++
+                " cluster-other-node"),
     timer:sleep(1000).
 
 rabbitmqctl(Args) ->
