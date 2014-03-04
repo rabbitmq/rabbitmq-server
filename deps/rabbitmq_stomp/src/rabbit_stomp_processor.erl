@@ -536,15 +536,16 @@ do_subscribe(Destination, DestHdr, Frame,
     Prefetch =
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT,
                                           undefined),
-    Args = case Prefetch of
-               undefined -> [];
-               _         -> [{<<"x-prefetch">>, signedint, Prefetch}]
-           end,
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
     case ensure_endpoint(source, Destination, Frame, Channel, RouteState) of
         {ok, Queue, RouteState1} ->
             {ok, ConsumerTag, Description} =
                 rabbit_stomp_util:consumer_tag(Frame),
+            case Prefetch of
+                undefined -> ok;
+                _         -> amqp_channel:call(
+                               Channel, #'basic.qos'{prefetch_count = Prefetch})
+            end,
             amqp_channel:subscribe(Channel,
                                    #'basic.consume'{
                                      queue        = Queue,
@@ -552,7 +553,7 @@ do_subscribe(Destination, DestHdr, Frame,
                                      no_local     = false,
                                      no_ack       = (AckMode == auto),
                                      exclusive    = false,
-                                     arguments    = Args},
+                                     arguments    = []},
                                    self()),
             ExchangeAndKey = rabbit_routing_util:parse_routing(Destination),
             ok = rabbit_routing_util:ensure_binding(
