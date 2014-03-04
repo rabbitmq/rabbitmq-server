@@ -29,7 +29,7 @@
 <% } %>
     <th><%= fmt_sort('User name',       'user') %></th>
     <th>Mode <span class="help" id="channel-mode"></span></th>
-    <th><%= fmt_sort('Prefetch',        'prefetch_count') %></th>
+    <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
     <th><%= fmt_sort('Unacked',         'messages_unacknowledged') %></th>
     <th><%= fmt_sort('Unconfirmed',     'messages_unconfirmed') %></th>
     <th><%= fmt_sort('State',           'state') %></th>
@@ -51,7 +51,7 @@
 <!-- TODO make sortable after bug 23401 -->
     <th>Channel</th>
     <th>Mode <span class="help" id="channel-mode"></span></th>
-    <th>Prefetch</th>
+    <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
     <th>Unacked</th>
     <th>Unconfirmed</th>
     <th>State</th>
@@ -96,7 +96,9 @@
       <small><acronym title="<%= channel.messages_uncommitted %> uncommitted messages"><%= channel.messages_uncommitted %>m</acronym>/<acronym title="<%= channel.acks_uncommitted %> uncommitted acks"><%= channel.acks_uncommitted %>a</acronym></small>
       <% } %>
     </td>
-    <td class="c"><%= channel.prefetch_count %></td>
+    <td class="c">
+      <%= channel.consumer_prefetch_count %> | <%= channel.prefetch_count %>
+    </td>
     <td class="c"><%= channel.messages_unacknowledged %></td>
     <td class="c"><%= channel.messages_unconfirmed %></td>
     <td class="c"><%= fmt_object_state(channel) %></td>
