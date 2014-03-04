@@ -135,7 +135,6 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     C1 = C#cr{consumer_count = Count + 1, limiter = Limiter1},
     update_ch_record(
       case parse_credit_args(Prefetch, Args) of
-          none                       -> C1;
           {0,       auto}            -> C1;
           {_Credit, auto} when NoAck -> C1;
           {Credit,  Mode}            -> credit_and_drain(
@@ -357,10 +356,7 @@ parse_credit_args(Default, Args) ->
                           {{long, C}, {bool, D}} -> {C, drain_mode(D)};
                           _                      -> {Default, auto}
                       end;
-        undefined  -> case rabbit_misc:table_lookup(Args, <<"x-prefetch">>) of
-                          {_, Prefetch} -> {Prefetch, auto};
-                          _             -> {Default, auto}
-                      end
+        undefined  -> {Default, auto}
     end.
 
 lookup_ch(ChPid) ->

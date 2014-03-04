@@ -436,8 +436,7 @@ declare_args() ->
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2}].
 
-consume_args() -> [{<<"x-priority">>, fun check_int_arg/2},
-                   {<<"x-prefetch">>, fun check_non_neg_int_arg/2}].
+consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
