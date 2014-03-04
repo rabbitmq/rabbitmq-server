@@ -305,36 +305,36 @@ ensure_application_loaded() ->
     end.
 
 start() ->
-    boot_with(fun() ->
-                      %% We do not want to HiPE compile or upgrade
-                      %% mnesia after just restarting the app
-                      ok = ensure_application_loaded(),
-                      ok = ensure_working_log_handlers(),
-                      rabbit_node_monitor:prepare_cluster_status_files(),
-                      rabbit_mnesia:check_cluster_consistency(),
-                      ok = rabbit_boot:start(app_startup_order()),
-                      ok = log_broker_started(rabbit_plugins:active())
-              end).
+    start_it(fun() ->
+                     %% We do not want to HiPE compile or upgrade
+                     %% mnesia after just restarting the app
+                     ok = ensure_application_loaded(),
+                     ok = ensure_working_log_handlers(),
+                     rabbit_node_monitor:prepare_cluster_status_files(),
+                     rabbit_mnesia:check_cluster_consistency(),
+                     ok = rabbit_boot:start(app_startup_order()),
+                     ok = log_broker_started(rabbit_plugins:active())
+             end).
 
 boot() ->
-    boot_with(fun() ->
-                      ok = ensure_application_loaded(),
-                      Success = maybe_hipe_compile(),
-                      ok = ensure_working_log_handlers(),
-                      warn_if_hipe_compilation_failed(Success),
-                      rabbit_node_monitor:prepare_cluster_status_files(),
-                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
-                      %% It's important that the consistency check happens after
-                      %% the upgrade, since if we are a secondary node the
-                      %% primary node will have forgotten us
-                      rabbit_mnesia:check_cluster_consistency(),
-                      Plugins = rabbit_plugins:setup(),
-                      ToBeLoaded = Plugins ++ ?APPS,
-                      ok = rabbit_boot:start(ToBeLoaded),
-                      ok = log_broker_started(Plugins)
-              end).
+    start_it(fun() ->
+                     ok = ensure_application_loaded(),
+                     Success = maybe_hipe_compile(),
+                     ok = ensure_working_log_handlers(),
+                     warn_if_hipe_compilation_failed(Success),
+                     rabbit_node_monitor:prepare_cluster_status_files(),
+                     ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+                     %% It's important that the consistency check happens after
+                     %% the upgrade, since if we are a secondary node the
+                     %% primary node will have forgotten us
+                     rabbit_mnesia:check_cluster_consistency(),
+                     Plugins = rabbit_plugins:setup(),
+                     ToBeLoaded = Plugins ++ ?APPS,
+                     ok = rabbit_boot:start(ToBeLoaded),
+                     ok = log_broker_started(Plugins)
+             end).
 
-boot_with(StartFun) ->
+start_it(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
     case catch register(rabbit_boot, Marker) of
         true -> try
@@ -358,8 +358,13 @@ boot_with(StartFun) ->
     end.
 
 stop() ->
+    Apps = app_shutdown_order(),
+    case whereis(?MODULE) of
+        undefined -> ok;
+        _         -> app_utils:wait_for_applications(Apps)
+    end,
     rabbit_log:info("Stopping RabbitMQ~n"),
-    rabbit_boot:shutdown(app_shutdown_order()).
+    ok = app_utils:stop_applications(Apps).
 
 stop_and_halt() ->
     try
@@ -604,8 +609,8 @@ boot_error(Reason, Stacktrace) ->
     boot_error(Reason, Fmt, Args, Stacktrace).
 
 -ifdef(use_specs).
--spec(boot_error/4         :: (term(), string(), [any()], not_available | [tuple()])
-                              -> no_return()).
+-spec(boot_error/4 :: (term(), string(), [any()], not_available | [tuple()])
+                      -> no_return()).
 -endif.
 boot_error(Reason, Fmt, Args, not_available) ->
     basic_boot_error(Reason, Fmt, Args);

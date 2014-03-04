@@ -17,7 +17,6 @@
 -module(rabbit_boot).
 
 -export([prepare_boot_table/0]).
--export([shutdown/1]).
 -export([start/1, stop/1]).
 -export([already_run/1, mark_complete/1]).
 
@@ -26,7 +25,6 @@
 -spec(prepare_boot_table/0 :: () -> 'ok').
 -spec(already_run/1        :: (atom()) -> boolean()).
 -spec(mark_complete/1      :: (atom()) -> 'ok').
--spec(shutdown/1           :: ([atom()]) -> 'ok').
 -spec(start/1              :: ([atom()]) -> 'ok').
 -spec(stop/1               :: ([atom()]) -> 'ok').
 
@@ -50,15 +48,6 @@
 
 prepare_boot_table() ->
     ets:new(?MODULE, [named_table, public, ordered_set]).
-
-shutdown(Apps) ->
-    case whereis(?MODULE) of
-        undefined -> ok;
-        _         -> await_startup(Apps)
-    end,
-    %% TODO: put this back in somewhere sensible...
-    %% rabbit_log:info("Stopping RabbitMQ~n"),
-    ok = app_utils:stop_applications(Apps).
 
 start(Apps) ->
     force_reload(Apps),
@@ -135,9 +124,6 @@ load_mod(Mod) ->
         {file, Path} when Path /= 'preloaded' -> code:load_abs(Path);
         _                                     -> code:load_file(Mod)
     end.
-
-await_startup(Apps) ->
-    app_utils:wait_for_applications(Apps).
 
 handle_app_error(Term) ->
     fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
