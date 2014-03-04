@@ -31,6 +31,21 @@ shard_queue_creation_test() ->
                        ["3_shard"])
       end).
 
+shard_no_queue_creation_test() ->
+    with_ch(
+      fun (Ch) ->
+              exchange_op(Ch, x_declare(?TEST_X)),
+              set_param("sharding-definition", "3_shard",
+                        "{\"sharded\": false, \"shards-per-node\": 3}"),
+              set_pol("3_shard", "^sharding\\.", policy("3_shard")),
+              ?assertEqual(0, length(queues("rabbit-test"))),
+
+              teardown(Ch,
+                       [{?TEST_X, 1}],
+                       [{"sharding-definition", "3_shard"}],
+                       ["3_shard"])
+      end).
+
 %% SPN = Shards Per Node
 shard_update_spn_test() ->
     with_ch(
