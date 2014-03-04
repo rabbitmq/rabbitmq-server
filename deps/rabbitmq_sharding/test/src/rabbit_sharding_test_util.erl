@@ -137,20 +137,5 @@ assert_link_status({DXorQNameBin, UpstreamName, UXorQNameBin}, Status,
     ?assertMatch([_], This),
     Rest.
 
-% links(#'exchange.declare'{exchange = Name}) ->
-%     case rabbit_policy:get(<<"federation-upstream-set">>, xr(Name)) of
-%         undefined -> [];
-%         Set       -> X = #exchange{name = xr(Name)},
-%                      [{Name, U#upstream.name, U#upstream.exchange_name} ||
-%                          U <- rabbit_federation_upstream:from_set(Set, X)]
-%     end;
-% links(#'queue.declare'{queue = Name}) ->
-%     case rabbit_policy:get(<<"federation-upstream-set">>, qr(Name)) of
-%         undefined -> [];
-%         Set       -> Q = #amqqueue{name = qr(Name)},
-%                      [{Name, U#upstream.name, U#upstream.queue_name} ||
-%                          U <- rabbit_federation_upstream:from_set(Set, Q)]
-%     end.
-
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).

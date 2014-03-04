@@ -12,7 +12,7 @@
 -import(rabbit_sharding_test_util,
         [set_param/3, clear_param/2, set_pol/3, clear_pol/1,
          policy/1, start_other_node/1, cluster_other_node/2,
-         reset_other_node/1, stop_other_node/1]).
+         reset_other_node/1, stop_other_node/1, xr/1, qr/1]).
 
 -import(rabbit_sharding_util, [a2b/1, exchange_bin/1]).
 
@@ -110,7 +110,7 @@ shard_clear_spn_param_test() ->
               %% queues should keep being three, but only one queue
               %% should be bound to the exchange.
               ?assertEqual(3, length(queues("rabbit-test"))),
-              {ok, X} = rabbit_exchange:lookup(x(?TEST_X)),
+              {ok, X} = rabbit_exchange:lookup(xr(?TEST_X)),
               ?assertEqual(1, length(bindings("rabbit-test", ?TEST_X))),
 
               teardown(Ch,
@@ -255,7 +255,7 @@ start_consumer(Ch, Shard) ->
     amqp_channel:call(Ch, #'basic.consume'{queue = Shard}).
 
 assert_consumers(Shard, QInd, Count) ->
-    Q0 = q(shard_q(x(Shard), QInd)),
+    Q0 = qr(shard_q(xr(Shard), QInd)),
     [{consumers, C0}] = rabbit_sharding_interceptor:consumer_count(Q0),
     ?assertEqual(C0, Count).
 
@@ -266,7 +266,7 @@ queues(Nodename) ->
     end.
 
 bindings(Nodename, XName) ->
-    case rpc:call(n(Nodename), rabbit_binding, list_for_source, [x(XName)]) of
+    case rpc:call(n(Nodename), rabbit_binding, list_for_source, [xr(XName)]) of
         {badrpc, _} -> [];
         Bs          -> Bs
     end.
@@ -308,10 +308,7 @@ x_delete(Name) ->
     #'exchange.delete'{exchange = Name}.
 
 q_delete(Name, QInd) ->
-    #'queue.delete'{queue = shard_q(x(Name), QInd)}.
-
-x(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
-q(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
+    #'queue.delete'{queue = shard_q(xr(Name), QInd)}.
 
 shard_q(X, N) ->
     rabbit_sharding_util:make_queue_name(
