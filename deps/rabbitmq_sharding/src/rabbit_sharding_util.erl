@@ -16,10 +16,7 @@ shard(X = #exchange{type = 'x-random'})          -> shard0(X);
 shard(_X)                                        -> false.
 
 shard0(X) ->
-    case get_policy(X) of
-        undefined -> false;
-        _         -> true
-    end.
+    get_parameter_value(<<"sharding-definition">>, <<"sharded">>, X, false).
 
 sharded_exchanges(VHost) ->
     [X || X <- find_exchanges(VHost), shard(X)].

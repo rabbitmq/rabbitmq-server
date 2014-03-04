@@ -30,7 +30,8 @@ validate(_VHost, <<"sharding">>, <<"routing-key">>, Term) ->
 validate(_VHost, <<"sharding-definition">>, Name, Term) ->
     rabbit_parameter_validation:proplist(
       Name,
-      [{<<"shards-per-node">>, fun validate_shards_per_node/2, optional},
+      [{<<"sharded">>, fun rabbit_parameter_validation:boolean/2, mandatory},
+       {<<"shards-per-node">>, fun validate_shards_per_node/2, optional},
        {<<"routing-key">>, fun rabbit_parameter_validation:binary/2, optional}],
       Term);
 
