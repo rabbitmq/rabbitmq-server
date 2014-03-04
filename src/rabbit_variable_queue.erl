@@ -292,13 +292,13 @@
           end_seq_id    %% end_seq_id is exclusive
         }).
 
-%% When we discover, on publish, that we should write some indices to
-%% disk for some betas, the IO_BATCH_SIZE sets the number of betas
-%% that we must be due to write indices for before we do any work at
-%% all. This is both a minimum and a maximum - we don't write fewer
-%% than IO_BATCH_SIZE indices out in one go, and we don't write more -
-%% we can always come back on the next publish to do more.
--define(IO_BATCH_SIZE, 1024).
+%% When we discover that we should write some indices to disk for some
+%% betas, the IO_BATCH_SIZE sets the number of betas that we must be
+%% due to write indices for before we do any work at all. This is both
+%% a minimum and a maximum - we don't write fewer than IO_BATCH_SIZE
+%% indices out in one go, and we don't write more - we can always come
+%% back on the next publish to do more.
+-define(IO_BATCH_SIZE, 2048). %% next power-of-2 after ?CREDIT_DISC_BOUND
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(QUEUE, lqueue).
