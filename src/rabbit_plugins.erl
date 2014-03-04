@@ -41,7 +41,7 @@
 enable(Enabled) ->
     prepare_plugins(Enabled),
     app_utils:update_running_apps(
-      fun() -> rabbit_boot:start(Enabled) end,
+      fun() -> rabbit:start_apps(Enabled) end,
       fun(Diff) ->
               ok = rabbit_event:notify(plugins_changed, [{enabled, Diff}])
       end).

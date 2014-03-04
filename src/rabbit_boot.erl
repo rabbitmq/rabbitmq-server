@@ -17,7 +17,8 @@
 -module(rabbit_boot).
 
 -export([prepare_boot_table/0]).
--export([start/1, stop/1]).
+-export([stop/1]).
+-export([force_reload/1]).
 -export([already_run/1, mark_complete/1]).
 
 -ifdef(use_specs).
@@ -25,8 +26,8 @@
 -spec(prepare_boot_table/0 :: () -> 'ok').
 -spec(already_run/1        :: (atom()) -> boolean()).
 -spec(mark_complete/1      :: (atom()) -> 'ok').
--spec(start/1              :: ([atom()]) -> 'ok').
 -spec(stop/1               :: ([atom()]) -> 'ok').
+-spec(force_reload/1       :: ([atom()]) -> 'ok').
 
 -endif.
 
@@ -49,20 +50,10 @@
 prepare_boot_table() ->
     ets:new(?MODULE, [named_table, public, ordered_set]).
 
-start(Apps) ->
-    force_reload(Apps),
-    StartupApps = app_utils:app_dependency_order(Apps, false),
-    case whereis(?MODULE) of
-        undefined -> rabbit:run_boot_steps();
-        _         -> ok
-    end,
-    ok = app_utils:start_applications(StartupApps,
-                                      handle_app_error(could_not_start)).
-
 stop(Apps) ->
     try
         ok = app_utils:stop_applications(
-               Apps, handle_app_error(error_during_shutdown))
+               Apps, rabbit:handle_app_error(error_during_shutdown))
     after
         BootSteps = rabbit:load_steps(boot),
         ToDelete = [Step || {App, _, _}=Step <- BootSteps,
@@ -123,13 +114,6 @@ load_mod(Mod) ->
     case code:is_loaded(Mod) of
         {file, Path} when Path /= 'preloaded' -> code:load_abs(Path);
         _                                     -> code:load_file(Mod)
-    end.
-
-handle_app_error(Term) ->
-    fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
-            throw({Term, App, ExitReason});
-       (App, Reason) ->
-            throw({Term, App, Reason})
     end.
 
 run_cleanup_step({_, StepName, Attributes}) ->

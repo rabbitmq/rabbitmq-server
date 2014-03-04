@@ -24,7 +24,7 @@
          start_fhc/0]).
 -export([run_boot_steps/0, load_steps/1, run_step/3]).
 -export([start/2, stop/1]).
-
+-export([handle_app_error/1, start_apps/1]).
 -export([log_location/1]). %% for testing
 
 %%---------------------------------------------------------------------------
@@ -242,6 +242,7 @@
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
+-spec(handle_app_error/1 :: (term()) -> fun((atom(), term()) -> no_return())).
 
 -endif.
 
@@ -312,7 +313,7 @@ start() ->
                      ok = ensure_working_log_handlers(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
-                     ok = rabbit_boot:start(app_startup_order()),
+                     ok = start_apps(app_startup_order()),
                      ok = log_broker_started(rabbit_plugins:active())
              end).
 
@@ -330,9 +331,26 @@ boot() ->
                      rabbit_mnesia:check_cluster_consistency(),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
-                     ok = rabbit_boot:start(ToBeLoaded),
+                     ok = start_apps(ToBeLoaded),
                      ok = log_broker_started(Plugins)
              end).
+
+handle_app_error(Term) ->
+    fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
+            throw({Term, App, ExitReason});
+       (App, Reason) ->
+            throw({Term, App, Reason})
+    end.
+
+start_apps(Apps) ->
+    rabbit_boot:force_reload(Apps),
+    StartupApps = app_utils:app_dependency_order(Apps, false),
+    case whereis(?MODULE) of
+        undefined -> rabbit:run_boot_steps();
+        _         -> ok
+    end,
+    ok = app_utils:start_applications(StartupApps,
+                                      handle_app_error(could_not_start)).
 
 start_it(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
