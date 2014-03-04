@@ -41,9 +41,9 @@ init([{Listeners, SslListeners}]) ->
               end,
     {ok, {{one_for_all, 10, 10},
           [{rabbit_mqtt_client_sup,
-            {rabbit_client_sup, start_link_worker,
+            {rabbit_client_sup, start_link,
              [{local, rabbit_mqtt_client_sup},
-              {rabbit_mqtt_reader, start_link, []}]},
+              {rabbit_mqtt_connection_sup, start_link, []}]},
             transient, infinity, supervisor, [rabbit_client_sup]} |
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts], Listeners) ++
@@ -63,14 +63,15 @@ tcp_listener_spec([Address, SocketOpts]) ->
 
 ssl_listener_spec([Address, SocketOpts, SslOpts]) ->
     rabbit_networking:tcp_listener_spec(
-      rabbit_stomp_listener_sup, Address, SocketOpts,
+      rabbit_mqtt_listener_sup, Address, SocketOpts,
       'mqtt/ssl', "MQTT SSL Listener",
       {?MODULE, start_ssl_client, [SslOpts]}).
 
 start_client(Sock, SockTransform) ->
-    {ok, Reader} = supervisor:start_child(rabbit_mqtt_client_sup, []),
+    {ok, KeepaliveSup, Reader} =
+        supervisor:start_child(rabbit_mqtt_client_sup, []),
     ok = rabbit_net:controlling_process(Sock, Reader),
-    ok = gen_server2:call(Reader, {go, Sock, SockTransform}, infinity),
+    ok = gen_server2:call(Reader, {go, Sock, SockTransform, KeepaliveSup}, infinity),
 
     %% see comment in rabbit_networking:start_client/2
     gen_event:which_handlers(error_logger),
