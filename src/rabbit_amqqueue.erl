@@ -114,11 +114,12 @@
 -spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(consumers/1 :: (rabbit_types:amqqueue())
                      -> [{pid(), rabbit_types:ctag(), boolean(),
-                          rabbit_framing:amqp_table()}]).
+                          non_neg_integer(), rabbit_framing:amqp_table()}]).
 -spec(consumer_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(consumers_all/1 ::
         (rabbit_types:vhost())
-        -> [{name(), pid(), rabbit_types:ctag(), boolean()}]).
+        -> [{name(), pid(), rabbit_types:ctag(), boolean(),
+             non_neg_integer(), rabbit_framing:amqp_table()}]).
 -spec(stat/1 ::
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
@@ -185,7 +186,8 @@
 %%----------------------------------------------------------------------------
 
 -define(CONSUMER_INFO_KEYS,
-        [queue_name, channel_pid, consumer_tag, ack_required, arguments]).
+        [queue_name, channel_pid, consumer_tag, ack_required, prefetch_count,
+         arguments]).
 
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
@@ -533,9 +535,10 @@ consumers_all(VHostPath) ->
     lists:append(
       map(VHostPath,
           fun (Q) ->
-              [lists:zip(ConsumerInfoKeys,
-                         [Q#amqqueue.name, ChPid, CTag, AckRequired, Args]) ||
-                         {ChPid, CTag, AckRequired, Args} <- consumers(Q)]
+              [lists:zip(
+                 ConsumerInfoKeys,
+                 [Q#amqqueue.name, ChPid, CTag, AckRequired, Prefetch, Args]) ||
+                  {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)]
           end)).
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).

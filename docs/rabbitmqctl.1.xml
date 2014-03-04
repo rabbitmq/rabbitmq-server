@@ -1604,8 +1604,9 @@
               and is managed, the consumer tag which uniquely identifies
               the subscription within a channel, a boolean
               indicating whether acknowledgements are expected for
-              messages delivered to this consumer, and any arguments for this
-              consumer.
+              messages delivered to this consumer, an integer indicating
+              the prefetch limit (with 0 meaning 'none'), and any arguments
+              for this consumer.
             </para>
           </listitem>
         </varlistentry>
