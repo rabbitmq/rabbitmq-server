@@ -685,7 +685,7 @@ pid_to_string(Pid) when is_pid(Pid) ->
     <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
         = term_to_binary(Pid),
     Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
-    format("<~w.~B.~B.~B>", [Node, Cre, Id, Ser]).
+    format("<~s.~B.~B.~B>", [Node, Cre, Id, Ser]).
 
 %% inverse of above
 string_to_pid(Str) ->
@@ -695,13 +695,7 @@ string_to_pid(Str) ->
     case re:run(Str, "^<(.*)\\.(\\d+)\\.(\\d+)\\.(\\d+)>\$",
                 [{capture,all_but_first,list}]) of
         {match, [NodeStr, CreStr, IdStr, SerStr]} ->
-            %% the NodeStr atom might be quoted, so we have to parse
-            %% it rather than doing a simple list_to_atom
-            NodeAtom = case erl_scan:string(NodeStr) of
-                           {ok, [{atom, _, X}], _} -> X;
-                           {error, _, _} -> throw(Err)
-                       end,
-            <<131,NodeEnc/binary>> = term_to_binary(NodeAtom),
+            <<131,NodeEnc/binary>> = term_to_binary(list_to_atom(NodeStr)),
             [Cre, Id, Ser] = lists:map(fun list_to_integer/1,
                                        [CreStr, IdStr, SerStr]),
             binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>);

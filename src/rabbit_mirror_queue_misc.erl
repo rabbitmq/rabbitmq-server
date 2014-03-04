@@ -20,7 +20,7 @@
 -export([remove_from_queue/3, on_node_up/0, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2, validate_policy/1,
-         maybe_auto_sync/1]).
+         maybe_auto_sync/1, log_info/3, log_warning/3]).
 
 %% for testing only
 -export([module/1]).
@@ -56,6 +56,8 @@
 -spec(update_mirrors/2 ::
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 -spec(maybe_auto_sync/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(log_info/3 :: (rabbit_amqqueue:name(), string(), [any()]) -> 'ok').
+-spec(log_warning/3 :: (rabbit_amqqueue:name(), string(), [any()]) -> 'ok').
 
 -endif.
 
@@ -156,9 +158,8 @@ drop_mirror(QName, MirrorNode) ->
                 [QPid] when SPids =:= [] ->
                     {error, cannot_drop_only_mirror};
                 [Pid] ->
-                    rabbit_log:info(
-                      "Dropping queue mirror on node ~p for ~s~n",
-                      [MirrorNode, rabbit_misc:rs(Name)]),
+                    log_info(Name, "Dropping queue mirror on node ~p~n",
+                             [MirrorNode]),
                     exit(Pid, {shutdown, dropped}),
                     {ok, dropped}
             end;
@@ -192,22 +193,28 @@ start_child(Name, MirrorNode, Q, SyncMode) ->
       fun () ->
               {ok, SPid} = rabbit_mirror_queue_slave_sup:start_child(
                              MirrorNode, [Q]),
-              rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
-                              [rabbit_misc:rs(Name), MirrorNode, SPid]),
+              log_info(Name, "Adding mirror on node ~p: ~p~n",
+                       [MirrorNode, SPid]),
               rabbit_mirror_queue_slave:go(SPid, SyncMode)
       end).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
 report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
-    rabbit_log:info("Mirrored-queue (~s): ~s ~s saw deaths of mirrors ~s~n",
-                    [rabbit_misc:rs(QueueName),
-                     case IsMaster of
+    log_info(QueueName, "~s ~s saw deaths of mirrors ~s~n",
+                    [case IsMaster of
                          true  -> "Master";
                          false -> "Slave"
                      end,
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[rabbit_misc:pid_to_string(P), $ ] || P <- DeadPids]]).
+
+log_info   (QName, Fmt, Args) -> log(info,    QName, Fmt, Args).
+log_warning(QName, Fmt, Args) -> log(warning, QName, Fmt, Args).
+
+log(Level, QName, Fmt, Args) ->
+    rabbit_log:log(mirroring, Level, "Mirrored ~s: " ++ Fmt,
+                   [rabbit_misc:rs(QName) | Args]).
 
 store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
                                    sync_slave_pids = SSPids}) ->

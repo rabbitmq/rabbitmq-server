@@ -257,9 +257,8 @@ handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
-    ok = handle_dead_rabbit(Node),
     [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
-    {noreply, handle_dead_rabbit_state(
+    {noreply, handle_dead_rabbit(
                 Node,
                 State#state{monitors = pmon:erase({rabbit, Node}, Monitors)})};
 
@@ -270,8 +269,7 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
 handle_info({nodedown, Node, Info}, State) ->
     rabbit_log:info("node ~p down: ~p~n",
                     [Node, proplists:get_value(nodedown_reason, Info)]),
-    ok = handle_dead_node(Node),
-    {noreply, State};
+    {noreply, handle_dead_node(Node, State)};
 
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
@@ -333,17 +331,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Functions that call the module specific hooks when nodes go up/down
 %%----------------------------------------------------------------------------
 
-%% TODO: This may turn out to be a performance hog when there are lots
-%% of nodes.  We really only need to execute some of these statements
-%% on *one* node, rather than all of them.
-handle_dead_rabbit(Node) ->
-    ok = rabbit_networking:on_node_down(Node),
-    ok = rabbit_amqqueue:on_node_down(Node),
-    ok = rabbit_alarm:on_node_down(Node),
-    ok = rabbit_mnesia:on_node_down(Node),
-    ok.
-
-handle_dead_node(_Node) ->
+handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     %% In general in rabbit_node_monitor we care about whether the
     %% rabbit application is up rather than the node; we do this so
     %% that we can respond in the same way to "rabbitmqctl stop_app"
@@ -356,17 +344,17 @@ handle_dead_node(_Node) ->
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
             case majority() of
-                true  -> ok;
-                false -> await_cluster_recovery()
+                true  -> State;
+                false -> await_cluster_recovery() %% Does not really return
             end;
         {ok, ignore} ->
-            ok;
+            State;
         {ok, autoheal} ->
-            ok;
+            State#state{autoheal = rabbit_autoheal:node_down(Node, Autoheal)};
         {ok, Term} ->
             rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
                                "assuming 'ignore'~n", [Term]),
-            ok
+            State
     end.
 
 await_cluster_recovery() ->
@@ -399,8 +387,15 @@ wait_for_cluster_recovery(Nodes) ->
                  wait_for_cluster_recovery(Nodes)
     end.
 
-handle_dead_rabbit_state(Node, State = #state{partitions = Partitions,
-                                              autoheal   = Autoheal}) ->
+handle_dead_rabbit(Node, State = #state{partitions = Partitions,
+                                        autoheal   = Autoheal}) ->
+    %% TODO: This may turn out to be a performance hog when there are
+    %% lots of nodes.  We really only need to execute some of these
+    %% statements on *one* node, rather than all of them.
+    ok = rabbit_networking:on_node_down(Node),
+    ok = rabbit_amqqueue:on_node_down(Node),
+    ok = rabbit_alarm:on_node_down(Node),
+    ok = rabbit_mnesia:on_node_down(Node),
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
     %% that we do not attempt to deal with individual (other) partitions
@@ -412,7 +407,7 @@ handle_dead_rabbit_state(Node, State = #state{partitions = Partitions,
                   end,
     ensure_ping_timer(
       State#state{partitions = Partitions1,
-                  autoheal   = rabbit_autoheal:node_down(Node, Autoheal)}).
+                  autoheal   = rabbit_autoheal:rabbit_down(Node, Autoheal)}).
 
 ensure_ping_timer(State) ->
     rabbit_misc:ensure_timer(
