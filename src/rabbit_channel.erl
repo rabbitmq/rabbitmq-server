@@ -38,7 +38,8 @@
              queue_names, queue_monitors, consumer_mapping,
              queue_consumers, delivering_queues,
              queue_collector_pid, stats_timer, confirm_enabled, publish_seqno,
-             unconfirmed, confirmed, mandatory, capabilities, trace_state}).
+             unconfirmed, confirmed, mandatory, capabilities, trace_state,
+             consumer_prefetch}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -52,6 +53,7 @@
          messages_uncommitted,
          acks_uncommitted,
          prefetch_count,
+         consumer_prefetch_count,
          state]).
 
 -define(CREATION_EVENT_KEYS,
@@ -216,7 +218,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 confirmed               = [],
                 mandatory               = dtree:empty(),
                 capabilities            = Capabilities,
-                trace_state             = rabbit_trace:init(VHost)},
+                trace_state             = rabbit_trace:init(VHost),
+                consumer_prefetch       = 0},
     State1 = rabbit_event:init_stats_timer(State, #ch.stats_timer),
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State1)),
     rabbit_event:if_enabled(State1, #ch.stats_timer,
@@ -752,9 +755,10 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                exclusive    = ExclusiveConsume,
                                nowait       = NoWait,
                                arguments    = Args},
-              _, State = #ch{conn_pid         = ConnPid,
-                             limiter          = Limiter,
-                             consumer_mapping = ConsumerMapping}) ->
+              _, State = #ch{conn_pid          = ConnPid,
+                             limiter           = Limiter,
+                             consumer_prefetch = ConsumerPrefetchCount,
+                             consumer_mapping  = ConsumerMapping}) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = qbin_to_resource(QueueNameBin, State),
@@ -776,6 +780,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                               Q, NoAck, self(),
                               rabbit_limiter:pid(Limiter),
                               rabbit_limiter:is_active(Limiter),
+                              ConsumerPrefetchCount,
                               ActualConsumerTag, ExclusiveConsume, Args,
                               ok_msg(NoWait, #'basic.consume_ok'{
                                        consumer_tag = ActualConsumerTag})),
@@ -842,19 +847,22 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
             end
     end;
 
-handle_method(#'basic.qos'{global = true}, _, _State) ->
-    rabbit_misc:protocol_error(not_implemented, "global=true", []);
-
 handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
     rabbit_misc:protocol_error(not_implemented,
                                "prefetch_size!=0 (~w)", [Size]);
 
-handle_method(#'basic.qos'{prefetch_count = 0},
+handle_method(#'basic.qos'{global         = false,
+                           prefetch_count = PrefetchCount}, _, State) ->
+    {reply, #'basic.qos_ok'{}, State#ch{consumer_prefetch = PrefetchCount}};
+
+handle_method(#'basic.qos'{global         = true,
+                           prefetch_count = 0},
               _, State = #ch{limiter = Limiter}) ->
     Limiter1 = rabbit_limiter:unlimit_prefetch(Limiter),
     {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
 
-handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
+handle_method(#'basic.qos'{global         = true,
+                           prefetch_count = PrefetchCount},
               _, State = #ch{limiter = Limiter, unacked_message_q = UAMQ}) ->
     %% TODO queue:len(UAMQ) is not strictly right since that counts
     %% unacked messages from basic.get too. Pretty obscure though.
@@ -1603,6 +1611,7 @@ i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
 i(state,                   #ch{state = running})         -> credit_flow:state();
 i(state,                   #ch{state = State})            -> State;
+i(consumer_prefetch_count, #ch{consumer_prefetch = C})    -> C;
 i(prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_prefetch_limit(Limiter);
 i(Item, _) ->

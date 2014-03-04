@@ -846,13 +846,13 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
 
 prioritise_call(Msg, _From, _Len, State) ->
     case Msg of
-        info                                    -> 9;
-        {info, _Items}                          -> 9;
-        consumers                               -> 9;
-        stat                                    -> 7;
-        {basic_consume, _, _, _, _, _, _, _, _} -> consumer_bias(State);
-        {basic_cancel, _, _, _}                 -> consumer_bias(State);
-        _                                       -> 0
+        info                                       -> 9;
+        {info, _Items}                             -> 9;
+        consumers                                  -> 9;
+        stat                                       -> 7;
+        {basic_consume, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
+        {basic_cancel, _, _, _}                    -> consumer_bias(State);
+        _                                          -> 0
     end.
 
 prioritise_cast(Msg, _Len, State) ->
@@ -961,7 +961,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             ConsumerTag, ExclusiveConsume, Args, OkMsg},
+             ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg},
             _From, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
@@ -969,6 +969,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
         ok     -> Consumers1 = rabbit_queue_consumers:add(
                                  ChPid, ConsumerTag, NoAck,
                                  LimiterPid, LimiterActive,
+                                 ConsumerPrefetchCount,
                                  Args, is_empty(State), Consumers),
                   ExclusiveConsumer =
                       if ExclusiveConsume -> {ChPid, ConsumerTag};
