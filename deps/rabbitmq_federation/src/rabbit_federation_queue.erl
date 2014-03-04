@@ -28,7 +28,8 @@
 
 -behaviour(rabbit_queue_decorator).
 
--export([startup/1, shutdown/1, policy_changed/2, active_for/1, notify/3]).
+-export([startup/1, shutdown/1, policy_changed/2, active_for/1,
+         consumer_state_changed/3]).
 -export([policy_changed_local/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -73,34 +74,36 @@ active_for(Q = #amqqueue{arguments = Args}) ->
 %% that doesn't want to be federated.
 
 %% We need to reconsider whether we need to run or pause every time
-%% something significant changes in the queue. In theory we don't need
-%% to respond to absolutely every event the queue emits, but in
-%% practice we need to respond to most of them and it doesn't really
-%% cost much to respond to all of them. So that's why we ignore the
-%% Event parameter.
+%% the consumer state changes in the queue. But why can the state
+%% change?
 %%
-%% For the record, the events, and why we care about them:
-%%
-%% consumer_blocked   | We may have no more active consumers, and thus need to
+%% consumer blocked   | We may have no more active consumers, and thus need to
 %%                    | pause
 %%                    |
-%% consumer_unblocked | We don't care
+%% consumer unblocked | We don't care
 %%                    |
-%% queue_empty        | The queue has become empty therefore we need to run to
+%% queue empty        | The queue has become empty therefore we need to run to
 %%                    | get more messages
 %%                    |
-%% basic_consume      | We don't care
+%% basic consume      | We don't care
 %%                    |
-%% basic_cancel       | We may have no more active consumers, and thus need to
+%% basic cancel       | We may have no more active consumers, and thus need to
 %%                    | pause
 %%                    |
 %% refresh            | We asked for it (we have started a new link after
 %%                    | failover and need something to prod us into action
 %%                    | (or not)).
+%%
+%% In the cases where we don't care it's not prohibitively expensive
+%% for us to be here anyway, so never mind.
+%%
+%% Note that there is no "queue became non-empty" state change - that's
+%% because of the queue invariant. If the queue transitions from empty to
+%% non-empty then it must have no active consumers - in which case it stays
+%% the same from our POV.
 
-notify(#amqqueue{name = QName}, _Event, Props) ->
-    case pget(is_empty, Props) andalso
-        active_unfederated(pget(max_active_consumer_priority, Props)) of
+consumer_state_changed(#amqqueue{name = QName}, MaxActivePriority, IsEmpty) ->
+    case IsEmpty andalso active_unfederated(MaxActivePriority) of
         true  -> rabbit_federation_queue_link:run(QName);
         false -> rabbit_federation_queue_link:pause(QName)
     end,

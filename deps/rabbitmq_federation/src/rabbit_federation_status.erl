@@ -89,18 +89,21 @@ code_change(_OldVsn, State, _Extra) ->
 format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = Type,
                                      name         = XorQNameBin},
-                           Connection, UXorQNameBin},
+                           UpstreamName, UXorQNameBin},
               status    = Status,
               uri       = URI,
               timestamp = Timestamp}) ->
-    [{type,          Type},
-     {name,          XorQNameBin},
-     {upstream_name, UXorQNameBin},
-     {vhost,         VHost},
-     {connection,    Connection},
-     {uri,           URI},
-     {status,        Status},
-     {timestamp,     Timestamp}].
+    case Type of
+        exchange -> [{exchange,          XorQNameBin},
+                     {upstream_exchange, UXorQNameBin}];
+        queue    -> [{queue,             XorQNameBin},
+                     {upstream_queue,    UXorQNameBin}]
+    end ++ [{type,      Type},
+            {vhost,     VHost},
+            {upstream,  UpstreamName},
+            {uri,       URI},
+            {status,    Status},
+            {timestamp, Timestamp}].
 
 %% We don't want to key off the entire upstream, bits of it may change
 key(XName = #resource{kind = exchange}, #upstream{name          = UpstreamName,
