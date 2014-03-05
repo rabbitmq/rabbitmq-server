@@ -21,7 +21,7 @@ of a publisher and a consumer:
 As you can see in the graphic, the producers publishes a series of
 messages, those messages get partitioned to different queues, and then
 our consumer get messages from one of those queues. Therefore if you
-have a partition with 3 queues, then you will need to at least 3
+have a partition with 3 queues, then you will need to have at least 3
 consumers to get all the messages from those queues.
 
 ## Auto-scaling ##
@@ -41,18 +41,20 @@ nothing" fashion, i.e: if a routing key matches a set of queues bound
 to the exchange, then RabbitMQ will route the message to all the
 queues in that set. Therefore for this plugin to work, we need to
 route messages to an exchange that would partition messages, so they
-are routed to _at most_ one queue. To achieve that we recommend the
+are routed to _at most_ one queue. To achieve that, we recommend the
 use of the _Consistent Hash Exchange_ or the _Random Exchange_.  The
-first one has the advantage of shipping directly with RabbitMQ.
+first one has the advantage of shipping directly with RabbitMQ. (It's
+worth noting that at the moment the plugin only works with those kind
+of exchanges).
 
 ## Consuming from a sharded queue ##
 
 While the plugin creates a bunch of queues behind the scenes, the idea
 is that those queues act like a big logical queue where you consume
-messages from. The plugin uses a new Erlang behaviour introduced
-introduce in the latest development version of RabbitMQ that allows
-the plugin to re-route calls to _basic.consume_ to a different queue
-from the original one required by the user.
+messages from. The plugin uses a new Erlang behaviour introduced in
+the latest development version of RabbitMQ that allows the plugin to
+re-route calls to _basic.consume_ to a different queue from the
+original one required by the user.
 
 An example should illustrate this better: let's say you declared the
 exchange _images_ to be a sharded exchange. Then RabbitMQ created
@@ -116,20 +118,22 @@ Get the RabbitMQ Public Umbrella ready as explained in the
 Move to the umbrella folder an then run the following commands, to
 fetch dependencies:
 
-```bash git clone https://github.com/videlalvaro/random-exchange.git
-hg clone http://hg.rabbitmq.com/rabbitmq-sharding/ cd rabbitmq-server
-hg up default cd ../rabbitmq-sharding make ``` ## Testing the plugin
-##
+```bash
+git clone https://github.com/jbrisbin/random-exchange.git
+hg clone http://hg.rabbitmq.com/rabbitmq-sharding/
+cd rabbitmq-server
+hg up default
+cd ../rabbitmq-sharding
+make
+```
+
+## Testing the plugin ##
 
 Here's how to start a two node RabbitMQ cluster and get the
 `rabbitmq-sharding` plugin running in it.
 
 Enable the following plugins as explained in the
 [RabbitMQ Plugin Development Guide](http://www.rabbitmq.com/plugin-development.html):
-
-```erlang
-[rabbitmq_management, amqp_client, rabbitmq_consistent_hash_exchange, random_exchange].
-```
 
 Then run `make run-in-broker`.
 
@@ -138,14 +142,15 @@ second RabbitMQ node.
 
 First setup the enabled plugins for the other node:
 
-```bash echo
-'[amqp_client,rabbitmq_consistent_hash_exchange,rabbitmq_sharding, rabbitmq_management_agent, random_exchange].'
-> other_plugins export RABBITMQ_ENABLED_PLUGINS_FILE=other_plugins ```
+```bash
+echo '[amqp_client,rabbitmq_consistent_hash_exchange,rabbitmq_sharding, rabbitmq_management_agent, random_exchange].' > other_plugins export RABBITMQ_ENABLED_PLUGINS_FILE=other_plugins
+```
 
 Then start the other node and cluster it:
 
-```bash make start-other-node OTHER_NODE=rabbit2 OTHER_PORT=5673 make
-cluster-other-node MAIN_NODE=rabbit-test@hostname OTHER_NODE=rabbit2
+```bash
+make start-other-node OTHER_NODE=rabbit2 OTHER_PORT=5673
+make cluster-other-node MAIN_NODE=rabbit-test@hostname OTHER_NODE=rabbit2
 ```
 
 You could repeat the previous two steps to start a couple more
@@ -161,18 +166,21 @@ routing key to use when binding the sharded queues to our exchange. If
 you use the consistent hash exchange then the routing keys need to be
 "an integer as a string", since routing keys in AMQP must be strings.
 
-```bash ../rabbitmq-server/scripts/rabbitmqctl set_parameter
-sharding-definition my_shard '{"shards-per-node": 2, "routing-key":
-"1234"}' ``` That parameter will tell the plugin to create 2 sharded
-queues per node. Based on the number of cores in your server, you need
-to decide how many `shards-per-node` you want. And finally the routing
-key used in this case will be `"1234"`. That routing key will apply in
-the context of a consistent hash exchange.
+```bash
+../rabbitmq-server/scripts/rabbitmqctl set_parameter sharding-definition my_shard '{"sharded": true, "shards-per-node": 2, "routing-key": "1234"}'
+```
+
+That parameter will tell the plugin to create 2 sharded queues per
+node. Based on the number of cores in your server, you need to decide
+how many `shards-per-node` you want. And finally the routing key used
+in this case will be `"1234"`. That routing key will apply in the
+context of a consistent hash exchange. The `sharded` key is mandatory
+for the exchange to be sharded.
 
 Let's add our policy now:
 
-```bash ../rabbitmq-server/scripts/rabbitmqctl -n rabbit-test@hostname
-set_policy my_shard "^shard\." '{"sharding-definition": "my_shard"}'
+```bash
+../rabbitmq-server/scripts/rabbitmqctl -n rabbit-test@hostname set_policy my_shard "^shard\." '{"sharding-definition": "my_shard"}'
 ```
 
 That policy will create a shard called `my_shard` for all exchanges
@@ -181,24 +189,28 @@ the one called `my_shard` that we've just defined.
 
 Then if you declare an exchange called for example `shard.logs_shard`
 the plugin will create two queues per node in the cluster.  So if we
-have a cluster of nodes [rabbit1, rabbit2, rabbit3], we will get the
+have a cluster of nodes `[rabbit1, rabbit2, rabbit3]`, we will get the
 following queues in the cluster:
 
-``` shard: shard.logs_shard - rabbit1@hostname - 0 shard:
-shard.logs_shard - rabbit1@hostname - 1
+```
+shard: shard.logs_shard - rabbit1@hostname - 0
+shard: shard.logs_shard - rabbit1@hostname - 1
 
-shard: shard.logs_shard - rabbit2@hostname - 0 shard: shard.logs_shard
-- rabbit2@hostname - 1
+shard: shard.logs_shard - rabbit2@hostname - 0
+shard: shard.logs_shard - rabbit2@hostname - 1
 
-shard: shard.logs_shard - rabbit3@hostname - 0 shard: shard.logs_shard
-- rabbit3@hostname - 1 ``` Each queue will be local to the node
-included in its name. Sharded queues names will have the `shard:`
-prefix in their names, and an index suffix starting at zero.
+shard: shard.logs_shard - rabbit3@hostname - 0
+shard: shard.logs_shard - rabbit3@hostname - 1
+```
+
+Each queue will be local to the node included in its name. Sharded
+queues names will have the `shard:` prefix in their names, and an
+index suffix starting at zero.
 
 ### What strategy is used for picking the queue name ###
 
 When you issue a `basic.consume`, the plugin will choose the queue
-with the least amount of consumers.  The queue will be local to the
+with the _least amount of consumers_.  The queue will be local to the
 broker your client is connected to. Of course the local sharded queue
 will be part of the set of queues that belong to the chosen shard.
 
@@ -207,18 +219,20 @@ will be part of the set of queues that belong to the chosen shard.
 The following configuration parameters affect the plugin behaviour:
 
 - `shards-per-node`: How many sharded queues to create per node. This
-  depends on the amount of cores in your server. Defaults to `1`.
+  could depend on the amount of cores in your server. Defaults to `1`.
 - `routing-key`: The routing key used when the plugin binds the queues
   to the shard exchange. Defaults to `"10000"`.
 
 First the parameters specified in the `sharding-definition` applies,
-if not set there, then the plugin defaults to global
+if one of them is not set there, then the plugin defaults to global
 parameters. Finally it will use the default plugin values.
 
 To set a parameter for the plugin, you could use the following
 command:
 
-```bash rabbitmqctl set_parameter sharding routing-key '"4321"' ```
+```bash
+rabbitmqctl set_parameter sharding routing-key '"4321"'
+```
 
 That will set a global parameter for routing keys used by the plugin.
 
@@ -239,12 +253,10 @@ This plugin works with the new `channel interceptors`. An interceptor
 basically allows a plugin to modify parts of an AMQP method. For
 example in this plugin case, whenever a user sends a `basic.consume`,
 the plugin will map the queue name sent by the user to one of the
-sharded queues. Moreover if the user tries to delete queue that
-actually is the name of a shard? One strategy could be that the plugin
-deletes the whole shard, including exchanges, queues and bindings.
+sharded queues.
 
 Also a plugin can decide that a certain AMQP method can't be performed
-on a queue that's managed by the plugin. In this case declared a queue
+on a queue that's managed by the plugin. In this case declaring a queue
 called `my_shard` doesn't make much sense when there's actually a
 sharded queue by that name. In this case the plugin will return a
 channel error to the user.
@@ -267,3 +279,7 @@ respective behaviour:
   queue, this method returns a channel error.
 - `'queue.delete', QueueName`: since there isn't an actual `QueueName`
   queue, this method returns a channel error.
+
+## LICENSE ##
+
+See the LICENSE file.
