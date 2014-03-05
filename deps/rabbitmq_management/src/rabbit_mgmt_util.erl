@@ -113,7 +113,10 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
     case rabbit_access_control:check_user_pass_login(Username, Password) of
         {ok, User = #user{tags = Tags}} ->
             IPStr = wrq:peer(ReqData),
-            {ok, IP} = inet:parse_address(IPStr),
+            %% inet_parse:address/1 is an undocumented function but
+            %% exists in old versions of Erlang. inet:parse_address/1
+            %% is a documented wrapper round it but introduced in R16B.
+            {ok, IP} = inet_parse:address(IPStr),
             case rabbit_access_control:check_user_loopback(Username, IP) of
                 ok ->
                     case is_mgmt_user(Tags) of
