@@ -58,8 +58,7 @@ handle_call(_Request, State) ->
 
 handle_event(Event, State) ->
     case extension_changes(Event) of
-        true  -> rabbit_log:info("Reset due to ~p~n", [Event]),
-                 rabbit_mgmt_app:reset();
+        true  -> rabbit_mgmt_app:reset();
         false -> ok
     end,
     {ok, State}.
