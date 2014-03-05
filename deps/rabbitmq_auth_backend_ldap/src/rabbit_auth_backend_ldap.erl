@@ -51,6 +51,13 @@ check_user_login(Username, []) ->
        [Username, log_result(R)]),
     R;
 
+check_user_login(Username, [{password, <<>>}]) ->
+    %% Password "" is special in LDAP, see
+    %% https://tools.ietf.org/html/rfc4513#section-5.1.2
+    ?L("CHECK: unauthenticated login for ~s", [Username]),
+    ?L("DECISION: unauthenticated login for ~s: denied", [Username]),
+    {refused, "user '~s' - unauthenticated bind not allowed", [Username]};
+
 check_user_login(Username, [{password, Password}]) ->
     ?L("CHECK: login for ~s", [Username]),
     R = with_ldap({fill_user_dn_pattern(Username), Password},
