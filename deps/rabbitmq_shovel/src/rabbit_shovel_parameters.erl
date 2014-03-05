@@ -21,7 +21,7 @@
 -include("rabbit_shovel.hrl").
 
 -export([validate/4, notify/4, notify_clear/3]).
--export([register/0, parse/2]).
+-export([register/0, unregister/0, parse/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -30,11 +30,15 @@
 -rabbit_boot_step({?MODULE,
                    [{description, "shovel parameters"},
                     {mfa, {rabbit_shovel_parameters, register, []}},
+                    {cleanup, {?MODULE, unregister, []}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
 register() ->
     rabbit_registry:register(runtime_parameter, <<"shovel">>, ?MODULE).
+
+unregister() ->
+    rabbit_registry:unregister(runtime_parameter, <<"shovel">>).
 
 validate(_VHost, <<"shovel">>, Name, Def) ->
     [case pget2(<<"src-exchange">>, <<"src-queue">>, Def) of
