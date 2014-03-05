@@ -16,7 +16,7 @@ configuration parameters.
 The following graphic depicts how the plugin works from the standpoint
 of a publisher and a consumer:
 
-![Sharding Overview](./docs/sharded_queues.png)
+![Sharding Overview](http://hg.rabbitmq.com/rabbitmq-sharding/raw-file/6fea09e847d5/docs/sharded_queues.png)
 
 As you can see in the graphic, the producers publishes a series of
 messages, those messages get partitioned to different queues, and then
