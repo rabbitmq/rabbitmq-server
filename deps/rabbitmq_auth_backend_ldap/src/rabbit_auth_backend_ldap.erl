@@ -46,7 +46,7 @@ check_user_login(Username, []) ->
     %% Without password, e.g. EXTERNAL
     ?L("CHECK: passwordless login for ~s", [Username]),
     R = with_ldap(creds(none),
-                  fun(LDAP) -> do_login(Username, none, LDAP) end),
+                  fun(LDAP) -> do_login(Username, unknown, none, LDAP) end),
     ?L("DECISION: passwordless login for ~s: ~p",
        [Username, log_result(R)]),
     R;
@@ -58,11 +58,16 @@ check_user_login(Username, [{password, <<>>}]) ->
     ?L("DECISION: unauthenticated login for ~s: denied", [Username]),
     {refused, "user '~s' - unauthenticated bind not allowed", [Username]};
 
-check_user_login(Username, [{password, Password}]) ->
-    ?L("CHECK: login for ~s", [Username]),
-    R = with_ldap({fill_user_dn_pattern(Username), Password},
-                  fun(LDAP) -> do_login(Username, Password, LDAP) end),
-    ?L("DECISION: login for ~s: ~p", [Username, log_result(R)]),
+check_user_login(User, [{password, PW}]) ->
+    ?L("CHECK: login for ~s", [User]),
+    R = case dn_lookup_when() of
+            prebind -> UserDN = username_to_dn_prebind(User),
+                       with_ldap({ok, {UserDN, PW}},
+                                 fun(L) -> do_login(User, UserDN,  PW, L) end);
+            _       -> with_ldap({ok, {fill_user_dn_pattern(User), PW}},
+                                 fun(L) -> do_login(User, unknown, PW, L) end)
+        end,
+    ?L("DECISION: login for ~s: ~p", [User, log_result(R)]),
     R;
 
 check_user_login(Username, AuthProps) ->
@@ -237,20 +242,36 @@ with_ldap(Creds, Fun) -> with_ldap(Creds, Fun, env(servers)).
 with_ldap(_Creds, _Fun, undefined) ->
     {error, no_ldap_servers_defined};
 
+with_ldap({error, _} = E, _Fun, _State) ->
+    E;
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
-with_ldap(Creds, Fun, Servers) ->
+with_ldap({ok, Creds}, Fun, Servers) ->
     Opts0 = [{ssl, env(use_ssl)}, {port, env(port)}],
-    Opts = case env(log) of
-               network ->
-                   Pre = "    LDAP network traffic: ",
-                   rabbit_log:info(
-                     "    LDAP connecting to servers: ~p~n", [Servers]),
-                   [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
-                             (2, S, A) -> rabbit_log:info   (Pre ++ S, A)
-                          end} | Opts0];
-               _ ->
-                   Opts0
+    SSLOpts = env(ssl_options),
+    Opts1 = case {SSLOpts, rabbit_misc:version_compare(
+                             erlang:system_info(version), "5.10")} of %% R16A
+                {[], _}  -> Opts0;
+                {_,  lt} -> exit({ssl_options_requires_min_r16a});
+                {_,  _}  -> [{sslopts, SSLOpts} | Opts0]
+            end,
+    Opts2 = case env(log) of
+    %% We can't just pass through [] as sslopts in the old case, eldap
+    %% exit()s when you do that.
+                network ->
+                    Pre = "    LDAP network traffic: ",
+                    rabbit_log:info(
+                      "    LDAP connecting to servers: ~p~n", [Servers]),
+                    [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
+                              (2, S, A) -> rabbit_log:info   (Pre ++ S, A)
+                           end} | Opts1];
+                _ ->
+                    Opts1
+            end,
+    %% eldap defaults to 'infinity' but doesn't allow you to set that. Harrumph.
+    Opts = case env(timeout) of
+               infinity -> Opts2;
+               MS       -> [{timeout, MS} | Opts2]
            end,
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
@@ -283,13 +304,15 @@ env(F) ->
     {ok, V} = application:get_env(rabbitmq_auth_backend_ldap, F),
     V.
 
-do_login(Username, Password, LDAP) ->
-    UserDN = username_to_dn(Username, LDAP),
+do_login(Username, PrebindUserDN, Password, LDAP) ->
+    UserDN = case PrebindUserDN of
+                 unknown -> username_to_dn(Username, LDAP, dn_lookup_when());
+                 _       -> PrebindUserDN
+             end,
     User = #user{username     = Username,
                  auth_backend = ?MODULE,
                  impl         = #impl{user_dn  = UserDN,
                                       password = Password}},
-
     TagRes = [begin
                   ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
                   R = evaluate(Q, [{username, Username},
@@ -303,19 +326,28 @@ do_login(Username, Password, LDAP) ->
         [E | _] -> E
     end.
 
-username_to_dn(Username, LDAP) ->
-    username_to_dn(Username, LDAP, env(dn_lookup_attribute)).
+dn_lookup_when() -> case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
+                        {none, _}       -> never;
+                        {_,    as_user} -> postbind;
+                        {_,    _}       -> prebind
+                    end.
 
-username_to_dn(Username, _LDAP, none) ->
-    fill_user_dn_pattern(Username);
+username_to_dn_prebind(Username) ->
+    with_ldap({ok, env(dn_lookup_bind)},
+              fun (LDAP) -> dn_lookup(Username, LDAP) end).
 
-username_to_dn(Username, LDAP, Attr) ->
+username_to_dn(Username, LDAP,  postbind) -> dn_lookup(Username, LDAP);
+username_to_dn(Username, _LDAP, _When)    -> fill_user_dn_pattern(Username).
+
+dn_lookup(Username, LDAP) ->
     Filled = fill_user_dn_pattern(Username),
     case eldap:search(LDAP,
                       [{base, env(dn_lookup_base)},
-                       {filter, eldap:equalityMatch(Attr, Filled)},
+                       {filter, eldap:equalityMatch(
+                                  env(dn_lookup_attribute), Filled)},
                        {attributes, ["distinguishedName"]}]) of
         {ok, #eldap_search_result{entries = [#eldap_entry{object_name = DN}]}}->
+            ?L1("DN lookup: ~s -> ~s", [Username, DN]),
             DN;
         {ok, #eldap_search_result{entries = Entries}} ->
             rabbit_log:warning("Searching for DN for ~s, got back ~p~n",
@@ -331,11 +363,11 @@ fill_user_dn_pattern(Username) ->
 creds(User) -> creds(User, env(other_bind)).
 
 creds(none, as_user) ->
-    exit(as_user_no_password);
+    {error, "'other_bind' set to 'as_user' but no password supplied"};
 creds(#user{impl = #impl{user_dn = UserDN, password = Password}}, as_user) ->
-    {UserDN, Password};
+    {ok, {UserDN, Password}};
 creds(_, Creds) ->
-    Creds.
+    {ok, Creds}.
 
 log(Fmt,  Args) -> case env(log) of
                        false -> ok;
