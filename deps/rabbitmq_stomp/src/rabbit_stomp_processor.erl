@@ -30,7 +30,7 @@
 -record(state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
                 config, route_state, reply_queues, frame_transformer,
-                adapter_info, send_fun, ssl_login_name}).
+                adapter_info, send_fun, ssl_login_name, peer_addr}).
 
 -record(subscription, {dest_hdr, channel, ack_mode, multi_ack, description}).
 
@@ -79,12 +79,14 @@ init(Configuration) ->
 terminate(_Reason, State) ->
     close_connection(State).
 
-handle_cast({init, [SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName]},
+handle_cast({init, [SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName,
+                    PeerAddr]},
             State) ->
     {noreply, State #state { send_fun            = SendFun,
                              adapter_info        = AdapterInfo,
                              start_heartbeat_fun = StartHeartbeatFun,
-                             ssl_login_name      = SSLLoginName }};
+                             ssl_login_name      = SSLLoginName,
+                             peer_addr           = PeerAddr}};
 
 handle_cast(flush_and_die, State) ->
     {stop, normal, close_connection(State)};
@@ -499,12 +501,12 @@ without_headers([], Command, Frame, State, Fun) ->
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)", State);
 do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
-         State) ->
-    case amqp_connection:start(
+         State = #state{peer_addr = Addr}) ->
+    case start_connection(
            #amqp_params_direct{username     = Username,
                                password     = Passwd,
                                virtual_host = VirtualHost,
-                               adapter_info = AdapterInfo}) of
+                               adapter_info = AdapterInfo}, Username, Addr) of
         {ok, Connection} ->
             link(Connection),
             {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -532,7 +534,22 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                                "(vhost access not allowed)~n"),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
-                                 "' access denied", State)
+                                 "' access denied", State);
+        {error, not_loopback} ->
+            rabbit_log:warning("STOMP login failed - access_refused "
+                               "(user must access over loopback)~n"),
+            error("Bad CONNECT", "non-loopback access denied", State)
+    end.
+
+start_connection(Params, Username, Addr) ->
+    case amqp_connection:start(Params) of
+        {ok, Conn} -> case rabbit_access_control:check_user_loopback(
+                             Username, Addr) of
+                          ok          -> {ok, Conn};
+                          not_allowed -> amqp_connection:close(Conn),
+                                         {error, not_loopback}
+                      end;
+        {error, E} -> {error, E}
     end.
 
 server_header() ->
