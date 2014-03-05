@@ -58,7 +58,8 @@ handle_call(_Request, State) ->
 
 handle_event(Event, State) ->
     case extension_changes(Event) of
-        true  -> rabbit_mgmt_app:reset();
+        true  -> rabbit_log:info("Reset due to ~p~n", [Event]),
+                 rabbit_mgmt_app:reset();
         false -> ok
     end,
     {ok, State}.
@@ -95,6 +96,6 @@ filter_extensions(Changed) ->
                             lists:map(fun app_utils:app_modules/1, Changed)),
                    {Attr, Bs} <- Mod:module_info(attributes),
                    lists:member(rabbit_mgmt_extension, Bs) andalso
-                       Attr =:= behavior orelse Attr =:= behaviour],
+                       (Attr =:= behavior orelse Attr =:= behaviour)],
     Exts /= [].
 
