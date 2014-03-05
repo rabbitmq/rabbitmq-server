@@ -345,7 +345,7 @@ handle_app_error(Term) ->
 start_apps(Apps) ->
     rabbit_boot:force_reload(Apps),
     StartupApps = app_utils:app_dependency_order(Apps, false),
-    case whereis(?MODULE) of
+    case whereis(rabbit_boot) of
         undefined -> rabbit:run_boot_steps();
         _         -> ok
     end,
