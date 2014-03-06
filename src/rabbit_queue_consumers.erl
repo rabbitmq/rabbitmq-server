@@ -97,7 +97,7 @@
 %%----------------------------------------------------------------------------
 
 new() -> #state{consumers = priority_queue:new(),
-                use       = {inactive, now_micros(), 0, 0.0}}.
+                use       = {active, now_micros(), 1.0}}.
 
 max_active_priority(#state{consumers = Consumers}) ->
     priority_queue:highest(Consumers).
