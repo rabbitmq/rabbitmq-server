@@ -62,7 +62,18 @@ HELP = {
         <dd>Channel will send streaming publish confirmations.</dd> \
         <dt><acronym title="Transactional">T</acronym> &ndash; <a target="_blank" href="http://www.rabbitmq.com/amqp-0-9-1-reference.html#class.tx">transactional</a></dt> \
         <dd>Channel is transactional.</dd> \
-      <dl>',
+      </dl>',
+
+    'channel-prefetch':
+      'Channel prefetch counts. \
+       <p> \
+         Each channel can have two prefetch counts: A per-consumer count, which \
+         will limit each new consumer created on the channel, and a global \
+         count, which is shared between all consumers on the channel.\
+       </p> \
+       <p> \
+         This column shows one, the other, or both limits if they are set. \
+       </p>',
 
     'file-descriptors':
       '<p>File descriptor count and limit, as reported by the operating \

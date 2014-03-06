@@ -38,9 +38,20 @@
 
 <table class="facts">
   <tr>
+    <th>State</th>
+    <td><%= fmt_object_state(channel) %></td>
+  </tr>
+  <tr>
     <th>Prefetch count</th>
     <td><%= channel.prefetch_count %></td>
   </tr>
+  <tr>
+    <th>Global prefetch count</th>
+    <td><%= channel.global_prefetch_count %></td>
+  </tr>
+</table>
+
+<table class="facts">
   <tr>
     <th>Messages unacknowledged</th>
     <td><%= channel.messages_unacknowledged %></td>
@@ -56,13 +67,6 @@
   <tr>
     <th>Acks uncommitted</th>
     <td><%= channel.acks_uncommitted %></td>
-  </tr>
-</table>
-
-<table class="facts">
-  <tr>
-    <th>State</th>
-    <td><%= fmt_object_state(channel) %></td>
   </tr>
 </table>
 </div>
