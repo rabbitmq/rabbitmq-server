@@ -67,13 +67,12 @@ HELP = {
     'channel-prefetch':
       'Channel prefetch counts. \
        <p> \
-         Each channel has two prefetch counts: A per-consumer count, which \
+         Each channel can have two prefetch counts: A per-consumer count, which \
          will limit each new consumer created on the channel, and a global \
          count, which is shared between all consumers on the channel.\
        </p> \
        <p> \
-         This column shows <i>per-consumer limit</i> | <i>channel global \
-         limit</i>. In each case, 0 means "no limit" \
+         This column shows one, the other, or both limits if they are set. \
        </p>',
 
     'file-descriptors':

@@ -97,7 +97,12 @@
       <% } %>
     </td>
     <td class="c">
-      <%= channel.consumer_prefetch_count %> | <%= channel.prefetch_count %>
+      <% if (channel.prefetch_count != 0) { %>
+        <%= channel.prefetch_count %><br/>
+      <% } %>
+      <% if (channel.global_prefetch_count != 0) { %>
+        <%= channel.global_prefetch_count %> (global)
+      <% } %>
     </td>
     <td class="c"><%= channel.messages_unacknowledged %></td>
     <td class="c"><%= channel.messages_unconfirmed %></td>
