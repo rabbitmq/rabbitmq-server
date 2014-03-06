@@ -17,8 +17,8 @@
 -module(rabbit_queue_consumers).
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
-         unacknowledged_message_count/0, add/8, remove/3, erase_ch/2,
-         send_drained/0, deliver/3, record_ack/3, subtract_acks/2,
+         unacknowledged_message_count/0, add/9, remove/3, erase_ch/2,
+         send_drained/0, deliver/3, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
          credit/6, utilisation/1]).
@@ -32,7 +32,7 @@
 
 -record(state, {consumers, use}).
 
--record(consumer, {tag, ack_required, args}).
+-record(consumer, {tag, ack_required, prefetch, args}).
 
 %% These are held in our process dictionary
 -record(cr, {ch_pid,
@@ -66,11 +66,12 @@
 -spec max_active_priority(state()) -> integer() | 'infinity' | 'empty'.
 -spec inactive(state()) -> boolean().
 -spec all(state()) -> [{ch(), rabbit_types:ctag(), boolean(),
-                        rabbit_framing:amqp_table()}].
+                        non_neg_integer(), rabbit_framing:amqp_table()}].
 -spec count() -> non_neg_integer().
 -spec unacknowledged_message_count() -> non_neg_integer().
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
-          rabbit_framing:amqp_table(), boolean(), state()) -> state().
+          non_neg_integer(), rabbit_framing:amqp_table(), boolean(), state())
+         -> state().
 -spec remove(ch(), rabbit_types:ctag(), state()) ->
                     'not_found' | state().
 -spec erase_ch(ch(), state()) ->
@@ -82,7 +83,8 @@
                      {'delivered',   boolean(), T, state()} |
                      {'undelivered', boolean(), state()}.
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
--spec subtract_acks(ch(), [ack()]) -> 'not_found' | 'ok'.
+-spec subtract_acks(ch(), [ack()], state()) ->
+                           'not_found' | 'unchanged' | {'unblocked', state()}.
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
                               'unchanged' | {'unblocked', state()}.
 -spec resume_fun()                       -> cr_fun().
@@ -112,8 +114,9 @@ all(#state{consumers = Consumers}) ->
 consumers(Consumers, Acc) ->
     priority_queue:fold(
       fun ({ChPid, Consumer}, _P, Acc1) ->
-              #consumer{tag = CTag, ack_required = Ack, args = Args} = Consumer,
-              [{ChPid, CTag, Ack, Args} | Acc1]
+              #consumer{tag = CTag, ack_required = Ack, prefetch = Prefetch,
+                        args = Args} = Consumer,
+              [{ChPid, CTag, Ack, Prefetch, Args} | Acc1]
       end, Acc, Consumers).
 
 count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
@@ -121,7 +124,7 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 unacknowledged_message_count() ->
     lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]).
 
-add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Args, IsEmpty,
+add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     State = #state{consumers = Consumers}) ->
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
@@ -130,13 +133,16 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Args, IsEmpty,
                    false -> Limiter
                end,
     C1 = C#cr{consumer_count = Count + 1, limiter = Limiter1},
-    update_ch_record(case parse_credit_args(Args) of
-                         none         -> C1;
-                         {Crd, Drain} -> credit_and_drain(
-                                           C1, CTag, Crd, Drain, IsEmpty)
-                     end),
+    update_ch_record(
+      case parse_credit_args(Prefetch, Args) of
+          {0,       auto}            -> C1;
+          {_Credit, auto} when NoAck -> C1;
+          {Credit,  Mode}            -> credit_and_drain(
+                                          C1, CTag, Credit, Mode, IsEmpty)
+      end),
     Consumer = #consumer{tag          = CTag,
                          ack_required = not NoAck,
+                         prefetch     = Prefetch,
                          args         = Args},
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers)}.
 
@@ -169,7 +175,7 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
                 blocked_consumers = BlockedQ} ->
             AllConsumers = priority_queue:join(Consumers, BlockedQ),
             ok = erase_ch_record(C),
-            {queue:to_list(ChAckTags),
+            {[AckTag || {AckTag, _CTag} <- queue:to_list(ChAckTags)],
              tags(priority_queue:to_list(AllConsumers)),
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
@@ -226,7 +232,7 @@ deliver_to_consumer(FetchFun,
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
-                     true  -> queue:in(AckTag, ChAckTags);
+                     true  -> queue:in({AckTag, CTag}, ChAckTags);
                      false -> ChAckTags
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
@@ -235,27 +241,42 @@ deliver_to_consumer(FetchFun,
 
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
-    update_ch_record(C#cr{acktags = queue:in(AckTag, ChAckTags)}),
+    update_ch_record(C#cr{acktags = queue:in({AckTag, none}, ChAckTags)}),
     ok.
 
-subtract_acks(ChPid, AckTags) ->
+subtract_acks(ChPid, AckTags, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
-        C = #cr{acktags = ChAckTags} ->
-            update_ch_record(
-              C#cr{acktags = subtract_acks(AckTags, [], ChAckTags)}),
-            ok
+        C = #cr{acktags = ChAckTags, limiter = Lim} ->
+            {CTagCounts, AckTags2} = subtract_acks(
+                                       AckTags, [], orddict:new(), ChAckTags),
+            {Unblocked, Lim2} =
+                orddict:fold(
+                  fun (CTag, Count, {UnblockedN, LimN}) ->
+                          {Unblocked1, LimN1} =
+                              rabbit_limiter:ack_from_queue(LimN, CTag, Count),
+                          {UnblockedN orelse Unblocked1, LimN1}
+                  end, {false, Lim}, CTagCounts),
+            C2 = C#cr{acktags = AckTags2, limiter = Lim2},
+            case Unblocked of
+                true  -> unblock(C2, State);
+                false -> update_ch_record(C2),
+                         unchanged
+            end
     end.
 
-subtract_acks([], [], AckQ) ->
-    AckQ;
-subtract_acks([], Prefix, AckQ) ->
-    queue:join(queue:from_list(lists:reverse(Prefix)), AckQ);
-subtract_acks([T | TL] = AckTags, Prefix, AckQ) ->
+subtract_acks([], [], CTagCounts, AckQ) ->
+    {CTagCounts, AckQ};
+subtract_acks([], Prefix, CTagCounts, AckQ) ->
+    {CTagCounts, queue:join(queue:from_list(lists:reverse(Prefix)), AckQ)};
+subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
     case queue:out(AckQ) of
-        {{value,  T}, QTail} -> subtract_acks(TL,             Prefix, QTail);
-        {{value, AT}, QTail} -> subtract_acks(AckTags, [AT | Prefix], QTail)
+        {{value, {T, CTag}}, QTail} ->
+            subtract_acks(TL, Prefix,
+                          orddict:update_counter(CTag, 1, CTagCounts), QTail);
+        {{value, V}, QTail} ->
+            subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail)
     end.
 
 possibly_unblock(Update, ChPid, State) ->
@@ -308,7 +329,7 @@ credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
             unchanged;
         #cr{limiter = Limiter} = C ->
             C1 = #cr{limiter = Limiter1} =
-                credit_and_drain(C, CTag, Credit, Drain, IsEmpty),
+                credit_and_drain(C, CTag, Credit, drain_mode(Drain), IsEmpty),
             case is_ch_blocked(C1) orelse
                 (not rabbit_limiter:is_consumer_blocked(Limiter, CTag)) orelse
                 rabbit_limiter:is_consumer_blocked(Limiter1, CTag) of
@@ -318,6 +339,9 @@ credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
             end
     end.
 
+drain_mode(true)  -> drain;
+drain_mode(false) -> manual.
+
 utilisation(#state{use = {active, Since, Avg}}) ->
     use_avg(now_micros() - Since, 0, Avg);
 utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
@@ -325,14 +349,14 @@ utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
 
 %%----------------------------------------------------------------------------
 
-parse_credit_args(Args) ->
+parse_credit_args(Default, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
         {table, T} -> case {rabbit_misc:table_lookup(T, <<"credit">>),
                             rabbit_misc:table_lookup(T, <<"drain">>)} of
-                          {{long, Credit}, {bool, Drain}} -> {Credit, Drain};
-                          _                               -> none
+                          {{long, C}, {bool, D}} -> {C, drain_mode(D)};
+                          _                      -> {Default, auto}
                       end;
-        undefined  -> none
+        undefined  -> {Default, auto}
     end.
 
 lookup_ch(ChPid) ->
@@ -393,8 +417,8 @@ send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
     end.
 
 credit_and_drain(C = #cr{ch_pid = ChPid, limiter = Limiter},
-                 CTag, Credit, Drain, IsEmpty) ->
-    case rabbit_limiter:credit(Limiter, CTag, Credit, Drain, IsEmpty) of
+                 CTag, Credit, Mode, IsEmpty) ->
+    case rabbit_limiter:credit(Limiter, CTag, Credit, Mode, IsEmpty) of
         {true,  Limiter1} -> rabbit_channel:send_drained(ChPid,
                                                          [{CTag, Credit}]),
                              C#cr{limiter = Limiter1};

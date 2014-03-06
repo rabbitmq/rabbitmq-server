@@ -17,7 +17,8 @@
 %% The purpose of the limiter is to stem the flow of messages from
 %% queues to channels, in order to act upon various protocol-level
 %% flow control mechanisms, specifically AMQP 0-9-1's basic.qos
-%% prefetch_count and AMQP 1.0's link (aka consumer) credit mechanism.
+%% prefetch_count, our consumer prefetch extension, and AMQP 1.0's
+%% link (aka consumer) credit mechanism.
 %%
 %% Each channel has an associated limiter process, created with
 %% start_link/1, which it passes to queues on consumer creation with
@@ -54,11 +55,15 @@
 %% inactive. In practice it is rare for that to happen, though we
 %% could optimise this case in the future.
 %%
-%% In addition, the consumer credit bookkeeping is local to queues, so
-%% it is not necessary to store information about it in the limiter
-%% process. But for abstraction we hide it from the queue behind the
-%% limiter API, and it therefore becomes part of the queue local
-%% state.
+%% Consumer credit (for AMQP 1.0) and per-consumer prefetch (for AMQP
+%% 0-9-1) are treated as essentially the same thing, but with the
+%% exception that per-consumer prefetch gets an auto-topup when
+%% acknowledgments come in.
+%%
+%% The bookkeeping for this is local to queues, so it is not necessary
+%% to store information about it in the limiter process. But for
+%% abstraction we hide it from the queue behind the limiter API, and
+%% it therefore becomes part of the queue local state.
 %%
 %% The interactions with the limiter are as follows:
 %%
@@ -66,7 +71,8 @@
 %%    that's what the limit_prefetch/3, unlimit_prefetch/1,
 %%    get_prefetch_limit/1 API functions are about. They also tell the
 %%    limiter queue state (via the queue) about consumer credit
-%%    changes - that's what credit/5 is for.
+%%    changes and message acknowledgement - that's what credit/5 and
+%%    ack_from_queue/3 are for.
 %%
 %% 2. Queues also tell the limiter queue state about the queue
 %%    becoming empty (via drained/1) and consumers leaving (via
@@ -123,8 +129,8 @@
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
 -export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
-         is_suspended/1, is_consumer_blocked/2, credit/5, drained/1,
-         forget_consumer/2]).
+         is_suspended/1, is_consumer_blocked/2, credit/5, ack_from_queue/3,
+         drained/1, forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/4]).
@@ -140,6 +146,8 @@
                           prefetch_limited :: boolean()}).
 -type(qstate() :: #qstate{pid :: pid(),
                           state :: 'dormant' | 'active' | 'suspended'}).
+
+-type(credit_mode() :: 'manual' | 'drain' | 'auto').
 
 -spec(start_link/1 :: (rabbit_types:proc_name()) ->
                            rabbit_types:ok_pid_or_error()).
@@ -161,8 +169,10 @@
 -spec(deactivate/1   :: (qstate()) -> qstate()).
 -spec(is_suspended/1 :: (qstate()) -> boolean()).
 -spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
--spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(), boolean(),
-                   boolean()) -> {boolean(), qstate()}).
+-spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(),
+                   credit_mode(), boolean()) -> {boolean(), qstate()}).
+-spec(ack_from_queue/3 :: (qstate(), rabbit_types:ctag(), non_neg_integer())
+                          -> {boolean(), qstate()}).
 -spec(drained/1 :: (qstate())
                    -> {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}).
 -spec(forget_consumer/2 :: (qstate(), rabbit_types:ctag()) -> qstate()).
@@ -179,7 +189,7 @@
 %% notified of a change in the limit or volume that may allow it to
 %% deliver more messages via the limiter's channel.
 
--record(credit, {credit = 0, drain = false}).
+-record(credit, {credit = 0, mode}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -256,19 +266,32 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         {value, #credit{}}                      -> true
     end.
 
-credit(Limiter = #qstate{credits = Credits}, CTag, Credit, Drain, IsEmpty) ->
-    {Res, Cr} = case IsEmpty andalso Drain of
-                    true  -> {true,  make_credit(0,      false)};
-                    false -> {false, make_credit(Credit, Drain)}
-                end,
-    {Res, Limiter#qstate{credits = gb_trees:enter(CTag, Cr, Credits)}}.
+credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Mode, IsEmpty) ->
+    {Res, Cr} =
+        case IsEmpty andalso Mode =:= drain of
+            true  -> {true,  #credit{credit = 0,   mode = manual}};
+            false -> {false, #credit{credit = Crd, mode = Mode}}
+        end,
+    {Res, Limiter#qstate{credits = enter_credit(CTag, Cr, Credits)}}.
+
+ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
+    {Credits1, Unblocked} =
+        case gb_trees:lookup(CTag, Credits) of
+            {value, C = #credit{mode = auto, credit = C0}} ->
+                {update_credit(CTag, C#credit{credit = C0 + Credit}, Credits),
+                 C0 =:= 0 andalso Credit =/= 0};
+            _ ->
+                {Credits, false}
+        end,
+    {Unblocked, Limiter#qstate{credits = Credits1}}.
 
 drained(Limiter = #qstate{credits = Credits}) ->
+    Drain = fun(C) -> C#credit{credit = 0, mode = manual} end,
     {CTagCredits, Credits2} =
         rabbit_misc:gb_trees_fold(
-          fun (CTag,  #credit{credit = C,  drain = true},  {Acc, Creds0}) ->
-                  {[{CTag, C} | Acc], update_credit(CTag, 0, false, Creds0)};
-              (_CTag, #credit{credit = _C, drain = false}, {Acc, Creds0}) ->
+          fun (CTag, C = #credit{credit = Crd, mode = drain},  {Acc, Creds0}) ->
+                  {[{CTag, Crd} | Acc], update_credit(CTag, Drain(C), Creds0)};
+              (_CTag,   #credit{credit = _Crd, mode = _Mode}, {Acc, Creds0}) ->
                   {Acc, Creds0}
           end, {[], Credits}, Credits),
     {CTagCredits, Limiter#qstate{credits = Credits2}}.
@@ -287,20 +310,25 @@ forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
 %% state for us (#qstate.credits), and maintain a fiction that the
 %% limiter is making the decisions...
 
-make_credit(Credit, Drain) ->
-    %% Using up all credit implies no need to send a 'drained' event
-    #credit{credit = Credit, drain = Drain andalso Credit > 0}.
-
 decrement_credit(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
-        {value, #credit{credit = Credit, drain = Drain}} ->
-            update_credit(CTag, Credit - 1, Drain, Credits);
+        {value, C = #credit{credit = Credit}} ->
+            update_credit(CTag, C#credit{credit = Credit - 1}, Credits);
         none ->
             Credits
     end.
 
-update_credit(CTag, Credit, Drain, Credits) ->
-    gb_trees:update(CTag, make_credit(Credit, Drain), Credits).
+enter_credit(CTag, C, Credits) ->
+    gb_trees:enter(CTag, ensure_credit_invariant(C), Credits).
+
+update_credit(CTag, C, Credits) ->
+    gb_trees:update(CTag, ensure_credit_invariant(C), Credits).
+
+ensure_credit_invariant(C = #credit{credit = 0, mode = drain}) ->
+    %% Using up all credit implies no need to send a 'drained' event
+    C#credit{mode = manual};
+ensure_credit_invariant(C) ->
+    C.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
