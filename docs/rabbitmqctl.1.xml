@@ -1574,7 +1574,11 @@
               </varlistentry>
               <varlistentry>
                 <term>prefetch_count</term>
-                <listitem><para>QoS prefetch count limit in force, 0 if unlimited.</para></listitem>
+                <listitem><para>QoS prefetch limit for new consumers, 0 if unlimited.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>global_prefetch_count</term>
+                <listitem><para>QoS prefetch limit for the entire channel, 0 if unlimited.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>

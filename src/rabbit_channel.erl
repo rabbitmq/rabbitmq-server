@@ -53,7 +53,7 @@
          messages_uncommitted,
          acks_uncommitted,
          prefetch_count,
-         consumer_prefetch_count,
+         global_prefetch_count,
          state]).
 
 -define(CREATION_EVENT_KEYS,
@@ -1611,8 +1611,8 @@ i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
 i(state,                   #ch{state = running})         -> credit_flow:state();
 i(state,                   #ch{state = State})            -> State;
-i(consumer_prefetch_count, #ch{consumer_prefetch = C})    -> C;
-i(prefetch_count, #ch{limiter = Limiter}) ->
+i(prefetch_count,          #ch{consumer_prefetch = C})    -> C;
+i(global_prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_prefetch_limit(Limiter);
 i(Item, _) ->
     throw({bad_argument, Item}).
