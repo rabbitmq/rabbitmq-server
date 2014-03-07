@@ -130,6 +130,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Mon Mar 3 2014 simon@rabbitmq.com 3.2.4-1
+- New Upstream Release
+
 * Thu Jan 23 2014 emile@rabbitmq.com 3.2.3-1
 - New Upstream Release
 
