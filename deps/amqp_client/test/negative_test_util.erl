@@ -62,7 +62,7 @@ hard_error_test() ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, OtherChannel} = amqp_connection:open_channel(Connection),
     OtherChannelMonitor = erlang:monitor(process, OtherChannel),
-    Qos = #'basic.qos'{global = true},
+    Qos = #'basic.qos'{prefetch_size = 10000000},
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
     catch
