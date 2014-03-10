@@ -43,13 +43,12 @@ memory() ->
 
     {Sums, _Other} = sum_processes(lists:append(All), [memory]),
 
-    [Conns, Qs, MsgIndexProc, MgmtDbProc, AllPlugins] =
+    [Conns, Qs, MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate_memory(Names, Sums) || Names <- All],
 
     Mnesia       = mnesia_memory(),
     MsgIndexETS  = ets_memory(rabbit_msg_store_ets_index),
     MgmtDbETS    = ets_memory(rabbit_mgmt_db),
-    Plugins      = AllPlugins - MgmtDbProc,
 
     [{total,     Total},
      {processes, Processes},
@@ -60,7 +59,7 @@ memory() ->
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
 
-    OtherProc = Processes - Conns - Qs - MsgIndexProc - AllPlugins,
+    OtherProc = Processes - Conns - Qs - MsgIndexProc - Plugins - MgmtDbProc,
 
     [{total,            Total},
      {connection_procs, Conns},
