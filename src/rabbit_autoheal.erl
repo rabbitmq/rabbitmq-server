@@ -89,6 +89,12 @@ rabbit_down(Node, {winner_waiting, [Node], Notify}) ->
 rabbit_down(Node, {winner_waiting, WaitFor, Notify}) ->
     {winner_waiting, WaitFor -- [Node], Notify};
 
+rabbit_down(Node, {leader_waiting, [Node]}) ->
+    not_healing;
+
+rabbit_down(Node, {leader_waiting, WaitFor}) ->
+    {leader_waiting, WaitFor -- [Node]};
+
 rabbit_down(_Node, State) ->
     %% ignore, we already cancelled the autoheal process
     State.
@@ -121,9 +127,18 @@ handle_msg({request_start, Node},
                                  "  * Winner:     ~p~n"
                                  "  * Losers:     ~p~n",
                                  [AllPartitions, Winner, Losers]),
-                 send(Winner, {become_winner, Losers}),
                  [send(L, {winner_is, Winner}) || L <- Losers],
-                 not_healing
+                 ShortCut = fun(Msg) ->
+                                    handle_msg(Msg, not_healing, Partitions)
+                            end,
+                 case {node() =:= Winner, lists:member(node(), Losers)} of
+                     true  -> ShortCut({become_winner, Losers});
+                     false -> send(Winner, {become_winner, Losers}),
+                              case lists:member(node(), Losers) of
+                                  true  -> ShortCut({winner_is, Winner});
+                                  false -> {leader_waiting, Losers}
+                              end
+                 end
     end;
 
 handle_msg({request_start, Node},
