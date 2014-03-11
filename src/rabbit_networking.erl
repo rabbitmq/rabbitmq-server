@@ -277,9 +277,8 @@ tcp_listener_stopped(Protocol, IPAddress, Port) ->
                      port = Port}).
 
 record_distribution_listener() ->
-    {ok, Names} = net_adm:names(),
-    {Name, _} = rabbit_nodes:parts(node()),
-    [Port] = [P || {N, P} <- Names, N =:= Name],
+    {Name, Host} = rabbit_nodes:parts(node()),
+    {port, Port, _Version} = erl_epmd:port_please(Name, Host),
     tcp_listener_started(clustering, {0,0,0,0,0,0,0,0}, Port).
 
 active_listeners() ->
