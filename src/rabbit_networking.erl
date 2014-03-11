@@ -280,7 +280,7 @@ record_distribution_listener() ->
     {ok, Names} = net_adm:names(),
     {Name, _} = rabbit_nodes:parts(node()),
     [Port] = [P || {N, P} <- Names, N =:= Name],
-    tcp_listener_started('erlang-clustering', {0,0,0,0,0,0,0,0}, Port).
+    tcp_listener_started(clustering, {0,0,0,0,0,0,0,0}, Port).
 
 active_listeners() ->
     rabbit_misc:dirty_read_all(rabbit_listener).

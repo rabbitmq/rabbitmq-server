@@ -394,7 +394,8 @@ status() ->
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
-          {alarms,               alarms()}],
+          {alarms,               alarms()},
+          {listeners,            listeners()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -423,6 +424,14 @@ alarms() ->
     N = node(),
     %% [{{resource_limit,memory,rabbit@mercurio},[]}]
     [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
+
+listeners() ->
+    [{Protocol, Port, rabbit_misc:ntoa(IP)} ||
+        #listener{node       = Node,
+                  protocol   = Protocol,
+                  ip_address = IP,
+                  port       = Port} <- rabbit_networking:active_listeners(),
+        Node =:= node()].
 
 is_running() -> is_running(node()).
 
