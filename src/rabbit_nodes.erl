@@ -58,15 +58,14 @@ names(Hostname) ->
     end.
 
 diagnostics(Nodes) ->
-    Hosts = lists:usort([element(2, parts(Node)) || Node <- Nodes]),
-    NodeDiags = [{"~nDIAGNOSTICS~n===========~n~n"
-                  "nodes in question: ~p~n~n"
-                  "hosts, their running nodes and ports:", [Nodes]}] ++
-        [diagnostics_host(Host) || Host <- Hosts] ++
-        diagnostics0(),
+    io:format("~nDiagnosing connectivity..."),
+    NodeDiags = [{" done.~n~nDIAGNOSTICS~n===========~n~n"
+                  "attempted to contact: ~p~n", [Nodes]}] ++
+        [diagnostics_node(Node) || Node <- Nodes] ++
+        current_node_details(),
     rabbit_misc:format_many(lists:flatten(NodeDiags)).
 
-diagnostics0() ->
+current_node_details() ->
     [{"~ncurrent node details:~n- node name: ~w", [node()]},
      case init:get_argument(home) of
          {ok, [[Home]]} -> {"- home dir: ~s", [Home]};
@@ -74,16 +73,66 @@ diagnostics0() ->
      end,
      {"- cookie hash: ~s", [cookie_hash()]}].
 
-diagnostics_host(Host) ->
+diagnostics_node(Node) ->
+    {Name, Host} = parts(Node),
     case names(Host) of
         {error, EpmdReason} ->
             {"- unable to connect to epmd on ~s: ~w (~s)",
              [Host, EpmdReason, rabbit_misc:format_inet_error(EpmdReason)]};
         {ok, NamePorts} ->
-            {"- ~s: ~p",
-             [Host, [{list_to_atom(Name), Port} ||
-                        {Name, Port} <- NamePorts]]}
+            case [{N, P} || {N, P} <- NamePorts, N =:= Name] of
+                [] ->
+                    {SelfName, SelfHost} = parts(node()),
+                    NamePorts1 = case SelfHost of
+                                     Host -> [{N, P} || {N, P} <- NamePorts,
+                                                        N =/= SelfName];
+                                     _    -> NamePorts
+                                 end,
+                    case NamePorts1 of
+                        [] ->
+                            {"- ~s:~n"
+                             "  * node seems not to be running at all~n"
+                             "  * no other nodes on ~s",
+                             [Node, Host]};
+                        _ ->
+                            {"- ~s:~n"
+                             "  * node seems not to be running at all~n"
+                             "  * other nodes on ~s: ~p",
+                             [Node, Host, fmt_nodes(NamePorts1)]}
+                    end;
+                [{Name, Port}] ->
+                    case diagnose_connect(Host, Port) of
+                        ok ->
+                            {"- ~s:~n"
+                             "  * found ~s~n"
+                             "  * TCP connection succeeded~n"
+                             "  * suggestion: is the cookie set correctly?~n",
+                             [Node, fmt_node({Name, Port})]};
+                        {error, Reason} ->
+                            {"- ~s:~n"
+                             "  * found ~s~n"
+                             "  * can't establish TCP connection, reason: ~p~n"
+                             "  * suggestion: blocked by firewall?~n",
+                             [Node, fmt_node({Name, Port}), Reason]}
+                    end
+            end
     end.
+
+fmt_nodes(Hs) ->
+    [fmt_node(H) || H <- Hs].
+
+fmt_node({Name, Port}) ->
+    rabbit_misc:format("~s: port ~b", [Name, Port]).
+
+diagnose_connect(Host, Port) ->
+    lists:foldl(fun (_Fam, ok) -> ok;
+                    (Fam, _)   -> case gen_tcp:connect(
+                                         Host, Port, [Fam], 5000) of
+                                      {ok, Socket}   -> gen_tcp:close(Socket),
+                                                        ok;
+                                      {error, _} = E -> E
+                                  end
+                end, undefined, [inet6, inet]).
 
 make({Prefix, Suffix}) -> list_to_atom(lists:append([Prefix, "@", Suffix]));
 make(NodeStr)          -> make(parts(NodeStr)).
