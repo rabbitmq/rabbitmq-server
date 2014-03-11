@@ -80,49 +80,35 @@ diagnostics_node(Node) ->
             {"- unable to connect to epmd on ~s: ~w (~s)",
              [Host, EpmdReason, rabbit_misc:format_inet_error(EpmdReason)]};
         {ok, NamePorts} ->
-            case [{N, P} || {N, P} <- NamePorts, N =:= Name] of
-                [] ->
-                    {SelfName, SelfHost} = parts(node()),
-                    NamePorts1 = case SelfHost of
-                                     Host -> [{N, P} || {N, P} <- NamePorts,
-                                                        N =/= SelfName];
-                                     _    -> NamePorts
-                                 end,
-                    case NamePorts1 of
-                        [] ->
-                            {"- ~s:~n"
-                             "  * node seems not to be running at all~n"
-                             "  * no other nodes on ~s",
-                             [Node, Host]};
-                        _ ->
-                            {"- ~s:~n"
-                             "  * node seems not to be running at all~n"
-                             "  * other nodes on ~s: ~p",
-                             [Node, Host, fmt_nodes(NamePorts1)]}
-                    end;
-                [{Name, Port}] ->
-                    case diagnose_connect(Host, Port) of
-                        ok ->
-                            {"- ~s:~n"
-                             "  * found ~s~n"
-                             "  * TCP connection succeeded~n"
-                             "  * suggestion: is the cookie set correctly?~n",
-                             [Node, fmt_node({Name, Port})]};
-                        {error, Reason} ->
-                            {"- ~s:~n"
-                             "  * found ~s~n"
-                             "  * can't establish TCP connection, reason: ~p~n"
-                             "  * suggestion: blocked by firewall?~n",
-                             [Node, fmt_node({Name, Port}), Reason]}
-                    end
-            end
+            [{"- ~s:", [Node]} | diagnostics_node0(Name, Host, NamePorts)]
     end.
 
-fmt_nodes(Hs) ->
-    [fmt_node(H) || H <- Hs].
-
-fmt_node({Name, Port}) ->
-    rabbit_misc:format("~s: port ~b", [Name, Port]).
+diagnostics_node0(Name, Host, NamePorts) ->
+    case [{N, P} || {N, P} <- NamePorts, N =:= Name] of
+        [] ->
+            {SelfName, SelfHost} = parts(node()),
+            Others = [list_to_atom(N) || {N, _} <- NamePorts,
+                                         N =/= case SelfHost of
+                                                   Host -> SelfName;
+                                                   _    -> never_matches
+                                               end],
+            [{"  * node seems not to be running at all", []} |
+             case Others of
+                 [] -> [{"  * no other nodes on ~s", [Host]}];
+                 _  -> [{"  * other nodes on ~s: ~p", [Host, Others]}]
+             end];
+        [{Name, Port}] ->
+            [{"  * found ~s: port ~b~n", [Name, Port]} |
+             case diagnose_connect(Host, Port) of
+                 ok ->
+                     [{"  * TCP connection succeeded~n"
+                       "  * suggestion: is the cookie set correctly?", []}];
+                 {error, Reason} ->
+                     [{"  * can't establish TCP connection, reason: ~p~n"
+                       "  * suggestion: blocked by firewall?",
+                       [rabbit_misc:format_inet_error(Reason)]}]
+             end]
+    end.
 
 diagnose_connect(Host, Port) ->
     lists:foldl(fun (_Fam, ok) -> ok;
