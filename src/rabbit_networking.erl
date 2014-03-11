@@ -120,6 +120,7 @@
 %%----------------------------------------------------------------------------
 
 boot() ->
+    ok = record_distribution_listener(),
     ok = start(),
     ok = boot_tcp(),
     ok = boot_ssl().
@@ -274,6 +275,12 @@ tcp_listener_stopped(Protocol, IPAddress, Port) ->
                      host = tcp_host(IPAddress),
                      ip_address = IPAddress,
                      port = Port}).
+
+record_distribution_listener() ->
+    {ok, Names} = net_adm:names(),
+    {Name, _} = rabbit_nodes:parts(node()),
+    [Port] = [P || {N, P} <- Names, N =:= Name],
+    tcp_listener_started('erlang-clustering', {0,0,0,0,0,0,0,0}, Port).
 
 active_listeners() ->
     rabbit_misc:dirty_read_all(rabbit_listener).
