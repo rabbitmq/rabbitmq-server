@@ -54,8 +54,13 @@ new(Module) -> #state{dict   = dict:new(),
 monitor(Item, S = #state{dict = M, module = Module}) ->
     case dict:is_key(Item, M) of
         true  -> S;
-        false -> S#state{dict = dict:store(
-                                  Item, Module:monitor(process, Item), M)}
+        false -> case node_alive_shortcut(Item) of
+                     true  -> Ref = Module:monitor(process, Item),
+                              S#state{dict = dict:store(Item, Ref, M)};
+                     false -> self() ! {'DOWN', fake_ref, process, Item,
+                                        nodedown},
+                              S
+                 end
     end.
 
 monitor_all([],     S) -> S;                %% optimisation
@@ -76,3 +81,16 @@ erase(Item, S = #state{dict = M}) -> S#state{dict = dict:erase(Item, M)}.
 monitored(#state{dict = M}) -> dict:fetch_keys(M).
 
 is_empty(#state{dict = M}) -> dict:size(M) == 0.
+
+%%----------------------------------------------------------------------------
+
+%% We check here to see if the node is alive in order to avoid trying
+%% to connect to it if it isn't - this can cause substantial
+%% slowdowns. We can't perform this shortcut if passed {Name, Node}
+%% since we would need to convert that into a pid for the fake 'DOWN'
+%% message, so we always return true here - but that's OK, it's just
+%% an optimisation.
+node_alive_shortcut(P) when is_pid(P) ->
+    lists:member(node(P), [node() | nodes()]);
+node_alive_shortcut({_Name, _Node}) ->
+    true.
