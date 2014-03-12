@@ -21,7 +21,7 @@ The plugin requires no configuration, just activate it:
 
 ## Installing
 
-There's a prebuild version for RabbitMQ 3.2.x in binary/. Install it
+There are prebuild versions for RabbitMQ 3.2.x and 3.3.x in binary/. Install it
 as documented at http://www.rabbitmq.com/plugins.html#installing-plugins.
 
 Or build it...
