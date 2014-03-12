@@ -101,6 +101,7 @@ diagnostics_node0(Name, Host, NamePorts) ->
              case diagnose_connect(Host, Port) of
                  ok ->
                      [{"  * TCP connection succeeded~n"
+                       "  * suggestion: hostname mismatch?~n"
                        "  * suggestion: is the cookie set correctly?", []}];
                  {error, Reason} ->
                      [{"  * can't establish TCP connection, reason: ~s~n"
