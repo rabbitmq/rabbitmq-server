@@ -1,7 +1,7 @@
 -module(rabbit_sharding_util).
 
 -export([shard/1, sharded_exchanges/1]).
--export([get_policy/1, shards_per_node/1, routing_key/1]).
+-export([get_policy/2, shards_per_node/1, routing_key/1]).
 -export([exchange_bin/1, make_queue_name/3]).
 -export([a2b/1, rpc_call/2]).
 
@@ -16,20 +16,22 @@ shard(X = #exchange{type = 'x-random'})          -> shard0(X);
 shard(_X)                                        -> false.
 
 shard0(X) ->
-    get_parameter_value(<<"sharding-definition">>, <<"sharded">>, X, false).
+    case get_policy(<<"sharded">>, X) of
+        true -> true;
+        _    -> false
+    end.
 
 sharded_exchanges(VHost) ->
     [X || X <- find_exchanges(VHost), shard(X)].
 
-get_policy(X) ->
-    rabbit_policy:get(<<"sharding-definition">>, X).
-
 shards_per_node(X) ->
-    get_parameter(<<"shards-per-node">>, X, ?DEFAULT_SHARDS_NUM).
+    get_policy(<<"shards-per-node">>, X).
 
-%% Move routing key to sharding-definition
 routing_key(X) ->
-    get_parameter(<<"routing-key">>, X, ?DEFAULT_RK).
+    get_policy(<<"shards-per-node">>, X).
+
+get_policy(Key, X) ->
+    rabbit_policy:get(Key, X).
 
 exchange_bin(#resource{name = XBin}) -> XBin.
 
@@ -45,23 +47,6 @@ rpc_call(F, Args) ->
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
 %%----------------------------------------------------------------------------
-
-get_parameter(Parameter, X, Default) ->
-    Default2 = rabbit_runtime_parameters:value(
-                 vhost(X), <<"sharding">>, Parameter, Default),
-    get_parameter_value(<<"sharding-definition">>, Parameter,
-                        X, Default2).
-
-get_parameter_value(Comp, Param, X, Default) ->
-    case get_policy(X) of
-        undefined -> Default;
-        Name      ->
-            case rabbit_runtime_parameters:value(
-                   vhost(X), Comp, Name) of
-                not_found -> Default;
-                Value     -> pget(Param, Value, Default)
-            end
-    end.
 
 find_exchanges(VHost) ->
     rabbit_exchange:list(VHost).
