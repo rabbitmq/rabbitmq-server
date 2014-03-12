@@ -23,6 +23,7 @@
 -include_lib("kernel/include/inet.hrl").
 
 -define(EPMD_TIMEOUT, 30000).
+-define(TCP_DIAGNOSTIC_TIMEOUT, 5000).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -113,7 +114,8 @@ diagnostics_node0(Name, Host, NamePorts) ->
 diagnose_connect(Host, Port) ->
     case inet:gethostbyname(Host) of
         {ok, #hostent{h_addrtype = Family}} ->
-            case gen_tcp:connect(Host, Port, [Family], 5000) of
+            case gen_tcp:connect(Host, Port, [Family],
+                                 ?TCP_DIAGNOSTIC_TIMEOUT) of
                 {ok, Socket}   -> gen_tcp:close(Socket),
                                   ok;
                 {error, _} = E -> E
