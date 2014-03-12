@@ -110,14 +110,16 @@ diagnostics_node0(Name, Host, NamePorts) ->
     end.
 
 diagnose_connect(Host, Port) ->
-    lists:foldl(fun (_Fam, ok) -> ok;
-                    (Fam, _)   -> case gen_tcp:connect(
-                                         Host, Port, [Fam], 5000) of
-                                      {ok, Socket}   -> gen_tcp:close(Socket),
-                                                        ok;
-                                      {error, _} = E -> E
-                                  end
-                end, undefined, [inet6, inet]).
+    case inet:gethostbyname(Host) of
+        {ok, #hostent{h_addrtype = Family}} ->
+            case gen_tcp:connect(Host, Port, [Family], 5000) of
+                {ok, Socket}   -> gen_tcp:close(Socket),
+                                  ok;
+                {error, _} = E -> E
+            end;
+        {error, _} = E ->
+            E
+    end.
 
 make({Prefix, Suffix}) -> list_to_atom(lists:append([Prefix, "@", Suffix]));
 make(NodeStr)          -> make(parts(NodeStr)).
