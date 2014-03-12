@@ -48,7 +48,10 @@ init([]) -> {ok, []}.
 
 handle_call(_Request, State) -> {ok, not_understood, State}.
 
-handle_event(#event{type = Type, props = Props, timestamp = TS}, State) ->
+handle_event(#event{type      = Type,
+                    props     = Props,
+                    timestamp = TS,
+                    reference = none}, State) ->
     case key(Type) of
         ignore -> ok;
         Key    -> PBasic = #'P_basic'{delivery_mode = 2,
@@ -56,8 +59,10 @@ handle_event(#event{type = Type, props = Props, timestamp = TS}, State) ->
                                       timestamp = timer:now_diff(TS, {0,0,0})},
                   Msg = rabbit_basic:message(x(), Key, PBasic, <<>>),
                   rabbit_basic:publish(
-                    rabbit_basic:delivery(false, Msg, undefined))
+                    rabbit_basic:delivery(false, false, Msg, undefined))
     end,
+    {ok, State};
+handle_event(_Event, State) ->
     {ok, State}.
 
 handle_info(_Info, State) -> {ok, State}.
