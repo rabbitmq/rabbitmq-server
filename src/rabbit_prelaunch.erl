@@ -20,8 +20,9 @@
 
 -include("rabbit.hrl").
 
--define(BaseApps, [rabbit]).
+-define(DIST_PORT_NOT_CONFIGURED, 0).
 -define(ERROR_CODE, 1).
+-define(DIST_PORT_CONFIGURED, 2).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -63,6 +64,22 @@ duplicate_node_check(NodeStr) ->
                         io:format(rabbit_nodes:diagnostics([Node]) ++ "~n"),
                         rabbit_misc:quit(?ERROR_CODE);
                 false -> ok
+            end,
+            case file:consult(os:getenv("RABBITMQ_CONFIG_FILE") ++ ".config") of
+                {ok, [Config]} ->
+                    Kernel = proplists:get_value(kernel, Config, []),
+                    case {proplists:get_value(inet_dist_listen_min, Kernel),
+                          proplists:get_value(inet_dist_listen_max, Kernel)}
+                        of
+                        {undefined, undefined} ->
+                            rabbit_misc:quit(?DIST_PORT_NOT_CONFIGURED);
+                        _ ->
+                            rabbit_misc:quit(?DIST_PORT_CONFIGURED)
+                    end;
+                {error, _} ->
+                    %% TODO can we present errors more nicely here
+                    %% than after -config has failed?
+                    rabbit_misc:quit(?DIST_PORT_NOT_CONFIGURED)
             end;
         {error, EpmdReason} ->
             io:format("ERROR: epmd error for host ~s: ~s~n",
