@@ -542,9 +542,11 @@ tcp_name(Prefix, IPAddress, Port)
     list_to_atom(
       format("~w_~s:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
 
-format_inet_error(address) -> "cannot connect to host/port";
-format_inet_error(timeout) -> "timed out";
-format_inet_error(Error)   -> inet:format_error(Error).
+format_inet_error(E) -> format("~s (~s)", [E, format_inet_error0(E)]).
+
+format_inet_error0(address) -> "cannot connect to host/port";
+format_inet_error0(timeout) -> "timed out";
+format_inet_error0(Error)   -> inet:format_error(Error).
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about

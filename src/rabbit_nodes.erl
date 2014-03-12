@@ -77,8 +77,8 @@ diagnostics_node(Node) ->
     {Name, Host} = parts(Node),
     case names(Host) of
         {error, EpmdReason} ->
-            {"- unable to connect to epmd on ~s: ~w (~s)",
-             [Host, EpmdReason, rabbit_misc:format_inet_error(EpmdReason)]};
+            {"- unable to connect to epmd on ~s: ~s",
+             [Host, rabbit_misc:format_inet_error(EpmdReason)]};
         {ok, NamePorts} ->
             [{"- ~s:", [Node]} | diagnostics_node0(Name, Host, NamePorts)]
     end.
@@ -104,7 +104,7 @@ diagnostics_node0(Name, Host, NamePorts) ->
                      [{"  * TCP connection succeeded~n"
                        "  * suggestion: is the cookie set correctly?", []}];
                  {error, Reason} ->
-                     [{"  * can't establish TCP connection, reason: ~p~n"
+                     [{"  * can't establish TCP connection, reason: ~s~n"
                        "  * suggestion: blocked by firewall?",
                        [rabbit_misc:format_inet_error(Reason)]}]
              end]

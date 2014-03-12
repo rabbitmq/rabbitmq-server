@@ -65,8 +65,7 @@ duplicate_node_check(NodeStr) ->
                 false -> ok
             end;
         {error, EpmdReason} ->
-            io:format("ERROR: epmd error for host ~p: ~p (~s)~n",
-                      [NodeHost, EpmdReason,
-                       rabbit_misc:format_inet_error(EpmdReason)]),
+            io:format("ERROR: epmd error for host ~s: ~s~n",
+                      [NodeHost, rabbit_misc:format_inet_error(EpmdReason)]),
             rabbit_misc:quit(?ERROR_CODE)
     end.
