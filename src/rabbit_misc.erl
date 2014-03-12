@@ -542,7 +542,7 @@ tcp_name(Prefix, IPAddress, Port)
     list_to_atom(
       format("~w_~s:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
 
-format_inet_error(E) -> format("~s (~s)", [E, format_inet_error0(E)]).
+format_inet_error(E) -> format("~w (~s)", [E, format_inet_error0(E)]).
 
 format_inet_error0(address) -> "cannot connect to host/port";
 format_inet_error0(timeout) -> "timed out";
