@@ -58,8 +58,7 @@ names(Hostname) ->
     end.
 
 diagnostics(Nodes) ->
-    io:format("~nDiagnosing connectivity..."),
-    NodeDiags = [{" done.~n~nDIAGNOSTICS~n===========~n~n"
+    NodeDiags = [{"~nDIAGNOSTICS~n===========~n~n"
                   "attempted to contact: ~p~n", [Nodes]}] ++
         [diagnostics_node(Node) || Node <- Nodes] ++
         current_node_details(),
@@ -80,7 +79,7 @@ diagnostics_node(Node) ->
             {"- unable to connect to epmd on ~s: ~s",
              [Host, rabbit_misc:format_inet_error(EpmdReason)]};
         {ok, NamePorts} ->
-            [{"- ~s:", [Node]} | diagnostics_node0(Name, Host, NamePorts)]
+            [{"~s:", [Node]} | diagnostics_node0(Name, Host, NamePorts)]
     end.
 
 diagnostics_node0(Name, Host, NamePorts) ->
@@ -92,13 +91,13 @@ diagnostics_node0(Name, Host, NamePorts) ->
                                                    Host -> SelfName;
                                                    _    -> never_matches
                                                end],
-            [{"  * node seems not to be running at all", []} |
+            [{"  * ~s seems not to be running at all", [Name]} |
              case Others of
                  [] -> [{"  * no other nodes on ~s", [Host]}];
                  _  -> [{"  * other nodes on ~s: ~p", [Host, Others]}]
              end];
         [{Name, Port}] ->
-            [{"  * found ~s: port ~b~n", [Name, Port]} |
+            [{"  * found ~s (port ~b)", [Name, Port]} |
              case diagnose_connect(Host, Port) of
                  ok ->
                      [{"  * TCP connection succeeded~n"
