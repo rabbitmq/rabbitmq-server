@@ -40,10 +40,18 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    [NodeStr] = init:get_plain_arguments(),
-    {ok, NodeHost} = duplicate_node_check(NodeStr),
-    ok = dist_port_set_check(),
-    ok = dist_port_use_check(NodeHost),
+    case init:get_plain_arguments() of
+        [NodeStr] ->
+            Node = rabbit_nodes:make(NodeStr),
+            {NodeName, NodeHost} = rabbit_nodes:parts(Node),
+            ok = duplicate_node_check(Node, NodeName, NodeHost),
+            ok = dist_port_set_check(),
+            ok = dist_port_use_check(NodeHost);
+        [] ->
+            %% Ignore running node while installing windows service
+            ok = dist_port_set_check(),
+            ok
+    end,
     rabbit_misc:quit(?DIST_PORT_NOT_CONFIGURED),
     ok.
 
@@ -53,12 +61,7 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 %% Check whether a node with the same name is already running
-duplicate_node_check([]) ->
-    %% Ignore running node while installing windows service
-    ok;
-duplicate_node_check(NodeStr) ->
-    Node = rabbit_nodes:make(NodeStr),
-    {NodeName, NodeHost} = rabbit_nodes:parts(Node),
+duplicate_node_check(Node, NodeName, NodeHost) ->
     case rabbit_nodes:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
@@ -67,7 +70,7 @@ duplicate_node_check(NodeStr) ->
                                   [NodeName, NodeHost]),
                         io:format(rabbit_nodes:diagnostics([Node]) ++ "~n"),
                         rabbit_misc:quit(?ERROR_CODE);
-                false -> {ok, NodeHost}
+                false -> ok
             end;
         {error, EpmdReason} ->
             io:format("ERROR: epmd error for host ~s: ~s~n",
