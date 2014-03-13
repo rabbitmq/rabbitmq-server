@@ -887,7 +887,7 @@ handle_info(sync, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
-handle_info({'DOWN', _MRef, Pid, _Reason}, State) ->
+handle_info({'DOWN', _MRef, process, Pid, _Reason}, State) ->
     credit_flow:peer_down(Pid),
     noreply(State);
 
