@@ -19,17 +19,21 @@
 
 -export([start/0, stop/0]).
 
+-define(NODE_OPT, "-n").
 -define(VERBOSE_OPT, "-v").
 -define(MINIMAL_OPT, "-m").
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
 
+-define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
 -define(ENABLED_DEF, {?ENABLED_OPT, flag}).
 -define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
 
--define(GLOBAL_DEFS, []).
+-define(RPC_TIMEOUT, infinity).
+
+-define(GLOBAL_DEFS(Node), [?NODE_DEF(Node)]).
 
 -define(COMMANDS,
         [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
@@ -51,11 +55,10 @@
 start() ->
     {ok, [[PluginsFile|_]|_]} =
         init:get_argument(enabled_plugins_file),
+    {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
     {Command, Opts, Args} =
-        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS,
-                                         init:get_plain_arguments())
-        of
+        case parse_arguments(init:get_plain_arguments(), NodeStr) of
             {ok, Res}  -> Res;
             no_command -> print_error("could not recognise command", []),
                           usage()
@@ -67,7 +70,8 @@ start() ->
                             [string:join([atom_to_list(Command) | Args], " ")])
         end,
 
-    case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
+    Node = proplists:get_value(?NODE_OPT, Opts),
+    case catch action(Command, Node, Args, Opts, PluginsFile, PluginsDir) of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
@@ -92,12 +96,25 @@ stop() ->
 
 %%----------------------------------------------------------------------------
 
-action(list, [], Opts, PluginsFile, PluginsDir) ->
-    action(list, [".*"], Opts, PluginsFile, PluginsDir);
-action(list, [Pat], Opts, PluginsFile, PluginsDir) ->
+parse_arguments(CmdLine, NodeStr) ->
+    case rabbit_misc:parse_arguments(
+           ?COMMANDS, ?GLOBAL_DEFS(NodeStr), CmdLine) of
+        {ok, {Cmd, Opts0, Args}} ->
+            Opts = [case K of
+                        ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
+                        _         -> {K, V}
+                    end || {K, V} <- Opts0],
+            {ok, {Cmd, Opts, Args}};
+        E ->
+            E
+    end.
+
+action(list, Node, [], Opts, PluginsFile, PluginsDir) ->
+    action(list, Node, [".*"], Opts, PluginsFile, PluginsDir);
+action(list, _Node, [Pat], Opts, PluginsFile, PluginsDir) ->
     format_plugins(Pat, Opts, PluginsFile, PluginsDir);
 
-action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
+action(enable, Node, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     case ToEnable0 of
         [] -> throw({error_string, "Not enough arguments for 'enable'"});
         _  -> ok
@@ -125,10 +142,10 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> print_list("The following plugins have been enabled:",
                          NewImplicitlyEnabled -- ImplicitlyEnabled),
-              report_change()
+              action_change(Node, enable, NewEnabled)
     end;
 
-action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
+action(disable, Node, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     case ToDisable0 of
         [] -> throw({error_string, "Not enough arguments for 'disable'"});
         _  -> ok
@@ -151,10 +168,11 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
                  NewImplicitlyEnabled =
                      rabbit_plugins:dependencies(false,
                                                  NewEnabled, AllPlugins),
+                 Disabled = ImplicitlyEnabled -- NewImplicitlyEnabled,
                  print_list("The following plugins have been disabled:",
-                            ImplicitlyEnabled -- NewImplicitlyEnabled),
+                            Disabled),
                  write_enabled_plugins(PluginsFile, NewEnabled),
-                 report_change()
+                 action_change(Node, disable, Disabled)
     end.
 
 %%----------------------------------------------------------------------------
@@ -262,6 +280,16 @@ write_enabled_plugins(PluginsFile, Plugins) ->
                                           PluginsFile, Reason}})
     end.
 
-report_change() ->
-    io:format("Plugin configuration has changed. "
-              "Restart RabbitMQ for changes to take effect.~n").
+action_change(Node, Action, Targets) ->
+    rpc_call(Node, rabbit_plugins, Action, [Targets]).
+
+rpc_call(Node, Mod, Action, Args) ->
+    case rpc:call(Node, Mod, Action, Args, ?RPC_TIMEOUT) of
+        {badrpc, nodedown} -> io:format("Plugin configuration has changed.~n");
+        ok                 -> io:format("Plugin(s) ~pd.~n", [Action]);
+        Error              -> io:format("Unable to ~p plugin(s). "
+                                        "Please restart the broker "
+                                        "to apply your changes.~nError: ~p~n",
+                                        [Action, Error])
+    end.
+
