@@ -641,11 +641,9 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
     end.
 
 clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
-                                      clients         = Clients,
-                                      dying_clients   = DyingClients }) ->
+                                      dying_clients = DyingClients }) ->
     State #msstate { cref_to_msg_ids = dict:erase(CRef, CTM),
-                     clients         = dict:erase(CRef, Clients),
-                     dying_clients   = sets:del_element(CRef, DyingClients) }.
+                     dying_clients = sets:del_element(CRef, DyingClients) }.
 
 
 %%----------------------------------------------------------------------------
@@ -805,8 +803,10 @@ handle_cast({client_dying, CRef},
     noreply(write_message(CRef, <<>>,
                           State #msstate { dying_clients = DyingClients1 }));
 
-handle_cast({client_delete, CRef}, State) ->
-    noreply(remove_message(CRef, CRef, clear_client(CRef, State)));
+handle_cast({client_delete, CRef},
+            State = #msstate { clients = Clients }) ->
+    State1 = State #msstate { clients = dict:erase(CRef, Clients) },
+    noreply(remove_message(CRef, CRef, clear_client(CRef, State1)));
 
 handle_cast({write, CRef, MsgId, Flow},
             State = #msstate { cur_file_cache_ets = CurFileCacheEts,
