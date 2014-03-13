@@ -48,7 +48,7 @@ enable(Plugins) ->
 
 disable(Plugins) ->
     app_utils:update_running_apps(
-      fun() -> rabbit_boot:stop(Plugins) end,
+      fun() -> rabbit:stop_apps(Plugins) end,
       fun(Diff) ->
               ok = rabbit_event:notify(plugins_changed, [{disabled, Diff}])
       end).

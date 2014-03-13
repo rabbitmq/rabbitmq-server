@@ -24,7 +24,7 @@
          start_fhc/0]).
 -export([run_boot_steps/0, load_steps/1, run_step/3]).
 -export([start/2, stop/1]).
--export([handle_app_error/1, start_apps/1]).
+-export([start_apps/1, stop_apps/1]).
 -export([log_location/1]). %% for testing
 
 %%---------------------------------------------------------------------------
@@ -242,7 +242,6 @@
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(handle_app_error/1 :: (term()) -> fun((atom(), term()) -> no_return())).
 
 -endif.
 
@@ -343,10 +342,10 @@ handle_app_error(Term) ->
     end.
 
 start_apps(Apps) ->
-    rabbit_boot:force_reload(Apps),
+    app_utils:load_applications(Apps),
     StartupApps = app_utils:app_dependency_order(Apps, false),
     case whereis(rabbit_boot) of
-        undefined -> rabbit:run_boot_steps();
+        undefined -> run_boot_steps(Apps);
         _         -> ok
     end,
     ok = app_utils:start_applications(StartupApps,
@@ -391,6 +390,29 @@ stop_and_halt() ->
         rabbit_misc:local_info_msg("Halting Erlang VM~n", []),
         init:stop()
     end,
+    ok.
+
+stop_apps(Apps) ->
+    try
+        ok = app_utils:stop_applications(
+               Apps, handle_app_error(error_during_shutdown))
+    after
+        run_cleanup_steps(Apps),
+        [begin
+             {ok, Mods} = application:get_key(App, modules),
+             [begin
+                  code:soft_purge(Mod),
+                  code:delete(Mod),
+                  false = code:is_loaded(Mod)
+              end || Mod <- Mods],
+             application:unload(App)
+         end || App <- Apps]
+    end.
+
+run_cleanup_steps(Apps) ->
+    [run_step(Name, Attributes, cleanup) ||
+        {App, Name, Attributes} <- load_steps(Apps),
+        lists:member(App, Apps)],
     ok.
 
 await_startup() ->
@@ -463,7 +485,6 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
-            rabbit_boot:prepare_boot_table(),
             run_boot_steps(),
             {ok, SupPid};
         Error ->
@@ -493,16 +514,12 @@ app_shutdown_order() ->
 %% boot step logic
 
 run_boot_steps() ->
-    Steps = load_steps(boot),
-    [ok = run_boot_step(Step) || Step <- Steps],
-    ok.
+    run_boot_steps([App || {App, _, _} <- application:loaded_applications()]).
 
-run_boot_step({_, StepName, Attributes}) ->
-    case catch rabbit_boot:already_run(StepName) of
-        false -> ok = run_step(StepName, Attributes, mfa),
-                 rabbit_boot:mark_complete(StepName);
-        _     -> ok
-    end,
+run_boot_steps(Apps) ->
+    Steps = load_steps(Apps),
+    [ok = run_step(StepName, Attributes, mfa) ||
+        {_, StepName, Attributes} <- Steps],
     ok.
 
 run_step(StepName, Attributes, AttributeName) ->
@@ -524,45 +541,71 @@ run_step(StepName, Attributes, AttributeName) ->
             ok
     end.
 
-load_steps(Type) ->
+load_steps(BaseApps) ->
+    Apps = BaseApps -- app_utils:which_applications(),  %% exclude running apps
     StepAttrs = rabbit_misc:all_module_attributes_with_app(rabbit_boot_step),
-    sort_boot_steps(
-      Type,
-      lists:usort(
-        [{Mod, {AppName, Steps}} || {AppName, Mod, Steps} <- StepAttrs])).
+    {AllSteps, StepsDict} =
+        lists:foldl(
+          fun({AppName, Mod, Steps}, {AccSteps, AccDict}) ->
+                  {[{Mod, {AppName, Steps}}|AccSteps],
+                   lists:foldl(
+                     fun({StepName, _}, Acc) ->
+                             dict:store(StepName, AppName, Acc)
+                     end, AccDict, Steps)}
+          end, {[], dict:new()}, StepAttrs),
+    Steps = lists:foldl(filter_steps(Apps, StepsDict), [], AllSteps),
+    sort_boot_steps(lists:usort(Steps)).
+
+filter_steps(Apps, Dict) ->
+    fun({Mod, {AppName, Steps}}, Acc) ->
+            Steps2 = [begin
+                          Filtered = lists:foldl(filter_attrs(Apps, Dict),
+                                                 [], Attrs),
+                          {Step, Filtered}
+                      end || {Step, Attrs} <- Steps,
+                             filter_app(Apps, Dict, Step)],
+            [{Mod, {AppName, Steps2}}|Acc]
+    end.
+
+filter_app(Apps, Dict, Step) ->
+    case dict:find(Step, Dict) of
+        {ok, App} -> lists:member(App, Apps);
+        error     -> false
+    end.
+
+filter_attrs(Apps, Dict) ->
+    fun(Attr={Type, Other}, AccAttrs) when Type =:= requires orelse
+                                           Type =:= enables ->
+            %% If we don't know about a dependency, we allow it through,
+            %% since we don't *know* that it should be ignored. If, on
+            %% the other hand, we recognise a dependency then we _only_
+            %% include it (i.e., the requires/enables attribute itself)
+            %% if the referenced step comes from one of the Apps we're
+            %% actively working with at this point.
+            case dict:find(Other, Dict) of
+                error     -> [Attr | AccAttrs];
+                {ok, App} -> case lists:member(App, Apps) of
+                                 true  -> [Attr | AccAttrs];
+                                 false -> AccAttrs
+                             end
+            end;
+       (Attr, AccAttrs) ->
+            [Attr | AccAttrs]
+    end.
 
 vertices(_Module, {AppName, Steps}) ->
     [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
 
-edges(Type) ->
-    %% When running "boot" steps, both hard _and_ soft dependencies are
-    %% considered equally. When running "cleanup" steps however, we only
-    %% consider /hard/ dependencies (i.e., of the form
-    %% {DependencyType, {hard, StepName}}) as dependencies.
-    fun (_Module, {_AppName, Steps}) ->
-            [case Key of
-                 requires -> {StepName, strip_type(OtherStep)};
-                 enables  -> {strip_type(OtherStep), StepName}
-             end || {StepName, Atts} <- Steps,
-                    {Key, OtherStep} <- Atts,
-                    filter_dependent_steps(Key, OtherStep, Type)]
-    end.
+edges(_Module, {_AppName, Steps}) ->
+    [case Key of
+         requires -> {StepName, OtherStep};
+         enables  -> {OtherStep, StepName}
+     end || {StepName, Atts} <- Steps,
+            {Key, OtherStep} <- Atts,
+            Key =:= requires orelse Key =:= enables].
 
-filter_dependent_steps(Key, Dependency, Type)
-  when Key =:= requires orelse Key =:= enables ->
-    case {Dependency, Type} of
-        {{hard, _}, cleanup} -> true;
-        {_SoftReqs, cleanup} -> false;
-        {_,         boot}    -> true
-    end;
-filter_dependent_steps(_, _, _) ->
-    false.
-
-strip_type({hard, Step}) -> Step;
-strip_type(Step)         -> Step.
-
-sort_boot_steps(Type, UnsortedSteps) ->
-    case rabbit_misc:build_acyclic_graph(fun vertices/2, edges(Type),
+sort_boot_steps(UnsortedSteps) ->
+    case rabbit_misc:build_acyclic_graph(fun vertices/2, fun edges/2,
                                          UnsortedSteps) of
         {ok, G} ->
             %% Use topological sort to find a consistent ordering (if
