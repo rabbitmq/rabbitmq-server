@@ -39,8 +39,10 @@
 
 start() ->
     [NodeStr] = init:get_plain_arguments(),
-    ok = duplicate_node_check(NodeStr),
-    rabbit_misc:quit(0),
+    {ok, NodeHost} = duplicate_node_check(NodeStr),
+    ok = dist_port_set_check(),
+    ok = dist_port_use_check(NodeHost),
+    rabbit_misc:quit(?DIST_PORT_NOT_CONFIGURED),
     ok.
 
 stop() ->
@@ -63,26 +65,42 @@ duplicate_node_check(NodeStr) ->
                                   [NodeName, NodeHost]),
                         io:format(rabbit_nodes:diagnostics([Node]) ++ "~n"),
                         rabbit_misc:quit(?ERROR_CODE);
-                false -> ok
-            end,
-            case file:consult(os:getenv("RABBITMQ_CONFIG_FILE") ++ ".config") of
-                {ok, [Config]} ->
-                    Kernel = proplists:get_value(kernel, Config, []),
-                    case {proplists:get_value(inet_dist_listen_min, Kernel),
-                          proplists:get_value(inet_dist_listen_max, Kernel)}
-                        of
-                        {undefined, undefined} ->
-                            rabbit_misc:quit(?DIST_PORT_NOT_CONFIGURED);
-                        _ ->
-                            rabbit_misc:quit(?DIST_PORT_CONFIGURED)
-                    end;
-                {error, _} ->
-                    %% TODO can we present errors more nicely here
-                    %% than after -config has failed?
-                    rabbit_misc:quit(?DIST_PORT_NOT_CONFIGURED)
+                false -> {ok, NodeHost}
             end;
         {error, EpmdReason} ->
             io:format("ERROR: epmd error for host ~s: ~s~n",
                       [NodeHost, rabbit_misc:format_inet_error(EpmdReason)]),
             rabbit_misc:quit(?ERROR_CODE)
     end.
+
+dist_port_set_check() ->
+    case file:consult(os:getenv("RABBITMQ_CONFIG_FILE") ++ ".config") of
+        {ok, [Config]} ->
+            Kernel = proplists:get_value(kernel, Config, []),
+            case {proplists:get_value(inet_dist_listen_min, Kernel, none),
+                  proplists:get_value(inet_dist_listen_max, Kernel, none)} of
+                {none, none} -> ok;
+                _            -> rabbit_misc:quit(?DIST_PORT_CONFIGURED)
+            end;
+        {error, _} ->
+            %% TODO can we present errors more nicely here
+            %% than after -config has failed?
+            ok
+    end.
+
+dist_port_use_check(NodeHost) ->
+    Port = list_to_integer(os:getenv("RABBITMQ_DIST_PORT")),
+    case gen_tcp:listen(Port, [inet]) of
+        {ok, Sock} -> gen_tcp:close(Sock);
+        {error, _} -> dist_port_use_check_fail(Port, NodeHost)
+    end.
+
+dist_port_use_check_fail(Port, Host) ->
+    {ok, Names} = rabbit_nodes:names(Host),
+    case [N || {N, P} <- Names, P =:= Port] of
+        []     -> io:format("ERROR: distribution port ~b in use on ~s "
+                            "(by non-Erlang process?)~n", [Port, Host]);
+        [Name] -> io:format("ERROR: distribution port ~b in use by ~s@~s~n",
+                            [Port, Name, Host])
+    end,
+    rabbit_misc:quit(?ERROR_CODE).
