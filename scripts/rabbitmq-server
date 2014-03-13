@@ -124,7 +124,6 @@ exec ${ERL_DIR}erl \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
-    ${RABBITMQ_DIST_ARG} \
     -sasl errlog_type error \
     -sasl sasl_error_logger false \
     -rabbit error_logger '{file,"'${RABBITMQ_LOGS}'"}' \
@@ -137,4 +136,5 @@ exec ${ERL_DIR}erl \
     -os_mon start_memsup false \
     -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
     ${RABBITMQ_SERVER_START_ARGS} \
+    ${RABBITMQ_DIST_ARG} \
     "$@"
