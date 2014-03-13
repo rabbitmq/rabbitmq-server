@@ -641,9 +641,11 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
     end.
 
 clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
-                                      dying_clients = DyingClients }) ->
+                                      clients         = Clients,
+                                      dying_clients   = DyingClients }) ->
     State #msstate { cref_to_msg_ids = dict:erase(CRef, CTM),
-                     dying_clients = sets:del_element(CRef, DyingClients) }.
+                     clients         = dict:erase(CRef, Clients),
+                     dying_clients   = sets:del_element(CRef, DyingClients) }.
 
 
 %%----------------------------------------------------------------------------
@@ -781,6 +783,7 @@ handle_call({new_client_state, CRef, CPid, MsgOnDiskFun, CloseFDsFun}, _From,
                                clients            = Clients,
                                gc_pid             = GCPid }) ->
     Clients1 = dict:store(CRef, {CPid, MsgOnDiskFun, CloseFDsFun}, Clients),
+    erlang:monitor(process, CPid),
     reply({IndexState, IndexModule, Dir, GCPid, FileHandlesEts, FileSummaryEts,
            CurFileCacheEts, FlyingEts},
           State #msstate { clients = Clients1 });
@@ -802,12 +805,8 @@ handle_cast({client_dying, CRef},
     noreply(write_message(CRef, <<>>,
                           State #msstate { dying_clients = DyingClients1 }));
 
-handle_cast({client_delete, CRef},
-            State = #msstate { clients = Clients }) ->
-    {CPid, _, _} = dict:fetch(CRef, Clients),
-    credit_flow:peer_down(CPid),
-    State1 = State #msstate { clients = dict:erase(CRef, Clients) },
-    noreply(remove_message(CRef, CRef, clear_client(CRef, State1)));
+handle_cast({client_delete, CRef}, State) ->
+    noreply(remove_message(CRef, CRef, clear_client(CRef, State)));
 
 handle_cast({write, CRef, MsgId, Flow},
             State = #msstate { cur_file_cache_ets = CurFileCacheEts,
@@ -887,6 +886,10 @@ handle_info(sync, State) ->
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
+
+handle_info({'DOWN', _MRef, Pid, _Reason}, State) ->
+    credit_flow:peer_down(Pid),
+    noreply(State);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
