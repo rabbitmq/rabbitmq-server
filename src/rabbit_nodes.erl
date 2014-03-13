@@ -78,15 +78,17 @@ diagnostics_node(Node) ->
     [{"~s:", [Node]} |
      case names(Host) of
          {error, Reason} ->
-             EpmdPort = case os:getenv("ERL_EPMD_PORT") of
-                            false -> "4369";
-                            P     -> P
-                        end,
              [{"  * unable to connect to epmd (port ~s) on ~s: ~s~n",
-               [EpmdPort, Host, rabbit_misc:format_inet_error(Reason)]}];
+               [epmd_port(), Host, rabbit_misc:format_inet_error(Reason)]}];
          {ok, NamePorts} ->
              diagnostics_node0(Name, Host, NamePorts)
      end].
+
+epmd_port() ->
+    case init:get_argument(epmd_port) of
+        {ok, [[Port | _] | _]} when is_list(Port) -> Port;
+        error                                     -> "4369"
+    end.
 
 diagnostics_node0(Name, Host, NamePorts) ->
     case [{N, P} || {N, P} <- NamePorts, N =:= Name] of
