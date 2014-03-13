@@ -57,14 +57,6 @@ remove_bindings(Ser, X, Bs) ->
     rabbit_federation_exchange:remove_bindings(transaction, X, Bs),
     rabbit_federation_exchange:remove_bindings(Ser, X, Bs).
 
-x(Name) ->
-    #exchange{name        = Name,
-              type        = fanout,
-              durable     = false,
-              auto_delete = false,
-              internal    = false,
-              arguments   = []}.
-
 r(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 
 b(Key) ->
