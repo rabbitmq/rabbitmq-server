@@ -36,10 +36,10 @@
                     {mfa,         {rabbit_sup, start_child, [?MODULE]}},
                     {requires,    kernel_ready},
                     {cleanup,     {?MODULE, stop, []}},
-                    {enables,     {hard, rabbit_federation_exchange}},
-                    {enables,     {hard, rabbit_federation_parameters}},
-                    {enables,     {hard, rabbit_federation_queue}},
-                    {enables,     {hard, rabbit_federation_upstream_exchange}}]}).
+                    {enables,     rabbit_federation_exchange},
+                    {enables,     rabbit_federation_parameters},
+                    {enables,     rabbit_federation_queue},
+                    {enables,     rabbit_federation_upstream_exchange}]}).
 
 %%----------------------------------------------------------------------------
 
