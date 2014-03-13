@@ -88,13 +88,13 @@ esac
 export RABBITMQ_CONFIG_FILE
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
- ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
-     -boot "${CLEAN_BOOT_FILE}" \
-     -noinput \
-     -hidden \
-     -s rabbit_prelaunch \
-     -sname rabbitmqprelaunch$$ \
-     -extra "${RABBITMQ_NODENAME}"
+${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+    -boot "${CLEAN_BOOT_FILE}" \
+    -noinput \
+    -hidden \
+    -s rabbit_prelaunch \
+    -sname rabbitmqprelaunch$$ \
+    -extra "${RABBITMQ_NODENAME}"
 
 PRELAUNCH_RESULT=$?
 if [ ${PRELAUNCH_RESULT} = 1 ] ; then
