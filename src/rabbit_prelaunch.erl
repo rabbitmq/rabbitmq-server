@@ -18,6 +18,8 @@
 
 -export([start/0, stop/0]).
 
+-import(rabbit_misc, [pget/2, pget/3]).
+
 -include("rabbit.hrl").
 
 -define(DIST_PORT_NOT_CONFIGURED, 0).
@@ -74,25 +76,33 @@ duplicate_node_check(NodeStr) ->
     end.
 
 dist_port_set_check() ->
-    case file:consult(os:getenv("RABBITMQ_CONFIG_FILE") ++ ".config") of
-        {ok, [Config]} ->
-            Kernel = proplists:get_value(kernel, Config, []),
-            case {proplists:get_value(inet_dist_listen_min, Kernel, none),
-                  proplists:get_value(inet_dist_listen_max, Kernel, none)} of
-                {none, none} -> ok;
-                _            -> rabbit_misc:quit(?DIST_PORT_CONFIGURED)
-            end;
-        {error, _} ->
-            %% TODO can we present errors more nicely here
-            %% than after -config has failed?
-            ok
+    case os:getenv("RABBITMQ_CONFIG_FILE") of
+        false ->
+            ok;
+        File ->
+            case file:consult(File ++ ".config") of
+                {ok, [Config]} ->
+                    Kernel = pget(kernel, Config, []),
+                    case {pget(inet_dist_listen_min, Kernel, none),
+                          pget(inet_dist_listen_max, Kernel, none)} of
+                        {none, none} -> ok;
+                        _            -> rabbit_misc:quit(?DIST_PORT_CONFIGURED)
+                    end;
+                {error, _} ->
+                    %% TODO can we present errors more nicely here
+                    %% than after -config has failed?
+                    ok
+            end
     end.
 
 dist_port_use_check(NodeHost) ->
-    Port = list_to_integer(os:getenv("RABBITMQ_DIST_PORT")),
-    case gen_tcp:listen(Port, [inet]) of
-        {ok, Sock} -> gen_tcp:close(Sock);
-        {error, _} -> dist_port_use_check_fail(Port, NodeHost)
+    case os:getenv("RABBITMQ_DIST_PORT") of
+        false   -> ok;
+        PortStr -> Port = list_to_integer(PortStr),
+                   case gen_tcp:listen(Port, [inet]) of
+                       {ok, Sock} -> gen_tcp:close(Sock);
+                       {error, _} -> dist_port_use_check_fail(Port, NodeHost)
+                   end
     end.
 
 dist_port_use_check_fail(Port, Host) ->
