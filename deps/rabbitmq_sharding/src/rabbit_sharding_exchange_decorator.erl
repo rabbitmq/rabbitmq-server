@@ -42,7 +42,8 @@ serialise_events(_X) -> false.
 create(transaction, _X) ->
     ok;
 create(none, X) ->
-    maybe_start(X).
+    maybe_start_sharding(X),
+    ok.
 
 add_binding(_Tx, _X, _B) -> ok.
 remove_bindings(_Tx, _X, _Bs) -> ok.
@@ -58,48 +59,44 @@ active_for(X) ->
 %% we have to remove the policy from ?SHARDING_TABLE
 delete(transaction, _X, _Bs) -> ok;
 delete(none, X, _Bs) ->
-    maybe_stop(X).
+    maybe_stop_sharding(X),
+    ok.
 
 %% we have to remove the old policy from ?SHARDING_TABLE
 %% and then add the new one.
 policy_changed(OldX, NewX) ->
-    maybe_stop(OldX),
-    maybe_start(NewX).
+    maybe_update_sharding(OldX, NewX),
+    ok.
 
 %%----------------------------------------------------------------------------
 
-maybe_start(#exchange{name = XName} = X)->
-    case shard(X) of
+maybe_update_sharding(OldX, NewX) ->
+    case shard(NewX) of
         true  ->
-            SPN = rabbit_sharding_util:shards_per_node(X),
-            RK  = rabbit_sharding_util:routing_key(X),
-            rabbit_misc:execute_mnesia_transaction(
-                    fun () ->
-                            mnesia:write(?SHARDING_TABLE,
-                                         #sharding{name            = XName,
-                                                   shards_per_node = SPN,
-                                                   routing_key     = RK},
-                                         write)
-                    end),
-            rabbit_sharding_util:rpc_call(ensure_sharded_queues, [X]),
-            ok;
-        false -> ok
+            rabbit_sharding_util:rpc_call(maybe_update_shards, [OldX, NewX]);
+        false ->
+            rabbit_sharding_util:rpc_call(maybe_stop_sharding, [OldX])
     end.
 
-maybe_stop(#exchange{name = XName} = X) ->
+maybe_start_sharding(X)->
     case shard(X) of
         true  ->
-            rabbit_misc:execute_mnesia_transaction(
-              fun () ->
-                      mnesia:delete({?SHARDING_TABLE, XName})
-              end),
-            ok;
-        false -> ok
+            rabbit_sharding_util:rpc_call(ensure_sharded_queues, [X]);
+        false ->
+            ok
+    end.
+
+maybe_stop_sharding(X) ->
+    case shard(X) of
+        true  ->
+            rabbit_sharding_util:rpc_call(maybe_stop_sharding, [X]);
+        false ->
+            ok
     end.
 
 shard(X) ->
     case sharding_up() of
-        true -> rabbit_sharding_util:shard(X);
+        true  -> rabbit_sharding_util:shard(X);
         false -> false
     end.
 
