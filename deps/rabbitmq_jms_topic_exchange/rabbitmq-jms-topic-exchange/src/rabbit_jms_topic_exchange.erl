@@ -105,7 +105,7 @@ route( #exchange{name = XName}
      , #delivery{message = #basic_message{content = MessageContent, routing_keys = RKs}}
      ) ->
   BindingFuns = get_binding_funs_x(XName),
-  match_bindings(XName, RKs, MessageContent, BindingFuns).
+  match_bindings_by_policy(XName, RKs, MessageContent, BindingFuns).
 
 
 % Before exchange declaration
@@ -163,8 +163,8 @@ policy_changed(_X1, _X2) -> ok.
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
 
-% Match bindings for the current message
-match_bindings( XName, _RoutingKeys, MessageContent, BindingFuns) ->
+% Match bindings for the current message under the appropriate policy
+match_bindings_by_policy( XName, _RoutingKeys, MessageContent, BindingFuns) ->
   MessageHeaders = get_headers(MessageContent),
   rabbit_router:match_bindings( XName
                               , fun(#binding{key = Key, destination = Dest}) ->
@@ -269,7 +269,7 @@ sql_match(SQL, Headers) ->
     _    -> false
   end.
 
-% get binding funs from state (using dirty_reads)
+% get policy and binding funs from state (using dirty_reads)
 get_binding_funs_x(XName) ->
   mnesia:async_dirty(
     fun() ->

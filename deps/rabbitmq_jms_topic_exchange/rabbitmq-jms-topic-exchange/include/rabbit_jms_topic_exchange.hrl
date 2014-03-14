@@ -26,14 +26,16 @@
 -define(JMS_TOPIC_RECORD, x_jms_topic_xs).
 
 %% Key is x_name -- the exchange name
--record(?JMS_TOPIC_RECORD, {x_name, x_selector_funs}).
+-record(?JMS_TOPIC_RECORD, {x_name, x_selection_policy = undefined, x_selector_funs}).
 %% fields:
 %%  x_selector_funs
 %%      a partial map (`dict`) of binding functions:
-%%          dict: RoutingKey x DestName -|-> BindingSelectorFun
+%%          dict: RoutingKey x DestName -/-> BindingSelectorFun
 %%      (there is no default, but an empty map will be initially inserted)
 %%      where a BindingSelectorFun has the signature:
 %%          bsf : Headers -> boolean
+%%  x_selection_policy
+%%      notused, retained for backwards compatibility of dbs.
 
 %% Name of arg on binding used to specify selector -- string type
 %%      private static final String RJMS_SELECTOR_ARG = "rjms_selector";
