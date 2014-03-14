@@ -104,8 +104,8 @@ serialise_events() -> false.
 route( #exchange{name = XName}
      , #delivery{message = #basic_message{content = MessageContent, routing_keys = RKs}}
      ) ->
-  {XPol, BindingFuns} = get_policy_and_binding_funs_x(XName),
-  match_bindings_by_policy(XName, RKs, MessageContent, XPol, BindingFuns).
+  BindingFuns = get_binding_funs_x(XName),
+  match_bindings(XName, RKs, MessageContent, BindingFuns).
 
 
 % Before exchange declaration
@@ -113,7 +113,7 @@ validate(_X) -> ok.
 
 % After exchange declaration and recovery
 create(transaction, #exchange{name = XName}) ->
-  add_initial_record(XName, jms_topic);
+  add_initial_record(XName);
 create(_Tx, _X) ->
   ok.
 
@@ -163,8 +163,8 @@ policy_changed(_X1, _X2) -> ok.
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
 
-% Match bindings for the current message under the appropriate policy
-match_bindings_by_policy( XName, _RoutingKeys    , MessageContent, jms_topic, BindingFuns) ->
+% Match bindings for the current message
+match_bindings( XName, _RoutingKeys, MessageContent, BindingFuns) ->
   MessageHeaders = get_headers(MessageContent),
   rabbit_router:match_bindings( XName
                               , fun(#binding{key = Key, destination = Dest}) ->
@@ -269,29 +269,29 @@ sql_match(SQL, Headers) ->
     _    -> false
   end.
 
-% get policy and binding funs from state (using dirty_reads)
-get_policy_and_binding_funs_x(XName) ->
+% get binding funs from state (using dirty_reads)
+get_binding_funs_x(XName) ->
   mnesia:async_dirty(
     fun() ->
-      #?JMS_TOPIC_RECORD{x_selection_policy = XPol, x_selector_funs = BindingFuns} = read_state(XName),
-      {XPol, BindingFuns}
+      #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state(XName),
+      BindingFuns
     end,
     []
   ).
 
-add_initial_record(XName, XPol) ->
-  write_state_fun(XName, dict:new(), XPol).
+add_initial_record(XName) ->
+  write_state_fun(XName, dict:new()).
 
 % add binding fun to binding fun dictionary
 add_binding_fun(XName, BindingKeyAndFun) ->
-  #?JMS_TOPIC_RECORD{x_selection_policy = XPol, x_selector_funs = BindingFuns} = read_state_for_update(XName),
-  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun), XPol).
+  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state_for_update(XName),
+  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun)).
 
 % remove binding funs from binding fun dictionary
 remove_binding_funs(XName, Bindings) ->
   BindingKeys = [ {BindingKey, DestName} || #binding{key = BindingKey, destination = DestName} <- Bindings ],
-  #?JMS_TOPIC_RECORD{x_selection_policy = XPol, x_selector_funs = BindingFuns} = read_state_for_update(XName),
-  write_state_fun(XName, remove_items(BindingFuns, BindingKeys), XPol).
+  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state_for_update(XName),
+  write_state_fun(XName, remove_items(BindingFuns, BindingKeys)).
 
 % add an item to the dictionary of binding functions
 put_item(Dict, {Key, Item}) -> dict:store(Key, Item, Dict).
@@ -318,9 +318,9 @@ read_state(XName, Lock) ->
   end.
 
 % Basic write
-write_state_fun(XName, BFuns, XPol) ->
+write_state_fun(XName, BFuns) ->
   mnesia:write( ?JMS_TOPIC_TABLE
-              , #?JMS_TOPIC_RECORD{x_name = XName, x_selection_policy = XPol, x_selector_funs = BFuns}
+              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = BFuns}
               , write ).
 
 %%----------------------------------------------------------------------------
