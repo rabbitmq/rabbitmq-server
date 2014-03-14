@@ -128,14 +128,14 @@ handle_msg({request_start, Node},
                                  "  * Losers:     ~p~n",
                                  [AllPartitions, Winner, Losers]),
                  [send(L, {winner_is, Winner}) || L <- Losers],
-                 ShortCut = fun(Msg) ->
+                 Continue = fun(Msg) ->
                                     handle_msg(Msg, not_healing, Partitions)
                             end,
-                 case {node() =:= Winner, lists:member(node(), Losers)} of
-                     true  -> ShortCut({become_winner, Losers});
+                 case node() =:= Winner of
+                     true  -> Continue({become_winner, Losers});
                      false -> send(Winner, {become_winner, Losers}),
                               case lists:member(node(), Losers) of
-                                  true  -> ShortCut({winner_is, Winner});
+                                  true  -> Continue({winner_is, Winner});
                                   false -> {leader_waiting, Losers}
                               end
                  end
