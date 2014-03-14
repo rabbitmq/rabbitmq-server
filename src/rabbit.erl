@@ -785,11 +785,15 @@ home_dir() ->
     end.
 
 config_files() ->
+    Abs = fun (F) ->
+                  filename:absname(filename:rootname(F, ".config") ++ ".config")
+          end,
     case init:get_argument(config) of
-        {ok, Files} -> [filename:absname(
-                          filename:rootname(File, ".config") ++ ".config") ||
-                           [File] <- Files];
-        error       -> []
+        {ok, Files} -> [Abs(File) || [File] <- Files];
+        error       -> case os:getenv("RABBITMQ_CONFIG_FILE") of
+                           false -> [];
+                           File  -> [Abs(File) ++ " (not found)"]
+                       end
     end.
 
 %% We don't want this in fhc since it references rabbit stuff. And we can't put
