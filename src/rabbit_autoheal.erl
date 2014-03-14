@@ -89,6 +89,12 @@ rabbit_down(Node, {winner_waiting, [Node], Notify}) ->
 rabbit_down(Node, {winner_waiting, WaitFor, Notify}) ->
     {winner_waiting, WaitFor -- [Node], Notify};
 
+rabbit_down(Node, {leader_waiting, [Node]}) ->
+    not_healing;
+
+rabbit_down(Node, {leader_waiting, WaitFor}) ->
+    {leader_waiting, WaitFor -- [Node]};
+
 rabbit_down(_Node, State) ->
     %% ignore, we already cancelled the autoheal process
     State.
@@ -121,10 +127,21 @@ handle_msg({request_start, Node},
                                  "  * Winner:     ~p~n"
                                  "  * Losers:     ~p~n",
                                  [AllPartitions, Winner, Losers]),
-                 send(Winner, {become_winner, Losers}),
                  [send(L, {winner_is, Winner}) || L <- Losers],
-                 not_healing
+                 Continue = fun(Msg) ->
+                                    handle_msg(Msg, not_healing, Partitions)
+                            end,
+                 case node() =:= Winner of
+                     true  -> Continue({become_winner, Losers});
+                     false -> send(Winner, {become_winner, Losers}), %% [0]
+                              case lists:member(node(), Losers) of
+                                  true  -> Continue({winner_is, Winner});
+                                  false -> {leader_waiting, Losers}
+                              end
+                 end
     end;
+%% [0] If we are a loser we will never receive this message - but it
+%% won't stick in the mailbox as we are restarting anyway
 
 handle_msg({request_start, Node},
            State, _Partitions) ->
