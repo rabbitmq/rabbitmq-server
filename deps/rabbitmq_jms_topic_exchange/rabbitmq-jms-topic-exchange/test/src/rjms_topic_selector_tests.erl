@@ -21,7 +21,6 @@
 -include("rabbit_jms_topic_exchange.hrl").
 
 %% Useful test constructors
--define(XPOLICYARG(Policy), {?RJMS_POLICY_ARG, longstr, Policy}).
 -define(BSELECTARG(BinStr), {?RJMS_SELECTOR_ARG, longstr, BinStr}).
 -define(BASICMSG(Payload, Hdrs), #'amqp_msg'{props=#'P_basic'{headers=Hdrs}, payload=Payload}).
 
@@ -33,7 +32,7 @@ all_tests() ->
 test_topic_selection() ->
     {Connection, Channel} = open_connection_and_channel(),
 
-    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", [?XPOLICYARG(<<"jms-topic">>)]),
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", []),
 
     %% Declare a queue and bind it
     Q = declare_queue(Channel),

@@ -222,7 +222,7 @@ generate_binding_fun({sql, SQL}, TypeInfo) ->
   end;
 generate_binding_fun({erlang, ERL}, _) ->
   case decode_term(ERL) of
-    {error, Err}  -> error;
+    {error, _}    -> error;
     {ok, ErlTerm} -> check_fun(ErlTerm)
   end.
 

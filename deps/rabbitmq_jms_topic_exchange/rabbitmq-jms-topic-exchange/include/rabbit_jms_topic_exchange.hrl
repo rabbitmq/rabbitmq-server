@@ -59,10 +59,3 @@
 %% in a Java Client application.
 -define(RJMS_TYPE_INFO_ARG, <<"rjms_type_info">>).
 %%
-
-%% Name of selection policy argument on exchange; used to specify how selection works.
-%% Constant (name of argument) defined as
-%%      private static final String RJMS_POLICY_ARG = "rjms_selection_policy";
-%% in a Java Client application.
--define(RJMS_POLICY_ARG, <<"rjms_selection_policy">>).
-%%
