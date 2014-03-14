@@ -81,6 +81,8 @@ case "$(uname -s)" in
            fi
 esac
 
+export RABBITMQ_CONFIG_FILE
+
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 if ! ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
             -boot "${CLEAN_BOOT_FILE}" \
