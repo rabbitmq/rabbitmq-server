@@ -78,9 +78,6 @@ execute(Cmd) ->
         _         -> exit({command_failed, Cmd, Res})
     end.
 
-policy(ShardingDef) ->
-    rabbit_misc:format("{\"sharding-definition\": \"~s\"}", [ShardingDef]).
-
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),
     filename:dirname(filename:dirname(File)).

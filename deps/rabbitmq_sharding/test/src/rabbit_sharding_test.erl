@@ -10,7 +10,7 @@
 
 -import(rabbit_sharding_test_util,
         [set_param/3, clear_param/2, set_pol/3, clear_pol/1,
-         policy/1, start_other_node/1, cluster_other_node/2,
+         start_other_node/1, cluster_other_node/2,
          reset_other_node/1, stop_other_node/1, xr/1, qr/1]).
 
 -import(rabbit_sharding_util, [a2b/1, exchange_bin/1]).
