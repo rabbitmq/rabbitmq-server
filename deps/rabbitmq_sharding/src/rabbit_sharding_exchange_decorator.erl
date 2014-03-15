@@ -7,12 +7,6 @@
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
--rabbit_boot_step({rabbit_sharding_exchange_decorator_mnesia,
-                   [{description, "rabbit sharding exchange decorator: mnesia"},
-                    {mfa, {?MODULE, setup_schema, []}},
-                    {requires, database},
-                    {enables, external_infrastructure}]}).
-
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_sharding.hrl").
 
@@ -21,18 +15,8 @@
 -export([description/0, serialise_events/1]).
 -export([create/2, delete/3, policy_changed/2,
          add_binding/3, remove_bindings/3, route/2, active_for/1]).
--export([setup_schema/0]).
 
 %%----------------------------------------------------------------------------
-
-setup_schema() ->
-    case mnesia:create_table(?SHARDING_TABLE,
-                             [{attributes, record_info(fields, sharding)},
-                              {record_name, sharding},
-                              {type, set}]) of
-        {atomic, ok} -> ok;
-        {aborted, {already_exists, ?SHARDING_TABLE}} -> ok
-    end.
 
 description() ->
     [{description, <<"Shard exchange decorator">>}].
