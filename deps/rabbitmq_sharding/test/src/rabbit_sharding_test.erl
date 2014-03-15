@@ -9,7 +9,7 @@
 -define(TEST_X, <<"sharding.test">>).
 
 -import(rabbit_sharding_test_util,
-        [set_param/3, clear_param/2, set_pol/3, clear_pol/1,
+        [set_param/3, set_pol/3, clear_pol/1,
          start_other_node/1, cluster_other_node/2,
          reset_other_node/1, stop_other_node/1, xr/1, qr/1]).
 
@@ -25,7 +25,6 @@ shard_queue_creation_test() ->
 
               teardown(Ch,
                        [{?TEST_X, 3}],
-                       [],
                        ["3_shard"])
       end).
 
@@ -42,7 +41,6 @@ shard_queue_creation2_test() ->
 
               teardown(Ch,
                        [{?TEST_X, 3}],
-                       [],
                        ["3_shard"])
       end).
 
@@ -56,7 +54,6 @@ shard_no_queue_creation_test() ->
 
               teardown(Ch,
                        [{?TEST_X, 1}],
-                       [],
                        ["3_shard"])
       end).
 
@@ -75,7 +72,6 @@ shard_update_spn_test() ->
 
               teardown(Ch,
                        [{?TEST_X, 5}],
-                       [],
                        ["3_shard"])
       end).
 
@@ -93,7 +89,6 @@ shard_decrease_spn_keep_queues_test() ->
 
               teardown(Ch,
                        [{?TEST_X, 5}],
-                       [],
                        ["3_shard"])
       end).
 
@@ -116,7 +111,6 @@ shard_update_routing_key_test() ->
 
               teardown(Ch,
                        [{?TEST_X, 1}],
-                       [],
                        ["rkey"])
       end).
 
@@ -152,7 +146,6 @@ shard_basic_consume_interceptor_test() ->
 
               teardown(Ch,
                        [{?TEST_X, 3}],
-                       [],
                        ["three"])
       end).
 
@@ -176,7 +169,6 @@ shard_auto_scale_cluster_test() ->
 
               teardown(Ch,
                        [{?TEST_X, 3}],
-                       [],
                        ["three"])
       end).
 
@@ -212,12 +204,11 @@ cleanup({Nodename, _}) ->
     [rpc:call(n(Nodename), rabbit_amqqueue, delete, [Q, false, false])
      || Q <- queues(Nodename)].
 
-teardown(Ch, Xs, Params, Policies) ->
+teardown(Ch, Xs, Policies) ->
     [begin
          exchange_op(Ch, x_delete(XName)),
          delete_queues(Ch, XName, N)
      end || {XName, N} <- Xs],
-    [clear_param(Comp, Param) || {Comp, Param} <- Params],
     [clear_pol(Policy) || Policy <- Policies].
 
 delete_queues(Ch, Name, N) ->
