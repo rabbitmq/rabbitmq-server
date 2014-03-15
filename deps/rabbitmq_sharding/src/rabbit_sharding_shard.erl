@@ -39,7 +39,7 @@ ensure_sharded_queues(X) ->
 
 maybe_update_shards(OldX, NewX) ->
     maybe_unbind_queues(routing_key(OldX), routing_key(NewX), OldX),
-    maybe_add_queues(shards_per_node(OldX), shards_per_node(NewX), NewX),
+    add_queues(NewX),
     bind_queues(NewX).
 
 maybe_stop_sharding(OldX) ->
@@ -50,12 +50,6 @@ maybe_unbind_queues(RK, RK, _OldX) ->
     ok;
 maybe_unbind_queues(_RK, _NewRK, OldX) ->
     unbind_queues(shards_per_node(OldX), OldX).
-
-%% shards per node didn't change. Do nothing.
-maybe_add_queues(SPN, SPN, _NewX) ->
-    ok;
-maybe_add_queues(_OldSPN, _NewSPN, NewX) ->
-    add_queues(NewX).
 
 unbind_queues(undefined, _X) ->
     ok;

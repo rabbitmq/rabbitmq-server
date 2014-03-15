@@ -19,8 +19,7 @@ shard_queue_creation_test() ->
     with_ch(
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
-              set_pol("3_shard", "^sharding\\.",
-                        "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              set_pol("3_shard", "^sharding\\.", policy(true, 3, "1234")),
               ?assertEqual(3, length(queues("rabbit-test"))),
 
               teardown(Ch,
@@ -31,8 +30,7 @@ shard_queue_creation_test() ->
 shard_queue_creation2_test() ->
     with_ch(
       fun (Ch) ->
-              set_pol("3_shard", "^sharding\\.",
-                        "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              set_pol("3_shard", "^sharding\\.", policy(true, 3, "1234")),
               ?assertEqual(0, length(queues("rabbit-test"))),
 
               exchange_op(Ch, x_declare(?TEST_X)),
@@ -48,10 +46,23 @@ shard_no_queue_creation_test() ->
     with_ch(
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
-              set_pol("3_shard", "^sharding\\.",
-                      "{\"sharded\": false, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              set_pol("3_shard", "^sharding\\.", policy(false, 3, "1234")),
               ?assertEqual(0, length(queues("rabbit-test"))),
 
+              teardown(Ch,
+                       [{?TEST_X, 1}],
+                       ["3_shard"])
+      end).
+
+shard_no_queue_creation2_test() ->
+    with_ch(
+      fun (Ch) ->
+              exchange_op(Ch, x_declare(?TEST_X)),
+              set_pol("3_shard", "^sharding\\.", policy(false, 3, "1234")),
+              ?assertEqual(0, length(queues("rabbit-test"))),
+
+              set_pol("3_shard", "^sharding\\.", policy(true, 3, "1234")),
+              ?assertEqual(3, length(queues("rabbit-test"))),
               teardown(Ch,
                        [{?TEST_X, 1}],
                        ["3_shard"])
@@ -62,12 +73,10 @@ shard_update_spn_test() ->
     with_ch(
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
-              set_pol("3_shard", "^sharding\\.",
-                      "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              set_pol("3_shard", "^sharding\\.", policy(true, 3, "1234")),
               ?assertEqual(3, length(queues("rabbit-test"))),
 
-              set_pol("3_shard", "^sharding\\.",
-                      "{\"sharded\": true, \"shards-per-node\": 5, \"routing-key\": \"1234\"}"),
+              set_pol("3_shard", "^sharding\\.", policy(true, 5, "1234")),
               ?assertEqual(5, length(queues("rabbit-test"))),
 
               teardown(Ch,
@@ -79,12 +88,10 @@ shard_decrease_spn_keep_queues_test() ->
     with_ch(
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
-              set_pol("3_shard", "^sharding\\.",
-                      "{\"sharded\": true, \"shards-per-node\": 5, \"routing-key\": \"1234\"}"),
+              set_pol("3_shard", "^sharding\\.", policy(true, 5, "1234")),
               ?assertEqual(5, length(queues("rabbit-test"))),
 
-              set_pol("3_shard", "^sharding\\.",
-                      "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              set_pol("3_shard", "^sharding\\.", policy(true, 3, "1234")),
               ?assertEqual(5, length(queues("rabbit-test"))),
 
               teardown(Ch,
@@ -99,12 +106,10 @@ shard_update_routing_key_test() ->
     with_ch(
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
-              set_pol("rkey", "^sharding\\.",
-                      "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              set_pol("rkey", "^sharding\\.", policy(true, 3, "1234")),
               Bs = bindings("rabbit-test", ?TEST_X),
 
-              set_pol("rkey", "^sharding\\.",
-                      "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"4321\"}"),
+              set_pol("rkey", "^sharding\\.", policy(true, 3, "4321")),
               Bs2 = bindings("rabbit-test", ?TEST_X),
 
               ?assert(Bs =/= Bs2),
@@ -121,8 +126,7 @@ shard_basic_consume_interceptor_test() ->
       fun (Ch) ->
               Sh = ?TEST_X,
               exchange_op(Ch, x_declare(Sh)),
-              set_pol("three", "^sharding\\.",
-                      "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              set_pol("three", "^sharding\\.", policy(true, 3, "1234")),
 
               start_consumer(Ch, Sh),
               assert_consumers(Sh, 0, 1),
@@ -154,8 +158,7 @@ shard_auto_scale_cluster_test() ->
       fun (Ch) ->
               Sh = ?TEST_X,
               exchange_op(Ch, x_declare(Sh)),
-              set_pol("three", "^sharding\\.",
-                      "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              set_pol("three", "^sharding\\.", policy(true, 3, "1234")),
 
               ?assertEqual(3, length(queues("rabbit-test"))),
 
@@ -237,3 +240,7 @@ shard_q(X, N) ->
 n(Nodename) ->
     {_, NodeHost} = rabbit_nodes:parts(node()),
     rabbit_nodes:make({Nodename, NodeHost}).
+
+policy(Sharded, SPN, RK) ->
+    Format = "{\"sharded\": ~p, \"shards-per-node\": ~p, \"routing-key\": ~p}",
+    lists:flatten(io_lib:format(Format, [Sharded, SPN, RK])).
