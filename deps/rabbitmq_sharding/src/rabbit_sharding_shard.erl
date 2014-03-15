@@ -1,7 +1,6 @@
 -module(rabbit_sharding_shard).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("rabbit_sharding.hrl").
 
 -export([maybe_shard_exchanges/0,
          ensure_sharded_queues/1,

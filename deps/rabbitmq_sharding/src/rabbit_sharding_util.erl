@@ -6,7 +6,6 @@
 -export([a2b/1, rpc_call/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("rabbit_sharding.hrl").
 
 -import(rabbit_misc, [pget/3]).
 

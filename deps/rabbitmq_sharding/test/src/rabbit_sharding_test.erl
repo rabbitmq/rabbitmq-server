@@ -1,6 +1,5 @@
 -module(rabbit_sharding_test).
 
--include("rabbit_sharding.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 

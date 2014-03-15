@@ -8,7 +8,6 @@
                     {enables, recovery}]}).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("rabbit_sharding.hrl").
 
 -behaviour(rabbit_exchange_decorator).
 
