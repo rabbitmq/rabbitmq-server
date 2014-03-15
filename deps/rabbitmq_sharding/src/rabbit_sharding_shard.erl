@@ -76,7 +76,6 @@ unbind_queues(OldSPN, #exchange{name = XName} = X) ->
 
 add_queues(#exchange{name = XName} = X) ->
     SPN = shards_per_node(X),
-    RKey = routing_key(X),
     XBin = exchange_bin(XName),
     F = fun (N) ->
                 QBin = rabbit_sharding_util:make_queue_name(

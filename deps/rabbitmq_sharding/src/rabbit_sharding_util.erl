@@ -49,6 +49,3 @@ a2b(A) -> list_to_binary(atom_to_list(A)).
 
 find_exchanges(VHost) ->
     rabbit_exchange:list(VHost).
-
-vhost(#exchange{name = #resource{virtual_host = VHost}}) -> VHost;
-vhost(                 #resource{virtual_host = VHost})  -> VHost.
