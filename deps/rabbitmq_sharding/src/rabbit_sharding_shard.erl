@@ -20,6 +20,8 @@
 
 -import(rabbit_misc, [r/3]).
 
+-define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
+
 %% We make sure the sharded queues are created when
 %% RabbitMQ starts.
 maybe_shard_exchanges() ->
@@ -44,13 +46,13 @@ maybe_update_shards(OldX, NewX) ->
     bind_queues(NewX).
 
 maybe_stop_sharding(OldX) ->
-    unbind_queues(OldX).
+    unbind_queues(shards_per_node(OldX), OldX).
 
 %% routing key didn't change. Do nothing.
 maybe_unbind_queues(RK, RK, _OldX) ->
     ok;
 maybe_unbind_queues(_RK, _NewRK, OldX) ->
-    unbind_queues(OldX).
+    unbind_queues(shards_per_node(OldX), OldX).
 
 %% shards per node didn't change. Do nothing.
 maybe_add_queues(SPN, SPN, _NewX) ->
@@ -58,9 +60,10 @@ maybe_add_queues(SPN, SPN, _NewX) ->
 maybe_add_queues(_OldSPN, _NewSPN, NewX) ->
     add_queues(NewX).
 
-unbind_queues(#exchange{name = XName} = X) ->
+unbind_queues(undefined, _X) ->
+    ok;
+unbind_queues(OldSPN, #exchange{name = XName} = X) ->
     XBin = exchange_bin(XName),
-    OldSPN = shards_per_node(X),
     OldRKey = routing_key(X),
     F = fun (N) ->
                 QBin = rabbit_sharding_util:make_queue_name(
@@ -74,9 +77,11 @@ unbind_queues(#exchange{name = XName} = X) ->
 
 add_queues(#exchange{name = XName} = X) ->
     SPN = shards_per_node(X),
+    RKey = routing_key(X),
+    XBin = exchange_bin(XName),
     F = fun (N) ->
                 QBin = rabbit_sharding_util:make_queue_name(
-                         exchange_bin(XName), a2b(node()), N),
+                         XBin, a2b(node()), N),
                 [#'queue.declare'{queue = QBin, durable = true}]
         end,
     ErrFun = fun(Code, Text) -> {error, Code, Text} end,
@@ -85,12 +90,13 @@ add_queues(#exchange{name = XName} = X) ->
 bind_queues(#exchange{name = XName} = X) ->
     RKey = routing_key(X),
     SPN = shards_per_node(X),
+    XBin = exchange_bin(XName),
     F = fun (N) ->
                 QBin = rabbit_sharding_util:make_queue_name(
-                         exchange_bin(XName), a2b(node()), N),
-                [#'queue.bind'{exchange = exchange_bin(XName),
-                               queue = QBin,
-                               routing_key = RKey}]
+                         XBin, a2b(node()), N),
+                #'queue.bind'{exchange = XBin,
+                              queue = QBin,
+                              routing_key = RKey}
         end,
     ErrFun = fun(Code, Text) -> {error, Code, Text} end,
     disposable_connection_calls(X, lists:flatten(do_n(F, SPN)), ErrFun).

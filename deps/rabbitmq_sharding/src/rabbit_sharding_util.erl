@@ -28,7 +28,7 @@ shards_per_node(X) ->
     get_policy(<<"shards-per-node">>, X).
 
 routing_key(X) ->
-    get_policy(<<"shards-per-node">>, X).
+    get_policy(<<"routing-key">>, X).
 
 get_policy(Key, X) ->
     rabbit_policy:get(Key, X).

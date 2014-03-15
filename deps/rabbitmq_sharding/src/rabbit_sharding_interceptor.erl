@@ -10,7 +10,7 @@
 %% exported for tests
 -export([consumer_count/1]).
 
--import(rabbit_sharding_util, [a2b/1]).
+-import(rabbit_sharding_util, [a2b/1, shards_per_node/1]).
 -import(rabbit_misc, [r/3]).
 
 -rabbit_boot_step({?MODULE,
@@ -83,22 +83,24 @@ applies_to(_Other) -> false.
 %%----------------------------------------------------------------------------
 
 queue_name(VHost, QBin) ->
-    case mnesia:dirty_read(?SHARDING_TABLE, r(VHost, exchange, QBin)) of
-        []  ->
+    case lookup_exchange(VHost, QBin) of
+        {ok, X}  ->
+            {ok, least_consumers(VHost, QBin, shards_per_node(X))};
+        _Error ->
             %% Queue is not part of a shard, return unmodified name
-            {ok, QBin};
-        [#sharding{shards_per_node = N}] ->
-            {ok, least_consumers(VHost, QBin, N)}
+            {ok, QBin}
     end.
 
 is_sharded(VHost, QBin) ->
-    case mnesia:dirty_read(?SHARDING_TABLE, r(VHost, exchange, QBin)) of
-        []  ->
-            %% Queue is not part of a shard
-            false;
-        [#sharding{}] ->
-            true
+    case lookup_exchange(VHost, QBin) of
+        {ok, X} ->
+            rabbit_sharding_util:shard(X);
+        _Error ->
+            false
     end.
+
+lookup_exchange(VHost, QBin) ->
+    rabbit_exchange:lookup(rabbit_misc:r(VHost, exchange, QBin)).
 
 %% returns the original queue name if it fails to find a proper queue.
 least_consumers(VHost, QBin, N) ->

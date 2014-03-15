@@ -72,7 +72,6 @@ rabbitmqctl(Args) ->
     execute(plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
     timer:sleep(100).
 
-%% ?assertCmd seems to hang if you background anything. Bah!
 execute(Cmd) ->
     Res = os:cmd(Cmd ++ " ; echo $?"),
     case lists:reverse(string:tokens(Res, "\n")) of
