@@ -29,6 +29,23 @@ shard_queue_creation_test() ->
                        ["3_shard"])
       end).
 
+shard_queue_creation2_test() ->
+    with_ch(
+      fun (Ch) ->
+              set_pol("3_shard", "^sharding\\.",
+                        "{\"sharded\": true, \"shards-per-node\": 3, \"routing-key\": \"1234\"}"),
+              ?assertEqual(0, length(queues("rabbit-test"))),
+
+              exchange_op(Ch, x_declare(?TEST_X)),
+
+              ?assertEqual(3, length(queues("rabbit-test"))),
+
+              teardown(Ch,
+                       [{?TEST_X, 3}],
+                       [],
+                       ["3_shard"])
+      end).
+
 shard_no_queue_creation_test() ->
     with_ch(
       fun (Ch) ->
