@@ -7,17 +7,15 @@
          maybe_update_shards/2,
          maybe_stop_sharding/1]).
 
+-import(rabbit_misc, [r/3]).
+-import(rabbit_sharding_util, [a2b/1, exchange_bin/1,
+                               routing_key/1, shards_per_node/1]).
+
 -rabbit_boot_step({rabbit_sharding_maybe_shard,
                    [{description, "rabbit sharding maybe shard"},
                     {mfa,         {?MODULE, maybe_shard_exchanges, []}},
                     {requires,    direct_client},
                     {enables,     networking}]}).
-
--import(rabbit_sharding_util, [a2b/1, exchange_bin/1,
-                               routing_key/1, shards_per_node/1]).
--import(rabbit_sharding_amqp_util, [disposable_connection_calls/3]).
-
--import(rabbit_misc, [r/3]).
 
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
@@ -72,7 +70,7 @@ unbind_queues(OldSPN, #exchange{name = XName} = X) ->
                                  routing_key = OldRKey}]
         end,
     ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    disposable_connection_calls(X, calls(F, OldSPN), ErrFun).
+    amqp_calls(X, calls(F, OldSPN), ErrFun).
 
 add_queues(#exchange{name = XName} = X) ->
     SPN = shards_per_node(X),
@@ -83,7 +81,7 @@ add_queues(#exchange{name = XName} = X) ->
                 [#'queue.declare'{queue = QBin, durable = true}]
         end,
     ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    disposable_connection_calls(X, calls(F, SPN), ErrFun).
+    amqp_calls(X, calls(F, SPN), ErrFun).
 
 bind_queues(#exchange{name = XName} = X) ->
     RKey = routing_key(X),
@@ -97,9 +95,40 @@ bind_queues(#exchange{name = XName} = X) ->
                               routing_key = RKey}
         end,
     ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    disposable_connection_calls(X, calls(F, SPN), ErrFun).
+    amqp_calls(X, calls(F, SPN), ErrFun).
 
 %%----------------------------------------------------------------------------
 
 calls(F, SPN) ->
     lists:flatten([F(N) || N <- lists:seq(0, SPN-1)]).
+
+amqp_calls(X, Methods, ErrFun) ->
+    case open(X) of
+        {ok, Conn, Ch} ->
+            try
+                [amqp_channel:call(Ch, Method) || Method <- Methods]
+            catch exit:{{shutdown, {connection_closing,
+                                    {server_initiated_close, Code, Txt}}}, _} ->
+                    ErrFun(Code, Txt)
+            after
+                ensure_connection_closed(Conn)
+            end;
+        E ->
+            E
+    end.
+
+ensure_connection_closed(Conn) ->
+    catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT).
+
+open(X) ->
+    case amqp_connection:start(params(X)) of
+        {ok, Conn} -> case amqp_connection:open_channel(Conn) of
+                          {ok, Ch} -> {ok, Conn, Ch};
+                          E        -> catch amqp_connection:close(Conn),
+                                      E
+                      end;
+        E -> E
+    end.
+
+params(#exchange{name = #resource{virtual_host = VHost}}) ->
+    #amqp_params_direct{virtual_host = VHost}.
