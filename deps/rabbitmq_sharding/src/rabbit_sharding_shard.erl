@@ -72,7 +72,7 @@ unbind_queues(OldSPN, #exchange{name = XName} = X) ->
                                  routing_key = OldRKey}]
         end,
     ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    disposable_connection_calls(X, lists:flatten(do_n(F, OldSPN)), ErrFun).
+    disposable_connection_calls(X, calls(F, OldSPN), ErrFun).
 
 add_queues(#exchange{name = XName} = X) ->
     SPN = shards_per_node(X),
@@ -83,7 +83,7 @@ add_queues(#exchange{name = XName} = X) ->
                 [#'queue.declare'{queue = QBin, durable = true}]
         end,
     ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    disposable_connection_calls(X, lists:flatten(do_n(F, SPN)), ErrFun).
+    disposable_connection_calls(X, calls(F, SPN), ErrFun).
 
 bind_queues(#exchange{name = XName} = X) ->
     RKey = routing_key(X),
@@ -97,14 +97,9 @@ bind_queues(#exchange{name = XName} = X) ->
                               routing_key = RKey}
         end,
     ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    disposable_connection_calls(X, lists:flatten(do_n(F, SPN)), ErrFun).
+    disposable_connection_calls(X, calls(F, SPN), ErrFun).
 
 %%----------------------------------------------------------------------------
 
-do_n(F, N) ->
-    do_n(F, 0, N, []).
-
-do_n(_F, N, N, Acc) ->
-    Acc;
-do_n(F, Count, N, Acc) ->
-    do_n(F, Count+1, N, [F(Count)|Acc]).
+calls(F, SPN) ->
+    lists:flatten([F(N) || N <- lists:seq(0, SPN-1)]).
