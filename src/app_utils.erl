@@ -18,12 +18,11 @@
 -export([load_applications/1, start_applications/1, start_applications/2,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
          wait_for_applications/1, app_dependencies/1, app_modules/1,
-         which_applications/0, update_running_apps/2]).
+         which_applications/0]).
 
 -ifdef(use_specs).
 
 -type error_handler() :: fun((atom(), any()) -> 'ok').
--type diff() :: [atom()].
 
 -spec load_applications([atom()])                   -> 'ok'.
 -spec start_applications([atom()])                  -> 'ok'.
@@ -33,8 +32,6 @@
 -spec wait_for_applications([atom()])               -> 'ok'.
 -spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
 -spec app_dependencies(atom())                      -> [atom()].
--spec update_running_apps(fun (() -> 'ok'),
-                          fun ((diff()) -> 'ok'))   -> 'ok'.
 -spec which_applications()                          -> [atom()].
 -spec app_modules(atom())                           -> [module()].
 
@@ -42,13 +39,6 @@
 
 %%---------------------------------------------------------------------------
 %% Public API
-
-update_running_apps(MakeChanges, WithChanges) ->
-    Old = sets:from_list(which_applications()),
-    MakeChanges(),
-    New = sets:from_list(which_applications()),
-    Diff = sets:to_list(sets:subtract(New, Old)),
-    WithChanges(Diff).
 
 which_applications() ->
     [App || {App, _, _} <- rabbit_misc:which_applications()].

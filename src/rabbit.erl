@@ -312,7 +312,7 @@ start() ->
                      ok = ensure_working_log_handlers(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
-                     ok = start_apps(app_startup_order()),
+                     start_apps(app_startup_order()),
                      ok = log_broker_started(rabbit_plugins:active())
              end).
 
@@ -330,7 +330,7 @@ boot() ->
                      rabbit_mnesia:check_cluster_consistency(),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
-                     ok = start_apps(ToBeLoaded),
+                     start_apps(ToBeLoaded),
                      ok = log_broker_started(Plugins)
              end).
 
@@ -349,7 +349,8 @@ start_apps(Apps) ->
         _         -> ok
     end,
     ok = app_utils:start_applications(StartupApps,
-                                      handle_app_error(could_not_start)).
+                                      handle_app_error(could_not_start)),
+    StartupApps.
 
 start_it(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
