@@ -344,9 +344,10 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
             case majority() of
-                true  -> State;
-                false -> await_cluster_recovery() %% Does not really return
-            end;
+                true  -> ok;
+                false -> await_cluster_recovery()
+            end,
+            State;
         {ok, ignore} ->
             State;
         {ok, autoheal} ->
