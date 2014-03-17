@@ -429,7 +429,7 @@ test_table_codec() ->
              {<<"table">>,     table,     [{<<"one">>, signedint, 54321},
                                            {<<"two">>, longstr,
                                             <<"A long string">>}]},
-             {<<"byte">>,      byte,      255},
+             {<<"byte">>,      byte,      -128},
              {<<"long">>,      long,      1234567890},
              {<<"short">>,     short,     655},
              {<<"bool">>,      bool,      true},
@@ -446,7 +446,7 @@ test_table_codec() ->
                5,"table",     "F", 31:32, % length of table
                3,"one",       "I", 54321:32,
                3,"two",       "S", 13:32, "A long string",
-               4,"byte",      "b", 255:8,
+               4,"byte",      "b", -128:8/signed,
                4,"long",      "l", 1234567890:64,
                5,"short",     "s", 655:16,
                4,"bool",      "t", 1,
