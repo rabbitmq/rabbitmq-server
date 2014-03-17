@@ -220,16 +220,16 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     OnlyActive     = proplists:get_bool(?ACTIVE_ONLY_OPT, Opts),
     OnlyInactive   = proplists:get_bool(?INACTIVE_ONLY_OPT, Opts),
 
-    ActivePlugins = case rpc:call(Node, rabbit_plugins, active,
-                                  [], ?RPC_TIMEOUT) of
-                        {badrpc, _} -> [];
-                        Active      -> Active
-                    end,
     AvailablePlugins = rabbit_plugins:list(PluginsDir),
     EnabledExplicitly = rabbit_plugins:read_enabled(PluginsFile),
-    EnabledImplicitly =
-        rabbit_plugins:dependencies(false, EnabledExplicitly,
-                                    AvailablePlugins) -- EnabledExplicitly,
+    AllEnabled = rabbit_plugins:dependencies(false, EnabledExplicitly,
+                                             AvailablePlugins),
+    EnabledImplicitly = AllEnabled -- EnabledExplicitly,
+    ActivePlugins = case rpc:call(Node, rabbit_plugins, active,
+                                  [], ?RPC_TIMEOUT) of
+                        {badrpc, _} -> AllEnabled;
+                        Active      -> Active
+                    end,
     Missing = [#plugin{name = Name, dependencies = []} ||
                   Name <- ((EnabledExplicitly ++ EnabledImplicitly) --
                                plugin_names(AvailablePlugins))],
