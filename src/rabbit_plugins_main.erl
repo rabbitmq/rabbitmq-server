@@ -326,12 +326,35 @@ action_change(Node, Action, Targets) ->
     rpc_call(Node, rabbit_plugins, Action, [Targets]).
 
 rpc_call(Node, Mod, Action, Args) ->
-    case rpc:call(Node, Mod, Action, Args, ?RPC_TIMEOUT) of
-        {badrpc, nodedown} -> io:format("Plugin configuration has changed.~n");
-        ok                 -> io:format("Plugin(s) ~pd.~n", [Action]);
-        Error              -> io:format("Unable to ~p plugin(s). "
-                                        "Please restart the broker "
-                                        "to apply your changes.~nError: ~p~n",
-                                        [Action, Error])
+    case net_adm:ping(Node) of
+        pong -> io:format("Changing plugin configuration on ~p.", [Node]),
+                AsyncKey = rpc:async_call(Node, Mod, Action, Args),
+                rpc_progress(AsyncKey, Node, Action);
+        pang -> io:format("Plugin configuration has changed. "
+                          "Plugins were not ~p since node is down.~n"
+                          "Please start the broker to apply "
+                          "your changes.~n",
+                         [case Action of
+                              enable  -> started;
+                              disable -> stopped
+                          end])
+
+    end.
+
+rpc_progress(Key, Node, Action) ->
+    case rpc:nb_yield(Key, 100) of
+        timeout -> io:format("."),
+                   rpc_progress(Key, Node, Action);
+        {value, {badrpc, nodedown}} ->
+            io:format(". error: Unable to contact ~p.~n ", [Node]),
+            io:format("Please start the broker to apply "
+                      "your changes.~n");
+        {value, ok} ->
+            io:format(". done: Plugin(s) ~pd.~n", [Action]);
+        {value, Error} ->
+            io:format(". error: Unable to ~p plugin(s).~n"
+                      "Please restart the broker to apply your changes.~n"
+                      "Error: ~p~n",
+                      [Action, Error])
     end.
 
