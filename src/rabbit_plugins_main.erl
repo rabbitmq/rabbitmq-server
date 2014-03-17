@@ -331,7 +331,7 @@ rpc_call(Node, Mod, Action, Args) ->
                 AsyncKey = rpc:async_call(Node, Mod, Action, Args),
                 rpc_progress(AsyncKey, Node, Action);
         pang -> io:format("Plugin configuration has changed. "
-                          "Plugins were not ~p since node is down.~n"
+                          "Plugins were not ~p since the node is down.~n"
                           "Please start the broker to apply "
                           "your changes.~n",
                          [case Action of
