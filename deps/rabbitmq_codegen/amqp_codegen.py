@@ -11,7 +11,7 @@
 ##  The Original Code is RabbitMQ.
 ##
 ##  The Initial Developer of the Original Code is GoPivotal, Inc.
-##  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+##  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 ##
 
 from __future__ import nested_scopes
