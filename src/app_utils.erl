@@ -17,8 +17,7 @@
 
 -export([load_applications/1, start_applications/1, start_applications/2,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
-         wait_for_applications/1, app_dependencies/1, app_modules/1,
-         which_applications/0]).
+         wait_for_applications/1, app_dependencies/1, app_modules/1]).
 
 -ifdef(use_specs).
 
@@ -32,16 +31,12 @@
 -spec wait_for_applications([atom()])               -> 'ok'.
 -spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
 -spec app_dependencies(atom())                      -> [atom()].
--spec which_applications()                          -> [atom()].
 -spec app_modules(atom())                           -> [module()].
 
 -endif.
 
 %%---------------------------------------------------------------------------
 %% Public API
-
-which_applications() ->
-    [App || {App, _, _} <- rabbit_misc:which_applications()].
 
 app_modules(App) ->
     {ok, Modules} = application:get_key(App, modules),

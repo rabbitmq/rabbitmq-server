@@ -543,8 +543,8 @@ run_step(StepName, Attributes, AttributeName) ->
     end.
 
 load_steps(BaseApps) ->
-    Apps = BaseApps -- app_utils:which_applications(),  %% exclude running apps
-    StepAttrs = rabbit_misc:all_module_attributes_with_app(rabbit_boot_step),
+    Apps = BaseApps -- [App || {App, _, _} <- rabbit_misc:which_applications()],
+    StepAttrs = rabbit_misc:all_module_attributes(rabbit_boot_step),
     {AllSteps, StepsDict} =
         lists:foldl(
           fun({AppName, Mod, Steps}, {AccSteps, AccDict}) ->
