@@ -5,7 +5,7 @@ NODENAME=rabbit-test
 MAIN_NODE=undefined
 OTHER_NODE=undefined
 OTHER_PORT=undefined
-OTHER_PLUGINS=other_plugins
+OTHER_PLUGINS=undefined
 BASEDIR=${TMPDIR}/rabbitmq-sharding-tests/$(OTHER_NODE)
 PID_FILE=$(BASEDIR)/$(OTHER_NODE).pid
 
