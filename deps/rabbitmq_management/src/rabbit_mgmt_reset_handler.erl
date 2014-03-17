@@ -38,11 +38,6 @@
 %% TODO: really?
 -import(rabbit_misc, [pget/3]).
 
-%% Starting or stopping these applications can't/shouldn't trigger a reset
--define(IGNORED_APPS, [rabbitmq_management,
-                       rabbitmq_managment_agent,
-                       rabbit]).
-
 %%----------------------------------------------------------------------------
 
 add_handler() ->
@@ -81,8 +76,7 @@ extension_changes(#event{ type = 'plugins_changed', props = Details }) ->
     %% regardless of what else has happened, the dispatcher will have been
     %% configured correctly during the plugin's boot sequence.
     case pget(rabbitmq_management, Enabled, undefined) of
-        undefined -> filter_extensions(
-                       lists:concat([Enabled, Disabled]) -- ?IGNORED_APPS);
+        undefined -> filter_extensions(lists:concat([Enabled, Disabled]));
         _         -> false
     end;
 extension_changes(_) ->
