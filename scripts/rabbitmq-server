@@ -85,10 +85,11 @@ case "$(uname -s)" in
            fi
 esac
 
-export RABBITMQ_CONFIG_FILE RABBITMQ_DIST_PORT
-
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+
+RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
+RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
+    ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
     -boot "${CLEAN_BOOT_FILE}" \
     -noinput \
     -hidden \
