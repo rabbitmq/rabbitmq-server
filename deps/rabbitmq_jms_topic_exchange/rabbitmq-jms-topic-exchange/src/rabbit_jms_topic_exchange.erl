@@ -129,7 +129,7 @@ validate_binding(_X, _B) -> ok.
 
 % A new binding has ben added or recovered
 add_binding( Tx
-           , #exchange{name = XName, arguments = XArgs}
+           , #exchange{name = XName}
            , #binding{key = BindingKey, destination = Dest, args = Args}
            ) ->
   Selector = get_selector_from_args(Args),

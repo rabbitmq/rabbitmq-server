@@ -17,13 +17,12 @@
 %% Copyright (c) 2012, 2013 Steve Powell (Zteve.Powell@gmail.com)
 %% -----------------------------------------------------------------------------
 
-%% Tests for sjx_evaluator and, indirectly, sjx_dialect
+%% Tests for sjx_evaluator
 
 %% -----------------------------------------------------------------------------
 -module(sjx_evaluate_tests).
 -include_lib("eunit/include/eunit.hrl").
 
--import(sjx_dialect, [analyze/2]).
 -import(sjx_evaluator, [evaluate/2]).
 
 %% Fixed type info for identifiers
@@ -37,7 +36,7 @@
 , {<<"JMSTimestamp">>,     longstr, <<"number">>}
 ]).
 
-eval(Hs, S) -> evaluate(analyze(?TEST_TYPE_INFO, S),Hs).
+eval(Hs, S) -> evaluate(S, Hs).
 
 basic_evaluate_test_() ->
     Hs = [{<<"JMSType">>, longstr, <<"car">>},
@@ -49,47 +48,44 @@ basic_evaluate_test_() ->
           {<<"afloat">>, float, 3.0e-2},
           {<<"abool">>, bool, false}],
 
-    [ ?_assert(    eval(Hs, " JMSType = 'car'                                  "))
-    , ?_assert(not eval(Hs, " abool                                            "))
-    , ?_assert(    eval(Hs, " not abool                                        "))
-    , ?_assert(    eval(Hs, " colour = 'blue'                                  "))
-    , ?_assert(    eval(Hs, " weight = 2501                                    "))
-    , ?_assert(    eval(Hs, " WeIgHt = 2                                       "))
-    , ?_assert(    eval(Hs, " 2501 = weight                                    "))
-    , ?_assert(    eval(Hs, " afloat = 3.0e-02                                 "))
-    , ?_assert(    eval(Hs, " afloat = 3.e-2                                   "))
-    , ?_assert(    eval(Hs, " afloat = 3e-2                                    "))
-    , ?_assert(    eval(Hs, " weight > 2500                                    "))
-    , ?_assert(    eval(Hs, " weight < 2502                                    "))
-    , ?_assert(    eval(Hs, " weight >= 2500                                   "))
-    , ?_assert(    eval(Hs, " weight <= 2502                                   "))
-    , ?_assert(    eval(Hs, " weight >= 2501                                   "))
-    , ?_assert(    eval(Hs, " weight <= 2501                                   "))
-    , ?_assert(    eval(Hs, " weight between 0 and 2501                        "))
-    , ?_assert(    eval(Hs, " weight between 2500 and 2501                     "))
-    , ?_assert(    eval(Hs, " 17 between 17 and 18                             "))
-    , ?_assert(    eval(Hs, " 17 Between 17 And 17                             "))
-    , ?_assert(    eval(Hs, " 16 not between 17 and 18                         "))
-    , ?_assert(    eval(Hs, " 2500 < weight                                    "))
-    , ?_assert(    eval(Hs, " 2502 > weight                                    "))
-    , ?_assert(    eval(Hs, " 2500 <= weight                                   "))
-    , ?_assert(    eval(Hs, " 2502 >= weight                                   "))
-    , ?_assert(    eval(Hs, " 2501 <= weight                                   "))
-    , ?_assert(    eval(Hs, " 2501 >= weight                                   "))
-    , ?_assert(    eval(Hs, " colour LIKE 'bl%'                                "))
-    , ?_assert(    eval(Hs, " likevar like 'b_!_ue' escape '!'                 "))
-    , ?_assert(    eval(Hs, " colour like 'bl_e'                               "))
-    , ?_assert(    eval(Hs, " colour not like 'l%'                             "))
-    , ?_assert(    eval(Hs, " colour     in ('blue', 'green')                  "))
-    , ?_assert(not eval(Hs, " colour not in ('green', 'blue')                  "))
-    , ?_assert(not eval(Hs, " colour     in ('bleen', 'grue')                  "))
-    , ?_assert(    eval(Hs, " colour not in ('grue', 'bleen')                  "))
-    , ?_assert(    eval(Hs, " altcol not like 'bl%'                            "))
-    , ?_assert(    eval(Hs, " altcol     like '''bl%'                          "))
-    , ?_assert(    eval(Hs, " altcol not like 'bl%'                            "))
-    , ?_assert(    eval(Hs, " colour LIKE 'bl%' and weight > 2500 or false     "))
-    , ?_assert(not eval(Hs, " weight <= 2500                                   "))
-    , ?_assert(not eval(Hs, " colour not like 'bl%'                            "))
-    , ?_assert(undefined =:= eval(Hs, " missing <= 2500                        "))
-    , ?_assert(undefined =:= eval(Hs, " missing in ('blue')                    "))
+    [ ?_assert(    eval(Hs, {'=', {'ident', <<"JMSType">>}, <<"car">>}                      ))
+    , ?_assert(not eval(Hs, {'ident', <<"abool">>}                                          ))
+    , ?_assert(    eval(Hs, {'not', {'ident', <<"abool">>}}                                 ))
+    , ?_assert(    eval(Hs, {'=', {'ident', <<"colour">>}, <<"blue">>}                      ))
+    , ?_assert(    eval(Hs, {'=', {'ident', <<"weight">>}, 2501}                            ))
+    , ?_assert(    eval(Hs, {'=', {'ident', <<"WeIgHt">>}, 2}                               ))
+    , ?_assert(    eval(Hs, {'=', 2501, {'ident', <<"weight">>}}                            ))
+    , ?_assert(    eval(Hs, {'=', {'ident', <<"afloat">>}, 3.0e-2}                          ))
+    , ?_assert(    eval(Hs, {'>', {'ident', <<"weight">>}, 2500}                            ))
+    , ?_assert(    eval(Hs, {'<', {'ident', <<"weight">>}, 2502}                            ))
+    , ?_assert(    eval(Hs, {'>=', {'ident', <<"weight">>}, 2501}                           ))
+    , ?_assert(    eval(Hs, {'<=', {'ident', <<"weight">>}, 2501}                           ))
+    , ?_assert(not eval(Hs, {'<=', {'ident', <<"weight">>}, 2500}                           ))
+    , ?_assert(    eval(Hs, {'between', {'ident', <<"weight">>}, {'range', 0, 2501}}        ))
+    , ?_assert(    eval(Hs, {'between', {'ident', <<"weight">>}, {'range', 2500, 2501}}     ))
+    , ?_assert(    eval(Hs, {'between', 17, {'range', 17, 18}}                              ))
+    , ?_assert(    eval(Hs, {'between', 17, {'range', 17, 17}}                              ))
+    , ?_assert(    eval(Hs, {'not_between', 16, {'range', 17, 18}}                          ))
+    , ?_assert(    eval(Hs, {'<', 2500, {'ident', <<"weight">>}}                            ))
+    , ?_assert(    eval(Hs, {'>', 2502, {'ident', <<"weight">>}}                            ))
+    , ?_assert(    eval(Hs, {'<=', 2500, {'ident', <<"weight">>}}                           ))
+    , ?_assert(    eval(Hs, {'>=', 2502, {'ident', <<"weight">>}}                           ))
+    , ?_assert(    eval(Hs, {'<=', 2501, {'ident', <<"weight">>}}                           ))
+    , ?_assert(    eval(Hs, {'>=', 2501, {'ident', <<"weight">>}}                           ))
+    , ?_assert(    eval(Hs, {'like', {'ident', <<"colour">>}, {<<"bl%">>, 'no_escape'}}     ))
+    , ?_assert(    eval(Hs, {'like', {'ident', <<"likevar">>}, {<<"b_!_ue">>, <<"!">>}}     ))
+    , ?_assert(    eval(Hs, {'like', {'ident', <<"colour">>}, {<<"bl_e">>, 'no_escape'}}    ))
+    , ?_assert(    eval(Hs, {'not_like', {'ident', <<"colour">>}, {<<"l%">>, 'no_escape'}}  ))
+    , ?_assert(not eval(Hs, {'not_like', {'ident', <<"colour">>}, {<<"bl%">>, 'no_escape'}} ))
+    , ?_assert(    eval(Hs, {'in', {'ident', <<"colour">>}, [<<"blue">>, <<"green">>]}      ))
+    , ?_assert(not eval(Hs, {'not_in', {'ident', <<"colour">>}, [<<"green">>, <<"blue">>]}  ))
+    , ?_assert(not eval(Hs, {'in', {'ident', <<"colour">>}, [<<"bleen">>, <<"grue">>]}      ))
+    , ?_assert(    eval(Hs, {'not_in', {'ident', <<"colour">>}, [<<"grue">>, <<"bleen">>]}  ))
+    , ?_assert(    eval(Hs, {'not_like', {'ident', <<"altcol">>}, {<<"bl%">>, 'no_escape'}} ))
+    , ?_assert(    eval(Hs, {'like', {'ident', <<"altcol">>}, {<<"'bl%">>, 'no_escape'}}    ))
+    , ?_assert(    eval(Hs, {'or', {'and', {'like', {'ident', <<"colour">>}, {<<"bl%">>, 'no_escape'}}
+                                         , {'>', {'ident', <<"weight">>}, 2500}}
+                                 , false}                                                   ))
+    , ?_assert(undefined =:= eval(Hs, {'<=', {'ident', <<"missing">>}, 2500}                ))
+    , ?_assert(undefined =:= eval(Hs, {'in', {'ident', <<"missing">>}, [<<"blue">>]}        ))
     ].

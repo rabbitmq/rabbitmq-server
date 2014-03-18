@@ -106,7 +106,7 @@ do_bin_op(_,_,_) -> error.
 
 isLike(undefined, _Patt) -> undefined;
 isLike(L, {regex, MP}) -> patt_match(L, MP);
-isLike(L, {Patt, Esc}) -> patt_match(L, sjx_parser:pattern_of(Patt, Esc)).
+isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
 
 patt_match(L, MP) ->
   BS = byte_size(L),
@@ -137,3 +137,42 @@ lookup_value(Table, Key) ->
     {_, bool,      Value} -> Value;
     false                 -> undefined
   end.
+
+pattern_of(S, Esc) -> compile_re(gen_re(binary_to_list(S), Esc)).
+
+gen_re(S, <<Ch>>   ) -> convert(S, [], Ch       );
+gen_re(S, no_escape) -> convert(S, [], no_escape);
+gen_re(_,_) -> error.
+
+convert([],               Acc, _Esc) -> lists:reverse(Acc);
+convert([Esc, Ch | Rest], Acc,  Esc) -> convert(Rest, [escape(Ch) | Acc], Esc);
+convert([$_ | Rest],      Acc,  Esc) -> convert(Rest, [$.         | Acc], Esc);
+convert([$% | Rest],      Acc,  Esc) -> convert(Rest, [".*"       | Acc], Esc);
+convert([Ch | Rest],      Acc,  Esc) -> convert(Rest, [escape(Ch) | Acc], Esc).
+
+escape($.)  -> "\\.";
+escape($*)  -> "\\*";
+escape($+)  -> "\\+";
+escape($?)  -> "\\?";
+escape($^)  -> "\\^";
+escape($=)  -> "\\=";
+escape($!)  -> "\\!";
+escape($:)  -> "\\:";
+escape($$)  -> "\\$";
+escape(${)  -> "\\{";
+escape($})  -> "\\}";
+escape($()  -> "\\(";
+escape($))  -> "\\)";
+escape($|)  -> "\\|";
+escape($[)  -> "\\[";
+escape($])  -> "\\]";
+escape($/)  -> "\\/";
+escape($\\) -> "\\\\";
+escape(Ch)  -> Ch.
+
+compile_re(error) -> error;
+compile_re(MatchMany) ->
+    case re:compile(MatchMany)
+    of  {ok, Rx} -> Rx;
+        _        -> error
+    end.
