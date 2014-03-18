@@ -426,12 +426,16 @@ alarms() ->
     [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
 
 listeners() ->
+    Listeners = try
+                    rabbit_networking:active_listeners()
+                catch
+                    exit:{aborted, _} -> []
+                end,
     [{Protocol, Port, rabbit_misc:ntoa(IP)} ||
         #listener{node       = Node,
                   protocol   = Protocol,
                   ip_address = IP,
-                  port       = Port} <- rabbit_networking:active_listeners(),
-        Node =:= node()].
+                  port       = Port} <- Listeners, Node =:= node()].
 
 is_running() -> is_running(node()).
 

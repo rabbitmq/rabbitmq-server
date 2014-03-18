@@ -1236,7 +1236,8 @@ test_amqp_connection_refusal(Header) ->
 
 find_listener() ->
     [#listener{host = H, port = P} | _] =
-        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
+        [L || L = #listener{node = N, protocol = amqp}
+                  <- rabbit_networking:active_listeners(),
               N =:= node()],
     {H, P}.
 
