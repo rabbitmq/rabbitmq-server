@@ -176,6 +176,10 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
 
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
+if "!RABBITMQ_CONFIG_FILE!"=="" (
+    set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
+)
+
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
@@ -192,10 +196,6 @@ if ERRORLEVEL 3 (
     exit /B 1
 ) else (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
-)
-
-if "!RABBITMQ_CONFIG_FILE!"=="" (
-    set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
 )
 
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
