@@ -59,7 +59,7 @@ add_binding_test() ->
   ?assertEqual(ok, add_binding(none, dummy_exchange(), dummy_binding_2())).
 
 dummy_exchange() ->
-  #exchange{name = <<"XName">>, arguments = [{?RJMS_TYPE_INFO_ARG, none, none}]}.
+  #exchange{name = <<"XName">>, arguments = []}.
 
 dummy_binding_2() ->
   #binding{key = <<"BindingKey">>, destination = #resource{name = <<"DName">>}, args = [{?RJMS_COMPILED_SELECTOR_ARG, longstr, <<"<<\"false\">>.">>}]}.
