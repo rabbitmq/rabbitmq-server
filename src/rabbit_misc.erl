@@ -209,7 +209,8 @@
          [string()])
         -> {'ok', {atom(), [{string(), string()}], [string()]}} |
            'no_command').
--spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
+-spec(all_module_attributes/1 ::
+        (atom()) -> [{atom(), atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
         (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
         -> rabbit_types:ok_or_error2(digraph(),
@@ -849,20 +850,20 @@ module_attributes(Module) ->
     end.
 
 all_module_attributes(Name) ->
-    Modules =
+    Targets =
         lists:usort(
           lists:append(
-            [Modules || {App, _, _}   <- application:loaded_applications(),
-                        {ok, Modules} <- [application:get_key(App, modules)]])),
+            [[{App, Module} || Module <- Modules] ||
+                {App, _, _}   <- application:loaded_applications(),
+                {ok, Modules} <- [application:get_key(App, modules)]])),
     lists:foldl(
-      fun (Module, Acc) ->
+      fun ({App, Module}, Acc) ->
               case lists:append([Atts || {N, Atts} <- module_attributes(Module),
                                          N =:= Name]) of
                   []   -> Acc;
-                  Atts -> [{Module, Atts} | Acc]
+                  Atts -> [{App, Module, Atts} | Acc]
               end
-      end, [], Modules).
-
+      end, [], Targets).
 
 build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     G = digraph:new([acyclic]),
