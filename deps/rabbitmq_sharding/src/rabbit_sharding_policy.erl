@@ -1,4 +1,4 @@
--module(rabbit_sharding_parameters).
+-module(rabbit_sharding_policy).
 
 -behaviour(rabbit_policy_validator).
 
