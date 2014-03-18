@@ -59,6 +59,14 @@ if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
     )
 )
 
+if "!RABBITMQ_DIST_PORT!"=="" (
+   if "!RABBITMQ_NODE_PORT!"=="" (
+      set RABBITMQ_DIST_PORT=25672
+   ) else (
+      set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
+   )
+)
+
 if "!ERLANG_SERVICE_MANAGER_PATH!"=="" (
     if not exist "!ERLANG_HOME!\bin\erl.exe" (
         echo.
@@ -172,6 +180,24 @@ if "!RABBITMQ_CONFIG_FILE!"=="" (
     set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
 )
 
+"!ERLANG_HOME!\bin\erl.exe" ^
+        -pa "!RABBITMQ_EBIN_ROOT!" ^
+        -noinput -hidden ^
+        -s rabbit_prelaunch ^
+        -sname rabbitmqprelaunch!RANDOM!!TIME:~9!
+
+if ERRORLEVEL 3 (
+    rem ERRORLEVEL means (or greater) so we need to catch all other failure
+    rem cases here
+    exit /B 1
+) else if ERRORLEVEL 2 (
+    rem dist port mentioned in config, do not attempt to set it
+) else if ERRORLEVEL 1 (
+    exit /B 1
+) else (
+    set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
+)
+
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else (
@@ -208,6 +234,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
+!RABBITMQ_DIST_ARG! ^
 !STARVAR!
 
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!

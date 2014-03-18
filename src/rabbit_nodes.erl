@@ -23,6 +23,7 @@
 -include_lib("kernel/include/inet.hrl").
 
 -define(EPMD_TIMEOUT, 30000).
+-define(TCP_DIAGNOSTIC_TIMEOUT, 5000).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -58,15 +59,13 @@ names(Hostname) ->
     end.
 
 diagnostics(Nodes) ->
-    Hosts = lists:usort([element(2, parts(Node)) || Node <- Nodes]),
     NodeDiags = [{"~nDIAGNOSTICS~n===========~n~n"
-                  "nodes in question: ~p~n~n"
-                  "hosts, their running nodes and ports:", [Nodes]}] ++
-        [diagnostics_host(Host) || Host <- Hosts] ++
-        diagnostics0(),
+                  "attempted to contact: ~p~n", [Nodes]}] ++
+        [diagnostics_node(Node) || Node <- Nodes] ++
+        current_node_details(),
     rabbit_misc:format_many(lists:flatten(NodeDiags)).
 
-diagnostics0() ->
+current_node_details() ->
     [{"~ncurrent node details:~n- node name: ~w", [node()]},
      case init:get_argument(home) of
          {ok, [[Home]]} -> {"- home dir: ~s", [Home]};
@@ -74,15 +73,62 @@ diagnostics0() ->
      end,
      {"- cookie hash: ~s", [cookie_hash()]}].
 
-diagnostics_host(Host) ->
-    case names(Host) of
-        {error, EpmdReason} ->
-            {"- unable to connect to epmd on ~s: ~w (~s)",
-             [Host, EpmdReason, rabbit_misc:format_inet_error(EpmdReason)]};
-        {ok, NamePorts} ->
-            {"- ~s: ~p",
-             [Host, [{list_to_atom(Name), Port} ||
-                        {Name, Port} <- NamePorts]]}
+diagnostics_node(Node) ->
+    {Name, Host} = parts(Node),
+    [{"~s:", [Node]} |
+     case names(Host) of
+         {error, Reason} ->
+             [{"  * unable to connect to epmd (port ~s) on ~s: ~s~n",
+               [epmd_port(), Host, rabbit_misc:format_inet_error(Reason)]}];
+         {ok, NamePorts} ->
+             diagnostics_node0(Name, Host, NamePorts)
+     end].
+
+epmd_port() ->
+    case init:get_argument(epmd_port) of
+        {ok, [[Port | _] | _]} when is_list(Port) -> Port;
+        error                                     -> "4369"
+    end.
+
+diagnostics_node0(Name, Host, NamePorts) ->
+    case [{N, P} || {N, P} <- NamePorts, N =:= Name] of
+        [] ->
+            {SelfName, SelfHost} = parts(node()),
+            Others = [list_to_atom(N) || {N, _} <- NamePorts,
+                                         N =/= case SelfHost of
+                                                   Host -> SelfName;
+                                                   _    -> never_matches
+                                               end],
+            [{"  * ~s seems not to be running at all", [Name]} |
+             case Others of
+                 [] -> [{"  * no other nodes on ~s", [Host]}];
+                 _  -> [{"  * other nodes on ~s: ~p", [Host, Others]}]
+             end];
+        [{Name, Port}] ->
+            [{"  * found ~s (port ~b)", [Name, Port]} |
+             case diagnose_connect(Host, Port) of
+                 ok ->
+                     [{"  * TCP connection succeeded~n"
+                       "  * suggestion: hostname mismatch?~n"
+                       "  * suggestion: is the cookie set correctly?", []}];
+                 {error, Reason} ->
+                     [{"  * can't establish TCP connection, reason: ~s~n"
+                       "  * suggestion: blocked by firewall?",
+                       [rabbit_misc:format_inet_error(Reason)]}]
+             end]
+    end.
+
+diagnose_connect(Host, Port) ->
+    case inet:gethostbyname(Host) of
+        {ok, #hostent{h_addrtype = Family}} ->
+            case gen_tcp:connect(Host, Port, [Family],
+                                 ?TCP_DIAGNOSTIC_TIMEOUT) of
+                {ok, Socket}   -> gen_tcp:close(Socket),
+                                  ok;
+                {error, _} = E -> E
+            end;
+        {error, _} = E ->
+            E
     end.
 
 make({Prefix, Suffix}) -> list_to_atom(lists:append([Prefix, "@", Suffix]));

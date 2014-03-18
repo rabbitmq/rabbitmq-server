@@ -29,6 +29,10 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_IP_ADDRESS=${DEFAULT_NODE_IP_ADDRESS}
 [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${DEFAULT_NODE_PORT}
 
+[ "x" = "x$RABBITMQ_DIST_PORT" ] && RABBITMQ_DIST_PORT=${DIST_PORT}
+[ "x" = "x$RABBITMQ_DIST_PORT" ] && [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((${DEFAULT_NODE_PORT} + 20000))
+[ "x" = "x$RABBITMQ_DIST_PORT" ] && [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((${RABBITMQ_NODE_PORT} + 20000))
+
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
 [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
@@ -81,18 +85,23 @@ case "$(uname -s)" in
            fi
 esac
 
-export RABBITMQ_CONFIG_FILE
+export RABBITMQ_CONFIG_FILE RABBITMQ_DIST_PORT
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if ! ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
-            -boot "${CLEAN_BOOT_FILE}" \
-	    -noinput \
-	    -hidden \
-	    -s rabbit_prelaunch \
-	    -sname rabbitmqprelaunch$$ \
-	    -extra "${RABBITMQ_NODENAME}";
-    then
-        exit 1;
+${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+    -boot "${CLEAN_BOOT_FILE}" \
+    -noinput \
+    -hidden \
+    -s rabbit_prelaunch \
+    -sname rabbitmqprelaunch$$ \
+    -extra "${RABBITMQ_NODENAME}"
+
+PRELAUNCH_RESULT=$?
+if [ ${PRELAUNCH_RESULT} = 1 ] ; then
+    exit 1
+elif [ ${PRELAUNCH_RESULT} = 0 ] ; then
+    # dist port is not mentioned in the config file, we can set it
+    RABBITMQ_DIST_ARG="-kernel inet_dist_listen_min ${RABBITMQ_DIST_PORT} -kernel inet_dist_listen_max ${RABBITMQ_DIST_PORT}"
 fi
 
 RABBITMQ_CONFIG_ARG=
@@ -127,4 +136,5 @@ exec ${ERL_DIR}erl \
     -os_mon start_memsup false \
     -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
     ${RABBITMQ_SERVER_START_ARGS} \
+    ${RABBITMQ_DIST_ARG} \
     "$@"

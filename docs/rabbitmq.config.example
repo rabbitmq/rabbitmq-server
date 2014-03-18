@@ -223,15 +223,7 @@
  %% See http://www.rabbitmq.com/clustering.html for details
  %% ----------------------------------------------------------------------------
  {kernel,
-  [%% Provide an explicit port-range for inter-node communications.
-   %% See http://www.rabbitmq.com/clustering.html#firewall for further details.
-
-   %% Sets the minimum / maximum port numbers
-   %%
-   %% {inet_dist_listen_min, 10000},
-   %% {inet_dist_listen_max, 10005},
-
-   %% Sets the net_kernel tick time.
+  [%% Sets the net_kernel tick time.
    %% Please see http://erlang.org/doc/man/kernel_app.html and
    %% http://www.rabbitmq.com/nettick.html for further details.
    %%
