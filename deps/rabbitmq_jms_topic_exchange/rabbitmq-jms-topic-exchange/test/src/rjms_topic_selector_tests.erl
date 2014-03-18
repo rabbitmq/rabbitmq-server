@@ -21,7 +21,7 @@
 -include("rabbit_jms_topic_exchange.hrl").
 
 %% Useful test constructors
--define(BSELECTARG(BinStr), {?RJMS_SELECTOR_ARG, longstr, BinStr}).
+-define(BSELECTARG(BinStr), {?RJMS_COMPILED_SELECTOR_ARG, longstr, BinStr}).
 -define(BASICMSG(Payload, Hdrs), #'amqp_msg'{props=#'P_basic'{headers=Hdrs}, payload=Payload}).
 
 all_tests() ->
@@ -36,7 +36,7 @@ test_topic_selection() ->
 
     %% Declare a queue and bind it
     Q = declare_queue(Channel),
-    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"boolVal">>)]),
+    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
 
     publish_two_messages(Channel, Exchange, <<"select-key">>),
 
@@ -52,7 +52,7 @@ test_default_topic_selection() ->
 
     %% Declare a queue and bind it
     Q = declare_queue(Channel),
-    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"boolVal">>)]),
+    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
 
     publish_two_messages(Channel, Exchange, <<"select-key">>),
 

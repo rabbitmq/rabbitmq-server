@@ -35,12 +35,7 @@
 %%      where a BindingSelectorFun has the signature:
 %%          bsf : Headers -> boolean
 %%  x_selection_policy
-%%      notused, retained for backwards compatibility of dbs.
-
-%% Name of arg on binding used to specify selector -- string type
-%%      private static final String RJMS_SELECTOR_ARG = "rjms_selector";
-%% in JMS Client.
--define(RJMS_SELECTOR_ARG, <<"rjms_selector">>).
+%%      not used, retained for backwards compatibility of db records.
 
 %% Name of arg on binding used to specify erlang term -- string type
 %%      private static final String RJMS_COMPILED_SELECTOR_ARG = "rjms_erlang_selector";

@@ -105,7 +105,7 @@ route( #exchange{name = XName}
      , #delivery{message = #basic_message{content = MessageContent, routing_keys = RKs}}
      ) ->
   BindingFuns = get_binding_funs_x(XName),
-  match_bindings_by_policy(XName, RKs, MessageContent, BindingFuns).
+  match_bindings(XName, RKs, MessageContent, BindingFuns).
 
 
 % Before exchange declaration
@@ -132,12 +132,13 @@ add_binding( Tx
            , #exchange{name = XName, arguments = XArgs}
            , #binding{key = BindingKey, destination = Dest, args = Args}
            ) ->
-  BindGen = generate_binding_fun(get_sql_from_args(Args), get_type_info_from_arguments(XArgs)),
+  Selector = get_selector_from_args(Args),
+  BindGen = generate_binding_fun(Selector),
   case {Tx, BindGen} of
     {transaction, {ok, BindFun}} ->
       add_binding_fun(XName, {{BindingKey, Dest}, BindFun});
     {none, error} ->
-      parsing_error(XName, get_sql_from_args(Args), Dest);
+      parsing_error(XName, Selector, Dest);
     _ ->
       ok
   end,
@@ -163,8 +164,8 @@ policy_changed(_X1, _X2) -> ok.
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
 
-% Match bindings for the current message under the appropriate policy
-match_bindings_by_policy( XName, _RoutingKeys, MessageContent, BindingFuns) ->
+% Match bindings for the current message
+match_bindings( XName, _RoutingKeys, MessageContent, BindingFuns) ->
   MessageHeaders = get_headers(MessageContent),
   rabbit_router:match_bindings( XName
                               , fun(#binding{key = Key, destination = Dest}) ->
@@ -179,34 +180,6 @@ binding_fun_match(DictKey, Headers, FunsDict) ->
     error                              -> false          % do not match if no function found
   end.
 
-get_type_info_from_arguments(Args) ->
-  case rabbit_misc:table_lookup(Args, ?RJMS_TYPE_INFO_ARG) of
-    {table, TypeInfoTable} -> TypeInfoTable;
-    _                      -> [] %% not supplied or wrong type => ignored
-  end.
-%% The rjms_type_info value has a slightly klunky format,
-%% due to the neccesity of transmitting this over the AMQP protocol.
-%%
-%% In general it is a table:
-%%    type_info()   :: [ident_type()]
-%% where
-%%    ident_type()  ::   {ident(), 'longstr', scalar_type()}
-%%                     | {ident(), 'array',   enum_type()  }
-%%    ident()       :: binary()
-%%    scalar_type() :: <<"string">> | <<"boolean">> | <<"number">>
-%%    enum_type()   :: [{longstr, enum_value()}]
-%%    enum_value()  :: binary()
-%%
-%% For example, the standard JMS type-info argument could be supplied as:
-%%   [ {<<"JMSType">>,          longstr, <<"string">>}
-%%   , {<<"JMSCorrelationID">>, longstr, <<"string">>}
-%%   , {<<"JMSMessageID">>,     longstr, <<"string">>}
-%%   , {<<"JMSDeliveryMode">>,  array,
-%%        [{longstr, <<"PERSISTENT">>}, {longstr, <<"NON_PERSISTENT">>}]}
-%%   , {<<"JMSPriority">>,      longstr, <<"number">>}
-%%   , {<<"JMSTimestamp">>,     longstr, <<"number">>}
-%%   ]
-
 % get Headers from message content
 get_headers(Content) ->
   case (Content#content.properties)#'P_basic'.headers of
@@ -214,13 +187,8 @@ get_headers(Content) ->
     H         -> rabbit_misc:sort_field_table(H)
   end.
 
-% generate the function that checks the message against the SQL expression
-generate_binding_fun({sql, SQL}, TypeInfo) ->
-  case compile_sql(SQL, TypeInfo) of
-    error          -> error;
-    CompiledSQLExp -> check_fun(CompiledSQLExp)
-  end;
-generate_binding_fun({erlang, ERL}, _) ->
+% generate the function that checks the message against the selector
+generate_binding_fun({erlang, ERL}) ->
   case decode_term(ERL) of
     {error, _}    -> error;
     {ok, ErlTerm} -> check_fun(ErlTerm)
@@ -230,26 +198,15 @@ generate_binding_fun({erlang, ERL}, _) ->
 check_fun(CompiledExp) ->
   { ok,
     fun(Headers) ->
-      sql_match(CompiledExp, Headers)
+      selector_match(CompiledExp, Headers)
     end
   }.
 
-% get sql string or erlang string from arguments
-get_sql_from_args(Args) ->
-  case rabbit_misc:table_lookup(Args, ?RJMS_SELECTOR_ARG) of
-    {longstr, BinSQL} -> {sql, binary_to_list(BinSQL)};
-    _                 ->
-      case rabbit_misc:table_lookup(Args, ?RJMS_COMPILED_SELECTOR_ARG) of
-        {longstr, BinERL} -> {erlang, binary_to_list(BinERL)};
-        _ -> not_found  %% nothing found of correct type
-      end
-  end.
-
-% scan and parse SQL expression
-compile_sql(SQL, TypeInfo) ->
-  case sjx_dialect:analyze(TypeInfo, SQL) of
-    error    -> error;
-    Compiled -> Compiled
+% get selector (as an erlang term) from arguments
+get_selector_from_args(Args) ->
+  case rabbit_misc:table_lookup(Args, ?RJMS_COMPILED_SELECTOR_ARG) of
+    {longstr, BinERL} -> {erlang, binary_to_list(BinERL)};
+    _ -> not_found  %% nothing found of correct type
   end.
 
 % get an erlang term from a string
@@ -262,14 +219,14 @@ decode_term(Str) ->
     Err -> {error, {invalid_erlang_term, Err}}
   end.
 
-% Evaluate the SQL parsed tree and check against the Headers
-sql_match(SQL, Headers) ->
-  case sjx_evaluator:evaluate(SQL, Headers) of
+% Evaluate the selector and check against the Headers
+selector_match(Selector, Headers) ->
+  case sjx_evaluator:evaluate(Selector, Headers) of
     true -> true;
     _    -> false
   end.
 
-% get policy and binding funs from state (using dirty_reads)
+% get binding funs from state (using dirty_reads)
 get_binding_funs_x(XName) ->
   mnesia:async_dirty(
     fun() ->
