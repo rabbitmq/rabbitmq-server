@@ -11,17 +11,17 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1, purge_acks/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
-         dropwhile/2, fetchwhile/4,
-         fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3, len/1,
-         is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
-         needs_timeout/1, timeout/1, handle_pre_hibernate/1, msg_rates/1,
+         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
+         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
+         handle_pre_hibernate/1, resume/1, msg_rates/1,
          status/1, invoke/3, is_duplicate/2, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
@@ -156,21 +156,19 @@
 %% (betas+gammas+delta)/(target_ram_count+betas+gammas+delta). I.e. as
 %% the target_ram_count shrinks to 0, so must betas and gammas.
 %%
-%% The conversion of betas to gammas is done in batches of exactly
+%% The conversion of betas to gammas is done in batches of at least
 %% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
 %% frequent operations on the queues of q2 and q3 will not be
 %% effectively amortised (switching the direction of queue access
-%% defeats amortisation), nor should it be too big, otherwise
-%% converting a batch stalls the queue for too long. Therefore, it
-%% must be just right.
+%% defeats amortisation). Note that there is a natural upper bound due
+%% to credit_flow limits on the alpha to beta conversion.
 %%
-%% The conversion from alphas to betas is also chunked, but only to
-%% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
-%% any one time. This further smooths the effects of changes to the
-%% target_ram_count and ensures the queue remains responsive
-%% even when there is a large amount of IO work to do. The
-%% timeout callback is utilised to ensure that conversions are
-%% done as promptly as possible whilst ensuring the queue remains
+%% The conversion from alphas to betas is chunked due to the
+%% credit_flow limits of the msg_store. This further smooths the
+%% effects of changes to the target_ram_count and ensures the queue
+%% remains responsive even when there is a large amount of IO work to
+%% do. The 'resume' callback is utilised to ensure that conversions
+%% are done as promptly as possible whilst ensuring the queue remains
 %% responsive.
 %%
 %% In the queue we keep track of both messages that are pending
@@ -196,13 +194,7 @@
 %% The order in which alphas are pushed to betas and pending acks
 %% are pushed to disk is determined dynamically. We always prefer to
 %% push messages for the source (alphas or acks) that is growing the
-%% fastest (with growth measured as avg. ingress - avg. egress). In
-%% each round of memory reduction a chunk of messages at most
-%% ?IO_BATCH_SIZE in size is allocated to be pushed to disk. The
-%% fastest growing source will be reduced by as much of this chunk as
-%% possible. If there is any remaining allocation in the chunk after
-%% the first source has been reduced to zero, the second source will
-%% be reduced by as much of the remaining chunk as possible.
+%% fastest (with growth measured as avg. ingress - avg. egress).
 %%
 %% Notes on Clean Shutdown
 %% (This documents behaviour in variable_queue, queue_index and
@@ -299,13 +291,10 @@
           end_seq_id    %% end_seq_id is exclusive
         }).
 
-%% When we discover, on publish, that we should write some indices to
-%% disk for some betas, the IO_BATCH_SIZE sets the number of betas
-%% that we must be due to write indices for before we do any work at
-%% all. This is both a minimum and a maximum - we don't write fewer
-%% than IO_BATCH_SIZE indices out in one go, and we don't write more -
-%% we can always come back on the next publish to do more.
--define(IO_BATCH_SIZE, 64).
+%% When we discover that we should write some indices to disk for some
+%% betas, the IO_BATCH_SIZE sets the number of betas that we must be
+%% due to write indices for before we do any work at all.
+-define(IO_BATCH_SIZE, 2048). %% next power-of-2 after ?CREDIT_DISC_BOUND
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(QUEUE, lqueue).
@@ -813,29 +802,20 @@ ram_duration(State) ->
 
     {Duration, State1}.
 
-needs_timeout(State = #vqstate { index_state      = IndexState,
-                                 target_ram_count = TargetRamCount }) ->
+needs_timeout(#vqstate { index_state = IndexState }) ->
     case rabbit_queue_index:needs_sync(IndexState) of
-        confirms                              -> timed;
-        other                                 -> idle;
-        false when TargetRamCount == infinity -> false;
-        false -> case reduce_memory_use(
-                        fun (_Quota, State1) -> {0, State1} end,
-                        fun (_Quota, State1) -> State1 end,
-                        fun (_Quota, State1) -> {0, State1} end,
-                        State) of
-                     {true,  _State} -> idle;
-                     {false, _State} -> false
-                 end
+        confirms -> timed;
+        other    -> idle;
+        false    -> false
     end.
 
 timeout(State = #vqstate { index_state = IndexState }) ->
-    IndexState1 = rabbit_queue_index:sync(IndexState),
-    State1 = State #vqstate { index_state = IndexState1 },
-    a(reduce_memory_use(State1)).
+    State #vqstate { index_state = rabbit_queue_index:sync(IndexState) }.
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
+
+resume(State) -> a(reduce_memory_use(State)).
 
 msg_rates(#vqstate { rates = #rates { in  = AvgIngressRate,
                                       out = AvgEgressRate } }) ->
@@ -1553,27 +1533,9 @@ ifold(Fun, Acc, Its, State) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
-%% Determine whether a reduction in memory use is necessary, and call
-%% functions to perform the required phase changes. The function can
-%% also be used to just do the former, by passing in dummy phase
-%% change functions.
-%%
-%% The function does not report on any needed beta->delta conversions,
-%% though the conversion function for that is called as necessary. The
-%% reason is twofold. Firstly, this is safe because the conversion is
-%% only ever necessary just after a transition to a
-%% target_ram_count of zero or after an incremental alpha->beta
-%% conversion. In the former case the conversion is performed straight
-%% away (i.e. any betas present at the time are converted to deltas),
-%% and in the latter case the need for a conversion is flagged up
-%% anyway. Secondly, this is necessary because we do not have a
-%% precise and cheap predicate for determining whether a beta->delta
-%% conversion is necessary - due to the complexities of retaining up
-%% one segment's worth of messages in q3 - and thus would risk
-%% perpetually reporting the need for a conversion when no such
-%% conversion is needed. That in turn could cause an infinite loop.
-reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
-                  State = #vqstate {
+reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
+    State;
+reduce_memory_use(State = #vqstate {
                     ram_pending_ack  = RPA,
                     ram_msg_count    = RamMsgCount,
                     target_ram_count = TargetRamCount,
@@ -1582,28 +1544,38 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
                                                 ack_in  = AvgAckIngress,
                                                 ack_out = AvgAckEgress } }) ->
 
-    {Reduce, State1 = #vqstate { q2 = Q2, q3 = Q3 }} =
+    State1 = #vqstate { q2 = Q2, q3 = Q3 } =
         case chunk_size(RamMsgCount + gb_trees:size(RPA), TargetRamCount) of
-            0  -> {false, State};
+            0  -> State;
             %% Reduce memory of pending acks and alphas. The order is
             %% determined based on which is growing faster. Whichever
             %% comes second may very well get a quota of 0 if the
             %% first manages to push out the max number of messages.
             S1 -> Funs = case ((AvgAckIngress - AvgAckEgress) >
                                    (AvgIngress - AvgEgress)) of
-                             true  -> [AckFun, AlphaBetaFun];
-                             false -> [AlphaBetaFun, AckFun]
+                             true  -> [fun limit_ram_acks/2,
+                                       fun push_alphas_to_betas/2];
+                             false -> [fun push_alphas_to_betas/2,
+                                       fun limit_ram_acks/2]
                          end,
                   {_, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
                                                     ReduceFun(QuotaN, StateN)
                                             end, {S1, State}, Funs),
-                  {true, State2}
+                  State2
         end,
 
     case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
                     permitted_beta_count(State1)) of
-        ?IO_BATCH_SIZE = S2 -> {true, BetaDeltaFun(S2, State1)};
-        _                   -> {Reduce, State1}
+        S2 when S2 >= ?IO_BATCH_SIZE ->
+            %% There is an implicit, but subtle, upper bound here. We
+            %% may shuffle a lot of messages from Q2/3 into delta, but
+            %% the number of these that require any disk operation,
+            %% namely index writing, i.e. messages that are genuine
+            %% betas and not gammas, is bounded by the credit_flow
+            %% limiting of the alpha->beta conversion above.
+            push_betas_to_deltas(S2, State1);
+        _  ->
+            State1
     end.
 
 limit_ram_acks(0, State) ->
@@ -1623,15 +1595,6 @@ limit_ram_acks(Quota, State = #vqstate { ram_pending_ack  = RPA,
                                              disk_pending_ack = DPA1 })
     end.
 
-reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
-    State;
-reduce_memory_use(State) ->
-    {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
-                                    fun push_betas_to_deltas/2,
-                                    fun limit_ram_acks/2,
-                                    State),
-    State1.
-
 permitted_beta_count(#vqstate { len = 0 }) ->
     infinity;
 permitted_beta_count(#vqstate { target_ram_count = 0, q3 = Q3 }) ->
@@ -1649,7 +1612,7 @@ chunk_size(Current, Permitted)
   when Permitted =:= infinity orelse Permitted >= Current ->
     0;
 chunk_size(Current, Permitted) ->
-    lists:min([Current - Permitted, ?IO_BATCH_SIZE]).
+    Current - Permitted.
 
 fetch_from_q3(State = #vqstate { q1    = Q1,
                                  q2    = Q2,
@@ -1755,17 +1718,22 @@ push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
        TargetRamCount >= RamMsgCount ->
     {Quota, State};
 push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
-    case Generator(Q) of
-        {empty, _Q} ->
-            {Quota, State};
-        {{value, MsgStatus}, Qa} ->
-            {MsgStatus1 = #msg_status { msg_on_disk = true },
-             State1 = #vqstate { ram_msg_count = RamMsgCount }} =
-                maybe_write_to_disk(true, false, MsgStatus, State),
-            MsgStatus2 = m(trim_msg_status(MsgStatus1)),
-            State2 = State1 #vqstate { ram_msg_count = RamMsgCount - 1 },
-            push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
-                                 Consumer(MsgStatus2, Qa, State2))
+    case credit_flow:blocked() of
+        true  -> {Quota, State};
+        false -> case Generator(Q) of
+                     {empty, _Q} ->
+                         {Quota, State};
+                     {{value, MsgStatus}, Qa} ->
+                         {MsgStatus1 = #msg_status { msg_on_disk = true },
+                          State1 = #vqstate { ram_msg_count = RamMsgCount }} =
+                             maybe_write_to_disk(true, false, MsgStatus, State),
+                         MsgStatus2 = m(trim_msg_status(MsgStatus1)),
+                         State2 = Consumer(MsgStatus2, Qa,
+                                           State1 #vqstate {
+                                             ram_msg_count = RamMsgCount - 1 }),
+                         push_alphas_to_betas(Generator, Consumer, Quota - 1,
+                                              Qa, State2)
+                 end
     end.
 
 push_betas_to_deltas(Quota, State = #vqstate { q2          = Q2,

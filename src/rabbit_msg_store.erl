@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_msg_store).
@@ -781,6 +781,7 @@ handle_call({new_client_state, CRef, CPid, MsgOnDiskFun, CloseFDsFun}, _From,
                                clients            = Clients,
                                gc_pid             = GCPid }) ->
     Clients1 = dict:store(CRef, {CPid, MsgOnDiskFun, CloseFDsFun}, Clients),
+    erlang:monitor(process, CPid),
     reply({IndexState, IndexModule, Dir, GCPid, FileHandlesEts, FileSummaryEts,
            CurFileCacheEts, FlyingEts},
           State #msstate { clients = Clients1 });
@@ -804,8 +805,6 @@ handle_cast({client_dying, CRef},
 
 handle_cast({client_delete, CRef},
             State = #msstate { clients = Clients }) ->
-    {CPid, _, _} = dict:fetch(CRef, Clients),
-    credit_flow:peer_down(CPid),
     State1 = State #msstate { clients = dict:erase(CRef, Clients) },
     noreply(remove_message(CRef, CRef, clear_client(CRef, State1)));
 
@@ -887,6 +886,10 @@ handle_info(sync, State) ->
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
+
+handle_info({'DOWN', _MRef, process, Pid, _Reason}, State) ->
+    credit_flow:peer_down(Pid),
+    noreply(State);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.

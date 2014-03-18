@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue_process).
@@ -1241,9 +1241,10 @@ handle_info(timeout, State) ->
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
-handle_info({bump_credit, Msg}, State) ->
+handle_info({bump_credit, Msg}, State = #q{backing_queue       = BQ,
+                                           backing_queue_state = BQS}) ->
     credit_flow:handle_bump_msg(Msg),
-    noreply(State);
+    noreply(State#q{backing_queue_state = BQ:resume(BQS)});
 
 handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.

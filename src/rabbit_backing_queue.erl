@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_backing_queue).
@@ -209,6 +209,9 @@
 %% Called immediately before the queue hibernates.
 -callback handle_pre_hibernate(state()) -> state().
 
+%% Called when more credit has become available for credit_flow.
+-callback resume(state()) -> state().
+
 %% Used to help prioritisation in rabbit_amqqueue_process. The rate of
 %% inbound messages and outbound messages at the moment.
 -callback msg_rates(state()) -> {float(), float()}.
@@ -240,7 +243,7 @@ behaviour_info(callbacks) ->
      {fetch, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
-     {handle_pre_hibernate, 1}, {msg_rates, 1}, {status, 1},
+     {handle_pre_hibernate, 1}, {resume, 1}, {msg_rates, 1}, {status, 1},
      {invoke, 3}, {is_duplicate, 2}] ;
 behaviour_info(_Other) ->
     undefined.
