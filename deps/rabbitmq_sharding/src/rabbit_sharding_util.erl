@@ -9,12 +9,7 @@
 
 -import(rabbit_misc, [pget/3]).
 
-%% only shard CH or random exchanges.
-shard(X = #exchange{type = 'x-consistent-hash'}) -> shard0(X);
-shard(X = #exchange{type = 'x-random'})          -> shard0(X);
-shard(_X)                                        -> false.
-
-shard0(X) ->
+shard(X) ->
     case get_policy(<<"sharded">>, X) of
         true -> true;
         _    -> false

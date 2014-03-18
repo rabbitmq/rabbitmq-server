@@ -220,7 +220,7 @@ delete_queues(Ch, Name, N) ->
 exchange_op(Ch, Op) ->
     amqp_channel:call(Ch, Op).
 
-x_declare(Name) -> x_declare(Name, <<"x-consistent-hash">>).
+x_declare(Name) -> x_declare(Name, <<"x-modulus-hash">>).
 
 x_declare(Name, Type) ->
     #'exchange.declare'{exchange = Name,
