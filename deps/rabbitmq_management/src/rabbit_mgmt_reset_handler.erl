@@ -86,9 +86,13 @@ filter_extensions([]) ->
     false;
 filter_extensions(Changed) ->
     Exts = [Mod || Mod <- lists:flatten(
-                            lists:map(fun app_utils:app_modules/1, Changed)),
+                            lists:map(fun app_modules/1, Changed)),
                    {Attr, Bs} <- Mod:module_info(attributes),
                    lists:member(rabbit_mgmt_extension, Bs) andalso
                        (Attr =:= behavior orelse Attr =:= behaviour)],
     Exts /= [].
+
+app_modules(App) ->
+    {ok, Modules} = application:get_key(App, modules),
+    Modules.
 
