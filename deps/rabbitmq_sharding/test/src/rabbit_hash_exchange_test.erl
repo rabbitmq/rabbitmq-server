@@ -19,13 +19,21 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+routed_to_zero_queue_test() ->
+    test0(fun () ->
+                  #'basic.publish'{exchange = <<"e">>, routing_key = rnd()}
+          end,
+          fun() ->
+                  #amqp_msg{props = #'P_basic'{}, payload = <<>>}
+          end, [], 5, 0).
+
 routed_to_one_queue_test() ->
     test0(fun () ->
                   #'basic.publish'{exchange = <<"e">>, routing_key = rnd()}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
-          end, [<<"q1">>, <<"q2">>, <<"q3">>], 1).
+          end, [<<"q1">>, <<"q2">>, <<"q3">>], 1, 1).
 
 routed_to_many_queue_test() ->
     test0(fun () ->
@@ -33,9 +41,9 @@ routed_to_many_queue_test() ->
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
-          end, [<<"q1">>, <<"q2">>, <<"q3">>], 5).
+          end, [<<"q1">>, <<"q2">>, <<"q3">>], 5, 5).
 
-test0(MakeMethod, MakeMsg, Queues, Count) ->
+test0(MakeMethod, MakeMsg, Queues, MsgCount, Count) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     #'exchange.declare_ok'{} =
@@ -56,7 +64,7 @@ test0(MakeMethod, MakeMsg, Queues, Count) ->
 
     [amqp_channel:call(Chan,
                        MakeMethod(),
-                       MakeMsg()) || _ <- lists:duplicate(Count, const)],
+                       MakeMsg()) || _ <- lists:duplicate(MsgCount, const)],
 
     Counts =
         [begin
