@@ -12,6 +12,8 @@
                    [{description, "exchange type x-recent-history"},
                     {mfa, {rabbit_registry, register,
                            [exchange, <<"x-recent-history">>, ?MODULE]}},
+                    {cleanup, {rabbit_registry, unregister,
+                               [exchange, <<"x-recent-history">>]}}
                     {requires, rabbit_registry},
                     {enables, kernel_ready}]}).
 
