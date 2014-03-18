@@ -37,9 +37,21 @@ nothing" fashion, i.e: if a routing key matches a set of queues bound
 to the exchange, then RabbitMQ will route the message to all the
 queues in that set. Therefore for this plugin to work, we need to
 route messages to an exchange that would partition messages, so they
-are routed to _at most_ one queue. To achieve that, we recommend the
-use of the _Consistent Hash Exchange_ or the _Random Exchange_.  The
-first one has the advantage of shipping directly with RabbitMQ.
+are routed to _at most_ one queue.
+
+The plugin provides a new exchange type `"x-modulus-hash"` that will use
+the traditional hashing technique applying to partition messages
+across queues.
+
+The `"x-modulus-hash"` exchange will hash the routing key used to
+publish the message and then it will apply a `Hash mod N` to pick the
+queue where to route the message, where N is the number of queues
+bound to the exchange. This exchange will completely ignore the
+binding key used to bind the queue to the exchange.
+
+You could also use other exchanges that have similar behaviour like
+the _Consistent Hash Exchange_ or the _Random Exchange_.  The first
+one has the advantage of shipping directly with RabbitMQ.
 
 ## Consuming from a sharded queue ##
 
