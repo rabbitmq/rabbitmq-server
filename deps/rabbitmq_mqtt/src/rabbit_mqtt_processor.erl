@@ -54,14 +54,18 @@ process_request(?CONNECT,
                                           password   = Password,
                                           proto_ver  = ProtoVersion,
                                           clean_sess = CleanSess,
-                                          client_id  = ClientId,
+                                          client_id  = ClientId0,
                                           keep_alive = Keepalive} = Var}, PState) ->
+    ClientId = case ClientId0 of
+                   []    -> rabbit_mqtt_util:gen_client_id();
+                   [_|_] -> ClientId0
+               end,
     {ReturnCode, PState1} =
-        case {ProtoVersion =:= ?MQTT_PROTO_MAJOR,
-              rabbit_mqtt_util:valid_client_id(ClientId)} of
+        case {lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)),
+              ClientId0 =:= [] andalso CleanSess =:= false} of
             {false, _} ->
                 {?CONNACK_PROTO_VER, PState};
-            {_, false} ->
+            {_, true} ->
                 {?CONNACK_INVALID_ID, PState};
             _ ->
                 case creds(Username, Password) of
@@ -69,7 +73,7 @@ process_request(?CONNECT,
                         rabbit_log:error("MQTT login failed - no credentials~n"),
                         {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
-                        case process_login(UserBin, PassBin, PState) of
+                        case process_login(UserBin, PassBin, ProtoVersion, PState) of
                             {?CONNACK_ACCEPT, Conn} ->
                                 link(Conn),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -320,14 +324,15 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
                dup     = false,
                payload = Msg }.
 
-process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
-                                             socket    = Sock }) ->
+process_login(UserBin, PassBin, ProtoVersion,
+              #proc_state{ channels  = {undefined, undefined},
+                           socket    = Sock }) ->
     {VHost, UsernameBin} = get_vhost_username(UserBin),
     case amqp_connection:start(#amqp_params_direct{
                                   username     = UsernameBin,
                                   password     = PassBin,
                                   virtual_host = VHost,
-                                  adapter_info = adapter_info(Sock)}) of
+                                  adapter_info = adapter_info(Sock, ProtoVersion)}) of
         {ok, Connection} ->
             case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
                 ok          -> {?CONNACK_ACCEPT, Connection};
@@ -477,9 +482,9 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
     PState #proc_state{ unacked_pubs   = UnackedPubs1,
                         awaiting_seqno = SeqNo1 }.
 
-adapter_info(Sock) ->
+adapter_info(Sock, ProtoVer) ->
     amqp_connection:socket_adapter_info(
-             Sock, {'MQTT', {?MQTT_PROTO_MAJOR, ?MQTT_PROTO_MINOR}}).
+             Sock, {'MQTT', integer_to_list(ProtoVer)}).
 
 send_client(Frame, #proc_state{ socket = Sock }) ->
     %rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),
