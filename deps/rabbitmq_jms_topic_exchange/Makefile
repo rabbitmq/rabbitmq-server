@@ -15,7 +15,6 @@ HG_BASE:=http://hg.rabbitmq.com
 RABBIT_DEPS:=rabbitmq-server rabbitmq-erlang-client rabbitmq-codegen
 UMBRELLA:=rabbitmq-public-umbrella
 RMQ_VERSION_TAG:=rabbitmq_v$(subst .,_,$(RMQ_VERSION))
-RJMS_APP_SRC:=$(EXCHANGE)/src/$(ARTEFACT).app.src
 
 # command targets ##################################
 .PHONY: all clean package dist init cleandist test run-in-broker
@@ -53,7 +52,9 @@ $(UMBRELLA).co:
 $(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/* $(EXCHANGE)/test/src/* $(EXCHANGE)/include/*
 	rm -rf $(UMBRELLA)/$(EXCHANGE)
 	cp -R $(EXCHANGE) $(UMBRELLA)/.
-	sed -e 's|@RJMS_VERSION@|$(RJMS_VERSION)|' <$(RJMS_APP_SRC) >$(UMBRELLA)/$(RJMS_APP_SRC)
+	for srcfile in $$(grep @RJMS_VERSION@ $(EXCHANGE) -r -l); do \
+		sed -e 's|@RJMS_VERSION@|$(RJMS_VERSION)|' <$${srcfile} >$(UMBRELLA)/$${srcfile}; \
+	done
 
 $(addprefix $(UMBRELLA)/,$(RABBIT_DEPS)): $(UMBRELLA).co
 	rm -rf $@

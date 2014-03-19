@@ -23,6 +23,7 @@
 %% Useful test constructors
 -define(BSELECTARG(BinStr), {?RJMS_COMPILED_SELECTOR_ARG, longstr, BinStr}).
 -define(BASICMSG(Payload, Hdrs), #'amqp_msg'{props=#'P_basic'{headers=Hdrs}, payload=Payload}).
+-define(VERSION_ARG, {?RJMS_VERSION_ARG, longstr, <<"@RJMS_VERSION@">>}).
 
 all_tests() ->
     test_default_topic_selection(),
@@ -32,11 +33,11 @@ all_tests() ->
 test_topic_selection() ->
     {Connection, Channel} = open_connection_and_channel(),
 
-    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", []),
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", [?VERSION_ARG]),
 
     %% Declare a queue and bind it
     Q = declare_queue(Channel),
-    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
+    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>), ?VERSION_ARG]),
 
     publish_two_messages(Channel, Exchange, <<"select-key">>),
 
@@ -48,11 +49,11 @@ test_topic_selection() ->
 test_default_topic_selection() ->
     {Connection, Channel} = open_connection_and_channel(),
 
-    Exchange = declare_rjms_exchange(Channel, "rjms_test_default_selector_exchange", []),
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_default_selector_exchange", [?VERSION_ARG]),
 
     %% Declare a queue and bind it
     Q = declare_queue(Channel),
-    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
+    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>), ?VERSION_ARG]),
 
     publish_two_messages(Channel, Exchange, <<"select-key">>),
 

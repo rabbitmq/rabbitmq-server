@@ -112,7 +112,8 @@ route( #exchange{name = XName}
 validate(_X) -> ok.
 
 % After exchange declaration and recovery
-create(transaction, #exchange{name = XName}) ->
+create(transaction, #exchange{name = XName, arguments = XArgs}) ->
+  check_version_arg(XName, XArgs),
   add_initial_record(XName);
 create(_Tx, _X) ->
   ok.
@@ -132,12 +133,13 @@ add_binding( Tx
            , #exchange{name = XName}
            , #binding{key = BindingKey, destination = Dest, args = Args}
            ) ->
-  Selector = get_selector_from_args(Args),
+  check_version_arg(XName, Args),
+  Selector = get_string_arg(Args, ?RJMS_COMPILED_SELECTOR_ARG),
   BindGen = generate_binding_fun(Selector),
   case {Tx, BindGen} of
     {transaction, {ok, BindFun}} ->
       add_binding_fun(XName, {{BindingKey, Dest}, BindFun});
-    {none, error} ->
+    {none, {error, _}} ->
       parsing_error(XName, Selector, Dest);
     _ ->
       ok
@@ -164,6 +166,22 @@ policy_changed(_X1, _X2) -> ok.
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
 
+% Check version argument, if supplied
+check_version_arg(XName, Args) ->
+  case get_string_arg(Args, ?RJMS_VERSION_ARG, "pre-1.2.0") of
+    "@RJMS_VERSION@" -> ok;
+    Version -> client_version_error(XName, Version)
+  end.
+
+% Get a string argument from the args or arguments parameters
+get_string_arg(Args, ArgName) -> get_string_arg(Args, ArgName, error).
+
+get_string_arg(Args, ArgName, Default) ->
+  case rabbit_misc:table_lookup(Args, ArgName) of
+    {longstr, BinVal} -> binary_to_list(BinVal);
+    _ -> Default
+  end.
+
 % Match bindings for the current message
 match_bindings( XName, _RoutingKeys, MessageContent, BindingFuns) ->
   MessageHeaders = get_headers(MessageContent),
@@ -188,7 +206,7 @@ get_headers(Content) ->
   end.
 
 % generate the function that checks the message against the selector
-generate_binding_fun({erlang, ERL}) ->
+generate_binding_fun(ERL) ->
   case decode_term(ERL) of
     {error, _}    -> error;
     {ok, ErlTerm} -> check_fun(ErlTerm)
@@ -201,13 +219,6 @@ check_fun(CompiledExp) ->
       selector_match(CompiledExp, Headers)
     end
   }.
-
-% get selector (as an erlang term) from arguments
-get_selector_from_args(Args) ->
-  case rabbit_misc:table_lookup(Args, ?RJMS_COMPILED_SELECTOR_ARG) of
-    {longstr, BinERL} -> {erlang, binary_to_list(BinERL)};
-    _ -> not_found  %% nothing found of correct type
-  end.
 
 % get an erlang term from a string
 decode_term(Str) ->
@@ -288,6 +299,12 @@ exchange_state_corrupt_error(#resource{name = XName}) ->
   rabbit_misc:protocol_error( internal_error
                             , "exchange named '~s' has no saved state or incorrect saved state"
                             , [XName] ).
+
+% version error
+client_version_error(#resource{name = XName}, Version) ->
+  rabbit_misc:protocol_error( internal_error
+                            , "client version '~s' incompatible with plugin for operation on exchange named '~s'"
+                            , [Version, XName] ).
 
 % parsing error
 parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
