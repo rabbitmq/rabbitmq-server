@@ -1254,7 +1254,7 @@ handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                   remove ->
                       ok = send(#'basic.cancel'{consumer_tag = CTag,
                                                 nowait       = true},
-                                State),
+                                StateN),
                       rabbit_event:notify(
                         consumer_deleted, [{consumer_tag, CTag},
                                            {channel,      self()},
