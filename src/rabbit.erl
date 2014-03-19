@@ -22,7 +22,6 @@
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
--export([run_boot_steps/0, load_steps/1, run_step/3]).
 -export([start/2, stop/1]).
 -export([start_apps/1, stop_apps/1]).
 -export([log_location/1]). %% for testing
@@ -412,7 +411,7 @@ stop_apps(Apps) ->
 
 run_cleanup_steps(Apps) ->
     [run_step(Name, Attributes, cleanup) ||
-        {App, Name, Attributes} <- load_steps(Apps),
+        {App, Name, Attributes} <- find_steps(Apps),
         lists:member(App, Apps)],
     ok.
 
