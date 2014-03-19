@@ -331,17 +331,17 @@ rpc_call(Node, Mod, Action, Args) ->
     end.
 
 rpc_progress(Key, Node, Action) ->
-    case rpc:nb_yield(Key, 100) of
+    case rpc:nb_yield(Key, 1000) of
         timeout -> io:format("."),
                    rpc_progress(Key, Node, Action);
         {value, {badrpc, nodedown}} ->
-            io:format(". error: Unable to contact ~p.~n ", [Node]),
+            io:format(". error.~nUnable to contact ~p.~n ", [Node]),
             io:format("Please start the broker to apply "
                       "your changes.~n");
         {value, ok} ->
-            io:format(". done: Plugin(s) ~pd.~n", [Action]);
+            io:format(". done.~n", []);
         {value, Error} ->
-            io:format(". error: Unable to ~p plugin(s).~n"
+            io:format(". error.~nUnable to ~p plugin(s).~n"
                       "Please restart the broker to apply your changes.~n"
                       "Error: ~p~n",
                       [Action, Error])
