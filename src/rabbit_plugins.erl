@@ -105,8 +105,8 @@ read_enabled(PluginsFile) ->
 %% the resulting list, otherwise they're skipped.
 dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
-                fun (App, _Deps) -> [{App, App}] end,
-                fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
+                fun ({App, _Deps}) -> [{App, App}] end,
+                fun ({App,  Deps}) -> [{App, Dep} || Dep <- Deps] end,
                 lists:ukeysort(
                   1, [{Name, Deps} ||
                          #plugin{name         = Name,

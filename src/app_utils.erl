@@ -75,8 +75,8 @@ wait_for_applications(Apps) ->
 
 app_dependency_order(RootApps, StripUnreachable) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
-                fun (App, _Deps) -> [{App, App}] end,
-                fun (App,  Deps) -> [{Dep, App} || Dep <- Deps] end,
+                fun ({App, _Deps}) -> [{App, App}] end,
+                fun ({App,  Deps}) -> [{Dep, App} || Dep <- Deps] end,
                 [{App, app_dependencies(App)} ||
                     {App, _Desc, _Vsn} <- application:loaded_applications()]),
     try

@@ -871,13 +871,13 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
         [case digraph:vertex(G, Vertex) of
              false -> digraph:add_vertex(G, Vertex, Label);
              _     -> ok = throw({graph_error, {vertex, duplicate, Vertex}})
-         end || {Module, Atts}  <- Graph,
-                {Vertex, Label} <- VertexFun(Module, Atts)],
+         end || GraphElem       <- Graph,
+                {Vertex, Label} <- VertexFun(GraphElem)],
         [case digraph:add_edge(G, From, To) of
              {error, E} -> throw({graph_error, {edge, E, From, To}});
              _          -> ok
-         end || {Module, Atts} <- Graph,
-                {From, To}     <- EdgeFun(Module, Atts)],
+         end || GraphElem  <- Graph,
+                {From, To} <- EdgeFun(GraphElem)],
         {ok, G}
     catch {graph_error, Reason} ->
             true = digraph:delete(G),

@@ -531,10 +531,16 @@ run_boot_steps() ->
     run_boot_steps([App || {App, _, _} <- application:loaded_applications()]).
 
 run_boot_steps(Apps) ->
-    Steps = load_steps(Apps),
+    Steps = find_steps(Apps),
     [ok = run_step(StepName, Attributes, mfa) ||
         {_, StepName, Attributes} <- Steps],
     ok.
+
+find_steps(BaseApps) ->
+    Apps = BaseApps -- [App || {App, _, _} <- rabbit_misc:which_applications()],
+    FullBoot = sort_boot_steps(
+                 rabbit_misc:all_module_attributes(rabbit_boot_step)),
+    [Step || {App, _, _} = Step <- FullBoot, lists:member(App, Apps)].
 
 run_step(StepName, Attributes, AttributeName) ->
     case [MFA || {Key, MFA} <- Attributes,
@@ -555,62 +561,10 @@ run_step(StepName, Attributes, AttributeName) ->
             ok
     end.
 
-load_steps(BaseApps) ->
-    Apps = BaseApps -- [App || {App, _, _} <- rabbit_misc:which_applications()],
-    StepAttrs = rabbit_misc:all_module_attributes(rabbit_boot_step),
-    {AllSteps, StepsDict} =
-        lists:foldl(
-          fun({AppName, Mod, Steps}, {AccSteps, AccDict}) ->
-                  {[{Mod, {AppName, Steps}}|AccSteps],
-                   lists:foldl(
-                     fun({StepName, _}, Acc) ->
-                             dict:store(StepName, AppName, Acc)
-                     end, AccDict, Steps)}
-          end, {[], dict:new()}, StepAttrs),
-    Steps = lists:foldl(filter_steps(Apps, StepsDict), [], AllSteps),
-    sort_boot_steps(lists:usort(Steps)).
-
-filter_steps(Apps, Dict) ->
-    fun({Mod, {AppName, Steps}}, Acc) ->
-            Steps2 = [begin
-                          Filtered = lists:foldl(filter_attrs(Apps, Dict),
-                                                 [], Attrs),
-                          {Step, Filtered}
-                      end || {Step, Attrs} <- Steps,
-                             filter_app(Apps, Dict, Step)],
-            [{Mod, {AppName, Steps2}}|Acc]
-    end.
-
-filter_app(Apps, Dict, Step) ->
-    case dict:find(Step, Dict) of
-        {ok, App} -> lists:member(App, Apps);
-        error     -> false
-    end.
-
-filter_attrs(Apps, Dict) ->
-    fun(Attr={Type, Other}, AccAttrs) when Type =:= requires orelse
-                                           Type =:= enables ->
-            %% If we don't know about a dependency, we allow it through,
-            %% since we don't *know* that it should be ignored. If, on
-            %% the other hand, we recognise a dependency then we _only_
-            %% include it (i.e., the requires/enables attribute itself)
-            %% if the referenced step comes from one of the Apps we're
-            %% actively working with at this point.
-            case dict:find(Other, Dict) of
-                error     -> [Attr | AccAttrs];
-                {ok, App} -> case lists:member(App, Apps) of
-                                 true  -> [Attr | AccAttrs];
-                                 false -> AccAttrs
-                             end
-            end;
-       (Attr, AccAttrs) ->
-            [Attr | AccAttrs]
-    end.
-
-vertices(_Module, {AppName, Steps}) ->
+vertices({AppName, _Module, Steps}) ->
     [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
 
-edges(_Module, {_AppName, Steps}) ->
+edges({_AppName, _Module, Steps}) ->
     [case Key of
          requires -> {StepName, OtherStep};
          enables  -> {OtherStep, StepName}
@@ -619,7 +573,7 @@ edges(_Module, {_AppName, Steps}) ->
             Key =:= requires orelse Key =:= enables].
 
 sort_boot_steps(UnsortedSteps) ->
-    case rabbit_misc:build_acyclic_graph(fun vertices/2, fun edges/2,
+    case rabbit_misc:build_acyclic_graph(fun vertices/1, fun edges/1,
                                          UnsortedSteps) of
         {ok, G} ->
             %% Use topological sort to find a consistent ordering (if
