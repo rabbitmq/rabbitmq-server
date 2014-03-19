@@ -54,75 +54,61 @@ maybe_unbind_queues(_RK, _NewRK, OldX) ->
 unbind_queues(undefined, _X) ->
     ok;
 unbind_queues(OldSPN, #exchange{name = XName} = X) ->
-    XBin = exchange_bin(XName),
     OldRKey = routing_key(X),
-    F = fun (N) ->
-                QBin = rabbit_sharding_util:make_queue_name(
-                         XBin, a2b(node()), N),
-                [#'queue.unbind'{exchange    = XBin,
-                                 queue       = QBin,
-                                 routing_key = OldRKey}]
-        end,
-    ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    amqp_calls(X, calls(F, OldSPN), ErrFun).
+    [unbind_queue(XName, OldRKey, N) || N <- lists:seq(0, OldSPN-1)].
 
 add_queues(#exchange{name = XName} = X) ->
     SPN = shards_per_node(X),
-    XBin = exchange_bin(XName),
-    F = fun (N) ->
-                QBin = rabbit_sharding_util:make_queue_name(
-                         XBin, a2b(node()), N),
-                [#'queue.declare'{queue = QBin, durable = true}]
-        end,
-    ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    amqp_calls(X, calls(F, SPN), ErrFun).
+    [declare_queue(XName, N) || N <- lists:seq(0, SPN-1)].
 
 bind_queues(#exchange{name = XName} = X) ->
     RKey = routing_key(X),
     SPN = shards_per_node(X),
-    XBin = exchange_bin(XName),
-    F = fun (N) ->
-                QBin = rabbit_sharding_util:make_queue_name(
-                         XBin, a2b(node()), N),
-                #'queue.bind'{exchange = XBin,
-                              queue = QBin,
-                              routing_key = RKey}
-        end,
-    ErrFun = fun(Code, Text) -> {error, Code, Text} end,
-    amqp_calls(X, calls(F, SPN), ErrFun).
+    [bind_queue(XName, RKey, N) || N <- lists:seq(0, SPN-1)].
 
 %%----------------------------------------------------------------------------
 
-calls(F, SPN) ->
-    lists:flatten([F(N) || N <- lists:seq(0, SPN-1)]).
-
-amqp_calls(X, Methods, ErrFun) ->
-    case open(X) of
-        {ok, Conn, Ch} ->
-            try
-                [amqp_channel:call(Ch, Method) || Method <- Methods]
-            catch exit:{{shutdown, {connection_closing,
-                                    {server_initiated_close, Code, Txt}}}, _} ->
-                    ErrFun(Code, Txt)
-            after
-                ensure_connection_closed(Conn)
-            end;
-        E ->
-            E
+declare_queue(XName, N) ->
+    QBin = rabbit_sharding_util:make_queue_name(
+                         exchange_bin(XName), a2b(node()), N),
+    QueueName = rabbit_misc:r(v(XName), queue, QBin),
+    try rabbit_amqqueue:declare(QueueName, false, false, [], none) of
+        {_Reply, _Q} ->
+            ok
+    catch
+        _Error:Reason ->
+            rabbit_log:error("sharding failed to declare queue for exchange ~p"
+                             " - soft error:~n~p~n",
+                             [exchange_bin(XName), Reason]),
+            error
     end.
 
-ensure_connection_closed(Conn) ->
-    catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT).
+bind_queue(XName, RoutingKey, N) ->
+    binding_action(fun rabbit_binding:add/2,
+                   XName, RoutingKey, N,
+                   "sharding failed to bind queue ~p to exchange ~p"
+                   " - soft error:~n~p~n").
 
-open(X) ->
-    case amqp_connection:start(params(X)) of
-        {ok, Conn} -> case amqp_connection:open_channel(Conn) of
-                          {ok, Ch} -> {ok, Conn, Ch};
-                          E        -> catch amqp_connection:close(Conn),
-                                      E
-                      end;
-        E -> E
+unbind_queue(XName, RoutingKey, N) ->
+    binding_action(fun rabbit_binding:remove/2,
+                   XName, RoutingKey, N,
+                   "sharding failed to unbind queue ~p to exchange ~p"
+                   " - soft error:~n~p~n").
+
+binding_action(F, XName, RoutingKey, N, ErrMsg) ->
+    QBin = rabbit_sharding_util:make_queue_name(
+                         exchange_bin(XName), a2b(node()), N),
+    QueueName = rabbit_misc:r(v(XName), queue, QBin),
+    case F(#binding{source      = XName,
+                    destination = QueueName,
+                    key         = RoutingKey,
+                    args        = []},
+           fun (_X, _Q) -> ok end) of
+        ok              -> ok;
+        {error, Reason} ->
+            rabbit_log:error(ErrMsg, [QBin, exchange_bin(XName), Reason]),
+            error
     end.
 
-params(#exchange{name = #resource{virtual_host = VHost}}) ->
-    #amqp_params_direct{virtual_host = VHost}.
+v(#resource{virtual_host = VHost}) ->
+    VHost.
