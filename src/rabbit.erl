@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -394,7 +394,8 @@ status() ->
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
-          {alarms,               alarms()}],
+          {alarms,               alarms()},
+          {listeners,            listeners()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -423,6 +424,18 @@ alarms() ->
     N = node(),
     %% [{{resource_limit,memory,rabbit@mercurio},[]}]
     [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
+
+listeners() ->
+    Listeners = try
+                    rabbit_networking:active_listeners()
+                catch
+                    exit:{aborted, _} -> []
+                end,
+    [{Protocol, Port, rabbit_misc:ntoa(IP)} ||
+        #listener{node       = Node,
+                  protocol   = Protocol,
+                  ip_address = IP,
+                  port       = Port} <- Listeners, Node =:= node()].
 
 is_running() -> is_running(node()).
 

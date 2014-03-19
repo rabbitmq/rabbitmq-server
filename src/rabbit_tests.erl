@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_tests).
@@ -1236,7 +1236,8 @@ test_amqp_connection_refusal(Header) ->
 
 find_listener() ->
     [#listener{host = H, port = P} | _] =
-        [L || L = #listener{node = N} <- rabbit_networking:active_listeners(),
+        [L || L = #listener{node = N, protocol = amqp}
+                  <- rabbit_networking:active_listeners(),
               N =:= node()],
     {H, P}.
 

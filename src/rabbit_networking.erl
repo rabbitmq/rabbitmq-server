@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_networking).
@@ -120,6 +120,7 @@
 %%----------------------------------------------------------------------------
 
 boot() ->
+    ok = record_distribution_listener(),
     ok = start(),
     ok = boot_tcp(),
     ok = boot_ssl().
@@ -274,6 +275,11 @@ tcp_listener_stopped(Protocol, IPAddress, Port) ->
                      host = tcp_host(IPAddress),
                      ip_address = IPAddress,
                      port = Port}).
+
+record_distribution_listener() ->
+    {Name, Host} = rabbit_nodes:parts(node()),
+    {port, Port, _Version} = erl_epmd:port_please(Name, Host),
+    tcp_listener_started(clustering, {0,0,0,0,0,0,0,0}, Port).
 
 active_listeners() ->
     rabbit_misc:dirty_read_all(rabbit_listener).

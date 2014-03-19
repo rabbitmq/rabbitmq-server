@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_control_main).
@@ -192,7 +192,11 @@ start() ->
             rabbit_misc:quit(2);
         {badrpc, Reason} ->
             print_error("unable to connect to node ~w: ~w", [Node, Reason]),
-            print_badrpc_diagnostics(Node),
+            print_badrpc_diagnostics([Node]),
+            rabbit_misc:quit(2);
+        {badrpc_multi, Reason, Nodes} ->
+            print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
+            print_badrpc_diagnostics(Nodes),
             rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
@@ -220,8 +224,8 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
 
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
-print_badrpc_diagnostics(Node) ->
-    fmt_stderr(rabbit_nodes:diagnostics([Node]), []).
+print_badrpc_diagnostics(Nodes) ->
+    fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
 
 stop() ->
     ok.

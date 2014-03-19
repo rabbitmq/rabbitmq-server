@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_reader).
@@ -188,8 +188,8 @@ server_capabilities(_) ->
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 socket_error(Reason) ->
-    log(error, "error on AMQP connection ~p: ~p (~s)~n",
-        [self(), Reason, rabbit_misc:format_inet_error(Reason)]).
+    log(error, "error on AMQP connection ~p: ~s~n",
+        [self(), rabbit_misc:format_inet_error(Reason)]).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
