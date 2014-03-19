@@ -27,7 +27,7 @@ build_dispatcher() ->
             lists:append([Module:dispatcher() || Module <- modules()])].
 
 modules() ->
-    [Module || {Module, Behaviours} <-
+    [Module || {_AppName, Module, Behaviours} <-
                    rabbit_misc:all_module_attributes(behaviour),
                lists:member(rabbit_mgmt_extension, Behaviours)].
 
