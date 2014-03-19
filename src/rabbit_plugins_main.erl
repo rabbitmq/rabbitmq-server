@@ -218,11 +218,11 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     AllEnabled = rabbit_plugins:dependencies(false, EnabledExplicitly,
                                              AvailablePlugins),
     EnabledImplicitly = AllEnabled -- EnabledExplicitly,
-    ActivePlugins = case rpc:call(Node, rabbit_plugins, active,
-                                  [], ?RPC_TIMEOUT) of
-                        {badrpc, _} -> AllEnabled;
-                        Active      -> Active
-                    end,
+    Running = case rpc:call(Node, rabbit_plugins, active,
+                            [], ?RPC_TIMEOUT) of
+                  {badrpc, _} -> AllEnabled;
+                  Active      -> Active
+              end,
     Missing = [#plugin{name = Name, dependencies = []} ||
                   Name <- ((EnabledExplicitly ++ EnabledImplicitly) --
                                plugin_names(AvailablePlugins))],
@@ -238,26 +238,34 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     Plugins1 = usort_plugins(Plugins),
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
                              #plugin{name = Name} <- Plugins1] ++ [0]),
-    [format_plugin(P, EnabledExplicitly, EnabledImplicitly, ActivePlugins,
+    case Format of
+        minimal -> ok;
+        _       -> io:format(" Configured: E = explicitly enabled; "
+                             "e = implicitly enabled; ! = missing~n"
+                             " | Status:   * = running on ~s~n"
+                             " |/~n", [Node])
+    end,
+    [format_plugin(P, EnabledExplicitly, EnabledImplicitly, Running,
                    plugin_names(Missing), Format, MaxWidth) || P <- Plugins1],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version,
                       description = Description, dependencies = Deps},
-              EnabledExplicitly, EnabledImplicitly, Active,
+              EnabledExplicitly, EnabledImplicitly, Running,
               Missing, Format, MaxWidth) ->
-    Glyph = case {lists:member(Name, EnabledExplicitly),
-                  lists:member(Name, EnabledImplicitly),
-                  lists:member(Name, Missing),
-                  lists:member(Name, Active)} of
-                {true,  false, false, false} -> "[I]";
-                {false,  true, false, false} -> "[i]";
-                {false, false, false,  true} -> "[A]";
-                {true,  false, false,  true} -> "[E]";
-                {false,  true, false,  true} -> "[e]";
-                {_,         _,  true,     _} -> "[!]";
-                _                            -> "[ ]"
-            end,
+    EnabledGlyph = case {lists:member(Name, EnabledExplicitly),
+                         lists:member(Name, EnabledImplicitly),
+                         lists:member(Name, Missing)} of
+                       {true, false, false} -> "E";
+                       {false, true, false} -> "e";
+                       {_,        _,  true} -> "!";
+                       _                    -> " "
+                   end,
+    RunningGlyph = case lists:member(Name, Running) of
+                       true  -> "*";
+                       false -> " "
+                   end,
+    Glyph = rabbit_misc:format("[~s~s]", [EnabledGlyph, RunningGlyph]),
     Opt = fun (_F, A, A) -> ok;
               ( F, A, _) -> io:format(F, [A])
           end,
@@ -268,9 +276,9 @@ format_plugin(#plugin{name = Name, version = Version,
                    Opt("~s", Version, undefined),
                    io:format("~n");
         verbose -> io:format("~s ~w~n", [Glyph, Name]),
-                   Opt("    Version:     \t~s~n", Version,     undefined),
-                   Opt("    Dependencies:\t~p~n", Deps,        []),
-                   Opt("    Description: \t~s~n", Description, undefined),
+                   Opt("     Version:     \t~s~n", Version,     undefined),
+                   Opt("     Dependencies:\t~p~n", Deps,        []),
+                   Opt("     Description: \t~s~n", Description, undefined),
                    io:format("~n")
     end.
 

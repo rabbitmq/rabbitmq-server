@@ -97,16 +97,14 @@
           </variablelist>
           <para>
             Lists all plugins, their versions, dependencies and
-            descriptions. Each plugin is prefixed with a status
-            indicator - [ ] to indicate that the plugin is not
-            enabled, [E] to indicate that it is explicitly enabled,
-            [e] to indicate that it is implicitly enabled, and [!] to
-            indicate that it is enabled but missing and thus not
-            operational. When a plugin is enabled but not currently
-            active (i.e., running) in the currently targetted broker,
-            [A] is shown, whilst a plugin which is active/running but
-            not currently configured to be enabled is indicated by
-            an [I].
+            descriptions. Each plugin is prefixed with two status
+            indicator characters inside [ ]. The first indicator can
+            be " " to indicate that the plugin is not enabled, "E" to
+            indicate that it is explicitly enabled, "e" to indicate
+            that it is implicitly enabled, or "!" to indicate that it
+            is enabled but missing and thus not operational. The
+            second indicator can be " " to show that the plugin is not
+            running, or "*" to show that it is.
           </para>
           <para>
             If the optional pattern is given, only plugins whose
