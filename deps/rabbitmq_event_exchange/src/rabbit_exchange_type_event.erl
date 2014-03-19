@@ -22,6 +22,8 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-export([fmt_proplist/1]). %% testing
+
 -define(EXCH_NAME, <<"amq.rabbitmq.event">>).
 
 -import(rabbit_misc, [pget/2, pget/3]).
@@ -55,7 +57,7 @@ handle_event(#event{type      = Type,
     case key(Type) of
         ignore -> ok;
         Key    -> PBasic = #'P_basic'{delivery_mode = 2,
-                                      headers = headers(Props),
+                                      headers = fmt_proplist(Props),
                                       timestamp = timer:now_diff(TS, {0,0,0})},
                   Msg = rabbit_basic:message(x(), Key, PBasic, <<>>),
                   rabbit_basic:publish(
@@ -79,22 +81,26 @@ key(S) ->
         Tokens       -> list_to_binary(string:join(Tokens, "."))
     end.
 
-headers(Props) ->
+fmt_proplist(Props) ->
     lists:append([fmt(a2b(K), V) || {K, V} <- Props]).
 
-fmt(K, true)                 -> [{K, bool, true}];
-fmt(K, false)                -> [{K, bool, false}];
-fmt(K, V) when is_atom(V)    -> [{K, longstr, a2b(V)}];
-fmt(K, V) when is_integer(V) -> [{K, long, V}];
-fmt(K, V) when is_number(V)  -> [{K, float, V}];
-fmt(K, V) when is_binary(V)  -> [{K, longstr, V}];
-fmt(K, V) when is_list(V)    -> [{K, table, V}];
-fmt(K, V) when is_pid(V)     -> [{K, longstr,
-                                  list_to_binary(rabbit_misc:pid_to_string(V))}];
 fmt(K, #resource{virtual_host = VHost, 
                  name         = Name}) -> [{K,           longstr, Name},
                                            {<<"vhost">>, longstr, VHost}];
-fmt(K, V) ->
-    [{K, list_to_binary(rabbit_misc:format("~w", [V]))}].
+fmt(K, V) -> {T, Enc} = fmt(V),
+             [{K, T, Enc}].
+
+fmt(true)                 -> {bool, true};
+fmt(false)                -> {bool, false};
+fmt(V) when is_atom(V)    -> {longstr, a2b(V)};
+fmt(V) when is_integer(V) -> {long, V};
+fmt(V) when is_number(V)  -> {float, V};
+fmt(V) when is_binary(V)  -> {longstr, V};
+fmt([{_, _}|_] = Vs)      -> {table, fmt_proplist(Vs)};
+fmt(Vs) when is_list(Vs)  -> {array, [fmt(V) || V <- Vs]};
+fmt(V) when is_pid(V)     -> {longstr,
+                              list_to_binary(rabbit_misc:pid_to_string(V))};
+fmt(V)                    -> {longstr,
+                              list_to_binary(rabbit_misc:format("~w", [V]))}.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
