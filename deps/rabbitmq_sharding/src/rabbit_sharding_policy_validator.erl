@@ -8,7 +8,7 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, "sharding parameters"},
-                    {mfa, {rabbit_sharding_parameters, register, []}},
+                    {mfa, {?MODULE, register, []}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
