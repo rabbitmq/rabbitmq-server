@@ -69,7 +69,7 @@
 
     <variablelist>
       <varlistentry>
-        <term><cmdsynopsis><command>list</command> <arg choice="opt">-v</arg> <arg choice="opt">-m</arg> <arg choice="opt">-E</arg> <arg choice="opt">-e</arg> <arg choice="opt">-A</arg> <arg choice="opt">-I</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>list</command> <arg choice="opt">-v</arg> <arg choice="opt">-m</arg> <arg choice="opt">-E</arg> <arg choice="opt">-e</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
             <varlistentry>
@@ -89,16 +89,6 @@
               <term>-e</term>
               <listitem><para>Show only explicitly or implicitly
               enabled plugins.</para></listitem>
-            </varlistentry>
-            <varlistentry>
-              <term>-A</term>
-              <listitem><para>Show active plugins (running on the broker) that
-              are not explicitly or implicitly enabled.</para></listitem>
-            </varlistentry>
-            <varlistentry>
-              <term>-I</term>
-              <listitem><para>Show in-active plugins (not running on the broker) that
-              are explicitly or implicitly enabled.</para></listitem>
             </varlistentry>
             <varlistentry>
               <term>pattern</term>

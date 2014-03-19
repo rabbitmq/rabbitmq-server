@@ -24,24 +24,19 @@
 -define(MINIMAL_OPT, "-m").
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
--define(ACTIVE_ONLY_OPT, "-A").
--define(INACTIVE_ONLY_OPT, "-I").
 
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
 -define(ENABLED_DEF, {?ENABLED_OPT, flag}).
 -define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
--define(ACTIVE_ONLY_DEF, {?ACTIVE_ONLY_OPT, flag}).
--define(INACTIVE_ONLY_DEF, {?INACTIVE_ONLY_OPT, flag}).
 
 -define(RPC_TIMEOUT, infinity).
 
 -define(GLOBAL_DEFS(Node), [?NODE_DEF(Node)]).
 
 -define(COMMANDS,
-        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF,
-                 ?ENABLED_ALL_DEF, ?ACTIVE_ONLY_DEF, ?INACTIVE_ONLY_DEF]},
+        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
          enable,
          disable]).
 
@@ -217,8 +212,6 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
              end,
     OnlyEnabled    = proplists:get_bool(?ENABLED_OPT,     Opts),
     OnlyEnabledAll = proplists:get_bool(?ENABLED_ALL_OPT, Opts),
-    OnlyActive     = proplists:get_bool(?ACTIVE_ONLY_OPT, Opts),
-    OnlyInactive   = proplists:get_bool(?INACTIVE_ONLY_OPT, Opts),
 
     AvailablePlugins = rabbit_plugins:list(PluginsDir),
     EnabledExplicitly = rabbit_plugins:read_enabled(PluginsFile),
@@ -237,17 +230,9 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     Plugins = [ Plugin ||
                   Plugin = #plugin{name = Name} <- AvailablePlugins ++ Missing,
                   re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match,
-                  if OnlyEnabled    ->  lists:member(Name, EnabledExplicitly);
-                     OnlyEnabledAll -> is_enabled(Name, EnabledExplicitly,
-                                                  EnabledImplicitly);
-                     OnlyActive     -> (lists:member(Name, ActivePlugins)
-                                        andalso not
-                                        (is_enabled(Name, EnabledExplicitly,
-                                                    EnabledImplicitly)));
-                     OnlyInactive   -> (is_enabled(Name, EnabledExplicitly,
-                                                    EnabledImplicitly)
-                                        andalso not
-                                        lists:member(Name, ActivePlugins));
+                  if OnlyEnabled    -> lists:member(Name, EnabledExplicitly);
+                     OnlyEnabledAll -> lists:member(Name, EnabledExplicitly) or
+                                           lists:member(Name,EnabledImplicitly);
                      true           -> true
                   end],
     Plugins1 = usort_plugins(Plugins),
@@ -256,10 +241,6 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     [format_plugin(P, EnabledExplicitly, EnabledImplicitly, ActivePlugins,
                    plugin_names(Missing), Format, MaxWidth) || P <- Plugins1],
     ok.
-
-is_enabled(Name, EnabledExplicitly, EnabledImplicitly) ->
-    lists:member(Name,EnabledExplicitly) or
-        lists:member(Name, EnabledImplicitly).
 
 format_plugin(#plugin{name = Name, version = Version,
                       description = Description, dependencies = Deps},
