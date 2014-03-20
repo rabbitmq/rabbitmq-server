@@ -784,7 +784,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
         error ->
             %% Spec requires we ignore this situation.
             return_ok(State, NoWait, OkMsg);
-        {ok, Q = #amqqueue{pid = QPid}} ->
+        {ok, {Q = #amqqueue{pid = QPid}, _CParams}} ->
             ConsumerMapping1 = dict:erase(ConsumerTag, ConsumerMapping),
             QCons1 =
                 case dict:find(QPid, QCons) of
@@ -1143,11 +1143,11 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                               drain        = Drain},
               _, State = #ch{consumer_mapping = Consumers}) ->
     case dict:find(CTag, Consumers) of
-        {ok, {Q, _Args}} -> ok = rabbit_amqqueue:credit(
-                                   Q, self(), CTag, Credit, Drain),
-                            {noreply, State};
-        error            -> precondition_failed(
-                              "unknown consumer tag '~s'", [CTag])
+        {ok, {Q, _CParams}} -> ok = rabbit_amqqueue:credit(
+                                      Q, self(), CTag, Credit, Drain),
+                               {noreply, State};
+        error               -> precondition_failed(
+                                 "unknown consumer tag '~s'", [CTag])
     end;
 
 handle_method(_MethodRecord, _Content, _State) ->
@@ -1203,7 +1203,7 @@ consumer_monitor(ConsumerTag,
     case rabbit_misc:table_lookup(
            Capabilities, <<"consumer_cancel_notify">>) of
         {bool, true} ->
-            {#amqqueue{pid = QPid}, _Args} =
+            {#amqqueue{pid = QPid}, _CParams} =
                 dict:fetch(ConsumerTag, ConsumerMapping),
             QCons1 = dict:update(QPid,
                                  fun (CTags) ->
@@ -1455,7 +1455,7 @@ foreach_per_queue(F, UAL) ->
     rabbit_misc:gb_trees_foreach(F, T).
 
 consumer_queues(Consumers) ->
-    lists:usort([QPid || {_Key, {#amqqueue{pid = QPid}, _Args}}
+    lists:usort([QPid || {_Key, {#amqqueue{pid = QPid}, _CParams}}
                              <- dict:to_list(Consumers)]).
 
 %% tell the limiter about the number of acks that have been received
