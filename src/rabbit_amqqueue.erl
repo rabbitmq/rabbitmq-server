@@ -20,7 +20,7 @@
          delete_immediately/1, delete/3, purge/1, forget_all_durable/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
-         assert_equivalence/5,
+         wait_for_recovery/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
@@ -90,6 +90,9 @@
 -spec(with/3 :: (name(), qfun(A), fun((not_found_or_absent()) -> B)) -> A | B).
 -spec(with_or_die/2 ::
         (name(), qfun(A)) -> A | rabbit_types:channel_exit()).
+-spec(wait_for_recovery/2 ::
+        (pid(), name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
+                           rabbit_types:error('not_found')).
 -spec(assert_equivalence/5 ::
         (rabbit_types:amqqueue(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
@@ -377,6 +380,14 @@ with_or_die(Name, F) ->
     with(Name, F, fun (not_found)   -> rabbit_misc:not_found(Name);
                       ({absent, Q}) -> rabbit_misc:absent(Q)
                   end).
+
+wait_for_recovery(OldQPid, QName) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, #amqqueue{pid = OldQPid}} -> timer:sleep(25),
+                                          wait_for_recovery(OldQPid, QName);
+        {ok, Q}                        -> {ok, Q};
+        {error, not_found}             -> {error, not_found}
+    end.
 
 assert_equivalence(#amqqueue{durable     = Durable,
                              auto_delete = AutoDelete} = Q,

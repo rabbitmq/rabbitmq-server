@@ -1270,16 +1270,11 @@ handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
 queue_down_consumer_action(QPid, QName, CTag, CMap) ->
     {_, {_, _, _, Args} = ConsumeSpec} = dict:fetch(CTag, CMap),
     case rabbit_misc:table_lookup(Args, <<"recover-on-ha-failover">>) of
-        {bool, true} ->
-            case rabbit_amqqueue:lookup(QName) of
-                {ok, #amqqueue{pid = QPid}} -> timer:sleep(25),
-                                               queue_down_consumer_action(
-                                                 QPid, QName, CTag, CMap);
-                {ok, _Q}                    -> {recover, ConsumeSpec};
-                {error, not_found}          -> remove
-            end;
-        _ ->
-            remove
+        {bool, true} -> case rabbit_amqqueue:wait_for_recovery(QPid, QName) of
+                            {ok, _Q}           -> {recover, ConsumeSpec};
+                            {error, not_found} -> remove
+                        end;
+        _            -> remove
     end.
 
 handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
