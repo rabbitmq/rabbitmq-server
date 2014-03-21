@@ -30,11 +30,13 @@ prop_trunc_any_term() ->
                     Shrunk  = rabbit_trunc_term:shrink_term(GenAny, MaxSz),
                     SzShrunk = erts_debug:size(Shrunk),
                     ?WHENFAIL(begin
-                                  io:format("MaxLen: ~p\n", [MaxSz]),
-                                  io:format("Input-Size: ~p\n", [SzInitial]),
-                                  io:format("Shrunk-Size: ~p\n", [SzShrunk]),
-                                  io:format("Input: ~p\n", [GenAny]),
-                                  io:format("Output: ~p\n", [Shrunk])
+                                  io:format("MaxLen: ~p~n", [MaxSz]),
+                                  io:format("SizeOfThing: ~p~n",
+                                            [size_of_thing(GenAny)]),
+                                  io:format("Input-Size: ~p~n", [SzInitial]),
+                                  io:format("Shrunk-Size: ~p~n", [SzShrunk]),
+                                  io:format("Input: ~p~n", [GenAny]),
+                                  io:format("Output: ~p~n", [Shrunk])
                               end,
                               case size_of_thing(GenAny) > MaxSz of
                                   true  -> true = SzShrunk < SzInitial;
@@ -42,16 +44,16 @@ prop_trunc_any_term() ->
                               end)
                 catch
                     _:Err ->
-                        io:format("\nException: ~p\n",
+                        io:format("\nException: ~p~n",
                                   [{Err, erlang:get_stacktrace()}]),
-                        io:format("Input: ~p\n", [GenAny]),
-                        io:format("Max-Size: ~p\n", [MaxSz]),
+                        io:format("Input: ~p~n", [GenAny]),
+                        io:format("Max-Size: ~p~n", [MaxSz]),
                         false
                 end
             end).
 
-size_of_thing(Thing) when is_binary(Thing)    -> size(Thing);
 size_of_thing(Thing) when is_bitstring(Thing) -> byte_size(Thing);
+size_of_thing(Thing) when is_binary(Thing)    -> size(Thing);
 size_of_thing(Thing) when is_list(Thing)      -> length(Thing);
 size_of_thing(Thing) when is_tuple(Thing)     -> size(Thing);
 size_of_thing(Thing)                          -> error({cannot_size, Thing}).
