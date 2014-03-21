@@ -57,9 +57,10 @@ shrink_term(T, N) when is_list(T) ->
     IsPrintable = io_lib:printable_list(T),
     case length(T) > N of
         true when IsPrintable ->
-            lists:append(lists:sublist(T, N-3), "...");
+            lists:append(lists:sublist(T, suffix_len(N-3)), "...");
         true ->
-            lists:append([shrink_term(E, N-1) || E <- lists:sublist(T, N-1)],
+            lists:append([shrink_term(E, N-1) ||
+                             E <- lists:sublist(T, suffix_len(N-1))],
                          ['...']);
         false when IsPrintable ->
             T;
@@ -76,4 +77,6 @@ shrink_term(T, N) when is_tuple(T) ->
                                    E <- tuple_to_list(T)])
     end;
 shrink_term(T, _) -> T.
+
+suffix_len(N) -> erlang:max(N, 1).
 

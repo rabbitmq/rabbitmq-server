@@ -30,10 +30,11 @@ prop_trunc_any_term() ->
                     Shrunk  = rabbit_trunc_term:shrink_term(GenAny, MaxSz),
                     SzShrunk = erts_debug:size(Shrunk),
                     ?WHENFAIL(begin
-                                  io:format("Input: ~p\n", [GenAny]),
                                   io:format("MaxLen: ~p\n", [MaxSz]),
                                   io:format("Input-Size: ~p\n", [SzInitial]),
-                                  io:format("Shrunk-Size: ~p\n", [SzShrunk])
+                                  io:format("Shrunk-Size: ~p\n", [SzShrunk]),
+                                  io:format("Input: ~p\n", [GenAny]),
+                                  io:format("Output: ~p\n", [Shrunk])
                               end,
                               case size_of_thing(GenAny) > MaxSz of
                                   true  -> true = SzShrunk < SzInitial;
@@ -41,7 +42,8 @@ prop_trunc_any_term() ->
                               end)
                 catch
                     _:Err ->
-                        io:format("\nException: ~p\n", [Err]),
+                        io:format("\nException: ~p\n",
+                                  [{Err, erlang:get_stacktrace()}]),
                         io:format("Input: ~p\n", [GenAny]),
                         io:format("Max-Size: ~p\n", [MaxSz]),
                         false
