@@ -43,8 +43,9 @@ shrink_term(T) -> shrink_term(T, 10).
 %% TODO: reconsider depth limit handling
 shrink_term(T, 0) -> T;
 shrink_term(T, N) when is_binary(T) andalso size(T) > N ->
-    case size(T) - N of
-        Sz when Sz >= 1 -> Head = binary:part(T, 0, N-3),
+    L = N - 3,
+    case size(T) - L of
+        Sz when Sz >= 1 -> <<Head:L/binary, _/binary>> = T,
                            <<Head/binary, <<"...">>/binary>>;
         _               -> T
     end;
