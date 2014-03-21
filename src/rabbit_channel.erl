@@ -1259,7 +1259,7 @@ handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                   remove ->
                       cancel_consumer(CTag, QName, StateN);
                   {recover, {NoAck, ConsumerPrefetch, Exclusive, Args}} ->
-                      case catch basic_consume(
+                      case catch basic_consume( %% [0]
                                    QName, NoAck, ConsumerPrefetch, CTag,
                                    Exclusive, Args, true, StateN) of
                           {ok, StateN1} -> StateN1;
@@ -1267,6 +1267,11 @@ handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                       end
               end
       end, State#ch{queue_consumers = dict:erase(QPid, QCons)}, ConsumerTags).
+
+%% [0] There is a slight danger here that if a queue is deleted and
+%% then recreated again the reconsume will succeed even though it was
+%% not an HA failover. But the likelihood is not great and most users
+%% are unlikely to care.
 
 cancel_consumer(CTag, QName, State = #ch{consumer_mapping = CMap}) ->
     ok = send(#'basic.cancel'{consumer_tag = CTag,
@@ -1278,9 +1283,9 @@ cancel_consumer(CTag, QName, State = #ch{consumer_mapping = CMap}) ->
 
 queue_down_consumer_action(CTag, CMap) ->
     {_, {_, _, _, Args} = ConsumeSpec} = dict:fetch(CTag, CMap),
-    case rabbit_misc:table_lookup(Args, <<"recover-on-ha-failover">>) of
-        {bool, true} -> {recover, ConsumeSpec};
-        _            -> remove
+    case rabbit_misc:table_lookup(Args, <<"cancel-on-ha-failover">>) of
+        {bool, false} -> {recover, ConsumeSpec};
+        _             -> remove
     end.
 
 handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
