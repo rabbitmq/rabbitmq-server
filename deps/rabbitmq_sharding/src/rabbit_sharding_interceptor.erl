@@ -16,6 +16,8 @@
                    [{description, "sharding interceptor"},
                     {mfa, {rabbit_registry, register,
                            [channel_interceptor, <<"sharding interceptor">>, ?MODULE]}},
+                    {cleanup, {rabbit_registry, unregister,
+                               [channel_interceptor, <<"sharding interceptor">>]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 

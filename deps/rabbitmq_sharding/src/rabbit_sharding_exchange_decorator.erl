@@ -4,6 +4,8 @@
                    [{description, "sharding exchange decorator"},
                     {mfa, {rabbit_registry, register,
                            [exchange_decorator, <<"sharding">>, ?MODULE]}},
+                    {cleanup, {rabbit_registry, unregister,
+                               [exchange_decorator, <<"sharding">>]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 

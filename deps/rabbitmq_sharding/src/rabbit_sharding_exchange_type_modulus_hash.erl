@@ -29,6 +29,8 @@
     [{description, "exchange type x-consistent-hash: registry"},
      {mfa,         {rabbit_registry, register,
                     [exchange, <<"x-modulus-hash">>, ?MODULE]}},
+     {cleanup, {rabbit_registry, unregister,
+                [exchange, <<"x-modulus-hash">>]}},
      {requires,    rabbit_registry},
      {enables,     kernel_ready}]}).
 
