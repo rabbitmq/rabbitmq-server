@@ -23,12 +23,20 @@ description() ->
     [{description, <<"Sharding interceptor for channel methods">>}].
 
 intercept(#'basic.consume'{queue = QName} = Method, VHost) ->
-    {ok, QName2} = queue_name(VHost, QName),
-    {ok, Method#'basic.consume'{queue = QName2}};
+    case queue_name(VHost, QName) of
+        {ok, QName2} ->
+            {ok, Method#'basic.consume'{queue = QName2}};
+        {error, QName} ->
+            {error, rabbit_misc:format("Error finding sharded queue for: ~p", [QName])}
+    end;
 
 intercept(#'basic.get'{queue = QName} = Method, VHost) ->
-    {ok, QName2} = queue_name(VHost, QName),
-    {ok, Method#'basic.get'{queue = QName2}};
+    case queue_name(VHost, QName) of
+        {ok, QName2} ->
+            {ok, Method#'basic.get'{queue = QName2}};
+        {error, QName} ->
+            {error, rabbit_misc:format("Error finding sharded queue for: ~p", [QName])}
+    end;
 
 intercept(#'queue.delete'{queue = QName} = Method, VHost) ->
     case is_sharded(VHost, QName) of
@@ -84,7 +92,7 @@ applies_to(_Other) -> false.
 queue_name(VHost, QBin) ->
     case lookup_exchange(VHost, QBin) of
         {ok, X}  ->
-            {ok, least_consumers(VHost, QBin, shards_per_node(X))};
+            least_consumers(VHost, QBin, shards_per_node(X));
         _Error ->
             %% Queue is not part of a shard, return unmodified name
             {ok, QBin}
@@ -101,7 +109,6 @@ is_sharded(VHost, QBin) ->
 lookup_exchange(VHost, QBin) ->
     rabbit_exchange:lookup(rabbit_misc:r(VHost, exchange, QBin)).
 
-%% returns the original queue name if it fails to find a proper queue.
 least_consumers(VHost, QBin, N) ->
     F = fun(QNum) ->
                 QBin2 = rabbit_sharding_util:make_queue_name(
@@ -112,13 +119,21 @@ least_consumers(VHost, QBin, N) ->
                 end
 
         end,
-    case do_n(F, N) of
+    case queues_with_count(F, N) of
         []     ->
-            QBin;
+            {error, QBin};
         Queues ->
             [{_, QBin3} | _ ] = lists:sort(Queues),
-            QBin3
+            {ok, QBin3}
     end.
+
+queues_with_count(F, N) ->
+    lists:foldl(fun (C, Acc) ->
+                        case F(C) of
+                            {error, _} -> Acc;
+                            Ret        -> [Ret|Acc]
+                        end
+                end, [], lists:seq(0, N-1)).
 
 consumer_count(QName) ->
     rabbit_amqqueue:with(
@@ -126,15 +141,3 @@ consumer_count(QName) ->
       fun(Q) ->
               rabbit_amqqueue:info(Q, [consumers])
       end).
-
-do_n(F, N) ->
-    do_n(F, 0, N, []).
-
-do_n(_F, N, N, Acc) ->
-    Acc;
-do_n(F, Count, N, Acc) ->
-    Acc2 = case F(Count) of
-               {error, _} -> Acc;
-               Ret        -> [Ret|Acc]
-           end,
-    do_n(F, Count+1, N, Acc2).
