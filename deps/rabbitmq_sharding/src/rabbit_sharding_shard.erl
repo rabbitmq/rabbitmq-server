@@ -25,7 +25,7 @@ maybe_shard_exchanges() ->
     ok.
 
 maybe_shard_exchanges(VHost) ->
-    [rabbit_sharding_util:rpc_call(ensure_sharded_queues, [X]) ||
+    [ensure_sharded_queues(X) ||
         X <- rabbit_sharding_util:sharded_exchanges(VHost)].
 
 %% queue needs to be started on the respective node.
