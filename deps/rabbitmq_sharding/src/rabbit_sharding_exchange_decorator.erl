@@ -17,6 +17,8 @@
 -export([create/2, delete/3, policy_changed/2,
          add_binding/3, remove_bindings/3, route/2, active_for/1]).
 
+-import(rabbit_sharding_util, [shard/1]).
+
 %%----------------------------------------------------------------------------
 
 description() ->
@@ -78,11 +80,3 @@ maybe_stop_sharding(X) ->
         false ->
             ok
     end.
-
-shard(X) ->
-    case sharding_up() of
-        true  -> rabbit_sharding_util:shard(X);
-        false -> false
-    end.
-
-sharding_up() -> is_pid(whereis(rabbit_sharding_app)).
