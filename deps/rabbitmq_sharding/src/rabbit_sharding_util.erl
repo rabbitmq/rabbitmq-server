@@ -36,7 +36,7 @@ make_queue_name(QBin, NodeBin, QNum) ->
 
 rpc_call(F, Args) ->
     [rpc:call(Node, rabbit_sharding_shard, F, Args) ||
-        Node <- rabbit_mnesia:cluster_nodes(running)].
+        Node <- running_nodes()].
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
@@ -44,3 +44,6 @@ a2b(A) -> list_to_binary(atom_to_list(A)).
 
 find_exchanges(VHost) ->
     rabbit_exchange:list(VHost).
+
+running_nodes() ->
+    proplists:get_value(running_nodes, rabbit_mnesia:status(), []).
