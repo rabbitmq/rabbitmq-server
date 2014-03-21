@@ -55,21 +55,21 @@ unbind_queues(undefined, _X) ->
     ok;
 unbind_queues(OldSPN, #exchange{name = XName} = X) ->
     OldRKey = routing_key(X),
-    [unbind_queue(XName, OldRKey, N) || N <- lists:seq(0, OldSPN-1)].
+    [unbind_queue(XName, OldRKey, N, node()) || N <- lists:seq(0, OldSPN-1)].
 
 add_queues(#exchange{name = XName} = X) ->
     SPN = shards_per_node(X),
-    [declare_queue(XName, N) || N <- lists:seq(0, SPN-1)].
+    [declare_queue(XName, N, node()) || N <- lists:seq(0, SPN-1)].
 
 bind_queues(#exchange{name = XName} = X) ->
     RKey = routing_key(X),
     SPN = shards_per_node(X),
-    [bind_queue(XName, RKey, N) || N <- lists:seq(0, SPN-1)].
+    [bind_queue(XName, RKey, N, node()) || N <- lists:seq(0, SPN-1)].
 
 %%----------------------------------------------------------------------------
 
-declare_queue(XName, N) ->
-    QBin = make_queue_name(exchange_bin(XName), a2b(node()), N),
+declare_queue(XName, N, Node) ->
+    QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
     try rabbit_amqqueue:declare(QueueName, false, false, [], none) of
         {_Reply, _Q} ->
@@ -82,20 +82,20 @@ declare_queue(XName, N) ->
             error
     end.
 
-bind_queue(XName, RoutingKey, N) ->
+bind_queue(XName, RoutingKey, N, Node) ->
     binding_action(fun rabbit_binding:add/2,
-                   XName, RoutingKey, N,
+                   XName, RoutingKey, N, Node,
                    "sharding failed to bind queue ~p to exchange ~p"
                    " - soft error:~n~p~n").
 
-unbind_queue(XName, RoutingKey, N) ->
+unbind_queue(XName, RoutingKey, N, Node) ->
     binding_action(fun rabbit_binding:remove/2,
-                   XName, RoutingKey, N,
+                   XName, RoutingKey, N, Node,
                    "sharding failed to unbind queue ~p to exchange ~p"
                    " - soft error:~n~p~n").
 
-binding_action(F, XName, RoutingKey, N, ErrMsg) ->
-    QBin = make_queue_name(exchange_bin(XName), a2b(node()), N),
+binding_action(F, XName, RoutingKey, N, Node, ErrMsg) ->
+    QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
     case F(#binding{source      = XName,
                     destination = QueueName,
