@@ -8,7 +8,7 @@
          maybe_stop_sharding/1]).
 
 -import(rabbit_misc, [r/3]).
--import(rabbit_sharding_util, [a2b/1, exchange_bin/1,
+-import(rabbit_sharding_util, [a2b/1, exchange_bin/1, make_queue_name/3,
                                routing_key/1, shards_per_node/1]).
 
 -rabbit_boot_step({rabbit_sharding_maybe_shard,
@@ -69,8 +69,7 @@ bind_queues(#exchange{name = XName} = X) ->
 %%----------------------------------------------------------------------------
 
 declare_queue(XName, N) ->
-    QBin = rabbit_sharding_util:make_queue_name(
-                         exchange_bin(XName), a2b(node()), N),
+    QBin = make_queue_name(exchange_bin(XName), a2b(node()), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
     try rabbit_amqqueue:declare(QueueName, false, false, [], none) of
         {_Reply, _Q} ->
@@ -96,8 +95,7 @@ unbind_queue(XName, RoutingKey, N) ->
                    " - soft error:~n~p~n").
 
 binding_action(F, XName, RoutingKey, N, ErrMsg) ->
-    QBin = rabbit_sharding_util:make_queue_name(
-                         exchange_bin(XName), a2b(node()), N),
+    QBin = make_queue_name(exchange_bin(XName), a2b(node()), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
     case F(#binding{source      = XName,
                     destination = QueueName,
