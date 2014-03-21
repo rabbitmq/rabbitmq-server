@@ -14,8 +14,7 @@
 -rabbit_boot_step({rabbit_sharding_maybe_shard,
                    [{description, "rabbit sharding maybe shard"},
                     {mfa,         {?MODULE, maybe_shard_exchanges, []}},
-                    {requires,    direct_client},
-                    {enables,     networking}]}).
+                    {requires,    recovery}]}).
 
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
