@@ -45,9 +45,13 @@ shrink_term(T) -> shrink_term(T, 10).
 %% TODO: reconsider depth limit handling
 shrink_term(T, 0) -> T;
 shrink_term(T, N) when is_binary(T) andalso size(T) > N ->
-    L = N - 3,
-    case size(T) - L of
-        Sz when Sz >= 1 -> <<Head:L/binary, _/binary>> = T,
+    Suffix = N - 3,
+    Len = case is_bitstring(T) of
+              true  -> byte_size(T);
+              false -> size(T)
+          end,
+    case Len - Suffix of
+        Sz when Sz >= 1 -> <<Head:Suffix/binary, _/binary>> = T,
                            <<Head/binary, <<"...">>/binary>>;
         _               -> T
     end;
@@ -60,8 +64,8 @@ shrink_term(T, N) when is_list(T) ->
         {true, true}
           when N > 3   -> lists:append(lists:sublist(T, resize(N-3)), "...");
         {true, false}  -> lists:append([shrink_term(E, resize(N-1, Len)) ||
-                                          E <- lists:sublist(T, resize(N-1))],
-                                      ['...']);
+                                           E <- lists:sublist(T, resize(N-1))],
+                                       ['...']);
         {false, false} -> [shrink_term(E, resize(N-1, Len)) || E <- T];
         _              -> T
     end;

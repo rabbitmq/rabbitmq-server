@@ -24,9 +24,8 @@
 prop_trunc_any_term() ->
     ?FORALL({GenAny, MaxSz}, {gen_top_level(50), gen_max_len()},
             begin
-                %% TODO: make proper skip this
-                SzInitial = erts_debug:size(GenAny),
                 try
+                    SzInitial = erts_debug:size(GenAny),
                     Shrunk  = rabbit_trunc_term:shrink_term(GenAny, MaxSz),
                     SzShrunk = erts_debug:size(Shrunk),
                     ?WHENFAIL(begin
@@ -39,7 +38,7 @@ prop_trunc_any_term() ->
                                   io:format("Output: ~p~n", [Shrunk])
                               end,
                               case size_of_thing(GenAny) > MaxSz of
-                                  true  -> true = SzShrunk < SzInitial;
+                                  true  -> SzShrunk < SzInitial;
                                   false -> Shrunk =:= GenAny
                               end)
                 catch
