@@ -16,7 +16,9 @@
 
 -module(rabbit_trunc_term).
 
--export([truncate_log_event/1, shrink_term/1]).
+-export([truncate_log_event/1]).
+%% exported for testing
+-export([shrink_term/1, shrink_term/2]).
 
 truncate_log_event({Type, GL, {Pid, Format, Args}})
   when Type =:= error orelse
