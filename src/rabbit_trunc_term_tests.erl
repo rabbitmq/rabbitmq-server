@@ -22,7 +22,7 @@
 -include_lib("proper/include/proper.hrl").
 
 prop_trunc_any_term() ->
-    ?FORALL({GenAny, MaxSz}, {gen_top_level(5000), gen_max_len()},
+    ?FORALL({GenAny, MaxSz}, {gen_top_level(50), gen_max_len()},
             begin
                 %% TODO: make proper skip this
                 SzInitial = erts_debug:size(GenAny),
