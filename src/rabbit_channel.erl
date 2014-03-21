@@ -1255,15 +1255,15 @@ handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
               QName = dict:fetch(QPid, QNames),
-              case queue_down_consumer_action(QPid, QName, CTag, CMap) of
+              case queue_down_consumer_action(CTag, CMap) of
                   remove ->
                       cancel_consumer(CTag, QName, StateN);
                   {recover, {NoAck, ConsumerPrefetch, Exclusive, Args}} ->
-                      case basic_consume(
-                             QName, NoAck, ConsumerPrefetch, CTag,
-                             Exclusive, Args, true, StateN) of
+                      case catch basic_consume(
+                                   QName, NoAck, ConsumerPrefetch, CTag,
+                                   Exclusive, Args, true, StateN) of
                           {ok, StateN1} -> StateN1;
-                          {error, _}    -> cancel_consumer(CTag, QName, StateN)
+                          _             -> cancel_consumer(CTag, QName, StateN)
                       end
               end
       end, State#ch{queue_consumers = dict:erase(QPid, QCons)}, ConsumerTags).
@@ -1276,13 +1276,10 @@ cancel_consumer(CTag, QName, State = #ch{consumer_mapping = CMap}) ->
                                            {queue,        QName}]),
     State#ch{consumer_mapping = dict:erase(CTag, CMap)}.
 
-queue_down_consumer_action(QPid, QName, CTag, CMap) ->
+queue_down_consumer_action(CTag, CMap) ->
     {_, {_, _, _, Args} = ConsumeSpec} = dict:fetch(CTag, CMap),
     case rabbit_misc:table_lookup(Args, <<"recover-on-ha-failover">>) of
-        {bool, true} -> case rabbit_amqqueue:wait_for_recovery(QPid, QName) of
-                            {ok, _Q}           -> {recover, ConsumeSpec};
-                            {error, not_found} -> remove
-                        end;
+        {bool, true} -> {recover, ConsumeSpec};
         _            -> remove
     end.
 
