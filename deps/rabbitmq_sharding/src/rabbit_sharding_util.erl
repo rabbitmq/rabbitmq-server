@@ -35,8 +35,17 @@ make_queue_name(QBin, NodeBin, QNum) ->
     <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
 
 rpc_call(F, Args) ->
-    [rpc:call(Node, rabbit_sharding_shard, F, Args) ||
-        Node <- running_nodes()].
+    [begin
+         case rpc:call(Node, rabbit_sharding_shard, F, Args)  of
+             {badrpc, Reason} ->
+                 rabbit_log:error("failed RPC call ~p"
+                                  " - soft error:~n~p~n",
+                                  [F, Reason]),
+                 {error, Reason};
+             Res ->
+                 {ok, Res}
+         end
+     end || Node <- running_nodes()].
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
