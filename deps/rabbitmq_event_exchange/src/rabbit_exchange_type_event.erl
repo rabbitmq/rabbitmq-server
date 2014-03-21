@@ -101,6 +101,7 @@ fmt(Vs) when is_list(Vs)  -> {array, [fmt(V) || V <- Vs]};
 fmt(V) when is_pid(V)     -> {longstr,
                               list_to_binary(rabbit_misc:pid_to_string(V))};
 fmt(V)                    -> {longstr,
-                              list_to_binary(rabbit_misc:format("~w", [V]))}.
+                              list_to_binary(
+                                rabbit_misc:format("~1000000000p", [V]))}.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
