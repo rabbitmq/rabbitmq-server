@@ -23,30 +23,29 @@
 
 prop_trunc_any_term() ->
     ?FORALL({GenAny, MaxSz}, {gen_top_level(5000), gen_max_len()},
-            case size_of_thing(GenAny) >= MaxSz of
-                false -> io:format("Skipping ~p~n", [{GenAny, MaxSz}]),
-                         true;
-                true  -> SzInitial = erts_debug:size(GenAny),
-                         try
-                             Shrunk  = rabbit_trunc_term:shrink_term(GenAny,
-                                                                     MaxSz),
-                             SzShrunk = erts_debug:size(Shrunk),
-                             ?WHENFAIL(begin
-                                           io:format("Input: ~p\n", [GenAny]),
-                                           io:format("MaxLen: ~p\n", [MaxSz]),
-                                           io:format("Input-Size: ~p\n",
-                                                     [SzInitial]),
-                                           io:format("Shrunk-Size: ~p\n",
-                                                     [SzShrunk])
-                                       end,
-                                       true = SzShrunk < SzInitial)
-                         catch
-                             _:Err ->
-                                 io:format("\nException: ~p\n", [Err]),
-                                 io:format("Input: ~p\n", [GenAny]),
-                                 io:format("Max-Size: ~p\n", [MaxSz]),
-                                 false
-                         end
+            begin
+                %% TODO: make proper skip this
+                SzInitial = erts_debug:size(GenAny),
+                try
+                    Shrunk  = rabbit_trunc_term:shrink_term(GenAny, MaxSz),
+                    SzShrunk = erts_debug:size(Shrunk),
+                    ?WHENFAIL(begin
+                                  io:format("Input: ~p\n", [GenAny]),
+                                  io:format("MaxLen: ~p\n", [MaxSz]),
+                                  io:format("Input-Size: ~p\n", [SzInitial]),
+                                  io:format("Shrunk-Size: ~p\n", [SzShrunk])
+                              end,
+                              case size_of_thing(GenAny) > MaxSz of
+                                  true  -> true = SzShrunk < SzInitial;
+                                  false -> Shrunk =:= GenAny
+                              end)
+                catch
+                    _:Err ->
+                        io:format("\nException: ~p\n", [Err]),
+                        io:format("Input: ~p\n", [GenAny]),
+                        io:format("Max-Size: ~p\n", [MaxSz]),
+                        false
+                end
             end).
 
 size_of_thing(Thing) when is_binary(Thing)    -> size(Thing);
