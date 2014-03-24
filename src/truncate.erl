@@ -65,7 +65,7 @@ shrink_list(_, N, _) when N =< 0 ->
 shrink_list([], _N, _D) ->
     [];
 shrink_list([H|T], N, D) ->
-    [term(H, N - D, D) | term(T, N - 1, D) ].
+    [term(H, N - D, D) | term(T, N - 1, D)].
 
 %%----------------------------------------------------------------------------
 
