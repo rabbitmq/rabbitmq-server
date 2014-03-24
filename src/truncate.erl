@@ -16,67 +16,91 @@
 
 -module(truncate).
 
--export([log_event/2]).
-%% exported for testing
--export([term/2]).
+-define(ELLIPSIS_LENGTH, 3).
 
-log_event({Type, GL, {Pid, Format, Args}}, Size)
+-export([log_event/3]).
+%% exported for testing
+-export([test/0, term/3]).
+
+log_event({Type, GL, {Pid, Format, Args}}, Size, Decr)
   when Type =:= error orelse
        Type =:= info_msg orelse
        Type =:= warning_msg ->
-    {Type, GL, {Pid, Format, [term(T, Size) || T <- Args]}};
-log_event({Type, GL, {Pid, ReportType, Report}}, Size)
+    {Type, GL, {Pid, Format, [term(T, Size, Decr) || T <- Args]}};
+log_event({Type, GL, {Pid, ReportType, Report}}, Size, Decr)
   when Type =:= error_report orelse
        Type =:= info_report orelse
        Type =:= warning_report ->
     Report2 = case ReportType of
-                  crash_report -> [[{K, term(V, Size)} || {K, V} <- R] ||
+                  crash_report -> [[{K, term(V, Size, Decr)} || {K, V} <- R] ||
                                       R <- Report];
-                  _            -> [{K, term(V, Size)} || {K, V} <- Report]
+                  _            -> [{K, term(V, Size, Decr)} || {K, V} <- Report]
               end,
     {Type, GL, {Pid, ReportType, Report2}};
-log_event(Event, _Size) ->
+log_event(Event, _Size, _Decr) ->
     Event.
 
-%% TODO: avoid copying
-term(_T, 0) -> '...';
-term(T, N) when is_binary(T) andalso size(T) > N ->
-    Suffix = N - 3,
-    Len = case is_bitstring(T) of
-              true  -> byte_size(T);
-              false -> size(T)
-          end,
-    case Len - Suffix of
-        Sz when Sz >= 1 -> <<Head:Suffix/binary, _/binary>> = T,
-                           <<Head/binary, <<"...">>/binary>>;
-        _               -> T
+term(_, N, _) when N =< 0 ->
+    '...';
+term(Bin, N, _D) when is_binary(Bin) andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
+    Suffix = without_ellipsis(N),
+    <<Head:Suffix/binary, _/binary>> = Bin,
+    <<Head/binary, <<"...">>/binary>>;
+term(L, N, D) when is_list(L) ->
+    IsPrintable = io_lib:printable_list(L),
+    case IsPrintable of
+        true  -> case length(L) > without_ellipsis(N) of
+                     true  -> string:left(L, without_ellipsis(N)) ++ "...";
+                     false -> L
+                 end;
+        false -> shrink_list(L, N, D)
     end;
-term([A|B], N) when not is_list(B) ->
-    term([A,B], N);
-term(T, N) when is_list(T) ->
-    IsPrintable = io_lib:printable_list(T),
-    Len = length(T),
-    case {Len > N, IsPrintable} of
-        {true, true}
-          when N > 3   -> lists:append(lists:sublist(T, resize(N-3)), "...");
-        {true, false}  -> lists:append([term(E, resize(N-1, Len)) ||
-                                           E <- lists:sublist(T, resize(N-1))],
-                                       ['...']);
-        {false, false} -> [term(E, resize(N-1, Len)) || E <- T];
-        _              -> T
-    end;
-term(T, N) when is_tuple(T) ->
-    case tuple_size(T) > N of
-        true  -> list_to_tuple(
-                   lists:append([term(E, N-1) ||
-                                    E <- lists:sublist(tuple_to_list(T), N-1)],
-                                ['...']));
-        false -> list_to_tuple([term(E, N-1) ||
-                                   E <- tuple_to_list(T)])
-    end;
-term(T, _) -> T.
+term(T, N, D) when is_tuple(T) ->
+    shrink_tuple(T, N, D);
+term(T, _, _) ->
+    T.
 
-resize(N) -> resize(N, 1).
+without_ellipsis(N) -> erlang:max(N - ?ELLIPSIS_LENGTH, 0).
 
-resize(N, M) -> erlang:max(N, M).
+shrink_list(_, 0, _) ->
+    ['...'];
+shrink_list([], _N, _D) ->
+    [];
+shrink_list([H|T], N, D) ->
+    [term(H, N - D, D) | case is_list(T) of
+                             true  -> shrink_list(T, N - 1, D);
+                             false -> term(T, N - 1, D)
+                         end].
 
+shrink_tuple(T, N, D) ->
+    shrink_tuple(T, N, D, erlang:min(tuple_size(T), N)).
+
+shrink_tuple(_T, _N, _D, 0) ->
+    {};
+shrink_tuple(T, N, D, Ix) ->
+    erlang:append_element(shrink_tuple(T, N, D, Ix - 1),
+                          term(element(Ix, T), N - D, D)).
+
+%%----------------------------------------------------------------------------
+
+test() ->
+    test_short_examples_exactly(),
+    test_large_examples_for_size(),
+    ok.
+
+test_short_examples_exactly() ->
+    F = fun (Term, Exp) -> Exp = term(Term, 10, 5) end,
+    F([], []),
+    F("h", "h"),
+    F("hello world", "hello w..."),
+    F([a|b], [a|b]),
+    F([<<"hello world">>], [<<"he...">>]),
+    F({{{{a}}},{b},c,d,e,f,g,h,i,j,k}, {{'...'},{'...'},c,d,e,f,g,h,i,j}),
+    P = spawn(fun() -> receive die -> ok end end),
+    F([0, 0.0, <<1:1>>, F, P], [0, 0.0, <<1:1>>, F, P]),
+    P ! die,
+    ok.
+
+test_large_examples_for_size() ->
+    %% TODO
+    ok.

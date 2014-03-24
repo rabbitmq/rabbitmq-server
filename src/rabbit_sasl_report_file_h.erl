@@ -68,7 +68,7 @@ init_file({File, Type}) ->
 
 handle_event(Event, State) ->
     sasl_report_file_h:handle_event(
-      truncate:log_event(Event, ?LOG_TRUNCATE_SIZE), State).
+      truncate:log_event(Event, ?LOG_TRUNC_SIZE, ?LOG_TRUNC_DECR), State).
 
 handle_info(Info, State) ->
     sasl_report_file_h:handle_info(Info, State).

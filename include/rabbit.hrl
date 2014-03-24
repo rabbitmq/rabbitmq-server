@@ -121,6 +121,9 @@
 
 %% Maximum size of any individual bit of a term to be logged. Feeds
 %% into truncate:log_event/2.
--define(LOG_TRUNCATE_SIZE, 100).
+-define(LOG_TRUNC_SIZE, 100).
+
+%% Amount to decrease size every time we descend while truncating
+-define(LOG_TRUNC_DECR, 5).
 
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).

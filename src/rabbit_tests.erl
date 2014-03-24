@@ -33,6 +33,7 @@
 
 all_tests() ->
     ok = setup_cluster(),
+    ok = truncate:test(),
     ok = supervisor2_tests:test_all(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
