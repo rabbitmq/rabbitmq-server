@@ -119,4 +119,8 @@
 %% wrapping the message body).
 -define(MAX_MSG_SIZE, 2147383648).
 
+%% Maximum size of any individual bit of a term to be logged. Feeds
+%% into truncate:log_event/2.
+-define(LOG_TRUNCATE_SIZE, 100).
+
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).

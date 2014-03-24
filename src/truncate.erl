@@ -16,29 +16,27 @@
 
 -module(truncate).
 
--export([log_event/1]).
+-export([log_event/2]).
 %% exported for testing
--export([term/1, term/2]).
+-export([term/2]).
 
-log_event({Type, GL, {Pid, Format, Args}})
+log_event({Type, GL, {Pid, Format, Args}}, Size)
   when Type =:= error orelse
        Type =:= info_msg orelse
        Type =:= warning_msg ->
-    {Type, GL, {Pid, Format, [term(T) || T <- Args]}};
-log_event({Type, GL, {Pid, ReportType, Report}})
+    {Type, GL, {Pid, Format, [term(T, Size) || T <- Args]}};
+log_event({Type, GL, {Pid, ReportType, Report}}, Size)
   when Type =:= error_report orelse
        Type =:= info_report orelse
        Type =:= warning_report ->
     Report2 = case ReportType of
-                  crash_report -> [[{K, term(V)} || {K, V} <- R] ||
+                  crash_report -> [[{K, term(V, Size)} || {K, V} <- R] ||
                                       R <- Report];
-                  _            -> [{K, term(V)} || {K, V} <- Report]
+                  _            -> [{K, term(V, Size)} || {K, V} <- Report]
               end,
     {Type, GL, {Pid, ReportType, Report2}};
-log_event(Event) ->
+log_event(Event, _Size) ->
     Event.
-
-term(T) -> term(T, 10).
 
 %% TODO: avoid copying
 %% TODO: can we get away with using binary:part/3 (OTP vsn requirements)?

@@ -89,7 +89,7 @@ publish1(RoutingKey, Format, Data, LogExch) ->
     Timestamp = rabbit_misc:now_ms() div 1000,
 
     %% TODO: is 'Data' ever in crash report format? I think not, but check...
-    Args = [truncate:log_event(A) || A <- Data],
+    Args = [truncate:log_event(A, ?LOG_TRUNCATE_SIZE) || A <- Data],
     {ok, _DeliveredQPids} =
         rabbit_basic:publish(LogExch, RoutingKey,
                              #'P_basic'{content_type = <<"text/plain">>,

@@ -15,6 +15,7 @@
 %%
 
 -module(rabbit_sasl_report_file_h).
+-include("rabbit.hrl").
 
 -behaviour(gen_event).
 
@@ -66,7 +67,8 @@ init_file({File, Type}) ->
     end.
 
 handle_event(Event, State) ->
-    sasl_report_file_h:handle_event(truncate:log_event(Event), State).
+    sasl_report_file_h:handle_event(
+      truncate:log_event(Event, ?LOG_TRUNCATE_SIZE), State).
 
 handle_info(Info, State) ->
     sasl_report_file_h:handle_info(Info, State).
