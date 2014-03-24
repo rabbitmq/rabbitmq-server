@@ -31,14 +31,15 @@ log_event({Type, GL, {Pid, ReportType, Report}}, Size, Decr)
   when Type =:= error_report orelse
        Type =:= info_report orelse
        Type =:= warning_report ->
-    Report2 = case ReportType of
-                  crash_report -> [[{K, term(V, Size, Decr)} || {K, V} <- R] ||
-                                      R <- Report];
-                  _            -> [{K, term(V, Size, Decr)} || {K, V} <- Report]
-              end,
-    {Type, GL, {Pid, ReportType, Report2}};
+    {Type, GL, {Pid, ReportType, report(Report, Size, Decr)}};
 log_event(Event, _Size, _Decr) ->
     Event.
+
+report([[Thing]], Size, Decr) -> report([Thing], Size, Decr);
+report(List, Size, Decr)      -> [case Item of
+                                      {K, V} -> {K, term(V, Size, Decr)};
+                                      _      -> term(Item, Size, Decr)
+                                  end || Item <- List].
 
 term(Bin, N, _D) when is_binary(Bin) andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
     Suffix = without_ellipsis(N),
