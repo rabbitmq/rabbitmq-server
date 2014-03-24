@@ -116,4 +116,4 @@ code_change(OldVsn, State, Extra) ->
 
 %%----------------------------------------------------------------------
 
-t(Term) -> truncate:log_event(Term, ?LOG_TRUNC_SIZE, ?LOG_TRUNC_DECR).
+t(Term) -> truncate:log_event(Term, ?LOG_TRUNC).

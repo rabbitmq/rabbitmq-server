@@ -18,56 +18,69 @@
 
 -define(ELLIPSIS_LENGTH, 3).
 
--export([log_event/3, term/3]).
+-record(params, {content, struct, content_dec, struct_dec}).
+
+-export([log_event/2, term/2]).
 %% exported for testing
 -export([test/0]).
 
-log_event({Type, GL, {Pid, Format, Args}}, Size, Decr)
+log_event({Type, GL, {Pid, Format, Args}}, Params)
   when Type =:= error orelse
        Type =:= info_msg orelse
        Type =:= warning_msg ->
-    {Type, GL, {Pid, Format, [term(T, Size, Decr) || T <- Args]}};
-log_event({Type, GL, {Pid, ReportType, Report}}, Size, Decr)
+    {Type, GL, {Pid, Format, [term(T, Params) || T <- Args]}};
+log_event({Type, GL, {Pid, ReportType, Report}}, Params)
   when Type =:= error_report orelse
        Type =:= info_report orelse
        Type =:= warning_report ->
-    {Type, GL, {Pid, ReportType, report(Report, Size, Decr)}};
-log_event(Event, _Size, _Decr) ->
+    {Type, GL, {Pid, ReportType, report(Report, Params)}};
+log_event(Event, _Params) ->
     Event.
 
-report([[Thing]], Size, Decr) -> report([Thing], Size, Decr);
-report(List, Size, Decr)      -> [case Item of
-                                      {K, V} -> {K, term(V, Size, Decr)};
-                                      _      -> term(Item, Size, Decr)
+report([[Thing]], Params) -> report([Thing], Params);
+report(List, Params)      -> [case Item of
+                                      {K, V} -> {K, term(V, Params)};
+                                      _      -> term(Item, Params)
                                   end || Item <- List].
 
-term(Bin, N, _D) when (is_binary(Bin) orelse is_bitstring(Bin))
-                      andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
+term(Thing, {Content, Struct, ContentDec, StructDec}) ->
+    term(Thing, #params{content     = Content,
+                        struct     = Struct,
+                        content_dec = ContentDec,
+                        struct_dec = StructDec});
+
+term(Bin, #params{content = N}) when (is_binary(Bin) orelse is_bitstring(Bin))
+                                     andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
     Suffix = without_ellipsis(N),
     <<Head:Suffix/binary, _/bitstring>> = Bin,
     <<Head/binary, <<"...">>/binary>>;
-term(L, N, D) when is_list(L) ->
+term(L, #params{struct = N} = Params) when is_list(L) ->
     case io_lib:printable_list(L) of
         true  -> N2 = without_ellipsis(N),
                  case length(L) > N2 of
                      true  -> string:left(L, N2) ++ "...";
                      false -> L
                  end;
-        false -> shrink_list(L, N, D)
+        false -> shrink_list(L, Params)
     end;
-term(T, N, D) when is_tuple(T) ->
-    list_to_tuple(shrink_list(tuple_to_list(T), N, D));
-term(T, _, _) ->
+term(T, Params) when is_tuple(T) ->
+    list_to_tuple(shrink_list(tuple_to_list(T), Params));
+term(T, _) ->
     T.
 
 without_ellipsis(N) -> erlang:max(N - ?ELLIPSIS_LENGTH, 0).
 
-shrink_list(_, N, _) when N =< 0 ->
+shrink_list(_, #params{struct = N}) when N =< 0 ->
     ['...'];
-shrink_list([], _N, _D) ->
+shrink_list([], _) ->
     [];
-shrink_list([H|T], N, D) ->
-    [term(H, N - D, D) | term(T, N - 1, D)].
+shrink_list([H|T], #params{content     = Content,
+                           struct      = Struct,
+                           content_dec = ContentDec,
+                           struct_dec  = StructDec} = Params) ->
+    [term(H, Params#params{content = Content - ContentDec,
+                           struct  = Struct  - StructDec})
+     | term(T, Params#params{struct = Struct - 1})].
 
 %%----------------------------------------------------------------------------
 
@@ -77,7 +90,7 @@ test() ->
     ok.
 
 test_short_examples_exactly() ->
-    F = fun (Term, Exp) -> Exp = term(Term, 10, 5) end,
+    F = fun (Term, Exp) -> Exp = term(Term, {10, 10, 5, 5}) end,
     F([], []),
     F("h", "h"),
     F("hello world", "hello w..."),
@@ -94,7 +107,8 @@ test_short_examples_exactly() ->
     ok.
 
 test_large_examples_for_size() ->
-    Shrink = fun(Term) -> term(Term, 100, 5) end, %% Real world values
+    %% Real world values
+    Shrink = fun(Term) -> term(Term, {1000, 100, 50, 5}) end,
     TestSize = fun(Term) ->
                        true = 5000000 < size(term_to_binary(Term)),
                        true = 500000 > size(term_to_binary(Shrink(Term)))
