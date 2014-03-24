@@ -66,16 +66,13 @@ init_file({File, Type}) ->
     end.
 
 handle_event(Event, State) ->
-    Event2 = rabbit_trunc_term:truncate_log_event(Event),
-    sasl_report_file_h:handle_event(Event2, State).
+    sasl_report_file_h:handle_event(truncate:log_event(Event), State).
 
-handle_info(Event, State) ->
-    Event2 = rabbit_trunc_term:truncate_log_event(Event),
-    sasl_report_file_h:handle_info(Event2, State).
+handle_info(Info, State) ->
+    sasl_report_file_h:handle_info(Info, State).
 
-handle_call(Event, State) ->
-    Event2 = rabbit_trunc_term:truncate_log_event(Event),
-    sasl_report_file_h:handle_call(Event2, State).
+handle_call(Call, State) ->
+    sasl_report_file_h:handle_call(Call, State).
 
 terminate(Reason, State) ->
     sasl_report_file_h:terminate(Reason, State).

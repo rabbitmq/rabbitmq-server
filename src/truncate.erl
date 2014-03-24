@@ -14,37 +14,37 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_trunc_term).
+-module(truncate).
 
--export([truncate_log_event/1]).
+-export([log_event/1]).
 %% exported for testing
--export([shrink_term/1, shrink_term/2]).
+-export([term/1, term/2]).
 
-truncate_log_event({Type, GL, {Pid, Format, Args}})
+log_event({Type, GL, {Pid, Format, Args}})
   when Type =:= error orelse
        Type =:= info_msg orelse
        Type =:= warning_msg ->
-    {Type, GL, {Pid, Format, [shrink_term(T) || T <- Args]}};
-truncate_log_event({Type, GL, {Pid, ReportType, Report}})
+    {Type, GL, {Pid, Format, [term(T) || T <- Args]}};
+log_event({Type, GL, {Pid, ReportType, Report}})
   when Type =:= error_report orelse
        Type =:= info_report orelse
        Type =:= warning_report ->
     Report2 = case ReportType of
-                  crash_report -> [[{K, shrink_term(V)} || {K, V} <- R] ||
+                  crash_report -> [[{K, term(V)} || {K, V} <- R] ||
                                       R <- Report];
-                  _            -> [{K, shrink_term(V)} || {K, V} <- Report]
+                  _            -> [{K, term(V)} || {K, V} <- Report]
               end,
     {Type, GL, {Pid, ReportType, Report2}};
-truncate_log_event(Event) ->
+log_event(Event) ->
     Event.
 
-shrink_term(T) -> shrink_term(T, 10).
+term(T) -> term(T, 10).
 
 %% TODO: avoid copying
 %% TODO: can we get away with using binary:part/3 (OTP vsn requirements)?
 %% TODO: reconsider depth limit handling
-shrink_term(T, 0) -> T;
-shrink_term(T, N) when is_binary(T) andalso size(T) > N ->
+term(T, 0) -> T;
+term(T, N) when is_binary(T) andalso size(T) > N ->
     Suffix = N - 3,
     Len = case is_bitstring(T) of
               true  -> byte_size(T);
@@ -55,30 +55,30 @@ shrink_term(T, N) when is_binary(T) andalso size(T) > N ->
                            <<Head/binary, <<"...">>/binary>>;
         _               -> T
     end;
-shrink_term([A|B], N) when not is_list(B) ->
-    shrink_term([A,B], N);
-shrink_term(T, N) when is_list(T) ->
+term([A|B], N) when not is_list(B) ->
+    term([A,B], N);
+term(T, N) when is_list(T) ->
     IsPrintable = io_lib:printable_list(T),
     Len = length(T),
     case {Len > N, IsPrintable} of
         {true, true}
           when N > 3   -> lists:append(lists:sublist(T, resize(N-3)), "...");
-        {true, false}  -> lists:append([shrink_term(E, resize(N-1, Len)) ||
+        {true, false}  -> lists:append([term(E, resize(N-1, Len)) ||
                                            E <- lists:sublist(T, resize(N-1))],
                                        ['...']);
-        {false, false} -> [shrink_term(E, resize(N-1, Len)) || E <- T];
+        {false, false} -> [term(E, resize(N-1, Len)) || E <- T];
         _              -> T
     end;
-shrink_term(T, N) when is_tuple(T) ->
+term(T, N) when is_tuple(T) ->
     case tuple_size(T) > N of
         true  -> list_to_tuple(
-                   lists:append([shrink_term(E, N-1) ||
+                   lists:append([term(E, N-1) ||
                                     E <- lists:sublist(tuple_to_list(T), N-1)],
                                 ['...']));
-        false -> list_to_tuple([shrink_term(E, N-1) ||
+        false -> list_to_tuple([term(E, N-1) ||
                                    E <- tuple_to_list(T)])
     end;
-shrink_term(T, _) -> T.
+term(T, _) -> T.
 
 resize(N) -> resize(N, 1).
 
