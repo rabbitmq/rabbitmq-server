@@ -18,7 +18,7 @@
 
 -define(ELLIPSIS_LENGTH, 3).
 
--export([log_event/3]).
+-export([log_event/3, term/3]).
 %% exported for testing
 -export([test/0]).
 
@@ -41,9 +41,10 @@ report(List, Size, Decr)      -> [case Item of
                                       _      -> term(Item, Size, Decr)
                                   end || Item <- List].
 
-term(Bin, N, _D) when is_binary(Bin) andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
+term(Bin, N, _D) when (is_binary(Bin) orelse is_bitstring(Bin))
+                      andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
     Suffix = without_ellipsis(N),
-    <<Head:Suffix/binary, _/binary>> = Bin,
+    <<Head:Suffix/binary, _/bitstring>> = Bin,
     <<Head/binary, <<"...">>/binary>>;
 term(L, N, D) when is_list(L) ->
     case io_lib:printable_list(L) of
@@ -82,7 +83,10 @@ test_short_examples_exactly() ->
     F("hello world", "hello w..."),
     F([[h,e,l,l,o,' ',w,o,r,l,d]], [[h,e,l,l,o,'...']]),
     F([a|b], [a|b]),
+    F(<<"hello">>, <<"hello">>),
     F([<<"hello world">>], [<<"he...">>]),
+    F(<<1:1>>, <<1:1>>),
+    F(<<1:81>>, <<0:56, "...">>),
     F({{{{a}}},{b},c,d,e,f,g,h,i,j,k}, {{{'...'}},{b},c,d,e,f,g,h,i,j,'...'}),
     P = spawn(fun() -> receive die -> ok end end),
     F([0, 0.0, <<1:1>>, F, P], [0, 0.0, <<1:1>>, F, P]),
