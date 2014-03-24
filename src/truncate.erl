@@ -46,10 +46,10 @@ term(Bin, N, _D) when is_binary(Bin) andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
     <<Head:Suffix/binary, _/binary>> = Bin,
     <<Head/binary, <<"...">>/binary>>;
 term(L, N, D) when is_list(L) ->
-    IsPrintable = io_lib:printable_list(L),
-    case IsPrintable of
-        true  -> case length(L) > without_ellipsis(N) of
-                     true  -> string:left(L, without_ellipsis(N)) ++ "...";
+    case io_lib:printable_list(L) of
+        true  -> N2 = without_ellipsis(N),
+                 case length(L) > N2 of
+                     true  -> string:left(L, N2) ++ "...";
                      false -> L
                  end;
         false -> shrink_list(L, N, D)
