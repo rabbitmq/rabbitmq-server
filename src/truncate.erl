@@ -20,7 +20,7 @@
 
 -export([log_event/3]).
 %% exported for testing
--export([test/0, term/3]).
+-export([test/0]).
 
 log_event({Type, GL, {Pid, Format, Args}}, Size, Decr)
   when Type =:= error orelse
@@ -40,8 +40,6 @@ log_event({Type, GL, {Pid, ReportType, Report}}, Size, Decr)
 log_event(Event, _Size, _Decr) ->
     Event.
 
-term(_, N, _) when N =< 0 ->
-    '...';
 term(Bin, N, _D) when is_binary(Bin) andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
     Suffix = without_ellipsis(N),
     <<Head:Suffix/binary, _/binary>> = Bin,
@@ -56,30 +54,18 @@ term(L, N, D) when is_list(L) ->
         false -> shrink_list(L, N, D)
     end;
 term(T, N, D) when is_tuple(T) ->
-    shrink_tuple(T, N, D);
+    list_to_tuple(shrink_list(tuple_to_list(T), N, D));
 term(T, _, _) ->
     T.
 
 without_ellipsis(N) -> erlang:max(N - ?ELLIPSIS_LENGTH, 0).
 
-shrink_list(_, 0, _) ->
+shrink_list(_, N, _) when N =< 0 ->
     ['...'];
 shrink_list([], _N, _D) ->
     [];
 shrink_list([H|T], N, D) ->
-    [term(H, N - D, D) | case is_list(T) of
-                             true  -> shrink_list(T, N - 1, D);
-                             false -> term(T, N - 1, D)
-                         end].
-
-shrink_tuple(T, N, D) ->
-    shrink_tuple(T, N, D, erlang:min(tuple_size(T), N)).
-
-shrink_tuple(_T, _N, _D, 0) ->
-    {};
-shrink_tuple(T, N, D, Ix) ->
-    erlang:append_element(shrink_tuple(T, N, D, Ix - 1),
-                          term(element(Ix, T), N - D, D)).
+    [term(H, N - D, D) | term(T, N - 1, D) ].
 
 %%----------------------------------------------------------------------------
 
@@ -93,14 +79,27 @@ test_short_examples_exactly() ->
     F([], []),
     F("h", "h"),
     F("hello world", "hello w..."),
+    F([[h,e,l,l,o,' ',w,o,r,l,d]], [[h,e,l,l,o,'...']]),
     F([a|b], [a|b]),
     F([<<"hello world">>], [<<"he...">>]),
-    F({{{{a}}},{b},c,d,e,f,g,h,i,j,k}, {{'...'},{'...'},c,d,e,f,g,h,i,j}),
+    F({{{{a}}},{b},c,d,e,f,g,h,i,j,k}, {{{'...'}},{b},c,d,e,f,g,h,i,j,'...'}),
     P = spawn(fun() -> receive die -> ok end end),
     F([0, 0.0, <<1:1>>, F, P], [0, 0.0, <<1:1>>, F, P]),
     P ! die,
     ok.
 
 test_large_examples_for_size() ->
-    %% TODO
+    Shrink = fun(Term) -> term(Term, 100, 5) end, %% Real world values
+    TestSize = fun(Term) ->
+                       true = 5000000 < size(term_to_binary(Term)),
+                       true = 500000 > size(term_to_binary(Shrink(Term)))
+               end,
+    TestSize(lists:seq(1, 5000000)),
+    TestSize(recursive_list(1000, 10)),
+    TestSize(recursive_list(5000, 20)),
+    TestSize(gb_sets:from_list([I || I <- lists:seq(1, 1000000)])),
+    TestSize(gb_trees:from_orddict([{I, I} || I <- lists:seq(1, 1000000)])),
     ok.
+
+recursive_list(S, 0) -> lists:seq(1, S);
+recursive_list(S, N) -> [recursive_list(S div N, N-1) || _ <- lists:seq(1, S)].
