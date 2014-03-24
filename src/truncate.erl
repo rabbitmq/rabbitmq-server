@@ -39,9 +39,7 @@ log_event(Event, _Size) ->
     Event.
 
 %% TODO: avoid copying
-%% TODO: can we get away with using binary:part/3 (OTP vsn requirements)?
-%% TODO: reconsider depth limit handling
-term(T, 0) -> T;
+term(_T, 0) -> '...';
 term(T, N) when is_binary(T) andalso size(T) > N ->
     Suffix = N - 3,
     Len = case is_bitstring(T) of
