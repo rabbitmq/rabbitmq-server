@@ -86,7 +86,7 @@ maybe_cache_msg(XName, #content{properties = #'P_basic'{headers = Headers}} = Co
         undefined ->
             cache_msg(XName, Content);
         _ ->
-            Store = table_lookup(Headers, <<"X-Recent-History-Store">>),
+            Store = table_lookup(Headers, <<"x-recent-history-no-store">>),
             case Store of
                 {bool, false} ->
                     ok;
