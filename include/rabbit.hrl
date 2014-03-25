@@ -125,6 +125,6 @@
 %% 4) Amount to decrease 2) every time we descend while truncating.
 %%
 %% Whole thing feeds into truncate:log_event/2.
--define(LOG_TRUNC, {1000, 100, 50, 5}).
+-define(LOG_TRUNC, {2000, 100, 100, 7}).
 
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
