@@ -1203,24 +1203,15 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
 consumer_monitor(ConsumerTag,
                  State = #ch{consumer_mapping = ConsumerMapping,
                              queue_monitors   = QMons,
-                             queue_consumers  = QCons,
-                             capabilities     = Capabilities}) ->
-    case rabbit_misc:table_lookup(
-           Capabilities, <<"consumer_cancel_notify">>) of
-        {bool, true} ->
-            {#amqqueue{pid = QPid}, _CParams} =
-                dict:fetch(ConsumerTag, ConsumerMapping),
-            QCons1 = dict:update(QPid,
-                                 fun (CTags) ->
-                                         gb_sets:insert(ConsumerTag, CTags)
-                                 end,
-                                 gb_sets:singleton(ConsumerTag),
-                                 QCons),
-            State#ch{queue_monitors  = pmon:monitor(QPid, QMons),
-                     queue_consumers = QCons1};
-        _ ->
-            State
-    end.
+                             queue_consumers  = QCons}) ->
+    {#amqqueue{pid = QPid}, _CParams} =
+        dict:fetch(ConsumerTag, ConsumerMapping),
+    QCons1 = dict:update(QPid, fun (CTags) ->
+                                       gb_sets:insert(ConsumerTag, CTags)
+                               end,
+                         gb_sets:singleton(ConsumerTag), QCons),
+    State#ch{queue_monitors  = pmon:monitor(QPid, QMons),
+             queue_consumers = QCons1}.
 
 monitor_delivering_queue(NoAck, QPid, QName,
                          State = #ch{queue_names       = QNames,
@@ -1273,9 +1264,14 @@ handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
 %% not an HA failover. But the likelihood is not great and most users
 %% are unlikely to care.
 
-cancel_consumer(CTag, QName, State = #ch{consumer_mapping = CMap}) ->
-    ok = send(#'basic.cancel'{consumer_tag = CTag,
-                              nowait       = true}, State),
+cancel_consumer(CTag, QName, State = #ch{capabilities     = Capabilities,
+                                         consumer_mapping = CMap}) ->
+    case rabbit_misc:table_lookup(
+           Capabilities, <<"consumer_cancel_notify">>) of
+        {bool, true} -> ok = send(#'basic.cancel'{consumer_tag = CTag,
+                                                  nowait       = true}, State);
+        _            -> ok
+    end,
     rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
                                            {channel,      self()},
                                            {queue,        QName}]),
