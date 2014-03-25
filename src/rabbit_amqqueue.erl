@@ -436,13 +436,17 @@ declare_args() ->
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2}].
 
-consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
+consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
+                   {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
         false -> {error, {unacceptable_type, Type}}
     end.
+
+check_bool_arg({bool, _}, _) -> ok;
+check_bool_arg({_,    _}, _) -> {error, {unacceptable_type, Type}}.
 
 check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of

@@ -1283,7 +1283,7 @@ cancel_consumer(CTag, QName, State = #ch{consumer_mapping = CMap}) ->
 
 queue_down_consumer_action(CTag, CMap) ->
     {_, {_, _, _, Args} = ConsumeSpec} = dict:fetch(CTag, CMap),
-    case rabbit_misc:table_lookup(Args, <<"cancel-on-ha-failover">>) of
+    case rabbit_misc:table_lookup(Args, <<"x-cancel-on-ha-failover">>) of
         {bool, true} -> remove;
         _            -> {recover, ConsumeSpec}
     end.
