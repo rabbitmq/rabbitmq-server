@@ -18,7 +18,7 @@ Finally copy all the `*.ez` files inside the `dist` folder to the `$RABBITMQ_HOM
 
 ## Usage
 Typically this exchange will store the latest 20 messages sent over the exchange.
-In case you'd like to not store certain messages, just add the header "X-Recent-History-Store" with the value "false"
+In case you'd like to not store certain messages, just add the header "x-recent-history-no-store" with the value "false"
 to the message.
 
 ## License
