@@ -446,7 +446,7 @@ check_int_arg({Type, _}, _) ->
     end.
 
 check_bool_arg({bool, _}, _) -> ok;
-check_bool_arg({_,    _}, _) -> {error, {unacceptable_type, Type}}.
+check_bool_arg({Type, _}, _) -> {error, {unacceptable_type, Type}}.
 
 check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
