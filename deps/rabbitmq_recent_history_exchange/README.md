@@ -34,7 +34,7 @@ channel.exchangeDeclare("my-direct", "direct", false, false, args);
 ### Preventing some messages from being stored ###
 
 In case you would like to not store certain messages, just
-add the header `"x-recent-history-no-store"` with the value "false" to
+add the header `"x-recent-history-no-store"` with the value `true` to
 the message.
 
 ## License
