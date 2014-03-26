@@ -139,7 +139,7 @@ deliver_messages(Queue, Msgs) ->
     error_logger:info_msg("Queue: ~p length: ~p~n", [Queue, length(Msgs)]),
     lists:map(
       fun (Msg) ->
-              Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
+              Delivery = rabbit_basic:delivery(false, Msg, undefined),
               rabbit_amqqueue:deliver([Queue], Delivery)
       end, lists:reverse(Msgs)).
 
