@@ -76,6 +76,12 @@ Section "RabbitMQ Server (required)" Rabbit
   File /r "rabbitmq_server-%%VERSION%%"
   File "rabbitmq.ico"
 
+  ; Set output path to the user's data directory
+  SetOutPath $APPDATA\RabbitMQ
+
+  ; ...And put the example config file there
+  File "rabbitmq_server-%%VERSION%%\etc\rabbitmq.config.example"
+
   ; Write the installation path into the registry
   WriteRegStr HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server" "Install_Dir" "$INSTDIR"
 
