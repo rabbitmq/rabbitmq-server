@@ -47,6 +47,11 @@ In case you would like to not store certain messages, just
 add the header `"x-recent-history-no-store"` with the value `true` to
 the message.
 
+## Disabling the Plugin ##
+
+A future version of RabbitMQ will allow users to disable plugins. When
+you disable this plugin, it will delete all the cached messages.
+
 ## License
 
 See LICENSE.md

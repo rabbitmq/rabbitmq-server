@@ -11,14 +11,13 @@
 -export([description/0, serialise_events/0, route/2]).
 -export([validate/1, validate_binding/2, create/2, delete/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2, policy_changed/2]).
--export([setup_schema/0]).
+-export([setup_schema/0, disable_plugin/0]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type x-recent-history"},
                     {mfa, {rabbit_registry, register,
                            [exchange, <<"x-recent-history">>, ?MODULE]}},
-                    {cleanup, {rabbit_registry, unregister,
-                               [exchange, <<"x-recent-history">>]}},
+                    {cleanup, {?MODULE, disable_plugin, []}},
                     {requires, rabbit_registry},
                     {enables, kernel_ready}]}).
 
@@ -84,8 +83,17 @@ setup_schema() ->
         {aborted, {already_exists, ?RH_TABLE}} -> ok
     end.
 
+disable_plugin() ->
+    rabbit_registry:unregister(exchange, <<"x-recent-history">>),
+    mnesia:delete_table(?RH_TABLE),
+    ok.
+
+%%----------------------------------------------------------------------------
 %%private
-maybe_cache_msg(XName, #content{properties = #'P_basic'{headers = Headers}} = Content, Length) ->
+maybe_cache_msg(XName,
+                #content{properties =
+                             #'P_basic'{headers = Headers}} = Content,
+                Length) ->
     case Headers of
         undefined ->
             cache_msg(XName, Content, Length);
