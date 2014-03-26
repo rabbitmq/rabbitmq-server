@@ -23,15 +23,10 @@
 -include("rabbit_recent_history.hrl").
 
 test() ->
-    t([<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]).
+    ok = eunit:test(tests(?MODULE, 60), [verbose]).
 
-t(Qs) ->
-    ok = test_with_default_length(Qs),
-    ok = test_with_length(Qs),
-    ok = test_with_no_store(Qs),
-    ok.
-
-test_with_default_length(Qs) ->
+default_length_test() ->
+    Qs = qs(),
     test0(fun () ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
@@ -39,7 +34,8 @@ test_with_default_length(Qs) ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
           end, [], Qs, 100, length(Qs) * ?KEEP_NB).
 
-test_with_length(Qs) ->
+length_argument_test() ->
+    Qs = qs(),
     test0(fun () ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
@@ -47,7 +43,8 @@ test_with_length(Qs) ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
           end, [{<<"x-recent-history-length">>, long, 30}], Qs, 100, length(Qs) * 30).
 
-test_with_no_store(Qs) ->
+no_store_test() ->
+    Qs = qs(),
     test0(fun () ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
@@ -101,3 +98,12 @@ test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
     ok.
+
+qs() ->
+    [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>].
+
+tests(Module, Timeout) ->
+    {foreach, fun() -> ok end,
+     [{timeout, Timeout, fun Module:F/0} ||
+         {F, _Arity} <- proplists:get_value(exports, Module:module_info()),
+         string:right(atom_to_list(F), 5) =:= "_test"]}.
