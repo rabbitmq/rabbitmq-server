@@ -37,8 +37,11 @@ description() ->
 
 serialise_events() -> false.
 
-route(#exchange{name = XName}, #delivery{message = #basic_message{content = Content}}) ->
-    maybe_cache_msg(XName, Content),
+route(#exchange{name      = XName,
+                arguments = Args},
+      #delivery{message = #basic_message{content = Content}}) ->
+    Length = table_lookup(Args, <<"history-length">>),
+    maybe_cache_msg(XName, Content, Length),
     rabbit_router:match_routing_key(XName, ['_']).
 
 validate(_X) -> ok.
@@ -84,25 +87,25 @@ setup_schema() ->
     end.
 
 %%private
-maybe_cache_msg(XName, #content{properties = #'P_basic'{headers = Headers}} = Content) ->
+maybe_cache_msg(XName, #content{properties = #'P_basic'{headers = Headers}} = Content, Length) ->
     case Headers of
         undefined ->
-            cache_msg(XName, Content);
+            cache_msg(XName, Content, Length);
         _ ->
             Store = table_lookup(Headers, <<"x-recent-history-no-store">>),
             case Store of
                 {bool, false} ->
                     ok;
                 _ ->
-                    cache_msg(XName, Content)
+                    cache_msg(XName, Content, Length)
             end
     end.
 
-cache_msg(XName, Content) ->
+cache_msg(XName, Content, Length) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Cached = get_msgs_from_cache(XName),
-              store_msg(XName, Cached, Content)
+              store_msg(XName, Cached, Content, Length)
       end).
 
 get_msgs_from_cache(XName) ->
@@ -116,10 +119,15 @@ get_msgs_from_cache(XName) ->
               end
       end).
 
-store_msg(Key, Cached, Content) ->
+store_msg(Key, Cached, Content, undefined) ->
+    store_msg0(Key, Cached, Content, ?KEEP_NB);
+store_msg(Key, Cached, Content, Length) ->
+    store_msg0(Key, Cached, Content, Length).
+
+store_msg0(Key, Cached, Content, Length) ->
     mnesia:write(?RH_TABLE,
                  #cached{key     = Key,
-                         content = [Content|lists:sublist(Cached, ?KEEP_NB-1)]},
+                         content = [Content|lists:sublist(Cached, Length-1)]},
                  write).
 
 msgs_from_content(XName, Cached) ->
