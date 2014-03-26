@@ -44,7 +44,7 @@ test_with_length(Qs) ->
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
-          end, [{<<"history-length">>, long, 30}], Qs, 100, length(Qs) * 30).
+          end, [{<<"x-recent-history-length">>, long, 30}], Qs, 100, length(Qs) * 30).
 
 test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
 
