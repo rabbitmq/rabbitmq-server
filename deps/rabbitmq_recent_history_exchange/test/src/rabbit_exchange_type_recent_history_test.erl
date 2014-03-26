@@ -28,6 +28,7 @@ test() ->
 t(Qs) ->
     ok = test_with_default_length(Qs),
     ok = test_with_length(Qs),
+    ok = test_with_no_store(Qs),
     ok.
 
 test_with_default_length(Qs) ->
@@ -45,6 +46,15 @@ test_with_length(Qs) ->
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
           end, [{<<"x-recent-history-length">>, long, 30}], Qs, 100, length(Qs) * 30).
+
+test_with_no_store(Qs) ->
+    test0(fun () ->
+                  #'basic.publish'{exchange = <<"e">>}
+          end,
+          fun() ->
+                  H = [{<<"x-recent-history-no-store">>, bool, true}],
+                  #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
+          end, [], Qs, 100, 0).
 
 test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
 
