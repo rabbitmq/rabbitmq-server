@@ -37,7 +37,7 @@ serialise_events() -> false.
 route(#exchange{name      = XName,
                 arguments = Args},
       #delivery{message = #basic_message{content = Content}}) ->
-    Length = table_lookup(Args, <<"history-length">>),
+    Length = table_lookup(Args, <<"x-recent-history-length">>),
     maybe_cache_msg(XName, Content, Length),
     rabbit_router:match_routing_key(XName, ['_']).
 
