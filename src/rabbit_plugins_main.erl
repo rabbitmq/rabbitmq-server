@@ -39,10 +39,9 @@
 -define(GLOBAL_DEFS(Node), [?NODE_DEF(Node)]).
 
 -define(COMMANDS,
-        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF,
-                 ?OFFLINE_DEF]},
-         enable,
-         disable]).
+        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
+         {enable, [?OFFLINE_DEF]},
+         {disable, [?OFFLINE_DEF]}]).
 
 %%----------------------------------------------------------------------------
 
