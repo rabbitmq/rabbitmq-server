@@ -18,25 +18,29 @@
 -include("rabbit.hrl").
 
 -export([start/0, stop/0]).
+-export([action/6]).
 
 -define(NODE_OPT, "-n").
 -define(VERBOSE_OPT, "-v").
 -define(MINIMAL_OPT, "-m").
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
+-define(OFFLINE_OPT, "--offline").
 
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
 -define(ENABLED_DEF, {?ENABLED_OPT, flag}).
 -define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
+-define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
 
 -define(RPC_TIMEOUT, infinity).
 
 -define(GLOBAL_DEFS(Node), [?NODE_DEF(Node)]).
 
 -define(COMMANDS,
-        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
+        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF,
+                 ?OFFLINE_DEF]},
          enable,
          disable]).
 
@@ -114,7 +118,7 @@ action(list, Node, [], Opts, PluginsFile, PluginsDir) ->
 action(list, Node, [Pat], Opts, PluginsFile, PluginsDir) ->
     format_plugins(Node, Pat, Opts, PluginsFile, PluginsDir);
 
-action(enable, Node, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
+action(enable, Node, ToEnable0, Opts, PluginsFile, PluginsDir) ->
     case ToEnable0 of
         [] -> throw({error_string, "Not enough arguments for 'enable'"});
         _  -> ok
@@ -128,7 +132,7 @@ action(enable, Node, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     ExplicitlyEnabled = lists:usort(Enabled ++ ToEnable),
     NewEnabled =
         case rpc:call(Node, rabbit_plugins, active, [], ?RPC_TIMEOUT) of
-            {badrpc, _} -> ExplicitlyEnabled;
+            {badrpc, _} -> ensure_offline(Opts, Node, ExplicitlyEnabled);
             []          -> ExplicitlyEnabled;
             ActiveList  -> EnabledSet = sets:from_list(ExplicitlyEnabled),
                            ActiveSet = sets:from_list(ActiveList),
@@ -154,7 +158,7 @@ action(enable, Node, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
               action_change(Node, enable, NewEnabled)
     end;
 
-action(disable, Node, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
+action(disable, Node, ToDisable0, Opts, PluginsFile, PluginsDir) ->
     case ToDisable0 of
         [] -> throw({error_string, "Not enough arguments for 'disable'"});
         _  -> ok
@@ -171,7 +175,7 @@ action(disable, Node, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     ToDisableDeps = rabbit_plugins:dependencies(true, ToDisable, AllPlugins),
     Active =
         case rpc:call(Node, rabbit_plugins, active, [], ?RPC_TIMEOUT) of
-            {badrpc, _} -> Enabled;
+            {badrpc, _} -> ensure_offline(Opts, Node, Enabled);
             []          -> Enabled;
             ActiveList  -> ActiveList
         end,
@@ -191,6 +195,15 @@ action(disable, Node, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+ensure_offline(Opts, Node, Thing) ->
+    case proplists:get_bool(?OFFLINE_OPT, Opts) of
+        true  -> Thing;
+        false -> Msg = io_lib:format("Unable to contact node: ~p - "
+                                     "To make your changes anyway, "
+                                     "try again with --offline~n", [Node]),
+                 throw({error_string, Msg})
+    end.
 
 print_error(Format, Args) ->
     rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
