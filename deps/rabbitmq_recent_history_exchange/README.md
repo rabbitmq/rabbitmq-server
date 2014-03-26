@@ -18,6 +18,16 @@ Finally copy all the `*.ez` files inside the `dist` folder to the `$RABBITMQ_HOM
 
 ## Usage
 
+### Creating an exchange  ###
+
+To create a _recent history exchange_, just declare an exchange providing the type `"x-recent-history"`.
+
+```java
+channel.exchangeDeclare("logs", "x-recent-history");
+```
+
+### Providing a custom history length ###
+
 Typically this exchange will store the latest 20 messages sent over
 the exchange. If you want to set a different cache length, then you
 can pass a `"x-recent-history-length"` argument to `exchange.declare`.
@@ -28,7 +38,7 @@ For example in Java:
 ```java
 Map<String, Object> args = new HashMap<String, Object>();
 args.put("x-recent-history-length", 60);
-channel.exchangeDeclare("my-direct", "direct", false, false, args);
+channel.exchangeDeclare("rh", "x-recent-history", false, false, args);
 ```
 
 ### Preventing some messages from being stored ###
