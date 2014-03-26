@@ -2,6 +2,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include("rabbit_recent_history.hrl").
 
 -behaviour(rabbit_exchange_type).
 
@@ -9,7 +10,7 @@
 
 -export([description/0, serialise_events/0, route/2]).
 -export([validate/1, validate_binding/2, create/2, delete/3, add_binding/3,
-         remove_bindings/3, assert_args_equivalence/2]).
+         remove_bindings/3, assert_args_equivalence/2, policy_changed/2]).
 -export([setup_schema/0]).
 
 -rabbit_boot_step({?MODULE,
@@ -27,10 +28,6 @@
                     {requires, database},
                     {enables, external_infrastructure}]}).
 
--define(KEEP_NB, 20).
--define(RH_TABLE, rh_exchange_table).
--record(cached, {key, content}).
-
 description() ->
     [{name, <<"x-recent-history">>},
      {description, <<"Recent History Exchange.">>}].
@@ -47,6 +44,7 @@ route(#exchange{name      = XName,
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
 create(_Tx, _X) -> ok.
+policy_changed(_X1, _X2) -> ok.
 
 delete(transaction, #exchange{ name = XName }, _Bs) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -121,7 +119,7 @@ get_msgs_from_cache(XName) ->
 
 store_msg(Key, Cached, Content, undefined) ->
     store_msg0(Key, Cached, Content, ?KEEP_NB);
-store_msg(Key, Cached, Content, Length) ->
+store_msg(Key, Cached, Content, {_Type, Length}) ->
     store_msg0(Key, Cached, Content, Length).
 
 store_msg0(Key, Cached, Content, Length) ->
@@ -141,7 +139,7 @@ deliver_messages(Queue, Msgs) ->
     error_logger:info_msg("Queue: ~p length: ~p~n", [Queue, length(Msgs)]),
     lists:map(
       fun (Msg) ->
-              Delivery = rabbit_basic:delivery(false, Msg, undefined),
+              Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
               rabbit_amqqueue:deliver([Queue], Delivery)
       end, lists:reverse(Msgs)).
 
