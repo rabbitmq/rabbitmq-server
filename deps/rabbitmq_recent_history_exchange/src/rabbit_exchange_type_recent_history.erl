@@ -1,7 +1,10 @@
 -module(rabbit_exchange_type_recent_history).
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -behaviour(rabbit_exchange_type).
+
+-import(rabbit_misc, [table_lookup/2]).
 
 -export([description/0, serialise_events/0, route/2]).
 -export([validate/1, validate_binding/2, create/2, delete/3, add_binding/3,
@@ -34,7 +37,7 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name = XName}, #delivery{message = #basic_message{content = Content}}) ->
-    cache_msg(XName, Content),
+    maybe_cache_msg(XName, Content),
     rabbit_router:match_routing_key(XName, ['_']).
 
 validate(_X) -> ok.
@@ -80,6 +83,20 @@ setup_schema() ->
     end.
 
 %%private
+maybe_cache_msg(XName, #content{properties = #'P_basic'{headers = Headers}} = Content) ->
+    case Headers of
+        undefined ->
+            cache_msg(XName, Content);
+        _ ->
+            Store = table_lookup(Headers, <<"x-recent-history-no-store">>),
+            case Store of
+                {bool, false} ->
+                    ok;
+                _ ->
+                    cache_msg(XName, Content)
+            end
+    end.
+
 cache_msg(XName, Content) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->

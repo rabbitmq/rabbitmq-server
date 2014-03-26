@@ -16,6 +16,11 @@ Then `cd` into the umbrella folder and type:
 
 Finally copy all the `*.ez` files inside the `dist` folder to the `$RABBITMQ_HOME/plugins` folder. Don't copy the file `rabbit_common-x.y.z` since it's not needed inside the broker installation.
 
+## Usage
+Typically this exchange will store the latest 20 messages sent over the exchange.
+In case you'd like to not store certain messages, just add the header "x-recent-history-no-store" with the value "false"
+to the message.
+
 ## License
 
 See LICENSE.md
