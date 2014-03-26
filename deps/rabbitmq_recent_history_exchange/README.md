@@ -17,9 +17,25 @@ Then `cd` into the umbrella folder and type:
 Finally copy all the `*.ez` files inside the `dist` folder to the `$RABBITMQ_HOME/plugins` folder. Don't copy the file `rabbit_common-x.y.z` since it's not needed inside the broker installation.
 
 ## Usage
-Typically this exchange will store the latest 20 messages sent over the exchange.
-In case you'd like to not store certain messages, just add the header "x-recent-history-no-store" with the value "false"
-to the message.
+
+Typically this exchange will store the latest 20 messages sent over
+the exchange. If you want to set a different cache length, then you
+can pass a `"x-recent-history-length"` argument to `exchange.declare`.
+The argument must be an integer greater or equal to zero.
+
+For example in Java:
+
+```java
+Map<String, Object> args = new HashMap<String, Object>();
+args.put("x-recent-history-length", 60);
+channel.exchangeDeclare("my-direct", "direct", false, false, args);
+```
+
+### Preventing some messages from being stored ###
+
+In case you would like to not store certain messages, just
+add the header `"x-recent-history-no-store"` with the value "false" to
+the message.
 
 ## License
 
