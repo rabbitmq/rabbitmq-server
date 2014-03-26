@@ -4,7 +4,15 @@ Keeps track of the last 20 messages that passed through the exchange. Every time
 
 Exchange Type: `x-recent-history`
 
-## Installation
+## Installation ##
+
+Copy the file
+`binaries/rabbitmq_recent_history_exchange-1.0.0-rmqX.Y.Z.ez` into
+your `RABBITMQ_PLUGINS_DIR`, where `X.Y.Z` represent your RabbitMQ
+version. At the moment there's only a binary release for
+`3.2.4`. Please open a ticket if you need a different one.
+
+## Building from Source ##
 
 Install and setup the RabbitMQ Public Umbrella as explained here: [http://www.rabbitmq.com/plugin-development.html#getting-started](http://www.rabbitmq.com/plugin-development.html#getting-started).
 
@@ -16,7 +24,7 @@ Then `cd` into the umbrella folder and type:
 
 Finally copy all the `*.ez` files inside the `dist` folder to the `$RABBITMQ_HOME/plugins` folder. Don't copy the file `rabbit_common-x.y.z` since it's not needed inside the broker installation.
 
-## Usage
+## Usage ##
 
 ### Creating an exchange  ###
 
