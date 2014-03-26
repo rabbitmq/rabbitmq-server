@@ -17,7 +17,7 @@
                     {mfa, {rabbit_registry, register,
                            [exchange, <<"x-recent-history">>, ?MODULE]}},
                     {cleanup, {rabbit_registry, unregister,
-                               [exchange, <<"x-recent-history">>]}}
+                               [exchange, <<"x-recent-history">>]}},
                     {requires, rabbit_registry},
                     {enables, kernel_ready}]}).
 
