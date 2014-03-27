@@ -81,8 +81,9 @@ delete(VHostPath) ->
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
     rabbit_log:info("Deleting vhost '~s'~n", [VHostPath]),
-    [assert_benign(rabbit_amqqueue:delete(Q, false, false)) ||
-        Q <- rabbit_amqqueue:list(VHostPath)],
+    QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false) end,
+    [assert_benign(rabbit_amqqueue:with(Name, QDelFun)) ||
+        #amqqueue{name = Name} <- rabbit_amqqueue:list(VHostPath)],
     [assert_benign(rabbit_exchange:delete(Name, false)) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
     R = rabbit_misc:execute_mnesia_transaction(
