@@ -18,24 +18,6 @@ register() ->
                           {policy_validator,  <<"routing-key">>}]],
     ok.
 
-validate_shards_per_node(Term) when is_number(Term) ->
-    case Term >= 0 of
-        true  ->
-            ok;
-        false ->
-            {error, "shards-per-node should be greater than 0, actually was ~p",
-             [Term]}
-    end;
-validate_shards_per_node(Term) ->
-    {error, "shards-per-node should be a number, actually was ~p", [Term]}.
-
-validate_routing_key(Term) when is_binary(Term) ->
-    ok;
-validate_routing_key(Term) ->
-    {error, "routink-key should be binary, actually was ~p", [Term]}.
-
-%%----------------------------------------------------------------------------
-
 validate_policy(KeyList) ->
     SPN = proplists:get_value(<<"shards-per-node">>, KeyList, none),
     RKey = proplists:get_value(<<"routing-key">>, KeyList, none),
@@ -52,3 +34,21 @@ validate_policy(KeyList) ->
                 {error, Reason} -> {error, Reason}
             end
     end.
+
+%%----------------------------------------------------------------------------
+
+validate_shards_per_node(Term) when is_number(Term) ->
+    case Term >= 0 of
+        true  ->
+            ok;
+        false ->
+            {error, "shards-per-node should be greater than 0, actually was ~p",
+             [Term]}
+    end;
+validate_shards_per_node(Term) ->
+    {error, "shards-per-node should be a number, actually was ~p", [Term]}.
+
+validate_routing_key(Term) when is_binary(Term) ->
+    ok;
+validate_routing_key(Term) ->
+    {error, "routink-key should be binary, actually was ~p", [Term]}.
