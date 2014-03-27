@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2012-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2012-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_ws_client_sup).
@@ -60,7 +60,8 @@ start_proc(SupPid, Conn) ->
                    intrinsic, ?MAX_WAIT, worker,
                    [rabbit_stomp_processor]}),
     rabbit_stomp_processor:init_arg(
-      Processor, [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end, none]),
+      Processor, [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end, none,
+                  PeerAddr]),
     {ok, Processor}.
 
 client_spec(Processor, Conn) ->
