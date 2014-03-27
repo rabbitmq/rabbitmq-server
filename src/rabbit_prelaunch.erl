@@ -107,6 +107,10 @@ dist_port_use_check(NodeHost) ->
                    end
     end.
 
+-ifdef(use_specs).
+-spec(dist_port_use_check_fail/2 :: (non_neg_integer(), string()) ->
+                                         no_return()).
+-endif.
 dist_port_use_check_fail(Port, Host) ->
     {ok, Names} = rabbit_nodes:names(Host),
     case [N || {N, P} <- Names, P =:= Port] of
