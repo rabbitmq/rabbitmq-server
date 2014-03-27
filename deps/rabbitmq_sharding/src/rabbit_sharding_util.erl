@@ -15,7 +15,7 @@ shard(X) ->
     end.
 
 sharded_exchanges(VHost) ->
-    [X || X <- find_exchanges(VHost), shard(X)].
+    [X || X <- rabbit_exchange:list(VHost), shard(X)].
 
 shards_per_node(X) ->
     get_policy(<<"shards-per-node">>, X).
@@ -34,8 +34,3 @@ make_queue_name(QBin, NodeBin, QNum) ->
     <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
-
-%%----------------------------------------------------------------------------
-
-find_exchanges(VHost) ->
-    rabbit_exchange:list(VHost).
