@@ -35,7 +35,7 @@ init() ->
     cowboy:start_listener(http, 100,
                           cowboy_tcp_transport, [{port,     Port}],
                           cowboy_http_protocol, [{dispatch, Routes}]),
-    rabbit_log:info("rabbit_web_stomp: started TCP (HTTP) listener on ~s:~w~n",
+    rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
                     ["0.0.0.0", Port]),
     case get_env(ssl_config, []) of
         [] ->
@@ -45,7 +45,7 @@ init() ->
             cowboy:start_listener(https, 100,
                                   cowboy_ssl_transport, Conf,
                                   cowboy_http_protocol, [{dispatch, Routes}]),
-            rabbit_log:info("rabbit_web_stomp: started TLS (HTTPS) listener on ~s:~w~n",
+            rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
                             ["0.0.0.0", TLSPort])
     end,
     ok.
