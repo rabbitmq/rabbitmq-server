@@ -4,13 +4,13 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Used everywhere
--define(RABBIT, {"rabbit-test",       5672}).
--define(HARE,   {"rabbit-hare",       5673}).
+-define(RABBIT, {"rabbit-test", 5672}).
+-define(HARE,   {"rabbit-hare", 5673}).
 -define(TEST_X, <<"sharding.test">>).
 
 -import(rabbit_sharding_test_util,
         [set_param/3, set_pol/3, clear_pol/1,
-         start_other_node/1, cluster_other_node/2,
+         start_other_node/1, cluster_other_node/2, n/1,
          reset_other_node/1, stop_other_node/1, xr/1, qr/1]).
 
 -import(rabbit_sharding_util, [a2b/1, exchange_bin/1]).
@@ -20,7 +20,7 @@ shard_queue_creation_test() ->
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
               set_pol("3_shard", "^sharding\\.", policy(3, "1234")),
-              ?assertEqual(3, length(queues("rabbit-test"))),
+              ?assertEqual(3, length(queues(?RABBIT))),
 
               teardown(Ch,
                        [{?TEST_X, 3}],
@@ -31,11 +31,11 @@ shard_queue_creation2_test() ->
     with_ch(
       fun (Ch) ->
               set_pol("3_shard", "^sharding\\.", policy(3, "1234")),
-              ?assertEqual(0, length(queues("rabbit-test"))),
+              ?assertEqual(0, length(queues(?RABBIT))),
 
               exchange_op(Ch, x_declare(?TEST_X)),
 
-              ?assertEqual(3, length(queues("rabbit-test"))),
+              ?assertEqual(3, length(queues(?RABBIT))),
 
               teardown(Ch,
                        [{?TEST_X, 3}],
@@ -48,10 +48,10 @@ shard_update_spn_test() ->
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
               set_pol("3_shard", "^sharding\\.", policy(3, "1234")),
-              ?assertEqual(3, length(queues("rabbit-test"))),
+              ?assertEqual(3, length(queues(?RABBIT))),
 
               set_pol("3_shard", "^sharding\\.", policy(5, "1234")),
-              ?assertEqual(5, length(queues("rabbit-test"))),
+              ?assertEqual(5, length(queues(?RABBIT))),
 
               teardown(Ch,
                        [{?TEST_X, 5}],
@@ -63,10 +63,10 @@ shard_decrease_spn_keep_queues_test() ->
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
               set_pol("3_shard", "^sharding\\.", policy(5, "1234")),
-              ?assertEqual(5, length(queues("rabbit-test"))),
+              ?assertEqual(5, length(queues(?RABBIT))),
 
               set_pol("3_shard", "^sharding\\.", policy(3, "1234")),
-              ?assertEqual(5, length(queues("rabbit-test"))),
+              ?assertEqual(5, length(queues(?RABBIT))),
 
               teardown(Ch,
                        [{?TEST_X, 5}],
@@ -81,10 +81,10 @@ shard_update_routing_key_test() ->
       fun (Ch) ->
               exchange_op(Ch, x_declare(?TEST_X)),
               set_pol("rkey", "^sharding\\.", policy(3, "1234")),
-              Bs = bindings("rabbit-test", ?TEST_X),
+              Bs = bindings(?RABBIT, ?TEST_X),
 
               set_pol("rkey", "^sharding\\.", policy(3, "4321")),
-              Bs2 = bindings("rabbit-test", ?TEST_X),
+              Bs2 = bindings(?RABBIT, ?TEST_X),
 
               ?assert(Bs =/= Bs2),
 
@@ -134,12 +134,12 @@ shard_auto_scale_cluster_test() ->
               exchange_op(Ch, x_declare(Sh)),
               set_pol("three", "^sharding\\.", policy(3, "1234")),
 
-              ?assertEqual(3, length(queues("rabbit-test"))),
+              ?assertEqual(3, length(queues(?RABBIT))),
 
               start_other_node(?HARE),
-              cluster_other_node(?HARE, {"rabbit-test@avidela", 5672}),
+              cluster_other_node(?HARE, ?RABBIT),
 
-              ?assertEqual(6, length(queues("rabbit-test"))),
+              ?assertEqual(6, length(queues(?RABBIT))),
 
               reset_other_node(?HARE),
               stop_other_node(?HARE),
@@ -157,13 +157,13 @@ assert_consumers(Shard, QInd, Count) ->
     [{consumers, C0}] = rabbit_sharding_interceptor:consumer_count(Q0),
     ?assertEqual(C0, Count).
 
-queues(Nodename) ->
+queues({Nodename, _}) ->
     case rpc:call(n(Nodename), rabbit_amqqueue, list, [<<"/">>]) of
         {badrpc, _} -> [];
         Qs          -> Qs
     end.
 
-bindings(Nodename, XName) ->
+bindings({Nodename, _}, XName) ->
     case rpc:call(n(Nodename), rabbit_binding, list_for_source, [xr(XName)]) of
         {badrpc, _} -> [];
         Bs          -> Bs
@@ -177,9 +177,9 @@ with_ch(Fun) ->
     cleanup(?RABBIT),
     ok.
 
-cleanup({Nodename, _}) ->
+cleanup({Nodename, _} = Rabbit) ->
     [rpc:call(n(Nodename), rabbit_amqqueue, delete, [Q, false, false])
-     || Q <- queues(Nodename)].
+     || Q <- queues(Rabbit)].
 
 teardown(Ch, Xs, Policies) ->
     [begin
@@ -210,10 +210,6 @@ q_delete(Name, QInd) ->
 shard_q(X, N) ->
     rabbit_sharding_util:make_queue_name(
       exchange_bin(X), a2b(node()), N).
-
-n(Nodename) ->
-    {_, NodeHost} = rabbit_nodes:parts(node()),
-    rabbit_nodes:make({Nodename, NodeHost}).
 
 policy(SPN, RK) ->
     Format = "{\"shards-per-node\": ~p, \"routing-key\": ~p}",

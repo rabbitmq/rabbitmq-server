@@ -63,7 +63,7 @@ reset_other_node({Name, _Port}) ->
 
 cluster_other_node({Name, _Port}, {MainName, _Port2}) ->
     execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                " MAIN_NODE=" ++ MainName ++
+                " MAIN_NODE=" ++ atom_to_list(n(MainName)) ++
                 " cluster-other-node"),
     timer:sleep(1000).
 
@@ -85,3 +85,7 @@ plugin_dir() ->
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
+
+n(Nodename) ->
+    {_, NodeHost} = rabbit_nodes:parts(node()),
+    rabbit_nodes:make({Nodename, NodeHost}).
