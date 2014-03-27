@@ -32,19 +32,21 @@ init() ->
                     <<"/stomp">>, fun service_stomp/3, {}, SockjsOpts),
     VhostRoutes = [{[<<"stomp">>, '...'], sockjs_cowboy_handler, SockjsState}],
     Routes = [{'_',  VhostRoutes}], % any vhost
-
-    rabbit_log:info("rabbit_web_stomp: started on ~s:~w~n",
-                    ["0.0.0.0", Port]),
     cowboy:start_listener(http, 100,
                           cowboy_tcp_transport, [{port,     Port}],
                           cowboy_http_protocol, [{dispatch, Routes}]),
+    rabbit_log:info("rabbit_web_stomp: started TCP (HTTP) listener on ~s:~w~n",
+                    ["0.0.0.0", Port]),
     case get_env(ssl_config, []) of
         [] ->
             ok;
         Conf ->
+            TLSPort = proplists:get_value(port, Conf),
             cowboy:start_listener(https, 100,
                                   cowboy_ssl_transport, Conf,
-                                  cowboy_http_protocol, [{dispatch, Routes}])
+                                  cowboy_http_protocol, [{dispatch, Routes}]),
+            rabbit_log:info("rabbit_web_stomp: started TLS (HTTPS) listener on ~s:~w~n",
+                            ["0.0.0.0", TLSPort])
     end,
     ok.
 
