@@ -1,6 +1,6 @@
 -module(rabbit_sharding_interceptor).
 
--include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -behaviour(rabbit_channel_interceptor).
 

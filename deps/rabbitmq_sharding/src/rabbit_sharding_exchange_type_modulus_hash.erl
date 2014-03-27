@@ -15,6 +15,7 @@
 %%
 
 -module(rabbit_sharding_exchange_type_modulus_hash).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_exchange_type).

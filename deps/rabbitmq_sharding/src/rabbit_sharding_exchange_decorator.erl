@@ -9,7 +9,7 @@
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
--include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_exchange_decorator).
 
