@@ -654,9 +654,8 @@ get_journal_handle(State = #qistate { journal_handle = Hdl }) ->
 %% Loading Journal. This isn't idempotent and will mess up the counts
 %% if you call it more than once on the same state. Assumes the counts
 %% are 0 to start with.
-load_journal(State = #qistate { journal_handle = Hdl, dir = Dir }) ->
-    case (Hdl =/= undefined orelse
-          rabbit_file:is_file(filename:join(Dir, ?JOURNAL_FILENAME))) of
+load_journal(State = #qistate { dir = Dir }) ->
+    case rabbit_file:is_file(filename:join(Dir, ?JOURNAL_FILENAME)) of
         true  -> {JournalHdl, State1} = get_journal_handle(State),
                  {ok, 0} = file_handle_cache:position(JournalHdl, 0),
                  load_journal_entries(State1);
