@@ -14,8 +14,7 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--define(MQTT_PROTO_MAJOR, 3).
--define(MQTT_PROTO_MINOR, 1).
+-define(PROTOCOL_NAMES,  [{3, "MQIsdp"}, {4, "MQTT"}]).
 
 %% frame types
 
