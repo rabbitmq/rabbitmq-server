@@ -5,7 +5,7 @@
 -export([maybe_shard_exchanges/0,
          ensure_sharded_queues/1,
          maybe_update_shards/2,
-         maybe_stop_sharding/1]).
+         stop_sharding/1]).
 
 -import(rabbit_misc, [r/3]).
 -import(rabbit_sharding_util, [a2b/1, exchange_bin/1, make_queue_name/3,
@@ -41,7 +41,7 @@ maybe_update_shards(OldX, NewX) ->
     add_queues(NewX),
     bind_queues(NewX).
 
-maybe_stop_sharding(OldX) ->
+stop_sharding(OldX) ->
     unbind_queues(shards_per_node(OldX), OldX).
 
 %% routing key didn't change. Do nothing.

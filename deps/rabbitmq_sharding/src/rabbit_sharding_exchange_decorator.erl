@@ -62,7 +62,7 @@ maybe_update_sharding(OldX, NewX) ->
         true  ->
             rabbit_sharding_util:rpc_call(maybe_update_shards, [OldX, NewX]);
         false ->
-            rabbit_sharding_util:rpc_call(maybe_stop_sharding, [OldX])
+            rabbit_sharding_util:rpc_call(stop_sharding, [OldX])
     end.
 
 maybe_start_sharding(X)->
@@ -76,7 +76,7 @@ maybe_start_sharding(X)->
 maybe_stop_sharding(X) ->
     case shard(X) of
         true  ->
-            rabbit_sharding_util:rpc_call(maybe_stop_sharding, [X]);
+            rabbit_sharding_util:rpc_call(stop_sharding, [X]);
         false ->
             ok
     end.
