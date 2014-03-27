@@ -8,7 +8,7 @@
 %% the License for the specific language governing rights and
 %% limitations under the License.
 %%
-%% The Original Code is RabbitMQ Consistent Hash Exchange.
+%% The Original Code is RabbitMQ Sharding Plugin
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
@@ -25,8 +25,8 @@
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
 -rabbit_boot_step(
-   {rabbit_exchange_type_consistent_hash_registry,
-    [{description, "exchange type x-consistent-hash: registry"},
+   {rabbit_sharding_exchange_type_modulus_hash_registry,
+    [{description, "exchange type x-modulus-hash: registry"},
      {mfa,         {rabbit_registry, register,
                     [exchange, <<"x-modulus-hash">>, ?MODULE]}},
      {cleanup, {rabbit_registry, unregister,

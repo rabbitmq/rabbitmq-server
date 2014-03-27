@@ -8,7 +8,7 @@
 %% the License for the specific language governing rights and
 %% limitations under the License.
 %%
-%% The Original Code is RabbitMQ Consistent Hash Exchange.
+%% The Original Code is RabbitMQ Sharding Plugin
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
