@@ -93,12 +93,17 @@ applies_to(_Other) -> false.
 
 %%----------------------------------------------------------------------------
 
+%% If the queue is not part of a shard, return unmodified name
 queue_name(VHost, QBin) ->
     case lookup_exchange(VHost, QBin) of
         {ok, X}  ->
-            least_consumers(VHost, QBin, shards_per_node(X));
+            case rabbit_sharding_util:shard(X) of
+                true ->
+                    least_consumers(VHost, QBin, shards_per_node(X));
+                _    ->
+                    {ok, QBin}
+            end;
         _Error ->
-            %% Queue is not part of a shard, return unmodified name
             {ok, QBin}
     end.
 
