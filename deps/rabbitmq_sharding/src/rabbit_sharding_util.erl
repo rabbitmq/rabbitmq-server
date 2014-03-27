@@ -2,8 +2,7 @@
 
 -export([shard/1, sharded_exchanges/1]).
 -export([get_policy/2, shards_per_node/1, routing_key/1]).
--export([exchange_bin/1, make_queue_name/3]).
--export([a2b/1, rpc_call/2]).
+-export([exchange_bin/1, make_queue_name/3, a2b/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -34,25 +33,9 @@ make_queue_name(QBin, NodeBin, QNum) ->
     QNumBin = list_to_binary(lists:flatten(io_lib:format("~p", [QNum]))),
     <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
 
-rpc_call(F, Args) ->
-    [begin
-         case rpc:call(Node, rabbit_sharding_shard, F, Args)  of
-             {badrpc, Reason} ->
-                 rabbit_log:error("failed RPC call ~p"
-                                  " - soft error:~n~p~n",
-                                  [F, Reason]),
-                 {error, Reason};
-             Res ->
-                 {ok, Res}
-         end
-     end || Node <- running_nodes()].
-
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
 %%----------------------------------------------------------------------------
 
 find_exchanges(VHost) ->
     rabbit_exchange:list(VHost).
-
-running_nodes() ->
-    proplists:get_value(running_nodes, rabbit_mnesia:status(), []).

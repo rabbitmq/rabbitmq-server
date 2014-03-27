@@ -28,10 +28,7 @@ maybe_shard_exchanges(VHost) ->
     [ensure_sharded_queues(X) ||
         X <- rabbit_sharding_util:sharded_exchanges(VHost)].
 
-%% queue needs to be started on the respective node.
-%% connection will be local.
-%% each rabbit_sharding_shard will receive the event
-%% and can declare the queue locally
+%% queue needs to be declared on the respective node.
 ensure_sharded_queues(X) ->
     add_queues(X),
     bind_queues(X).
@@ -54,23 +51,32 @@ unbind_queues(undefined, _X) ->
     ok;
 unbind_queues(OldSPN, #exchange{name = XName} = X) ->
     OldRKey = routing_key(X),
-    [unbind_queue(XName, OldRKey, N, node()) || N <- lists:seq(0, OldSPN-1)].
+    foreach_node(fun(Node) ->
+                         [unbind_queue(XName, OldRKey, N, Node)
+                          || N <- lists:seq(0, OldSPN-1)]
+                 end).
 
 add_queues(#exchange{name = XName} = X) ->
     SPN = shards_per_node(X),
-    [declare_queue(XName, N, node()) || N <- lists:seq(0, SPN-1)].
+    foreach_node(fun(Node) ->
+                         [declare_queue(XName, N, Node)
+                          || N <- lists:seq(0, SPN-1)]
+                 end).
 
 bind_queues(#exchange{name = XName} = X) ->
     RKey = routing_key(X),
     SPN = shards_per_node(X),
-    [bind_queue(XName, RKey, N, node()) || N <- lists:seq(0, SPN-1)].
+    foreach_node(fun(Node) ->
+                         [bind_queue(XName, RKey, N, Node) ||
+                             N <- lists:seq(0, SPN-1)]
+                 end).
 
 %%----------------------------------------------------------------------------
 
 declare_queue(XName, N, Node) ->
     QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
-    try rabbit_amqqueue:declare(QueueName, false, false, [], none) of
+    try rabbit_amqqueue:declare(QueueName, false, false, [], none, Node) of
         {_Reply, _Q} ->
             ok
     catch
@@ -109,3 +115,9 @@ binding_action(F, XName, RoutingKey, N, Node, ErrMsg) ->
 
 v(#resource{virtual_host = VHost}) ->
     VHost.
+
+foreach_node(F) ->
+    [F(Node) || Node <- running_nodes()].
+
+running_nodes() ->
+    proplists:get_value(running_nodes, rabbit_mnesia:status(), []).
