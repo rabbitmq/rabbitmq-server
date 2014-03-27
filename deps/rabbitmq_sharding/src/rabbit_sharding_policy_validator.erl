@@ -18,21 +18,37 @@ register() ->
                           {policy_validator,  <<"routing-key">>}]],
     ok.
 
-validate_shards_per_node(Name, Term) when is_number(Term) ->
+validate_shards_per_node(Term) when is_number(Term) ->
     case Term >= 0 of
         true  ->
             ok;
         false ->
-            {error, "~s should be greater than 0, actually was ~p", [Name, Term]}
+            {error, "shards-per-node should be greater than 0, actually was ~p",
+             [Term]}
     end;
-validate_shards_per_node(Name, Term) ->
-    {error, "~s should be number, actually was ~p", [Name, Term]}.
+validate_shards_per_node(Term) ->
+    {error, "shards-per-node should be a number, actually was ~p", [Term]}.
+
+validate_routing_key(Term) when is_binary(Term) ->
+    ok;
+validate_routing_key(Term) ->
+    {error, "routink-key should be binary, actually was ~p", [Term]}.
 
 %%----------------------------------------------------------------------------
 
 validate_policy(KeyList) ->
-    rabbit_parameter_validation:proplist(
-      <<"sharding policy definition">>,
-      [{<<"shards-per-node">>, fun validate_shards_per_node/2, mandatory},
-       {<<"routing-key">>, fun rabbit_parameter_validation:binary/2, mandatory}],
-      KeyList).
+    SPN = proplists:get_value(<<"shards-per-node">>, KeyList, none),
+    RKey = proplists:get_value(<<"routing-key">>, KeyList, none),
+    case {SPN, RKey} of
+        {none, none} ->
+            ok;
+        {none, _} ->
+            {error, "shards-per-node and routing-key must be specified", []};
+        {_, none} ->
+            {error, "shards-per-node and routing-key must be specified", []};
+        {SPN, RKey} ->
+            case validate_shards_per_node(SPN) of
+                ok              -> validate_routing_key(RKey);
+                {error, Reason} -> {error, Reason}
+            end
+    end.
