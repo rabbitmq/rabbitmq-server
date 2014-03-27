@@ -14,8 +14,7 @@
 
 register() ->
     [rabbit_registry:register(Class, Name, ?MODULE) ||
-        {Class, Name} <- [{policy_validator,  <<"sharded">>},
-                          {policy_validator,  <<"shards-per-node">>},
+        {Class, Name} <- [{policy_validator,  <<"shards-per-node">>},
                           {policy_validator,  <<"routing-key">>}]],
     ok.
 
@@ -34,7 +33,6 @@ validate_shards_per_node(Name, Term) ->
 validate_policy(KeyList) ->
     rabbit_parameter_validation:proplist(
       <<"sharding policy definition">>,
-      [{<<"sharded">>, fun rabbit_parameter_validation:boolean/2, mandatory},
-       {<<"shards-per-node">>, fun validate_shards_per_node/2, mandatory},
+      [{<<"shards-per-node">>, fun validate_shards_per_node/2, mandatory},
        {<<"routing-key">>, fun rabbit_parameter_validation:binary/2, mandatory}],
       KeyList).

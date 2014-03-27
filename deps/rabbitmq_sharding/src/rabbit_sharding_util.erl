@@ -10,9 +10,9 @@
 -import(rabbit_misc, [pget/3]).
 
 shard(X) ->
-    case get_policy(<<"sharded">>, X) of
-        true -> true;
-        _    -> false
+    case get_policy(<<"shards-per-node">>, X) of
+        undefined -> false;
+        _SPN      -> true
     end.
 
 sharded_exchanges(VHost) ->
