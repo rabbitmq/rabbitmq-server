@@ -3,4 +3,4 @@
   {vsn, "0.1.0"},
   {modules, []},
   {registered, []},
-  {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
+  {applications, [kernel, stdlib, rabbit]}]}.
