@@ -2,28 +2,30 @@ open_source_license.txt
 
 JMS Client for Pivotal RabbitMQ 1.2.0 GA
 
-================================================================
-The following copyright statements and licenses apply to various open
-source software packages (or portions thereof) that are distributed
-with this Pivotal, Inc. Product.
+===========================================================================
+The following copyright statements and licenses apply to various open source
+software packages (or portions thereof) that are distributed with this
+Pivotal Software Inc., Product.
 
-The Pivotal Product may also include other Pivotal components,
-which may contain additional open source software packages. One or
-more such open_source_licenses.txt files may therefore accompany
-this Pivotal Product.
+The Pivotal Product may also include other Pivotal Software Inc.
+components, which may contain additional open source software packages.
+One or more such open_source_licenses.txt files may therefore accompany this
+Pivotal Software Inc. Product.
 
-The Pivotal Product that includes this file does not necessarily
-use all the open source software packages referred to below and
-may also only use portions of a given package.
+The Pivotal Software Inc. Product that includes this file does not necessarily
+use all the open source software packages referred to below and may also
+only use portions of a given package.
 
-=================================================================
-TABLE OF CONTENTS
-=================================================================
 
-The following is a listing of the open source components detailed
-in this document. This list is provided for your convenience; please
-read further if you wish to review the copyright notice(s) and the
-full text of the license associated with each component.
+=============== TABLE OF CONTENTS =============================
+
+
+The following is a listing of the open source components detailed in
+this document. This list is provided for your convenience; please read
+further if you wish to review the copyright notice(s) and the full text
+of the license associated with each component.
+
+
 
 SECTION 1: BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES
 
@@ -49,7 +51,6 @@ APPENDIX. Standard License Files
    >>> Apache License, V2.0
 
    >>> Mozilla Public License, V1.1
-
 
 
 
@@ -832,7 +833,6 @@ EXHIBIT A -Mozilla Public License.
 
 
 
-
 ===========================================================================
 
 To the extent any open source components are licensed under the
@@ -841,10 +841,10 @@ source code and/or modifications to source code to be made
 available (as would be noted above), you may obtain a copy of
 the source code corresponding to the binaries for such open
 source components and modifications thereto, if any, (the
-"Source Files"), by downloading the Source Files from Pivotal website at
-(http://www.gopivotal.com/open-source),or by sending a request,
-with your name and address to: Pivotal Software Inc.3496 Deer Creek Rd,
-Palo Alto, CA 94304,Attention: General Counsel.
+"Source Files"), by downloading the Source Files from Pivotal's website at
+http://www.gopivotal.com/open-source, or by sending a request,
+with your name and address to: Pivotal Software Inc.
+3496 Deer Creek Rd, Palo Alto, CA 94304, Attention: General Counsel.
 All such requests should clearly specify: OPEN SOURCE FILES REQUEST,
 Attention General Counsel. Pivotal shall mail a copy of the
 Source Files to you on a CD or equivalent physical medium. This
@@ -852,4 +852,4 @@ offer to obtain a copy of the Source Files is valid for three
 years from the date you acquired this Software product.
 Alternatively, the Source Files may accompany the Pivotal product.
 
-[RABBITJMS114GASS030414]
+[RABBITJMS120GASC032414]
