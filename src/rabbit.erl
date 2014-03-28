@@ -311,8 +311,7 @@ start() ->
                      ok = ensure_working_log_handlers(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
-                     start_apps(app_startup_order()),
-                     ok = log_broker_started(rabbit_plugins:active())
+                     broker_start()
              end).
 
 boot() ->
@@ -327,11 +326,14 @@ boot() ->
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
                      rabbit_mnesia:check_cluster_consistency(),
-                     Plugins = rabbit_plugins:setup(),
-                     ToBeLoaded = Plugins ++ ?APPS,
-                     start_apps(ToBeLoaded),
-                     ok = log_broker_started(Plugins)
+                     broker_start()
              end).
+
+broker_start() ->
+    Plugins = rabbit_plugins:setup(),
+    ToBeLoaded = Plugins ++ ?APPS,
+    start_apps(ToBeLoaded),
+    ok = log_broker_started(rabbit_plugins:active()).
 
 handle_app_error(Term) ->
     fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
