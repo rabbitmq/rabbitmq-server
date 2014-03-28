@@ -82,7 +82,9 @@ plugin folder.
 
 Then run the following command:
 
-```bash rabbitmq-plugins enable rabbitmq_sharding ```
+```bash
+rabbitmq-plugins enable rabbitmq_sharding
+```
 
 And finally restart the broker (you'd probably want to also enable the
 consistent hash exchange plugin).
