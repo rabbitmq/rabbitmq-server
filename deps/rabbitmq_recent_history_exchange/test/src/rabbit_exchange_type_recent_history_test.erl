@@ -28,18 +28,9 @@ length_argument_test() ->
           end, [{<<"x-recent-history-length">>, long, 30}], Qs, 100, length(Qs) * 30).
 
 wrong_argument_type_test() ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
-    DeclareArgs = [{<<"x-recent-history-length">>, long, -30}],
-    process_flag(trap_exit, true),
-    ?assertExit(_, amqp_channel:call(Chan,
-                          #'exchange.declare' {
-                            exchange = <<"e">>,
-                            type = <<"x-recent-history">>,
-                            auto_delete = true,
-                            arguments = DeclareArgs
-                            })),
-    ok.
+    wrong_argument_type_test0(-30),
+    wrong_argument_type_test0(0).
+
 
 no_store_test() ->
     Qs = qs(),
@@ -94,6 +85,20 @@ test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
     [amqp_channel:call(Chan, #'queue.delete' { queue = Q }) || Q <- Queues],
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
+    ok.
+
+wrong_argument_type_test0(Length) ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    DeclareArgs = [{<<"x-recent-history-length">>, long, Length}],
+    process_flag(trap_exit, true),
+    ?assertExit(_, amqp_channel:call(Chan,
+                          #'exchange.declare' {
+                            exchange = <<"e">>,
+                            type = <<"x-recent-history">>,
+                            auto_delete = true,
+                            arguments = DeclareArgs
+                            })),
     ok.
 
 qs() ->

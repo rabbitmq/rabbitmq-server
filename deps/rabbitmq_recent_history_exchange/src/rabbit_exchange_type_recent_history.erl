@@ -48,7 +48,7 @@ validate(#exchange{arguments = Args}) ->
             ok;
         {Type, Val} ->
             case check_int_arg(Type) of
-                ok when Val >= 0 ->
+                ok when Val > 0 ->
                     ok;
                 _ ->
                     rabbit_misc:protocol_error(precondition_failed,
