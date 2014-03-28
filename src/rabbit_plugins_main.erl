@@ -132,7 +132,7 @@ action(enable, Node, ToEnable0, Opts, PluginsFile, PluginsDir) ->
     OfflineOnly = proplists:get_bool(?OFFLINE_OPT, Opts),
     NewEnabled =
         case OfflineOnly of
-            true  -> ExplicitlyEnabled;
+            true  -> ToEnable -- Enabled;
             false ->
                 case rpc:call(Node, rabbit_plugins, active, [], ?RPC_TIMEOUT) of
                     {badrpc, _} -> rpc_failure(Node);
@@ -332,10 +332,8 @@ write_enabled_plugins(PluginsFile, Plugins) ->
     end.
 
 action_change(true, _Node, Action, _Targets) ->
-    io:format("Plugin configuration has changed. "
-              "Plugins were not ~p since the node is down.~n"
-              "Please start the broker to apply "
-              "your changes.~n",
+    io:format("Offline Mode: No plugins were ~p.~n"
+              "Please (re)start the broker to apply your changes.~n",
               [case Action of
                    enable  -> started;
                    disable -> stopped
