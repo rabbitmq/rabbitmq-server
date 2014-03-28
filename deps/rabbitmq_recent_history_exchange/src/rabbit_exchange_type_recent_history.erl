@@ -27,6 +27,8 @@
                     {requires, database},
                     {enables, external_infrastructure}]}).
 
+-define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
+
 description() ->
     [{name, <<"x-recent-history">>},
      {description, <<"Recent History Exchange.">>}].
@@ -40,7 +42,23 @@ route(#exchange{name      = XName,
     maybe_cache_msg(XName, Content, Length),
     rabbit_router:match_routing_key(XName, ['_']).
 
-validate(_X) -> ok.
+validate(#exchange{arguments = Args}) ->
+    case table_lookup(Args, <<"x-recent-history-length">>) of
+        undefined   ->
+            ok;
+        {Type, Val} ->
+            case check_int_arg(Type) of
+                ok when Val >= 0 ->
+                    ok;
+                _ ->
+                    rabbit_misc:protocol_error(precondition_failed,
+                                               "Invalid argument ~p, "
+                                               "'x-recent-history-length' "
+                                               "must be a positive integer",
+                                               [Val])
+            end
+    end.
+
 validate_binding(_X, _B) -> ok.
 create(_Tx, _X) -> ok.
 policy_changed(_X1, _X2) -> ok.
@@ -156,3 +174,10 @@ queue_not_found_error(QName) ->
       internal_error,
       "could not find queue '~s'",
       [QName]).
+
+%% adapted from rabbit_amqqueue.erl
+check_int_arg(Type) ->
+    case lists:member(Type, ?INTEGER_ARG_TYPES) of
+        true  -> ok;
+        false -> {error, {unacceptable_type, Type}}
+    end.
