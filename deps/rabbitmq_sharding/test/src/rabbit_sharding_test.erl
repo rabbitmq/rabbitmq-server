@@ -4,8 +4,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Used everywhere
--define(RABBIT, {"rabbit-test", 5672}).
--define(HARE,   {"rabbit-hare", 5673}).
+-define(RABBIT, {"rabbit-test",  5672}).
+-define(HARE,   {"arabbit-hare", 5673}).
 -define(TEST_X, <<"sharding.test">>).
 
 -import(rabbit_sharding_test_util,
@@ -139,7 +139,10 @@ shard_auto_scale_cluster_test() ->
               start_other_node(?HARE),
               cluster_other_node(?HARE, ?RABBIT),
 
-              ?assertEqual(6, length(queues(?RABBIT))),
+              Qs = queues(?RABBIT),
+
+              ?assertEqual(6, length(Qs)),
+              ?assertEqual([nn(?HARE), nn(?RABBIT)], lists:usort(queue_nodes(Qs))),
 
               reset_other_node(?HARE),
               stop_other_node(?HARE),
@@ -214,3 +217,12 @@ shard_q(X, N) ->
 policy(SPN, RK) ->
     Format = "{\"shards-per-node\": ~p, \"routing-key\": ~p}",
     lists:flatten(io_lib:format(Format, [SPN, RK])).
+
+queue_nodes(Qs) ->
+    [queue_node(Q) || Q <- Qs].
+
+queue_node(#amqqueue{pid = Pid}) ->
+    node(Pid).
+
+nn({Nodename, _}) ->
+    n(Nodename).
