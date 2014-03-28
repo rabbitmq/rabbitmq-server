@@ -7,10 +7,10 @@ Exchange Type: `x-recent-history`
 ## Installation ##
 
 Copy the file
-`binaries/rabbitmq_recent_history_exchange-1.0.0-rmqX.Y.Z.ez` into
+`binaries/rabbitmq_recent_history_exchange-<VERSION>-rmqX.Y.Z.ez` into
 your `RABBITMQ_PLUGINS_DIR`, where `X.Y.Z` represent your RabbitMQ
-version. At the moment there's only a binary release for
-`3.2.4`. Please open a ticket if you need a different one.
+version. Please open a ticket if you need a binary for a different
+RabbitMQ version than the one provided.
 
 ## Building from Source ##
 
