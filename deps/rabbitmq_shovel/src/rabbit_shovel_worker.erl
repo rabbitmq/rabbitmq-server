@@ -228,7 +228,7 @@ make_conn_and_chan(URIs) ->
     {ok, Conn} = amqp_connection:start(AmqpParam),
     link(Conn),
     {ok, Chan} = amqp_connection:open_channel(Conn),
-    {Conn, Chan, amqp_uri:remove_credentials(URI)}.
+    {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))}.
 
 remaining(Ch, #shovel{delete_after = never}) ->
     unlimited;

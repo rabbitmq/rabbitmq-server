@@ -219,8 +219,8 @@ ensure_queue(Conn, Queue) ->
     end.
 
 update_headers(Table0, Table1, SrcURI, DestURI, Headers) ->
-    Table = Table0 ++ [{<<"src-uri">>,  list_to_binary(SrcURI)},
-                       {<<"dest-uri">>, list_to_binary(DestURI)}] ++ Table1,
+    Table = Table0 ++ [{<<"src-uri">>,  SrcURI},
+                       {<<"dest-uri">>, DestURI}] ++ Table1,
     rabbit_basic:prepend_table_header(
       ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
       Headers).

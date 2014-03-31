@@ -56,10 +56,13 @@ handle_call(status, _From, State) ->
 handle_cast({report, Name, Type, Info, Timestamp}, State) ->
     true = ets:insert(?ETS_NAME, #entry{name = Name, type = Type, info = Info,
                                         timestamp = Timestamp}),
+    rabbit_event:notify(shovel_worker_status,
+                        split_name(Name) ++ split_status(Info)),
     {noreply, State};
 
 handle_cast({remove, Name}, State) ->
     true = ets:delete(?ETS_NAME, Name),
+    rabbit_event:notify(shovel_worker_removed, split_name(Name)),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -70,3 +73,12 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+split_status({running, MoreInfo})         -> [{status, running} | MoreInfo];
+split_status({terminated, Reason})        -> [{status, terminated},
+                                              {reason, Reason}];
+split_status(Status) when is_atom(Status) -> [{status, Status}].
+
+split_name({VHost, Name})           -> [{name,  Name},
+                                        {vhost, VHost}];
+split_name(Name) when is_atom(Name) -> [{name, Name}].
