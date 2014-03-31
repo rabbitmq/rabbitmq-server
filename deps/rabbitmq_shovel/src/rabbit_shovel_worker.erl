@@ -192,10 +192,8 @@ remove_delivery_tags(Seq, true, Unacked, Count) ->
 report_running(State) ->
     rabbit_shovel_status:report(
       State#state.name, State#state.type,
-      {running, [{src_uri,      State#state.inbound_uri},
-                 {src_channel,  State#state.inbound_ch},
-                 {dest_uri,     State#state.outbound_uri},
-                 {dest_channel, State#state.outbound_ch}]}).
+      {running, [{src_uri,  State#state.inbound_uri},
+                 {dest_uri, State#state.outbound_uri}]}).
 
 publish(_Tag, _Method, _Msg, State = #state{remaining_unacked = 0}) ->
     %% We are in on-confirm mode, and are autodelete. We have
