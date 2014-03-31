@@ -200,10 +200,12 @@ validate(_VHost, <<"policy">>, Name, Term) ->
     rabbit_parameter_validation:proplist(
       Name, policy_validation(), Term).
 
-notify(VHost, <<"policy">>, _Name, _Term) ->
+notify(VHost, <<"policy">>, Name, Term) ->
+    rabbit_event:notify(policy_set, [{name, Name} | Term]),
     update_policies(VHost).
 
-notify_clear(VHost, <<"policy">>, _Name) ->
+notify_clear(VHost, <<"policy">>, Name) ->
+    rabbit_event:notify(policy_cleared, [{name, Name}]),
     update_policies(VHost).
 
 %%----------------------------------------------------------------------------

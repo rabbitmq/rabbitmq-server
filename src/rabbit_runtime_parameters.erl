@@ -99,7 +99,11 @@ set_any0(VHost, Component, Name, Term) ->
                 ok ->
                     case mnesia_update(VHost, Component, Name, Term) of
                         {old, Term} -> ok;
-                        _           -> Mod:notify(VHost, Component, Name, Term)
+                        _           -> event_notify(
+                                         parameter_set, VHost, Component,
+                                         [{name,  Name},
+                                          {value, Term}]),
+                                       Mod:notify(VHost, Component, Name, Term)
                     end,
                     ok;
                 E ->
@@ -136,7 +140,10 @@ clear_any(VHost, Component, Name) ->
         not_found -> {error_string, "Parameter does not exist"};
         _         -> mnesia_clear(VHost, Component, Name),
                      case lookup_component(Component) of
-                         {ok, Mod} -> Mod:notify_clear(VHost, Component, Name);
+                         {ok, Mod} -> event_notify(
+                                         parameter_cleared, VHost, Component,
+                                         [{name, Name}]),
+                                      Mod:notify_clear(VHost, Component, Name);
                          _         -> ok
                      end
     end.
@@ -146,6 +153,12 @@ mnesia_clear(VHost, Component, Name) ->
                 ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
         end,
     ok = rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
+
+event_notify(_Event, _VHost, <<"policy">>, _Props) ->
+    ok;
+event_notify(Event, VHost, Component, Props) ->
+    rabbit_event:notify(Event, [{vhost,     VHost},
+                                {component, Component} | Props]).
 
 list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-
