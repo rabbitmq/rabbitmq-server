@@ -1,5 +1,5 @@
 {application, rabbitmq_sharding,
- [{description, "RabbitMQ Topic Management"},
+ [{description, "RabbitMQ Sharding Plugin"},
   {vsn, "0.1.0"},
   {modules, []},
   {registered, []},
