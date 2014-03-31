@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2011-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_backing_queue_qc).
@@ -34,7 +34,8 @@
 -export([initial_state/0, command/1, precondition/2, postcondition/3,
          next_state/3]).
 
--export([prop_backing_queue_test/0, publish_multiple/1, timeout/2]).
+-export([prop_backing_queue_test/0, publish_multiple/1,
+         timeout/2, bump_credit/1]).
 
 -record(state, {bqstate,
                 len,         %% int
@@ -106,6 +107,7 @@ command(S) ->
                {1,  qc_dropwhile(S)},
                {1,  qc_is_empty(S)},
                {1,  qc_timeout(S)},
+               {1,  qc_bump_credit(S)},
                {1,  qc_purge(S)},
                {1,  qc_fold(S)}]).
 
@@ -155,6 +157,9 @@ qc_is_empty(#state{bqstate = BQ}) ->
 qc_timeout(#state{bqstate = BQ}) ->
     {call, ?MODULE, timeout, [BQ, ?TIMEOUT_LIMIT]}.
 
+qc_bump_credit(#state{bqstate = BQ}) ->
+    {call, ?MODULE, bump_credit, [BQ]}.
+
 qc_purge(#state{bqstate = BQ}) ->
     {call, ?BQMOD, purge, [BQ]}.
 
@@ -176,6 +181,8 @@ precondition(#state{messages = Messages},
 precondition(_S, {call, ?BQMOD, _Fun, _Arg}) ->
     true;
 precondition(_S, {call, ?MODULE, timeout, _Arg}) ->
+    true;
+precondition(_S, {call, ?MODULE, bump_credit, _Arg}) ->
     true;
 precondition(#state{len = Len}, {call, ?MODULE, publish_multiple, _Arg}) ->
     Len < ?QUEUE_MAXLEN.
@@ -272,6 +279,8 @@ next_state(S, _Res, {call, ?BQMOD, is_empty, _Args}) ->
 
 next_state(S, BQ, {call, ?MODULE, timeout, _Args}) ->
     S#state{bqstate = BQ};
+next_state(S, BQ, {call, ?MODULE, bump_credit, _Args}) ->
+    S#state{bqstate = BQ};
 
 next_state(S, Res, {call, ?BQMOD, purge, _Args}) ->
     BQ1 = {call, erlang, element, [2, Res]},
@@ -354,6 +363,16 @@ timeout(BQ, AtMost) ->
         _     -> timeout(?BQMOD:timeout(BQ), AtMost - 1)
     end.
 
+bump_credit(BQ) ->
+    case credit_flow:blocked() of
+        false -> BQ;
+        true  -> receive
+                     {bump_credit, Msg} ->
+                         credit_flow:handle_bump_msg(Msg),
+                         ?BQMOD:resume(BQ)
+                 end
+    end.
+
 qc_message_payload() -> ?SIZED(Size, resize(Size * Size, binary())).
 
 qc_routing_key() -> noshrink(binary(10)).
@@ -373,7 +392,7 @@ qc_default_exchange() ->
 
 qc_variable_queue_init(Q) ->
     {call, ?BQMOD, init,
-     [Q, false, function(2, ok)]}.
+     [Q, new, function(2, {ok, []})]}.
 
 qc_test_q() -> {call, rabbit_misc, r, [<<"/">>, queue, noshrink(binary(16))]}.
 

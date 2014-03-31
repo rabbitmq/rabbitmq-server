@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_upgrade_functions).
@@ -46,6 +46,8 @@
 -rabbit_upgrade({exchange_decorators,   mnesia, [policy]}).
 -rabbit_upgrade({policy_apply_to,       mnesia, [runtime_parameters]}).
 -rabbit_upgrade({queue_decorators,      mnesia, [gm_pids]}).
+-rabbit_upgrade({internal_system_x,     mnesia, [exchange_decorators]}).
+-rabbit_upgrade({cluster_name,          mnesia, [runtime_parameters]}).
 
 %% -------------------------------------------------------------------
 
@@ -74,6 +76,7 @@
 -spec(exchange_decorators/0   :: () -> 'ok').
 -spec(policy_apply_to/0       :: () -> 'ok').
 -spec(queue_decorators/0      :: () -> 'ok').
+-spec(internal_system_x/0     :: () -> 'ok').
 
 -endif.
 
@@ -339,6 +342,45 @@ queue_decorators(Table) ->
       end,
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, policy, gm_pids, decorators]).
+
+internal_system_x() ->
+    transform(
+      rabbit_durable_exchange,
+      fun ({exchange, Name = {resource, _, _, <<"amq.rabbitmq.", _/binary>>},
+            Type, Dur, AutoDel, _Int, Args, Scratches, Policy, Decorators}) ->
+              {exchange, Name, Type, Dur, AutoDel, true, Args, Scratches,
+               Policy, Decorators};
+          (X) ->
+              X
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches, policy,
+       decorators]).
+
+cluster_name() ->
+    {atomic, ok} = mnesia:transaction(fun cluster_name_tx/0),
+    ok.
+
+cluster_name_tx() ->
+    %% mnesia:transform_table/4 does not let us delete records
+    T = rabbit_runtime_parameters,
+    mnesia:write_lock_table(T),
+    Ks = [K || {_VHost, <<"federation">>, <<"local-nodename">>} = K
+                   <- mnesia:all_keys(T)],
+    case Ks of
+        []     -> ok;
+        [K|Tl] -> [{runtime_parameters, _K, Name}] = mnesia:read(T, K, write),
+                  R = {runtime_parameters, cluster_name, Name},
+                  mnesia:write(T, R, write),
+                  case Tl of
+                      [] -> ok;
+                      _  -> {VHost, _, _} = K,
+                            error_logger:warning_msg(
+                              "Multiple local-nodenames found, picking '~s' "
+                              "from '~s' for cluster name~n", [Name, VHost])
+                  end
+    end,
+    [mnesia:delete(T, K, write) || K <- Ks],
+    ok.
 
 %%--------------------------------------------------------------------
 

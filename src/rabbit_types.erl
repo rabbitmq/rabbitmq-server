@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_types).
@@ -30,7 +30,8 @@
               connection/0, protocol/0, user/0, internal_user/0,
               username/0, password/0, password_hash/0,
               ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
-              channel_exit/0, connection_exit/0, mfargs/0]).
+              channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
+              proc_type_and_name/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(vhost() :: binary()).
@@ -155,5 +156,8 @@
 -type(connection_exit() :: no_return()).
 
 -type(mfargs() :: {atom(), atom(), [any()]}).
+
+-type(proc_name() :: term()).
+-type(proc_type_and_name() :: {atom(), proc_name()}).
 
 -endif. % use_specs

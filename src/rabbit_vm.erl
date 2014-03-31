@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_vm).
@@ -36,7 +36,7 @@ memory() ->
     ConnProcs     = [rabbit_tcp_client_sup, ssl_connection_sup, amqp_sup],
     QProcs        = [rabbit_amqqueue_sup, rabbit_mirror_queue_slave_sup],
     MsgIndexProcs = [msg_store_transient, msg_store_persistent],
-    MgmtDbProcs   = [rabbit_mgmt_sup],
+    MgmtDbProcs   = [rabbit_mgmt_sup_sup],
     PluginProcs   = plugin_sups(),
 
     All = [ConnProcs, QProcs, MsgIndexProcs, MgmtDbProcs, PluginProcs],

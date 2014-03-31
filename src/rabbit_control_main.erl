@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_control_main).
@@ -90,6 +90,7 @@
          status,
          environment,
          report,
+         set_cluster_name,
          eval,
 
          close_connection,
@@ -191,7 +192,11 @@ start() ->
             rabbit_misc:quit(2);
         {badrpc, Reason} ->
             print_error("unable to connect to node ~w: ~w", [Node, Reason]),
-            print_badrpc_diagnostics(Node),
+            print_badrpc_diagnostics([Node]),
+            rabbit_misc:quit(2);
+        {badrpc_multi, Reason, Nodes} ->
+            print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
+            print_badrpc_diagnostics(Nodes),
             rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
@@ -219,8 +224,8 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
 
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
-print_badrpc_diagnostics(Node) ->
-    fmt_stderr(rabbit_nodes:diagnostics([Node]), []).
+print_badrpc_diagnostics(Nodes) ->
+    fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
 
 stop() ->
     ok.
@@ -527,6 +532,10 @@ action(report, Node, _Args, _Opts, Inform) ->
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
     ok;
 
+action(set_cluster_name, Node, [Name], _Opts, Inform) ->
+    Inform("Setting cluster name to ~s", [Name]),
+    rpc_call(Node, rabbit_nodes, set_cluster_name, [list_to_binary(Name)]);
+
 action(eval, Node, [Expr], _Opts, _Inform) ->
     case erl_scan:string(Expr) of
         {ok, Scanned, _} ->
@@ -706,7 +715,14 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
     end.
 
 call(Node, {Mod, Fun, Args}) ->
-    rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary/1, Args)).
+    rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args)).
+
+list_to_binary_utf8(L) ->
+    B = list_to_binary(L),
+    case rabbit_binary_parser:validate_utf8(B) of
+        ok    -> B;
+        error -> throw({error, {not_utf_8, L}})
+    end.
 
 rpc_call(Node, Mod, Fun, Args) ->
     rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).

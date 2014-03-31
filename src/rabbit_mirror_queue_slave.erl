@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2010-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_slave).
@@ -79,6 +79,7 @@ set_maximum_since_use(QPid, Age) ->
 info(QPid) -> gen_server2:call(QPid, info, infinity).
 
 init(Q) ->
+    ?store_proc_name(Q#amqqueue.name),
     {ok, {not_started, Q}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
       ?DESIRED_HIBERNATE}}.
@@ -114,7 +115,7 @@ handle_go(Q = #amqqueue{name = QName}) ->
                    Self, {rabbit_amqqueue, set_ram_duration_target, [Self]}),
             {ok, BQ} = application:get_env(backing_queue_module),
             Q1 = Q #amqqueue { pid = QPid },
-            BQS = bq_init(BQ, Q1, false),
+            BQS = bq_init(BQ, Q1, new),
             State = #state { q                   = Q1,
                              gm                  = GM,
                              backing_queue       = BQ,
@@ -135,9 +136,8 @@ handle_go(Q = #amqqueue{name = QName}) ->
             rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
             {ok, State};
         {stale, StalePid} ->
-            rabbit_log:warning("Detected stale HA master while adding "
-                               "mirror of ~s: ~p~n",
-                               [rabbit_misc:rs(QName), StalePid]),
+            rabbit_mirror_queue_misc:log_warning(
+              QName, "Detected stale HA master: ~p~n", [StalePid]),
             gm:leave(GM),
             {error, {stale_master_pid, StalePid}};
         duplicate_live_master ->
@@ -525,8 +525,8 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           msg_id_ack          = MA,
                           msg_id_status       = MS,
                           known_senders       = KS }) ->
-    rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
-                    [rabbit_misc:rs(QName), rabbit_misc:pid_to_string(self())]),
+    rabbit_mirror_queue_misc:log_info(QName, "Promoting slave ~s to master~n",
+                                      [rabbit_misc:pid_to_string(self())]),
     Q1 = Q #amqqueue { pid = self() },
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q1, GM, rabbit_mirror_queue_master:sender_death_fun(),
@@ -616,6 +616,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     KS1 = lists:foldl(fun (ChPid0, KS0) ->
                               pmon:demonitor(ChPid0, KS0)
                       end, KS, AwaitGmDown),
+    rabbit_misc:store_proc_name(rabbit_amqqueue_process, QName),
     rabbit_amqqueue_process:init_with_backing_queue_state(
       Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS1,
       MTC).

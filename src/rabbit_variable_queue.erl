@@ -11,18 +11,18 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
 
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1, purge_acks/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
-         dropwhile/2, fetchwhile/4,
-         fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3, len/1,
-         is_empty/1, depth/1, set_ram_duration_target/2, ram_duration/1,
-         needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
-         is_duplicate/2, multiple_routing_keys/0]).
+         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
+         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
+         handle_pre_hibernate/1, resume/1, msg_rates/1,
+         status/1, invoke/3, is_duplicate/2, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
@@ -156,21 +156,19 @@
 %% (betas+gammas+delta)/(target_ram_count+betas+gammas+delta). I.e. as
 %% the target_ram_count shrinks to 0, so must betas and gammas.
 %%
-%% The conversion of betas to gammas is done in batches of exactly
+%% The conversion of betas to gammas is done in batches of at least
 %% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
 %% frequent operations on the queues of q2 and q3 will not be
 %% effectively amortised (switching the direction of queue access
-%% defeats amortisation), nor should it be too big, otherwise
-%% converting a batch stalls the queue for too long. Therefore, it
-%% must be just right.
+%% defeats amortisation). Note that there is a natural upper bound due
+%% to credit_flow limits on the alpha to beta conversion.
 %%
-%% The conversion from alphas to betas is also chunked, but only to
-%% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
-%% any one time. This further smooths the effects of changes to the
-%% target_ram_count and ensures the queue remains responsive
-%% even when there is a large amount of IO work to do. The
-%% timeout callback is utilised to ensure that conversions are
-%% done as promptly as possible whilst ensuring the queue remains
+%% The conversion from alphas to betas is chunked due to the
+%% credit_flow limits of the msg_store. This further smooths the
+%% effects of changes to the target_ram_count and ensures the queue
+%% remains responsive even when there is a large amount of IO work to
+%% do. The 'resume' callback is utilised to ensure that conversions
+%% are done as promptly as possible whilst ensuring the queue remains
 %% responsive.
 %%
 %% In the queue we keep track of both messages that are pending
@@ -196,13 +194,7 @@
 %% The order in which alphas are pushed to betas and pending acks
 %% are pushed to disk is determined dynamically. We always prefer to
 %% push messages for the source (alphas or acks) that is growing the
-%% fastest (with growth measured as avg. ingress - avg. egress). In
-%% each round of memory reduction a chunk of messages at most
-%% ?IO_BATCH_SIZE in size is allocated to be pushed to disk. The
-%% fastest growing source will be reduced by as much of this chunk as
-%% possible. If there is any remaining allocation in the chunk after
-%% the first source has been reduced to zero, the second source will
-%% be reduced by as much of the remaining chunk as possible.
+%% fastest (with growth measured as avg. ingress - avg. egress).
 %%
 %% Notes on Clean Shutdown
 %% (This documents behaviour in variable_queue, queue_index and
@@ -277,11 +269,10 @@
           unconfirmed,
           confirmed,
           ack_out_counter,
-          ack_in_counter,
-          ack_rates
+          ack_in_counter
         }).
 
--record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
+-record(rates, { in, out, ack_in, ack_out, timestamp }).
 
 -record(msg_status,
         { seq_id,
@@ -300,13 +291,10 @@
           end_seq_id    %% end_seq_id is exclusive
         }).
 
-%% When we discover, on publish, that we should write some indices to
-%% disk for some betas, the IO_BATCH_SIZE sets the number of betas
-%% that we must be due to write indices for before we do any work at
-%% all. This is both a minimum and a maximum - we don't write fewer
-%% than IO_BATCH_SIZE indices out in one go, and we don't write more -
-%% we can always come back on the next publish to do more.
--define(IO_BATCH_SIZE, 64).
+%% When we discover that we should write some indices to disk for some
+%% betas, the IO_BATCH_SIZE sets the number of betas that we must be
+%% due to write indices for before we do any work at all.
+-define(IO_BATCH_SIZE, 2048). %% next power-of-2 after ?CREDIT_DISC_BOUND
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(QUEUE, lqueue).
@@ -322,11 +310,11 @@
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
 
--type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
-                          ingress     :: {timestamp(), non_neg_integer()},
-                          avg_egress  :: float(),
-                          avg_ingress :: float(),
-                          timestamp   :: timestamp() }).
+-type(rates() :: #rates { in        :: float(),
+                          out       :: float(),
+                          ack_in    :: float(),
+                          ack_out   :: float(),
+                          timestamp :: timestamp()}).
 
 -type(delta() :: #delta { start_seq_id :: non_neg_integer(),
                           count        :: non_neg_integer(),
@@ -368,8 +356,7 @@
              unconfirmed           :: gb_set(),
              confirmed             :: gb_set(),
              ack_out_counter       :: non_neg_integer(),
-             ack_in_counter        :: non_neg_integer(),
-             ack_rates             :: rates() }).
+             ack_in_counter        :: non_neg_integer() }).
 %% Duplicated from rabbit_backing_queue
 -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
@@ -384,21 +371,37 @@
                                          count        = 0,
                                          end_seq_id   = Z }).
 
+-define(MICROS_PER_SECOND, 1000000.0).
+
+%% We're sampling every 5s for RAM duration; a half life that is of
+%% the same order of magnitude is probably about right.
+-define(RATE_AVG_HALF_LIFE, 5.0).
+
+%% We will recalculate the #rates{} every time we get asked for our
+%% RAM duration, or every N messages published, whichever is
+%% sooner. We do this since the priority calculations in
+%% rabbit_amqqueue_process need fairly fresh rates.
+-define(MSGS_PER_RATE_CALC, 100).
+
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
 
 start(DurableQueues) ->
-    {AllTerms, StartFunState} = rabbit_queue_index:recover(DurableQueues),
+    {AllTerms, StartFunState} = rabbit_queue_index:start(DurableQueues),
     start_msg_store(
       [Ref || Terms <- AllTerms,
+              Terms /= non_clean_shutdown,
               begin
                   Ref = proplists:get_value(persistent_ref, Terms),
                   Ref =/= undefined
               end],
-      StartFunState).
+      StartFunState),
+    {ok, AllTerms}.
 
-stop() -> stop_msg_store().
+stop() ->
+    ok = stop_msg_store(),
+    ok = rabbit_queue_index:stop().
 
 start_msg_store(Refs, StartFunState) ->
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
@@ -419,7 +422,7 @@ init(Queue, Recover, AsyncCallback) ->
          end,
          fun (MsgIds) -> msg_indices_written_to_disk(AsyncCallback, MsgIds) end).
 
-init(#amqqueue { name = QueueName, durable = IsDurable }, false,
+init(#amqqueue { name = QueueName, durable = IsDurable }, new,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
     init(IsDurable, IndexState, 0, [],
@@ -430,28 +433,31 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, false,
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback));
 
-init(#amqqueue { name = QueueName, durable = true }, true,
+init(#amqqueue { name = QueueName, durable = true }, Terms,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
-    Terms = rabbit_queue_index:shutdown_terms(QueueName),
-    {PRef, Terms1} =
-        case proplists:get_value(persistent_ref, Terms) of
-            undefined -> {rabbit_guid:gen(), []};
-            PRef1     -> {PRef1, Terms}
-        end,
+    {PRef, RecoveryTerms} = process_recovery_terms(Terms),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
                                              MsgOnDiskFun, AsyncCallback),
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
                                              undefined, AsyncCallback),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
-          QueueName, Terms1,
+          QueueName, RecoveryTerms,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
           fun (MsgId) ->
                   rabbit_msg_store:contains(MsgId, PersistentClient)
           end,
           MsgIdxOnDiskFun),
-    init(true, IndexState, DeltaCount, Terms1,
+    init(true, IndexState, DeltaCount, RecoveryTerms,
          PersistentClient, TransientClient).
+
+process_recovery_terms(Terms=non_clean_shutdown) ->
+    {rabbit_guid:gen(), Terms};
+process_recovery_terms(Terms) ->
+    case proplists:get_value(persistent_ref, Terms) of
+        undefined -> {rabbit_guid:gen(), []};
+        PRef      -> {PRef, Terms}
+    end.
 
 terminate(_Reason, State) ->
     State1 = #vqstate { persistent_count  = PCount,
@@ -533,14 +539,15 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                  false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
                  true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
              end,
-    PCount1 = PCount + one_if(IsPersistent1),
+    InCount1 = InCount + 1,
+    PCount1  = PCount  + one_if(IsPersistent1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    a(reduce_memory_use(
-        inc_ram_msg_count(State2 #vqstate { next_seq_id      = SeqId   + 1,
-                                            len              = Len     + 1,
-                                            in_counter       = InCount + 1,
-                                            persistent_count = PCount1,
-                                            unconfirmed      = UC1 }))).
+    State3 = inc_ram_msg_count(State2 #vqstate { next_seq_id      = SeqId + 1,
+                                                 len              = Len   + 1,
+                                                 in_counter       = InCount1,
+                                                 persistent_count = PCount1,
+                                                 unconfirmed      = UC1 }),
+    a(reduce_memory_use(maybe_update_rates(State3))).
 
 publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
                                          id = MsgId },
@@ -558,12 +565,12 @@ publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    {SeqId, a(reduce_memory_use(
-                State2 #vqstate { next_seq_id      = SeqId    + 1,
-                                  out_counter      = OutCount + 1,
-                                  in_counter       = InCount  + 1,
-                                  persistent_count = PCount1,
-                                  unconfirmed      = UC1 }))}.
+    State3 = State2 #vqstate { next_seq_id      = SeqId    + 1,
+                               out_counter      = OutCount + 1,
+                               in_counter       = InCount  + 1,
+                               persistent_count = PCount1,
+                               unconfirmed      = UC1 },
+    {SeqId, a(reduce_memory_use(maybe_update_rates(State3)))}.
 
 discard(_MsgId, _ChPid, State) -> State.
 
@@ -622,6 +629,31 @@ drop(AckRequired, State) ->
 
 ack([], State) ->
     {[], State};
+%% optimisation: this head is essentially a partial evaluation of the
+%% general case below, for the single-ack case.
+ack([SeqId], State) ->
+    {#msg_status { msg_id        = MsgId,
+                   is_persistent = IsPersistent,
+                   msg_on_disk   = MsgOnDisk,
+                   index_on_disk = IndexOnDisk },
+     State1 = #vqstate { index_state       = IndexState,
+                         msg_store_clients = MSCState,
+                         persistent_count  = PCount,
+                         ack_out_counter   = AckOutCount }} =
+        remove_pending_ack(SeqId, State),
+    IndexState1 = case IndexOnDisk of
+                      true  -> rabbit_queue_index:ack([SeqId], IndexState);
+                      false -> IndexState
+                  end,
+    case MsgOnDisk of
+        true  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]);
+        false -> ok
+    end,
+    PCount1 = PCount - one_if(IsPersistent),
+    {[MsgId],
+     a(State1 #vqstate { index_state      = IndexState1,
+                         persistent_count = PCount1,
+                         ack_out_counter  = AckOutCount + 1 })};
 ack(AckTags, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,
@@ -658,11 +690,12 @@ requeue(AckTags, #vqstate { delta      = Delta,
                                                   State2),
     MsgCount = length(MsgIds2),
     {MsgIds2, a(reduce_memory_use(
-                  State3 #vqstate { delta      = Delta1,
-                                    q3         = Q3a,
-                                    q4         = Q4a,
-                                    in_counter = InCounter + MsgCount,
-                                    len        = Len + MsgCount }))}.
+                  maybe_update_rates(
+                    State3 #vqstate { delta      = Delta1,
+                                      q3         = Q3a,
+                                      q4         = Q4a,
+                                      in_counter = InCounter + MsgCount,
+                                      len        = Len + MsgCount })))}.
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
@@ -689,10 +722,10 @@ depth(State = #vqstate { ram_pending_ack = RPA, disk_pending_ack = DPA }) ->
 
 set_ram_duration_target(
   DurationTarget, State = #vqstate {
-                    rates     = #rates { avg_egress  = AvgEgressRate,
-                                         avg_ingress = AvgIngressRate },
-                    ack_rates = #rates { avg_egress  = AvgAckEgressRate,
-                                         avg_ingress = AvgAckIngressRate },
+                    rates = #rates { in      = AvgIngressRate,
+                                     out     = AvgEgressRate,
+                                     ack_in  = AvgAckIngressRate,
+                                     ack_out = AvgAckEgressRate },
                     target_ram_count = TargetRamCount }) ->
     Rate =
         AvgEgressRate + AvgIngressRate + AvgAckEgressRate + AvgAckIngressRate,
@@ -709,35 +742,57 @@ set_ram_duration_target(
           false -> reduce_memory_use(State1)
       end).
 
-ram_duration(State = #vqstate {
-               rates              = #rates { timestamp = Timestamp,
-                                             egress    = Egress,
-                                             ingress   = Ingress } = Rates,
-               ack_rates          = #rates { timestamp = AckTimestamp,
-                                             egress    = AckEgress,
-                                             ingress   = AckIngress } = ARates,
-               in_counter         = InCount,
-               out_counter        = OutCount,
-               ack_in_counter     = AckInCount,
-               ack_out_counter    = AckOutCount,
-               ram_msg_count      = RamMsgCount,
-               ram_msg_count_prev = RamMsgCountPrev,
-               ram_pending_ack    = RPA,
-               ram_ack_count_prev = RamAckCountPrev }) ->
-    Now = now(),
-    {AvgEgressRate,   Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
-    {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),
+maybe_update_rates(State = #vqstate{ in_counter  = InCount,
+                                     out_counter = OutCount })
+  when InCount + OutCount > ?MSGS_PER_RATE_CALC ->
+    update_rates(State);
+maybe_update_rates(State) ->
+    State.
 
-    {AvgAckEgressRate,   AckEgress1} =
-        update_rate(Now, AckTimestamp, AckOutCount, AckEgress),
-    {AvgAckIngressRate, AckIngress1} =
-        update_rate(Now, AckTimestamp, AckInCount, AckIngress),
+update_rates(State = #vqstate{ in_counter      =     InCount,
+                               out_counter     =    OutCount,
+                               ack_in_counter  =  AckInCount,
+                               ack_out_counter = AckOutCount,
+                               rates = #rates{ in        =     InRate,
+                                               out       =    OutRate,
+                                               ack_in    =  AckInRate,
+                                               ack_out   = AckOutRate,
+                                               timestamp = TS }}) ->
+    Now = erlang:now(),
+
+    Rates = #rates { in        = update_rate(Now, TS,     InCount,     InRate),
+                     out       = update_rate(Now, TS,    OutCount,    OutRate),
+                     ack_in    = update_rate(Now, TS,  AckInCount,  AckInRate),
+                     ack_out   = update_rate(Now, TS, AckOutCount, AckOutRate),
+                     timestamp = Now },
+
+    State#vqstate{ in_counter      = 0,
+                   out_counter     = 0,
+                   ack_in_counter  = 0,
+                   ack_out_counter = 0,
+                   rates           = Rates }.
+
+update_rate(Now, TS, Count, Rate) ->
+    Time = timer:now_diff(Now, TS) / ?MICROS_PER_SECOND,
+    rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE, Count / Time, Rate).
+
+ram_duration(State) ->
+    State1 = #vqstate { rates = #rates { in      = AvgIngressRate,
+                                         out     = AvgEgressRate,
+                                         ack_in  = AvgAckIngressRate,
+                                         ack_out = AvgAckEgressRate },
+                        ram_msg_count      = RamMsgCount,
+                        ram_msg_count_prev = RamMsgCountPrev,
+                        ram_pending_ack    = RPA,
+                        ram_ack_count_prev = RamAckCountPrev } =
+        update_rates(State),
 
     RamAckCount = gb_trees:size(RPA),
 
     Duration = %% msgs+acks / (msgs+acks/sec) == sec
-        case (AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
-              AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0) of
+        case lists:all(fun (X) -> X < 0.01 end,
+                       [AvgEgressRate, AvgIngressRate,
+                        AvgAckEgressRate, AvgAckIngressRate]) of
             true  -> infinity;
             false -> (RamMsgCountPrev + RamMsgCount +
                           RamAckCount + RamAckCountPrev) /
@@ -745,49 +800,26 @@ ram_duration(State = #vqstate {
                                    AvgAckEgressRate + AvgAckIngressRate))
         end,
 
-    {Duration, State #vqstate {
-                 rates              = Rates #rates {
-                                        egress      = Egress1,
-                                        ingress     = Ingress1,
-                                        avg_egress  = AvgEgressRate,
-                                        avg_ingress = AvgIngressRate,
-                                        timestamp   = Now },
-                 ack_rates          = ARates #rates {
-                                        egress      = AckEgress1,
-                                        ingress     = AckIngress1,
-                                        avg_egress  = AvgAckEgressRate,
-                                        avg_ingress = AvgAckIngressRate,
-                                        timestamp   = Now },
-                 in_counter         = 0,
-                 out_counter        = 0,
-                 ack_in_counter     = 0,
-                 ack_out_counter    = 0,
-                 ram_msg_count_prev = RamMsgCount,
-                 ram_ack_count_prev = RamAckCount }}.
+    {Duration, State1}.
 
-needs_timeout(State = #vqstate { index_state      = IndexState,
-                                 target_ram_count = TargetRamCount }) ->
+needs_timeout(#vqstate { index_state = IndexState }) ->
     case rabbit_queue_index:needs_sync(IndexState) of
-        confirms                              -> timed;
-        other                                 -> idle;
-        false when TargetRamCount == infinity -> false;
-        false -> case reduce_memory_use(
-                        fun (_Quota, State1) -> {0, State1} end,
-                        fun (_Quota, State1) -> State1 end,
-                        fun (_Quota, State1) -> {0, State1} end,
-                        State) of
-                     {true,  _State} -> idle;
-                     {false, _State} -> false
-                 end
+        confirms -> timed;
+        other    -> idle;
+        false    -> false
     end.
 
 timeout(State = #vqstate { index_state = IndexState }) ->
-    IndexState1 = rabbit_queue_index:sync(IndexState),
-    State1 = State #vqstate { index_state = IndexState1 },
-    a(reduce_memory_use(State1)).
+    State #vqstate { index_state = rabbit_queue_index:sync(IndexState) }.
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
+
+resume(State) -> a(reduce_memory_use(State)).
+
+msg_rates(#vqstate { rates = #rates { in  = AvgIngressRate,
+                                      out = AvgEgressRate } }) ->
+    {AvgIngressRate, AvgEgressRate}.
 
 status(#vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
@@ -798,10 +830,11 @@ status(#vqstate {
           ram_msg_count    = RamMsgCount,
           next_seq_id      = NextSeqId,
           persistent_count = PersistentCount,
-          rates            = #rates { avg_egress  = AvgEgressRate,
-                                      avg_ingress = AvgIngressRate },
-          ack_rates        = #rates { avg_egress  = AvgAckEgressRate,
-                                      avg_ingress = AvgAckIngressRate } }) ->
+          rates            = #rates { in      = AvgIngressRate,
+                                      out     = AvgEgressRate,
+                                      ack_in  = AvgAckIngressRate,
+                                      ack_out = AvgAckEgressRate }}) ->
+
     [ {q1                  , ?QUEUE:len(Q1)},
       {q2                  , ?QUEUE:len(Q2)},
       {delta               , Delta},
@@ -991,10 +1024,6 @@ expand_delta(SeqId, #delta { count        = Count,
 expand_delta(_SeqId, #delta { count       = Count } = Delta) ->
     d(Delta #delta { count = Count + 1 }).
 
-update_rate(Now, Then, Count, {OThen, OCount}) ->
-    %% avg over the current period and the previous
-    {1000000.0 * (Count + OCount) / timer:now_diff(Now, OThen), {Then, Count}}.
-
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
@@ -1003,7 +1032,12 @@ init(IsDurable, IndexState, DeltaCount, Terms,
      PersistentClient, TransientClient) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
-    DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
+    DeltaCount1 =
+        case Terms of
+            non_clean_shutdown -> DeltaCount;
+            _                  -> proplists:get_value(persistent_count,
+                                                      Terms, DeltaCount)
+        end,
     Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
                 true  -> ?BLANK_DELTA;
                 false -> d(#delta { start_seq_id = LowSeqId,
@@ -1034,22 +1068,21 @@ init(IsDurable, IndexState, DeltaCount, Terms,
       ram_ack_count_prev  = 0,
       out_counter         = 0,
       in_counter          = 0,
-      rates               = blank_rate(Now, DeltaCount1),
+      rates               = blank_rates(Now),
       msgs_on_disk        = gb_sets:new(),
       msg_indices_on_disk = gb_sets:new(),
       unconfirmed         = gb_sets:new(),
       confirmed           = gb_sets:new(),
       ack_out_counter     = 0,
-      ack_in_counter      = 0,
-      ack_rates           = blank_rate(Now, 0) },
+      ack_in_counter      = 0 },
     a(maybe_deltas_to_betas(State)).
 
-blank_rate(Timestamp, IngressLength) ->
-    #rates { egress      = {Timestamp, 0},
-             ingress     = {Timestamp, IngressLength},
-             avg_egress  = 0.0,
-             avg_ingress = 0.0,
-             timestamp   = Timestamp }.
+blank_rates(Now) ->
+    #rates { in        = 0.0,
+             out       = 0.0,
+             ack_in    = 0.0,
+             ack_out   = 0.0,
+             timestamp = Now}.
 
 in_r(MsgStatus = #msg_status { msg = undefined },
      State = #vqstate { q3 = Q3, q4 = Q4 }) ->
@@ -1132,11 +1165,12 @@ remove(AckRequired, MsgStatus = #msg_status {
     PCount1      = PCount      - one_if(IsPersistent andalso not AckRequired),
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
-    {AckTag, State1 #vqstate {ram_msg_count    = RamMsgCount1,
-                              out_counter      = OutCount + 1,
-                              index_state      = IndexState2,
-                              len              = Len - 1,
-                              persistent_count = PCount1}}.
+    {AckTag, maybe_update_rates(
+               State1 #vqstate {ram_msg_count    = RamMsgCount1,
+                                out_counter      = OutCount + 1,
+                                index_state      = IndexState2,
+                                len              = Len - 1,
+                                persistent_count = PCount1})}.
 
 purge_betas_and_deltas(LensByStore,
                        State = #vqstate { q3                = Q3,
@@ -1499,58 +1533,49 @@ ifold(Fun, Acc, Its, State) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
-%% Determine whether a reduction in memory use is necessary, and call
-%% functions to perform the required phase changes. The function can
-%% also be used to just do the former, by passing in dummy phase
-%% change functions.
-%%
-%% The function does not report on any needed beta->delta conversions,
-%% though the conversion function for that is called as necessary. The
-%% reason is twofold. Firstly, this is safe because the conversion is
-%% only ever necessary just after a transition to a
-%% target_ram_count of zero or after an incremental alpha->beta
-%% conversion. In the former case the conversion is performed straight
-%% away (i.e. any betas present at the time are converted to deltas),
-%% and in the latter case the need for a conversion is flagged up
-%% anyway. Secondly, this is necessary because we do not have a
-%% precise and cheap predicate for determining whether a beta->delta
-%% conversion is necessary - due to the complexities of retaining up
-%% one segment's worth of messages in q3 - and thus would risk
-%% perpetually reporting the need for a conversion when no such
-%% conversion is needed. That in turn could cause an infinite loop.
-reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
-                  State = #vqstate {
+reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
+    State;
+reduce_memory_use(State = #vqstate {
                     ram_pending_ack  = RPA,
                     ram_msg_count    = RamMsgCount,
                     target_ram_count = TargetRamCount,
-                    rates            = #rates { avg_ingress = AvgIngress,
-                                                avg_egress  = AvgEgress },
-                    ack_rates        = #rates { avg_ingress = AvgAckIngress,
-                                                avg_egress  = AvgAckEgress }
-                   }) ->
+                    rates            = #rates { in      = AvgIngress,
+                                                out     = AvgEgress,
+                                                ack_in  = AvgAckIngress,
+                                                ack_out = AvgAckEgress } }) ->
 
-    {Reduce, State1 = #vqstate { q2 = Q2, q3 = Q3 }} =
+    State1 = #vqstate { q2 = Q2, q3 = Q3 } =
         case chunk_size(RamMsgCount + gb_trees:size(RPA), TargetRamCount) of
-            0  -> {false, State};
+            0  -> State;
             %% Reduce memory of pending acks and alphas. The order is
             %% determined based on which is growing faster. Whichever
             %% comes second may very well get a quota of 0 if the
             %% first manages to push out the max number of messages.
             S1 -> Funs = case ((AvgAckIngress - AvgAckEgress) >
                                    (AvgIngress - AvgEgress)) of
-                             true  -> [AckFun, AlphaBetaFun];
-                             false -> [AlphaBetaFun, AckFun]
+                             true  -> [fun limit_ram_acks/2,
+                                       fun push_alphas_to_betas/2];
+                             false -> [fun push_alphas_to_betas/2,
+                                       fun limit_ram_acks/2]
                          end,
                   {_, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
                                                     ReduceFun(QuotaN, StateN)
                                             end, {S1, State}, Funs),
-                  {true, State2}
+                  State2
         end,
 
     case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
                     permitted_beta_count(State1)) of
-        ?IO_BATCH_SIZE = S2 -> {true, BetaDeltaFun(S2, State1)};
-        _                   -> {Reduce, State1}
+        S2 when S2 >= ?IO_BATCH_SIZE ->
+            %% There is an implicit, but subtle, upper bound here. We
+            %% may shuffle a lot of messages from Q2/3 into delta, but
+            %% the number of these that require any disk operation,
+            %% namely index writing, i.e. messages that are genuine
+            %% betas and not gammas, is bounded by the credit_flow
+            %% limiting of the alpha->beta conversion above.
+            push_betas_to_deltas(S2, State1);
+        _  ->
+            State1
     end.
 
 limit_ram_acks(0, State) ->
@@ -1570,15 +1595,6 @@ limit_ram_acks(Quota, State = #vqstate { ram_pending_ack  = RPA,
                                              disk_pending_ack = DPA1 })
     end.
 
-reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
-    State;
-reduce_memory_use(State) ->
-    {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
-                                    fun push_betas_to_deltas/2,
-                                    fun limit_ram_acks/2,
-                                    State),
-    State1.
-
 permitted_beta_count(#vqstate { len = 0 }) ->
     infinity;
 permitted_beta_count(#vqstate { target_ram_count = 0, q3 = Q3 }) ->
@@ -1596,7 +1612,7 @@ chunk_size(Current, Permitted)
   when Permitted =:= infinity orelse Permitted >= Current ->
     0;
 chunk_size(Current, Permitted) ->
-    lists:min([Current - Permitted, ?IO_BATCH_SIZE]).
+    Current - Permitted.
 
 fetch_from_q3(State = #vqstate { q1    = Q1,
                                  q2    = Q2,
@@ -1702,17 +1718,22 @@ push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
        TargetRamCount >= RamMsgCount ->
     {Quota, State};
 push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
-    case Generator(Q) of
-        {empty, _Q} ->
-            {Quota, State};
-        {{value, MsgStatus}, Qa} ->
-            {MsgStatus1 = #msg_status { msg_on_disk = true },
-             State1 = #vqstate { ram_msg_count = RamMsgCount }} =
-                maybe_write_to_disk(true, false, MsgStatus, State),
-            MsgStatus2 = m(trim_msg_status(MsgStatus1)),
-            State2 = State1 #vqstate { ram_msg_count = RamMsgCount - 1 },
-            push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
-                                 Consumer(MsgStatus2, Qa, State2))
+    case credit_flow:blocked() of
+        true  -> {Quota, State};
+        false -> case Generator(Q) of
+                     {empty, _Q} ->
+                         {Quota, State};
+                     {{value, MsgStatus}, Qa} ->
+                         {MsgStatus1 = #msg_status { msg_on_disk = true },
+                          State1 = #vqstate { ram_msg_count = RamMsgCount }} =
+                             maybe_write_to_disk(true, false, MsgStatus, State),
+                         MsgStatus2 = m(trim_msg_status(MsgStatus1)),
+                         State2 = Consumer(MsgStatus2, Qa,
+                                           State1 #vqstate {
+                                             ram_msg_count = RamMsgCount - 1 }),
+                         push_alphas_to_betas(Generator, Consumer, Quota - 1,
+                                              Qa, State2)
+                 end
     end.
 
 push_betas_to_deltas(Quota, State = #vqstate { q2          = Q2,

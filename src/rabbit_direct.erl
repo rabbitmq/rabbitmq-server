@@ -11,12 +11,12 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_direct).
 
--export([boot/0, force_event_refresh/0, list/0, connect/5,
+-export([boot/0, force_event_refresh/1, list/0, connect/5,
          start_channel/9, disconnect/2]).
 %% Internal
 -export([list_local/0]).
@@ -28,10 +28,10 @@
 -ifdef(use_specs).
 
 -spec(boot/0 :: () -> 'ok').
--spec(force_event_refresh/0 :: () -> 'ok').
+-spec(force_event_refresh/1 :: (reference()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
--spec(connect/5 :: ((rabbit_types:username() | rabbit_types:user() |
+-spec(connect/5 :: (({'none', 'none'} | {rabbit_types:username(), 'none'} |
                      {rabbit_types:username(), rabbit_types:password()}),
                     rabbit_types:vhost(), rabbit_types:protocol(), pid(),
                     rabbit_event:event_props()) ->
@@ -54,8 +54,8 @@ boot() -> rabbit_sup:start_supervisor_child(
             [{local, rabbit_direct_client_sup},
              {rabbit_channel_sup, start_link, []}]).
 
-force_event_refresh() ->
-    [Pid ! force_event_refresh || Pid<- list()],
+force_event_refresh(Ref) ->
+    [Pid ! {force_event_refresh, Ref} || Pid <- list()],
     ok.
 
 list_local() ->
@@ -67,7 +67,31 @@ list() ->
 
 %%----------------------------------------------------------------------------
 
-connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
+connect({none, _}, VHost, Protocol, Pid, Infos) ->
+    connect0(fun () -> {ok, rabbit_auth_backend_dummy:user()} end,
+             VHost, Protocol, Pid, Infos);
+
+connect({Username, none}, VHost, Protocol, Pid, Infos) ->
+    connect0(fun () -> rabbit_access_control:check_user_login(Username, []) end,
+             VHost, Protocol, Pid, Infos);
+
+connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
+    connect0(fun () -> rabbit_access_control:check_user_pass_login(
+                         Username, Password) end,
+             VHost, Protocol, Pid, Infos).
+
+connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
+    case rabbit:is_running() of
+        true  -> case AuthFun() of
+                     {ok, User} ->
+                         connect1(User, VHost, Protocol, Pid, Infos);
+                     {refused, _M, _A} ->
+                         {error, {auth_failure, "Refused"}}
+                 end;
+        false -> {error, broker_not_found_on_node}
+    end.
+
+connect1(User, VHost, Protocol, Pid, Infos) ->
     try rabbit_access_control:check_vhost_access(User, VHost) of
         ok -> ok = pg_local:join(rabbit_direct, Pid),
               rabbit_event:notify(connection_created, Infos),
@@ -75,29 +99,7 @@ connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
     catch
         exit:#amqp_error{name = access_refused} ->
             {error, access_refused}
-    end;
-
-connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> rabbit_access_control:check_user_pass_login(
-                         Username, Password) end,
-             VHost, Protocol, Pid, Infos);
-
-connect(Username, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> rabbit_access_control:check_user_login(
-                         Username, []) end,
-             VHost, Protocol, Pid, Infos).
-
-connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
-    case rabbit:is_running() of
-        true  -> case AuthFun() of
-                     {ok, User} ->
-                         connect(User, VHost, Protocol, Pid, Infos);
-                     {refused, _M, _A} ->
-                         {error, {auth_failure, "Refused"}}
-                 end;
-        false -> {error, broker_not_found_on_node}
     end.
-
 
 start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
               VHost, Capabilities, Collector) ->

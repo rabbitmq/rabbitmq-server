@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_event).
@@ -22,7 +22,7 @@
 -export([init_stats_timer/2, init_disabled_stats_timer/2,
          ensure_stats_timer/3, stop_stats_timer/2, reset_stats_timer/2]).
 -export([stats_level/2, if_enabled/3]).
--export([notify/2, notify_if/3]).
+-export([notify/2, notify/3, notify_if/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -41,6 +41,7 @@
 
 -type(event() :: #event { type      :: event_type(),
                           props     :: event_props(),
+                          reference :: 'none' | reference(),
                           timestamp :: event_timestamp() }).
 
 -type(level() :: 'none' | 'coarse' | 'fine').
@@ -58,6 +59,7 @@
 -spec(stats_level/2 :: (container(), pos()) -> level()).
 -spec(if_enabled/3 :: (container(), pos(), timer_fun()) -> 'ok').
 -spec(notify/2 :: (event_type(), event_props()) -> 'ok').
+-spec(notify/3 :: (event_type(), event_props(), reference() | 'none') -> 'ok').
 -spec(notify_if/3 :: (boolean(), event_type(), event_props()) -> 'ok').
 
 -endif.
@@ -140,7 +142,10 @@ if_enabled(C, P, Fun) ->
 notify_if(true,   Type,  Props) -> notify(Type, Props);
 notify_if(false, _Type, _Props) -> ok.
 
-notify(Type, Props) ->
+notify(Type, Props) -> notify(Type, Props, none).
+
+notify(Type, Props, Ref) ->
     gen_event:notify(?MODULE, #event{type      = Type,
                                      props     = Props,
+                                     reference = Ref,
                                      timestamp = os:timestamp()}).

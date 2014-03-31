@@ -11,14 +11,14 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_writer).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/5, start_link/5, start/6, start_link/6]).
+-export([start/6, start_link/6, start/7, start_link/7]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -30,7 +30,7 @@
 -export([internal_send_command/4, internal_send_command/6]).
 
 %% internal
--export([mainloop/2, mainloop1/2]).
+-export([enter_mainloop/2, mainloop/2, mainloop1/2]).
 
 -record(wstate, {sock, channel, frame_max, protocol, reader,
                  stats_timer, pending}).
@@ -41,21 +41,25 @@
 
 -ifdef(use_specs).
 
--spec(start/5 ::
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid())
-        -> rabbit_types:ok(pid())).
--spec(start_link/5 ::
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid())
-        -> rabbit_types:ok(pid())).
 -spec(start/6 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(), boolean())
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name())
         -> rabbit_types:ok(pid())).
 -spec(start_link/6 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(), boolean())
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name())
+        -> rabbit_types:ok(pid())).
+-spec(start/7 ::
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name(), boolean())
+        -> rabbit_types:ok(pid())).
+-spec(start_link/7 ::
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name(), boolean())
         -> rabbit_types:ok(pid())).
 
 -spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
@@ -99,23 +103,23 @@
 
 %%---------------------------------------------------------------------------
 
-start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    start(Sock, Channel, FrameMax, Protocol, ReaderPid, false).
+start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
+    start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, false).
 
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
-    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, false).
+start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
+    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, false).
 
-start(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
+start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
+      ReaderWantsStats) ->
     State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
                           ReaderWantsStats),
-    Deb = sys:debug_options([]),
-    {ok, proc_lib:spawn(?MODULE, mainloop, [Deb, State])}.
+    {ok, proc_lib:spawn(?MODULE, enter_mainloop, [Identity, State])}.
 
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
+start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
+           ReaderWantsStats) ->
     State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
                           ReaderWantsStats),
-    Deb = sys:debug_options([]),
-    {ok, proc_lib:spawn_link(?MODULE, mainloop, [Deb, State])}.
+    {ok, proc_lib:spawn_link(?MODULE, enter_mainloop, [Identity, State])}.
 
 initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats) ->
     (case ReaderWantsStats of
@@ -137,6 +141,11 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
+
+enter_mainloop(Identity, State) ->
+    Deb = sys:debug_options([]),
+    ?store_proc_name(Identity),
+    mainloop(Deb, State).
 
 mainloop(Deb, State) ->
     try

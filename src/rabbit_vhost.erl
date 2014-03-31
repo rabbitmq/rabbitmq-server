@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_vhost).
@@ -60,15 +60,17 @@ add(VHostPath) ->
               (ok, false) ->
                   [rabbit_exchange:declare(
                      rabbit_misc:r(VHostPath, exchange, Name),
-                     Type, true, false, false, []) ||
-                      {Name,Type} <-
-                          [{<<"">>,                   direct},
-                           {<<"amq.direct">>,         direct},
-                           {<<"amq.topic">>,          topic},
-                           {<<"amq.match">>,          headers}, %% per 0-9-1 pdf
-                           {<<"amq.headers">>,        headers}, %% per 0-9-1 xml
-                           {<<"amq.fanout">>,         fanout},
-                           {<<"amq.rabbitmq.trace">>, topic}]],
+                     Type, true, false, Internal, []) ||
+                      {Name, Type, Internal} <-
+                          [{<<"">>,                   direct,  false},
+                           {<<"amq.direct">>,         direct,  false},
+                           {<<"amq.topic">>,          topic,   false},
+                           %% per 0-9-1 pdf
+                           {<<"amq.match">>,          headers, false},
+                           %% per 0-9-1 xml
+                           {<<"amq.headers">>,        headers, false},
+                           {<<"amq.fanout">>,         fanout,  false},
+                           {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   ok
           end),
     rabbit_event:notify(vhost_created, info(VHostPath)),

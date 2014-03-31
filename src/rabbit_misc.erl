@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -53,13 +53,12 @@
 -export([parse_arguments/3]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
--export([const_ok/0, const/1]).
+-export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2, pset/3]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
--export([multi_call/2]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
 -export([version/0, which_applications/0]).
@@ -70,6 +69,8 @@
 -export([interval_operation/4]).
 -export([ensure_timer/4, stop_timer/2]).
 -export([get_parent/0]).
+-export([store_proc_name/1, store_proc_name/2]).
+-export([moving_average/4]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -217,7 +218,6 @@
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
--spec(const_ok/0 :: () -> 'ok').
 -spec(const/1 :: (A) -> thunk(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
@@ -228,8 +228,6 @@
 -spec(pset/3 :: (term(), term(), [term()]) -> term()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
--spec(multi_call/2 ::
-        ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 -spec(version/0 :: () -> string()).
@@ -248,6 +246,10 @@
 -spec(ensure_timer/4 :: (A, non_neg_integer(), non_neg_integer(), any()) -> A).
 -spec(stop_timer/2 :: (A, non_neg_integer()) -> A).
 -spec(get_parent/0 :: () -> pid()).
+-spec(store_proc_name/2 :: (atom(), rabbit_types:proc_name()) -> ok).
+-spec(store_proc_name/1 :: (rabbit_types:proc_type_and_name()) -> ok).
+-spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
+                          -> float()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -540,9 +542,11 @@ tcp_name(Prefix, IPAddress, Port)
     list_to_atom(
       format("~w_~s:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
 
-format_inet_error(address) -> "cannot connect to host/port";
-format_inet_error(timeout) -> "timed out";
-format_inet_error(Error)   -> inet:format_error(Error).
+format_inet_error(E) -> format("~w (~s)", [E, format_inet_error0(E)]).
+
+format_inet_error0(address) -> "cannot connect to host/port";
+format_inet_error0(timeout) -> "timed out";
+format_inet_error0(Error)   -> inet:format_error(Error).
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about
@@ -683,7 +687,7 @@ pid_to_string(Pid) when is_pid(Pid) ->
     <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
         = term_to_binary(Pid),
     Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
-    format("<~w.~B.~B.~B>", [Node, Cre, Id, Ser]).
+    format("<~s.~B.~B.~B>", [Node, Cre, Id, Ser]).
 
 %% inverse of above
 string_to_pid(Str) ->
@@ -693,13 +697,7 @@ string_to_pid(Str) ->
     case re:run(Str, "^<(.*)\\.(\\d+)\\.(\\d+)\\.(\\d+)>\$",
                 [{capture,all_but_first,list}]) of
         {match, [NodeStr, CreStr, IdStr, SerStr]} ->
-            %% the NodeStr atom might be quoted, so we have to parse
-            %% it rather than doing a simple list_to_atom
-            NodeAtom = case erl_scan:string(NodeStr) of
-                           {ok, [{atom, _, X}], _} -> X;
-                           {error, _, _} -> throw(Err)
-                       end,
-            <<131,NodeEnc/binary>> = term_to_binary(NodeAtom),
+            <<131,NodeEnc/binary>> = term_to_binary(list_to_atom(NodeStr)),
             [Cre, Id, Ser] = lists:map(fun list_to_integer/1,
                                        [CreStr, IdStr, SerStr]),
             binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>);
@@ -885,7 +883,6 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
             {error, Reason}
     end.
 
-const_ok() -> ok.
 const(X) -> fun () -> X end.
 
 %% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
@@ -943,31 +940,6 @@ append_rpc_all_nodes(Nodes, M, F, A) ->
                       {badrpc, _} -> [];
                       _           -> Res
                   end || Res <- ResL]).
-
-%% A simplified version of gen_server:multi_call/2 with a sane
-%% API. This is not in gen_server2 as there is no useful
-%% infrastructure there to share.
-multi_call(Pids, Req) ->
-    MonitorPids = [start_multi_call(Pid, Req) || Pid <- Pids],
-    receive_multi_call(MonitorPids, [], []).
-
-start_multi_call(Pid, Req) when is_pid(Pid) ->
-    Mref = erlang:monitor(process, Pid),
-    Pid ! {'$gen_call', {self(), Mref}, Req},
-    {Mref, Pid}.
-
-receive_multi_call([], Good, Bad) ->
-    {lists:reverse(Good), lists:reverse(Bad)};
-receive_multi_call([{Mref, Pid} | MonitorPids], Good, Bad) ->
-    receive
-        {Mref, Reply} ->
-            erlang:demonitor(Mref, [flush]),
-            receive_multi_call(MonitorPids, [{Pid, Reply} | Good], Bad);
-        {'DOWN', Mref, _, _, noconnection} ->
-            receive_multi_call(MonitorPids, Good, [{Pid, nodedown} | Bad]);
-        {'DOWN', Mref, _, _, Reason} ->
-            receive_multi_call(MonitorPids, Good, [{Pid, Reason} | Bad])
-    end.
 
 os_cmd(Command) ->
     case os:type() of
@@ -1081,6 +1053,28 @@ stop_timer(State, Idx) ->
                          _     -> setelement(Idx, State, undefined)
                      end
     end.
+
+store_proc_name(Type, ProcName) -> store_proc_name({Type, ProcName}).
+store_proc_name(TypeProcName)   -> put(process_name, TypeProcName).
+
+moving_average(_Time, _HalfLife, Next, undefined) ->
+    Next;
+%% We want the Weight to decrease as Time goes up (since Weight is the
+%% weight for the current sample, not the new one), so that the moving
+%% average decays at the same speed regardless of how long the time is
+%% between samplings. So we want Weight = math:exp(Something), where
+%% Something turns out to be negative.
+%%
+%% We want to determine Something here in terms of the Time taken
+%% since the last measurement, and a HalfLife. So we want Weight =
+%% math:exp(Time * Constant / HalfLife). What should Constant be? We
+%% want Weight to be 0.5 when Time = HalfLife.
+%%
+%% Plug those numbers in and you get 0.5 = math:exp(Constant). Take
+%% the log of each side and you get math:log(0.5) = Constant.
+moving_average(Time,  HalfLife,  Next, Current) ->
+    Weight = math:exp(Time * math:log(0.5) / HalfLife),
+    Next * (1 - Weight) + Current * Weight.
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl

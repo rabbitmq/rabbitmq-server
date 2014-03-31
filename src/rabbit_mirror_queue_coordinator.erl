@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2010-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_coordinator).
@@ -323,6 +323,7 @@ ensure_monitoring(CPid, Pids) ->
 %% ---------------------------------------------------------------------------
 
 init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
+    ?store_proc_name(QueueName),
     GM1 = case GM of
               undefined ->
                   {ok, GM2} = gm:start_link(

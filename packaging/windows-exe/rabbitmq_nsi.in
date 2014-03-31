@@ -37,7 +37,7 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "RabbitMQ Server"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "Comments" ""
 VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "GoPivotal, Inc"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalTrademarks" "" ; TODO ?
-VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved."
+VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved."
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "RabbitMQ Server"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "%%VERSION%%"
 
@@ -75,6 +75,12 @@ Section "RabbitMQ Server (required)" Rabbit
   ; Put files there
   File /r "rabbitmq_server-%%VERSION%%"
   File "rabbitmq.ico"
+
+  ; Set output path to the user's data directory
+  SetOutPath $APPDATA\RabbitMQ
+
+  ; ...And put the example config file there
+  File "rabbitmq_server-%%VERSION%%\etc\rabbitmq.config.example"
 
   ; Write the installation path into the registry
   WriteRegStr HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server" "Install_Dir" "$INSTDIR"

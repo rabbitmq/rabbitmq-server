@@ -11,17 +11,15 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_queue_index).
 
--export([init/2, shutdown_terms/1, recover/5,
+-export([init/2, recover/5,
          terminate/2, delete_and_terminate/1,
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
-         read/3, next_segment_boundary/1, bounds/1, recover/1]).
-
--export([scan/3]).
+         read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0]).
 
@@ -196,10 +194,9 @@
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
                                {rabbit_types:msg_id(), non_neg_integer(), A})).
--type(shutdown_terms() :: [any()]).
+-type(shutdown_terms() :: [term()] | 'non_clean_shutdown').
 
 -spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
--spec(shutdown_terms/1 :: (rabbit_amqqueue:name()) -> shutdown_terms()).
 -spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate(), on_sync_fun()) ->
                         {'undefined' | non_neg_integer(), qistate()}).
@@ -220,13 +217,7 @@
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
-
--spec(scan/3 :: (file:filename(),
-                 fun ((seq_id(), rabbit_types:msg_id(),
-                       rabbit_types:message_properties(), boolean(),
-                       ('del' | 'no_del'), ('ack' | 'no_ack'), A) -> A),
-                     A) -> A).
+-spec(start/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
@@ -242,26 +233,20 @@ init(Name, OnSyncFun) ->
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
     State #qistate { on_sync = OnSyncFun }.
 
-shutdown_terms(Name) ->
-    #qistate { dir = Dir } = blank_state(Name),
-    case read_shutdown_terms(Dir) of
-        {error, _}   -> [];
-        {ok, Terms1} -> Terms1
-    end.
-
 recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
-    State = #qistate { dir = Dir } = blank_state(Name),
+    State = blank_state(Name),
     State1 = State #qistate { on_sync = OnSyncFun },
-    CleanShutdown = detect_clean_shutdown(Dir),
+    CleanShutdown = Terms /= non_clean_shutdown,
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
                  init_clean(RecoveredCounts, State1);
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
-terminate(Terms, State) ->
-    {SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
-    store_clean_shutdown([{segments, SegmentCounts} | Terms], Dir),
+terminate(Terms, State = #qistate { dir = Dir }) ->
+    {SegmentCounts, State1} = terminate(State),
+    rabbit_recovery_terms:store(filename:basename(Dir),
+                                [{segments, SegmentCounts} | Terms]),
     State1.
 
 delete_and_terminate(State) ->
@@ -357,37 +342,40 @@ bounds(State = #qistate { segments = Segments }) ->
         end,
     {LowSeqId, NextSeqId, State}.
 
-recover(DurableQueues) ->
-    DurableDict = dict:from_list([ {queue_name_to_dir_name(Queue), Queue} ||
-                                     Queue <- DurableQueues ]),
-    QueuesDir = queues_dir(),
-    QueueDirNames = all_queue_directory_names(QueuesDir),
-    DurableDirectories = sets:from_list(dict:fetch_keys(DurableDict)),
-    {DurableQueueNames, DurableTerms} =
+start(DurableQueueNames) ->
+    ok = rabbit_recovery_terms:start(),
+    {DurableTerms, DurableDirectories} =
         lists:foldl(
-          fun (QueueDirName, {DurableAcc, TermsAcc}) ->
-                  QueueDirPath = filename:join(QueuesDir, QueueDirName),
-                  case sets:is_element(QueueDirName, DurableDirectories) of
-                      true ->
-                          TermsAcc1 =
-                              case read_shutdown_terms(QueueDirPath) of
-                                  {error, _}  -> TermsAcc;
-                                  {ok, Terms} -> [Terms | TermsAcc]
-                              end,
-                          {[dict:fetch(QueueDirName, DurableDict) | DurableAcc],
-                           TermsAcc1};
-                      false ->
-                          ok = rabbit_file:recursive_delete([QueueDirPath]),
-                          {DurableAcc, TermsAcc}
-                  end
-          end, {[], []}, QueueDirNames),
-    {DurableTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+          fun(QName, {RecoveryTerms, ValidDirectories}) ->
+                  DirName = queue_name_to_dir_name(QName),
+                  RecoveryInfo = case rabbit_recovery_terms:read(DirName) of
+                                     {error, _}  -> non_clean_shutdown;
+                                     {ok, Terms} -> Terms
+                                 end,
+                  {[RecoveryInfo | RecoveryTerms],
+                   sets:add_element(DirName, ValidDirectories)}
+          end, {[], sets:new()}, DurableQueueNames),
+
+    %% Any queue directory we've not been asked to recover is considered garbage
+    QueuesDir = queues_dir(),
+    rabbit_file:recursive_delete(
+      [filename:join(QueuesDir, DirName) ||
+          DirName <- all_queue_directory_names(QueuesDir),
+          not sets:is_element(DirName, DurableDirectories)]),
+
+    rabbit_recovery_terms:clear(),
+
+    %% The backing queue interface requires that the queue recovery terms
+    %% which come back from start/1 are in the same order as DurableQueueNames
+    OrderedTerms = lists:reverse(DurableTerms),
+    {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+
+stop() -> rabbit_recovery_terms:stop().
 
 all_queue_directory_names(Dir) ->
     case rabbit_file:list_dir(Dir) of
-        {ok, Entries}   -> [ Entry || Entry <- Entries,
-                                      rabbit_file:is_dir(
-                                        filename:join(Dir, Entry)) ];
+        {ok, Entries}   -> [E || E <- Entries,
+                                 rabbit_file:is_dir(filename:join(Dir, E))];
         {error, enoent} -> []
     end.
 
@@ -409,22 +397,6 @@ blank_state_dir(Dir) ->
                max_journal_entries = MaxJournal,
                on_sync             = fun (_) -> ok end,
                unconfirmed         = gb_sets:new() }.
-
-clean_filename(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
-
-detect_clean_shutdown(Dir) ->
-    case rabbit_file:delete(clean_filename(Dir)) of
-        ok              -> true;
-        {error, enoent} -> false
-    end.
-
-read_shutdown_terms(Dir) ->
-    rabbit_file:read_term_file(clean_filename(Dir)).
-
-store_clean_shutdown(Terms, Dir) ->
-    CleanFileName = clean_filename(Dir),
-    ok = rabbit_file:ensure_dir(CleanFileName),
-    rabbit_file:write_term_file(CleanFileName, Terms).
 
 init_clean(RecoveredCounts, State) ->
     %% Load the journal. Since this is a clean recovery this (almost)
@@ -452,22 +424,24 @@ init_dirty(CleanShutdown, ContainsCheckFun, State) ->
     %% and the journal.
     State1 = #qistate { dir = Dir, segments = Segments } =
         recover_journal(State),
-    {Segments1, Count} =
+    {Segments1, Count, DirtyCount} =
         %% Load each segment in turn and filter out messages that are
         %% not in the msg_store, by adding acks to the journal. These
         %% acks only go to the RAM journal as it doesn't matter if we
         %% lose them. Also mark delivered if not clean shutdown. Also
-        %% find the number of unacked messages.
+        %% find the number of unacked messages. Also accumulate the
+        %% dirty count here, so we can call maybe_flush_journal below
+        %% and avoid unnecessary file system operations.
         lists:foldl(
-          fun (Seg, {Segments2, CountAcc}) ->
-                  Segment = #segment { unacked = UnackedCount } =
+          fun (Seg, {Segments2, CountAcc, DirtyCount}) ->
+                  {Segment = #segment { unacked = UnackedCount }, Dirty} =
                       recover_segment(ContainsCheckFun, CleanShutdown,
                                       segment_find_or_new(Seg, Dir, Segments2)),
-                  {segment_store(Segment, Segments2), CountAcc + UnackedCount}
-          end, {Segments, 0}, all_segment_nums(State1)),
-    %% Unconditionally flush since the dirty_count doesn't get updated
-    %% by the above foldl.
-    State2 = flush_journal(State1 #qistate { segments = Segments1 }),
+                  {segment_store(Segment, Segments2),
+                   CountAcc + UnackedCount, DirtyCount + Dirty}
+          end, {Segments, 0, 0}, all_segment_nums(State1)),
+    State2 = maybe_flush_journal(State1 #qistate { segments = Segments1,
+                                                   dirty_count = DirtyCount }),
     {Count, State2}.
 
 terminate(State = #qistate { journal_handle = JournalHdl,
@@ -491,23 +465,25 @@ recover_segment(ContainsCheckFun, CleanShutdown,
         segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
       fun (RelSeq, {{MsgId, _MsgProps, _IsPersistent}, Del, no_ack},
-           Segment1) ->
+           SegmentAndDirtyCount) ->
               recover_message(ContainsCheckFun(MsgId), CleanShutdown,
-                              Del, RelSeq, Segment1)
+                              Del, RelSeq, SegmentAndDirtyCount)
       end,
-      Segment #segment { unacked = UnackedCount + UnackedCountDelta },
+      {Segment #segment { unacked = UnackedCount + UnackedCountDelta }, 0},
       SegEntries1).
 
-recover_message( true,  true,   _Del, _RelSeq, Segment) ->
-    Segment;
-recover_message( true, false,    del, _RelSeq, Segment) ->
-    Segment;
-recover_message( true, false, no_del,  RelSeq, Segment) ->
-    add_to_journal(RelSeq, del, Segment);
-recover_message(false,     _,    del,  RelSeq, Segment) ->
-    add_to_journal(RelSeq, ack, Segment);
-recover_message(false,     _, no_del,  RelSeq, Segment) ->
-    add_to_journal(RelSeq, ack, add_to_journal(RelSeq, del, Segment)).
+recover_message( true,  true,   _Del, _RelSeq, SegmentAndDirtyCount) ->
+    SegmentAndDirtyCount;
+recover_message( true, false,    del, _RelSeq, SegmentAndDirtyCount) ->
+    SegmentAndDirtyCount;
+recover_message( true, false, no_del,  RelSeq, {Segment, DirtyCount}) ->
+    {add_to_journal(RelSeq, del, Segment), DirtyCount + 1};
+recover_message(false,     _,    del,  RelSeq, {Segment, DirtyCount}) ->
+    {add_to_journal(RelSeq, ack, Segment), DirtyCount + 1};
+recover_message(false,     _, no_del,  RelSeq, {Segment, DirtyCount}) ->
+    {add_to_journal(RelSeq, ack,
+                    add_to_journal(RelSeq, del, Segment)),
+     DirtyCount + 2}.
 
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     <<Num:128>> = erlang:md5(term_to_binary(Name)),
@@ -553,9 +529,6 @@ queue_index_walker_reader(QueueName, Gatherer) ->
                    Acc
            end, ok, State),
     ok = gatherer:finish(Gatherer).
-
-scan(Dir, Fun, Acc) ->
-    scan_segments(Fun, Acc, blank_state_dir(Dir)).
 
 scan_segments(Fun, Acc, State) ->
     State1 = #qistate { segments = Segments, dir = Dir } =
@@ -681,10 +654,13 @@ get_journal_handle(State = #qistate { journal_handle = Hdl }) ->
 %% Loading Journal. This isn't idempotent and will mess up the counts
 %% if you call it more than once on the same state. Assumes the counts
 %% are 0 to start with.
-load_journal(State) ->
-    {JournalHdl, State1} = get_journal_handle(State),
-    {ok, 0} = file_handle_cache:position(JournalHdl, 0),
-    load_journal_entries(State1).
+load_journal(State = #qistate { dir = Dir }) ->
+    case rabbit_file:is_file(filename:join(Dir, ?JOURNAL_FILENAME)) of
+        true  -> {JournalHdl, State1} = get_journal_handle(State),
+                 {ok, 0} = file_handle_cache:position(JournalHdl, 0),
+                 load_journal_entries(State1);
+        false -> State
+    end.
 
 %% ditto
 recover_journal(State) ->

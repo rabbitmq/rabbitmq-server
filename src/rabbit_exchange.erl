@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange).
@@ -81,9 +81,8 @@
 -spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                  -> [rabbit_amqqueue:name()]).
 -spec(delete/2 ::
-        (name(), boolean())-> 'ok' |
-                              rabbit_types:error('not_found') |
-                              rabbit_types:error('in_use')).
+        (name(),  'true') -> 'ok' | rabbit_types:error('not_found' | 'in_use');
+        (name(), 'false') -> 'ok' | rabbit_types:error('not_found')).
 -spec(validate_binding/2 ::
         (rabbit_types:exchange(), rabbit_types:binding())
         -> rabbit_types:ok_or_error({'binding_invalid', string(), [any()]})).

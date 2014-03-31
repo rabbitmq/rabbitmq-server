@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -record(user, {username,
@@ -60,7 +60,7 @@
 
 -record(trie_node, {exchange_name, node_id}).
 -record(trie_edge, {exchange_name, node_id, word}).
--record(trie_binding, {exchange_name, node_id, destination}).
+-record(trie_binding, {exchange_name, node_id, destination, arguments}).
 
 -record(listener, {node, protocol, host, ip_address, port}).
 
@@ -70,10 +70,10 @@
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
--record(delivery, {mandatory, sender, message, msg_seq_no}).
+-record(delivery, {mandatory, confirm, sender, message, msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
--record(event, {type, props, timestamp}).
+-record(event, {type, props, reference = undefined, timestamp}).
 
 -record(message_properties, {expiry, needs_confirming = false}).
 
@@ -118,3 +118,13 @@
 %% to allow plenty of leeway for the #basic_message{} and #content{}
 %% wrapping the message body).
 -define(MAX_MSG_SIZE, 2147383648).
+
+%% 1) Maximum size of printable lists and binaries.
+%% 2) Maximum size of any structural term.
+%% 3) Amount to decrease 1) every time we descend while truncating.
+%% 4) Amount to decrease 2) every time we descend while truncating.
+%%
+%% Whole thing feeds into truncate:log_event/2.
+-define(LOG_TRUNC, {2000, 100, 100, 7}).
+
+-define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).

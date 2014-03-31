@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mnesia).
@@ -129,7 +129,7 @@ init_from_config() ->
         {ok, Node} ->
             rabbit_log:info("Node '~p' selected for clustering from "
                             "configuration~n", [Node]),
-            {ok, {_, DiscNodes, _}} = discover_cluster(Node),
+            {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
@@ -160,10 +160,7 @@ join_cluster(DiscoveryNode, NodeType) ->
         true  -> e(clustering_only_disc_node);
         false -> ok
     end,
-    {ClusterNodes, _, _} = case discover_cluster(DiscoveryNode) of
-                               {ok, Res}      -> Res;
-                               {error, _} = E -> throw(E)
-                           end,
+    {ClusterNodes, _, _} = discover_cluster([DiscoveryNode]),
     case me_in_nodes(ClusterNodes) of
         false ->
             %% reset the node. this simplifies things and it will be needed in
@@ -229,10 +226,7 @@ change_cluster_node_type(Type) ->
         false -> e(not_clustered);
         true  -> ok
     end,
-    {_, _, RunningNodes} = case discover_cluster(cluster_nodes(all)) of
-                               {ok, Status}     -> Status;
-                               {error, _Reason} -> e(cannot_connect_to_cluster)
-                           end,
+    {_, _, RunningNodes} = discover_cluster(cluster_nodes(all)),
     %% We might still be marked as running by a remote node since the
     %% information of us going down might not have propagated yet.
     Node = case RunningNodes -- [node()] of
@@ -245,11 +239,7 @@ change_cluster_node_type(Type) ->
 update_cluster_nodes(DiscoveryNode) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
-    Status = {AllNodes, _, _} =
-        case discover_cluster(DiscoveryNode) of
-            {ok, Status0}    -> Status0;
-            {error, _Reason} -> e(cannot_connect_to_node)
-        end,
+    Status = {AllNodes, _, _} = discover_cluster([DiscoveryNode]),
     case me_in_nodes(AllNodes) of
         true ->
             %% As in `check_consistency/0', we can safely delete the
@@ -327,6 +317,7 @@ status() ->
         case is_running() of
             true  -> RunningNodes = cluster_nodes(running),
                      [{running_nodes, RunningNodes},
+                      {cluster_name,  rabbit_nodes:cluster_name()},
                       {partitions,    mnesia_partitions(RunningNodes)}];
             false -> []
         end.
@@ -606,21 +597,19 @@ running_disc_nodes() ->
 %% Internal helpers
 %%--------------------------------------------------------------------
 
-discover_cluster(Nodes) when is_list(Nodes) ->
-    lists:foldl(fun (_, {ok, Res})     -> {ok, Res};
-                    (Node, {error, _}) -> discover_cluster(Node)
-                end, {error, no_nodes_provided}, Nodes);
-discover_cluster(Node) when Node == node() ->
-    {error, {cannot_discover_cluster, "Cannot cluster node with itself"}};
-discover_cluster(Node) ->
-    OfflineError =
-        {error, {cannot_discover_cluster,
-                 "The nodes provided are either offline or not running"}},
-    case rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []) of
-        {badrpc, _Reason}           -> OfflineError;
-        {error, mnesia_not_running} -> OfflineError;
-        {ok, Res}                   -> {ok, Res}
+discover_cluster(Nodes) ->
+    case lists:foldl(fun (_,    {ok, Res}) -> {ok, Res};
+                         (Node, _)         -> discover_cluster0(Node)
+                     end, {error, no_nodes_provided}, Nodes) of
+        {ok, Res}        -> Res;
+        {error, E}       -> throw({error, E});
+        {badrpc, Reason} -> throw({badrpc_multi, Reason, Nodes})
     end.
+
+discover_cluster0(Node) when Node == node() ->
+    {error, cannot_cluster_node_with_itself};
+discover_cluster0(Node) ->
+    rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []).
 
 schema_ok_or_move() ->
     case rabbit_table:check_schema_integrity() of
@@ -832,15 +821,9 @@ error_description(resetting_only_disc_node) ->
         "Please convert another node of the cluster to a disc node first.";
 error_description(not_clustered) ->
     "Non-clustered nodes can only be disc nodes.";
-error_description(cannot_connect_to_cluster) ->
-    "Could not connect to the cluster nodes present in this node's "
-        "status file. If the cluster has changed, you can use the "
-        "'update_cluster_nodes' command to point to the new cluster nodes.";
 error_description(no_online_cluster_nodes) ->
     "Could not find any online cluster nodes. If the cluster has changed, "
         "you can use the 'update_cluster_nodes' command.";
-error_description(cannot_connect_to_node) ->
-    "Could not connect to the cluster node provided.";
 error_description(inconsistent_cluster) ->
     "The nodes provided do not have this node as part of the cluster.";
 error_description(not_a_cluster_node) ->

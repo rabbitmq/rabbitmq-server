@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_topic).
@@ -79,9 +79,9 @@ remove_bindings(transaction, _X, Bs) ->
     [begin
          Path = [{FinalNode, _} | _] =
              follow_down_get_path(X, split_topic_key(K)),
-         trie_remove_binding(X, FinalNode, D),
+         trie_remove_binding(X, FinalNode, D, Args),
          remove_path_if_empty(X, Path)
-     end ||  #binding{source = X, key = K, destination = D} <- Bs],
+     end ||  #binding{source = X, key = K, destination = D, args = Args} <- Bs],
     ok;
 remove_bindings(none, _X, _Bs) ->
     ok.
@@ -91,9 +91,10 @@ assert_args_equivalence(X, Args) ->
 
 %%----------------------------------------------------------------------------
 
-internal_add_binding(#binding{source = X, key = K, destination = D}) ->
+internal_add_binding(#binding{source = X, key = K, destination = D,
+                              args = Args}) ->
     FinalNode = follow_down_create(X, split_topic_key(K)),
-    trie_add_binding(X, FinalNode, D),
+    trie_add_binding(X, FinalNode, D, Args),
     ok.
 
 trie_match(X, Words) ->
@@ -176,7 +177,8 @@ trie_bindings(X, Node) ->
     MatchHead = #topic_trie_binding{
       trie_binding = #trie_binding{exchange_name = X,
                                    node_id       = Node,
-                                   destination   = '$1'}},
+                                   destination   = '$1',
+                                   arguments     = '_'}},
     mnesia:select(rabbit_topic_trie_binding, [{MatchHead, [], ['$1']}]).
 
 trie_update_node_counts(X, Node, Field, Delta) ->
@@ -213,20 +215,21 @@ trie_edge_op(X, FromNode, ToNode, W, Op) ->
                              node_id   = ToNode},
             write).
 
-trie_add_binding(X, Node, D) ->
+trie_add_binding(X, Node, D, Args) ->
     trie_update_node_counts(X, Node, #topic_trie_node.binding_count, +1),
-    trie_binding_op(X, Node, D, fun mnesia:write/3).
+    trie_binding_op(X, Node, D, Args, fun mnesia:write/3).
 
-trie_remove_binding(X, Node, D) ->
+trie_remove_binding(X, Node, D, Args) ->
     trie_update_node_counts(X, Node, #topic_trie_node.binding_count, -1),
-    trie_binding_op(X, Node, D, fun mnesia:delete_object/3).
+    trie_binding_op(X, Node, D, Args, fun mnesia:delete_object/3).
 
-trie_binding_op(X, Node, D, Op) ->
+trie_binding_op(X, Node, D, Args, Op) ->
     ok = Op(rabbit_topic_trie_binding,
             #topic_trie_binding{
               trie_binding = #trie_binding{exchange_name = X,
                                            node_id       = Node,
-                                           destination   = D}},
+                                           destination   = D,
+                                           arguments     = Args}},
             write).
 
 trie_remove_all_nodes(X) ->

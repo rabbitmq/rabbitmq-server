@@ -11,14 +11,14 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_access_control).
 
 -include("rabbit.hrl").
 
--export([check_user_pass_login/2, check_user_login/2,
+-export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
          check_vhost_access/2, check_resource_access/3]).
 
 %%----------------------------------------------------------------------------
@@ -35,6 +35,9 @@
 -spec(check_user_login/2 ::
         (rabbit_types:username(), [{atom(), any()}])
         -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
+-spec(check_user_loopback/2 :: (rabbit_types:username(),
+                                rabbit_net:socket() | inet:ip_address())
+        -> 'ok' | 'not_allowed').
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
@@ -52,17 +55,38 @@ check_user_pass_login(Username, Password) ->
 check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     lists:foldl(
-      fun(Module, {refused, _, _}) ->
-              case Module:check_user_login(Username, AuthProps) of
-                  {error, E} ->
-                      {refused, "~s failed authenticating ~s: ~p~n",
-                       [Module, Username, E]};
-                  Else ->
-                      Else
+      fun ({ModN, ModZ}, {refused, _, _}) ->
+              %% Different modules for authN vs authZ. So authenticate
+              %% with authN module, then if that succeeds do
+              %% passwordless (i.e pre-authenticated) login with authZ
+              %% module, and use the #user{} the latter gives us.
+              case try_login(ModN, Username, AuthProps) of
+                  {ok, _} -> try_login(ModZ, Username, []);
+                  Else    -> Else
               end;
-         (_, {ok, User}) ->
+          (Mod, {refused, _, _}) ->
+              %% Same module for authN and authZ. Just take the result
+              %% it gives us
+              try_login(Mod, Username, AuthProps);
+          (_, {ok, User}) ->
+              %% We've successfully authenticated. Skip to the end...
               {ok, User}
       end, {refused, "No modules checked '~s'", [Username]}, Modules).
+
+try_login(Module, Username, AuthProps) ->
+    case Module:check_user_login(Username, AuthProps) of
+        {error, E} -> {refused, "~s failed authenticating ~s: ~p~n",
+                       [Module, Username, E]};
+        Else       -> Else
+    end.
+
+check_user_loopback(Username, SockOrAddr) ->
+    {ok, Users} = application:get_env(rabbit, loopback_users),
+    case rabbit_net:is_loopback(SockOrAddr)
+        orelse not lists:member(Username, Users) of
+        true  -> ok;
+        false -> not_allowed
+    end.
 
 check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->

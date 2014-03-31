@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2011-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_plugins).
@@ -143,8 +143,7 @@ prepare_dir_plugin(PluginAppDescPath) ->
 delete_recursively(Fn) ->
     case rabbit_file:recursive_delete([Fn]) of
         ok                 -> ok;
-        {error, {Path, E}} -> {error, {cannot_delete, Path, E}};
-        Error              -> Error
+        {error, {Path, E}} -> {error, {cannot_delete, Path, E}}
     end.
 
 prepare_plugin(#plugin{type = ez, location = Location}, ExpandDir) ->

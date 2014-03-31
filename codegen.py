@@ -11,7 +11,7 @@
 ##  The Original Code is RabbitMQ.
 ##
 ##  The Initial Developer of the Original Code is GoPivotal, Inc.
-##  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+##  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 ##
 
 from __future__ import nested_scopes
@@ -106,7 +106,7 @@ def printFileHeader():
 %%  The Original Code is RabbitMQ.
 %%
 %%  The Initial Developer of the Original Code is GoPivotal, Inc.
-%%  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%%  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%"""
 
 def genErl(spec):
@@ -187,7 +187,7 @@ def genErl(spec):
         elif type == 'table':
             return p+'Len:32/unsigned, '+p+'Tab:'+p+'Len/binary'
 
-    def genFieldPostprocessing(packed):
+    def genFieldPostprocessing(packed, hasContent):
         for f in packed:
             type = erlType(f.domain)
             if type == 'bit':
@@ -199,6 +199,10 @@ def genErl(spec):
             elif type == 'table':
                 print "  F%d = rabbit_binary_parser:parse_table(F%dTab)," % \
                       (f.index, f.index)
+            # We skip the check on content-bearing methods for
+            # speed. This is a sanity check, not a security thing.
+            elif type == 'shortstr' and not hasContent:
+                print "  rabbit_binary_parser:assert_utf8(F%d)," % (f.index)
             else:
                 pass
 
@@ -214,7 +218,7 @@ def genErl(spec):
             restSeparator = ''
         recordConstructorExpr = '#%s{%s}' % (m.erlangName(), fieldMapList(m.arguments))
         print "decode_method_fields(%s, <<%s>>) ->" % (m.erlangName(), binaryPattern)
-        genFieldPostprocessing(packedFields)
+        genFieldPostprocessing(packedFields, m.hasContent)
         print "  %s;" % (recordConstructorExpr,)
 
     def genDecodeProperties(c):

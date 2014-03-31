@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_registry).
@@ -126,13 +126,14 @@ sanity_check_module(ClassModule, Module) ->
         true                  -> ok
     end.
 
-class_module(exchange)           -> rabbit_exchange_type;
-class_module(auth_mechanism)     -> rabbit_auth_mechanism;
-class_module(runtime_parameter)  -> rabbit_runtime_parameter;
-class_module(exchange_decorator) -> rabbit_exchange_decorator;
-class_module(queue_decorator)    -> rabbit_queue_decorator;
-class_module(policy_validator)   -> rabbit_policy_validator;
-class_module(ha_mode)            -> rabbit_mirror_queue_mode.
+class_module(exchange)            -> rabbit_exchange_type;
+class_module(auth_mechanism)      -> rabbit_auth_mechanism;
+class_module(runtime_parameter)   -> rabbit_runtime_parameter;
+class_module(exchange_decorator)  -> rabbit_exchange_decorator;
+class_module(queue_decorator)     -> rabbit_queue_decorator;
+class_module(policy_validator)    -> rabbit_policy_validator;
+class_module(ha_mode)             -> rabbit_mirror_queue_mode;
+class_module(channel_interceptor) -> rabbit_channel_interceptor.
 
 %%---------------------------------------------------------------------------
 

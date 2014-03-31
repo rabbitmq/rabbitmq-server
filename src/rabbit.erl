@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -20,7 +20,7 @@
 
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
-         is_running/1, environment/0, rotate_logs/1, force_event_refresh/0,
+         is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
 
 -export([start/2, stop/1]).
@@ -227,7 +227,7 @@
 -spec(is_running/1 :: (node()) -> boolean()).
 -spec(environment/0 :: () -> [{param(), term()}]).
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
--spec(force_event_refresh/0 :: () -> 'ok').
+-spec(force_event_refresh/1 :: (reference()) -> 'ok').
 
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
@@ -393,7 +393,9 @@ status() ->
           {running_applications, rabbit_misc:which_applications()},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
-          {memory,               rabbit_vm:memory()}],
+          {memory,               rabbit_vm:memory()},
+          {alarms,               alarms()},
+          {listeners,            listeners()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -415,6 +417,25 @@ status() ->
                                  T div 1000
                              end}],
     S1 ++ S2 ++ S3 ++ S4.
+
+alarms() ->
+    Alarms = rabbit_misc:with_exit_handler(rabbit_misc:const([]),
+                                           fun rabbit_alarm:get_alarms/0),
+    N = node(),
+    %% [{{resource_limit,memory,rabbit@mercurio},[]}]
+    [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
+
+listeners() ->
+    Listeners = try
+                    rabbit_networking:active_listeners()
+                catch
+                    exit:{aborted, _} -> []
+                end,
+    [{Protocol, Port, rabbit_misc:ntoa(IP)} ||
+        #listener{node       = Node,
+                  protocol   = Protocol,
+                  ip_address = IP,
+                  port       = Port} <- Listeners, Node =:= node()].
 
 is_running() -> is_running(node()).
 
@@ -696,11 +717,11 @@ log_rotation_result(ok, {error, SaslLogError}) ->
 log_rotation_result(ok, ok) ->
     ok.
 
-force_event_refresh() ->
-    rabbit_direct:force_event_refresh(),
-    rabbit_networking:force_connection_event_refresh(),
-    rabbit_channel:force_event_refresh(),
-    rabbit_amqqueue:force_event_refresh().
+force_event_refresh(Ref) ->
+    rabbit_direct:force_event_refresh(Ref),
+    rabbit_networking:force_connection_event_refresh(Ref),
+    rabbit_channel:force_event_refresh(Ref),
+    rabbit_amqqueue:force_event_refresh(Ref).
 
 %%---------------------------------------------------------------------------
 %% misc
@@ -768,11 +789,15 @@ home_dir() ->
     end.
 
 config_files() ->
+    Abs = fun (F) ->
+                  filename:absname(filename:rootname(F, ".config") ++ ".config")
+          end,
     case init:get_argument(config) of
-        {ok, Files} -> [filename:absname(
-                          filename:rootname(File, ".config") ++ ".config") ||
-                           [File] <- Files];
-        error       -> []
+        {ok, Files} -> [Abs(File) || [File] <- Files];
+        error       -> case os:getenv("RABBITMQ_CONFIG_FILE") of
+                           false -> [];
+                           File  -> [Abs(File) ++ " (not found)"]
+                       end
     end.
 
 %% We don't want this in fhc since it references rabbit stuff. And we can't put

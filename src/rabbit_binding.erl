@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_binding).
@@ -169,7 +169,7 @@ add(Binding, InnerFun) ->
                           ok ->
                               case mnesia:read({rabbit_route, B}) of
                                   []  -> add(Src, Dst, B);
-                                  [_] -> fun rabbit_misc:const_ok/0
+                                  [_] -> fun () -> ok end
                               end;
                           {error, _} = Err ->
                               rabbit_misc:const(Err)

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_disk_monitor).
@@ -186,9 +186,7 @@ get_disk_free(Dir, {unix, Sun})
 get_disk_free(Dir, {unix, _}) ->
     parse_free_unix(rabbit_misc:os_cmd("/bin/df -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
-    parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ Dir ++ [$"]));
-get_disk_free(_, Platform) ->
-    {unknown, Platform}.
+    parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ Dir ++ "\"")).
 
 parse_free_unix(CommandResult) ->
     [_, Stats | _] = string:tokens(CommandResult, "\n"),

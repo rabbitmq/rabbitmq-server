@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_binary_generator).
@@ -119,52 +119,51 @@ create_frame(TypeInt, ChannelInt, Payload) ->
 table_field_to_binary({FName, T, V}) ->
     [short_string_to_binary(FName) | field_value_to_binary(T, V)].
 
-field_value_to_binary(longstr,   V) -> ["S", long_string_to_binary(V)];
-field_value_to_binary(signedint, V) -> ["I", <<V:32/signed>>];
+field_value_to_binary(longstr,   V) -> [$S | long_string_to_binary(V)];
+field_value_to_binary(signedint, V) -> [$I, <<V:32/signed>>];
 field_value_to_binary(decimal,   V) -> {Before, After} = V,
-                                       ["D", Before, <<After:32>>];
-field_value_to_binary(timestamp, V) -> ["T", <<V:64>>];
-field_value_to_binary(table,     V) -> ["F", table_to_binary(V)];
-field_value_to_binary(array,     V) -> ["A", array_to_binary(V)];
-field_value_to_binary(byte,      V) -> ["b", <<V:8/unsigned>>];
-field_value_to_binary(double,    V) -> ["d", <<V:64/float>>];
-field_value_to_binary(float,     V) -> ["f", <<V:32/float>>];
-field_value_to_binary(long,      V) -> ["l", <<V:64/signed>>];
-field_value_to_binary(short,     V) -> ["s", <<V:16/signed>>];
-field_value_to_binary(bool,      V) -> ["t", if V -> 1; true -> 0 end];
-field_value_to_binary(binary,    V) -> ["x", long_string_to_binary(V)];
-field_value_to_binary(void,     _V) -> ["V"].
+                                       [$D, Before, <<After:32>>];
+field_value_to_binary(timestamp, V) -> [$T, <<V:64>>];
+field_value_to_binary(table,     V) -> [$F | table_to_binary(V)];
+field_value_to_binary(array,     V) -> [$A | array_to_binary(V)];
+field_value_to_binary(byte,      V) -> [$b, <<V:8/signed>>];
+field_value_to_binary(double,    V) -> [$d, <<V:64/float>>];
+field_value_to_binary(float,     V) -> [$f, <<V:32/float>>];
+field_value_to_binary(long,      V) -> [$l, <<V:64/signed>>];
+field_value_to_binary(short,     V) -> [$s, <<V:16/signed>>];
+field_value_to_binary(bool,      V) -> [$t, if V -> 1; true -> 0 end];
+field_value_to_binary(binary,    V) -> [$x | long_string_to_binary(V)];
+field_value_to_binary(void,     _V) -> [$V].
 
 table_to_binary(Table) when is_list(Table) ->
-    BinTable = generate_table(Table),
-    [<<(size(BinTable)):32>>, BinTable].
+    BinTable = generate_table_iolist(Table),
+    [<<(iolist_size(BinTable)):32>> | BinTable].
 
 array_to_binary(Array) when is_list(Array) ->
-    BinArray = generate_array(Array),
-    [<<(size(BinArray)):32>>, BinArray].
+    BinArray = generate_array_iolist(Array),
+    [<<(iolist_size(BinArray)):32>> | BinArray].
 
 generate_table(Table) when is_list(Table) ->
-    list_to_binary(lists:map(fun table_field_to_binary/1, Table)).
+    list_to_binary(generate_table_iolist(Table)).
 
-generate_array(Array) when is_list(Array) ->
-    list_to_binary(lists:map(fun ({T, V}) -> field_value_to_binary(T, V) end,
-                             Array)).
+generate_table_iolist(Table) ->
+    lists:map(fun table_field_to_binary/1, Table).
 
-short_string_to_binary(String) when is_binary(String) ->
-    Len = size(String),
-    if Len < 256 -> [<<Len:8>>, String];
-       true      -> exit(content_properties_shortstr_overflow)
-    end;
+generate_array_iolist(Array) ->
+    lists:map(fun ({T, V}) -> field_value_to_binary(T, V) end, Array).
+
 short_string_to_binary(String) ->
-    Len = length(String),
+    Len = string_length(String),
     if Len < 256 -> [<<Len:8>>, String];
        true      -> exit(content_properties_shortstr_overflow)
     end.
 
-long_string_to_binary(String) when is_binary(String) ->
-    [<<(size(String)):32>>, String];
 long_string_to_binary(String) ->
-    [<<(length(String)):32>>, String].
+    Len = string_length(String),
+    [<<Len:32>>, String].
+
+string_length(String) when is_binary(String) ->   size(String);
+string_length(String)                        -> length(String).
 
 check_empty_frame_size() ->
     %% Intended to ensure that EMPTY_FRAME_SIZE is defined correctly.

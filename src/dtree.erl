@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 %% A dual-index tree.
@@ -32,7 +32,7 @@
 
 -module(dtree).
 
--export([empty/0, insert/4, take/3, take/2, take_all/2,
+-export([empty/0, insert/4, take/3, take/2, take_all/2, drop/2,
          is_defined/2, is_empty/1, smallest/1, size/1]).
 
 %%----------------------------------------------------------------------------
@@ -53,6 +53,7 @@
 -spec(take/3       :: ([pk()], sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(take/2       :: (sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(take_all/2   :: (sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
+-spec(drop/2       :: (pk(), ?MODULE()) -> ?MODULE()).
 -spec(is_defined/2 :: (sk(), ?MODULE()) -> boolean()).
 -spec(is_empty/1   :: (?MODULE()) -> boolean()).
 -spec(smallest/1   :: (?MODULE()) -> kv()).
@@ -118,6 +119,14 @@ take_all(SK, {P, S}) ->
         none         -> {[], {P, S}};
         {value, PKS} -> {KVs, SKS, P1} = take_all2(PKS, P),
                         {KVs, {P1, prune(SKS, PKS, S)}}
+    end.
+
+%% Drop all entries for the given primary key (which does not have to exist).
+drop(PK, {P, S}) ->
+    case gb_trees:lookup(PK, P) of
+        none               -> {P, S};
+        {value, {SKS, _V}} -> {gb_trees:delete(PK, P),
+                               prune(SKS, gb_sets:singleton(PK), S)}
     end.
 
 is_defined(SK, {_P, S}) -> gb_trees:is_defined(SK, S).

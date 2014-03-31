@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_binary_parser).
@@ -20,6 +20,7 @@
 
 -export([parse_table/1]).
 -export([ensure_content_decoded/1, clear_decoded_content/1]).
+-export([validate_utf8/1, assert_utf8/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -30,6 +31,8 @@
         (rabbit_types:content()) -> rabbit_types:decoded_content()).
 -spec(clear_decoded_content/1 ::
         (rabbit_types:content()) -> rabbit_types:undecoded_content()).
+-spec(validate_utf8/1 :: (binary()) -> 'ok' | 'error').
+-spec(assert_utf8/1 :: (binary()) -> 'ok').
 
 -endif.
 
@@ -50,35 +53,35 @@ parse_array(<<ValueAndRest/binary>>) ->
     {Type, Value, Rest} = parse_field_value(ValueAndRest),
     [{Type, Value} | parse_array(Rest)].
 
-parse_field_value(<<"S", VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
+parse_field_value(<<$S, VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
     {longstr, V, R};
 
-parse_field_value(<<"I", V:32/signed, R/binary>>) ->
+parse_field_value(<<$I, V:32/signed, R/binary>>) ->
     {signedint, V, R};
 
-parse_field_value(<<"D", Before:8/unsigned, After:32/unsigned, R/binary>>) ->
+parse_field_value(<<$D, Before:8/unsigned, After:32/unsigned, R/binary>>) ->
     {decimal, {Before, After}, R};
 
-parse_field_value(<<"T", V:64/unsigned, R/binary>>) ->
+parse_field_value(<<$T, V:64/unsigned, R/binary>>) ->
     {timestamp, V, R};
 
-parse_field_value(<<"F", VLen:32/unsigned, Table:VLen/binary, R/binary>>) ->
+parse_field_value(<<$F, VLen:32/unsigned, Table:VLen/binary, R/binary>>) ->
     {table, parse_table(Table), R};
 
-parse_field_value(<<"A", VLen:32/unsigned, Array:VLen/binary, R/binary>>) ->
+parse_field_value(<<$A, VLen:32/unsigned, Array:VLen/binary, R/binary>>) ->
     {array, parse_array(Array), R};
 
-parse_field_value(<<"b", V:8/unsigned, R/binary>>) -> {byte,        V, R};
-parse_field_value(<<"d", V:64/float,   R/binary>>) -> {double,      V, R};
-parse_field_value(<<"f", V:32/float,   R/binary>>) -> {float,       V, R};
-parse_field_value(<<"l", V:64/signed,  R/binary>>) -> {long,        V, R};
-parse_field_value(<<"s", V:16/signed,  R/binary>>) -> {short,       V, R};
-parse_field_value(<<"t", V:8/unsigned, R/binary>>) -> {bool, (V /= 0), R};
+parse_field_value(<<$b, V:8/signed,   R/binary>>) -> {byte,        V, R};
+parse_field_value(<<$d, V:64/float,   R/binary>>) -> {double,      V, R};
+parse_field_value(<<$f, V:32/float,   R/binary>>) -> {float,       V, R};
+parse_field_value(<<$l, V:64/signed,  R/binary>>) -> {long,        V, R};
+parse_field_value(<<$s, V:16/signed,  R/binary>>) -> {short,       V, R};
+parse_field_value(<<$t, V:8/unsigned, R/binary>>) -> {bool, (V /= 0), R};
 
-parse_field_value(<<"x", VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
+parse_field_value(<<$x, VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
     {binary, V, R};
 
-parse_field_value(<<"V", R/binary>>) ->
+parse_field_value(<<$V, R/binary>>) ->
     {void, undefined, R}.
 
 ensure_content_decoded(Content = #content{properties = Props})
@@ -99,3 +102,18 @@ clear_decoded_content(Content = #content{properties_bin = none}) ->
     Content;
 clear_decoded_content(Content = #content{}) ->
     Content#content{properties = none}.
+
+assert_utf8(B) ->
+    case validate_utf8(B) of
+        ok    -> ok;
+        error -> rabbit_misc:protocol_error(
+                   frame_error, "Malformed UTF-8 in shortstr", [])
+    end.
+
+validate_utf8(Bin) ->
+    try
+        xmerl_ucs:from_utf8(Bin),
+        ok
+    catch exit:{ucs, _} ->
+            error
+    end.

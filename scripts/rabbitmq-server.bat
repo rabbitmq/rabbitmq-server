@@ -12,7 +12,7 @@ REM
 REM  The Original Code is RabbitMQ.
 REM
 REM  The Initial Developer of the Original Code is GoPivotal, Inc.
-REM  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+REM  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 REM
 
 setlocal
@@ -42,6 +42,14 @@ if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 ) else (
    if "!RABBITMQ_NODE_PORT!"=="" (
       set RABBITMQ_NODE_PORT=5672
+   )
+)
+
+if "!RABBITMQ_DIST_PORT!"=="" (
+   if "!RABBITMQ_NODE_PORT!"=="" (
+      set RABBITMQ_DIST_PORT=25672
+   ) else (
+      set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
    )
 )
 
@@ -99,8 +107,12 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
         -sname rabbitmqprelaunch!RANDOM!!TIME:~9! ^
         -extra "!RABBITMQ_NODENAME!"
 
-if ERRORLEVEL 1 (
+if ERRORLEVEL 2 (
+    rem dist port mentioned in config, do not attempt to set it
+) else if ERRORLEVEL 1 (
     exit /B 1
+) else (
+    set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
 set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
@@ -147,6 +159,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
+!RABBITMQ_DIST_ARG! ^
 !STAR!
 
 endlocal

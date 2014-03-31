@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_net).
@@ -20,7 +20,7 @@
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
          setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
-         peercert/1, connection_string/2, socket_ends/2]).
+         peercert/1, connection_string/2, socket_ends/2, is_loopback/1]).
 
 %%---------------------------------------------------------------------------
 
@@ -77,6 +77,7 @@
         (socket(), 'inbound' | 'outbound')
         -> ok_val_or_error({host_or_ip(), rabbit_networking:ip_port(),
                             host_or_ip(), rabbit_networking:ip_port()})).
+-spec(is_loopback/1 :: (socket() | inet:ip_address()) -> boolean()).
 
 -endif.
 
@@ -222,11 +223,24 @@ maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.
 
 rdns(Addr) ->
-    {ok, Lookup} = application:get_env(rabbit, reverse_dns_lookups),
-    case Lookup of
-        true -> list_to_binary(rabbit_networking:tcp_host(Addr));
-        _    -> Addr
+    case application:get_env(rabbit, reverse_dns_lookups) of
+        {ok, true} -> list_to_binary(rabbit_networking:tcp_host(Addr));
+        _          -> Addr
     end.
 
 sock_funs(inbound)  -> {fun peername/1, fun sockname/1};
 sock_funs(outbound) -> {fun sockname/1, fun peername/1}.
+
+is_loopback(Sock) when is_port(Sock) ; ?IS_SSL(Sock) ->
+    case sockname(Sock) of
+        {ok, {Addr, _Port}} -> is_loopback(Addr);
+        {error, _}          -> false
+    end;
+%% We could parse the results of inet:getifaddrs() instead. But that
+%% would be more complex and less maybe Windows-compatible...
+is_loopback({127,_,_,_})             -> true;
+is_loopback({0,0,0,0,0,0,0,1})       -> true;
+is_loopback({0,0,0,0,0,65535,AB,CD}) -> is_loopback(ipv4(AB, CD));
+is_loopback(_)                       -> false.
+
+ipv4(AB, CD) -> {AB bsr 8, AB band 255, CD bsr 8, CD band 255}.

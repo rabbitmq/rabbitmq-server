@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_connection_helper_sup).
@@ -20,7 +20,7 @@
 
 -export([start_link/0]).
 -export([start_channel_sup_sup/1,
-         start_queue_collector/1]).
+         start_queue_collector/2]).
 
 -export([init/1]).
 
@@ -31,7 +31,8 @@
 -ifdef(use_specs).
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start_channel_sup_sup/1 :: (pid()) -> rabbit_types:ok_pid_or_error()).
--spec(start_queue_collector/1 :: (pid()) -> rabbit_types:ok_pid_or_error()).
+-spec(start_queue_collector/2 :: (pid(), rabbit_types:proc_name()) ->
+                                      rabbit_types:ok_pid_or_error()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -45,10 +46,10 @@ start_channel_sup_sup(SupPid) ->
           {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
            intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}).
 
-start_queue_collector(SupPid) ->
+start_queue_collector(SupPid, Identity) ->
     supervisor2:start_child(
       SupPid,
-      {collector, {rabbit_queue_collector, start_link, []},
+      {collector, {rabbit_queue_collector, start_link, [Identity]},
        intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}).
 
 %%----------------------------------------------------------------------------

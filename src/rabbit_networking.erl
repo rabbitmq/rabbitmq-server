@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_networking).
@@ -22,7 +22,7 @@
          connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
-         close_connection/2, force_connection_event_refresh/0, tcp_host/1]).
+         close_connection/2, force_connection_event_refresh/1, tcp_host/1]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/6,
@@ -80,7 +80,7 @@
 -spec(connection_info_all/1 ::
         (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
--spec(force_connection_event_refresh/0 :: () -> 'ok').
+-spec(force_connection_event_refresh/1 :: (reference()) -> 'ok').
 
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(tcp_listener_addresses/1 :: (listener_config()) -> [address()]).
@@ -120,6 +120,7 @@
 %%----------------------------------------------------------------------------
 
 boot() ->
+    ok = record_distribution_listener(),
     ok = start(),
     ok = boot_tcp(),
     ok = boot_ssl().
@@ -275,6 +276,11 @@ tcp_listener_stopped(Protocol, IPAddress, Port) ->
                      ip_address = IPAddress,
                      port = Port}).
 
+record_distribution_listener() ->
+    {Name, Host} = rabbit_nodes:parts(node()),
+    {port, Port, _Version} = erl_epmd:port_please(Name, Host),
+    tcp_listener_started(clustering, {0,0,0,0,0,0,0,0}, Port).
+
 active_listeners() ->
     rabbit_misc:dirty_read_all(rabbit_listener).
 
@@ -331,8 +337,8 @@ close_connection(Pid, Explanation) ->
         false -> throw({error, {not_a_connection_pid, Pid}})
     end.
 
-force_connection_event_refresh() ->
-    [rabbit_reader:force_event_refresh(C) || C <- connections()],
+force_connection_event_refresh(Ref) ->
+    [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
     ok.
 
 %%--------------------------------------------------------------------
