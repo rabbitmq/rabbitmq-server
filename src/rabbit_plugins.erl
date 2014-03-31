@@ -143,8 +143,7 @@ prepare_dir_plugin(PluginAppDescPath) ->
 delete_recursively(Fn) ->
     case rabbit_file:recursive_delete([Fn]) of
         ok                 -> ok;
-        {error, {Path, E}} -> {error, {cannot_delete, Path, E}};
-        Error              -> Error
+        {error, {Path, E}} -> {error, {cannot_delete, Path, E}}
     end.
 
 prepare_plugin(#plugin{type = ez, location = Location}, ExpandDir) ->

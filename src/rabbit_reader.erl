@@ -1051,6 +1051,9 @@ auth_phase(Response,
                                                         auth_state = none}}
     end.
 
+-ifdef(use_specs).
+-spec(auth_fail/4 :: (string(), [any()], binary(), #v1{}) -> no_return()).
+-endif.
 auth_fail(Msg, Args, AuthName,
           State = #v1{connection = #connection{protocol     = Protocol,
                                                capabilities = Capabilities}}) ->
