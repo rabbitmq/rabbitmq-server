@@ -38,29 +38,28 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Chs = rabbit_mgmt_db:get_all_channels(rabbit_mgmt_util:range(ReqData)),
-    rabbit_mgmt_util:reply(status(Chs), ReqData, Context).
+    rabbit_mgmt_util:reply(status(), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-status(Chs) ->
-    lists:append([status(Chs, Node) || Node <- [node() | nodes()]]).
+status() ->
+    lists:append([status(Node) || Node <- [node() | nodes()]]).
 
-status(Chs, Node) ->
+status(Node) ->
     case rpc:call(Node, rabbit_shovel_status, status, [], infinity) of
         {badrpc, {'EXIT', _}} ->
             [];
         Status ->
-            [format(Node, I, Chs) || I <- Status]
+            [format(Node, I) || I <- Status]
     end.
 
-format(Node, {Name, Type, Info, TS}, Chs) ->
+format(Node, {Name, Type, Info, TS}) ->
     [{node, Node}, {timestamp, format_ts(TS)}] ++
         format_name(Type, Name) ++
-        format_info(Info, Type, Name, Chs).
+        format_info(Info, Type, Name).
 
 format_name(static,  Name)          -> [{name,  Name},
                                         {type,  static}];
@@ -68,16 +67,16 @@ format_name(dynamic, {VHost, Name}) -> [{name,  Name},
                                         {vhost, VHost},
                                         {type,  dynamic}].
 
-format_info(starting, _Type, _Name, _Chs) ->
+format_info(starting, _Type, _Name) ->
     [{state, starting}];
 
-format_info({running, Props}, Type, Name, Chs) ->
+format_info({running, Props}, Type, Name) ->
     [{state, running}] ++ lookup_src_dest(Type, Name) ++
         [R || KV <-  Props,
-              R  <-  [format_info_item(KV, Chs)],
+              R  <-  [format_info_item(KV)],
               R  =/= unknown];
 
-format_info({terminated, Reason}, _Type, _Name, _Chs) ->
+format_info({terminated, Reason}, _Type, _Name) ->
     [{state,  terminated},
      {reason, print("~p", [Reason])}].
 
@@ -87,14 +86,8 @@ format_ts({{Y, M, D}, {H, Min, S}}) ->
 print(Fmt, Val) ->
     list_to_binary(io_lib:format(Fmt, Val)).
 
-format_info_item({K, B}, _Chs) when is_binary(B) ->
-    {K, B};
-format_info_item({K, ChPid}, Chs) when is_pid(ChPid) ->
-    case rabbit_mgmt_format:strip_pids(
-           [Ch || Ch <- Chs, pget(pid, Ch) =:= ChPid]) of
-        [Ch] -> {K, Ch};
-        []   -> unknown
-    end.
+format_info_item({K, B}) when is_binary(B) ->
+    {K, B}.
 
 lookup_src_dest(static, _Name) ->
     %% This is too messy to do, the config may be on another node and anyway
