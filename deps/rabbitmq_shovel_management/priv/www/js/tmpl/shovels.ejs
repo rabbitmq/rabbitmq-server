@@ -11,7 +11,6 @@
     <th>State</th>
     <th colspan="2">Source</th>
     <th colspan="2">Destination</th>
-    <th>Message rate</th>
     <th>Last changed</th>
   </tr>
  </thead>
@@ -48,11 +47,6 @@
       <td><%= fmt_string(shovel.dest_uri) %></td>
       <td><%= fmt_shovel_endpoint('dest', shovel.definition) %></td>
     <% } %>
-    <td class="r">
-      <% if (shovel.dest_channel) { %>
-        <%= fmt_rate(shovel.dest_channel.message_stats, 'confirm') %>
-      <% } %>
-    </td>
     <td><%= shovel.timestamp %></td>
   </tr>
 <% } %>
