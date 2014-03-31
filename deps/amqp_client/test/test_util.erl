@@ -32,6 +32,9 @@
 %% unsubscribes
 -define(Wait, 200).
 
+%% How to long wait for a process to die after an expected failure
+-define(DeathWait, 5000).
+
 %% AMQP URI parsing test
 amqp_uri_parse_test() ->
     %% From the spec (adapted)
@@ -1076,7 +1079,7 @@ teardown_test() ->
 wait_for_death(Pid) ->
     Ref = erlang:monitor(process, Pid),
     receive {'DOWN', Ref, process, Pid, _Reason} -> ok
-    after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
+    after ?DeathWait -> exit({timed_out_waiting_for_process_death, Pid})
     end.
 
 latch_loop() ->
