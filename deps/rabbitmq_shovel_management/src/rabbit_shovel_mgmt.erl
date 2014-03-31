@@ -87,8 +87,6 @@ format_ts({{Y, M, D}, {H, Min, S}}) ->
 print(Fmt, Val) ->
     list_to_binary(io_lib:format(Fmt, Val)).
 
-format_info_item({K, L}, _Chs) when is_list(L) ->
-    {K, list_to_binary(L)};
 format_info_item({K, B}, _Chs) when is_binary(B) ->
     {K, B};
 format_info_item({K, ChPid}, Chs) when is_pid(ChPid) ->
