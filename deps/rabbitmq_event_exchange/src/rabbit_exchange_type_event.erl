@@ -104,4 +104,5 @@ fmt(V)                    -> {longstr,
                               list_to_binary(
                                 rabbit_misc:format("~1000000000p", [V]))}.
 
-a2b(A) -> list_to_binary(atom_to_list(A)).
+a2b(A) when is_atom(A)   -> list_to_binary(atom_to_list(A));
+a2b(B) when is_binary(B) -> B.
