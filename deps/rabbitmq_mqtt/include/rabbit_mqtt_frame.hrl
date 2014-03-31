@@ -11,11 +11,10 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--define(MQTT_PROTO_MAJOR, 3).
--define(MQTT_PROTO_MINOR, 1).
+-define(PROTOCOL_NAMES,  [{3, "MQIsdp"}, {4, "MQTT"}]).
 
 %% frame types
 

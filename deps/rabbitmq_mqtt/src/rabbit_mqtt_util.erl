@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mqtt_util).
@@ -38,9 +38,8 @@ amqp2mqtt(Topic) ->
       re:replace(re:replace(Topic, "[\*]", "+", [global]),
                  "[\.]", "/", [global])).
 
-valid_client_id(ClientId) ->
-    ClientIdLen = length(ClientId),
-    1 =< ClientIdLen andalso ClientIdLen =< ?CLIENT_ID_MAXLEN.
+gen_client_id() ->
+    lists:nthtail(1, rabbit_guid:string(rabbit_guid:gen_secure(), [])).
 
 env(Key) ->
     case application:get_env(rabbitmq_mqtt, Key) of

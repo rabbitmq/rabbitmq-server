@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mqtt_processor).
@@ -54,13 +54,18 @@ process_request(?CONNECT,
                                           password   = Password,
                                           proto_ver  = ProtoVersion,
                                           clean_sess = CleanSess,
-                                          client_id  = ClientId } = Var}, PState) ->
+                                          client_id  = ClientId0,
+                                          keep_alive = Keepalive} = Var}, PState) ->
+    ClientId = case ClientId0 of
+                   []    -> rabbit_mqtt_util:gen_client_id();
+                   [_|_] -> ClientId0
+               end,
     {ReturnCode, PState1} =
-        case {ProtoVersion =:= ?MQTT_PROTO_MAJOR,
-              rabbit_mqtt_util:valid_client_id(ClientId)} of
+        case {lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)),
+              ClientId0 =:= [] andalso CleanSess =:= false} of
             {false, _} ->
                 {?CONNACK_PROTO_VER, PState};
-            {_, false} ->
+            {_, true} ->
                 {?CONNACK_INVALID_ID, PState};
             _ ->
                 case creds(Username, Password) of
@@ -68,7 +73,7 @@ process_request(?CONNECT,
                         rabbit_log:error("MQTT login failed - no credentials~n"),
                         {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
-                        case process_login(UserBin, PassBin, PState) of
+                        case process_login(UserBin, PassBin, ProtoVersion, PState) of
                             {?CONNACK_ACCEPT, Conn} ->
                                 link(Conn),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -77,6 +82,7 @@ process_request(?CONNECT,
                                 Prefetch = rabbit_mqtt_util:env(prefetch),
                                 #'basic.qos_ok'{} = amqp_channel:call(
                                   Ch, #'basic.qos'{prefetch_count = Prefetch}),
+                                rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
                                 {?CONNACK_ACCEPT,
                                  maybe_clean_sess(
                                    PState #proc_state{ will_msg   = make_will_msg(Var),
@@ -318,26 +324,42 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
                dup     = false,
                payload = Msg }.
 
-process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
-                                             socket    = Sock }) ->
-     VHost = rabbit_mqtt_util:env(vhost),
-     case amqp_connection:start(#amqp_params_direct{
-                                  username     = UserBin,
+process_login(UserBin, PassBin, ProtoVersion,
+              #proc_state{ channels  = {undefined, undefined},
+                           socket    = Sock }) ->
+    {VHost, UsernameBin} = get_vhost_username(UserBin),
+    case amqp_connection:start(#amqp_params_direct{
+                                  username     = UsernameBin,
                                   password     = PassBin,
                                   virtual_host = VHost,
-                                  adapter_info = adapter_info(Sock)}) of
-         {ok, Connection} ->
-             {?CONNACK_ACCEPT, Connection};
-         {error, {auth_failure, Explanation}} ->
-             rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
-                              [binary_to_list(UserBin), Explanation]),
-             ?CONNACK_CREDENTIALS;
-         {error, access_refused} ->
-             rabbit_log:warning("MQTT login failed for ~p access_refused "
-                                "(vhost access not allowed)~n",
-                                [binary_to_list(UserBin)]),
-             ?CONNACK_AUTH
-      end.
+                                  adapter_info = adapter_info(Sock, ProtoVersion)}) of
+        {ok, Connection} ->
+            case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
+                ok          -> {?CONNACK_ACCEPT, Connection};
+                not_allowed -> amqp_connection:close(Connection),
+                               rabbit_log:warning(
+                                 "MQTT login failed for ~p access_refused "
+                                 "(access must be from localhost)~n",
+                                 [binary_to_list(UsernameBin)]),
+                               ?CONNACK_AUTH
+            end;
+        {error, {auth_failure, Explanation}} ->
+            rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
+                             [binary_to_list(UserBin), Explanation]),
+            ?CONNACK_CREDENTIALS;
+        {error, access_refused} ->
+            rabbit_log:warning("MQTT login failed for ~p access_refused "
+                               "(vhost access not allowed)~n",
+                               [binary_to_list(UserBin)]),
+            ?CONNACK_AUTH
+    end.
+
+get_vhost_username(UserBin) ->
+    %% split at the last colon, disallowing colons in username
+    case re:split(UserBin, ":(?!.*?:)") of
+        [Vhost, UserName] -> {Vhost,  UserName};
+        [UserBin]         -> {rabbit_mqtt_util:env(vhost), UserBin}
+    end.
 
 creds(User, Pass) ->
     DefaultUser = rabbit_mqtt_util:env(default_user),
@@ -460,9 +482,9 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
     PState #proc_state{ unacked_pubs   = UnackedPubs1,
                         awaiting_seqno = SeqNo1 }.
 
-adapter_info(Sock) ->
+adapter_info(Sock, ProtoVer) ->
     amqp_connection:socket_adapter_info(
-             Sock, {'MQTT', {?MQTT_PROTO_MAJOR, ?MQTT_PROTO_MINOR}}).
+             Sock, {'MQTT', integer_to_list(ProtoVer)}).
 
 send_client(Frame, #proc_state{ socket = Sock }) ->
     %rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),
