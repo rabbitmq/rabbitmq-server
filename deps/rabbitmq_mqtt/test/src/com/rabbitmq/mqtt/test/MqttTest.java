@@ -29,8 +29,9 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttTopic;
 import org.eclipse.paho.client.mqttv3.internal.NetworkModule;
 import org.eclipse.paho.client.mqttv3.internal.TCPNetworkModule;
+import org.eclipse.paho.client.mqttv3.internal.wire.MqttInputStream;
 import org.eclipse.paho.client.mqttv3.internal.wire.MqttOutputStream;
-import org.eclipse.paho.client.mqttv3.internal.wire.MqttPublish;
+import org.eclipse.paho.client.mqttv3.internal.wire.MqttPingReq;
 
 import javax.net.SocketFactory;
 import java.io.IOException;
@@ -129,16 +130,14 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     public void testConnectFirst() throws MqttException, IOException, InterruptedException {
-        MqttPublish publish = new MqttPublish(this.getName(), new MqttMessage(payload));
         NetworkModule networkModule = new TCPNetworkModule(SocketFactory.getDefault(), host, port, "");
         networkModule.start();
+        MqttInputStream  mqttIn  = new MqttInputStream (networkModule.getInputStream());
         MqttOutputStream mqttOut = new MqttOutputStream(networkModule.getOutputStream());
         try {
-            for (int i=1; i<1000; i++) {
-                mqttOut.write(publish);
-                mqttOut.flush();
-            }
-            Thread.sleep(testDelay);
+            mqttOut.write(new MqttPingReq());
+            mqttOut.flush();
+            mqttIn.readMqttWireMessage();
             fail("Error expected if CONNECT is not first packet");
         } catch (IOException _) {}
     }
