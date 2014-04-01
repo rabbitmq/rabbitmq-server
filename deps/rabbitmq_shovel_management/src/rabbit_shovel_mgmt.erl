@@ -71,10 +71,7 @@ format_info(starting, _Type, _Name) ->
     [{state, starting}];
 
 format_info({running, Props}, Type, Name) ->
-    [{state, running}] ++ lookup_src_dest(Type, Name) ++
-        [R || KV <-  Props,
-              R  <-  [format_info_item(KV)],
-              R  =/= unknown];
+    [{state, running}] ++ lookup_src_dest(Type, Name) ++ Props;
 
 format_info({terminated, Reason}, _Type, _Name) ->
     [{state,  terminated},
@@ -85,11 +82,6 @@ format_ts({{Y, M, D}, {H, Min, S}}) ->
 
 print(Fmt, Val) ->
     list_to_binary(io_lib:format(Fmt, Val)).
-
-format_info_item({K, L}) when is_list(L) ->
-    {K, list_to_binary(L)};
-format_info_item({K, B}) when is_binary(B) ->
-    {K, B}.
 
 lookup_src_dest(static, _Name) ->
     %% This is too messy to do, the config may be on another node and anyway
