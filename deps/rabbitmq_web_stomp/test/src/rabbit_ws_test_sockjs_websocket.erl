@@ -45,7 +45,6 @@ sjs_recv(WS) ->
             {close, CloseReason}
     end.
 
-    
 pubsub_test() ->
     WS = rfc6455_client:new("ws://127.0.0.1:15674/stomp/0/0/websocket", self()),
     {ok, _} = rfc6455_client:open(WS),
@@ -81,6 +80,6 @@ disconnect_test() ->
 
     ok = sjs_send(WS, "DISCONNECT", []),
     {close, [1000, _]} = sjs_recv(WS),
-    
+
     ok.
 

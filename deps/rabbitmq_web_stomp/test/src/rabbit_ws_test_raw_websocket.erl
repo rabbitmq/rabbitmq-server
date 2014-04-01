@@ -30,7 +30,7 @@ raw_send(WS, Command, Headers) ->
 raw_send(WS, Command, Headers, Body) ->
     Frame = stomp:marshal(Command, Headers, Body),
     rfc6455_client:send(WS, Frame).
-    
+
 raw_recv(WS) ->
     {ok, P} = rfc6455_client:recv(WS),
     stomp:unmarshal(P).
@@ -67,5 +67,5 @@ disconnect_test() ->
 
     ok = raw_send(WS, "DISCONNECT", []),
     {close, {1005, _}} = rfc6455_client:recv(WS),
-    
+
     ok.

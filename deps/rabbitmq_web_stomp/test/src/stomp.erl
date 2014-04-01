@@ -32,8 +32,6 @@ unmarshal(Frame) ->
     Headers = [list_to_tuple(binary:split(Line, <<":">>)) || Line <- HeaderLines],
     [Body1, <<>>] = binary:split(Body, [<<0>>],[{scope,{byte_size(Body)-1, 1}}]),
     {Command, Headers, Body1}.
-    
-    
 
 %% ----------
 
@@ -45,7 +43,6 @@ iolist_join2([], _Separator, Acc) ->
 iolist_join2([E | List], Separator, Acc) ->
     iolist_join2(List, Separator, [E, Separator | Acc]).
 
-    
 
 list_to_hex(L) ->
     lists:flatten(lists:map(fun(X) -> int_to_hex(X) end, L)).
@@ -55,4 +52,3 @@ hex(N) when N < 10 ->
     $0+N;
 hex(N) when N >= 10, N < 16 ->
     $a + (N-10).
-
