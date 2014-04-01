@@ -54,24 +54,29 @@ check_user_pass_login(Username, Password) ->
 
 check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
-    lists:foldl(
-      fun ({ModN, ModZ}, {refused, _, _}) ->
-              %% Different modules for authN vs authZ. So authenticate
-              %% with authN module, then if that succeeds do
-              %% passwordless (i.e pre-authenticated) login with authZ
-              %% module, and use the #user{} the latter gives us.
-              case try_login(ModN, Username, AuthProps) of
-                  {ok, _} -> try_login(ModZ, Username, []);
-                  Else    -> Else
-              end;
-          (Mod, {refused, _, _}) ->
-              %% Same module for authN and authZ. Just take the result
-              %% it gives us
-              try_login(Mod, Username, AuthProps);
-          (_, {ok, User}) ->
-              %% We've successfully authenticated. Skip to the end...
-              {ok, User}
-      end, {refused, "No modules checked '~s'", [Username]}, Modules).
+    R = lists:foldl(
+          fun ({ModN, ModZ}, {refused, _, _}) ->
+                  %% Different modules for authN vs authZ. So authenticate
+                  %% with authN module, then if that succeeds do
+                  %% passwordless (i.e pre-authenticated) login with authZ
+                  %% module, and use the #user{} the latter gives us.
+                  case try_login(ModN, Username, AuthProps) of
+                      {ok, _} -> try_login(ModZ, Username, []);
+                      Else    -> Else
+                  end;
+              (Mod, {refused, _, _}) ->
+                  %% Same module for authN and authZ. Just take the result
+                  %% it gives us
+                  try_login(Mod, Username, AuthProps);
+              (_, {ok, User}) ->
+                  %% We've successfully authenticated. Skip to the end...
+                  {ok, User}
+          end, {refused, "No modules checked '~s'", [Username]}, Modules),
+    rabbit_event:notify(case R of
+                            {ok, _User} -> user_authentication_success;
+                            _           -> user_authentication_failure
+                        end, [{name, Username}]),
+    R.
 
 try_login(Module, Username, AuthProps) ->
     case Module:check_user_login(Username, AuthProps) of
