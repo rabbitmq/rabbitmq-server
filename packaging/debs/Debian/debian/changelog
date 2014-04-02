@@ -1,3 +1,9 @@
+rabbitmq-server (3.3.0-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Simon MacMullen <simon@rabbitmq.com>  Wed, 02 Apr 2014 14:23:14 +0100
+
 rabbitmq-server (3.2.4-1) unstable; urgency=low
 
   * New Upstream Release
