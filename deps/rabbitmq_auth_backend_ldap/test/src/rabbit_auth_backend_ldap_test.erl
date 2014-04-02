@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_ldap_test).
@@ -27,26 +27,78 @@
                                     password     = <<"password">>,
                                     virtual_host = <<"test">>}).
 
-login_test_() ->
-    [?_test(fail(#amqp_params_network{})),
-     ?_test(fail(#amqp_params_network{username     = <<"Simon MacMullen">>})),
-     ?_test(fail(#amqp_params_network{username     = <<"Simon MacMullen">>,
-                                      password     = <<"password">>})),
-     ?_test(succ(?SIMON)),
-     ?_test(succ(?MIKEB))].
+%%--------------------------------------------------------------------
 
-succ(Params) -> ?assertMatch({ok, _}, amqp_connection:start(Params)).
-fail(Params) -> ?assertMatch({error, _}, amqp_connection:start(Params)).
+login_test_() ->
+    [test_login(Env, L, case {LGood, EnvGood} of
+                            {good, good} -> fun succ/1;
+                            _            -> fun fail/1
+                        end) || {LGood, L}     <- logins(),
+                                {EnvGood, Env} <- login_envs()].
+
+logins() ->
+    [{bad, #amqp_params_network{}},
+     {bad, #amqp_params_network{username = <<"Simon MacMullen">>}},
+     {bad, #amqp_params_network{username = <<"Simon MacMullen">>,
+                                password = <<"password">>}},
+     {good, ?SIMON},
+     {good, ?MIKEB}].
+
+login_envs() ->
+    [{good, base_login_env()},
+     {good, dn_lookup_pre_bind_env()},
+     {good, other_bind_admin_env()},
+     {good, other_bind_anon_env()},
+     {bad, other_bind_broken_env()}].
+
+base_login_env() ->
+    [{user_dn_pattern,    "cn=${username},ou=People,dc=example,dc=com"},
+     {dn_lookup_attribute, none},
+     {dn_lookup_base,      none},
+     {dn_lookup_bind,      as_user},
+     {other_bind,          as_user}].
+
+%% TODO configure OpenLDAP to allow a dn_lookup_post_bind_env()
+dn_lookup_pre_bind_env() ->
+    [{user_dn_pattern,    "${username}"},
+     {dn_lookup_attribute, "cn"},
+     {dn_lookup_base,      "OU=People,DC=example,DC=com"},
+     {dn_lookup_bind,      {"cn=admin,dc=example,dc=com", "admin"}}].
+
+other_bind_admin_env() ->
+    [{other_bind, {"cn=admin,dc=example,dc=com", "admin"}}].
+
+other_bind_anon_env() ->
+    [{other_bind, anon}].
+
+other_bind_broken_env() ->
+    [{other_bind, {"cn=admin,dc=example,dc=com", "admi"}}].
+
+test_login(Env, Login, ResultFun) ->
+    ?_test(try
+               set_env(Env),
+               ResultFun(Login)
+           after
+               set_env(base_login_env())
+           end).
+
+set_env(Env) ->
+    [application:set_env(rabbitmq_auth_backend_ldap, K, V) || {K, V} <- Env].
+
+succ(Login) -> ?assertMatch({ok, _}, amqp_connection:start(Login)).
+fail(Login) -> ?assertMatch({error, _}, amqp_connection:start(Login)).
+
+%%--------------------------------------------------------------------
 
 in_group_test_() ->
     X = [#'exchange.declare'{exchange = <<"test">>}],
-    [test_resource_fun(PTR) || PTR <- [{?SIMON, X, ok},
-                                       {?MIKEB, X, fail}]].
+    test_resource_funs([{?SIMON, X, ok},
+                         {?MIKEB, X, fail}]).
 
 const_test_() ->
     Q = [#'queue.declare'{queue = <<"test">>}],
-    [test_resource_fun(PTR) || PTR <- [{?SIMON, Q, ok},
-                                       {?MIKEB, Q, fail}]].
+    test_resource_funs([{?SIMON, Q, ok},
+                        {?MIKEB, Q, fail}]).
 
 string_match_test_() ->
     B = fun(N) ->
@@ -54,10 +106,9 @@ string_match_test_() ->
                  #'queue.declare'{queue = <<"test">>},
                  #'queue.bind'{exchange = N, queue = <<"test">>}]
         end,
-    [test_resource_fun(PTR) ||
-        PTR <- [{?SIMON, B(<<"xch-Simon MacMullen-abc123">>), ok},
-                {?SIMON, B(<<"abc123">>),                     fail},
-                {?SIMON, B(<<"xch-Someone Else-abc123">>),    fail}]].
+    test_resource_funs([{?SIMON, B(<<"xch-Simon MacMullen-abc123">>), ok},
+                        {?SIMON, B(<<"abc123">>),                     fail},
+                        {?SIMON, B(<<"xch-Someone Else-abc123">>),    fail}]).
 
 boolean_logic_test_() ->
     Q1 = [#'queue.declare'{queue = <<"test1">>},
@@ -68,6 +119,8 @@ boolean_logic_test_() ->
                                        {?SIMON, Q2, ok},
                                        {?MIKEB, Q1, fail},
                                        {?MIKEB, Q2, fail}]].
+
+test_resource_funs(PTRs) -> [test_resource_fun(PTR) || PTR <- PTRs].
 
 test_resource_fun({Person, Things, Result}) ->
     fun() ->
@@ -81,3 +134,5 @@ test_resource_fun({Person, Things, Result}) ->
                          catch exit:_ -> fail
                          end)
     end.
+
+%%--------------------------------------------------------------------
