@@ -18,7 +18,7 @@ $(CLIENT_PKG):
 	@echo
 	@echo You need $(CLIENT_PKG) to run these tests. Unfortunately we can\'t
 	@echo redistribute it. Obtain it from the SwiftMQ website and place it
-	@echo in this directory.
+	@echo in $(shell pwd).
 	@echo
 	@false
 
