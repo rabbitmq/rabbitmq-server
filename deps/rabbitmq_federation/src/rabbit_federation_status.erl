@@ -11,7 +11,7 @@
 %%  The Original Code is RabbitMQ Federation.
 %%
 %%  The Initial Developer of the Original Code is GoPivotal, Inc.
-%%  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%%  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_status).
@@ -57,11 +57,15 @@ init([]) ->
     {ok, #state{}}.
 
 handle_call({remove_exchange_or_queue, XorQName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, match_entry(xorqkey(XorQName))),
+    [link_gone(Entry)
+     || Entry <- ets:match_object(?ETS_NAME, match_entry(xorqkey(XorQName)))],
     {reply, ok, State};
 
 handle_call({remove, Upstream, XorQName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, match_entry(key(XorQName, Upstream))),
+    case ets:match_object(?ETS_NAME, match_entry(key(XorQName, Upstream))) of
+        [Entry] -> link_gone(Entry);
+        []      -> ok
+    end,
     {reply, ok, State};
 
 handle_call(status, _From, State) ->
@@ -70,11 +74,12 @@ handle_call(status, _From, State) ->
 
 handle_cast({report, Upstream, #upstream_params{safe_uri = URI},
              XorQName, Status, Timestamp}, State) ->
-    true = ets:insert(?ETS_NAME,
-                      #entry{key        = key(XorQName, Upstream),
-                             status     = Status,
-                             uri        = URI,
-                             timestamp  = Timestamp}),
+    Entry = #entry{key        = key(XorQName, Upstream),
+                   status     = Status,
+                   uri        = URI,
+                   timestamp  = Timestamp},
+    true = ets:insert(?ETS_NAME, Entry),
+    rabbit_event:notify(federation_link_status, format(Entry)),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -86,21 +91,34 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-format(#entry{key       = {#resource{virtual_host = VHost,
-                                     kind         = Type,
-                                     name         = XorQNameBin},
-                           Connection, UXorQNameBin},
-              status    = Status,
+format(#entry{status    = Status,
               uri       = URI,
-              timestamp = Timestamp}) ->
-    [{type,          Type},
-     {name,          XorQNameBin},
-     {upstream_name, UXorQNameBin},
-     {vhost,         VHost},
-     {connection,    Connection},
-     {uri,           URI},
-     {status,        Status},
-     {timestamp,     Timestamp}].
+              timestamp = Timestamp} = Entry) ->
+    identity(Entry) ++ split_status(Status) ++ [{uri,       URI},
+                                                {timestamp, Timestamp}].
+
+identity(#entry{key       = {#resource{virtual_host = VHost,
+                                       kind         = Type,
+                                       name         = XorQNameBin},
+                             UpstreamName, UXorQNameBin}}) ->
+    case Type of
+        exchange -> [{exchange,          XorQNameBin},
+                     {upstream_exchange, UXorQNameBin}];
+        queue    -> [{queue,             XorQNameBin},
+                     {upstream_queue,    UXorQNameBin}]
+    end ++ [{type,      Type},
+            {vhost,     VHost},
+            {upstream,  UpstreamName}].
+
+split_status({running, ConnName})         -> [{status,           running},
+                                              {local_connection, ConnName}];
+split_status({Status, Error})             -> [{status, Status},
+                                              {error,  Error}];
+split_status(Status) when is_atom(Status) -> [{status, Status}].
+
+link_gone(Entry) ->
+    rabbit_event:notify(federation_link_removed, identity(Entry)),
+    true = ets:delete_object(?ETS_NAME, Entry).
 
 %% We don't want to key off the entire upstream, bits of it may change
 key(XName = #resource{kind = exchange}, #upstream{name          = UpstreamName,

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_unit_test).
@@ -56,14 +56,6 @@ add_binding(Ser, X, B) ->
 remove_bindings(Ser, X, Bs) ->
     rabbit_federation_exchange:remove_bindings(transaction, X, Bs),
     rabbit_federation_exchange:remove_bindings(Ser, X, Bs).
-
-x(Name) ->
-    #exchange{name        = Name,
-              type        = fanout,
-              durable     = false,
-              auto_delete = false,
-              internal    = false,
-              arguments   = []}.
 
 r(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 

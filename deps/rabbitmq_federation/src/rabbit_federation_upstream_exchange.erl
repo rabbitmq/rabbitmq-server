@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_upstream_exchange).
@@ -43,9 +43,16 @@ serialise_events() -> false.
 
 route(X = #exchange{arguments = Args},
       D = #delivery{message = #basic_message{content = Content}}) ->
+    %% This arg was introduced in the same release as this exchange type;
+    %% it must be set
     {long, MaxHops} = rabbit_misc:table_lookup(Args, ?MAX_HOPS_ARG),
+    %% This was introduced later; it might be missing
+    DName = case rabbit_misc:table_lookup(Args, ?NODE_NAME_ARG) of
+                {longstr, N} -> N;
+                _            -> unknown
+            end,
     Headers = rabbit_basic:extract_headers(Content),
-    case rabbit_federation_util:should_forward(Headers, MaxHops) of
+    case rabbit_federation_util:should_forward(Headers, MaxHops, DName) of
         true  -> rabbit_exchange_type_fanout:route(X, D);
         false -> []
     end.

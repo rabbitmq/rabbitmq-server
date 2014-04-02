@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -record(upstream, {uris,
@@ -38,5 +38,6 @@
 
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(BINDING_HEADER, <<"x-bound-from">>).
--define(MAX_HOPS_ARG, <<"x-max-hops">>).
+-define(MAX_HOPS_ARG,   <<"x-max-hops">>).
+-define(NODE_NAME_ARG,  <<"x-downstream-name">>).
 -define(DEF_PREFETCH, 1000).

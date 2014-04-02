@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ Federation.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_queue_test).
@@ -76,10 +76,6 @@ bidirectional_test() ->
 dynamic_reconfiguration_test() ->
     with_ch(
       fun (Ch) ->
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
-
-              %% Test this at least does not blow up
-              set_param("federation", "local-nodename", "\"test\""),
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
 
               %% Test that clearing connections works
@@ -160,7 +156,8 @@ with_ch(Fun, Qs) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_all(Ch, Qs),
     timer:sleep(1000), %% Time for statuses to get updated
-    rabbit_federation_test_util:assert_status(Qs),
+    rabbit_federation_test_util:assert_status(
+      Qs, {queue, upstream_queue}),
     Fun(Ch),
     delete_all(Ch, Qs),
     amqp_connection:close(Conn),

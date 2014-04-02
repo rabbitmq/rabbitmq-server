@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_link_sup).
@@ -58,7 +58,7 @@ adjust(Sup, XorQ, {clear_upstream, UpstreamName}) ->
     [stop(Sup, Upstream, XorQ) || Upstream <- children(Sup, UpstreamName)];
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
-adjust(Sup, X = #exchange{name = XName}, {upstream_set, Set}) ->
+adjust(Sup, X = #exchange{name = XName}, {upstream_set, _Set}) ->
     case rabbit_federation_upstream:federate(X) of
         false -> ok;
         true  -> ok = rabbit_federation_db:prune_scratch(

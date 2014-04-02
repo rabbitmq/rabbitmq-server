@@ -11,39 +11,34 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_util).
 
--include_lib("kernel/include/inet.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([local_nodename/1, should_forward/2, find_upstreams/2]).
+-export([should_forward/3, find_upstreams/2, already_seen/2]).
 -export([validate_arg/3, fail/2, name/1, vhost/1, r/1]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
 
 %%----------------------------------------------------------------------------
 
-local_nodename(VHost) ->
-    rabbit_runtime_parameters:value(
-      VHost, <<"federation">>, <<"local-nodename">>, local_nodename_implicit()).
-
-local_nodename_implicit() ->
-    {ID, _} = rabbit_nodes:parts(node()),
-    {ok, Host} = inet:gethostname(),
-    {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
-    list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN}))).
-
-should_forward(undefined, _MaxHops) ->
+should_forward(undefined, _MaxHops, _DName) ->
     true;
-should_forward(Headers, MaxHops) ->
+should_forward(Headers, MaxHops, DName) ->
     case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
-        {array, A} -> length(A) < MaxHops;
+        {array, A} -> length(A) < MaxHops andalso not already_seen(DName, A);
         _          -> true
     end.
+
+already_seen(Name, Array) ->
+    lists:any(fun ({table, T}) -> {longstr, Name} =:= rabbit_misc:table_lookup(
+                                                        T, <<"cluster-name">>);
+                  (_)          -> false
+              end, Array).
 
 find_upstreams(Name, Upstreams) ->
     [U || U = #upstream{name = Name2} <- Upstreams,

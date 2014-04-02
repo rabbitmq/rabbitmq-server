@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_queue_link).
@@ -136,7 +136,9 @@ handle_info(#'basic.nack'{} = Nack, State = #state{ch      = Ch,
     Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
     {noreply, State#state{unacked = Unacked1}};
 
-handle_info({#'basic.deliver'{redelivered = Redelivered} = DeliverMethod, Msg},
+handle_info({#'basic.deliver'{redelivered = Redelivered,
+                              exchange    = X,
+                              routing_key = K} = DeliverMethod, Msg},
             State = #state{queue           = #amqqueue{name = QName},
                            upstream        = Upstream,
                            upstream_params = UParams,
@@ -145,7 +147,7 @@ handle_info({#'basic.deliver'{redelivered = Redelivered} = DeliverMethod, Msg},
                            unacked         = Unacked}) ->
     PublishMethod = #'basic.publish'{exchange    = <<"">>,
                                      routing_key = QName#resource.name},
-    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, H) end,
+    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, X, K, H) end,
     ForwardFun = fun (_H) -> true end,
     Unacked1 = rabbit_federation_link_util:forward(
                  Upstream, DeliverMethod, Ch, DCh, PublishMethod,
@@ -240,14 +242,21 @@ check_upstream_suitable(Conn) ->
         _            -> exit({error, upstream_lacks_consumer_priorities})
     end.
 
-update_headers(UParams, Redelivered, undefined) ->
-    update_headers(UParams, Redelivered, []);
+update_headers(UParams, Redelivered, X, K, undefined) ->
+    update_headers(UParams, Redelivered, X, K, []);
 
-update_headers(#upstream_params{table = Table}, Redelivered, Headers) ->
+update_headers(#upstream_params{table = Table}, Redelivered, X, K, Headers) ->
     {Headers1, Count} =
         case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
             undefined ->
-                {Headers, 0};
+                %% We only want to record the original exchange and
+                %% routing key the first time a message gets
+                %% forwarded; after that it's known that they were
+                %% <<>> and QueueName respectively.
+                {rabbit_misc:set_table_value(
+                   rabbit_misc:set_table_value(
+                     Headers, <<"x-original-exchange">>, longstr, X),
+                   <<"x-original-routing-key">>, longstr, K), 0};
             {array, Been} ->
                 {Found, Been1} = lists:partition(
                                       fun (I) -> visit_match(I, Table) end,
@@ -266,7 +275,13 @@ update_headers(#upstream_params{table = Table}, Redelivered, Headers) ->
     rabbit_basic:prepend_table_header(
       ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered},
                                  {<<"visit-count">>, long, Count + 1}],
-      Headers1).
+      swap_cc_header(Headers1)).
+
+swap_cc_header(Table) ->
+    [{case K of
+          <<"CC">> -> <<"x-original-cc">>;
+          _        -> K
+      end, T, V} || {K, T, V} <- Table].
 
 visit_match({table, T}, Info) ->
     lists:all(fun (K) ->

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_upstream).
@@ -55,13 +55,12 @@ upstreams(XorQ) ->
         {_,         undefined} -> [[{<<"upstream">>, UName}]]
     end.
 
-params_table(SafeURI, Params, XorQ) ->
+params_table(SafeURI, XorQ) ->
     Key = case XorQ of
               #exchange{} -> <<"exchange">>;
               #amqqueue{} -> <<"queue">>
           end,
     [{<<"uri">>,          longstr, SafeURI},
-     {<<"virtual_host">>, longstr, vhost(Params)},
      {Key,                longstr, name(XorQ)}].
 
 params_to_string(#upstream_params{safe_uri = SafeURI,
@@ -69,18 +68,7 @@ params_to_string(#upstream_params{safe_uri = SafeURI,
     print("~s on ~s", [rabbit_misc:rs(r(XorQ)), SafeURI]).
 
 remove_credentials(URI) ->
-    Props = uri_parser:parse(binary_to_list(URI),
-                             [{host, undefined}, {path, undefined},
-                              {port, undefined}, {'query', []}]),
-    PortPart = case pget(port, Props) of
-                   undefined -> "";
-                   Port      -> rabbit_misc:format(":~B", [Port])
-               end,
-    PGet = fun(K, P) -> case pget(K, P) of undefined -> ""; R -> R end end,
-    list_to_binary(
-      rabbit_misc:format(
-        "~s://~s~s~s", [pget(scheme, Props), PGet(host, Props),
-                        PortPart,            PGet(path, Props)])).
+    list_to_binary(amqp_uri:remove_credentials(binary_to_list(URI))).
 
 to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
     random:seed(now()),
@@ -92,7 +80,7 @@ to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
                      uri      = URI,
                      x_or_q   = XorQ1,
                      safe_uri = SafeURI,
-                     table    = params_table(SafeURI, Params, XorQ)}.
+                     table    = params_table(SafeURI, XorQ)}.
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
