@@ -78,7 +78,8 @@ to the broker you are connected to.
 ## Installing ##
 
 Copy the provided .ez files from the _binary_ folder to your RabbitMQ
-plugin folder.
+plugin folder. Choose the *.ez file that corresponds with your RabbitMQ
+broker version.
 
 Then run the following command:
 
