@@ -591,7 +591,6 @@ do_subscribe(Destination, DestHdr, Frame,
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
         State = #state{channel = Channel, route_state = RouteState}) ->
-
     case ensure_endpoint(dest, Destination, Frame, Channel, RouteState) of
 
         {ok, _Q, RouteState1} ->
@@ -921,26 +920,36 @@ millis_to_seconds(M)               -> M div 1000.
 %%----------------------------------------------------------------------------
 
 ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
-    Params =
-        case rabbit_stomp_frame:boolean_header(
-               Frame, ?HEADER_PERSISTENT, false) of
-            true ->
-                [{subscription_queue_name_gen,
-                    fun () ->
-                        {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-                        {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
-                        list_to_binary(
-                          rabbit_stomp_util:durable_subscription_queue(Name,
-                                                                       Id))
-                    end},
-                 {durable, true}];
-            false ->
-                [{durable, false}]
-        end,
-    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, Params, State);
+    case EndPoint of
+        {queue, []} ->
+            {error, invalid_destination, "Destination cannot be blank", [], State};
+        _ ->
+            Params =
+                case rabbit_stomp_frame:boolean_header(
+                       Frame, ?HEADER_PERSISTENT, false) of
+                    true ->
+                        [{subscription_queue_name_gen,
+                          fun () ->
+                                  {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
+                                  {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
+                                  list_to_binary(
+                                    rabbit_stomp_util:durable_subscription_queue(Name,
+                                                                                 Id))
+                          end},
+                         {durable, true}];
+                    false ->
+                        [{durable, false}]
+                end,
+            rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, Params, State)
+    end;
 
 ensure_endpoint(Direction, Endpoint, _Frame, Channel, State) ->
-    rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, State).
+    case Endpoint of
+        {queue, []} ->
+            {error, invalid_destination, "Destination cannot be blank", [], State};
+        _ ->
+            rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, State)
+    end.
 
 %%----------------------------------------------------------------------------
 %% Success/error handling
@@ -958,7 +967,7 @@ amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = amqp_connection:error_atom(ReplyCode),
     ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
+    {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
