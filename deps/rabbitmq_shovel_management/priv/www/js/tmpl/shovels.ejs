@@ -28,11 +28,11 @@
     <td><%= fmt_node(shovel.node) %></td>
 <% } %>
 <% if (shovel.state == 'terminated') { %>
-    <td colspan="6"><%= fmt_state('red', shovel.state) %></td>
+    <td colspan="5"><%= fmt_state('red', shovel.state) %></td>
     <td><%= shovel.timestamp %></td>
   </tr>
   <tr>
-    <td colspan="9">
+    <td colspan="8">
       <pre><%= fmt_string(shovel.reason) %></pre>
     </td>
   </tr>
