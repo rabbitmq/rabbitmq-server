@@ -449,6 +449,11 @@ with_destination(Command, Frame, State, Fun) ->
                                   "'~s' is not a valid destination for '~s'~n",
                                   [DestHdr, Command],
                                   State);
+                        {error, {invalid_destination, Msg}} ->
+                            error("Invalid destination",
+                                  "~s",
+                                  [Msg],
+                                  State);
                         {error, Reason} ->
                             throw(Reason);
                         Result ->
@@ -591,7 +596,6 @@ do_subscribe(Destination, DestHdr, Frame,
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
         State = #state{channel = Channel, route_state = RouteState}) ->
-
     case ensure_endpoint(dest, Destination, Frame, Channel, RouteState) of
 
         {ok, _Q, RouteState1} ->
@@ -920,19 +924,22 @@ millis_to_seconds(M)               -> M div 1000.
 %% Queue Setup
 %%----------------------------------------------------------------------------
 
+ensure_endpoint(Direction, {queue, []}, Frame, Channel, State) ->
+    {error, {invalid_destination, "Destination cannot be blank"}};
+
 ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
     Params =
         case rabbit_stomp_frame:boolean_header(
                Frame, ?HEADER_PERSISTENT, false) of
             true ->
                 [{subscription_queue_name_gen,
-                    fun () ->
-                        {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-                        {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
-                        list_to_binary(
-                          rabbit_stomp_util:durable_subscription_queue(Name,
-                                                                       Id))
-                    end},
+                  fun () ->
+                          {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
+                          {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
+                          list_to_binary(
+                            rabbit_stomp_util:durable_subscription_queue(Name,
+                                                                         Id))
+                  end},
                  {durable, true}];
             false ->
                 [{durable, false}]
@@ -958,7 +965,7 @@ amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = amqp_connection:error_atom(ReplyCode),
     ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
+    {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).

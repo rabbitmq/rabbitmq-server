@@ -36,7 +36,8 @@ all_tests() ->
                      fun test_send/3,
                      fun test_delete_queue_subscribe/3,
                      fun test_temp_destination_queue/3,
-                     fun test_temp_destination_in_send/3]]
+                     fun test_temp_destination_in_send/3,
+                     fun test_blank_destination_in_send/3]]
      || Version <- ?SUPPORTED_VERSIONS],
     ok.
 
@@ -203,6 +204,13 @@ test_temp_destination_queue(Channel, Client, _Version) ->
 
 test_temp_destination_in_send(Channel, Client, _Version) ->
     rabbit_stomp_client:send( Client, "SEND", [{"destination", "/temp-queue/foo"}],
+                                              ["poing"]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+    "Invalid destination" = proplists:get_value("message", Hdrs),
+    ok.
+
+test_blank_destination_in_send(Channel, Client, _Version) ->
+    rabbit_stomp_client:send( Client, "SEND", [{"destination", ""}],
                                               ["poing"]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
     "Invalid destination" = proplists:get_value("message", Hdrs),
