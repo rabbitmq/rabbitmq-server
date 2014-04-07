@@ -449,6 +449,11 @@ with_destination(Command, Frame, State, Fun) ->
                                   "'~s' is not a valid destination for '~s'~n",
                                   [DestHdr, Command],
                                   State);
+                        {error, {invalid_destination, Msg}} ->
+                            error("Invalid destination",
+                                  "~s",
+                                  [Msg],
+                                  State);
                         {error, Reason} ->
                             throw(Reason);
                         Result ->
@@ -922,7 +927,7 @@ millis_to_seconds(M)               -> M div 1000.
 ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
     case EndPoint of
         {queue, []} ->
-            {error, invalid_destination, "Destination cannot be blank", [], State};
+            {error, {invalid_destination, "Destination cannot be blank"}};
         _ ->
             Params =
                 case rabbit_stomp_frame:boolean_header(
@@ -946,7 +951,7 @@ ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
 ensure_endpoint(Direction, Endpoint, _Frame, Channel, State) ->
     case Endpoint of
         {queue, []} ->
-            {error, invalid_destination, "Destination cannot be blank", [], State};
+            {error, {invalid_destination, "Destination cannot be blank"}};
         _ ->
             rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, State)
     end.
