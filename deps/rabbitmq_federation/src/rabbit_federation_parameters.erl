@@ -20,7 +20,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([validate/4, notify/4, notify_clear/3]).
+-export([validate/5, notify/4, notify_clear/3]).
 -export([register/0, validate_policy/1]).
 
 -rabbit_boot_step({?MODULE,
@@ -38,19 +38,19 @@ register() ->
                           {policy_validator,  <<"federation-upstream-set">>}]],
     ok.
 
-validate(_VHost, <<"federation-upstream-set">>, Name, Term) ->
+validate(_VHost, <<"federation-upstream-set">>, Name, Term, _User) ->
     [rabbit_parameter_validation:proplist(
        Name,
        [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory} |
         shared_validation()], Upstream)
      || Upstream <- Term];
 
-validate(_VHost, <<"federation-upstream">>, Name, Term) ->
+validate(_VHost, <<"federation-upstream">>, Name, Term, _User) ->
     rabbit_parameter_validation:proplist(
       Name, [{<<"uri">>, fun validate_uri/2, mandatory} |
             shared_validation()], Term);
 
-validate(_VHost, _Component, Name, _Term) ->
+validate(_VHost, _Component, Name, _Term, _User) ->
     {error, "name not recognised: ~p", [Name]}.
 
 notify(_VHost, <<"federation-upstream-set">>, Name, _Term) ->
