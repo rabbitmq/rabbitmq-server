@@ -18,9 +18,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([toplist/3, fmt_all/1, fmt/1, obtain_name/1, process_info/2]).
-
--compile({no_auto_import,[process_info/2]}).
+-export([toplist/3, fmt_all/1, fmt/1, obtain_name/1, safe_process_info/2]).
 
 toplist(Key, Count, List) ->
     Sorted = lists:sublist(
@@ -51,14 +49,14 @@ obtain_name(Pid) ->
                             fun obtain_from_initial_call/1]).
 
 obtain_from_registered_name(Pid) ->
-    case process_info(Pid, registered_name) of
+    case safe_process_info(Pid, registered_name) of
         {registered_name, Name} -> [{type, registered},
                                     {name, Name}];
         _                       -> fail
     end.
 
 obtain_from_process_name(Pid) ->
-    case process_info(Pid, dictionary) of
+    case safe_process_info(Pid, dictionary) of
         {dictionary, Dict} ->
             case lists:keyfind(process_name, 1, Dict) of
                 {process_name, Name} -> fmt_process_name(Name);
@@ -106,7 +104,7 @@ obtain_from_initial_call(Pid) ->
 
 initial_call(Pid) ->
     case initial_call_dict(Pid) of
-        fail -> case process_info(Pid, initial_call) of
+        fail -> case safe_process_info(Pid, initial_call) of
                     {initial_call, MFA} -> MFA;
                     _                   -> fail
                 end;
@@ -114,7 +112,7 @@ initial_call(Pid) ->
     end.
 
 initial_call_dict(Pid) ->
-    case process_info(Pid, dictionary) of
+    case safe_process_info(Pid, dictionary) of
         {dictionary, Dict} ->
             case lists:keyfind('$initial_call', 1, Dict) of
                 {'$initial_call', MFA} -> MFA;
@@ -130,5 +128,5 @@ guess_initial_call({mochiweb_acceptor, _F, _A}) -> mochiweb_http;
 guess_initial_call(_MFA)                        -> fail.
 
 
-process_info(Pid, Info) ->
+safe_process_info(Pid, Info) ->
     rpc:call(node(Pid), erlang, process_info, [Pid, Info]).
