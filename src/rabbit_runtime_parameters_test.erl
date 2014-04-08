@@ -18,7 +18,9 @@
 -behaviour(rabbit_runtime_parameter).
 -behaviour(rabbit_policy_validator).
 
--export([validate/4, notify/4, notify_clear/3]).
+-include("rabbit.hrl").
+
+-export([validate/5, notify/4, notify_clear/3]).
 -export([register/0, unregister/0]).
 -export([validate_policy/1]).
 -export([register_policy_validator/0, unregister_policy_validator/0]).
@@ -31,9 +33,12 @@ register() ->
 unregister() ->
     rabbit_registry:unregister(runtime_parameter, <<"test">>).
 
-validate(_, <<"test">>, <<"good">>,  _Term)      -> ok;
-validate(_, <<"test">>, <<"maybe">>, <<"good">>) -> ok;
-validate(_, <<"test">>, _, _)                    -> {error, "meh", []}.
+validate(_, <<"test">>, <<"good">>,  _Term, _User)      -> ok;
+validate(_, <<"test">>, <<"maybe">>, <<"good">>, _User) -> ok;
+validate(_, <<"test">>, <<"admin">>, _Term, none)       -> ok;
+validate(_, <<"test">>, <<"admin">>, _Term, User) ->
+    lists:member(administrator, User#user.tags);
+validate(_, <<"test">>, _, _, _)                        -> {error, "meh", []}.
 
 notify(_, _, _, _) -> ok.
 notify_clear(_, _, _) -> ok.

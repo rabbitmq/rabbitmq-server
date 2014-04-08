@@ -150,7 +150,7 @@ set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     set0(VHost, Name, PolicyProps).
 
 set0(VHost, Name, Term) ->
-    rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term).
+    rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term, none).
 
 delete(VHost, Name) ->
     rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Name).

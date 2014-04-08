@@ -1063,11 +1063,13 @@ test_runtime_parameters() ->
     %% Test actual validation hook
     Good(["test", "maybe", "\"good\""]),
     Bad(["test", "maybe", "\"bad\""]),
+    Good(["test", "admin", "\"ignore\""]), %% ctl means 'user' -> none
 
     ok = control_action(list_parameters, []),
 
     ok = control_action(clear_parameter, ["test", "good"]),
     ok = control_action(clear_parameter, ["test", "maybe"]),
+    ok = control_action(clear_parameter, ["test", "admin"]),
     {error_string, _} =
         control_action(clear_parameter, ["test", "neverexisted"]),
 

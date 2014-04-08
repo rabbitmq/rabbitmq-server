@@ -484,8 +484,9 @@ action(set_parameter, Node, [Component, Key, Value], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Setting runtime parameter ~p for component ~p to ~p",
            [Key, Component, Value]),
-    rpc_call(Node, rabbit_runtime_parameters, parse_set,
-             [VHostArg, list_to_binary(Component), list_to_binary(Key), Value]);
+    rpc_call(
+      Node, rabbit_runtime_parameters, parse_set,
+      [VHostArg, list_to_binary(Component), list_to_binary(Key), Value, none]);
 
 action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
