@@ -210,6 +210,7 @@
 %% this really should be an abstract type
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
 -type(param() :: atom()).
+-type(app_name() :: atom()).
 
 -spec(start/0 :: () -> 'ok').
 -spec(boot/0 :: () -> 'ok').
@@ -241,6 +242,8 @@
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
+-spec(start_apps/1 :: ([app_name()]) -> 'ok').
+-spec(stop_apps/1 :: ([app_name()]) -> 'ok').
 
 -endif.
 
@@ -350,8 +353,7 @@ start_apps(Apps) ->
         _         -> ok
     end,
     ok = app_utils:start_applications(StartupApps,
-                                      handle_app_error(could_not_start)),
-    StartupApps.
+                                      handle_app_error(could_not_start)).
 
 start_it(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),

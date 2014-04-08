@@ -40,15 +40,15 @@
 
 enable(Plugins) ->
     prepare_plugins(Plugins),
-    Diff = rabbit:start_apps(Plugins),
-    ok = rabbit_event:notify(plugins_changed, [{enabled, Diff}]).
+    rabbit:start_apps(Plugins),
+    ok = rabbit_event:notify(plugins_changed, [{enabled, Plugins}]).
 
 disable(Plugins) ->
     RunningApps = rabbit_misc:which_applications(),
     ToDisable = [P || P <- Plugins,
                       proplists:is_defined(P, RunningApps)],
-    rabbit:stop_apps(ToDisable),
-    ok = rabbit_event:notify(plugins_changed, [{disabled, ToDisable}]).
+    ok = rabbit_event:sync_notify(plugins_changed, [{disabled, ToDisable}]),
+    rabbit:stop_apps(ToDisable).
 
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
