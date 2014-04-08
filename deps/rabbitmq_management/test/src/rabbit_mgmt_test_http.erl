@@ -1096,6 +1096,8 @@ policy_permissions_test() ->
                   http_put("/policies/v/HA",    Policy, U, U, ?NOT_AUTHORISED),
                   http_put(
                     "/parameters/test/v/good",   Param, U, U, ?NOT_AUTHORISED),
+                  http_put(
+                    "/parameters/test/v/admin",  Param, U, U, ?NOT_AUTHORISED),
                   http_get("/policies",                 U, U, ?NOT_AUTHORISED),
                   http_get("/policies/v",               U, U, ?NOT_AUTHORISED),
                   http_get("/parameters",               U, U, ?NOT_AUTHORISED),
@@ -1116,6 +1118,11 @@ policy_permissions_test() ->
     [Neg(U) || U <- ["mon", "mgmt"]],
     [Pos(U) || U <- ["admin", "policy"]],
     [AlwaysNeg(U) || U <- ["mon", "mgmt", "admin", "policy"]],
+
+    %% This one is deliberately different between admin and policymaker.
+    http_put("/parameters/test/v/admin", Param, "admin", "admin", ?NO_CONTENT),
+    http_put("/parameters/test/v/admin", Param, "policy", "policy",
+             ?BAD_REQUEST),
 
     http_delete("/vhosts/v", ?NO_CONTENT),
     http_delete("/users/admin", ?NO_CONTENT),
