@@ -146,6 +146,30 @@ validation_test() ->
                    {<<"ack-mode">>,        <<"no-ack">>} | QURIs]),
     ok.
 
+security_validation_test() ->
+    [begin
+         rabbit_vhost:add(U),
+         rabbit_auth_backend_internal:add_user(U, <<>>),
+         rabbit_auth_backend_internal:set_permissions(
+           U, U, <<".*">>, <<".*">>, <<".*">>)
+     end || U <- [<<"a">>, <<"b">>]],
+
+    Qs = [{<<"src-queue">>, <<"test">>},
+          {<<"dest-queue">>, <<"test2">>}],
+
+    A = lookup_user(<<"a">>),
+    valid_param([{<<"src-uri">>,  <<"amqp:///a">>},
+                 {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
+    invalid_param([{<<"src-uri">>,  <<"amqp:///a">>},
+                   {<<"dest-uri">>, <<"amqp:///b">>} | Qs], A),
+    invalid_param([{<<"src-uri">>,  <<"amqp:///b">>},
+                   {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
+    [begin
+         rabbit_vhost:delete(U),
+         rabbit_auth_backend_internal:delete_user(U)
+     end || U <- [<<"a">>, <<"b">>]],
+    ok.
+
 %%----------------------------------------------------------------------------
 
 with_ch(Fun) ->
@@ -200,15 +224,25 @@ set_param_nowait(Name, Value) ->
     ok = rabbit_runtime_parameters:set(
            <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  <<"amqp://">>},
                                          {<<"dest-uri">>, [<<"amqp://">>]} |
-                                         Value]).
+                                         Value], guest()).
 
-invalid_param(Value) ->
+invalid_param(Value, User) ->
     {error_string, _} = rabbit_runtime_parameters:set(
-                          <<"/">>, <<"shovel">>, <<"invalid">>, Value).
+                          <<"/">>, <<"shovel">>, <<"invalid">>, Value, User).
 
-valid_param(Value) ->
-    ok = rabbit_runtime_parameters:set(<<"/">>, <<"shovel">>, <<"a">>, Value),
+valid_param(Value, User) ->
+    ok = rabbit_runtime_parameters:set(
+           <<"/">>, <<"shovel">>, <<"a">>, Value, User),
     ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>).
+
+invalid_param(Value) -> invalid_param(Value, guest()).
+valid_param(Value) -> valid_param(Value, guest()).
+
+lookup_user(Name) ->
+    {ok, User} = rabbit_auth_backend_internal:check_user_login(Name, []),
+    User.
+
+guest() -> lookup_user(<<"guest">>).
 
 clear_param(Name) ->
     rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, Name).
