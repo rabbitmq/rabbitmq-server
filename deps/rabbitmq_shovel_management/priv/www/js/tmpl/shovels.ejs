@@ -1,4 +1,9 @@
 <h1>Shovel Status</h1>
+<%
+  var extra_width = 0;
+  if (vhosts_interesting) extra_width++;
+  if (nodes_interesting)  extra_width++;
+%>
 <div class="updatable">
 <% if (shovels.length > 0) { %>
 <table class="list">
@@ -7,6 +12,9 @@
     <th>Name</th>
 <% if (nodes_interesting) { %>
     <th>Node</th>
+<% } %>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
 <% } %>
     <th>State</th>
     <th colspan="2">Source</th>
@@ -27,12 +35,15 @@
 <% if (nodes_interesting) { %>
     <td><%= fmt_node(shovel.node) %></td>
 <% } %>
+<% if (vhosts_interesting) { %>
+    <td><%= fmt_string(shovel.vhost) %></td>
+<% } %>
 <% if (shovel.state == 'terminated') { %>
     <td colspan="5"><%= fmt_state('red', shovel.state) %></td>
     <td><%= shovel.timestamp %></td>
   </tr>
   <tr>
-    <td colspan="8">
+    <td colspan="<%= 8 + extra_width %>">
       <pre><%= fmt_string(shovel.reason) %></pre>
     </td>
   </tr>

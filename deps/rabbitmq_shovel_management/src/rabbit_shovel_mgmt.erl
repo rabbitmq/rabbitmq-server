@@ -19,7 +19,8 @@
 -behaviour(rabbit_mgmt_extension).
 
 -export([dispatcher/0, web_ui/0]).
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/1, to_json/2, resource_exists/2, content_types_provided/2,
+         is_authorized/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -27,7 +28,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 
-dispatcher() -> [{["shovels"], ?MODULE, []}].
+dispatcher() -> [{["shovels"],        ?MODULE, []},
+                 {["shovels", vhost], ?MODULE, []}].
 web_ui()     -> [{javascript, <<"shovel.js">>}].
 
 %%--------------------------------------------------------------------
@@ -37,16 +39,30 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
+resource_exists(ReqData, Context) ->
+    {case rabbit_mgmt_util:vhost(ReqData) of
+         not_found -> false;
+         _         -> true
+     end, ReqData, Context}.
+
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(status(), ReqData, Context).
+    rabbit_mgmt_util:reply_list(
+      filter_vhost(status(ReqData, Context), ReqData), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-status() ->
-    lists:append([status(Node) || Node <- [node() | nodes()]]).
+filter_vhost(List, ReqData) ->
+    rabbit_mgmt_util:all_or_one_vhost(
+      ReqData,
+      fun(V) -> lists:filter(fun(I) -> pget(vhost, I) =:= V end, List) end).
+
+status(ReqData, Context) ->
+    rabbit_mgmt_util:filter_vhost(
+      lists:append([status(Node) || Node <- [node() | nodes()]]),
+      ReqData, Context).
 
 status(Node) ->
     case rpc:call(Node, rabbit_shovel_status, status, [], infinity) of

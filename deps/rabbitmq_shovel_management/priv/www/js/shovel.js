@@ -1,6 +1,8 @@
 dispatcher_add(function(sammy) {
     sammy.get('#/shovels', function() {
-            render({'shovels': '/shovels'}, 'shovels', '#/shovels');
+            render({'shovels': {path:    '/shovels',
+                                options: {vhost:true}}},
+                    'shovels', '#/shovels');
         });
     sammy.get('#/dynamic-shovels', function() {
             render({'shovels': {path:   '/parameters/shovel',
@@ -27,8 +29,8 @@ dispatcher_add(function(sammy) {
 });
 
 
-NAVIGATION['Admin'][0]['Shovel Status'] = ['#/shovels', "administrator"];
-NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "administrator"];
+NAVIGATION['Admin'][0]['Shovel Status'] = ['#/shovels', "monitoring"];
+NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "policymaker"];
 
 HELP['shovel-uri'] =
     'Both source and destination can be either a local or remote broker. See the "URI examples" pane for examples of how to construct URIs. If connecting to a cluster, you can enter several URIs here separated by spaces.';
