@@ -124,13 +124,13 @@ is_cycle(Queue, Deaths) ->
     %% no reject in it?
     case Rest of
         []    -> false;
-        [H|_] -> not lists:any(
-                       fun ({table, D}) ->
-                               {longstr, <<"rejected">>} =:=
-                                   rabbit_misc:table_lookup(D, <<"reason">>);
-                           (_) ->
-                               true
-                       end, Cycle ++ [H])
+        [H|_] -> lists:all(
+                   fun ({table, D}) ->
+                           {longstr, <<"rejected">>} =/=
+                               rabbit_misc:table_lookup(D, <<"reason">>);
+                       (_) ->
+                           false
+                   end, Cycle ++ [H])
     end.
 
 log_cycle_once(Queues) ->
