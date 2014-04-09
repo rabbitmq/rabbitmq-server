@@ -192,9 +192,9 @@ parse_free_unix(Str) ->
     case string:tokens(Str, "\n") of
         [_, S | _] -> case string:tokens(S, " \t") of
                           [_, _, _, Free | _] -> list_to_integer(Free) * 1024;
-                          _                   -> exit({not_found, Str})
+                          _                   -> exit({unparseable, Str})
                       end;
-        _          -> exit({not_found, Str})
+        _          -> exit({unparseable, Str})
     end.
 
 parse_free_win32(CommandResult) ->
