@@ -37,7 +37,10 @@ validate(_, <<"test">>, <<"good">>,  _Term, _User)      -> ok;
 validate(_, <<"test">>, <<"maybe">>, <<"good">>, _User) -> ok;
 validate(_, <<"test">>, <<"admin">>, _Term, none)       -> ok;
 validate(_, <<"test">>, <<"admin">>, _Term, User) ->
-    lists:member(administrator, User#user.tags);
+    case lists:member(administrator, User#user.tags) of
+        true  -> ok;
+        false -> {error, "meh", []}
+    end;
 validate(_, <<"test">>, _, _, _)                        -> {error, "meh", []}.
 
 notify(_, _, _, _) -> ok.
