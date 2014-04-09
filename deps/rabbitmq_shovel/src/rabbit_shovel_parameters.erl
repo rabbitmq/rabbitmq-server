@@ -20,7 +20,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
--export([validate/4, notify/4, notify_clear/3]).
+-export([validate/5, notify/4, notify_clear/3]).
 -export([register/0, parse/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
@@ -36,7 +36,7 @@
 register() ->
     rabbit_registry:register(runtime_parameter, <<"shovel">>, ?MODULE).
 
-validate(_VHost, <<"shovel">>, Name, Def) ->
+validate(_VHost, <<"shovel">>, Name, Def, User) ->
     [case pget2(<<"src-exchange">>, <<"src-queue">>, Def) of
          zero -> {error, "Must specify 'src-exchange' or 'src-queue'", []};
          one  -> ok;
@@ -52,9 +52,9 @@ validate(_VHost, <<"shovel">>, Name, Def) ->
              {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
          _ ->
              ok
-     end | rabbit_parameter_validation:proplist(Name, validation(), Def)];
+     end | rabbit_parameter_validation:proplist(Name, validation(User), Def)];
 
-validate(_VHost, _Component, Name, _Term) ->
+validate(_VHost, _Component, Name, _Term, _User) ->
     {error, "name not recognised: ~p", [Name]}.
 
 pget2(K1, K2, Defs) -> case {pget(K1, Defs), pget(K2, Defs)} of
@@ -73,9 +73,9 @@ notify_clear(VHost, <<"shovel">>, Name) ->
 
 %%----------------------------------------------------------------------------
 
-validation() ->
-    [{<<"src-uri">>,         fun validate_uri/2, mandatory},
-     {<<"dest-uri">>,        fun validate_uri/2, mandatory},
+validation(User) ->
+    [{<<"src-uri">>,         validate_uri_fun(User), mandatory},
+     {<<"dest-uri">>,        validate_uri_fun(User), mandatory},
      {<<"src-exchange">>,    fun rabbit_parameter_validation:binary/2,optional},
      {<<"src-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
      {<<"src-queue">>,       fun rabbit_parameter_validation:binary/2,optional},
@@ -90,25 +90,38 @@ validation() ->
      {<<"delete-after">>,    fun validate_delete_after/2, optional}
     ].
 
-%% TODO this function is duplicated from federation. Move to amqp_uri module?
-validate_uri(Name, Term) when is_binary(Term) ->
+validate_uri_fun(User) ->
+    fun (Name, Term) -> validate_uri(Name, Term, User) end.
+
+validate_uri(Name, Term, User) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
-                  {ok, _}    -> ok;
+                  {ok, P}    -> validate_params_user(P, User);
                   {error, E} -> {error, "\"~s\" not a valid URI: ~p", [Term, E]}
               end;
         E  -> E
     end;
-validate_uri(Name, Term) ->
+validate_uri(Name, Term, User) ->
     case rabbit_parameter_validation:list(Name, Term) of
-        ok -> case [V || U <- Term,
-                         V <- [validate_uri(Name, U)],
+        ok -> case [V || URI <- Term,
+                         V <- [validate_uri(Name, URI, User)],
                          element(1, V) =:= error] of
                   []      -> ok;
                   [E | _] -> E
               end;
         E  -> E
     end.
+
+validate_params_user(#amqp_params_direct{virtual_host = VHost},
+                     User = #user{username     = Username,
+                                  auth_backend = M}) ->
+    case rabbit_vhost:exists(VHost) andalso M:check_vhost_access(User, VHost) of
+        true  -> ok;
+        false -> {error, "user \"~s\" may not connect to vhost \"~s\"",
+                  [Username, VHost]}
+    end;
+validate_params_user(#amqp_params_network{}, _User) ->
+    ok.
 
 validate_delete_after(_Name, <<"never">>)          -> ok;
 validate_delete_after(_Name, <<"queue-length">>)   -> ok;
