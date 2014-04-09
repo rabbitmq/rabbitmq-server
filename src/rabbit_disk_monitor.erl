@@ -103,7 +103,7 @@ init([Limit]) ->
             {ok, start_timer(set_disk_limits(State, Limit))};
         Err ->
             rabbit_log:info("Disabling disk free space monitoring "
-                            "on unsupported platform: ~p~n", [Err]),
+                            "on unsupported platform:~n~p~n", [Err]),
             {stop, unsupported_platform}
     end.
 
@@ -188,10 +188,14 @@ get_disk_free(Dir, {unix, _}) ->
 get_disk_free(Dir, {win32, _}) ->
     parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ Dir ++ "\"")).
 
-parse_free_unix(CommandResult) ->
-    [_, Stats | _] = string:tokens(CommandResult, "\n"),
-    [_FS, _Total, _Used, Free | _] = string:tokens(Stats, " \t"),
-    list_to_integer(Free) * 1024.
+parse_free_unix(Str) ->
+    case string:tokens(Str, "\n") of
+        [_, S | _] -> case string:tokens(S, " \t") of
+                          [_, _, _, Free | _] -> list_to_integer(Free) * 1024;
+                          _                   -> exit({unparseable, Str})
+                      end;
+        _          -> exit({unparseable, Str})
+    end.
 
 parse_free_win32(CommandResult) ->
     LastLine = lists:last(string:tokens(CommandResult, "\r\n")),

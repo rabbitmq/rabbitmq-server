@@ -16,28 +16,33 @@
 
 -module(rabbit_restartable_sup).
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 
--export([start_link/2]).
+-export([start_link/3]).
 
 -export([init/1]).
 
 -include("rabbit.hrl").
 
+-define(DELAY, 2).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(start_link/2 :: (atom(), rabbit_types:mfargs()) ->
+-spec(start_link/3 :: (atom(), rabbit_types:mfargs(), boolean()) ->
                            rabbit_types:ok_pid_or_error()).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-start_link(Name, {_M, _F, _A} = Fun) ->
-    supervisor:start_link({local, Name}, ?MODULE, [Fun]).
+start_link(Name, {_M, _F, _A} = Fun, Delay) ->
+    supervisor2:start_link({local, Name}, ?MODULE, [Fun, Delay]).
 
-init([{Mod, _F, _A} = Fun]) ->
+init([{Mod, _F, _A} = Fun, Delay]) ->
     {ok, {{one_for_one, 10, 10},
-          [{Mod, Fun, transient, ?MAX_WAIT, worker, [Mod]}]}}.
+          [{Mod, Fun, case Delay of
+                          true  -> {transient, 1};
+                          false -> transient
+                      end, ?MAX_WAIT, worker, [Mod]}]}}.
