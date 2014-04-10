@@ -86,7 +86,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2013 GoPivotal, Inc.").
+-define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2014 GoPivotal, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
 -define(ERTS_MINIMUM, "5.6.3").
 
