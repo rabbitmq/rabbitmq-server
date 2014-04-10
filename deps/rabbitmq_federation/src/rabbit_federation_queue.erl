@@ -18,8 +18,7 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, "federation queue decorator"},
-                    {mfa, {rabbit_registry, register,
-                           [queue_decorator, <<"federation">>, ?MODULE]}},
+                    {mfa, {?MODULE, recover, []}},
                     {requires, rabbit_registry},
                     {cleanup, {rabbit_registry, unregister,
                                [queue_decorator, <<"federation">>]}},
@@ -31,12 +30,25 @@
 -behaviour(rabbit_queue_decorator).
 
 -export([startup/1, shutdown/1, policy_changed/2, active_for/1,
-         consumer_state_changed/3]).
+         consumer_state_changed/3, recover/0]).
 -export([policy_changed_local/2]).
 
 -import(rabbit_misc, [pget/2]).
 
 %%----------------------------------------------------------------------------
+
+recover() ->
+    rabbit_registry:register(queue_decorator, <<"federation">>, ?MODULE),
+
+    %% When we're enabled at runtime, we must replicate some of the work
+    %% that rabbit:recover/0 does during the boot sequence, since we need
+    %% to establish links for any federated exchanges. During startup, this
+    %% runs prior to exchange recovery, at which point rabbit_exchange is
+    %% empty.
+
+    %% Q: can we get away with a dirty read here?
+    [ startup(Q) || Q <- rabbit_misc:dirty_read_all(rabbit_queue) ],
+    ok.
 
 startup(Q) ->
     case active_for(Q) of
