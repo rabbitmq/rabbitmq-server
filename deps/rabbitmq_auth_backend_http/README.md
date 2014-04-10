@@ -11,7 +11,12 @@ As with all authentication plugins, this one requires rabbitmq-server
 Note: it's at an early stage of development, although it's
 conceptually very simple.
 
-# Requirements
+# Downloading
+
+You can download a pre-built binary of this plugin from
+http://www.rabbitmq.com/community-plugins.html.
+
+# Building
 
 You can build and install it like any other plugin (see
 [the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
