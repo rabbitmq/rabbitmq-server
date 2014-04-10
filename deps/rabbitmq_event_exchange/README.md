@@ -19,10 +19,10 @@ The plugin requires no configuration, just activate it:
 
     rabbitmq-plugins enable rabbitmq_event_exchange
 
-## Installing
+## Downloading
 
-There are prebuild versions for RabbitMQ 3.2.x and 3.3.x in binary/. Install it
-as documented at http://www.rabbitmq.com/plugins.html#installing-plugins.
+You can download a pre-built binary of this plugin from
+http://www.rabbitmq.com/community-plugins.html.
 
 Or build it...
 
