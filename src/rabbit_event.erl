@@ -157,10 +157,10 @@ notify(Type, Props, Ref) ->
 sync_notify(Type, Props) -> sync_notify(Type, Props, none).
 
 sync_notify(Type, Props, Ref) ->
-    do_notify(sync_notify, #event{ type      = Type,
-                                   props     = Props,
-                                   reference = Ref,
-                                   timestamp = os:timestamp()}).
+    do_notify(sync_notify, #event{type      = Type,
+                                  props     = Props,
+                                  reference = Ref,
+                                  timestamp = os:timestamp()}).
 
 do_notify(F, Event) ->
     apply(gen_event, F, [?MODULE, Event]).
