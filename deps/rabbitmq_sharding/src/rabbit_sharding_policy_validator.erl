@@ -30,8 +30,8 @@ validate_policy(KeyList) ->
             {error, "shards-per-node and routing-key must be specified", []};
         {SPN, RKey} ->
             case validate_shards_per_node(SPN) of
-                ok              -> validate_routing_key(RKey);
-                {error, Reason} -> {error, Reason}
+                ok   -> validate_routing_key(RKey);
+                Else -> Else
             end
     end.
 
@@ -51,4 +51,4 @@ validate_shards_per_node(Term) ->
 validate_routing_key(Term) when is_binary(Term) ->
     ok;
 validate_routing_key(Term) ->
-    {error, "routink-key should be binary, actually was ~p", [Term]}.
+    {error, "routing-key should be binary, actually was ~p", [Term]}.
