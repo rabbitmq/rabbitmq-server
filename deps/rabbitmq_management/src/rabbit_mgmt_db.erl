@@ -137,7 +137,7 @@
           %% {queue/channel/connection}
           old_stats,
           gc_timer,
-          gc_continuation,
+          gc_next_key,
           lookups,
           interval,
           event_refresh_ref}).
@@ -1042,25 +1042,29 @@ augment_connection_pid(Pid, #state{tables = Tables}) ->
 %% Internal, event-GCing
 %%----------------------------------------------------------------------------
 
-gc_batch(State = #state{aggregated_stats = ETS,
-                        gc_continuation = Continuation}) ->
-    Match = case Continuation of
-                undefined -> Size = ets:info(ETS, size),
-                             Rows = lists:max([?GC_MIN_ROWS,
-                                               round(?GC_MIN_RATIO * Size)]),
-                             ets:match(ETS, '$1', Rows);
-                _         -> ets:match(Continuation)
-            end,
-    case Match of
-        {Matches, Continuation1} ->
-            {ok, Policies} = application:get_env(
-                               rabbitmq_management, sample_retention_policies),
-            Now = floor(erlang:now(), State),
-            [gc(Key, Stats, Policies, Now, ETS) || [{Key, Stats}] <- Matches],
-            State#state{gc_continuation = Continuation1};
-        '$end_of_table' ->
-            State#state{gc_continuation = undefined}
-    end.
+gc_batch(State = #state{aggregated_stats = ETS}) ->
+    {ok, Policies} = application:get_env(
+                       rabbitmq_management, sample_retention_policies),
+    Rows = erlang:max(?GC_MIN_ROWS,
+                      round(?GC_MIN_RATIO * ets:info(ETS, size))),
+    gc_batch(Rows, Policies, State).
+
+gc_batch(0, _Policies, State) ->
+    State;
+gc_batch(Rows, Policies, State = #state{aggregated_stats = ETS,
+                         gc_next_key      = Key0}) ->
+    Key = case Key0 of
+              undefined -> ets:first(ETS);
+              _         -> ets:next(ETS, Key0)
+          end,
+    Key1 = case Key of
+               '$end_of_table' -> undefined;
+               _               -> Now = floor(erlang:now(), State),
+                                  Stats = ets:lookup_element(ETS, Key, 2),
+                                  gc(Key, Stats, Policies, Now, ETS),
+                                  Key
+           end,
+    gc_batch(Rows - 1, Policies, State#state{gc_next_key = Key1}).
 
 gc({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
     Policy = pget(retention_policy(Type), Policies),
