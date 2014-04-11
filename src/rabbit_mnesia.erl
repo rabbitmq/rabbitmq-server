@@ -602,7 +602,7 @@ discover_cluster(Nodes) ->
                          (Node, _)         -> discover_cluster0(Node)
                      end, {error, no_nodes_provided}, Nodes) of
         {ok, Res}        -> Res;
-        {error, E}       -> throw(E);
+        {error, E}       -> throw({error, E});
         {badrpc, Reason} -> throw({badrpc_multi, Reason, Nodes})
     end.
 

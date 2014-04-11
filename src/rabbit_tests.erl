@@ -33,6 +33,7 @@
 
 all_tests() ->
     ok = setup_cluster(),
+    ok = truncate:test(),
     ok = supervisor2_tests:test_all(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
@@ -429,7 +430,7 @@ test_table_codec() ->
              {<<"table">>,     table,     [{<<"one">>, signedint, 54321},
                                            {<<"two">>, longstr,
                                             <<"A long string">>}]},
-             {<<"byte">>,      byte,      255},
+             {<<"byte">>,      byte,      -128},
              {<<"long">>,      long,      1234567890},
              {<<"short">>,     short,     655},
              {<<"bool">>,      bool,      true},
@@ -446,7 +447,7 @@ test_table_codec() ->
                5,"table",     "F", 31:32, % length of table
                3,"one",       "I", 54321:32,
                3,"two",       "S", 13:32, "A long string",
-               4,"byte",      "b", 255:8,
+               4,"byte",      "b", -128:8/signed,
                4,"long",      "l", 1234567890:64,
                5,"short",     "s", 655:16,
                4,"bool",      "t", 1,
@@ -1062,11 +1063,13 @@ test_runtime_parameters() ->
     %% Test actual validation hook
     Good(["test", "maybe", "\"good\""]),
     Bad(["test", "maybe", "\"bad\""]),
+    Good(["test", "admin", "\"ignore\""]), %% ctl means 'user' -> none
 
     ok = control_action(list_parameters, []),
 
     ok = control_action(clear_parameter, ["test", "good"]),
     ok = control_action(clear_parameter, ["test", "maybe"]),
+    ok = control_action(clear_parameter, ["test", "admin"]),
     {error_string, _} =
         control_action(clear_parameter, ["test", "neverexisted"]),
 

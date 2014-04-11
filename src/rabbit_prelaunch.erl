@@ -44,7 +44,7 @@ start() ->
         [NodeStr] ->
             Node = rabbit_nodes:make(NodeStr),
             {NodeName, NodeHost} = rabbit_nodes:parts(Node),
-            ok = duplicate_node_check(Node, NodeName, NodeHost),
+            ok = duplicate_node_check(NodeName, NodeHost),
             ok = dist_port_set_check(),
             ok = dist_port_use_check(NodeHost);
         [] ->
@@ -61,14 +61,13 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 %% Check whether a node with the same name is already running
-duplicate_node_check(Node, NodeName, NodeHost) ->
+duplicate_node_check(NodeName, NodeHost) ->
     case rabbit_nodes:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
-                true -> io:format("ERROR: node with name ~p "
-                                  "already running on ~p~n",
-                                  [NodeName, NodeHost]),
-                        io:format(rabbit_nodes:diagnostics([Node]) ++ "~n"),
+                true -> io:format(
+                          "ERROR: node with name ~p already running on ~p~n",
+                          [NodeName, NodeHost]),
                         rabbit_misc:quit(?ERROR_CODE);
                 false -> ok
             end;
@@ -108,6 +107,10 @@ dist_port_use_check(NodeHost) ->
                    end
     end.
 
+-ifdef(use_specs).
+-spec(dist_port_use_check_fail/2 :: (non_neg_integer(), string()) ->
+                                         no_return()).
+-endif.
 dist_port_use_check_fail(Port, Host) ->
     {ok, Names} = rabbit_nodes:names(Host),
     case [N || {N, P} <- Names, P =:= Port] of

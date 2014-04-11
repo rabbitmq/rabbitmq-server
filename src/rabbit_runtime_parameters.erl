@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([parse_set/4, set/4, set_any/4, clear/3, clear_any/3, list/0, list/1,
+-export([parse_set/5, set/5, set_any/5, clear/3, clear_any/3, list/0, list/1,
          list_component/1, list/2, list_formatted/1, lookup/3,
          value/3, value/4, info_keys/0]).
 
@@ -30,12 +30,12 @@
 
 -type(ok_or_error_string() :: 'ok' | {'error_string', string()}).
 
--spec(parse_set/4 :: (rabbit_types:vhost(), binary(), binary(), string())
-                     -> ok_or_error_string()).
--spec(set/4 :: (rabbit_types:vhost(), binary(), binary(), term())
-               -> ok_or_error_string()).
--spec(set_any/4 :: (rabbit_types:vhost(), binary(), binary(), term())
-                   -> ok_or_error_string()).
+-spec(parse_set/5 :: (rabbit_types:vhost(), binary(), binary(), string(),
+                      rabbit_types:user() | 'none') -> ok_or_error_string()).
+-spec(set/5 :: (rabbit_types:vhost(), binary(), binary(), term(),
+                rabbit_types:user() | 'none') -> ok_or_error_string()).
+-spec(set_any/5 :: (rabbit_types:vhost(), binary(), binary(), term(),
+                    rabbit_types:user() | 'none') -> ok_or_error_string()).
 -spec(set_global/2 :: (atom(), term()) -> 'ok').
 -spec(clear/3 :: (rabbit_types:vhost(), binary(), binary())
                  -> ok_or_error_string()).
@@ -65,19 +65,19 @@
 
 %%---------------------------------------------------------------------------
 
-parse_set(_, <<"policy">>, _, _) ->
+parse_set(_, <<"policy">>, _, _, _) ->
     {error_string, "policies may not be set using this method"};
-parse_set(VHost, Component, Name, String) ->
+parse_set(VHost, Component, Name, String, User) ->
     case rabbit_misc:json_decode(String) of
         {ok, JSON} -> set(VHost, Component, Name,
-                          rabbit_misc:json_to_term(JSON));
+                          rabbit_misc:json_to_term(JSON), User);
         error      -> {error_string, "JSON decoding error"}
     end.
 
-set(_, <<"policy">>, _, _) ->
+set(_, <<"policy">>, _, _, _) ->
     {error_string, "policies may not be set using this method"};
-set(VHost, Component, Name, Term) ->
-    set_any(VHost, Component, Name, Term).
+set(VHost, Component, Name, Term, User) ->
+    set_any(VHost, Component, Name, Term, User).
 
 set_global(Name, Term) ->
     mnesia_update(Name, Term),
@@ -86,20 +86,25 @@ set_global(Name, Term) ->
 format_error(L) ->
     {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
 
-set_any(VHost, Component, Name, Term) ->
-    case set_any0(VHost, Component, Name, Term) of
+set_any(VHost, Component, Name, Term, User) ->
+    case set_any0(VHost, Component, Name, Term, User) of
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.
 
-set_any0(VHost, Component, Name, Term) ->
+set_any0(VHost, Component, Name, Term, User) ->
     case lookup_component(Component) of
         {ok, Mod} ->
-            case flatten_errors(Mod:validate(VHost, Component, Name, Term)) of
+            case flatten_errors(
+                   Mod:validate(VHost, Component, Name, Term, User)) of
                 ok ->
                     case mnesia_update(VHost, Component, Name, Term) of
                         {old, Term} -> ok;
-                        _           -> Mod:notify(VHost, Component, Name, Term)
+                        _           -> event_notify(
+                                         parameter_set, VHost, Component,
+                                         [{name,  Name},
+                                          {value, Term}]),
+                                       Mod:notify(VHost, Component, Name, Term)
                     end,
                     ok;
                 E ->
@@ -136,7 +141,10 @@ clear_any(VHost, Component, Name) ->
         not_found -> {error_string, "Parameter does not exist"};
         _         -> mnesia_clear(VHost, Component, Name),
                      case lookup_component(Component) of
-                         {ok, Mod} -> Mod:notify_clear(VHost, Component, Name);
+                         {ok, Mod} -> event_notify(
+                                         parameter_cleared, VHost, Component,
+                                         [{name, Name}]),
+                                      Mod:notify_clear(VHost, Component, Name);
                          _         -> ok
                      end
     end.
@@ -146,6 +154,12 @@ mnesia_clear(VHost, Component, Name) ->
                 ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
         end,
     ok = rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
+
+event_notify(_Event, _VHost, <<"policy">>, _Props) ->
+    ok;
+event_notify(Event, VHost, Component, Props) ->
+    rabbit_event:notify(Event, [{vhost,     VHost},
+                                {component, Component} | Props]).
 
 list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-

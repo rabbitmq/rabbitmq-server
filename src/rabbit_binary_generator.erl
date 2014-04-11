@@ -126,7 +126,7 @@ field_value_to_binary(decimal,   V) -> {Before, After} = V,
 field_value_to_binary(timestamp, V) -> [$T, <<V:64>>];
 field_value_to_binary(table,     V) -> [$F | table_to_binary(V)];
 field_value_to_binary(array,     V) -> [$A | array_to_binary(V)];
-field_value_to_binary(byte,      V) -> [$b, <<V:8/unsigned>>];
+field_value_to_binary(byte,      V) -> [$b, <<V:8/signed>>];
 field_value_to_binary(double,    V) -> [$d, <<V:64/float>>];
 field_value_to_binary(float,     V) -> [$f, <<V:32/float>>];
 field_value_to_binary(long,      V) -> [$l, <<V:64/signed>>];

@@ -15,6 +15,7 @@
 %%
 
 -module(rabbit_error_logger_file_h).
+-include("rabbit.hrl").
 
 -behaviour(gen_event).
 
@@ -92,23 +93,27 @@ handle_event(Event = {error, _, {emulator, _, ["Discarding message" ++ _]}},
     case get(discarding_message_seen) of
         true      -> {ok, State};
         undefined -> put(discarding_message_seen, true),
-                     error_logger_file_h:handle_event(Event, State)
+                     error_logger_file_h:handle_event(t(Event), State)
     end;
 %% Clear this state if we log anything else (but not a progress report).
 handle_event(Event = {info_msg, _, _}, State) ->
     erase(discarding_message_seen),
-    error_logger_file_h:handle_event(Event, State);
+    error_logger_file_h:handle_event(t(Event), State);
 handle_event(Event, State) ->
-    error_logger_file_h:handle_event(Event, State).
+    error_logger_file_h:handle_event(t(Event), State).
 
-handle_info(Event, State) ->
-    error_logger_file_h:handle_info(Event, State).
+handle_info(Info, State) ->
+    error_logger_file_h:handle_info(Info, State).
 
-handle_call(Event, State) ->
-    error_logger_file_h:handle_call(Event, State).
+handle_call(Call, State) ->
+    error_logger_file_h:handle_call(Call, State).
 
 terminate(Reason, State) ->
     error_logger_file_h:terminate(Reason, State).
 
 code_change(OldVsn, State, Extra) ->
     error_logger_file_h:code_change(OldVsn, State, Extra).
+
+%%----------------------------------------------------------------------
+
+t(Term) -> truncate:log_event(Term, ?LOG_TRUNC).

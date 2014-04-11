@@ -25,7 +25,9 @@
 
 -ifdef(use_specs).
 
--spec publish(rabbit_types:message(), atom(), rabbit_types:exchange(),
+-type reason() :: 'expired' | 'rejected' | 'maxlen'.
+
+-spec publish(rabbit_types:message(), reason(), rabbit_types:exchange(),
               'undefined' | binary(), rabbit_amqqueue:name()) -> 'ok'.
 
 -endif.
@@ -83,7 +85,10 @@ per_msg_ttl_header(#'P_basic'{expiration = Expiration}) ->
 per_msg_ttl_header(_) ->
     [].
 
-detect_cycles(expired, #basic_message{content = Content}, Queues) ->
+detect_cycles(rejected, _Msg, Queues) ->
+    {Queues, []};
+
+detect_cycles(_Reason, #basic_message{content = Content}, Queues) ->
     #content{properties = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     NoCycles = {Queues, []},
@@ -105,9 +110,7 @@ detect_cycles(expired, #basic_message{content = Content}, Queues) ->
                 _ ->
                     NoCycles
             end
-    end;
-detect_cycles(_Reason, _Msg, Queues) ->
-    {Queues, []}.
+    end.
 
 is_cycle(Queue, Deaths) ->
     {Cycle, Rest} =
@@ -117,14 +120,18 @@ is_cycle(Queue, Deaths) ->
               (_) ->
                   true
           end, Deaths),
-    %% Is there a cycle, and if so, is it entirely due to expiry?
+    %% Is there a cycle, and if so, is it "fully automatic", i.e. with
+    %% no reject in it?
     case Rest of
         []    -> false;
         [H|_] -> lists:all(
                    fun ({table, D}) ->
-                           {longstr, <<"expired">>} =:=
+                           {longstr, <<"rejected">>} =/=
                                rabbit_misc:table_lookup(D, <<"reason">>);
                        (_) ->
+                           %% There was something we didn't expect, therefore
+                           %% a client must have put it there, therefore the
+                           %% cycle was not "fully automatic".
                            false
                    end, Cycle ++ [H])
     end.

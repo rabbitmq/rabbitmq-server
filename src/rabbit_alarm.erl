@@ -62,7 +62,8 @@ start() ->
                           end,
                           fun clear_alarm/1]),
     {ok, DiskLimit} = application:get_env(disk_free_limit),
-    rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
+    rabbit_sup:start_delayed_restartable_child(
+      rabbit_disk_monitor, [DiskLimit]),
     ok.
 
 stop() -> ok.

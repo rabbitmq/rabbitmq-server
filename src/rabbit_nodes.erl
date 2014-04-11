@@ -81,7 +81,10 @@ diagnostics_node(Node) ->
              [{"  * unable to connect to epmd (port ~s) on ~s: ~s~n",
                [epmd_port(), Host, rabbit_misc:format_inet_error(Reason)]}];
          {ok, NamePorts} ->
-             diagnostics_node0(Name, Host, NamePorts)
+             case net_adm:ping(Node) of
+                 pong -> dist_working_diagnostics(Node);
+                 pang -> dist_broken_diagnostics(Name, Host, NamePorts)
+             end
      end].
 
 epmd_port() ->
@@ -90,7 +93,24 @@ epmd_port() ->
         error                                     -> "4369"
     end.
 
-diagnostics_node0(Name, Host, NamePorts) ->
+dist_working_diagnostics(Node) ->
+    case rabbit:is_running(Node) of
+        true  -> [{"  * node up, rabbit application running~n", []}];
+        false -> [{"  * node up, rabbit application not running~n"
+                   "  * running applications on ~s: ~p~n"
+                   "  * suggestion: start_app on ~s~n",
+                   [Node, remote_apps(Node), Node]}]
+    end.
+
+remote_apps(Node) ->
+    %% We want a timeout here because really, we don't trust the node,
+    %% the last thing we want to do is hang.
+    case rpc:call(Node, application, which_applications, [5000]) of
+        {badrpc, _} = E -> E;
+        Apps            -> [App || {App, _, _} <- Apps]
+    end.
+
+dist_broken_diagnostics(Name, Host, NamePorts) ->
     case [{N, P} || {N, P} <- NamePorts, N =:= Name] of
         [] ->
             {SelfName, SelfHost} = parts(node()),
@@ -108,7 +128,8 @@ diagnostics_node0(Name, Host, NamePorts) ->
             [{"  * found ~s (port ~b)", [Name, Port]} |
              case diagnose_connect(Host, Port) of
                  ok ->
-                     [{"  * TCP connection succeeded~n"
+                     [{"  * TCP connection succeeded but Erlang distribution "
+                       "failed~n"
                        "  * suggestion: hostname mismatch?~n"
                        "  * suggestion: is the cookie set correctly?", []}];
                  {error, Reason} ->

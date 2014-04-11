@@ -27,7 +27,7 @@
 -export([register/0]).
 -export([invalidate/0, recover/0]).
 -export([name/1, get/2, get_arg/3, set/1]).
--export([validate/4, notify/4, notify_clear/3]).
+-export([validate/5, notify/4, notify_clear/3]).
 -export([parse_set/6, set/6, delete/2, lookup/2, list/0, list/1,
          list_formatted/1, info_keys/0]).
 
@@ -150,7 +150,7 @@ set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     set0(VHost, Name, PolicyProps).
 
 set0(VHost, Name, Term) ->
-    rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term).
+    rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term, none).
 
 delete(VHost, Name) ->
     rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Name).
@@ -196,14 +196,16 @@ info_keys() -> [vhost, name, 'apply-to', pattern, definition, priority].
 
 %%----------------------------------------------------------------------------
 
-validate(_VHost, <<"policy">>, Name, Term) ->
+validate(_VHost, <<"policy">>, Name, Term, _User) ->
     rabbit_parameter_validation:proplist(
       Name, policy_validation(), Term).
 
-notify(VHost, <<"policy">>, _Name, _Term) ->
+notify(VHost, <<"policy">>, Name, Term) ->
+    rabbit_event:notify(policy_set, [{name, Name} | Term]),
     update_policies(VHost).
 
-notify_clear(VHost, <<"policy">>, _Name) ->
+notify_clear(VHost, <<"policy">>, Name) ->
+    rabbit_event:notify(policy_cleared, [{name, Name}]),
     update_policies(VHost).
 
 %%----------------------------------------------------------------------------

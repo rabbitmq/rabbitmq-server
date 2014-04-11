@@ -71,7 +71,7 @@ parse_field_value(<<$F, VLen:32/unsigned, Table:VLen/binary, R/binary>>) ->
 parse_field_value(<<$A, VLen:32/unsigned, Array:VLen/binary, R/binary>>) ->
     {array, parse_array(Array), R};
 
-parse_field_value(<<$b, V:8/unsigned, R/binary>>) -> {byte,        V, R};
+parse_field_value(<<$b, V:8/signed,   R/binary>>) -> {byte,        V, R};
 parse_field_value(<<$d, V:64/float,   R/binary>>) -> {double,      V, R};
 parse_field_value(<<$f, V:32/float,   R/binary>>) -> {float,       V, R};
 parse_field_value(<<$l, V:64/signed,  R/binary>>) -> {long,        V, R};

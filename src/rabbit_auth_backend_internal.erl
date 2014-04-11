@@ -145,51 +145,59 @@ permission_index(read)      -> #permission.read.
 
 add_user(Username, Password) ->
     rabbit_log:info("Creating user '~s'~n", [Username]),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({rabbit_user, Username}) of
-                  [] ->
-                      ok = mnesia:write(
-                             rabbit_user,
-                             #internal_user{username = Username,
-                                            password_hash =
-                                                hash_password(Password),
-                                            tags = []},
-                             write);
-                  _ ->
-                      mnesia:abort({user_already_exists, Username})
-              end
-      end).
+    R = rabbit_misc:execute_mnesia_transaction(
+          fun () ->
+                  case mnesia:wread({rabbit_user, Username}) of
+                      [] ->
+                          ok = mnesia:write(
+                                 rabbit_user,
+                                 #internal_user{username = Username,
+                                                password_hash =
+                                                    hash_password(Password),
+                                                tags = []},
+                                 write);
+                      _ ->
+                          mnesia:abort({user_already_exists, Username})
+                  end
+          end),
+    rabbit_event:notify(user_created, [{name, Username}]),
+    R.
 
 delete_user(Username) ->
     rabbit_log:info("Deleting user '~s'~n", [Username]),
-    rabbit_misc:execute_mnesia_transaction(
-      rabbit_misc:with_user(
-        Username,
-        fun () ->
-                ok = mnesia:delete({rabbit_user, Username}),
-                [ok = mnesia:delete_object(
-                        rabbit_user_permission, R, write) ||
-                    R <- mnesia:match_object(
-                           rabbit_user_permission,
-                           #user_permission{user_vhost = #user_vhost{
-                                                            username = Username,
-                                                            virtual_host = '_'},
-                                            permission = '_'},
-                           write)],
-                ok
-        end)).
+    R = rabbit_misc:execute_mnesia_transaction(
+          rabbit_misc:with_user(
+            Username,
+            fun () ->
+                    ok = mnesia:delete({rabbit_user, Username}),
+                    [ok = mnesia:delete_object(
+                            rabbit_user_permission, R, write) ||
+                        R <- mnesia:match_object(
+                               rabbit_user_permission,
+                               #user_permission{user_vhost = #user_vhost{
+                                                  username = Username,
+                                                  virtual_host = '_'},
+                                                permission = '_'},
+                               write)],
+                    ok
+            end)),
+    rabbit_event:notify(user_deleted, [{name, Username}]),
+    R.
 
 lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
 
 change_password(Username, Password) ->
     rabbit_log:info("Changing password for '~s'~n", [Username]),
-    change_password_hash(Username, hash_password(Password)).
+    R = change_password_hash(Username, hash_password(Password)),
+    rabbit_event:notify(user_password_changed, [{name, Username}]),
+    R.
 
 clear_password(Username) ->
     rabbit_log:info("Clearing password for '~s'~n", [Username]),
-    change_password_hash(Username, <<"">>).
+    R = change_password_hash(Username, <<"">>),
+    rabbit_event:notify(user_password_cleared, [{name, Username}]),
+    R.
 
 hash_password(Cleartext) ->
     {A1,A2,A3} = now(),
@@ -212,9 +220,11 @@ salted_md5(Salt, Cleartext) ->
 set_tags(Username, Tags) ->
     rabbit_log:info("Setting user tags for user '~s' to ~p~n",
                     [Username, Tags]),
-    update_user(Username, fun(User) ->
-                                  User#internal_user{tags = Tags}
-                          end).
+    R = update_user(Username, fun(User) ->
+                                      User#internal_user{tags = Tags}
+                              end),
+    rabbit_event:notify(user_tags_set, [{name, Username}, {tags, Tags}]),
+    R.
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
     rabbit_log:info("Setting permissions for "
@@ -229,30 +239,40 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
                                                     Regexp, Reason}})
               end
       end, [ConfigurePerm, WritePerm, ReadPerm]),
-    rabbit_misc:execute_mnesia_transaction(
-      rabbit_misc:with_user_and_vhost(
-        Username, VHostPath,
-        fun () -> ok = mnesia:write(
-                         rabbit_user_permission,
-                         #user_permission{user_vhost = #user_vhost{
-                                            username     = Username,
-                                            virtual_host = VHostPath},
-                                          permission = #permission{
-                                            configure = ConfigurePerm,
-                                            write     = WritePerm,
-                                            read      = ReadPerm}},
-                         write)
-        end)).
+    R = rabbit_misc:execute_mnesia_transaction(
+          rabbit_misc:with_user_and_vhost(
+            Username, VHostPath,
+            fun () -> ok = mnesia:write(
+                             rabbit_user_permission,
+                             #user_permission{user_vhost = #user_vhost{
+                                                username     = Username,
+                                                virtual_host = VHostPath},
+                                              permission = #permission{
+                                                configure = ConfigurePerm,
+                                                write     = WritePerm,
+                                                read      = ReadPerm}},
+                             write)
+            end)),
+    rabbit_event:notify(permission_created, [{user,      Username}, 
+                                             {vhost,     VHostPath},
+                                             {configure, ConfigurePerm},
+                                             {write,     WritePerm},
+                                             {read,      ReadPerm}]),
+    R.
 
 clear_permissions(Username, VHostPath) ->
-    rabbit_misc:execute_mnesia_transaction(
-      rabbit_misc:with_user_and_vhost(
-        Username, VHostPath,
-        fun () ->
-                ok = mnesia:delete({rabbit_user_permission,
-                                    #user_vhost{username     = Username,
-                                                virtual_host = VHostPath}})
-        end)).
+    R = rabbit_misc:execute_mnesia_transaction(
+          rabbit_misc:with_user_and_vhost(
+            Username, VHostPath,
+            fun () ->
+                    ok = mnesia:delete({rabbit_user_permission,
+                                        #user_vhost{username     = Username,
+                                                    virtual_host = VHostPath}})
+            end)),
+    rabbit_event:notify(permission_deleted, [{user,  Username},
+                                             {vhost, VHostPath}]),
+    R.
+
 
 update_user(Username, Fun) ->
     rabbit_misc:execute_mnesia_transaction(

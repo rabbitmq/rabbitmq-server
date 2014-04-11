@@ -22,7 +22,7 @@
         'ok' | {error, string(), [term()]} | [validate_results()]).
 
 -callback validate(rabbit_types:vhost(), binary(), binary(),
-                   term()) -> validate_results().
+                   term(), rabbit_types:user()) -> validate_results().
 -callback notify(rabbit_types:vhost(), binary(), binary(), term()) -> 'ok'.
 -callback notify_clear(rabbit_types:vhost(), binary(), binary()) -> 'ok'.
 

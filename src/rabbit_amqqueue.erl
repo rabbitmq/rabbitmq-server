@@ -16,7 +16,7 @@
 
 -module(rabbit_amqqueue).
 
--export([recover/0, stop/0, start/1, declare/5,
+-export([recover/0, stop/0, start/1, declare/5, declare/6,
          delete_immediately/1, delete/3, purge/1, forget_all_durable/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
@@ -71,6 +71,11 @@
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
+        -> {'new' | 'existing' | 'absent' | 'owner_died',
+            rabbit_types:amqqueue()} | rabbit_types:channel_exit()).
+-spec(declare/6 ::
+        (name(), boolean(), boolean(),
+         rabbit_framing:amqp_table(), rabbit_types:maybe(pid()), node())
         -> {'new' | 'existing' | 'absent' | 'owner_died',
             rabbit_types:amqqueue()} | rabbit_types:channel_exit()).
 -spec(internal_declare/2 ::
@@ -243,6 +248,13 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
     [Q || {_, {new, Q}} <- Results].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
+    declare(QueueName, Durable, AutoDelete, Args, Owner, node()).
+
+
+%% The Node argument suggests where the queue (master if mirrored)
+%% should be. Note that in some cases (e.g. with "nodes" policy in
+%% effect) this might not be possible to satisfy.
+declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Q = rabbit_policy:set(#amqqueue{name            = QueueName,
                                     durable         = Durable,
@@ -253,7 +265,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                     slave_pids      = [],
                                     sync_slave_pids = [],
                                     gm_pids         = []}),
-    {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
+    Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
     gen_server2:call(start_queue_process(Node, Q), {init, new}, infinity).
 
 internal_declare(Q, true) ->
@@ -436,13 +448,17 @@ declare_args() ->
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2}].
 
-consume_args() -> [{<<"x-priority">>, fun check_int_arg/2}].
+consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
+                   {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
         false -> {error, {unacceptable_type, Type}}
     end.
+
+check_bool_arg({bool, _}, _) -> ok;
+check_bool_arg({Type, _}, _) -> {error, {unacceptable_type, Type}}.
 
 check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of

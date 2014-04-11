@@ -18,7 +18,8 @@
 -behaviour(rabbit_policy_validator).
 
 -export([remove_from_queue/3, on_node_up/0, add_mirrors/3,
-         report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
+         report_deaths/4, store_updated_slaves/1,
+         initial_queue_node/2, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2, validate_policy/1,
          maybe_auto_sync/1, log_info/3, log_warning/3]).
 
@@ -50,6 +51,7 @@
                        -> 'ok').
 -spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
                                      rabbit_types:amqqueue()).
+-spec(initial_queue_node/2 :: (rabbit_types:amqqueue(), node()) -> node()).
 -spec(suggested_queue_nodes/1 :: (rabbit_types:amqqueue()) ->
                                       {node(), [node()]}).
 -spec(is_mirrored/1 :: (rabbit_types:amqqueue()) -> boolean()).
@@ -234,16 +236,20 @@ promote_slave([SPid | SPids]) ->
     %% the one to promote is the oldest.
     {SPid, SPids}.
 
-suggested_queue_nodes(Q) ->
-    suggested_queue_nodes(Q, rabbit_mnesia:cluster_nodes(running)).
+initial_queue_node(Q, DefNode) ->
+    {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, all_nodes()),
+    MNode.
 
-%% This variant exists so we can pull a call to
-%% rabbit_mnesia:cluster_nodes(running) out of a loop or
-%% transaction or both.
-suggested_queue_nodes(Q = #amqqueue{exclusive_owner = Owner}, All) ->
+suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, all_nodes()).
+suggested_queue_nodes(Q, All) -> suggested_queue_nodes(Q, node(), All).
+
+%% The third argument exists so we can pull a call to
+%% rabbit_mnesia:cluster_nodes(running) out of a loop or transaction
+%% or both.
+suggested_queue_nodes(Q = #amqqueue{exclusive_owner = Owner}, DefNode, All) ->
     {MNode0, SNodes, SSNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
-                none -> node();
+                none -> DefNode;
                 _    -> MNode0
             end,
     case Owner of
@@ -255,6 +261,8 @@ suggested_queue_nodes(Q = #amqqueue{exclusive_owner = Owner}, All) ->
                 end;
         _    -> {MNode, []}
     end.
+
+all_nodes() -> rabbit_mnesia:cluster_nodes(running).
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
