@@ -19,20 +19,41 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, "federation exchange decorator"},
-                    {mfa, {rabbit_registry, register,
-                           [exchange_decorator, <<"federation">>, ?MODULE]}},
+                    {mfa, {?MODULE, recover, []}},
                     {requires, rabbit_registry},
+                    {requires, rabbit_federation_upstream_exchange},
+                    {cleanup, {rabbit_registry, unregister,
+                               [exchange_decorator, <<"federation">>]}},
                     {enables, recovery}]}).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -behaviour(rabbit_exchange_decorator).
 
--export([description/0, serialise_events/1]).
+-export([description/0, serialise_events/1, recover/0]).
 -export([create/2, delete/3, policy_changed/2,
          add_binding/3, remove_bindings/3, route/2, active_for/1]).
 
 %%----------------------------------------------------------------------------
+
+recover() ->
+    rabbit_registry:register(exchange_decorator, <<"federation">>, ?MODULE),
+
+    %% When we're enabled at runtime, we must replicate some of the work
+    %% that rabbit:recover/0 does during the boot sequence, since we need
+    %% to establish links for any federated exchanges. During startup, this
+    %% runs prior to exchange recovery, at which point rabbit_exchange is
+    %% empty.
+    rabbit_misc:table_filter(
+      fun (Ex = #exchange{ type = Type }) ->
+              Type /= 'x-federation-upstream'
+      end,
+      fun(Ex, Txn) -> create(map_create_tx(Txn), Ex) end,
+      rabbit_exchange),
+    ok.
+
+map_create_tx(true)  -> transaction;
+map_create_tx(false) -> none.
 
 description() ->
     [{description, <<"Federation exchange decorator">>}].
