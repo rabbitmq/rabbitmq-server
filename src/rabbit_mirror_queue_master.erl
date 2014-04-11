@@ -126,8 +126,10 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
              confirmed           = [],
              known_senders       = sets:new() }.
 
-stop_mirroring(State = #state { backing_queue       = BQ,
+stop_mirroring(State = #state { coordinator         = CPid,
+                                backing_queue       = BQ,
                                 backing_queue_state = BQS }) ->
+    unlink(CPid),
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
@@ -179,11 +181,8 @@ delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
     stop_all_slaves(Reason, State),
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
-stop_all_slaves(Reason, #state{name        = QName,
-                               gm          = GM,
-                               coordinator = CPid}) ->
+stop_all_slaves(Reason, #state{name = QName, gm   = GM}) ->
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
-    unlink(CPid),
     MRefs = [erlang:monitor(process, Pid) || Pid <- [GM | SPids]],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
     [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
