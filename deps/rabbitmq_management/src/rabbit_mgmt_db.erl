@@ -140,7 +140,8 @@
           gc_next_key,
           lookups,
           interval,
-          event_refresh_ref}).
+          event_refresh_ref,
+          rates_mode}).
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
@@ -232,6 +233,7 @@ init([Ref]) ->
     %% that the management plugin work.
     process_flag(priority, high),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     rabbit_node_monitor:subscribe(self()),
     rabbit_log:info("Statistics database started.~n"),
     Table = fun () -> ets:new(rabbit_mgmt_db, [ordered_set]) end,
@@ -243,7 +245,8 @@ init([Ref]) ->
                     old_stats              = Table(),
                     aggregated_stats       = Table(),
                     aggregated_stats_index = Table(),
-                    event_refresh_ref      = Ref})), hibernate,
+                    event_refresh_ref      = Ref,
+                    rates_mode             = RatesMode})), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({augment_exchanges, Xs, Ranges, basic}, _From, State) ->
@@ -770,6 +773,10 @@ record_sampleX(RenamePublishTo, X, {publish, Diff, TS, State}) ->
 record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
     record_sample0({exchange_stats, X}, {Type, Diff, TS, State}).
 
+%% Ignore case where ID1 and ID2 are in a tuple, i.e. detailed stats,
+%% when in basic mode
+record_sample0({_, {_ID1, _ID2}} = X, {_, _, _, #state{rates_mode = basic}}) ->
+    ok;
 record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
                                            aggregated_stats_index = ETSi}}) ->
     Id = {Id0, Key},

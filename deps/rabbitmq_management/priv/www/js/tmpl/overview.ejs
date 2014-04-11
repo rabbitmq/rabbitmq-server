@@ -7,7 +7,7 @@
 <div class="hider">
 <% if (overview.statistics_db_node != 'not_running') { %>
   <%= queue_lengths('lengths-over', overview.queue_totals) %>
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
   <%= message_rates('msg-rates-over', overview.message_stats) %>
 <% } %>
 <% } else { %>
@@ -256,14 +256,12 @@
 </div>
 </div>
 
-<% if (overview.statistics_level != 'fine') { %>
+<% if (overview.rates_mode == 'none') { %>
 <div class="section-hidden">
 <h2>Message Rates Disabled</h2>
 <div class="hider">
 <p>
-  The statistics level in this RabbitMQ server is currently set to
-  <code><%= overview.statistics_level %></code>. Message rates are therefore
-  disabled.
+  Message rates are currently disabled.
 </p>
 <p>
   To re-enable message rates, edit your configuration file and either
