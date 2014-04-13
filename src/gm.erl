@@ -1198,14 +1198,14 @@ maybe_erase_aliases(State = #state { self          = Self,
                          false -> Acc
                      end
              end, {[], MembersState}, Aliases),
-    State1 = State #state { members_state = MembersState1 },
-    case Erasable of
-        [] -> {ok, State1 #state { view = View }};
-        _  -> View1 = group_to_view(
-                        erase_members_in_group(Erasable, GroupName, TxnFun)),
-              {callback_view_changed(Args, Module, View0, View1),
-               check_neighbours(State1 #state { view = View1 })}
-    end.
+    View1 = case Erasable of
+                [] -> View;
+                _  -> group_to_view(
+                        erase_members_in_group(Erasable, GroupName, TxnFun))
+            end,
+    State1 = State #state { members_state = MembersState1, view = View1 },
+    {callback_view_changed(Args, Module, View0, View1),
+     check_neighbours(State1)}.
 
 can_erase_view_member(Self, Self, _LA, _LP) -> false;
 can_erase_view_member(_Self, _Id,   N,   N) -> true;
