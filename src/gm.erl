@@ -706,9 +706,6 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
                              left          = Left,
                              right         = Right,
                              group_name    = GroupName,
-                             view          = View,
-                             module        = Module,
-                             callback_args = Args,
                              confirms      = Confirms,
                              txn_executor  = TxnFun }) ->
     Member = case {Left, Right} of
@@ -722,24 +719,15 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
         {_, {shutdown, ring_shutdown}} ->
             noreply(State);
         _ ->
-            View1 =
-                group_to_view(record_dead_member_in_group(Member,
-                                                          GroupName, TxnFun)),
-            {Result, State2} =
-                case alive_view_members(View1) of
-                    [Self] ->
-                        {Result1, State1} = maybe_erase_aliases(State, View1),
-                        {Result1, State1 #state {
-                            members_state = blank_member_state(),
-                            confirms      = purge_confirms(Confirms) }};
-                    _ ->
-                        %% here we won't be pointing out any deaths:
-                        %% the concern is that there maybe births
-                        %% which we'd otherwise miss.
-                        {callback_view_changed(Args, Module, View, View1),
-                         check_neighbours(State #state { view = View1 })}
-                end,
-            handle_callback_result({Result, State2})
+            View1 = group_to_view(record_dead_member_in_group(
+                                    Member, GroupName, TxnFun)),
+            State1 = case alive_view_members(View1) of
+                         [Self] -> State #state {
+                                     members_state = blank_member_state(),
+                                     confirms      = purge_confirms(Confirms) };
+                         _      -> State
+                     end,
+            handle_callback_result(maybe_erase_aliases(State1, View1))
     end.
 
 
