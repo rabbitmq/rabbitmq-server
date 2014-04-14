@@ -405,10 +405,7 @@ handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
     %% This is only of value to the master
     ok;
 handle_msg([_SPid], _From, process_death) ->
-    %% Since GM is by nature lazy we need to make sure there is some
-    %% traffic when a master dies, to make sure we get informed of the
-    %% death. That's all process_death does, create some traffic. We
-    %% must not take any notice of the master death here since it
+    %% We must not take any notice of the master death here since it
     %% comes without ordering guarantees - there could still be
     %% messages from the master we have yet to receive. When we get
     %% members_changed, then there will be no more messages.
