@@ -108,7 +108,6 @@ handle_go(Q = #amqqueue{name = QName}) ->
     case rabbit_misc:execute_mnesia_transaction(
            fun() -> init_it(Self, GM, Node, QName) end) of
         {new, QPid, GMPids} ->
-            erlang:monitor(process, QPid),
             ok = file_handle_cache:register_callback(
                    rabbit_amqqueue, set_maximum_since_use, [Self]),
             ok = rabbit_memory_monitor:register(
@@ -193,7 +192,8 @@ handle_call(go, _From, {not_started, Q} = NotStarted) ->
     end;
 
 handle_call({gm_deaths, LiveGMPids}, From,
-            State = #state { q = Q = #amqqueue { name = QName, pid = MPid }}) ->
+            State = #state { gm = GM, q = Q = #amqqueue {
+                                                 name = QName, pid = MPid }}) ->
     Self = self(),
     case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, LiveGMPids) of
         {error, not_found} ->
@@ -214,7 +214,12 @@ handle_call({gm_deaths, LiveGMPids}, From,
                 _ ->
                     %% master has changed to not us
                     gen_server2:reply(From, ok),
-                    erlang:monitor(process, Pid),
+                    %% Since GM is by nature lazy we need to make sure
+                    %% there is some traffic when a master dies, to
+                    %% make sure all slaves get informed of the
+                    %% death. That is all process_death does, create
+                    %% some traffic.
+                    ok = gm:broadcast(GM, process_death),
                     noreply(State #state { q = Q #amqqueue { pid = Pid } })
             end
     end;
@@ -293,11 +298,6 @@ handle_info(sync_timeout, State) ->
 
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));
-
-handle_info({'DOWN', _MonitorRef, process, MPid, _Reason},
-            State = #state { gm = GM, q = #amqqueue { pid = MPid } }) ->
-    ok = gm:broadcast(GM, process_death),
-    noreply(State);
 
 handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
     local_sender_death(ChPid, State),
@@ -405,10 +405,7 @@ handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
     %% This is only of value to the master
     ok;
 handle_msg([_SPid], _From, process_death) ->
-    %% Since GM is by nature lazy we need to make sure there is some
-    %% traffic when a master dies, to make sure we get informed of the
-    %% death. That's all process_death does, create some traffic. We
-    %% must not take any notice of the master death here since it
+    %% We must not take any notice of the master death here since it
     %% comes without ordering guarantees - there could still be
     %% messages from the master we have yet to receive. When we get
     %% members_changed, then there will be no more messages.
