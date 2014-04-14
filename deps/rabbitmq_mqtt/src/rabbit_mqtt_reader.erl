@@ -48,26 +48,26 @@ handle_cast({go, Sock0, SockTransform, KeepaliveSup}, undefined) ->
     case rabbit_net:connection_string(Sock0, inbound) of
         {ok, ConnStr} ->
             log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
-                case SockTransform(Sock0) of
-                    {ok, Sock} ->
-                        rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-                        ProcessorState = rabbit_mqtt_processor:initial_state(Sock),
-                        {noreply,
-                         control_throttle(
-                           #state{socket           = Sock,
-                                  conn_name        = ConnStr,
-                                  await_recv       = false,
-                                  connection_state = running,
-                                  keepalive        = {none, none},
-                                  keepalive_sup    = KeepaliveSup,
-                                  conserve         = false,
-                                  parse_state      = rabbit_mqtt_frame:initial_state(),
-                                  proc_state       = ProcessorState }),
-                         hibernate};
-                    {error, Reason} ->
-                        rabbit_net:fast_close(Sock0),
-                        {stop, {network_error, Reason}, undefined}
-                end;
+            case SockTransform(Sock0) of
+                {ok, Sock} ->
+                    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+                    ProcessorState = rabbit_mqtt_processor:initial_state(Sock),
+                    {noreply,
+                     control_throttle(
+                       #state{socket           = Sock,
+                              conn_name        = ConnStr,
+                              await_recv       = false,
+                              connection_state = running,
+                              keepalive        = {none, none},
+                              keepalive_sup    = KeepaliveSup,
+                              conserve         = false,
+                              parse_state      = rabbit_mqtt_frame:initial_state(),
+                              proc_state       = ProcessorState }),
+                     hibernate};
+                {error, Reason} ->
+                    rabbit_net:fast_close(Sock0),
+                    {stop, {network_error, Reason}, undefined}
+            end;
         {error, enotconn} ->
             rabbit_net:fast_close(Sock0),
             {stop, shutdown, undefined};
