@@ -26,8 +26,17 @@
 
 ##--- End of overridden <var_name> variables
 
+## SSL Dist Options
+RABBITMQ_SSL_DIST_PA=""
+if [ "x" != "x$RABBITMQ_SSL_DIST_ARGS" ]; then
+    RABBITMQ_SSL_DIST_PA="-pa "`${ERL_DIR}erl -eval 'io:format("~p", [code:lib_dir(ssl, ebin)]),halt().' -noshell`
+    RABBITMQ_SSL_DIST_ARGS="$RABBITMQ_SSL_DIST_ARGS -proto_dist inet_tls"
+fi
+
 exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
+    ${RABBITMQ_SSL_DIST_PA} \
+    "${RABBITMQ_SSL_DIST_ARGS}" \
     -noinput \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \

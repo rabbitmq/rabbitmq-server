@@ -61,6 +61,13 @@ DEFAULT_NODE_PORT=5672
 
 ##--- End of overridden <var_name> variables
 
+## SSL Dist Options
+RABBITMQ_SSL_DIST_PA=""
+if [ "x" != "x$RABBITMQ_SSL_DIST_ARGS" ]; then
+    RABBITMQ_SSL_DIST_PA="-pa "`${ERL_DIR}erl -eval 'io:format("~p", [code:lib_dir(ssl, ebin)]),halt().' -noshell`
+    RABBITMQ_SSL_DIST_ARGS="$RABBITMQ_SSL_DIST_ARGS -proto_dist inet_tls"
+fi
+
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
 [ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s rabbit boot "
@@ -118,6 +125,8 @@ set -f
 
 exec ${ERL_DIR}erl \
     -pa ${RABBITMQ_EBIN_ROOT} \
+    ${RABBITMQ_SSL_DIST_PA} \
+    "${RABBITMQ_SSL_DIST_ARGS}" \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
     -boot "${SASL_BOOT_FILE}" \
