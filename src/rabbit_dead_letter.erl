@@ -129,6 +129,9 @@ is_cycle(Queue, Deaths) ->
                            {longstr, <<"rejected">>} =/=
                                rabbit_misc:table_lookup(D, <<"reason">>);
                        (_) ->
+                           %% There was something we didn't expect, therefore
+                           %% a client must have put it there, therefore the
+                           %% cycle was not "fully automatic".
                            false
                    end, Cycle ++ [H])
     end.
