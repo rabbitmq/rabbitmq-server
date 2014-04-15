@@ -203,7 +203,7 @@ network_error(Reason,
     % todo: flush channel after publish
     stop({shutdown, conn_closed}, State).
 
-stop(Reason, State = #state{ proc_state = PState }) ->
+stop(Reason, State) ->
     {stop, Reason, close_connection(State)}.
 
 close_connection(State = #state{ proc_state = ProcState} ) ->
