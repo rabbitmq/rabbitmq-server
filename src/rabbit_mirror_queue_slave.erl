@@ -166,13 +166,13 @@ init_it(Self, GM, Node, QName) ->
                           end;
                 [SPid] -> case rabbit_misc:is_process_alive(SPid) of
                               true  -> existing;
-                              false -> GMPids = [T || T = {_, S} <- GMPids,
-                                                      S =/= SPid],
+                              false -> GMPids1 = [T || T = {_, S} <- GMPids,
+                                                       S =/= SPid],
                                        Q1 = Q#amqqueue{
                                               slave_pids = SPids -- [SPid],
-                                              gm_pids    = GMPids},
+                                              gm_pids    = GMPids1},
                                        add_slave(Q1, Self, GM),
-                                       {new, QPid, GMPids}
+                                       {new, QPid, GMPids1}
                           end
             end;
         [] ->
