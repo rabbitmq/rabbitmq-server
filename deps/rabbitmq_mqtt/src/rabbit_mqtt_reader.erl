@@ -50,7 +50,8 @@ handle_cast({go, Sock0, SockTransform, KeepaliveSup}, undefined) ->
             log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
             case SockTransform(Sock0) of
                 {ok, Sock} ->
-                    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+                    rabbit_alarm:register(
+                      self(), {?MODULE, conserve_resources, []}),
                     ProcessorState = rabbit_mqtt_processor:initial_state(Sock),
                     {noreply,
                      control_throttle(
