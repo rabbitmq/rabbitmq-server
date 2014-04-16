@@ -446,10 +446,10 @@ supervisor(Pid) -> with_exit_handler(fun() -> dead end,
                                      fun() -> delegate(Pid) end).
 
 write(Group, Overall, ChildSpec) ->
-    ok = mnesia:write(
-           #mirrored_sup_childspec{key           = {Group, id(ChildSpec)},
-                                   mirroring_pid = Overall,
-                                   childspec     = ChildSpec}),
+    S = #mirrored_sup_childspec{key           = {Group, id(ChildSpec)},
+                                mirroring_pid = Overall,
+                                childspec     = ChildSpec},
+    ok = mnesia:write(?TABLE, S, write),
     ChildSpec.
 
 delete(Group, Id) ->
