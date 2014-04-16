@@ -22,9 +22,8 @@
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
-
 -export([start/2, stop/1]).
-
+-export([start_apps/1, stop_apps/1]).
 -export([log_location/1]). %% for testing
 
 %%---------------------------------------------------------------------------
@@ -211,6 +210,7 @@
 %% this really should be an abstract type
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
 -type(param() :: atom()).
+-type(app_name() :: atom()).
 
 -spec(start/0 :: () -> 'ok').
 -spec(boot/0 :: () -> 'ok').
@@ -242,6 +242,8 @@
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
+-spec(start_apps/1 :: ([app_name()]) -> 'ok').
+-spec(stop_apps/1 :: ([app_name()]) -> 'ok').
 
 -endif.
 
@@ -312,9 +314,7 @@ start() ->
                      ok = ensure_working_log_handlers(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
-                     ok = app_utils:start_applications(
-                            app_startup_order(), fun handle_app_error/2),
-                     ok = log_broker_started(rabbit_plugins:active())
+                     broker_start()
              end).
 
 boot() ->
@@ -329,21 +329,31 @@ boot() ->
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
                      rabbit_mnesia:check_cluster_consistency(),
-                     Plugins = rabbit_plugins:setup(),
-                     ToBeLoaded = Plugins ++ ?APPS,
-                     ok = app_utils:load_applications(ToBeLoaded),
-                     StartupApps = app_utils:app_dependency_order(ToBeLoaded,
-                                                                  false),
-                     ok = app_utils:start_applications(
-                            StartupApps, fun handle_app_error/2),
-                     ok = log_broker_started(Plugins)
+                     broker_start()
              end).
 
-handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
-    throw({could_not_start, App, Reason});
+broker_start() ->
+    Plugins = rabbit_plugins:setup(),
+    ToBeLoaded = Plugins ++ ?APPS,
+    start_apps(ToBeLoaded),
+    ok = log_broker_started(rabbit_plugins:active()).
 
-handle_app_error(App, Reason) ->
-    throw({could_not_start, App, Reason}).
+handle_app_error(Term) ->
+    fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
+            throw({Term, App, ExitReason});
+       (App, Reason) ->
+            throw({Term, App, Reason})
+    end.
+
+start_apps(Apps) ->
+    app_utils:load_applications(Apps),
+    StartupApps = app_utils:app_dependency_order(Apps, false),
+    case whereis(rabbit_boot) of
+        undefined -> run_boot_steps(Apps);
+        _         -> ok
+    end,
+    ok = app_utils:start_applications(StartupApps,
+                                      handle_app_error(could_not_start)).
 
 start_it(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
@@ -369,12 +379,13 @@ start_it(StartFun) ->
     end.
 
 stop() ->
+    Apps = app_shutdown_order(),
     case whereis(rabbit_boot) of
         undefined -> ok;
-        _         -> await_startup()
+        _         -> app_utils:wait_for_applications(Apps)
     end,
     rabbit_log:info("Stopping RabbitMQ~n"),
-    ok = app_utils:stop_applications(app_shutdown_order()).
+    ok = app_utils:stop_applications(Apps).
 
 stop_and_halt() ->
     try
@@ -383,6 +394,29 @@ stop_and_halt() ->
         rabbit_misc:local_info_msg("Halting Erlang VM~n", []),
         init:stop()
     end,
+    ok.
+
+stop_apps(Apps) ->
+    try
+        ok = app_utils:stop_applications(
+               Apps, handle_app_error(error_during_shutdown))
+    after
+        run_cleanup_steps(Apps),
+        [begin
+             {ok, Mods} = application:get_key(App, modules),
+             [begin
+                  code:soft_purge(Mod),
+                  code:delete(Mod),
+                  false = code:is_loaded(Mod)
+              end || Mod <- Mods],
+             application:unload(App)
+         end || App <- Apps]
+    end.
+
+run_cleanup_steps(Apps) ->
+    [run_step(Name, Attributes, cleanup) ||
+        {App, Name, Attributes} <- find_steps(Apps),
+        lists:member(App, Apps)],
     ok.
 
 await_startup() ->
@@ -468,7 +502,7 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
-            [ok = run_boot_step(Step) || Step <- boot_steps()],
+            run_boot_steps(),
             {ok, SupPid};
         Error ->
             Error
@@ -496,29 +530,44 @@ app_shutdown_order() ->
 %%---------------------------------------------------------------------------
 %% boot step logic
 
-run_boot_step({_StepName, Attributes}) ->
-    case [MFA || {mfa, MFA} <- Attributes] of
+run_boot_steps() ->
+    run_boot_steps([App || {App, _, _} <- application:loaded_applications()]).
+
+run_boot_steps(Apps) ->
+    Steps = find_steps(Apps),
+    [ok = run_step(StepName, Attributes, mfa) ||
+        {_, StepName, Attributes} <- Steps],
+    ok.
+
+find_steps(BaseApps) ->
+    Apps = BaseApps -- [App || {App, _, _} <- rabbit_misc:which_applications()],
+    FullBoot = sort_boot_steps(
+                 rabbit_misc:all_module_attributes(rabbit_boot_step)),
+    [Step || {App, _, _} = Step <- FullBoot, lists:member(App, Apps)].
+
+run_step(StepName, Attributes, AttributeName) ->
+    case [MFA || {Key, MFA} <- Attributes,
+                 Key =:= AttributeName] of
         [] ->
             ok;
         MFAs ->
             [try
                  apply(M,F,A)
              of
-                 ok ->              ok;
-                 {error, Reason} -> boot_error(Reason, not_available)
+                 ok              -> ok;
+                 {error, Reason} -> boot_error({boot_step, StepName, Reason},
+                                               not_available)
              catch
-                 _:Reason -> boot_error(Reason, erlang:get_stacktrace())
+                 _:Reason -> boot_error({boot_step, StepName, Reason},
+                                        erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             ok
     end.
 
-boot_steps() ->
-    sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)).
+vertices({AppName, _Module, Steps}) ->
+    [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
 
-vertices(_Module, Steps) ->
-    [{StepName, {StepName, Atts}} || {StepName, Atts} <- Steps].
-
-edges(_Module, Steps) ->
+edges({_AppName, _Module, Steps}) ->
     [case Key of
          requires -> {StepName, OtherStep};
          enables  -> {OtherStep, StepName}
@@ -527,7 +576,7 @@ edges(_Module, Steps) ->
             Key =:= requires orelse Key =:= enables].
 
 sort_boot_steps(UnsortedSteps) ->
-    case rabbit_misc:build_acyclic_graph(fun vertices/2, fun edges/2,
+    case rabbit_misc:build_acyclic_graph(fun vertices/1, fun edges/1,
                                          UnsortedSteps) of
         {ok, G} ->
             %% Use topological sort to find a consistent ordering (if
@@ -541,8 +590,8 @@ sort_boot_steps(UnsortedSteps) ->
             digraph:delete(G),
             %% Check that all mentioned {M,F,A} triples are exported.
             case [{StepName, {M,F,A}} ||
-                     {StepName, Attributes} <- SortedSteps,
-                     {mfa, {M,F,A}}         <- Attributes,
+                     {_App, StepName, Attributes} <- SortedSteps,
+                     {mfa, {M,F,A}}               <- Attributes,
                      not erlang:function_exported(M, F, length(A))] of
                 []               -> SortedSteps;
                 MissingFunctions -> basic_boot_error(

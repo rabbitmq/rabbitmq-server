@@ -23,6 +23,7 @@
          ensure_stats_timer/3, stop_stats_timer/2, reset_stats_timer/2]).
 -export([stats_level/2, if_enabled/3]).
 -export([notify/2, notify/3, notify_if/3]).
+-export([sync_notify/2, sync_notify/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -61,6 +62,9 @@
 -spec(notify/2 :: (event_type(), event_props()) -> 'ok').
 -spec(notify/3 :: (event_type(), event_props(), reference() | 'none') -> 'ok').
 -spec(notify_if/3 :: (boolean(), event_type(), event_props()) -> 'ok').
+-spec(sync_notify/2 :: (event_type(), event_props()) -> 'ok').
+-spec(sync_notify/3 :: (event_type(), event_props(),
+                        reference() | 'none') -> 'ok').
 
 -endif.
 
@@ -145,7 +149,19 @@ notify_if(false, _Type, _Props) -> ok.
 notify(Type, Props) -> notify(Type, Props, none).
 
 notify(Type, Props, Ref) ->
-    gen_event:notify(?MODULE, #event{type      = Type,
-                                     props     = Props,
-                                     reference = Ref,
-                                     timestamp = os:timestamp()}).
+    do_notify(notify, #event{type      = Type,
+                             props     = Props,
+                             reference = Ref,
+                             timestamp = os:timestamp()}).
+
+sync_notify(Type, Props) -> sync_notify(Type, Props, none).
+
+sync_notify(Type, Props, Ref) ->
+    do_notify(sync_notify, #event{type      = Type,
+                                  props     = Props,
+                                  reference = Ref,
+                                  timestamp = os:timestamp()}).
+
+do_notify(F, Event) ->
+    apply(gen_event, F, [?MODULE, Event]).
+
