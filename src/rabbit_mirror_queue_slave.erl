@@ -191,11 +191,11 @@ handle_call(go, _From, {not_started, Q} = NotStarted) ->
         {error, Error} -> {stop, Error, NotStarted}
     end;
 
-handle_call({gm_deaths, LiveGMPids}, From,
+handle_call({gm_deaths, DeadGMPids}, From,
             State = #state { gm = GM, q = Q = #amqqueue {
                                                  name = QName, pid = MPid }}) ->
     Self = self(),
-    case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, LiveGMPids) of
+    case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, DeadGMPids) of
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
@@ -365,7 +365,7 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         info                                 -> 9;
-        {gm_deaths, _Live}                   -> 5;
+        {gm_deaths, _Dead}                   -> 5;
         _                                    -> 0
     end.
 
@@ -393,10 +393,17 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 joined([SPid], _Members) -> SPid ! {joined, self()}, ok.
 
-members_changed([_SPid], _Births, [], _Live) ->
+members_changed([_SPid], _Births, [],     _Live) ->
     ok;
-members_changed([ SPid], _Births, _Deaths, Live) ->
-    inform_deaths(SPid, Live).
+members_changed([ SPid], _Births, Deaths, _Live) ->
+    case rabbit_misc:with_exit_handler(
+           rabbit_misc:const(ok),
+           fun() ->
+                   gen_server2:call(SPid, {gm_deaths, Deaths}, infinity)
+           end) of
+        ok              -> ok;
+        {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
+    end.
 
 handle_msg([_SPid], _From, request_depth) ->
     %% This is only of value to the master
@@ -420,14 +427,6 @@ handle_msg([SPid], _From, {sync_start, Ref, Syncer, SPids}) ->
     end;
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
-
-inform_deaths(SPid, Live) ->
-    case rabbit_misc:with_exit_handler(
-           rabbit_misc:const(ok),
-           fun() -> gen_server2:call(SPid, {gm_deaths, Live}, infinity) end) of
-        ok              -> ok;
-        {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
-    end.
 
 %% ---------------------------------------------------------------------------
 %% Others

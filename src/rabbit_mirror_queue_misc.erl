@@ -73,7 +73,7 @@
 %% slave (now master) receives messages it's not ready for (for
 %% example, new consumers).
 %% Returns {ok, NewMPid, DeadPids}
-remove_from_queue(QueueName, Self, LiveGMPids) ->
+remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -83,16 +83,15 @@ remove_from_queue(QueueName, Self, LiveGMPids) ->
                   [Q = #amqqueue { pid        = QPid,
                                    slave_pids = SPids,
                                    gm_pids    = GMPids }] ->
-                      {GMPids1, Dead} = lists:partition(
+                      {Dead, GMPids1} = lists:partition(
                                           fun ({GM, _}) ->
-                                                  lists:member(GM, LiveGMPids)
+                                                  lists:member(GM, DeadGMPids)
                                           end, GMPids),
                       DeadPids = [Pid || {_GM, Pid} <- Dead],
                       Alive = [QPid | SPids] -- DeadPids,
                       {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
-                              GMPids = GMPids1, %% ASSERTION
                               {ok, QPid1, []};
                           _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
                               %% Either master hasn't changed, so
@@ -107,12 +106,23 @@ remove_from_queue(QueueName, Self, LiveGMPids) ->
                               %% then shut it down. So let's check if the new
                               %% master needs to sync.
                               maybe_auto_sync(Q1),
-                              {ok, QPid1, [QPid | SPids] -- Alive};
+                              {ok, QPid1, DeadPids};
                           _ ->
-                              %% Master has changed, and we're not it,
-                              %% so leave alone to allow the promoted
-                              %% slave to find it and make its
-                              %% promotion atomic.
+                              %% Master has changed, and we're not it.
+                              %% We still update mnesia here in case
+                              %% the slave that is supposed to become
+                              %% master dies before it does do so, in
+                              %% which case the dead old master might
+                              %% otherwise never get removed, which in
+                              %% turn might prevent promotion of
+                              %% another slave (e.g. us).
+                              %%
+                              %% Note however that we do not update
+                              %% the master pid, for reasons explained
+                              %% at the top of the function.
+                              Q1 = Q#amqqueue{slave_pids = SPids1,
+                                              gm_pids    = GMPids1},
+                              store_updated_slaves(Q1),
                               {ok, QPid1, []}
                       end
               end
