@@ -83,12 +83,14 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                   [Q = #amqqueue { pid        = QPid,
                                    slave_pids = SPids,
                                    gm_pids    = GMPids }] ->
-                      {Dead, GMPids1} = lists:partition(
-                                          fun ({GM, _}) ->
-                                                  lists:member(GM, DeadGMPids)
-                                          end, GMPids),
-                      DeadPids = [Pid || {_GM, Pid} <- Dead],
-                      Alive = [QPid | SPids] -- DeadPids,
+                      {DeadGM, AliveGM} = lists:partition(
+                                            fun ({GM, _}) ->
+                                                    lists:member(GM, DeadGMPids)
+                                            end, GMPids),
+                      DeadPids  = [Pid || {_GM, Pid} <- DeadGM],
+                      AlivePids = [Pid || {_GM, Pid} <- AliveGM],
+                      Alive     = [Pid || Pid <- [QPid | SPids],
+                                          lists:member(Pid, AlivePids)],
                       {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
@@ -99,7 +101,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               %% become the master.
                               Q1 = Q#amqqueue{pid        = QPid1,
                                               slave_pids = SPids1,
-                                              gm_pids    = GMPids1},
+                                              gm_pids    = AliveGM},
                               store_updated_slaves(Q1),
                               %% If we add and remove nodes at the same time we
                               %% might tell the old master we need to sync and
@@ -109,24 +111,24 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               {ok, QPid1, DeadPids};
                           _ ->
                               %% Master has changed, and we're not it.
-                              %% We still update mnesia here in case
-                              %% the slave that is supposed to become
-                              %% master dies before it does do so, in
-                              %% which case the dead old master might
-                              %% otherwise never get removed, which in
-                              %% turn might prevent promotion of
-                              %% another slave (e.g. us).
-                              %%
-                              %% Note however that we do not update
-                              %% the master pid, for reasons explained
-                              %% at the top of the function.
-                              Q1 = Q#amqqueue{slave_pids = SPids1,
-                                              gm_pids    = GMPids1},
+                              %% [1].
+                              Q1 = Q#amqqueue{slave_pids = Alive,
+                                              gm_pids    = AliveGM},
                               store_updated_slaves(Q1),
                               {ok, QPid1, []}
                       end
               end
       end).
+%% [1] We still update mnesia here in case the slave that is supposed
+%% to become master dies before it does do so, in which case the dead
+%% old master might otherwise never get removed, which in turn might
+%% prevent promotion of another slave (e.g. us).
+%%
+%% Note however that we do not update the master pid, for reasons
+%% explained at the top of the function. And we set slave_pids to
+%% Alive rather than SPids1 since otherwise we'd be removing the pid
+%% of the candidate master, which in turn would prevent it from
+%% promoting itself.
 
 on_node_up() ->
     QNames =
