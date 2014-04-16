@@ -207,9 +207,11 @@ action(disable, Node, ToDisable0, Opts, PluginsFile, PluginsDir) ->
 %%----------------------------------------------------------------------------
 
 rpc_failure(Node) ->
-    Msg = io_lib:format("Unable to contact node: ~p - "
-                                     "To make your changes anyway, "
-                                     "try again with --offline~n", [Node]),
+    RpcMsg = rabbit_nodes:diagnostics([Node]),
+    Msg = io_lib:format("Unable to contact ~p~n"
+                        "To apply these changes anyway, "
+                        "try again with --offline~n"
+                        "~s", [Node, RpcMsg]),
     throw({error_string, Msg}).
 
 print_error(Format, Args) ->
