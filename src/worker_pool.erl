@@ -42,7 +42,7 @@
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(submit/1 :: (fun (() -> A) | mfargs()) -> A).
 -spec(submit_async/1 :: (fun (() -> any()) | mfargs()) -> 'ok').
--spec(idle/1 :: (any()) -> 'ok').
+-spec(idle/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -56,9 +56,8 @@
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [],
-                           [{timeout, infinity}]).
+start_link() -> gen_server2:start_link({local, ?SERVER}, ?MODULE, [],
+                                       [{timeout, infinity}]).
 
 submit(Fun) ->
     case get(worker_pool_worker) of
@@ -67,11 +66,9 @@ submit(Fun) ->
                 worker_pool_worker:submit(Pid, Fun)
     end.
 
-submit_async(Fun) ->
-    gen_server2:cast(?SERVER, {run_async, Fun}).
+submit_async(Fun) -> gen_server2:cast(?SERVER, {run_async, Fun}).
 
-idle(WId) ->
-    gen_server2:cast(?SERVER, {idle, WId}).
+idle(WPid) -> gen_server2:cast(?SERVER, {idle, WPid}).
 
 %%----------------------------------------------------------------------------
 
@@ -84,27 +81,25 @@ handle_call({next_free, CPid}, From, State = #state { available = [],
     {noreply, State#state{pending = queue:in({next_free, From, CPid}, Pending)},
      hibernate};
 handle_call({next_free, CPid}, _From, State = #state { available =
-                                                           [WId | Avail1] }) ->
-    WPid = get_worker_pid(WId),
+                                                           [WPid | Avail1] }) ->
     worker_pool_worker:next_job_from(WPid, CPid),
     {reply, WPid, State #state { available = Avail1 }, hibernate};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast({idle, WId}, State = #state { available = Avail,
-                                          pending   = Pending }) ->
+handle_cast({idle, WPid}, State = #state { available = Avail,
+                                           pending   = Pending }) ->
     {noreply,
      case queue:out(Pending) of
          {empty, _Pending} ->
-             State #state { available = ordsets:add_element(WId, Avail) };
+             State #state { available = ordsets:add_element(WPid, Avail) };
          {{value, {next_free, From, CPid}}, Pending1} ->
-             WPid = get_worker_pid(WId),
              worker_pool_worker:next_job_from(WPid, CPid),
              gen_server2:reply(From, WPid),
              State #state { pending = Pending1 };
          {{value, {run_async, Fun}}, Pending1} ->
-             worker_pool_worker:submit_async(get_worker_pid(WId), Fun),
+             worker_pool_worker:submit_async(WPid, Fun),
              State #state { pending = Pending1 }
      end, hibernate};
 
@@ -112,8 +107,8 @@ handle_cast({run_async, Fun}, State = #state { available = [],
                                                pending   = Pending }) ->
     {noreply, State #state { pending = queue:in({run_async, Fun}, Pending)},
      hibernate};
-handle_cast({run_async, Fun}, State = #state { available = [WId | Avail1] }) ->
-    worker_pool_worker:submit_async(get_worker_pid(WId), Fun),
+handle_cast({run_async, Fun}, State = #state { available = [WPid | Avail1] }) ->
+    worker_pool_worker:submit_async(WPid, Fun),
     {noreply, State #state { available = Avail1 }, hibernate};
 
 handle_cast(Msg, State) ->
@@ -127,14 +122,3 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, State) ->
     State.
-
-%%----------------------------------------------------------------------------
-
-get_worker_pid(WId) ->
-    [{WId, Pid, _Type, _Modules} | _] =
-        lists:dropwhile(fun ({Id, _Pid, _Type, _Modules})
-                              when Id =:= WId -> false;
-                            (_)               -> true
-                        end,
-                        supervisor:which_children(worker_pool_sup)),
-    Pid.
