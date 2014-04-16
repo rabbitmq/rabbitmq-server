@@ -72,7 +72,7 @@ run(Fun) ->
 init([]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
-    ok = worker_pool:idle(self()),
+    ok = worker_pool:ready(self()),
     put(worker_pool_worker, true),
     {ok, undefined, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.

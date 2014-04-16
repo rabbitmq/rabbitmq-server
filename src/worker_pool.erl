@@ -28,7 +28,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0, submit/1, submit_async/1, idle/1]).
+-export([start_link/0, submit/1, submit_async/1, ready/1, idle/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -42,6 +42,7 @@
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(submit/1 :: (fun (() -> A) | mfargs()) -> A).
 -spec(submit_async/1 :: (fun (() -> any()) | mfargs()) -> 'ok').
+-spec(ready/1 :: (pid()) -> 'ok').
 -spec(idle/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -68,6 +69,8 @@ submit(Fun) ->
 
 submit_async(Fun) -> gen_server2:cast(?SERVER, {run_async, Fun}).
 
+ready(WPid) -> gen_server2:cast(?SERVER, {ready, WPid}).
+
 idle(WPid) -> gen_server2:cast(?SERVER, {idle, WPid}).
 
 %%----------------------------------------------------------------------------
@@ -87,6 +90,10 @@ handle_call({next_free, CPid}, _From, State = #state { available =
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
+
+handle_cast({ready, WPid}, State) ->
+    erlang:monitor(process, WPid),
+    handle_cast({idle, WPid}, State);
 
 handle_cast({idle, WPid}, State = #state { available = Avail,
                                            pending   = Pending }) ->
@@ -113,6 +120,11 @@ handle_cast({run_async, Fun}, State = #state { available = [WPid | Avail1] }) ->
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
+
+handle_info({'DOWN', _MRef, process, WPid, _Reason},
+            State = #state { available = Avail }) ->
+    {noreply, State #state { available = ordsets:del_element(WPid, Avail) },
+     hibernate};
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
