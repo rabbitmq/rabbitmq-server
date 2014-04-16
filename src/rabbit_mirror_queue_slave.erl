@@ -353,6 +353,9 @@ terminate_common(State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+handle_pre_hibernate({not_started, _Q} = State) ->
+    {hibernate, State};
+
 handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS }) ->
     {RamDuration, BQS1} = BQ:ram_duration(BQS),
