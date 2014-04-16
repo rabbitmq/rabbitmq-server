@@ -24,6 +24,8 @@
 
 -export([intercept_method/2]).
 
+-import(rabbit_misc, [protocol_error/3]).
+
 -ifdef(use_specs).
 
 -type(intercept_method() :: rabbit_framing:amqp_method_name()).
@@ -33,7 +35,7 @@
 -callback description() -> [proplists:property()].
 
 -callback intercept(original_method(), rabbit_types:vhost()) ->
-    rabbit_types:ok_or_error2(processed_method(), any()).
+    {'ok', processed_method()} | {rabbit_framing:amqp_exception(), any()}.
 
 %% Whether the interceptor wishes to intercept the amqp method
 -callback applies_to(intercept_method()) -> boolean().
@@ -68,17 +70,17 @@ intercept_method(M, VHost, [I]) ->
                 true ->
                     M2;
                 _   ->
-                    internal_error("Interceptor: ~p expected "
+                    precondition_failed("Interceptor: ~p expected "
                                    "to return method: ~p but returned: ~p",
                                    [I, rabbit_misc:method_record_type(M),
                                        rabbit_misc:method_record_type(M2)])
             end;
-        {error, Reason} ->
-            internal_error("Interceptor: ~p failed with reason: ~p",
+        {Error, Reason} ->
+            protocol_error(Error, "Interceptor: ~p failed with reason: ~p",
                            [I, Reason])
     end;
 intercept_method(M, _VHost, Is) ->
-    internal_error("More than one interceptor for method: ~p -- ~p",
+    precondition_failed("More than one interceptor for method: ~p -- ~p",
                    [rabbit_misc:method_record_type(M), Is]).
 
 %% select the interceptors that apply to intercept_method().
@@ -91,6 +93,6 @@ validate_method(M, M2) ->
     rabbit_misc:method_record_type(M) =:= rabbit_misc:method_record_type(M2).
 
 %% keep dialyzer happy
--spec internal_error(string(), [any()]) -> no_return().
-internal_error(Format, Args) ->
-    rabbit_misc:protocol_error(internal_error, Format, Args).
+-spec precondition_failed(string(), [any()]) -> no_return().
+precondition_failed(Format, Args) ->
+    protocol_error(precondition_failed, Format, Args).
