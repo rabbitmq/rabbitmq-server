@@ -94,7 +94,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                       {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
-                              {ok, QPid1, []};
+                              ok;
                           _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
@@ -107,16 +107,15 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               %% might tell the old master we need to sync and
                               %% then shut it down. So let's check if the new
                               %% master needs to sync.
-                              maybe_auto_sync(Q1),
-                              {ok, QPid1, DeadPids};
+                              maybe_auto_sync(Q1);
                           _ ->
                               %% Master has changed, and we're not it.
                               %% [1].
                               Q1 = Q#amqqueue{slave_pids = Alive,
                                               gm_pids    = AliveGM},
-                              store_updated_slaves(Q1),
-                              {ok, QPid1, []}
-                      end
+                              store_updated_slaves(Q1)
+                      end,
+                      {ok, QPid1, DeadPids}
               end
       end).
 %% [1] We still update mnesia here in case the slave that is supposed
