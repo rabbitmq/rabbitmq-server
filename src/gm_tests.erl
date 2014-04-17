@@ -22,7 +22,7 @@
          test_member_death/0,
          test_receive_in_order/0,
          all_tests/0]).
--export([joined/2, members_changed/4, handle_msg/3, terminate/2]).
+-export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
 
 -behaviour(gm).
 
@@ -40,7 +40,7 @@ joined(Pid, Members) ->
     Pid ! {joined, self(), Members},
     ok.
 
-members_changed(Pid, Births, Deaths, _Live) ->
+members_changed(Pid, Births, Deaths) ->
     Pid ! {members_changed, self(), Births, Deaths},
     ok.
 

@@ -21,7 +21,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([joined/2, members_changed/4, handle_msg/3]).
+-export([joined/2, members_changed/3, handle_msg/3]).
 
 -behaviour(gen_server2).
 -behaviour(gm).
@@ -348,11 +348,11 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
 handle_call(get_gm, _From, State = #state { gm = GM }) ->
     reply(GM, State).
 
-handle_cast({gm_deaths, LiveGMPids},
+handle_cast({gm_deaths, DeadGMPids},
             State = #state { q  = #amqqueue { name = QueueName, pid = MPid } })
   when node(MPid) =:= node() ->
     case rabbit_mirror_queue_misc:remove_from_queue(
-           QueueName, MPid, LiveGMPids) of
+           QueueName, MPid, DeadGMPids) of
         {ok, MPid, DeadPids} ->
             rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName,
                                                    DeadPids),
@@ -401,10 +401,10 @@ joined([CPid], Members) ->
     CPid ! {joined, self(), Members},
     ok.
 
-members_changed([_CPid], _Births, [], _Live) ->
+members_changed([_CPid], _Births, []) ->
     ok;
-members_changed([CPid], _Births, _Deaths, Live) ->
-    ok = gen_server2:cast(CPid, {gm_deaths, Live}).
+members_changed([CPid],  _Births, Deaths) ->
+    ok = gen_server2:cast(CPid, {gm_deaths, Deaths}).
 
 handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);

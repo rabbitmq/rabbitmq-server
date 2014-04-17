@@ -65,15 +65,8 @@
 
 %%----------------------------------------------------------------------------
 
-%% If the dead pids include the queue pid (i.e. the master has died)
-%% then only remove that if we are about to be promoted. Otherwise we
-%% can have the situation where a slave updates the mnesia record for
-%% a queue, promoting another slave before that slave realises it has
-%% become the new master, which is bad because it could then mean the
-%% slave (now master) receives messages it's not ready for (for
-%% example, new consumers).
 %% Returns {ok, NewMPid, DeadPids}
-remove_from_queue(QueueName, Self, LiveGMPids) ->
+remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -83,40 +76,63 @@ remove_from_queue(QueueName, Self, LiveGMPids) ->
                   [Q = #amqqueue { pid        = QPid,
                                    slave_pids = SPids,
                                    gm_pids    = GMPids }] ->
-                      {GMPids1, Dead} = lists:partition(
-                                          fun ({GM, _}) ->
-                                                  lists:member(GM, LiveGMPids)
-                                          end, GMPids),
-                      DeadPids = [Pid || {_GM, Pid} <- Dead],
-                      Alive = [QPid | SPids] -- DeadPids,
+                      {DeadGM, AliveGM} = lists:partition(
+                                            fun ({GM, _}) ->
+                                                    lists:member(GM, DeadGMPids)
+                                            end, GMPids),
+                      DeadPids  = [Pid || {_GM, Pid} <- DeadGM],
+                      AlivePids = [Pid || {_GM, Pid} <- AliveGM],
+                      Alive     = [Pid || Pid <- [QPid | SPids],
+                                          lists:member(Pid, AlivePids)],
                       {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
-                              GMPids = GMPids1, %% ASSERTION
-                              {ok, QPid1, []};
+                              ok;
                           _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
                               %% become the master.
                               Q1 = Q#amqqueue{pid        = QPid1,
                                               slave_pids = SPids1,
-                                              gm_pids    = GMPids1},
+                                              gm_pids    = AliveGM},
                               store_updated_slaves(Q1),
                               %% If we add and remove nodes at the same time we
                               %% might tell the old master we need to sync and
                               %% then shut it down. So let's check if the new
                               %% master needs to sync.
-                              maybe_auto_sync(Q1),
-                              {ok, QPid1, [QPid | SPids] -- Alive};
+                              maybe_auto_sync(Q1);
                           _ ->
-                              %% Master has changed, and we're not it,
-                              %% so leave alone to allow the promoted
-                              %% slave to find it and make its
-                              %% promotion atomic.
-                              {ok, QPid1, []}
-                      end
+                              %% Master has changed, and we're not it.
+                              %% [1].
+                              Q1 = Q#amqqueue{slave_pids = Alive,
+                                              gm_pids    = AliveGM},
+                              store_updated_slaves(Q1)
+                      end,
+                      {ok, QPid1, DeadPids}
               end
       end).
+%% [1] We still update mnesia here in case the slave that is supposed
+%% to become master dies before it does do so, in which case the dead
+%% old master might otherwise never get removed, which in turn might
+%% prevent promotion of another slave (e.g. us).
+%%
+%% Note however that we do not update the master pid. Otherwise we can
+%% have the situation where a slave updates the mnesia record for a
+%% queue, promoting another slave before that slave realises it has
+%% become the new master, which is bad because it could then mean the
+%% slave (now master) receives messages it's not ready for (for
+%% example, new consumers).
+%%
+%% We set slave_pids to Alive rather than SPids1 since otherwise we'd
+%% be removing the pid of the candidate master, which in turn would
+%% prevent it from promoting itself.
+%%
+%% We maintain gm_pids as our source of truth, i.e. it contains the
+%% most up-to-date information about which GMs and associated
+%% {M,S}Pids are alive. And all pids in slave_pids always have a
+%% corresponding entry in gm_pids. By contrast, due to the
+%% aforementioned restriction on updating the master pid, that pid may
+%% not be present in gm_pids, but only if said master has died.
 
 on_node_up() ->
     QNames =
