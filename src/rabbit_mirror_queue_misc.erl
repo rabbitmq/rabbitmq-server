@@ -65,13 +65,6 @@
 
 %%----------------------------------------------------------------------------
 
-%% If the dead pids include the queue pid (i.e. the master has died)
-%% then only remove that if we are about to be promoted. Otherwise we
-%% can have the situation where a slave updates the mnesia record for
-%% a queue, promoting another slave before that slave realises it has
-%% become the new master, which is bad because it could then mean the
-%% slave (now master) receives messages it's not ready for (for
-%% example, new consumers).
 %% Returns {ok, NewMPid, DeadPids}
 remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -123,11 +116,23 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
 %% old master might otherwise never get removed, which in turn might
 %% prevent promotion of another slave (e.g. us).
 %%
-%% Note however that we do not update the master pid, for reasons
-%% explained at the top of the function. And we set slave_pids to
-%% Alive rather than SPids1 since otherwise we'd be removing the pid
-%% of the candidate master, which in turn would prevent it from
-%% promoting itself.
+%% Note however that we do not update the master pid. Otherwise we can
+%% have the situation where a slave updates the mnesia record for a
+%% queue, promoting another slave before that slave realises it has
+%% become the new master, which is bad because it could then mean the
+%% slave (now master) receives messages it's not ready for (for
+%% example, new consumers).
+%%
+%% We set slave_pids to Alive rather than SPids1 since otherwise we'd
+%% be removing the pid of the candidate master, which in turn would
+%% prevent it from promoting itself.
+%%
+%% We maintain gm_pids as our source of truth, i.e. it contains the
+%% most up-to-date information about which GMs and associated
+%% {M,S}Pids are alive. And all pids in slave_pids always have a
+%% corresponding entry in gm_pids. By contrast, due to the
+%% aforementioned restriction on updating the master pid, that pid may
+%% not be present in gm_pids, but only if said master has died.
 
 on_node_up() ->
     QNames =
