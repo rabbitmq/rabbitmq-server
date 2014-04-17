@@ -527,9 +527,9 @@ force_event_refresh(Ref) -> force_event_refresh(list(), Ref).
 force_event_refresh(Qs, Ref) ->
     {_, Bad} = gen_server2:mcall(
                  [{Q#amqqueue.pid, {force_event_refresh, Ref}} || Q <- Qs]),
-    FailedPids = [Pid || {Pid, _Reason} <- Bad],
+    FailedPids = gb_sets:from_list([Pid || {Pid, _Reason} <- Bad]),
     case [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
-                  lists:member(Pid, FailedPids)] of
+                  gb_sets:is_element(Pid, FailedPids)] of
         []     -> ok;
         Failed -> timer:sleep(?FAILOVER_WAIT_MILLIS),
                   force_event_refresh(lookup(Failed), Ref)
