@@ -45,8 +45,6 @@
 
 -define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
--define(FAILOVER_WAIT_MILLIS, 100).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -517,26 +515,10 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
-%% We need to account for the idea that queues may be mid-promotion
-%% during force_event_refresh (since it's likely we're doing this in
-%% the first place since a node failed). Therefore we keep poking at
-%% the list of queues until we were able to talk to a live process or
-%% the queue no longer exists.
 force_event_refresh(Ref) ->
-    force_event_refresh([Q#amqqueue.name || Q <- list()], Ref).
-
-force_event_refresh(QNames, Ref) ->
-    Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
-    {_, Bad} = gen_server2:mcall(
-                 [{Q#amqqueue.pid, {force_event_refresh, Ref}} || Q <- Qs]),
-    FailedPids = [Pid || {Pid, _Reason} <- Bad],
-    Failed = [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
-                      lists:member(Pid, FailedPids)],
-    case Failed of
-        [] -> ok;
-        _  -> timer:sleep(?FAILOVER_WAIT_MILLIS),
-              force_event_refresh(Failed, Ref)
-    end.
+    [gen_server2:cast(Q#amqqueue.pid,
+                      {force_event_refresh, Ref}) || Q <- list()],
+    ok.
 
 notify_policy_changed(#amqqueue{pid = QPid}) ->
     gen_server2:cast(QPid, policy_changed).
