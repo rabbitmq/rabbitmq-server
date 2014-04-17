@@ -30,7 +30,7 @@
          code_change/3, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 
--export([joined/2, members_changed/4, handle_msg/3]).
+-export([joined/2, members_changed/3, handle_msg/3]).
 
 -behaviour(gen_server2).
 -behaviour(gm).
@@ -393,9 +393,9 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 joined([SPid], _Members) -> SPid ! {joined, self()}, ok.
 
-members_changed([_SPid], _Births, [],     _Live) ->
+members_changed([_SPid], _Births, []) ->
     ok;
-members_changed([ SPid], _Births, Deaths, _Live) ->
+members_changed([ SPid], _Births, Deaths) ->
     case rabbit_misc:with_exit_handler(
            rabbit_misc:const(ok),
            fun() ->

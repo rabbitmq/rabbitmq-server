@@ -21,7 +21,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([joined/2, members_changed/4, handle_msg/3]).
+-export([joined/2, members_changed/3, handle_msg/3]).
 
 -behaviour(gen_server2).
 -behaviour(gm).
@@ -401,9 +401,9 @@ joined([CPid], Members) ->
     CPid ! {joined, self(), Members},
     ok.
 
-members_changed([_CPid], _Births, [],     _Live) ->
+members_changed([_CPid], _Births, []) ->
     ok;
-members_changed([CPid],  _Births, Deaths, _Live) ->
+members_changed([CPid],  _Births, Deaths) ->
     ok = gen_server2:cast(CPid, {gm_deaths, Deaths}).
 
 handle_msg([CPid], _From, request_depth = Msg) ->

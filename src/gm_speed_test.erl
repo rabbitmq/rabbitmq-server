@@ -17,7 +17,7 @@
 -module(gm_speed_test).
 
 -export([test/3]).
--export([joined/2, members_changed/4, handle_msg/3, terminate/2]).
+-export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
 -export([wile_e_coyote/2]).
 
 -behaviour(gm).
@@ -30,7 +30,7 @@ joined(Owner, _Members) ->
     Owner ! joined,
     ok.
 
-members_changed(_Owner, _Births, _Deaths, _Live) ->
+members_changed(_Owner, _Births, _Deaths) ->
     ok.
 
 handle_msg(Owner, _From, ping) ->

@@ -17,7 +17,7 @@
 -module(gm_soak_test).
 
 -export([test/0]).
--export([joined/2, members_changed/4, handle_msg/3, terminate/2]).
+-export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
 
 -behaviour(gm).
 
@@ -51,7 +51,7 @@ joined([], Members) ->
     put(ts, now()),
     ok.
 
-members_changed([], Births, Deaths, _Live) ->
+members_changed([], Births, Deaths) ->
     with_state(
       fun (State) ->
               State1 =
