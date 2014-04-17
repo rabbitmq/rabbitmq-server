@@ -522,20 +522,17 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 %% the first place since a node failed). Therefore we keep poking at
 %% the list of queues until we were able to talk to a live process or
 %% the queue no longer exists.
-force_event_refresh(Ref) ->
-    force_event_refresh([Q#amqqueue.name || Q <- list()], Ref).
+force_event_refresh(Ref) -> force_event_refresh(list(), Ref).
 
-force_event_refresh(QNames, Ref) ->
-    Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
+force_event_refresh(Qs, Ref) ->
     {_, Bad} = gen_server2:mcall(
                  [{Q#amqqueue.pid, {force_event_refresh, Ref}} || Q <- Qs]),
     FailedPids = [Pid || {Pid, _Reason} <- Bad],
-    Failed = [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
-                      lists:member(Pid, FailedPids)],
-    case Failed of
-        [] -> ok;
-        _  -> timer:sleep(?FAILOVER_WAIT_MILLIS),
-              force_event_refresh(Failed, Ref)
+    case [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
+                  lists:member(Pid, FailedPids)] of
+        []     -> ok;
+        Failed -> timer:sleep(?FAILOVER_WAIT_MILLIS),
+                  force_event_refresh(lookup(Failed), Ref)
     end.
 
 notify_policy_changed(#amqqueue{pid = QPid}) ->
