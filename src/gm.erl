@@ -581,7 +581,11 @@ handle_call({confirmed_broadcast, Msg}, _From,
                            ok, State});
 
 handle_call({confirmed_broadcast, Msg}, From, State) ->
-    internal_broadcast(Msg, From, 0, State);
+    {Result, State1 = #state { pub_count = PubCount, confirms = Confirms }} =
+        internal_broadcast(Msg, 0, State),
+    Confirms1 = queue:in({PubCount, From}, Confirms),
+    handle_callback_result({Result, flush_broadcast_buffer(
+                                      State1 #state { confirms = Confirms1 })});
 
 handle_call(info, _From,
             State = #state { members_state = undefined }) ->
@@ -657,7 +661,8 @@ handle_cast({broadcast, Msg, _SizeHint},
                             State});
 
 handle_cast({broadcast, Msg, SizeHint}, State) ->
-    internal_broadcast(Msg, none, SizeHint, State);
+    {Result, State1} = internal_broadcast(Msg, SizeHint, State),
+    handle_callback_result({Result, maybe_flush_broadcast_buffer(State1)});
 
 handle_cast(join, State = #state { self          = Self,
                                    group_name    = GroupName,
@@ -876,30 +881,18 @@ ensure_broadcast_timer(State = #state { broadcast_timer = undefined }) ->
 ensure_broadcast_timer(State) ->
     State.
 
-internal_broadcast(Msg, From, SizeHint,
+internal_broadcast(Msg, SizeHint,
                    State = #state { self                = Self,
                                     pub_count           = PubCount,
                                     module              = Module,
-                                    confirms            = Confirms,
                                     callback_args       = Args,
                                     broadcast_buffer    = Buffer,
                                     broadcast_buffer_sz = BufferSize }) ->
     PubCount1 = PubCount + 1,
-    Result = Module:handle_msg(Args, get_pid(Self), Msg),
-    Buffer1 = [{PubCount1, Msg} | Buffer],
-    Confirms1 = case From of
-                    none -> Confirms;
-                    _    -> queue:in({PubCount1, From}, Confirms)
-                end,
-    State1 = State #state { pub_count           = PubCount1,
-                            confirms            = Confirms1,
-                            broadcast_buffer    = Buffer1,
-                            broadcast_buffer_sz = BufferSize + SizeHint},
-    handle_callback_result(
-        {Result, case From of
-                     none -> maybe_flush_broadcast_buffer(State1);
-                     _    -> flush_broadcast_buffer(State1)
-                 end}).
+    {Module:handle_msg(Args, get_pid(Self), Msg),
+     State #state { pub_count           = PubCount1,
+                    broadcast_buffer    = [{PubCount1, Msg} | Buffer],
+                    broadcast_buffer_sz = BufferSize + SizeHint}}.
 
 %% The Erlang distribution mechanism has an interesting quirk - it
 %% will kill the VM cold with "Absurdly large distribution output data
