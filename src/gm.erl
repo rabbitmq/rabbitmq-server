@@ -1091,71 +1091,64 @@ read_group(GroupName) -> mnesia:read({?GROUP_TABLE, GroupName}).
 write_group(Group) -> mnesia:write(?GROUP_TABLE, Group, write), Group.
 
 prune_or_create_group(Self, GroupName, TxnFun) ->
-    Group = TxnFun(
-              fun () ->
-                      GroupNew = #gm_group { name    = GroupName,
-                                             members = [Self],
-                                             version = get_version(Self) },
-                      case read_group(GroupName) of
-                          [] ->
-                              write_group(GroupNew);
-                          [Group1 = #gm_group { members = Members }] ->
-                              case lists:any(fun is_member_alive/1, Members) of
-                                  true  -> Group1;
-                                  false -> write_group(GroupNew)
-                              end
+    TxnFun(
+      fun () ->
+              GroupNew = #gm_group { name    = GroupName,
+                                     members = [Self],
+                                     version = get_version(Self) },
+              case read_group(GroupName) of
+                  [] ->
+                      write_group(GroupNew);
+                  [Group = #gm_group { members = Members }] ->
+                      case lists:any(fun is_member_alive/1, Members) of
+                          true  -> Group;
+                          false -> write_group(GroupNew)
                       end
-              end),
-    Group.
+              end
+      end).
 
 record_dead_member_in_group(Member, GroupName, TxnFun) ->
-    Group =
-        TxnFun(
-          fun () -> [Group1 = #gm_group { members = Members, version = Ver }] =
-                        mnesia:read({?GROUP_TABLE, GroupName}),
-                    case lists:splitwith(
-                           fun (Member1) -> Member1 =/= Member end, Members) of
-                        {_Members1, []} -> %% not found - already recorded dead
-                            Group1;
-                        {Members1, [Member | Members2]} ->
-                            Members3 = Members1 ++ [{dead, Member} | Members2],
-                            write_group(Group1 #gm_group { members = Members3,
-                                                           version = Ver + 1 })
-                    end
-          end),
-    Group.
+    TxnFun(
+      fun () -> [Group = #gm_group { members = Members, version = Ver }] =
+                    mnesia:read({?GROUP_TABLE, GroupName}),
+                case lists:splitwith(
+                       fun (Member1) -> Member1 =/= Member end, Members) of
+                    {_Members1, []} -> %% not found - already recorded dead
+                        Group;
+                    {Members1, [Member | Members2]} ->
+                        Members3 = Members1 ++ [{dead, Member} | Members2],
+                        write_group(Group #gm_group { members = Members3,
+                                                      version = Ver + 1 })
+                end
+      end).
 
 record_new_member_in_group(GroupName, Left, NewMember, Fun, TxnFun) ->
-    {Result, Group} =
-        TxnFun(
-          fun () ->
-                  [#gm_group { members = Members, version = Ver } = Group1] =
-                      mnesia:read({?GROUP_TABLE, GroupName}),
-                  {Prefix, [Left | Suffix]} =
-                      lists:splitwith(fun (M) -> M =/= Left end, Members),
-                  Members1 = Prefix ++ [Left, NewMember | Suffix],
-                  Group2 = Group1 #gm_group { members = Members1,
-                                              version = Ver + 1 },
-                  {Fun(Group2), write_group(Group2)}
-          end),
-    {Result, Group}.
+    TxnFun(
+      fun () ->
+              [Group = #gm_group { members = Members, version = Ver }] =
+                  mnesia:read({?GROUP_TABLE, GroupName}),
+              {Prefix, [Left | Suffix]} =
+                  lists:splitwith(fun (M) -> M =/= Left end, Members),
+              Group1 = Group #gm_group {
+                         members = Prefix ++ [Left, NewMember | Suffix],
+                         version = Ver + 1 },
+              {Fun(Group1), write_group(Group1)}
+      end).
 
 erase_members_in_group(Members, GroupName, TxnFun) ->
     DeadMembers = [{dead, Id} || Id <- Members],
-    Group =
-        TxnFun(
-          fun () ->
-                  [Group1 = #gm_group { members = [_|_] = Members1,
-                                        version = Ver }] =
-                      mnesia:read({?GROUP_TABLE, GroupName}),
-                  case Members1 -- DeadMembers of
-                      Members1 -> Group1;
-                      Members2 -> write_group(
-                                    Group1 #gm_group { members = Members2,
-                                                       version = Ver + 1 })
-                  end
-          end),
-    Group.
+    TxnFun(
+      fun () ->
+              [Group = #gm_group { members = [_|_] = Members1,
+                                   version = Ver }] =
+                  mnesia:read({?GROUP_TABLE, GroupName}),
+              case Members1 -- DeadMembers of
+                  Members1 -> Group;
+                  Members2 -> write_group(
+                                Group #gm_group { members = Members2,
+                                                  version = Ver + 1 })
+              end
+      end).
 
 maybe_erase_aliases(State = #state { self          = Self,
                                      group_name    = GroupName,
