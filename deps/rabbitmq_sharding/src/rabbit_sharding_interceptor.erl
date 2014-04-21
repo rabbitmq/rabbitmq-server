@@ -10,7 +10,7 @@
 -export([consumer_count/1]).
 
 -import(rabbit_sharding_util, [a2b/1, shards_per_node/1]).
--import(rabbit_misc, [r/3, format/2]).
+-import(rabbit_misc, [r/3, format/2, protocol_error/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "sharding interceptor"},
@@ -152,5 +152,4 @@ consumer_count(QName) ->
       end).
 
 precondition_failed(Format, QName) ->
-    {precondition_failed,
-     format("Error finding sharded queue for: ~p", [QName])}.
+    protocol_error(precondition_failed, Format, QName).
