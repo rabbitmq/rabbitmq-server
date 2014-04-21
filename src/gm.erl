@@ -636,7 +636,7 @@ handle_cast({?TAG, ReqVer, Msg},
                              callback_args = Args }) ->
     {Result, State1} =
         case needs_view_update(ReqVer, View) of
-            true  -> View1 = group_to_view(read_group(GroupName)),
+            true  -> View1 = group_to_view(dirty_read_group(GroupName)),
                      MemberState1 = remove_erased_members(MembersState, View1),
                      {callback_view_changed(Args, Module, View, View1),
                       check_neighbours(
@@ -1037,7 +1037,7 @@ ensure_alive_suffix1(MembersQ) ->
 %% ---------------------------------------------------------------------------
 
 join_group(Self, GroupName, TxnFun) ->
-    join_group(Self, GroupName, read_group(GroupName), TxnFun).
+    join_group(Self, GroupName, dirty_read_group(GroupName), TxnFun).
 
 join_group(Self, GroupName, {error, not_found}, TxnFun) ->
     join_group(Self, GroupName,
@@ -1080,11 +1080,15 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
             end
     end.
 
-read_group(GroupName) ->
+dirty_read_group(GroupName) ->
     case mnesia:dirty_read(?GROUP_TABLE, GroupName) of
         []      -> {error, not_found};
         [Group] -> Group
     end.
+
+read_group(GroupName) -> mnesia:read({?GROUP_TABLE, GroupName}).
+
+write_group(Group) -> mnesia:write(?GROUP_TABLE, Group, write), Group.
 
 prune_or_create_group(Self, GroupName, TxnFun) ->
     Group = TxnFun(
@@ -1092,15 +1096,13 @@ prune_or_create_group(Self, GroupName, TxnFun) ->
                       GroupNew = #gm_group { name    = GroupName,
                                              members = [Self],
                                              version = get_version(Self) },
-                      case mnesia:read({?GROUP_TABLE, GroupName}) of
+                      case read_group(GroupName) of
                           [] ->
-                              mnesia:write(GroupNew),
-                              GroupNew;
+                              write_group(GroupNew);
                           [Group1 = #gm_group { members = Members }] ->
                               case lists:any(fun is_member_alive/1, Members) of
                                   true  -> Group1;
-                                  false -> mnesia:write(GroupNew),
-                                           GroupNew
+                                  false -> write_group(GroupNew)
                               end
                       end
               end),
@@ -1117,10 +1119,8 @@ record_dead_member_in_group(Member, GroupName, TxnFun) ->
                             Group1;
                         {Members1, [Member | Members2]} ->
                             Members3 = Members1 ++ [{dead, Member} | Members2],
-                            Group2 = Group1 #gm_group { members = Members3,
-                                                        version = Ver + 1 },
-                            mnesia:write(Group2),
-                            Group2
+                            write_group(Group1 #gm_group { members = Members3,
+                                                           version = Ver + 1 })
                     end
           end),
     Group.
@@ -1136,9 +1136,7 @@ record_new_member_in_group(GroupName, Left, NewMember, Fun, TxnFun) ->
                   Members1 = Prefix ++ [Left, NewMember | Suffix],
                   Group2 = Group1 #gm_group { members = Members1,
                                               version = Ver + 1 },
-                  Result = Fun(Group2),
-                  mnesia:write(Group2),
-                  {Result, Group2}
+                  {Fun(Group2), write_group(Group2)}
           end),
     {Result, Group}.
 
@@ -1152,11 +1150,9 @@ erase_members_in_group(Members, GroupName, TxnFun) ->
                       mnesia:read({?GROUP_TABLE, GroupName}),
                   case Members1 -- DeadMembers of
                       Members1 -> Group1;
-                      Members2 -> Group2 =
-                                      Group1 #gm_group { members = Members2,
-                                                         version = Ver + 1 },
-                                  mnesia:write(Group2),
-                                  Group2
+                      Members2 -> write_group(
+                                    Group1 #gm_group { members = Members2,
+                                                       version = Ver + 1 })
                   end
           end),
     Group.
@@ -1321,7 +1317,7 @@ prepare_members_state(MembersState) -> ?DICT:to_list(MembersState).
 build_members_state(MembersStateList) -> ?DICT:from_list(MembersStateList).
 
 make_member(GroupName) ->
-   {case read_group(GroupName) of
+   {case dirty_read_group(GroupName) of
         #gm_group { version = Version } -> Version;
         {error, not_found}              -> ?VERSION_START
     end, self()}.
