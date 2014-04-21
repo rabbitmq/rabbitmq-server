@@ -33,7 +33,7 @@
 -callback description() -> [proplists:property()].
 
 -callback intercept(original_method(), rabbit_types:vhost()) ->
-    rabbit_types:ok_or_error2(processed_method(), any()).
+    {ok, processed_method()} | rabbit_misc:channel_or_connection_exit().
 
 %% Whether the interceptor wishes to intercept the amqp method
 -callback applies_to(intercept_method()) -> boolean().
