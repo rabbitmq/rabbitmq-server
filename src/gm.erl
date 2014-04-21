@@ -725,13 +725,15 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
         _ ->
             View1 = group_to_view(record_dead_member_in_group(
                                     Member, GroupName, TxnFun)),
-            State1 = case alive_view_members(View1) of
-                         [Self] -> State #state {
-                                     members_state = blank_member_state(),
-                                     confirms      = purge_confirms(Confirms) };
-                         _      -> State
-                     end,
-            handle_callback_result(maybe_erase_aliases(State1, View1))
+            {Result, State1} = maybe_erase_aliases(State, View1),
+            handle_callback_result(
+              {Result,
+               case alive_view_members(View1) of
+                   [Self] -> State1 #state {
+                               members_state = blank_member_state(),
+                               confirms      = purge_confirms(Confirms) };
+                   _      -> State1
+               end})
     end.
 
 
