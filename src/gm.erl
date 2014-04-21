@@ -610,23 +610,16 @@ handle_call({add_on_right, NewMember}, _From,
                              module        = Module,
                              callback_args = Args,
                              txn_executor  = TxnFun }) ->
-    {MembersState1, Group} =
-      record_new_member_in_group(
-        GroupName, Self, NewMember,
-        fun (Group1) ->
-                View1 = group_to_view(Group1),
-                MembersState1 = remove_erased_members(MembersState, View1),
-                ok = send_right(NewMember, View1,
-                                {catchup, Self,
-                                 prepare_members_state(MembersState1)}),
-                MembersState1
-        end, TxnFun),
-    View2 = group_to_view(Group),
-    State1 = check_neighbours(State #state { view          = View2,
-                                             members_state = MembersState1 }),
-    Result = callback_view_changed(Args, Module, View, View2),
-    handle_callback_result({Result, {ok, Group}, State1}).
-
+    Group = record_new_member_in_group(NewMember, Self, GroupName, TxnFun),
+    View1 = group_to_view(Group),
+    MembersState1 = remove_erased_members(MembersState, View1),
+    ok = send_right(NewMember, View1,
+                    {catchup, Self, prepare_members_state(MembersState1)}),
+    handle_callback_result(
+      {callback_view_changed(Args, Module, View, View1),
+       {ok, Group},
+       check_neighbours(State #state { view          = View1,
+                                       members_state = MembersState1 })}).
 
 handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
@@ -1126,17 +1119,16 @@ record_dead_member_in_group(Member, GroupName, TxnFun) ->
                 end
       end).
 
-record_new_member_in_group(GroupName, Left, NewMember, Fun, TxnFun) ->
+record_new_member_in_group(NewMember, Left, GroupName, TxnFun) ->
     TxnFun(
       fun () ->
               Group = #gm_group { members = Members, version = Ver } =
                   read_group(GroupName),
               {Prefix, [Left | Suffix]} =
                   lists:splitwith(fun (M) -> M =/= Left end, Members),
-              Group1 = Group #gm_group {
-                         members = Prefix ++ [Left, NewMember | Suffix],
-                         version = Ver + 1 },
-              {Fun(Group1), write_group(Group1)}
+              write_group(Group #gm_group {
+                            members = Prefix ++ [Left, NewMember | Suffix],
+                            version = Ver + 1 })
       end).
 
 erase_members_in_group(Members, GroupName, TxnFun) ->
