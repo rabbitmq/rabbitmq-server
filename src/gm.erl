@@ -605,36 +605,27 @@ handle_call({add_on_right, _NewMember}, _From,
 handle_call({add_on_right, NewMember}, _From,
             State = #state { self          = Self,
                              group_name    = GroupName,
-                             view          = View,
                              members_state = MembersState,
-                             module        = Module,
-                             callback_args = Args,
                              txn_executor  = TxnFun }) ->
     Group = record_new_member_in_group(NewMember, Self, GroupName, TxnFun),
     View1 = group_to_view(Group),
     MembersState1 = remove_erased_members(MembersState, View1),
     ok = send_right(NewMember, View1,
                     {catchup, Self, prepare_members_state(MembersState1)}),
-    handle_callback_result(
-      {callback_view_changed(Args, Module, View, View1),
-       {ok, Group},
-       check_neighbours(State #state { view          = View1,
-                                       members_state = MembersState1 })}).
+    {Result, State1} = change_view(View1, State #state {
+                                            members_state = MembersState1 }),
+    handle_callback_result({Result, {ok, Group}, State1}).
 
 handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
                              members_state = MembersState,
-                             group_name    = GroupName,
-                             module        = Module,
-                             callback_args = Args }) ->
+                             group_name    = GroupName }) ->
     {Result, State1} =
         case needs_view_update(ReqVer, View) of
             true  -> View1 = group_to_view(dirty_read_group(GroupName)),
                      MemberState1 = remove_erased_members(MembersState, View1),
-                     {callback_view_changed(Args, Module, View, View1),
-                      check_neighbours(
-                        State #state { view          = View1,
-                                       members_state = MemberState1 })};
+                     change_view(View1, State #state {
+                                          members_state = MemberState1 });
             false -> {ok, State}
         end,
     handle_callback_result(
@@ -1148,10 +1139,7 @@ erase_members_in_group(Members, GroupName, TxnFun) ->
 
 maybe_erase_aliases(State = #state { self          = Self,
                                      group_name    = GroupName,
-                                     view          = View0,
                                      members_state = MembersState,
-                                     module        = Module,
-                                     callback_args = Args,
                                      txn_executor  = TxnFun }, View) ->
     #view_member { aliases = Aliases } = fetch_view_member(Self, View),
     {Erasable, MembersState1}
@@ -1170,9 +1158,7 @@ maybe_erase_aliases(State = #state { self          = Self,
                 _  -> group_to_view(
                         erase_members_in_group(Erasable, GroupName, TxnFun))
             end,
-    State1 = State #state { members_state = MembersState1, view = View1 },
-    {callback_view_changed(Args, Module, View0, View1),
-     check_neighbours(State1)}.
+    change_view(View1, State #state { members_state = MembersState1 }).
 
 can_erase_view_member(Self, Self, _LA, _LP) -> false;
 can_erase_view_member(_Self, _Id,   N,   N) -> true;
@@ -1370,16 +1356,19 @@ callback(Args, Module, Activity) ->
         {stop, _Reason} = Error -> Error
     end.
 
-callback_view_changed(Args, Module, OldView, NewView) ->
-    OldMembers = all_known_members(OldView),
-    NewMembers = all_known_members(NewView),
+change_view(View, State = #state { view          = View0,
+                                   module        = Module,
+                                   callback_args = Args }) ->
+    OldMembers = all_known_members(View0),
+    NewMembers = all_known_members(View),
     Births = NewMembers -- OldMembers,
     Deaths = OldMembers -- NewMembers,
-    case {Births, Deaths} of
-        {[], []} -> ok;
-        _        -> Module:members_changed(
-                      Args, get_pids(Births), get_pids(Deaths))
-    end.
+    Result = case {Births, Deaths} of
+                 {[], []} -> ok;
+                 _        -> Module:members_changed(
+                               Args, get_pids(Births), get_pids(Deaths))
+             end,
+    {Result, check_neighbours(State #state { view = View })}.
 
 handle_callback_result({Result, State}) ->
     if_callback_success(
