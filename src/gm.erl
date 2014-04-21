@@ -1106,17 +1106,18 @@ prune_or_create_group(Self, GroupName, TxnFun) ->
 
 record_dead_member_in_group(Member, GroupName, TxnFun) ->
     TxnFun(
-      fun () -> Group = #gm_group { members = Members, version = Ver } =
-                    read_group(GroupName),
-                case lists:splitwith(
-                       fun (Member1) -> Member1 =/= Member end, Members) of
-                    {_Members1, []} -> %% not found - already recorded dead
-                        Group;
-                    {Members1, [Member | Members2]} ->
-                        Members3 = Members1 ++ [{dead, Member} | Members2],
-                        write_group(Group #gm_group { members = Members3,
-                                                      version = Ver + 1 })
-                end
+      fun () ->
+              Group = #gm_group { members = Members, version = Ver } =
+                  read_group(GroupName),
+              case lists:splitwith(
+                     fun (Member1) -> Member1 =/= Member end, Members) of
+                  {_Members1, []} -> %% not found - already recorded dead
+                      Group;
+                  {Members1, [Member | Members2]} ->
+                      Members3 = Members1 ++ [{dead, Member} | Members2],
+                      write_group(Group #gm_group { members = Members3,
+                                                    version = Ver + 1 })
+              end
       end).
 
 record_new_member_in_group(NewMember, Left, GroupName, TxnFun) ->
