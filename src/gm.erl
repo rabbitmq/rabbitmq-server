@@ -509,9 +509,9 @@ create_tables([]) ->
     ok;
 create_tables([{Table, Attributes} | Tables]) ->
     case mnesia:create_table(Table, Attributes) of
-        {atomic, ok}                          -> create_tables(Tables);
-        {aborted, {already_exists, gm_group}} -> create_tables(Tables);
-        Err                                   -> Err
+        {atomic, ok}                       -> create_tables(Tables);
+        {aborted, {already_exists, Table}} -> create_tables(Tables);
+        Err                                -> Err
     end.
 
 table_definitions() ->
