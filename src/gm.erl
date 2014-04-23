@@ -711,13 +711,12 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
                                     Member, GroupName, TxnFun)),
             handle_callback_result(
               case alive_view_members(View1) of
-                  [Self] ->
-                      {Result, State1} = maybe_erase_aliases(State, View1),
-                      {Result, State1 #state {
-                                 members_state = blank_member_state(),
-                                 confirms      = purge_confirms(Confirms) }};
-                  _ ->
-                      change_view(View1, State)
+                  [Self] -> maybe_erase_aliases(
+                              State #state {
+                                members_state = blank_member_state(),
+                                confirms      = purge_confirms(Confirms) },
+                              View1);
+                  _      -> change_view(View1, State)
               end)
     end.
 
