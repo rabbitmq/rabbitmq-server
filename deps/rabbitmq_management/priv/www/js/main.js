@@ -994,11 +994,12 @@ function collapse_multifields(params0) {
         var v = params0[name + '_' + id + '_mfvalue'];
         var t = params0[name + '_' + id + '_mftype'];
         var val = null;
+        var top_level = id_parts.length == 1;
         if (t == 'list') {
             val = [];
             id_map[name][id] = val;
         }
-        else if (set(k) || set(v)) {
+        else if ((set(k) && top_level) || set(v)) {
             if (t == 'boolean') {
                 if (v != 'true' && v != 'false')
                     throw(k + ' must be "true" or "false"; got ' + v);
@@ -1015,7 +1016,7 @@ function collapse_multifields(params0) {
             }
         }
         if (val != null) {
-            if (id_parts.length == 1) {
+            if (top_level) {
                 params[name][k] = val;
             }
             else {
