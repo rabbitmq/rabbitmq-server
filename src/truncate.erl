@@ -44,18 +44,19 @@ report(List, Params)      -> [case Item of
                                   end || Item <- List].
 
 term(Thing, {Content, Struct, ContentDec, StructDec}) ->
-    term(Thing, #params{content     = Content,
-                        struct     = Struct,
-                        content_dec = ContentDec,
-                        struct_dec = StructDec});
+    term(Thing, true, #params{content     = Content,
+                              struct      = Struct,
+                              content_dec = ContentDec,
+                              struct_dec  = StructDec}).
 
-term(Bin, #params{content = N}) when (is_binary(Bin) orelse is_bitstring(Bin))
-                                     andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
+term(Bin, _AllowPrintable, #params{content = N})
+  when (is_binary(Bin) orelse is_bitstring(Bin))
+       andalso size(Bin) > N - ?ELLIPSIS_LENGTH ->
     Suffix = without_ellipsis(N),
     <<Head:Suffix/binary, _/bitstring>> = Bin,
     <<Head/binary, <<"...">>/binary>>;
-term(L, #params{struct = N} = Params) when is_list(L) ->
-    case io_lib:printable_list(L) of
+term(L, AllowPrintable, #params{struct = N} = Params) when is_list(L) ->
+    case AllowPrintable andalso io_lib:printable_list(L) of
         true  -> N2 = without_ellipsis(N),
                  case length(L) > N2 of
                      true  -> string:left(L, N2) ++ "...";
@@ -63,9 +64,9 @@ term(L, #params{struct = N} = Params) when is_list(L) ->
                  end;
         false -> shrink_list(L, Params)
     end;
-term(T, Params) when is_tuple(T) ->
+term(T, _AllowPrintable, Params) when is_tuple(T) ->
     list_to_tuple(shrink_list(tuple_to_list(T), Params));
-term(T, _) ->
+term(T, _, _) ->
     T.
 
 without_ellipsis(N) -> erlang:max(N - ?ELLIPSIS_LENGTH, 0).
@@ -78,9 +79,9 @@ shrink_list([H|T], #params{content     = Content,
                            struct      = Struct,
                            content_dec = ContentDec,
                            struct_dec  = StructDec} = Params) ->
-    [term(H, Params#params{content = Content - ContentDec,
-                           struct  = Struct  - StructDec})
-     | term(T, Params#params{struct = Struct - 1})].
+    [term(H, true, Params#params{content = Content - ContentDec,
+                                 struct  = Struct  - StructDec})
+     | term(T, false, Params#params{struct = Struct - 1})].
 
 %%----------------------------------------------------------------------------
 
@@ -91,6 +92,7 @@ test() ->
 
 test_short_examples_exactly() ->
     F = fun (Term, Exp) -> Exp = term(Term, {10, 10, 5, 5}) end,
+    FSmall = fun (Term, Exp) -> Exp = term(Term, {2, 2, 2, 2}) end,
     F([], []),
     F("h", "h"),
     F("hello world", "hello w..."),
@@ -101,6 +103,8 @@ test_short_examples_exactly() ->
     F(<<1:1>>, <<1:1>>),
     F(<<1:81>>, <<0:56, "...">>),
     F({{{{a}}},{b},c,d,e,f,g,h,i,j,k}, {{{'...'}},{b},c,d,e,f,g,h,i,j,'...'}),
+    FSmall({a,30,40,40,40,40}, {a,30,'...'}),
+    FSmall([a,30,40,40,40,40], [a,30,'...']),
     P = spawn(fun() -> receive die -> ok end end),
     F([0, 0.0, <<1:1>>, F, P], [0, 0.0, <<1:1>>, F, P]),
     P ! die,
