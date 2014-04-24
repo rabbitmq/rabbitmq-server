@@ -959,6 +959,15 @@ publish_fail_test() ->
             {payload,          [<<"not a string">>]},
             {payload_encoding, <<"string">>}],
     http_post("/exchanges/%2f/amq.default/publish", Msg3, ?BAD_REQUEST),
+    MsgTemplate = [{exchange,         <<"">>},
+                   {routing_key,      <<"myqueue">>},
+                   {payload,          <<"Hello world">>},
+                   {payload_encoding, <<"string">>}],
+    [http_post("/exchanges/%2f/amq.default/publish",
+               [{properties, [BadProp]} | MsgTemplate], ?BAD_REQUEST)
+     || BadProp <- [{priority,   <<"really high">>},
+                    {timestamp,  <<"recently">>},
+                    {expiration, 1234}]],
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
