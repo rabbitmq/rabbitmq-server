@@ -130,7 +130,8 @@ stop_mirroring(State = #state { coordinator         = CPid,
                                 backing_queue       = BQ,
                                 backing_queue_state = BQS }) ->
     unlink(CPid),
-    stop_all_slaves(shutdown, State),
+    %% delete = *slaves* should delete
+    stop_all_slaves(shutdown, delete, State),
     {BQ, BQS}.
 
 sync_mirrors(HandleInfo, EmitStats,
@@ -170,21 +171,31 @@ terminate({shutdown, dropped} = Reason,
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)};
 
 terminate(Reason,
-          State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+          State = #state { name                = QName,
+                           backing_queue       = BQ,
+                           backing_queue_state = BQS }) ->
     %% Backing queue termination. The queue is going down but
     %% shouldn't be deleted. Most likely safe shutdown of this
-    %% node. Thus just let some other slave take over.
+    %% node.
+    {ok, #amqqueue{sync_slave_pids = SSPids}} = rabbit_amqqueue:lookup(QName),
+    %% TODO there should be a policy for this
+    case SSPids of
+        [] -> %% Remove the whole queue to avoid data loss
+              stop_all_slaves(Reason, nodelete, State);
+        _  -> %% Just let some other slave take over.
+              ok
+    end,
     State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
 
 delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
                                               backing_queue_state = BQS }) ->
-    stop_all_slaves(Reason, State),
+    stop_all_slaves(Reason, delete, State),
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
-stop_all_slaves(Reason, #state{name = QName, gm   = GM}) ->
+stop_all_slaves(Reason, Delete, #state{name = QName, gm = GM}) ->
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
     MRefs = [erlang:monitor(process, Pid) || Pid <- [GM | SPids]],
-    ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
+    ok = gm:broadcast(GM, {terminate, Delete, Reason}),
     [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
     %% Normally when we remove a slave another slave or master will
     %% notice and update Mnesia. But we just removed them all, and

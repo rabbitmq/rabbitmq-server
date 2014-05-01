@@ -420,7 +420,7 @@ handle_msg([_SPid], _From, process_death) ->
     %% messages from the master we have yet to receive. When we get
     %% members_changed, then there will be no more messages.
     ok;
-handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
+handle_msg([CPid], _From, {terminate, _Delete, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, {gm, Msg}),
     {stop, {shutdown, ring_shutdown}};
 handle_msg([SPid], _From, {sync_start, Ref, Syncer, SPids}) ->
@@ -876,10 +876,13 @@ process_instruction({depth, Depth},
                                      backing_queue_state = BQS }) ->
     {ok, set_delta(Depth - BQ:depth(BQS), State)};
 
-process_instruction({delete_and_terminate, Reason},
+process_instruction({terminate, Delete, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
-    BQ:delete_and_terminate(Reason, BQS),
+    case Delete of
+        delete   -> BQ:delete_and_terminate(Reason, BQS);
+        nodelete -> BQ:terminate(Reason, BQS)
+    end,
     {stop, State #state { backing_queue_state = undefined }}.
 
 msg_ids_to_acktags(MsgIds, MA) ->
