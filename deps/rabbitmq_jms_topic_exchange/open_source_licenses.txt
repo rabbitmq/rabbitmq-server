@@ -1,20 +1,22 @@
 open_source_license.txt
 
-JMS Client for Pivotal RabbitMQ 1.2.0 GA
+JMS Client for Pivotal RabbitMQ 1.2.1 GA
+
 
 ===========================================================================
-The following copyright statements and licenses apply to various open source
-software packages (or portions thereof) that are distributed with this
-Pivotal Software Inc., Product.
 
-The Pivotal Product may also include other Pivotal Software Inc.
-components, which may contain additional open source software packages.
-One or more such open_source_licenses.txt files may therefore accompany this
-Pivotal Software Inc. Product.
+The following copyright statements and licenses apply to various open
+source software packages (or portions thereof) that are distributed with
+this Pivotal Software, Inc. Product.
 
-The Pivotal Software Inc. Product that includes this file does not necessarily
-use all the open source software packages referred to below and may also
-only use portions of a given package.
+The Pivotal Product may also include other Pivotal components, which may
+contain additional open source software packages. One or more such
+open_source_licenses.txt files may therefore accompany this Pivotal
+Product.
+
+The Pivotal Product that includes this file does not necessarily use all
+the open source software packages referred to below and may also only
+use portions of a given package.
 
 
 =============== TABLE OF CONTENTS =============================
@@ -843,13 +845,12 @@ the source code corresponding to the binaries for such open
 source components and modifications thereto, if any, (the
 "Source Files"), by downloading the Source Files from Pivotal's website at
 http://www.gopivotal.com/open-source, or by sending a request,
-with your name and address to: Pivotal Software Inc.
-3496 Deer Creek Rd, Palo Alto, CA 94304, Attention: General Counsel.
-All such requests should clearly specify: OPEN SOURCE FILES REQUEST,
-Attention General Counsel. Pivotal shall mail a copy of the
-Source Files to you on a CD or equivalent physical medium. This
-offer to obtain a copy of the Source Files is valid for three
+with your name and address to: Pivotal Software, Inc., 3496 Deer Creek Rd,
+Palo Alto, CA 94304, Attention: General Counsel. All such requests should
+clearly specify: OPEN SOURCE FILES REQUEST, Attention General Counsel.
+Pivotal shall mail a copy of the Source Files to you on a CD or equivalent physical medium.
+This offer to obtain a copy of the Source Files is valid for three
 years from the date you acquired this Software product.
 Alternatively, the Source Files may accompany the Pivotal product.
 
-[RABBITJMS120GASC032414]
+[RABBITJMS121GASS050114]
