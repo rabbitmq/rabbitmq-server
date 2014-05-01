@@ -27,6 +27,7 @@
          augment_nodes/1, augment_vhosts/2,
          get_channel/2, get_connection/2,
          get_all_channels/1, get_all_connections/1,
+         get_all_consumers/0,
          get_overview/2, get_overview/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -202,6 +203,8 @@ get_connection(Name, R)     -> safe_call({get_connection, Name, R}, not_found).
 get_all_channels(R)         -> safe_call({get_all_channels, R}).
 get_all_connections(R)      -> safe_call({get_all_connections, R}).
 
+get_all_consumers()         -> safe_call(get_all_consumers).
+
 get_overview(User, R)       -> safe_call({get_overview, User, R}).
 get_overview(R)             -> safe_call({get_overview, all, R}).
 
@@ -289,6 +292,12 @@ handle_call({get_all_connections, Ranges}, _From,
             State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
     reply(connection_stats(Ranges, Conns, State), State);
+
+handle_call(get_all_consumers, _From, State = #state{tables = Tables}) ->
+    All = ets:tab2list(orddict:fetch(consumers_by_queue, Tables)),
+    {reply, [augment_msg_stats(
+               augment_consumer(Obj), State) ||{{_Q, _Ch, _CTag}, Obj} <- All],
+     State};
 
 handle_call({get_overview, User, Ranges}, _From,
             State = #state{tables = Tables}) ->
