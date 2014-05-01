@@ -520,21 +520,25 @@ get_conn(Username, Password) ->
                    [LocalPort]),
     {Conn, ConnPath, ChPath, ConnChPath}.
 
-permissions_connection_channel_test() ->
+permissions_connection_channel_consumer_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/user", [{password, <<"user">>},
                              {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
     http_put("/users/monitor", [{password, <<"monitor">>},
-                            {tags, <<"monitoring">>}], ?NO_CONTENT),
+                                {tags, <<"monitoring">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/monitor", PermArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+
     {Conn1, UserConn, UserCh, UserConnCh} = get_conn("user", "user"),
     {Conn2, MonConn, MonCh, MonConnCh} = get_conn("monitor", "monitor"),
     {Conn3, AdmConn, AdmCh, AdmConnCh} = get_conn("guest", "guest"),
-    {ok, _Ch1} = amqp_connection:open_channel(Conn1),
-    {ok, _Ch2} = amqp_connection:open_channel(Conn2),
-    {ok, _Ch3} = amqp_connection:open_channel(Conn3),
-
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    {ok, Ch3} = amqp_connection:open_channel(Conn3),
+    [amqp_channel:subscribe(
+       Ch, #'basic.consume'{queue = <<"test">>}, self()) ||
+        Ch <- [Ch1, Ch2, Ch3]],
     AssertLength = fun (Path, User, Len) ->
                            ?assertEqual(Len,
                                         length(http_get(Path, User, User, ?OK)))
@@ -543,7 +547,7 @@ permissions_connection_channel_test() ->
          AssertLength(P, "user", 1),
          AssertLength(P, "monitor", 3),
          AssertLength(P, "guest", 3)
-     end || P <- ["/connections", "/channels"]],
+     end || P <- ["/connections", "/channels", "/consumers", "/consumers/%2f"]],
 
     AssertRead = fun(Path, UserStatus) ->
                          http_get(Path, "user", "user", UserStatus),
@@ -573,6 +577,7 @@ permissions_connection_channel_test() ->
     http_delete("/users/monitor", ?NO_CONTENT),
     http_get("/connections/foo", ?NOT_FOUND),
     http_get("/channels/foo", ?NOT_FOUND),
+    http_delete("/queues/%2f/test", ?NO_CONTENT),
     ok.
 
 consumers_test() ->
