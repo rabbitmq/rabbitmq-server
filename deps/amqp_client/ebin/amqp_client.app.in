@@ -5,4 +5,4 @@
   {registered, [amqp_sup]},
   {env, [{prefer_ipv6, false}]},
   {mod, {amqp_client, []}},
-  {applications, [kernel, stdlib]}]}.
+  {applications, [kernel, stdlib, xmerl]}]}.
