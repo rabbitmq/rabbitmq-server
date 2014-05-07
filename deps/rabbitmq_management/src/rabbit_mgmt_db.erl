@@ -27,6 +27,7 @@
          augment_nodes/1, augment_vhosts/2,
          get_channel/2, get_connection/2,
          get_all_channels/1, get_all_connections/1,
+         get_all_consumers/0, get_all_consumers/1,
          get_overview/2, get_overview/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -202,6 +203,9 @@ get_connection(Name, R)     -> safe_call({get_connection, Name, R}, not_found).
 get_all_channels(R)         -> safe_call({get_all_channels, R}).
 get_all_connections(R)      -> safe_call({get_all_connections, R}).
 
+get_all_consumers()         -> safe_call({get_all_consumers, all}).
+get_all_consumers(V)        -> safe_call({get_all_consumers, V}).
+
 get_overview(User, R)       -> safe_call({get_overview, User, R}).
 get_overview(R)             -> safe_call({get_overview, all, R}).
 
@@ -289,6 +293,14 @@ handle_call({get_all_connections, Ranges}, _From,
             State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
     reply(connection_stats(Ranges, Conns, State), State);
+
+handle_call({get_all_consumers, VHost},
+            _From, State = #state{tables = Tables}) ->
+    All = ets:tab2list(orddict:fetch(consumers_by_queue, Tables)),
+    {reply, [augment_msg_stats(
+               augment_consumer(Obj), State) ||
+                {{#resource{virtual_host = VHostC}, _Ch, _CTag}, Obj} <- All,
+                VHost =:= all orelse VHost =:= VHostC], State};
 
 handle_call({get_overview, User, Ranges}, _From,
             State = #state{tables = Tables}) ->
@@ -1027,6 +1039,7 @@ augment_channel_pid(Pid, #state{tables = Tables}) ->
                           {pget(connection, Ch), create}),
     [{name,            pget(name,   Ch)},
      {number,          pget(number, Ch)},
+     {user,            pget(user,   Ch)},
      {connection_name, pget(name,         Conn)},
      {peer_port,       pget(peer_port,    Conn)},
      {peer_host,       pget(peer_host,    Conn)}].
