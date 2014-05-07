@@ -47,20 +47,32 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(
-      filter_vhost(status(ReqData, Context), ReqData), ReqData, Context).
+      filter_vhost_req(status(ReqData, Context), ReqData), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-filter_vhost(List, ReqData) ->
-    rabbit_mgmt_util:all_or_one_vhost(
-      ReqData,
-      fun(V) -> lists:filter(fun(I) -> pget(vhost, I) =:= V end, List) end).
+filter_vhost_req(List, ReqData) ->
+    case rabbit_mgmt_util:vhost(ReqData) of
+        none      -> List;
+        VHost     -> [I || I <- List,
+                           pget(vhost, I) =:= VHost]
+    end.
+
+%% Allow users to see things in the vhosts they are authorised. But
+%% static shovels do not have a vhost, so only allow admins (not
+%% monitors) to see them.
+filter_vhost_user(List, _ReqData, #context{user = User = #user{tags = Tags}}) ->
+    VHosts = rabbit_mgmt_util:list_login_vhosts(User),
+    [I || I <- List, case pget(vhost, I) of
+                         undefined -> lists:member(administrator, Tags);
+                         VHost     -> lists:member(VHost, VHosts)
+                     end].
 
 status(ReqData, Context) ->
-    rabbit_mgmt_util:filter_vhost(
+    filter_vhost_user(
       lists:append([status(Node) || Node <- [node() | nodes()]]),
       ReqData, Context).
 
