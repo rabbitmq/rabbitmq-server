@@ -16,6 +16,7 @@
 
 -module(rabbit_federation_exchange_test).
 
+-compile(export_all).
 -include("rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -253,11 +254,19 @@ no_loop_test() ->
       end, [x(<<"one">>),
             x(<<"two">>)]).
 
-binding_recovery_test() ->
+binding_recovery_with() -> start_ab.
+binding_recovery([_Rabbit, Hare]) ->
     Q = <<"durable-Q">>,
+    {_, Ch} = rabbit_test_util:connect(Hare),
 
-    stop_other_node(?HARE),
-    Ch = start_other_node(?HARE, "hare-two-upstreams"),
+    rabbit_federation_test_util:set_upstream(
+      Hare, <<"hare">>, <<"amqp://localhost:5673">>),
+    rabbit_federation_test_util:set_upstream_set(
+      Hare, <<"upstream">>,
+      [{<<"hare">>, [{<<"exchange">>, <<"upstream">>}]},
+       {<<"hare">>, [{<<"exchange">>, <<"upstream2">>}]}]),
+    rabbit_federation_test_util:set_policy(
+      Hare, <<"fed">>, <<"^fed\\.">>, <<"upstream">>),
 
     declare_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
     #'queue.declare_ok'{} =
@@ -267,30 +276,33 @@ binding_recovery_test() ->
     timer:sleep(100), %% To get the suffix written
 
     %% i.e. don't clean up
-    rabbit_federation_test_util:stop_other_node(?HARE),
-    start_other_node(?HARE, "hare-two-upstreams"),
+    Hare2 = rabbit_test_configs:restart_node(Hare),
 
-    ?assert(none =/= suffix(?HARE, "upstream")),
-    ?assert(none =/= suffix(?HARE, "upstream2")),
+    ?assert(none =/= suffix(Hare2, <<"hare">>, "upstream")),
+    ?assert(none =/= suffix(Hare2, <<"hare">>, "upstream2")),
 
     %% again don't clean up
-    rabbit_federation_test_util:stop_other_node(?HARE),
+    Hare3 = rabbit_test_configs:restart_node(Hare2),
+    {_, Ch3} = rabbit_test_util:connect(Hare3),
 
-    Ch2 = start_other_node(?HARE),
+    rabbit_test_util:set_param(
+      Hare, <<"federation-upstream-set">>, <<"upstream">>,
+      [[{<<"upstream">>, <<"hare">>}, {<<"exchange">>, <<"upstream">>}]]),
 
-    publish_expect(Ch2, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
-    ?assert(none =/= suffix(?HARE, "upstream")),
-    ?assertEqual(none, suffix(?HARE, "upstream2")),
-    delete_all(Ch2, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
-    delete_queue(Ch2, Q),
+    publish_expect(Ch3, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
+    ?assert(none =/= suffix(Hare3, <<"hare">>, "upstream")),
+    ?assertEqual(none, suffix(Hare3, <<"hare">>, "upstream2")),
+    delete_all(Ch3, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
+    delete_queue(Ch3, Q),
     ok.
 
-suffix({Nodename, _}, XName) ->
-    rpc:call(n(Nodename), rabbit_federation_db, get_active_suffix,
+suffix(Cfg, Name, XName) ->
+    rpc:call(pget(node, Cfg), rabbit_federation_db, get_active_suffix,
              [r(<<"fed.downstream">>),
-              #upstream{name          = list_to_binary(Nodename),
+              #upstream{name          = Name,
                         exchange_name = list_to_binary(XName)}, none]).
 
+%% TODO remove
 n(Nodename) ->
     {_, NodeHost} = rabbit_nodes:parts(node()),
     rabbit_nodes:make({Nodename, NodeHost}).
