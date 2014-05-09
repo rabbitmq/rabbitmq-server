@@ -52,8 +52,11 @@ expect_empty(Ch, Q) ->
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
 set_upstream(Cfg, Name, URI) ->
+    set_upstream(Cfg, Name, URI, []).
+
+set_upstream(Cfg, Name, URI, Extra) ->
     rabbit_test_util:set_param(Cfg, <<"federation-upstream">>, Name,
-                               [{<<"uri">>, URI}]).
+                               [{<<"uri">>, URI} | Extra]).
 
 set_upstream_set(Cfg, Name, Set) ->
     rabbit_test_util:set_param(
@@ -65,6 +68,10 @@ set_policy(Cfg, Name, Pattern, UpstreamSet) ->
       Cfg, Name, Pattern, <<"all">>,
       [{<<"federation-upstream-set">>, UpstreamSet}]).
 
+set_policy1(Cfg, Name, Pattern, UpstreamSet) ->
+    rabbit_test_util:set_policy(
+      Cfg, Name, Pattern, <<"all">>,
+      [{<<"federation-upstream">>, UpstreamSet}]).
 
 %% set_param(Component, Name, Value) ->
 %%     rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).
