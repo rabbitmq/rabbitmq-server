@@ -176,13 +176,14 @@ terminate(Reason,
     %% Backing queue termination. The queue is going down but
     %% shouldn't be deleted. Most likely safe shutdown of this
     %% node.
-    {ok, #amqqueue{sync_slave_pids = SSPids}} = rabbit_amqqueue:lookup(QName),
-    %% TODO there should be a policy for this
-    case SSPids of
-        [] -> %% Remove the whole queue to avoid data loss
-              stop_all_slaves(Reason, nodelete, State);
-        _  -> %% Just let some other slave take over.
-              ok
+    {ok, Q = #amqqueue{sync_slave_pids = SSPids}} =
+        rabbit_amqqueue:lookup(QName),
+    case SSPids =:= [] andalso
+        rabbit_policy:get(<<"ha-promote-on-shutdown">>, Q) =/= <<"always">> of
+        true  -> %% Remove the whole queue to avoid data loss
+                 stop_all_slaves(Reason, State);
+        false -> %% Just let some other slave take over.
+                 ok
     end,
     State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
 
