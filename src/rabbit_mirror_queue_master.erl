@@ -130,8 +130,7 @@ stop_mirroring(State = #state { coordinator         = CPid,
                                 backing_queue       = BQ,
                                 backing_queue_state = BQS }) ->
     unlink(CPid),
-    %% delete = *slaves* should delete
-    stop_all_slaves(shutdown, delete, State),
+    stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
 sync_mirrors(HandleInfo, EmitStats,
@@ -189,13 +188,13 @@ terminate(Reason,
 
 delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
                                               backing_queue_state = BQS }) ->
-    stop_all_slaves(Reason, delete, State),
+    stop_all_slaves(Reason, State),
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
-stop_all_slaves(Reason, Delete, #state{name = QName, gm = GM}) ->
+stop_all_slaves(Reason, #state{name = QName, gm = GM}) ->
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
     MRefs = [erlang:monitor(process, Pid) || Pid <- [GM | SPids]],
-    ok = gm:broadcast(GM, {terminate, Delete, Reason}),
+    ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
     [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
     %% Normally when we remove a slave another slave or master will
     %% notice and update Mnesia. But we just removed them all, and

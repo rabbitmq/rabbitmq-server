@@ -368,7 +368,7 @@ handle_cast(request_depth, State = #state { depth_fun = DepthFun }) ->
 handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
     noreply(State #state { monitors = pmon:monitor_all(Pids, Mons) });
 
-handle_cast({terminate, _Delete, Reason}, State) ->
+handle_cast({delete_and_terminate, Reason}, State) ->
     {stop, Reason, State}.
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
@@ -410,7 +410,7 @@ handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
-handle_msg([CPid], _From, {terminate, _Delete, _Reason} = Msg) ->
+handle_msg([CPid], _From, {delete_and_terminate,  _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, Msg),
     {stop, {shutdown, ring_shutdown}};
 handle_msg([_CPid], _From, _Msg) ->
