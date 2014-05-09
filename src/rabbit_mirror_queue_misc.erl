@@ -21,7 +21,8 @@
          report_deaths/4, store_updated_slaves/1,
          initial_queue_node/2, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2, validate_policy/1,
-         maybe_auto_sync/1, log_info/3, log_warning/3]).
+         maybe_auto_sync/1, maybe_drop_master_after_sync/1,
+         log_info/3, log_warning/3]).
 
 %% for testing only
 -export([module/1]).
@@ -57,6 +58,7 @@
 -spec(is_mirrored/1 :: (rabbit_types:amqqueue()) -> boolean()).
 -spec(update_mirrors/2 ::
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
+-spec(maybe_drop_master_after_sync/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(maybe_auto_sync/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(log_info/3 :: (rabbit_amqqueue:name(), string(), [any()]) -> 'ok').
 -spec(log_warning/3 :: (rabbit_amqqueue:name(), string(), [any()]) -> 'ok').
@@ -345,6 +347,26 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     %% a policy requiring auto-sync.
     maybe_auto_sync(NewQ),
     ok.
+
+%% The arrival of a newly synced slave may cause the master to die if
+%% the policy does not want the master but it has been kept alive
+%% because there were no synced slaves.
+%%
+%% We don't just call update_mirrors/2 here since that could decide to
+%% start a slave for some other reason, and since we are the slave ATM
+%% that allows complicated deadlocks.
+maybe_drop_master_after_sync(Q = #amqqueue{name = QName,
+                                           pid  = MPid}) ->
+    {DesiredMNode, DesiredSNodes} = suggested_queue_nodes(Q),
+    case node(MPid) of
+        DesiredMNode -> ok;
+        OldMNode     -> false = lists:member(OldMNode, DesiredSNodes), %% [0]
+                        drop_mirror(QName, OldMNode)
+    end,
+    ok.
+%% [0] ASSERTION - if the policy wants the master to change, it has
+%% not just shuffled it into the slaves. All our modes ensure this
+%% does not happen, but we should guard against a misbehaving plugin.
 
 %%----------------------------------------------------------------------------
 

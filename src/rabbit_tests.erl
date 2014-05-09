@@ -90,19 +90,9 @@ do_if_secondary_node(Up, Down) ->
 setup_cluster() ->
     do_if_secondary_node(
       fun (SecondaryNode) ->
-              cover:stop(SecondaryNode),
               ok = control_action(stop_app, []),
-              %% 'cover' does not cope at all well with nodes disconnecting,
-              %% which happens as part of reset. So we turn it off
-              %% temporarily. That is ok even if we're not in general using
-              %% cover, it just turns the engine on / off and doesn't log
-              %% anything.  Note that this way cover won't be on when joining
-              %% the cluster, but this is OK since we're testing the clustering
-              %% interface elsewere anyway.
-              cover:stop(nodes()),
               ok = control_action(join_cluster,
                                   [atom_to_list(SecondaryNode)]),
-              cover:start(nodes()),
               ok = control_action(start_app, []),
               ok = control_action(start_app, SecondaryNode, [], [])
       end,

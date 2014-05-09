@@ -922,8 +922,6 @@ update_ram_duration(BQ, BQS) ->
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQ:set_ram_duration_target(DesiredDuration, BQS1).
 
-%% [1] - the arrival of this newly synced slave may cause the master to die if
-%% the admin has requested a migration-type change to policy.
 record_synchronised(#amqqueue { name = QName }) ->
     Self = self(),
     case rabbit_misc:execute_mnesia_transaction(
@@ -934,9 +932,9 @@ record_synchronised(#amqqueue { name = QName }) ->
                        [Q1 = #amqqueue { sync_slave_pids = SSPids }] ->
                            Q2 = Q1#amqqueue{sync_slave_pids = [Self | SSPids]},
                            rabbit_mirror_queue_misc:store_updated_slaves(Q2),
-                           {ok, Q1, Q2}
+                           {ok, Q2}
                    end
            end) of
-        ok           -> ok;
-        {ok, Q1, Q2} -> rabbit_mirror_queue_misc:update_mirrors(Q1, Q2) %% [1]
+        ok      -> ok;
+        {ok, Q} -> rabbit_mirror_queue_misc:maybe_drop_master_after_sync(Q)
     end.
