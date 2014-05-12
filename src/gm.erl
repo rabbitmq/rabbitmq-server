@@ -1036,7 +1036,8 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
             case lists:filter(fun is_member_alive/1, Members) of
                 [] ->
                     join_group(Self, GroupName,
-                               prune_or_create_group(Self, GroupName, TxnFun));
+                               prune_or_create_group(Self, GroupName, TxnFun),
+                               TxnFun);
                 Alive ->
                     Left = lists:nth(random:uniform(length(Alive)), Alive),
                     Handler =
