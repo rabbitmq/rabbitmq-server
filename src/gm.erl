@@ -653,18 +653,17 @@ handle_cast(join, State = #state { self          = Self,
                                    module        = Module,
                                    callback_args = Args,
                                    txn_executor  = TxnFun }) ->
-    State1 = check_neighbours(
-               case join_group(Self, GroupName, TxnFun) of
-                   {ok, View} ->
+    State1 = case join_group(Self, GroupName, TxnFun) of
+                 {ok, View} ->
+                     check_neighbours(
                        State#state{view          = View,
-                                   members_state = blank_member_state()};
-                   {ok, View, Left, MembersState} ->
-                       {ok, State2} = handle_msg({catchup, Left, MembersState},
-                                                 State),
-                       State2#state{view = View}
-               end),
-    handle_callback_result(
-      {Module:joined(Args, get_pids(all_known_members(View))), State1});
+                                   members_state = blank_member_state()});
+                 {ok, View, Left, MembersState} ->
+                     initial_catchup(Left, MembersState,
+                                     check_neighbours(State#state{view = View}))
+             end,
+    Members = get_pids(all_known_members(State1#state.view)),
+    handle_callback_result({Module:joined(Args, Members), State1});
 
 handle_cast({validate_members, OldMembers},
             State = #state { view          = View,
@@ -740,19 +739,19 @@ prioritise_info(_, _Len, _State) ->
     0.
 
 
+initial_catchup(Left, MembersStateLeft,
+                State = #state { self          = Self,
+                                 left          = {Left, _MRefL},
+                                 right         = {Right, _MRefR},
+                                 view          = View,
+                                 members_state = undefined }) ->
+    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
+    MembersStateLeft1 = build_members_state(MembersStateLeft),
+    State #state { members_state = MembersStateLeft1 }.
+
 handle_msg(check_neighbours, State) ->
     %% no-op - it's already been done by the calling handle_cast
     {ok, State};
-
-handle_msg({catchup, Left, MembersStateLeft},
-           State = #state { self          = Self,
-                            left          = {Left, _MRefL},
-                            right         = {Right, _MRefR},
-                            view          = View,
-                            members_state = undefined }) ->
-    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
-    MembersStateLeft1 = build_members_state(MembersStateLeft),
-    {ok, State #state { members_state = MembersStateLeft1 }};
 
 handle_msg({catchup, Left, MembersStateLeft},
            State = #state { self = Self,
