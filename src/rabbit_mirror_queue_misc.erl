@@ -29,16 +29,19 @@
 
 -include("rabbit.hrl").
 
--rabbit_boot_step({?MODULE,
-                   [{description, "HA policy validation"},
-                    {mfa, {rabbit_registry, register,
-                           [policy_validator, <<"ha-mode">>, ?MODULE]}},
-                    {mfa, {rabbit_registry, register,
-                           [policy_validator, <<"ha-params">>, ?MODULE]}},
-                    {mfa, {rabbit_registry, register,
-                           [policy_validator, <<"ha-sync-mode">>, ?MODULE]}},
-                    {requires, rabbit_registry},
-                    {enables, recovery}]}).
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "HA policy validation"},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-mode">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-params">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-sync-mode">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-promote-on-shutdown">>, ?MODULE]}},
+     {requires, rabbit_registry},
+     {enables, recovery}]}).
 
 %%----------------------------------------------------------------------------
 
