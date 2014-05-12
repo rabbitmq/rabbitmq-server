@@ -610,11 +610,10 @@ handle_call({add_on_right, NewMember}, _From,
     Group = record_new_member_in_group(NewMember, Self, GroupName, TxnFun),
     View1 = group_to_view(Group),
     MembersState1 = remove_erased_members(MembersState, View1),
-    ok = send_right(NewMember, View1,
-                    {catchup, Self, prepare_members_state(MembersState1)}),
     {Result, State1} = change_view(View1, State #state {
                                             members_state = MembersState1 }),
-    handle_callback_result({Result, {ok, Group}, State1}).
+    Reply = {ok, Group, prepare_members_state(MembersState1)},
+    handle_callback_result({Result, Reply, State1}).
 
 handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
@@ -654,14 +653,16 @@ handle_cast(join, State = #state { self          = Self,
                                    module        = Module,
                                    callback_args = Args,
                                    txn_executor  = TxnFun }) ->
-    View = join_group(Self, GroupName, TxnFun),
-    MembersState =
-        case alive_view_members(View) of
-            [Self] -> blank_member_state();
-            _      -> undefined
-        end,
-    State1 = check_neighbours(State #state { view          = View,
-                                             members_state = MembersState }),
+    State1 = check_neighbours(
+               case join_group(Self, GroupName, TxnFun) of
+                   {ok, View} ->
+                       State#state{view          = View,
+                                   members_state = blank_member_state()};
+                   {ok, View, Left, MembersState} ->
+                       {ok, State2} = handle_msg({catchup, Left, MembersState},
+                                                 State),
+                       State2#state{view = View}
+               end),
     handle_callback_result(
       {Module:joined(Args, get_pids(all_known_members(View))), State1});
 
@@ -1027,11 +1028,11 @@ join_group(Self, GroupName, {error, not_found}, TxnFun) ->
     join_group(Self, GroupName,
                prune_or_create_group(Self, GroupName, TxnFun), TxnFun);
 join_group(Self, _GroupName, #gm_group { members = [Self] } = Group, _TxnFun) ->
-    group_to_view(Group);
+    {ok, group_to_view(Group)};
 join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
     case lists:member(Self, Members) of
         true ->
-            group_to_view(Group);
+            {ok, group_to_view(Group)};
         false ->
             case lists:filter(fun is_member_alive/1, Members) of
                 [] ->
@@ -1051,8 +1052,11 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                     try
                         case gen_server2:call(
                                get_pid(Left), {add_on_right, Self}, infinity) of
-                            {ok, Group1} -> group_to_view(Group1);
-                            not_ready    -> join_group(Self, GroupName, TxnFun)
+                            {ok, Group1, MembersState1} ->
+                                {ok, group_to_view(Group1), Left,
+                                 build_members_state(MembersState1)};
+                            not_ready ->
+                                join_group(Self, GroupName, TxnFun)
                         end
                     catch
                         exit:{R, _}
