@@ -410,7 +410,7 @@ handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
-handle_msg([CPid], _From, {delete_and_terminate,  _Reason} = Msg) ->
+handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, Msg),
     {stop, {shutdown, ring_shutdown}};
 handle_msg([_CPid], _From, _Msg) ->

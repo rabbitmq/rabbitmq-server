@@ -181,6 +181,9 @@ terminate(Reason,
     case SSPids =:= [] andalso
         rabbit_policy:get(<<"ha-promote-on-shutdown">>, Q) =/= <<"always">> of
         true  -> %% Remove the whole queue to avoid data loss
+                 rabbit_mirror_queue_misc:log_warning(
+                   QName, "Stopping all nodes on master shutdown since no "
+                   "synchronised slave is available~n", []),
                  stop_all_slaves(Reason, State);
         false -> %% Just let some other slave take over.
                  ok
