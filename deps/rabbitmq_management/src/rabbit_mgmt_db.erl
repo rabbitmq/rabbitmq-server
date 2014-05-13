@@ -31,8 +31,8 @@
          get_overview/2, get_overview/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, handle_pre_hibernate/1, prioritise_cast/3,
-         format_message_queue/2]).
+         code_change/3, handle_pre_hibernate/1,
+         prioritise_cast/3, prioritise_call/4, format_message_queue/2]).
 
 %% For testing
 -export([override_lookups/1, reset_lookups/0]).
@@ -175,6 +175,9 @@ prioritise_cast({event, #event{type  = Type,
     end;
 prioritise_cast(_Msg, _Len, _State) ->
     0.
+
+%% We want timely replies to queries even when overloaded!
+prioritise_call(_Msg, _From, _Len, _State) -> 5.
 
 %%----------------------------------------------------------------------------
 %% API
