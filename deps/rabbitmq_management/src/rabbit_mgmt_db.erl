@@ -775,7 +775,7 @@ record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
 
 %% Ignore case where ID1 and ID2 are in a tuple, i.e. detailed stats,
 %% when in basic mode
-record_sample0({_, {_ID1, _ID2}} = X, {_, _, _, #state{rates_mode = basic}}) ->
+record_sample0({_, {_ID1, _ID2}}, {_, _, _, #state{rates_mode = basic}}) ->
     ok;
 record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
                                            aggregated_stats_index = ETSi}}) ->
