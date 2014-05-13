@@ -68,10 +68,44 @@ set_policy(Cfg, Name, Pattern, UpstreamSet) ->
       Cfg, Name, Pattern, <<"all">>,
       [{<<"federation-upstream-set">>, UpstreamSet}]).
 
-set_policy1(Cfg, Name, Pattern, UpstreamSet) ->
+set_policy1(Cfg, Name, Pattern, Upstream) ->
     rabbit_test_util:set_policy(
       Cfg, Name, Pattern, <<"all">>,
-      [{<<"federation-upstream">>, UpstreamSet}]).
+      [{<<"federation-upstream">>, Upstream}]).
+
+set_policy_upstream(Cfg, Pattern, URI, Extra) ->
+    set_policy_upstreams(Cfg, Pattern, [{URI, Extra}]).
+
+set_policy_upstreams(Cfg, Pattern, URIExtras) ->
+    put(upstream_num, 1),
+    [set_upstream(Cfg, gen_upstream_name(), URI, Extra)
+     || {URI, Extra} <- URIExtras],
+    set_policy(Cfg, Pattern, Pattern, <<"all">>).
+
+gen_upstream_name() ->
+    list_to_binary("upstream-" ++ integer_to_list(next_upstream_num())).
+
+next_upstream_num() ->
+    R = get(upstream_num) + 1,
+    put (upstream_num, R),
+    R.
+
+%% Make sure that even though multiple nodes are in a single
+%% distributed system, we still keep all our process groups separate.
+disambiguate(Rest) ->
+    [Rest,
+     fun (Cfgs) ->
+             [rpc:call(pget(node, Cfg), application, set_env,
+                       [rabbitmq_federation, pgroup_name_cluster_id, true])
+              || Cfg <- Cfgs],
+             Cfgs
+     end].
+
+no_plugins(Cfg) ->
+    [{K, case K of
+             plugins -> none;
+             _       -> V
+         end} || {K, V} <- Cfg].
 
 %% set_param(Component, Name, Value) ->
 %%     rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).

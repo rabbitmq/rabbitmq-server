@@ -16,6 +16,7 @@
 
 -module(rabbit_federation_queue_test).
 
+-compile(export_all).
 -include("rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -25,6 +26,8 @@
 
 -import(rabbit_federation_test_util, [expect/3, set_param/3, clear_param/2,
          set_pol/3, clear_pol/1, policy/1, start_other_node/1,
+         set_policy_upstream/4, set_policy_upstreams/3,
+         disambiguate/1,
          stop_other_node/1]).
 
 -define(UPSTREAM_DOWNSTREAM, [q(<<"upstream">>),
@@ -121,29 +124,29 @@ federate_unfederate_test() ->
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
 
-restart_upstream_test() ->
-    with_ch(
-      fun (Downstream) ->
-              stop_other_node(?HARE),
-              Upstream = start_other_node(?HARE),
+restart_upstream_with() -> disambiguate(start_ab).
+restart_upstream([Rabbit, Hare]) ->
+    set_policy_upstream(Rabbit, <<"^test$">>, <<"amqp://localhost:5673">>, []),
 
-              declare_queue(Upstream, q(<<"upstream">>)),
-              declare_queue(Downstream, q(<<"hare.downstream">>)),
-              Seq = lists:seq(1, 100),
-              [publish(Upstream, <<>>, <<"upstream">>, <<"bulk">>) || _ <- Seq],
-              expect(Upstream, <<"upstream">>, repeat(25, <<"bulk">>)),
-              expect(Downstream, <<"hare.downstream">>, repeat(25, <<"bulk">>)),
+    {_, Downstream} = rabbit_test_util:connect(Rabbit),
+    {_, Upstream}   = rabbit_test_util:connect(Hare),
 
-              stop_other_node(?HARE),
-              Upstream2 = start_other_node(?HARE),
+    declare_queue(Upstream, q(<<"test">>)),
+    declare_queue(Downstream, q(<<"test">>)),
+    Seq = lists:seq(1, 100),
+    [publish(Upstream, <<>>, <<"test">>, <<"bulk">>) || _ <- Seq],
+    expect(Upstream, <<"test">>, repeat(25, <<"bulk">>)),
+    expect(Downstream, <<"test">>, repeat(25, <<"bulk">>)),
 
-              expect(Upstream2, <<"upstream">>, repeat(25, <<"bulk">>)),
-              expect(Downstream, <<"hare.downstream">>, repeat(25, <<"bulk">>)),
-              expect_empty(Upstream2, <<"upstream">>),
-              expect_empty(Downstream, <<"hare.downstream">>),
+    Hare2 = rabbit_test_configs:restart_node(Hare),
+    {_, Upstream2} = rabbit_test_util:connect(Hare2),
 
-              stop_other_node(?HARE)
-      end, []).
+    expect(Upstream2, <<"test">>, repeat(25, <<"bulk">>)),
+    expect(Downstream, <<"test">>, repeat(25, <<"bulk">>)),
+    expect_empty(Upstream2, <<"test">>),
+    expect_empty(Downstream, <<"test">>),
+
+    ok.
 
 upstream_has_no_federation_test() ->
     %% TODO

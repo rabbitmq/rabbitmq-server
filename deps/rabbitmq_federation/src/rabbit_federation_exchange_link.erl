@@ -30,7 +30,7 @@
          terminate/2, code_change/3]).
 
 -import(rabbit_misc, [pget/2]).
--import(rabbit_federation_util, [name/1, vhost/1]).
+-import(rabbit_federation_util, [name/1, vhost/1, pgname/1]).
 
 -record(state, {upstream,
                 upstream_params,
@@ -192,16 +192,16 @@ cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 cast(XName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- x(XName)].
 
 join(Name) ->
-    pg2_fixed:create(Name),
-    ok = pg2_fixed:join(Name, self()).
+    pg2_fixed:create(pgname(Name)),
+    ok = pg2_fixed:join(pgname(Name), self()).
 
 all() ->
-    pg2_fixed:create(rabbit_federation_exchanges),
-    pg2_fixed:get_members(rabbit_federation_exchanges).
+    pg2_fixed:create(pgname(rabbit_federation_exchanges)),
+    pg2_fixed:get_members(pgname(rabbit_federation_exchanges)).
 
 x(XName) ->
-    pg2_fixed:create({rabbit_federation_exchange, XName}),
-    pg2_fixed:get_members({rabbit_federation_exchange, XName}).
+    pg2_fixed:create(pgname({rabbit_federation_exchange, XName})),
+    pg2_fixed:get_members(pgname({rabbit_federation_exchange, XName})).
 
 %%----------------------------------------------------------------------------
 
