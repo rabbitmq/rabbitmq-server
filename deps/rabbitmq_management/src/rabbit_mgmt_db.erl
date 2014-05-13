@@ -345,6 +345,12 @@ handle_call({override_lookups, Lookups}, _From, State) ->
 handle_call(reset_lookups, _From, State) ->
     reply(ok, reset_lookups(State));
 
+%% Used in rabbit_mgmt_test_db where we need guarantees events have
+%% been handled before querying
+handle_call({event, Event = #event{reference = none}}, _From, State) ->
+    handle_event(Event, State),
+    reply(ok, State);
+
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
 
