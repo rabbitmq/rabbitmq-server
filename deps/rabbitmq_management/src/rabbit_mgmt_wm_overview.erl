@@ -32,13 +32,7 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    {ok, RatesMode0} = application:get_env(rabbitmq_management, rates_mode),
-    RatesMode = case {StatsLevel, RatesMode0} of
-                    {fine, basic} -> basic;
-                    {fine, _}     -> detailed;
-                    _             -> none
-                end,
+    {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
