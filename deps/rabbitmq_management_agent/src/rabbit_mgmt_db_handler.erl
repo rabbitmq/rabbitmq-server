@@ -35,8 +35,21 @@ gc() ->
 %%----------------------------------------------------------------------------
 
 ensure_statistics_enabled() ->
-    {ok, ForceStats} = application:get_env(rabbitmq_management_agent,
-                                           force_fine_statistics),
+    ForceStats = case application:get_env(rabbitmq_management, rates_mode) of
+                     {ok, basic}    -> true;
+                     {ok, detailed} -> true;
+                     _              -> false
+                 end,
+    case application:get_env(rabbitmq_management_agent,
+                             force_fine_statistics) of
+        {ok, X} ->
+            error_logger:warning_msg(
+              "force_fine_statistics set to ~p; ignored.~n"
+              "Replaced by {rates_mode, none} in the rabbitmq_management "
+              "application.~n", [X]);
+        undefined ->
+            ok
+    end,
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     case {ForceStats, StatsLevel} of
         {true,  fine} ->
