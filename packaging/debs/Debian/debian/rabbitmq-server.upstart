@@ -1,0 +1,14 @@
+description "rabbitmq-server - High performance enterprise messaging server"
+author "Cameron Norman <camerontnorman@gmail.com>"
+
+start on filesystem and static-network-up
+stop on runlevel [016] or deconfiguring-networking
+
+respawn
+
+chdir /var/lib/rabbitmq
+setuid rabbitmq
+setgid rabbitmq
+env HOME=/var/lib/rabbitmq
+
+exec /usr/lib/rabbitmq/bin/rabbitmq-server
