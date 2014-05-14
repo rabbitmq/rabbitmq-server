@@ -25,34 +25,14 @@
 -import(rabbit_federation_util, [name/1]).
 
 -import(rabbit_federation_test_util,
-        [expect/3, expect_empty/2, set_param/3, clear_param/2,
-         set_pol/3, clear_pol/1, plugin_dir/0, policy/1,
+        [expect/3, expect_empty/2,
+         set_upstream/3, clear_upstream/2, set_upstream_set/3,
+         set_policy/4, clear_policy/2,
          set_policy_upstream/4, set_policy_upstreams/3,
-         disambiguate/1, no_plugins/1,
-         start_other_node/1, start_other_node/2, start_other_node/3]).
+         disambiguate/1, no_plugins/1, single_cfg/0]).
 
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               x(<<"fed.downstream">>)]).
-
-%% Used everywhere
--define(RABBIT,     {"rabbit-test",       5672}).
-
-%% Used in restart_upstream_test
--define(HARE,       {"hare",       5673}).
-
-%% Used in max_hops_test
--define(FLOPSY,     {"flopsy",     5674}).
--define(MOPSY,      {"mopsy",      5675}).
--define(COTTONTAIL, {"cottontail", 5676}).
-
-%% Used in binding_propagation_test
--define(DYLAN,   {"dylan",   5674}).
--define(BUGS,    {"bugs",    5675}).
--define(JESSICA, {"jessica", 5676}).
-
-%% Used in cycle_detection_test
--define(CYCLE1,   {"cycle1", 5674}).
--define(CYCLE2,   {"cycle2", 5675}).
 
 simple_test() ->
     with_ch(
@@ -76,8 +56,8 @@ multiple_upstreams_test() ->
 
 multiple_uris_test() ->
     %% We can't use a direct connection for Kill() to work.
-    set_param("federation-upstream", "localhost",
-              "{\"uri\": [\"amqp://localhost\", \"amqp://localhost:5672\"]}"),
+    set_upstream(single_cfg(), <<"localhost">>,
+                 [<<"amqp://localhost">>, <<"amqp://localhost:5672">>]),
     WithCh = fun(F) ->
                      {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
                      {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -88,7 +68,7 @@ multiple_uris_test() ->
     expect_uris([<<"amqp://localhost">>, <<"amqp://localhost:5672">>]),
     WithCh(fun (Ch) -> delete_all(Ch, ?UPSTREAM_DOWNSTREAM) end),
     %% Put back how it was
-    set_param("federation-upstream", "localhost", "{\"uri\": \"amqp://\"}").
+    set_upstream(single_cfg(), <<"localhost">>, <<"amqp://">>).
 
 expect_uris([])   -> ok;
 expect_uris(URIs) -> [Link] = rabbit_federation_status:status(),
@@ -517,6 +497,7 @@ upstream_has_no_federation([Rabbit, Hare]) ->
     ok.
 
 dynamic_reconfiguration_test() ->
+    Cfg = single_cfg(),
     with_ch(
       fun (_Ch) ->
               Xs = [<<"all.fed1">>, <<"all.fed2">>],
@@ -524,26 +505,23 @@ dynamic_reconfiguration_test() ->
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Test that clearing connections works
-              clear_param("federation-upstream", "localhost"),
-              clear_param("federation-upstream", "local5673"),
+              clear_upstream(Cfg, <<"localhost">>),
+              clear_upstream(Cfg, <<"local5673">>),
               assert_connections(Xs, []),
 
               %% Test that readding them and changing them works
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://localhost\"}"),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://localhost">>),
               %% Do it twice so we at least hit the no-restart optimisation
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://\"}"),
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://\"}"),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://">>),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://">>),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% And re-add the last - for next test
-              set_param("federation-upstream", "local5673",
-                        "{\"uri\": \"amqp://localhost:5673\"}")
+              set_upstream(Cfg, <<"local5673">>, <<"amqp://localhost:5673">>)
       end, [x(<<"all.fed1">>), x(<<"all.fed2">>)]).
 
 dynamic_reconfiguration_integrity_test() ->
+    Cfg = single_cfg(),
     with_ch(
       fun (_Ch) ->
               Xs = [<<"new.fed1">>, <<"new.fed2">>],
@@ -552,23 +530,22 @@ dynamic_reconfiguration_integrity_test() ->
               assert_connections(Xs, []),
 
               %% Create the set - links appear
-              set_param("federation-upstream-set", "new-set",
-                        "[{\"upstream\": \"localhost\"}]"),
+              set_upstream_set(Cfg, <<"new-set">>, [{<<"localhost">>, []}]),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Add nonexistent connections to set - nothing breaks
-              set_param("federation-upstream-set", "new-set",
-                        "[{\"upstream\": \"localhost\"},"
-                        " {\"upstream\": \"does-not-exist\"}]"),
+              set_upstream_set(
+                Cfg, <<"new-set">>, [{<<"localhost">>, []},
+                                     {<<"does-not-exist">>, []}]),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Change connection in set - links change
-              set_param("federation-upstream-set", "new-set",
-                        "[{\"upstream\": \"local5673\"}]"),
+              set_upstream_set(Cfg, <<"new-set">>, [{<<"local5673">>, []}]),
               assert_connections(Xs, [<<"local5673">>])
       end, [x(<<"new.fed1">>), x(<<"new.fed2">>)]).
 
 federate_unfederate_test() ->
+    Cfg = single_cfg(),
     with_ch(
       fun (_Ch) ->
               Xs = [<<"dyn.exch1">>, <<"dyn.exch2">>],
@@ -577,15 +554,15 @@ federate_unfederate_test() ->
               assert_connections(Xs, []),
 
               %% Federate them - links appear
-              set_pol("dyn", "^dyn\\.", policy("all")),
+              set_policy(Cfg, <<"dyn">>, <<"^dyn\\.">>, <<"all">>),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Change policy - links change
-              set_pol("dyn", "^dyn\\.", policy("localhost")),
+              set_policy(Cfg, <<"dyn">>, <<"^dyn\\.">>, <<"localhost">>),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Unfederate them - links disappear
-              clear_pol("dyn"),
+              clear_policy(Cfg, <<"dyn">>),
               assert_connections(Xs, [])
       end, [x(<<"dyn.exch1">>), x(<<"dyn.exch2">>)]).
 
@@ -600,15 +577,15 @@ with_ch(Fun, Xs) ->
     Fun(Ch),
     delete_all(Ch, Xs),
     amqp_connection:close(Conn),
-    cleanup(?RABBIT),
+    cleanup(single_cfg()),
     ok.
 
-cleanup({Nodename, _}) ->
-    [rpc:call(n(Nodename), rabbit_amqqueue, delete, [Q, false, false]) ||
-        Q <- queues(Nodename)].
+cleanup(Cfg) ->
+    [rpc:call(pget(node, Cfg), rabbit_amqqueue, delete, [Q, false, false]) ||
+        Q <- queues(pget(node, Cfg))].
 
-queues(Nodename) ->
-    case rpc:call(n(Nodename), rabbit_amqqueue, list, [<<"/">>]) of
+queues(Node) ->
+    case rpc:call(Node, rabbit_amqqueue, list, [<<"/">>]) of
         {badrpc, _} -> [];
         Qs          -> Qs
     end.
@@ -664,10 +641,10 @@ delete_exchange(Ch, X) ->
 delete_queue(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
-await_binding(X, Key)         -> await_binding(?RABBIT, X, Key, 1).
+await_binding(X, Key)         -> await_binding(single_cfg(), X, Key, 1).
 await_binding(X, Key, Count)
-  when is_binary(X)           -> await_binding(?RABBIT, X, Key, Count);
-await_binding(Broker, X, Key) -> await_binding(Broker,  X, Key, 1).
+  when is_binary(X)           -> await_binding(single_cfg(), X, Key, Count);
+await_binding(Broker, X, Key) -> await_binding(Broker,       X, Key, 1).
 
 await_binding(Node, X, Key, Count) when is_atom(Node) ->
     case bound_keys_from(Node, X, Key) of

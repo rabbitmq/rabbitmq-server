@@ -24,11 +24,11 @@
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1]).
 
--import(rabbit_federation_test_util, [expect/3, set_param/3, clear_param/2,
-         set_pol/3, clear_pol/1, policy/1, start_other_node/1,
+-import(rabbit_federation_test_util,
+        [expect/3,
+         set_upstream/3, clear_upstream/2, set_policy/4, clear_policy/2,
          set_policy_upstream/4, set_policy_upstreams/3,
-         disambiguate/1,
-         stop_other_node/1]).
+         disambiguate/1, single_cfg/0]).
 
 -define(UPSTREAM_DOWNSTREAM, [q(<<"upstream">>),
                               q(<<"fed.downstream">>)]).
@@ -77,44 +77,43 @@ bidirectional_test() ->
             q(<<"two">>)]).
 
 dynamic_reconfiguration_test() ->
+    Cfg = single_cfg(),
     with_ch(
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
 
               %% Test that clearing connections works
-              clear_param("federation-upstream", "localhost"),
+              clear_upstream(Cfg, <<"localhost">>),
               expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
 
               %% Test that readding them and changing them works
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://localhost\"}"),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://localhost">>),
               %% Do it twice so we at least hit the no-restart optimisation
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://\"}"),
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://\"}"),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://">>),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://">>),
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
       end, [q(<<"upstream">>),
             q(<<"fed.downstream">>)]).
 
 federate_unfederate_test() ->
+    Cfg = single_cfg(),
     with_ch(
       fun (Ch) ->
               expect_no_federation(Ch, <<"upstream">>, <<"downstream">>),
               expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>),
 
               %% Federate it
-              set_pol("dyn", "^downstream\$", policy("upstream")),
+              set_policy(Cfg, <<"dyn">>, <<"^downstream\$">>, <<"upstream">>),
               expect_federation(Ch, <<"upstream">>, <<"downstream">>),
               expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>),
 
               %% Change policy - upstream changes
-              set_pol("dyn", "^downstream\$", policy("upstream2")),
+              set_policy(Cfg, <<"dyn">>, <<"^downstream\$">>, <<"upstream2">>),
               expect_no_federation(Ch, <<"upstream">>, <<"downstream">>),
               expect_federation(Ch, <<"upstream2">>, <<"downstream">>),
 
               %% Unfederate it - no federation
-              clear_pol("dyn"),
+              clear_policy(Cfg, <<"dyn">>),
               expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>)
       end, [q(<<"upstream">>),
             q(<<"upstream2">>),

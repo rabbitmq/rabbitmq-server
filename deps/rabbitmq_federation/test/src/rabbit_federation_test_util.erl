@@ -58,20 +58,24 @@ set_upstream(Cfg, Name, URI, Extra) ->
     rabbit_test_util:set_param(Cfg, <<"federation-upstream">>, Name,
                                [{<<"uri">>, URI} | Extra]).
 
+clear_upstream(Cfg, Name) ->
+    rabbit_test_util:clear_param(Cfg, <<"federation-upstream">>, Name).
+
 set_upstream_set(Cfg, Name, Set) ->
     rabbit_test_util:set_param(
       Cfg, <<"federation-upstream-set">>, Name,
       [[{<<"upstream">>, UStream} | Extra] || {UStream, Extra} <- Set]).
 
 set_policy(Cfg, Name, Pattern, UpstreamSet) ->
-    rabbit_test_util:set_policy(
-      Cfg, Name, Pattern, <<"all">>,
-      [{<<"federation-upstream-set">>, UpstreamSet}]).
+    rabbit_test_util:set_policy(Cfg, Name, Pattern, <<"all">>,
+                                [{<<"federation-upstream-set">>, UpstreamSet}]).
 
 set_policy1(Cfg, Name, Pattern, Upstream) ->
-    rabbit_test_util:set_policy(
-      Cfg, Name, Pattern, <<"all">>,
-      [{<<"federation-upstream">>, Upstream}]).
+    rabbit_test_util:set_policy(Cfg, Name, Pattern, <<"all">>,
+                                [{<<"federation-upstream">>, Upstream}]).
+
+clear_policy(Cfg, Name) ->
+    rabbit_test_util:clear_policy(Cfg, Name).
 
 set_policy_upstream(Cfg, Pattern, URI, Extra) ->
     set_policy_upstreams(Cfg, Pattern, [{URI, Extra}]).
@@ -106,6 +110,13 @@ no_plugins(Cfg) ->
              plugins -> none;
              _       -> V
          end} || {K, V} <- Cfg].
+
+%% "fake" cfg to let us use various utility functions when running
+%% in-broker tests
+single_cfg() ->
+    [{nodename, 'rabbit-test'},
+     {node,     rabbit_nodes:make('rabbit-test')},
+     {port,     5672}].
 
 %% set_param(Component, Name, Value) ->
 %%     rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).
@@ -156,8 +167,8 @@ no_plugins(Cfg) ->
 %%         _         -> exit({command_failed, Cmd, Res})
 %%     end.
 
-policy(UpstreamSet) ->
-    rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
+%% policy(UpstreamSet) ->
+%%     rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
 
 %% plugin_dir() ->
 %%     {ok, [[File]]} = init:get_argument(config),
