@@ -213,17 +213,23 @@ notify_clear(VHost, <<"policy">>, Name) ->
 %% [1] We need to prevent this from becoming O(n^2) in a similar
 %% manner to rabbit_binding:remove_for_{source,destination}. So see
 %% the comment in rabbit_binding:lock_route_tables/0 for more rationale.
+%% [2] We could be here in a post-tx fun after the vhost has been
+%% deleted; in which case it's fine to do nothing.
 update_policies(VHost) ->
     Tabs = [rabbit_queue,    rabbit_durable_queue,
             rabbit_exchange, rabbit_durable_exchange],
     {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
                  fun() ->
                          [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
-                         Policies = list(VHost),
-                         {[update_exchange(X, Policies) ||
-                              X <- rabbit_exchange:list(VHost)],
-                          [update_queue(Q, Policies) ||
-                              Q <- rabbit_amqqueue:list(VHost)]}
+                         case catch list(VHost) of
+                             {error, {no_such_vhost, _}} ->
+                                 ok; %% [2]
+                             Policies ->
+                                 {[update_exchange(X, Policies) ||
+                                      X <- rabbit_exchange:list(VHost)],
+                                  [update_queue(Q, Policies) ||
+                                      Q <- rabbit_amqqueue:list(VHost)]}
+                         end
                  end),
     [catch notify(X) || X <- Xs],
     [catch notify(Q) || Q <- Qs],

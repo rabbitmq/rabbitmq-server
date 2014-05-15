@@ -88,12 +88,11 @@ delete(VHostPath) ->
         #amqqueue{name = Name} <- rabbit_amqqueue:list(VHostPath)],
     [assert_benign(rabbit_exchange:delete(Name, false)) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
-    R = rabbit_misc:execute_mnesia_transaction(
-          with(VHostPath, fun () ->
-                                  ok = internal_delete(VHostPath)
-                          end)),
+    Funs = rabbit_misc:execute_mnesia_transaction(
+          with(VHostPath, fun () -> internal_delete(VHostPath) end)),
     ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
-    R.
+    [ok = Fun() || Fun <- Funs],
+    ok.
 
 assert_benign(ok)                   -> ok;
 assert_benign({ok, _})              -> ok;
@@ -111,14 +110,14 @@ internal_delete(VHostPath) ->
     [ok = rabbit_auth_backend_internal:clear_permissions(
             proplists:get_value(user, Info), VHostPath)
      || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHostPath)],
-    [ok = rabbit_runtime_parameters:clear(VHostPath,
-                                          proplists:get_value(component, Info),
-                                          proplists:get_value(name, Info))
+    Fs1 = [rabbit_runtime_parameters:clear(VHostPath,
+                                           proplists:get_value(component, Info),
+                                           proplists:get_value(name, Info))
      || Info <- rabbit_runtime_parameters:list(VHostPath)],
-    [ok = rabbit_policy:delete(VHostPath, proplists:get_value(name, Info))
-     || Info <- rabbit_policy:list(VHostPath)],
+    Fs2 = [rabbit_policy:delete(VHostPath, proplists:get_value(name, Info))
+           || Info <- rabbit_policy:list(VHostPath)],
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
-    ok.
+    Fs1 ++ Fs2.
 
 exists(VHostPath) ->
     mnesia:dirty_read({rabbit_vhost, VHostPath}) /= [].
