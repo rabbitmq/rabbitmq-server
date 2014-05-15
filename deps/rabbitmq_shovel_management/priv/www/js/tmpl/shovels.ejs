@@ -36,7 +36,7 @@
     <td><%= fmt_node(shovel.node) %></td>
 <% } %>
 <% if (vhosts_interesting) { %>
-    <td><%= fmt_string(shovel.vhost) %></td>
+    <td><%= fmt_string(shovel.vhost, '') %></td>
 <% } %>
 <% if (shovel.state == 'terminated') { %>
     <td colspan="5"><%= fmt_state('red', shovel.state) %></td>
