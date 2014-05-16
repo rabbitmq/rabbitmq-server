@@ -110,9 +110,9 @@ with_fhc_handle(Fun) ->
     with_fhc_handle(1, Fun).
 
 with_fhc_handle(N, Fun) ->
-    ok = file_handle_cache:obtain(N),
+    ok = file_handle_cache:obtain(N, file),
     try Fun()
-    after ok = file_handle_cache:release(N)
+    after ok = file_handle_cache:release(N, file)
     end.
 
 read_term_file(File) ->
