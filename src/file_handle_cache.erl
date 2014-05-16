@@ -146,9 +146,8 @@
 -export([open/3, close/1, read/2, append/2, needs_sync/1, sync/1, position/2,
          truncate/1, current_virtual_offset/1, current_raw_offset/1, flush/1,
          copy/3, set_maximum_since_use/1, delete/1, clear/1]).
--export([obtain/0, obtain/1, obtain/2,
-         release/0, release/1, release/2, transfer/1, transfer/2, transfer/3,
-         set_limit/1, get_limit/0, info_keys/0,
+-export([obtain/0, obtain/1, release/0, release/1, transfer/1, transfer/2,
+         set_limit/1, get_limit/0, info_keys/0, with_handle/1, with_handle/2,
          info/0, info/1]).
 -export([ulimit/0]).
 
@@ -234,7 +233,6 @@
                      {('bof' |'eof'), non_neg_integer()} |
                      {'cur', integer()})).
 -type(offset() :: non_neg_integer()).
--type(obtain_type() :: 'file' | 'socket').
 
 -spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(open/3 ::
@@ -258,13 +256,12 @@
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(obtain/0 :: () -> 'ok').
 -spec(obtain/1 :: (non_neg_integer()) -> 'ok').
--spec(obtain/2 :: (non_neg_integer(), obtain_type()) -> 'ok').
 -spec(release/0 :: () -> 'ok').
 -spec(release/1 :: (non_neg_integer()) -> 'ok').
--spec(release/2 :: (non_neg_integer(), obtain_type()) -> 'ok').
 -spec(transfer/1 :: (pid()) -> 'ok').
 -spec(transfer/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(transfer/3 :: (pid(), non_neg_integer(), obtain_type()) -> 'ok').
+-spec(with_handle/1 :: (fun(() -> A)) -> A).
+-spec(with_handle/2 :: (non_neg_integer(), fun(() -> A)) -> A).
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -503,7 +500,15 @@ transfer(Pid) -> transfer(Pid, 1).
 
 obtain(Count)        -> obtain(Count, socket).
 release(Count)       -> release(Count, socket).
-transfer(Pid, Count) -> transfer(Pid, Count, socket).
+
+with_handle(Fun) ->
+    with_handle(1, Fun).
+
+with_handle(N, Fun) ->
+    ok = obtain(N, file),
+    try Fun()
+    after ok = release(N, file)
+    end.
 
 obtain(Count, Type) when Count > 0 ->
     %% If the FHC isn't running, obtains succeed immediately.
@@ -516,8 +521,8 @@ obtain(Count, Type) when Count > 0 ->
 release(Count, Type) when Count > 0 ->
     gen_server2:cast(?SERVER, {release, Count, Type, self()}).
 
-transfer(Pid, Count, Type) when Count > 0 ->
-    gen_server2:cast(?SERVER, {transfer, Count, Type, self(), Pid}).
+transfer(Pid, Count) when Count > 0 ->
+    gen_server2:cast(?SERVER, {transfer, Count, self(), Pid}).
 
 set_limit(Limit) ->
     gen_server2:call(?SERVER, {set_limit, Limit}, infinity).
@@ -968,11 +973,11 @@ handle_cast({close, Pid, EldestUnusedSince},
     {noreply, adjust_alarm(State, process_pending(
                 update_counts(open, Pid, -1, State)))};
 
-handle_cast({transfer, N, Type, FromPid, ToPid}, State) ->
+handle_cast({transfer, N, FromPid, ToPid}, State) ->
     ok = track_client(ToPid, State#fhc_state.clients),
     {noreply, process_pending(
-                update_counts({obtain, Type}, ToPid, +N,
-                              update_counts({obtain, Type}, FromPid, -N,
+                update_counts({obtain, socket}, ToPid, +N,
+                              update_counts({obtain, socket}, FromPid, -N,
                                             State)))}.
 
 handle_info(check_counts, State) ->
