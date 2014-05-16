@@ -37,11 +37,12 @@ log_event({Type, GL, {Pid, ReportType, Report}}, Params)
 log_event(Event, _Params) ->
     Event.
 
-report([[Thing]], Params) -> report([Thing], Params);
-report(List, Params)      -> [case Item of
-                                      {K, V} -> {K, term(V, Params)};
-                                      _      -> term(Item, Params)
-                                  end || Item <- List].
+report([[Thing]], Params)               -> report([Thing], Params);
+report(List, Params) when is_list(List) -> [case Item of
+                                                {K, V} -> {K, term(V, Params)};
+                                                _      -> term(Item, Params)
+                                            end || Item <- List];
+report(Other, Params)                   -> term(Other, Params).
 
 term(Thing, {Content, Struct, ContentDec, StructDec}) ->
     term(Thing, true, #params{content     = Content,
