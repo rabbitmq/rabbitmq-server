@@ -575,13 +575,6 @@ permissions_connection_channel_test() ->
     http_get("/channels/foo", ?NOT_FOUND),
     ok.
 
-unicode_test() ->
-    QArgs = [],
-    http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
-    http_get("/queues/%2f/♫♪♫♪", ?OK),
-    http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
-    ok.
-
 defs(Key, URI, CreateMethod, Args) ->
     defs(Key, URI, CreateMethod, Args,
          fun(URI2) -> http_delete(URI2, ?NO_CONTENT) end).
