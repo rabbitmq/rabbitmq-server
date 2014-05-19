@@ -249,6 +249,8 @@ with_ldap({error, _} = E, _Fun, _State) ->
 with_ldap({ok, Creds}, Fun, Servers) ->
     Opts0 = [{ssl, env(use_ssl)}, {port, env(port)}],
     SSLOpts = env(ssl_options),
+    %% We can't just pass through [] as sslopts in the old case, eldap
+    %% exit()s when you do that.
     Opts1 = case {SSLOpts, rabbit_misc:version_compare(
                              erlang:system_info(version), "5.10")} of %% R16A
                 {[], _}  -> Opts0;
@@ -256,8 +258,6 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                 {_,  _}  -> [{sslopts, SSLOpts} | Opts0]
             end,
     Opts2 = case env(log) of
-    %% We can't just pass through [] as sslopts in the old case, eldap
-    %% exit()s when you do that.
                 network ->
                     Pre = "    LDAP network traffic: ",
                     rabbit_log:info(

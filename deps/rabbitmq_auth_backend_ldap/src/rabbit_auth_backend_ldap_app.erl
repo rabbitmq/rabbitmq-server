@@ -31,6 +31,11 @@ start(_Type, _StartArgs) ->
                    "LDAP plugin loaded, but rabbit_auth_backend_ldap is not "
                    "in the list of auth_backends. LDAP auth will not work.~n")
     end,
+    {ok, SSL} = application:get_env(rabbitmq_auth_backend_ldap, use_ssl),
+    case SSL of
+        true  -> rabbit_networking:ensure_ssl();
+        false -> ok
+    end,
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
