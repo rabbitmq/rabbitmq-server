@@ -277,8 +277,16 @@ to_basic_properties({struct, P}) ->
     to_basic_properties(P);
 
 to_basic_properties(Props) ->
-    Fmt = fun (headers, H) -> to_amqp_table(H);
-              (_K     , V) -> V
+    E = fun (A, B) -> throw({error, {A, B}}) end,
+    Fmt = fun (headers,       H)                    -> to_amqp_table(H);
+              (delivery_mode, V) when is_integer(V) -> V;
+              (delivery_mode, _V)                   -> E(not_int,delivery_mode);
+              (priority,      V) when is_integer(V) -> V;
+              (priority,      _V)                   -> E(not_int, priority);
+              (timestamp,     V) when is_integer(V) -> V;
+              (timestamp,     _V)                   -> E(not_int, timestamp);
+              (_,             V) when is_binary(V)  -> V;
+              (K,            _V)                    -> E(not_string, K)
           end,
     {Res, _Ix} = lists:foldl(
                    fun (K, {P, Ix}) ->

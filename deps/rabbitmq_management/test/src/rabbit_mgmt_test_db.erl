@@ -204,11 +204,11 @@ delete_ch(Name, Timestamp) ->
     event(channel_closed, [{pid, pid_del(Name)}], Timestamp).
 
 event(Type, Stats, Timestamp) ->
-    gen_server:cast({global, rabbit_mgmt_db},
-                    {event, #event{type      = Type,
-                                   props     = Stats,
-                                   reference = none,
-                                   timestamp = sec_to_triple(Timestamp)}}).
+    ok = gen_server:call(rabbit_mgmt_db,
+                         {event, #event{type      = Type,
+                                        props     = Stats,
+                                        reference = none,
+                                        timestamp = sec_to_triple(Timestamp)}}).
 
 sec_to_triple(Sec) -> {Sec div 1000000, Sec rem 1000000, 0}.
 

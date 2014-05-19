@@ -27,11 +27,12 @@
          augment_nodes/1, augment_vhosts/2,
          get_channel/2, get_connection/2,
          get_all_channels/1, get_all_connections/1,
+         get_all_consumers/0, get_all_consumers/1,
          get_overview/2, get_overview/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, handle_pre_hibernate/1, prioritise_cast/3,
-         format_message_queue/2]).
+         code_change/3, handle_pre_hibernate/1,
+         prioritise_cast/3, prioritise_call/4, format_message_queue/2]).
 
 %% For testing
 -export([override_lookups/1, reset_lookups/0]).
@@ -176,6 +177,9 @@ prioritise_cast({event, #event{type  = Type,
 prioritise_cast(_Msg, _Len, _State) ->
     0.
 
+%% We want timely replies to queries even when overloaded!
+prioritise_call(_Msg, _From, _Len, _State) -> 5.
+
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
@@ -202,6 +206,9 @@ get_connection(Name, R)     -> safe_call({get_connection, Name, R}, not_found).
 
 get_all_channels(R)         -> safe_call({get_all_channels, R}).
 get_all_connections(R)      -> safe_call({get_all_connections, R}).
+
+get_all_consumers()         -> safe_call({get_all_consumers, all}).
+get_all_consumers(V)        -> safe_call({get_all_consumers, V}).
 
 get_overview(User, R)       -> safe_call({get_overview, User, R}).
 get_overview(R)             -> safe_call({get_overview, all, R}).
@@ -293,6 +300,14 @@ handle_call({get_all_connections, Ranges}, _From,
     Conns = created_events(connection_stats, Tables),
     reply(connection_stats(Ranges, Conns, State), State);
 
+handle_call({get_all_consumers, VHost},
+            _From, State = #state{tables = Tables}) ->
+    All = ets:tab2list(orddict:fetch(consumers_by_queue, Tables)),
+    {reply, [augment_msg_stats(
+               augment_consumer(Obj), State) ||
+                {{#resource{virtual_host = VHostC}, _Ch, _CTag}, Obj} <- All,
+                VHost =:= all orelse VHost =:= VHostC], State};
+
 handle_call({get_overview, User, Ranges}, _From,
             State = #state{tables = Tables}) ->
     VHosts = case User of
@@ -332,6 +347,12 @@ handle_call({override_lookups, Lookups}, _From, State) ->
 
 handle_call(reset_lookups, _From, State) ->
     reply(ok, reset_lookups(State));
+
+%% Used in rabbit_mgmt_test_db where we need guarantees events have
+%% been handled before querying
+handle_call({event, Event = #event{reference = none}}, _From, State) ->
+    handle_event(Event, State),
+    reply(ok, State);
 
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
@@ -1034,6 +1055,7 @@ augment_channel_pid(Pid, #state{tables = Tables}) ->
                           {pget(connection, Ch), create}),
     [{name,            pget(name,   Ch)},
      {number,          pget(number, Ch)},
+     {user,            pget(user,   Ch)},
      {connection_name, pget(name,         Conn)},
      {peer_port,       pget(peer_port,    Conn)},
      {peer_host,       pget(peer_host,    Conn)}].
