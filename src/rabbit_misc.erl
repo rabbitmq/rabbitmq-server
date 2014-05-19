@@ -81,7 +81,7 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, thunk/1]).
+-export_type([resource_name/0, thunk/1, channel_or_connection_exit/0]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
