@@ -24,14 +24,7 @@
 -export([start_client/1, start_ssl_client/2]).
 
 start_link(Listeners, []) ->
-    {ok, SupPid} = supervisor2:start_link({local, ?MODULE}, ?MODULE,
-                                         [Listeners]),
-    {ok, _Collector} =
-        supervisor2:start_child(
-          SupPid,
-          {collector, {rabbit_mqtt_collector, start_link, []},
-          transient, ?MAX_WAIT, worker, [rabbit_mqtt_collector]}),
-    {ok, SupPid}.
+    supervisor2:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
 init([{Listeners, SslListeners}]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_mqtt, tcp_listen_options),
@@ -40,10 +33,12 @@ init([{Listeners, SslListeners}]) ->
                   _  -> rabbit_networking:ensure_ssl()
               end,
     {ok, {{one_for_all, 10, 10},
-          [{rabbit_mqtt_client_sup,
-            {rabbit_client_sup, start_link,
-             [{local, rabbit_mqtt_client_sup},
-              {rabbit_mqtt_connection_sup, start_link, []}]},
+          [{collector,
+            {rabbit_mqtt_collector, start_link, []},
+            transient, ?MAX_WAIT, worker, [rabbit_mqtt_collector]},
+           {rabbit_mqtt_client_sup,
+            {rabbit_client_sup, start_link, [{local, rabbit_mqtt_client_sup},
+                                             {rabbit_mqtt_connection_sup, start_link, []}]},
             transient, infinity, supervisor, [rabbit_client_sup]} |
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts], Listeners) ++
@@ -68,7 +63,7 @@ ssl_listener_spec([Address, SocketOpts, SslOpts]) ->
       {?MODULE, start_ssl_client, [SslOpts]}).
 
 start_client(Sock, SockTransform) ->
-    {ok, KeepaliveSup, Reader} =
+    {ok, _, {KeepaliveSup, Reader}} =
         supervisor2:start_child(rabbit_mqtt_client_sup, []),
     ok = rabbit_net:controlling_process(Sock, Reader),
     ok = gen_server2:cast(Reader, {go, Sock, SockTransform, KeepaliveSup}),

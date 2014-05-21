@@ -38,7 +38,7 @@ start_link() ->
                           {rabbit_keepalive_sup,
                            {rabbit_mqtt_connection_sup, start_keepalive_link, []},
                            intrinsic, infinity, supervisor, [rabbit_keepalive_sup]}),
-    {ok, KeepaliveSup, ReaderPid}.
+    {ok, SupPid, {KeepaliveSup, ReaderPid}}.
 
 start_keepalive_link() ->
     supervisor2:start_link(?MODULE, []).
