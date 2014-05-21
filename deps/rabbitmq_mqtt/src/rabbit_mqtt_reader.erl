@@ -41,7 +41,7 @@ init([]) ->
     {ok, undefined, hibernate, {backoff, 1000, 1000, 10000}}.
 
 handle_call(Msg, From, State) ->
-    stop({mqtt_unexpected_call, Msg, From}, State).
+    {stop, {mqtt_unexpected_call, Msg, From}, State}.
 
 handle_cast({go, Sock0, SockTransform, KeepaliveSup}, undefined) ->
     process_flag(trap_exit, true),
@@ -82,10 +82,10 @@ handle_cast(duplicate_id,
                             conn_name  = ConnName }) ->
     log(warning, "MQTT disconnecting duplicate client id ~p (~p)~n",
                  [rabbit_mqtt_processor:info(client_id, PState), ConnName]),
-    stop({shutdown, duplicate_id}, State);
+    {stop, {shutdown, duplicate_id}, State};
 
 handle_cast(Msg, State) ->
-    stop({mqtt_unexpected_cast, Msg}, State).
+    {stop, {mqtt_unexpected_cast, Msg}, State}.
 
 handle_info({#'basic.deliver'{}, #amqp_msg{}} = Delivery,
             State = #state{ proc_state = ProcState }) ->
@@ -98,10 +98,10 @@ handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State, hibernate};
 
 handle_info(#'basic.cancel'{}, State) ->
-    stop({shutdown, subscription_cancelled}, State);
+    {stop, {shutdown, subscription_cancelled}, State};
 
 handle_info({'EXIT', _Conn, Reason}, State) ->
-    stop({connection_died, Reason}, State);
+    {stop, {connection_died, Reason}, State};
 
 handle_info({inet_reply, _Ref, ok}, State) ->
     {noreply, State, hibernate};
@@ -136,14 +136,13 @@ handle_info({start_keepalives, Keepalive},
 
 handle_info(keepalive_timeout, State = #state { conn_name = ConnStr }) ->
     log(error, "closing MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
-    stop({shutdown, keepalive_timeout}, State);
+    {stop, {shutdown, keepalive_timeout}, State};
 
 handle_info(Msg, State) ->
-    stop({mqtt_unexpected_msg, Msg}, State).
+    {stop, {mqtt_unexpected_msg, Msg}, State}.
 
-terminate(_Reason, State = #state{proc_state = ProcessorState}) ->
-    #proc_state{connection = Connection} = ProcessorState,
-    catch amqp_connection:close(Connection),
+terminate(_Reason, State = #state{ proc_state = ProcState}) ->
+    rabbit_mqtt_processor:close_connection(ProcState),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -173,14 +172,14 @@ process_received_bytes(Bytes,
                 {err, Reason, ProcState1} ->
                     log(info, "MQTT protocol error ~p for connection ~p~n",
                         [Reason, ConnStr]),
-                    stop({shutdown, Reason}, pstate(State, ProcState1));
+                    {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {stop, ProcState1} ->
-                    stop(normal, pstate(State, ProcState1))
+                    {stop, normal, pstate(State, ProcState1)}
             end;
         {error, Error} ->
             log(error, "MQTT detected framing error ~p for connection ~p~n",
                 [ConnStr, Error]),
-            stop({shutdown, Error}, State)
+            {stop, {shutdown, Error}, State}
     end.
 
 callback_reply(State, {ok, ProcState}) ->
@@ -204,13 +203,7 @@ network_error(Reason,
     log(info, "MQTT detected network error for ~p: ~p~n", [ConnStr, Reason]),
     rabbit_mqtt_processor:send_will(PState),
     % todo: flush channel after publish
-    stop({shutdown, conn_closed}, State).
-
-stop(Reason, State) ->
-    {stop, Reason, close_connection(State)}.
-
-close_connection(State = #state{ proc_state = ProcState} ) ->
-    pstate(State, rabbit_mqtt_processor:close_connection(ProcState)).
+    {stop, {shutdown, conn_closed}, State}.
 
 run_socket(State = #state{ connection_state = blocked }) ->
     State;
