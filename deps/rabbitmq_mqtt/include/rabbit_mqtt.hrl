@@ -16,6 +16,7 @@
 
 -define(CLIENT_ID_MAXLEN, 23).
 
+%% reader state
 -record(state,      { socket,
                       conn_name,
                       await_recv,
@@ -26,6 +27,7 @@
                       parse_state,
                       proc_state }).
 
+%% processor state
 -record(proc_state, { socket,
                       subscriptions,
                       consumer_tags,
