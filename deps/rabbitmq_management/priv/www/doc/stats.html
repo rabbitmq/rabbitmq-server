@@ -97,8 +97,8 @@
       <tr>
         <td><code>samples</code></td>
         <td>
-          Snapshots of how the showing how the value has changed over
-          the requested time period.
+          Snapshots showing how the value has changed over the
+          requested time period.
         </td>
       </tr>
     </table>
@@ -291,7 +291,7 @@
         </td>
       </tr>
       <tr>
-        <td><code></code></td>
+        <td><code>erlang_version</code></td>
         <td>
           A string with the Erlang version of the node connected
           to. As clusters should all run the same version this can be
@@ -338,15 +338,19 @@
       <tr>
         <td><code>object_totals</code></td>
         <td>
-          A global count of all objects, subject to the same
-          visibility rules as for <code>message_stats</code>.
+          An object containing global counts of all connections,
+          channels, exchanges, queues and consumers, subject to the
+          same visibility rules as for <code>message_stats</code>.
         </td>
       </tr>
       <tr>
         <td><code>queue_totals</code></td>
         <td>
-          A sum of the size of all queues, again subject to the same
-          visibility rules as for <code>message_stats</code>.
+          An object containing sums of
+          the <code>messages</code>, <code>messages_ready</code>
+          and <code>messages_unacknowledged</code> fields for all
+          queues, again subject to the same visibility rules as
+          for <code>message_stats</code>.
         </td>
       </tr>
       <tr>
@@ -370,10 +374,9 @@
     </table>
 
     <h2>/api/nodes</h2>
-    <h2>/api/nodes/(node-name)</h2>
 
     <p>
-      These have the following fields:
+      This has the following fields:
     </p>
 
     <table>
@@ -459,7 +462,7 @@
         <td><code>os_pid</code></td>
         <td>
           Process identifier for the Operating System under which this
-          ndoe is running.
+          node is running.
         </td>
       </tr>
       <tr>
