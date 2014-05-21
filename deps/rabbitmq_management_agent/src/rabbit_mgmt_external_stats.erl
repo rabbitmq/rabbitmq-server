@@ -30,7 +30,7 @@
 -define(KEYS, [name, partitions, os_pid, fd_used, fd_total,
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                disk_free_limit, disk_free, disk_free_alarm,
-               proc_used, proc_total, statistics_level,
+               proc_used, proc_total, rates_mode,
                uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications, contexts]).
 
@@ -175,9 +175,8 @@ i(contexts,        _State) -> rabbit_web_dispatch_contexts();
 i(uptime, _State) ->
     {Total, _} = erlang:statistics(wall_clock),
     Total;
-i(statistics_level, _State) ->
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    StatsLevel;
+i(rates_mode, _State) ->
+    rabbit_mgmt_db_handler:rates_mode();
 i(exchange_types, _State) ->
     list_registry_plugins(exchange);
 i(auth_mechanisms, _State) ->
