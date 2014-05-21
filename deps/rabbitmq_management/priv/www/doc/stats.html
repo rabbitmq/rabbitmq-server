@@ -215,13 +215,15 @@
 
     <h2>Detailed message stats objects</h2>
     <p>
-      In addition, queues, exchanges and channels will return a
+      In addition, queues, exchanges and channels can return a
       breakdown of message stats for each of their neighbours
       (i.e. adjacent objects in the chain: channel -> exchange ->
-      queue -> channel).
+      queue -> channel). This will only happen if
+      the <code>rates_mode<code> configuration item has been switched
+      to <code>detailed</code> from its default of <code>basic</code>.
     </p>
     <p>
-      As this possibly constitutes a large quantity of data, it is
+      As this possibly constitutes a large quantity of data, it is also
       only returned when querying a single channel, queue or exchange
       rather than a list. Note also that the default sample retention
       policy means that these detailed message stats do not retain
@@ -366,9 +368,9 @@
         </td>
       </tr>
       <tr>
-        <td><code>statistics_level</code></td>
+        <td><code>rates_mode</code></td>
         <td>
-          Whether the node is running fine or coarse statistics.
+          'none', 'basic' or 'detailed'.
         </td>
       </tr>
     </table>
@@ -515,9 +517,9 @@
         </td>
       </tr>
       <tr>
-        <td><code>statistics_level</code></td>
+        <td><code>rates_mode</code></td>
         <td>
-          'fine' or 'coarse'.
+          'none', 'basic' or 'detailed'.
         </td>
       </tr>
       <tr>
