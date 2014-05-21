@@ -206,7 +206,7 @@ network_error(Reason,
     stop({shutdown, conn_closed}, State).
 
 stop(Reason, State) ->
-    {stop, Reason, close_connection(State)}.
+    {stop, Reason, State}.
 
 close_connection(State = #state{ proc_state = ProcState} ) ->
     pstate(State, rabbit_mqtt_processor:close_connection(ProcState)).
