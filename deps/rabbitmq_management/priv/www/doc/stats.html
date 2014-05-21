@@ -31,7 +31,7 @@
       It should be read in conjunction with the manual page
       for <code>rabbitmqctl</code> (see your installation if on Unix / Linux,
       or <a href="http://www.rabbitmq.com/man/rabbitmqctl.1.man.html">the
-      RabbitMQ website</a> for the latest version. Any field which can
+      RabbitMQ website</a> for the latest version). Any field which can
       be returned by a command of the form <code>rabbitmqctl
       list_<i>something</i></code> will also be returned in the
       equivalent part of the HTTP API, so all those keys are not
@@ -78,7 +78,7 @@
       <tr>
         <td><code>avg</code></td>
         <td>
-          The average value for the requested time period.
+          The average value for the requested time period (see below).
         </td>
       </tr>
       <tr>
@@ -98,17 +98,17 @@
         <td><code>samples</code></td>
         <td>
           Snapshots of how the showing how the value has changed over
-          the requested time period (see below).
+          the requested time period.
         </td>
       </tr>
     </table>
 
     <p>
       <code>avg</code>, <code>avg_rate</code> and <code>samples</code>
-      will only appear if you request a specific time period. To do
-      this you need to set an age and an increment for the samples you
-      want. The end of the range returned will always correspond to
-      the present.
+      will only appear if you request a specific time period by
+      appending query parameters to the URL. To do this you need to
+      set an age and an increment for the samples you want. The end of
+      the range returned will always correspond to the present.
     </p>
     <p>
       Use <code>msg_rates_age</code>
