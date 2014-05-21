@@ -141,9 +141,8 @@ handle_info(keepalive_timeout, State = #state { conn_name = ConnStr }) ->
 handle_info(Msg, State) ->
     stop({mqtt_unexpected_msg, Msg}, State).
 
-terminate(_Reason, State = #state{proc_state = ProcessorState}) ->
-    #proc_state{connection = Connection} = ProcessorState,
-    catch amqp_connection:close(Connection),
+terminate(_Reason, State) ->
+    close_connection(State),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
