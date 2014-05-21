@@ -33,13 +33,13 @@ init([{Listeners, SslListeners}]) ->
                   _  -> rabbit_networking:ensure_ssl()
               end,
     {ok, {{one_for_all, 10, 10},
-          [{rabbit_mqtt_client_sup,
+          [{collector,
+            {rabbit_mqtt_collector, start_link, []},
+            transient, ?MAX_WAIT, worker, [rabbit_mqtt_collector]},
+           {rabbit_mqtt_client_sup,
             {rabbit_client_sup, start_link, [{local, rabbit_mqtt_client_sup},
                                              {rabbit_mqtt_connection_sup, start_link, []}]},
-            transient, infinity, supervisor, [rabbit_client_sup]},
-           {collector,
-            {rabbit_mqtt_collector, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_mqtt_collector]} |
+            transient, infinity, supervisor, [rabbit_client_sup]} |
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
