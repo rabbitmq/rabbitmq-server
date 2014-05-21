@@ -24,7 +24,7 @@
 -export([start_client/1, start_ssl_client/2]).
 
 start_link(Listeners, []) ->
-    {ok, SupPid} = supervisor:start_link({local, ?MODULE}, ?MODULE,
+    {ok, SupPid} = supervisor2:start_link({local, ?MODULE}, ?MODULE,
                                          [Listeners]),
     {ok, _Collector} =
         supervisor2:start_child(
@@ -69,7 +69,7 @@ ssl_listener_spec([Address, SocketOpts, SslOpts]) ->
 
 start_client(Sock, SockTransform) ->
     {ok, KeepaliveSup, Reader} =
-        supervisor:start_child(rabbit_mqtt_client_sup, []),
+        supervisor2:start_child(rabbit_mqtt_client_sup, []),
     ok = rabbit_net:controlling_process(Sock, Reader),
     ok = gen_server2:cast(Reader, {go, Sock, SockTransform, KeepaliveSup}),
 
