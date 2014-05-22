@@ -134,10 +134,15 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
                 for_all(exchanges,   All, fun add_exchange/1),
                 for_all(bindings,    All, fun add_binding/1),
                 SuccessFun()
-            catch {error, E} -> ErrorFun(E);
-                  exit:E     -> ErrorFun(E)
+            catch {error, E} -> ErrorFun(format(E));
+                  exit:E     -> ErrorFun(format(E))
             end
     end.
+
+format(#amqp_error{name = Name, explanation = Explanation}) ->
+    list_to_binary(rabbit_misc:format("~s: ~s", [Name, Explanation]));
+format(E) ->
+    list_to_binary(rabbit_misc:format("~p", [E])).
 
 get_part(Name, Parts) ->
     %% TODO any reason not to use lists:keyfind instead?
