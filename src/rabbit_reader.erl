@@ -188,9 +188,11 @@ server_capabilities(_) ->
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-socket_error(Reason) ->
+socket_error(Reason) when is_atom(Reason) ->
     log(error, "error on AMQP connection ~p: ~s~n",
-        [self(), rabbit_misc:format_inet_error(Reason)]).
+        [self(), rabbit_misc:format_inet_error(Reason)]);
+socket_error(Reason) ->
+    log(error, "error on AMQP connection ~p:~n~p~n", [self(), Reason]).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
