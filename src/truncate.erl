@@ -44,11 +44,14 @@ report(List, Params) when is_list(List) -> [case Item of
                                             end || Item <- List];
 report(Other, Params)                   -> term(Other, Params).
 
-term(Thing, {Content, Struct, ContentDec, StructDec}) ->
-    term(Thing, true, #params{content     = Content,
-                              struct      = Struct,
-                              content_dec = ContentDec,
-                              struct_dec  = StructDec}).
+term(Thing, {Max, {Content, Struct, ContentDec, StructDec}}) ->
+    case term_size(Thing, erlang:system_info(wordsize)) > Max of
+        true  -> term(Thing, true, #params{content     = Content,
+                                           struct      = Struct,
+                                           content_dec = ContentDec,
+                                           struct_dec  = StructDec});
+        false -> Thing
+    end.
 
 term(Bin, _AllowPrintable, #params{content = N})
   when (is_binary(Bin) orelse is_bitstring(Bin))
@@ -86,14 +89,30 @@ shrink_list([H|T], #params{content     = Content,
 
 %%----------------------------------------------------------------------------
 
+%% We don't use erts_debug:flat_size/1 because that ignores binary
+%% sizes. This is all going to be rather approximate though, these
+%% sizes are probably not very "fair" but we are just trying to see if
+%% we reach a fairly arbitrary limit anyway though.
+term_size(B, _W) when is_bitstring(B) -> size(B);
+term_size(A, W)  when is_atom(A)      -> 2 * W;
+term_size(N, W)  when is_number(N)    -> 2 * W;
+term_size(F, W)  when is_function(F)  -> erts_debug:flat_size(F) * W;
+term_size(P, W)  when is_pid(P)       -> erts_debug:flat_size(P) * W;
+term_size(T, W)  when is_tuple(T)     -> term_size(tuple_to_list(T), W);
+term_size([], W)                      -> 2 * W;
+term_size([H|T], W)                   -> 2 * W + term_size(H, W) +
+                                             term_size(T, W).
+
+%%----------------------------------------------------------------------------
+
 test() ->
     test_short_examples_exactly(),
     test_large_examples_for_size(),
     ok.
 
 test_short_examples_exactly() ->
-    F = fun (Term, Exp) -> Exp = term(Term, {10, 10, 5, 5}) end,
-    FSmall = fun (Term, Exp) -> Exp = term(Term, {2, 2, 2, 2}) end,
+    F = fun (Term, Exp) -> Exp = term(Term, {1, {10, 10, 5, 5}}) end,
+    FSmall = fun (Term, Exp) -> Exp = term(Term, {1, {2, 2, 2, 2}}) end,
     F([], []),
     F("h", "h"),
     F("hello world", "hello w..."),
@@ -113,7 +132,7 @@ test_short_examples_exactly() ->
 
 test_large_examples_for_size() ->
     %% Real world values
-    Shrink = fun(Term) -> term(Term, {1000, 100, 50, 5}) end,
+    Shrink = fun(Term) -> term(Term, {1, {1000, 100, 50, 5}}) end,
     TestSize = fun(Term) ->
                        true = 5000000 < size(term_to_binary(Term)),
                        true = 500000 > size(term_to_binary(Shrink(Term)))
