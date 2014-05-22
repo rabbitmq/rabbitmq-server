@@ -11,7 +11,7 @@
   <h2>Overview</h2>
   <div class="hider">
     <%= queue_lengths('lengths-vhost', vhost) %>
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-vhost', vhost.message_stats) %>
 <% } %>
     <%= data_rates('data-rates-vhost', vhost, 'Data rates') %>

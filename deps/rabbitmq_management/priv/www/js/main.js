@@ -368,7 +368,7 @@ function y_position() {
 
 function with_update(fun) {
     with_reqs(apply_state(current_reqs), [], function(json) {
-            json.statistics_level = statistics_level;
+            //json.statistics_level = statistics_level;
             var html = format(current_template, json);
             fun(html);
             update_status('ok');

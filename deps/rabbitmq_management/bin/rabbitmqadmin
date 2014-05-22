@@ -34,6 +34,7 @@ VERSION = '%%VSN%%'
 
 LISTABLE = {'connections': {'vhost': False},
             'channels':    {'vhost': False},
+            'consumers':   {'vhost': True},
             'exchanges':   {'vhost': True},
             'queues':      {'vhost': True},
             'bindings':    {'vhost': True},
