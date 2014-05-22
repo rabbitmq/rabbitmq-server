@@ -29,6 +29,7 @@
 -ifdef(use_specs).
 
 -type(ok_or_error_string() :: 'ok' | {'error_string', string()}).
+-type(ok_thunk_or_error_string() :: ok_or_error_string() | fun(() -> 'ok')).
 
 -spec(parse_set/5 :: (rabbit_types:vhost(), binary(), binary(), string(),
                       rabbit_types:user() | 'none') -> ok_or_error_string()).
@@ -38,9 +39,9 @@
                     rabbit_types:user() | 'none') -> ok_or_error_string()).
 -spec(set_global/2 :: (atom(), term()) -> 'ok').
 -spec(clear/3 :: (rabbit_types:vhost(), binary(), binary())
-                 -> ok_or_error_string()).
+                 -> ok_thunk_or_error_string()).
 -spec(clear_any/3 :: (rabbit_types:vhost(), binary(), binary())
-                     -> ok_or_error_string()).
+                     -> ok_thunk_or_error_string()).
 -spec(list/0 :: () -> [rabbit_types:infos()]).
 -spec(list/1 :: (rabbit_types:vhost() | '_') -> [rabbit_types:infos()]).
 -spec(list_component/1 :: (binary()) -> [rabbit_types:infos()]).
@@ -137,15 +138,21 @@ clear(VHost, Component, Name) ->
     clear_any(VHost, Component, Name).
 
 clear_any(VHost, Component, Name) ->
+    Notify = fun () ->
+                     case lookup_component(Component) of
+                         {ok, Mod} -> event_notify(
+                                        parameter_cleared, VHost, Component,
+                                        [{name, Name}]),
+                                      Mod:notify_clear(VHost, Component, Name);
+                         _         -> ok
+                     end
+             end,
     case lookup(VHost, Component, Name) of
         not_found -> {error_string, "Parameter does not exist"};
         _         -> mnesia_clear(VHost, Component, Name),
-                     case lookup_component(Component) of
-                         {ok, Mod} -> event_notify(
-                                         parameter_cleared, VHost, Component,
-                                         [{name, Name}]),
-                                      Mod:notify_clear(VHost, Component, Name);
-                         _         -> ok
+                     case mnesia:is_transaction() of
+                         true  -> Notify;
+                         false -> Notify()
                      end
     end.
 

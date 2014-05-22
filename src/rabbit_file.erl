@@ -24,6 +24,8 @@
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
 -export([lock_file/1]).
 
+-import(file_handle_cache, [with_handle/1, with_handle/2]).
+
 -define(TMP_EXT, ".tmp").
 
 %%----------------------------------------------------------------------------
@@ -81,7 +83,7 @@ file_size(File) ->
         _                           -> 0
     end.
 
-ensure_dir(File) -> with_fhc_handle(fun () -> ensure_dir_internal(File) end).
+ensure_dir(File) -> with_handle(fun () -> ensure_dir_internal(File) end).
 
 ensure_dir_internal("/")  ->
     ok;
@@ -101,23 +103,14 @@ wildcard(Pattern, Dir) ->
         {error, _}  -> []
     end.
 
-list_dir(Dir) -> with_fhc_handle(fun () -> prim_file:list_dir(Dir) end).
+list_dir(Dir) -> with_handle(fun () -> prim_file:list_dir(Dir) end).
 
 read_file_info(File) ->
-    with_fhc_handle(fun () -> prim_file:read_file_info(File) end).
-
-with_fhc_handle(Fun) ->
-    with_fhc_handle(1, Fun).
-
-with_fhc_handle(N, Fun) ->
-    ok = file_handle_cache:obtain(N),
-    try Fun()
-    after ok = file_handle_cache:release(N)
-    end.
+    with_handle(fun () -> prim_file:read_file_info(File) end).
 
 read_term_file(File) ->
     try
-        {ok, Data} = with_fhc_handle(fun () -> prim_file:read_file(File) end),
+        {ok, Data} = with_handle(fun () -> prim_file:read_file(File) end),
         {ok, Tokens, _} = erl_scan:string(binary_to_list(Data)),
         TokenGroups = group_tokens(Tokens),
         {ok, [begin
@@ -177,7 +170,7 @@ with_synced_copy(Path, Modes, Fun) ->
         true ->
             {error, append_not_supported, Path};
         false ->
-            with_fhc_handle(
+            with_handle(
               fun () ->
                       Bak = Path ++ ?TMP_EXT,
                       case prim_file:open(Bak, Modes) of
@@ -206,16 +199,16 @@ append_file(File, Suffix) ->
 append_file(_, _, "") ->
     ok;
 append_file(File, 0, Suffix) ->
-    with_fhc_handle(fun () ->
-                            case prim_file:open([File, Suffix], [append]) of
-                                {ok, Fd} -> prim_file:close(Fd);
-                                Error    -> Error
-                            end
-                    end);
+    with_handle(fun () ->
+                        case prim_file:open([File, Suffix], [append]) of
+                            {ok, Fd} -> prim_file:close(Fd);
+                            Error    -> Error
+                        end
+                end);
 append_file(File, _, Suffix) ->
-    case with_fhc_handle(2, fun () ->
+    case with_handle(2, fun () ->
                                 file:copy(File, {[File, Suffix], [append]})
-                            end) of
+                        end) of
         {ok, _BytesCopied} -> ok;
         Error              -> Error
     end.
@@ -227,12 +220,12 @@ ensure_parent_dirs_exist(Filename) ->
             throw({error, {cannot_create_parent_dirs, Filename, Reason}})
     end.
 
-rename(Old, New) -> with_fhc_handle(fun () -> prim_file:rename(Old, New) end).
+rename(Old, New) -> with_handle(fun () -> prim_file:rename(Old, New) end).
 
-delete(File) -> with_fhc_handle(fun () -> prim_file:delete(File) end).
+delete(File) -> with_handle(fun () -> prim_file:delete(File) end).
 
 recursive_delete(Files) ->
-    with_fhc_handle(
+    with_handle(
       fun () -> lists:foldl(fun (Path,  ok) -> recursive_delete1(Path);
                                 (_Path, {error, _Err} = Error) -> Error
                             end, ok, Files)
@@ -307,7 +300,7 @@ recursive_copy(Src, Dest) ->
 lock_file(Path) ->
     case is_file(Path) of
         true  -> {error, eexist};
-        false -> with_fhc_handle(
+        false -> with_handle(
                    fun () -> {ok, Lock} = prim_file:open(Path, [write]),
                              ok = prim_file:close(Lock)
                    end)

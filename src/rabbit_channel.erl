@@ -187,7 +187,7 @@ force_event_refresh(Ref) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
+init([Channel, Foo, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid]) ->
     process_flag(trap_exit, true),
     ?store_proc_name({ConnName, Channel}),
@@ -195,7 +195,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
-                reader_pid              = ReaderPid,
+                reader_pid              = Foo,
                 writer_pid              = WriterPid,
                 conn_pid                = ConnPid,
                 conn_name               = ConnName,
@@ -894,8 +894,7 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
               _, State = #ch{virtual_host = VHostPath}) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_not_default_exchange(ExchangeName),
-    check_configure_permitted(ExchangeName, State),
+    test(State, ExchangeName),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
@@ -1119,7 +1118,7 @@ handle_method(#'tx.commit'{}, _, #ch{tx = none}) ->
 
 handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Msgs, Acks},
                                              limiter = Limiter}) ->
-    State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, Msgs),
+    State1 = test2(State, Msgs),
     Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
     lists:foreach(fun ({ack,     A}) -> ack(Rev(A), State1);
                       ({Requeue, A}) -> reject(Requeue, Rev(A), Limiter)
@@ -1164,6 +1163,13 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
       command_invalid, "unimplemented method", []).
+
+test2(State, Msgs) ->
+    rabbit_misc:queue_fold(fun deliver_to_queues/2, State, Msgs).
+
+test(State, ExchangeName) ->
+    check_not_default_exchange(ExchangeName),
+    check_configure_permitted(ExchangeName, State).
 
 %%----------------------------------------------------------------------------
 

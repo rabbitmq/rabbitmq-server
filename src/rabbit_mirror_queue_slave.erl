@@ -102,7 +102,15 @@ handle_go(Q = #amqqueue{name = QName}) ->
     process_flag(trap_exit, true), %% amqqueue_process traps exits too.
     {ok, GM} = gm:start_link(QName, ?MODULE, [self()],
                              fun rabbit_misc:execute_mnesia_transaction/1),
-    receive {joined, GM} -> ok end,
+    MRef = erlang:monitor(process, GM),
+    %% We ignore the DOWN message because we are also linked and
+    %% trapping exits, we just want to not get stuck and we will exit
+    %% later.
+    receive
+        {joined, GM}            -> erlang:demonitor(MRef, [flush]),
+                                   ok;
+        {'DOWN', MRef, _, _, _} -> ok
+    end,
     Self = self(),
     Node = node(),
     case rabbit_misc:execute_mnesia_transaction(
