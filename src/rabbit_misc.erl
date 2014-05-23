@@ -67,7 +67,7 @@
 -export([check_expiry/1]).
 -export([base64url/1]).
 -export([interval_operation/4]).
--export([ensure_timer/4, stop_timer/2, send_after/3]).
+-export([ensure_timer/4, stop_timer/2, send_after/3, cancel_timer/1]).
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
