@@ -99,7 +99,6 @@ term_limit(Thing, Max) ->
         _              -> false
     end.
 
-term_size(_,  limit_exceeded)        -> limit_exceeded;
 term_size(B, M) when is_bitstring(B) -> lim(M - size(B));
 term_size(A, M) when is_atom(A)      -> lim(M - 2);
 term_size(N, M) when is_number(N)    -> lim(M - 2);
@@ -114,7 +113,7 @@ term_size([H|T], M) ->
         limit_exceeded -> limit_exceeded;
         M2             -> case term_size(T, M2) of
                               limit_exceeded -> limit_exceeded;
-                              M3             -> M3 - 2
+                              M3             -> lim(M3 - 2)
                           end
     end.
 
