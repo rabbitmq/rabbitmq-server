@@ -45,7 +45,7 @@ report(List, Params) when is_list(List) -> [case Item of
 report(Other, Params)                   -> term(Other, Params).
 
 term(Thing, {Max, {Content, Struct, ContentDec, StructDec}}) ->
-    case term_limit(Thing, Max div erlang:system_info(wordsize)) of
+    case term_limit(Thing, Max) of
         true  -> term(Thing, true, #params{content     = Content,
                                            struct      = Struct,
                                            content_dec = ContentDec,
@@ -94,35 +94,35 @@ shrink_list([H|T], #params{content     = Content,
 %% sizes are probably not very "fair" but we are just trying to see if
 %% we reach a fairly arbitrary limit anyway though.
 term_limit(Thing, Max) ->
-    case term_size(Thing, Max) of
+    case term_size(Thing, Max, erlang:system_info(wordsize)) of
         limit_exceeded -> true;
         _              -> false
     end.
 
-term_size(B, M) when is_bitstring(B) -> lim(M, size(B));
-term_size(A, M) when is_atom(A)      -> lim(M, 2);
-term_size(N, M) when is_number(N)    -> lim(M, 2);
-term_size(F, M) when is_function(F)  -> lim(M, erts_debug:flat_size(F));
-term_size(P, M) when is_pid(P)       -> lim(M, erts_debug:flat_size(P));
-term_size(T, M) when is_tuple(T)     -> tuple_term_size(T, M, 1, tuple_size(T));
-
-term_size([], M)    ->
+term_size(B, M, _W) when is_bitstring(B) -> lim(M, size(B));
+term_size(A, M, W) when is_atom(A)       -> lim(M, 2 * W);
+term_size(N, M, W) when is_number(N)     -> lim(M, 2 * W);
+term_size(F, M, W) when is_function(F)   -> lim(M, erts_debug:flat_size(F) * W);
+term_size(P, M, W) when is_pid(P)        -> lim(M, erts_debug:flat_size(P) * W);
+term_size(T, M, W) when is_tuple(T)      -> tuple_term_size(
+                                              T, M, 1, tuple_size(T), W);
+term_size([], M, _W)    ->
     M;
-term_size([H|T], M) ->
-    case term_size(H, M) of
+term_size([H|T], M, W) ->
+    case term_size(H, M, W) of
         limit_exceeded -> limit_exceeded;
-        M2             -> lim(term_size(T, M2), 2)
+        M2             -> lim(term_size(T, M2, W), 2 * W)
     end.
 
 lim(S, T) when is_number(S) andalso S > T -> S - T;
 lim(_, _)                                 -> limit_exceeded.
 
-tuple_term_size(_T, limit_exceeded, _I, _S) ->
+tuple_term_size(_T, limit_exceeded, _I, _S, _W) ->
     limit_exceeded;
-tuple_term_size(_T, M, I, S) when I > S ->
+tuple_term_size(_T, M, I, S, _W) when I > S ->
     M;
-tuple_term_size(T, M, I, S) ->
-    tuple_term_size(T, lim(term_size(element(I, T), M), 2), I + 1, S).
+tuple_term_size(T, M, I, S, W) ->
+    tuple_term_size(T, lim(term_size(element(I, T), M, W), 2 * W), I + 1, S, W).
 
 %%----------------------------------------------------------------------------
 
@@ -159,12 +159,13 @@ test_short_examples_exactly() ->
     ok.
 
 test_term_limit() ->
+    W = erlang:system_info(wordsize),
     S = <<"abc">>,
-    1 = truncate:term_size(S, 4),
-    limit_exceeded = truncate:term_size(S, 3),
-    90 = truncate:term_size([S, S], 100),
-    88 = truncate:term_size([S, [S]], 100),
-    limit_exceeded = truncate:term_size([S, S], 6),
+    1 = term_size(S, 4, W),
+    limit_exceeded = term_size(S, 3, W),
+    62 = term_size([S, S], 100, W),
+    46 = term_size([S, [S]], 100, W),
+    limit_exceeded = term_size([S, S], 6, W),
     ok.
 
 test_large_examples_for_size() ->
