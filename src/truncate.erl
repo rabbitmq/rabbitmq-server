@@ -124,12 +124,19 @@ lim(_)            -> limit_exceeded.
 
 test() ->
     test_short_examples_exactly(),
+    test_term_limit(),
     test_large_examples_for_size(),
     ok.
 
 test_short_examples_exactly() ->
-    F = fun (Term, Exp) -> Exp = term(Term, {1, {10, 10, 5, 5}}) end,
-    FSmall = fun (Term, Exp) -> Exp = term(Term, {1, {2, 2, 2, 2}}) end,
+    F = fun (Term, Exp) ->
+                Exp = term(Term, {1, {10, 10, 5, 5}}),
+                Term = term(Term, {100000, {10, 10, 5, 5}})
+        end,
+    FSmall = fun (Term, Exp) ->
+                     Exp = term(Term, {1, {2, 2, 2, 2}}),
+                     Term = term(Term, {100000, {2, 2, 2, 2}})
+             end,
     F([], []),
     F("h", "h"),
     F("hello world", "hello w..."),
@@ -145,6 +152,15 @@ test_short_examples_exactly() ->
     P = spawn(fun() -> receive die -> ok end end),
     F([0, 0.0, <<1:1>>, F, P], [0, 0.0, <<1:1>>, F, P]),
     P ! die,
+    ok.
+
+test_term_limit() ->
+    S = <<"abc">>,
+    1 = truncate:term_size(S, 4),
+    limit_exceeded = truncate:term_size(S, 3),
+    90 = truncate:term_size([S, S], 100),
+    88 = truncate:term_size([S, [S]], 100),
+    limit_exceeded = truncate:term_size([S, S], 6),
     ok.
 
 test_large_examples_for_size() ->
