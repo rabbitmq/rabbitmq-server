@@ -99,38 +99,30 @@ term_limit(Thing, Max) ->
         _              -> false
     end.
 
-term_size(B, M) when is_bitstring(B) -> lim(M - size(B));
-term_size(A, M) when is_atom(A)      -> lim(M - 2);
-term_size(N, M) when is_number(N)    -> lim(M - 2);
-term_size(F, M) when is_function(F)  -> lim(M - erts_debug:flat_size(F));
-term_size(P, M) when is_pid(P)       -> lim(M - erts_debug:flat_size(P));
-term_size(T, M) when is_tuple(T)     -> tuple_term_size(T, M, 1);
+term_size(B, M) when is_bitstring(B) -> lim(M, size(B));
+term_size(A, M) when is_atom(A)      -> lim(M, 2);
+term_size(N, M) when is_number(N)    -> lim(M, 2);
+term_size(F, M) when is_function(F)  -> lim(M, erts_debug:flat_size(F));
+term_size(P, M) when is_pid(P)       -> lim(M, erts_debug:flat_size(P));
+term_size(T, M) when is_tuple(T)     -> tuple_term_size(T, M, 1, tuple_size(T));
 
 term_size([], M)    ->
     M;
 term_size([H|T], M) ->
     case term_size(H, M) of
         limit_exceeded -> limit_exceeded;
-        M2             -> case term_size(T, M2) of
-                              limit_exceeded -> limit_exceeded;
-                              M3             -> lim(M3 - 2)
-                          end
+        M2             -> lim(term_size(T, M2), 2)
     end.
 
-lim(S) when S > 0 -> S;
-lim(_)            -> limit_exceeded.
+lim(S, T) when is_number(S) andalso S > T -> S - T;
+lim(_, _)                                 -> limit_exceeded.
 
-tuple_term_size(_T, limit_exceeded, _I) ->
+tuple_term_size(_T, limit_exceeded, _I, _S) ->
     limit_exceeded;
-tuple_term_size(T, M, I) ->
-    case term_size(element(I, T), M) of
-        limit_exceeded -> limit_exceeded;
-        M2             -> M3 = lim(M2 - 2),
-                          case tuple_size(T) of
-                              I -> M3;
-                              _ -> tuple_term_size(T, M3, I + 1)
-                          end
-    end.
+tuple_term_size(_T, M, I, S) when I > S ->
+    M;
+tuple_term_size(T, M, I, S) ->
+    tuple_term_size(T, lim(term_size(element(I, T), M), 2), I + 1, S).
 
 %%----------------------------------------------------------------------------
 
