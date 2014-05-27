@@ -104,7 +104,7 @@ term_size(A, M) when is_atom(A)      -> lim(M - 2);
 term_size(N, M) when is_number(N)    -> lim(M - 2);
 term_size(F, M) when is_function(F)  -> lim(M - erts_debug:flat_size(F));
 term_size(P, M) when is_pid(P)       -> lim(M - erts_debug:flat_size(P));
-term_size(T, M) when is_tuple(T)     -> term_size(tuple_to_list(T), M);
+term_size(T, M) when is_tuple(T)     -> tuple_term_size(T, M, 1);
 
 term_size([], M)    ->
     M;
@@ -119,6 +119,18 @@ term_size([H|T], M) ->
 
 lim(S) when S > 0 -> S;
 lim(_)            -> limit_exceeded.
+
+tuple_term_size(_T, limit_exceeded, _I) ->
+    limit_exceeded;
+tuple_term_size(T, M, I) ->
+    case term_size(element(I, T), M) of
+        limit_exceeded -> limit_exceeded;
+        M2             -> M3 = lim(M2 - 2),
+                          case tuple_size(T) of
+                              I -> M3;
+                              _ -> tuple_term_size(T, M3, I + 1)
+                          end
+    end.
 
 %%----------------------------------------------------------------------------
 
