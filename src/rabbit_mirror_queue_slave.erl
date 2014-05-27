@@ -321,7 +321,7 @@ handle_info({bump_credit, Msg}, State) ->
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-terminate(normal, {not_started, _Q}) ->
+terminate(_Reason, {not_started, _Q}) ->
     ok;
 terminate(_Reason, #state { backing_queue_state = undefined }) ->
     %% We've received a delete_and_terminate from gm, thus nothing to
