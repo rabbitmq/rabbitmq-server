@@ -45,7 +45,7 @@ report(List, Params) when is_list(List) -> [case Item of
 report(Other, Params)                   -> term(Other, Params).
 
 term(Thing, {Max, {Content, Struct, ContentDec, StructDec}}) ->
-    case term_size(Thing, erlang:system_info(wordsize)) > Max of
+    case term_limit(Thing, Max div erlang:system_info(wordsize)) of
         true  -> term(Thing, true, #params{content     = Content,
                                            struct      = Struct,
                                            content_dec = ContentDec,
@@ -93,15 +93,33 @@ shrink_list([H|T], #params{content     = Content,
 %% sizes. This is all going to be rather approximate though, these
 %% sizes are probably not very "fair" but we are just trying to see if
 %% we reach a fairly arbitrary limit anyway though.
-term_size(B, _W) when is_bitstring(B) -> size(B);
-term_size(A, W)  when is_atom(A)      -> 2 * W;
-term_size(N, W)  when is_number(N)    -> 2 * W;
-term_size(F, W)  when is_function(F)  -> erts_debug:flat_size(F) * W;
-term_size(P, W)  when is_pid(P)       -> erts_debug:flat_size(P) * W;
-term_size(T, W)  when is_tuple(T)     -> term_size(tuple_to_list(T), W);
-term_size([], W)                      -> 2 * W;
-term_size([H|T], W)                   -> 2 * W + term_size(H, W) +
-                                             term_size(T, W).
+term_limit(Thing, Max) ->
+    case term_size(Thing, Max) of
+        limit_exceeded -> true;
+        _              -> false
+    end.
+
+term_size(_,  limit_exceeded)        -> limit_exceeded;
+term_size(B, M) when is_bitstring(B) -> lim(M - size(B));
+term_size(A, M) when is_atom(A)      -> lim(M - 2);
+term_size(N, M) when is_number(N)    -> lim(M - 2);
+term_size(F, M) when is_function(F)  -> lim(M - erts_debug:flat_size(F));
+term_size(P, M) when is_pid(P)       -> lim(M - erts_debug:flat_size(P));
+term_size(T, M) when is_tuple(T)     -> term_size(tuple_to_list(T), M);
+
+term_size([], M)    ->
+    M;
+term_size([H|T], M) ->
+    case term_size(H, M) of
+        limit_exceeded -> limit_exceeded;
+        M2             -> case term_size(T, M2) of
+                              limit_exceeded -> limit_exceeded;
+                              M3             -> M3 - 2
+                          end
+    end.
+
+lim(S) when S > 0 -> S;
+lim(_)            -> limit_exceeded.
 
 %%----------------------------------------------------------------------------
 
