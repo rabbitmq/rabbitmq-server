@@ -109,7 +109,11 @@ is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     end.
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
-    ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
+    ErrFun = fun (Msg) ->
+                     rabbit_log:warning("HTTP access denied: user '~s' - ~s~n",
+                                        [Username, Msg]),
+                     not_authorised(Msg, ReqData, Context)
+             end,
     case rabbit_access_control:check_user_pass_login(Username, Password) of
         {ok, User = #user{tags = Tags}} ->
             IPStr = wrq:peer(ReqData),
@@ -133,8 +137,10 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
                 not_allowed ->
                     ErrFun(<<"User can only log in via localhost">>)
             end;
-        _ ->
-            ErrFun(<<"Login failed">>)
+        {refused, Msg, Args} ->
+            rabbit_log:warning("HTTP access denied: ~s~n",
+                               [rabbit_misc:format(Msg, Args)]),
+            not_authorised(<<"Login failed">>, ReqData, Context)
     end.
 
 vhost(ReqData) ->
