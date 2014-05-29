@@ -382,7 +382,8 @@
 
 -behaviour(gen_server2).
 
--export([create_tables/0, start_link/4, leave/1, broadcast/2, broadcast/3,
+-export([create_tables/0, start_link/4, start_link/6,
+         leave/1, broadcast/2, broadcast/3,
          confirmed_broadcast/2, info/1, validate_members/2, forget_group/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -417,7 +418,9 @@
           broadcast_buffer,
           broadcast_buffer_sz,
           broadcast_timer,
-          txn_executor
+          txn_executor,
+          call,
+          cast
         }).
 
 -record(gm_group, { name, version, members }).
@@ -519,7 +522,14 @@ table_definitions() ->
     [{Name, [?TABLE_MATCH | Attributes]}].
 
 start_link(GroupName, Module, Args, TxnFun) ->
-    gen_server2:start_link(?MODULE, [GroupName, Module, Args, TxnFun], []).
+    start_link(GroupName, Module, Args, TxnFun,
+               fun gen_server2:call/3, fun gen_server2:cast/2).
+
+%% For testing we can instrument certain "interesting" cases where we
+%% call and cast to other GMs.
+start_link(GroupName, Module, Args, TxnFun, Call, Cast) ->
+    gen_server2:start_link(
+      ?MODULE, [GroupName, Module, Args, TxnFun, Call, Cast], []).
 
 leave(Server) ->
     gen_server2:cast(Server, leave).
@@ -545,7 +555,7 @@ forget_group(GroupName) ->
                      end),
     ok.
 
-init([GroupName, Module, Args, TxnFun]) ->
+init([GroupName, Module, Args, TxnFun, Call, Cast]) ->
     put(process_name, {?MODULE, GroupName}),
     {MegaSecs, Secs, MicroSecs} = now(),
     random:seed(MegaSecs, Secs, MicroSecs),
@@ -564,7 +574,9 @@ init([GroupName, Module, Args, TxnFun]) ->
                   broadcast_buffer    = [],
                   broadcast_buffer_sz = 0,
                   broadcast_timer     = undefined,
-                  txn_executor        = TxnFun }, hibernate,
+                  txn_executor        = TxnFun,
+                  call                = Call,
+                  cast                = Cast}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 
@@ -606,12 +618,14 @@ handle_call({add_on_right, NewMember}, _From,
             State = #state { self          = Self,
                              group_name    = GroupName,
                              members_state = MembersState,
-                             txn_executor  = TxnFun }) ->
+                             txn_executor  = TxnFun,
+                             cast          = Cast}) ->
     Group = record_new_member_in_group(NewMember, Self, GroupName, TxnFun),
     View1 = group_to_view(Group),
     MembersState1 = remove_erased_members(MembersState, View1),
     ok = send_right(NewMember, View1,
-                    {catchup, Self, prepare_members_state(MembersState1)}),
+                    {catchup, Self, prepare_members_state(MembersState1)},
+                    Cast),
     {Result, State1} = change_view(View1, State #state {
                                             members_state = MembersState1 }),
     handle_callback_result({Result, {ok, Group}, State1}).
@@ -653,8 +667,9 @@ handle_cast(join, State = #state { self          = Self,
                                    members_state = undefined,
                                    module        = Module,
                                    callback_args = Args,
-                                   txn_executor  = TxnFun }) ->
-    View = join_group(Self, GroupName, TxnFun),
+                                   txn_executor  = TxnFun,
+                                   call          = Call}) ->
+    View = join_group(Self, GroupName, TxnFun, Call),
     MembersState =
         case alive_view_members(View) of
             [Self] -> blank_member_state();
@@ -761,8 +776,9 @@ handle_msg({catchup, Left, MembersStateLeft},
                             left          = {Left, _MRefL},
                             right         = {Right, _MRefR},
                             view          = View,
-                            members_state = undefined }) ->
-    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
+                            members_state = undefined,
+                            cast          = Cast}) ->
+    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}, Cast),
     MembersStateLeft1 = build_members_state(MembersStateLeft),
     {ok, State #state { members_state = MembersStateLeft1 }};
 
@@ -1033,15 +1049,17 @@ ensure_alive_suffix1(MembersQ) ->
 %% View modification
 %% ---------------------------------------------------------------------------
 
-join_group(Self, GroupName, TxnFun) ->
-    join_group(Self, GroupName, dirty_read_group(GroupName), TxnFun).
+join_group(Self, GroupName, TxnFun, Call) ->
+    join_group(Self, GroupName, dirty_read_group(GroupName), TxnFun, Call).
 
-join_group(Self, GroupName, {error, not_found}, TxnFun) ->
+join_group(Self, GroupName, {error, not_found}, TxnFun, Call) ->
     join_group(Self, GroupName,
-               prune_or_create_group(Self, GroupName, TxnFun), TxnFun);
-join_group(Self, _GroupName, #gm_group { members = [Self] } = Group, _TxnFun) ->
+               prune_or_create_group(Self, GroupName, TxnFun), TxnFun, Call);
+join_group(Self, _GroupName, #gm_group { members = [Self] } = Group,
+           _TxnFun, _Call) ->
     group_to_view(Group);
-join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
+join_group(Self, GroupName, #gm_group { members = Members } = Group,
+           TxnFun, Call) ->
     case lists:member(Self, Members) of
         true ->
             group_to_view(Group);
@@ -1050,7 +1068,7 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                 [] ->
                     join_group(Self, GroupName,
                                prune_or_create_group(Self, GroupName, TxnFun),
-                               TxnFun);
+                               TxnFun, Call);
                 Alive ->
                     Left = lists:nth(random:uniform(length(Alive)), Alive),
                     Handler =
@@ -1059,13 +1077,14 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                                   Self, GroupName,
                                   record_dead_member_in_group(
                                     Left, GroupName, TxnFun),
-                                  TxnFun)
+                                  TxnFun, Call)
                         end,
                     try
-                        case gen_server2:call(
+                        case Call(
                                get_pid(Left), {add_on_right, Self}, infinity) of
                             {ok, Group1} -> group_to_view(Group1);
-                            not_ready    -> join_group(Self, GroupName, TxnFun)
+                            not_ready    -> join_group(
+                                              Self, GroupName, TxnFun, Call)
                         end
                     catch
                         exit:{R, _}
@@ -1183,21 +1202,20 @@ can_erase_view_member(_Self, _Id, _LA, _LP) -> false.
 %% View monitoring and maintanence
 %% ---------------------------------------------------------------------------
 
-ensure_neighbour(_Ver, Self, {Self, undefined}, Self) ->
+ensure_neighbour(_Ver, Self, {Self, undefined}, Self, _Cast) ->
     {Self, undefined};
-ensure_neighbour(Ver, Self, {Self, undefined}, RealNeighbour) ->
-    ok = gen_server2:cast(get_pid(RealNeighbour),
-                          {?TAG, Ver, check_neighbours}),
+ensure_neighbour(Ver, Self, {Self, undefined}, RealNeighbour, Cast) ->
+    ok = Cast(get_pid(RealNeighbour), {?TAG, Ver, check_neighbours}),
     {RealNeighbour, maybe_monitor(RealNeighbour, Self)};
-ensure_neighbour(_Ver, _Self, {RealNeighbour, MRef}, RealNeighbour) ->
+ensure_neighbour(_Ver, _Self, {RealNeighbour, MRef}, RealNeighbour, _Cast) ->
     {RealNeighbour, MRef};
-ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour) ->
+ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour, Cast) ->
     true = erlang:demonitor(MRef),
     Msg = {?TAG, Ver, check_neighbours},
-    ok = gen_server2:cast(get_pid(RealNeighbour), Msg),
+    ok = Cast(get_pid(RealNeighbour), Msg),
     ok = case Neighbour of
              Self -> ok;
-             _    -> gen_server2:cast(get_pid(Neighbour), Msg)
+             _    -> Cast(get_pid(Neighbour), Msg)
          end,
     {Neighbour, maybe_monitor(Neighbour, Self)}.
 
@@ -1208,12 +1226,13 @@ check_neighbours(State = #state { self             = Self,
                                   left             = Left,
                                   right            = Right,
                                   view             = View,
-                                  broadcast_buffer = Buffer }) ->
+                                  broadcast_buffer = Buffer,
+                                  cast             = Cast}) ->
     #view_member { left = VLeft, right = VRight }
         = fetch_view_member(Self, View),
     Ver = view_version(View),
-    Left1 = ensure_neighbour(Ver, Self, Left, VLeft),
-    Right1 = ensure_neighbour(Ver, Self, Right, VRight),
+    Left1 = ensure_neighbour(Ver, Self, Left, VLeft, Cast),
+    Right1 = ensure_neighbour(Ver, Self, Right, VRight, Cast),
     Buffer1 = case Right1 of
                   {Self, undefined} -> [];
                   _                 -> Buffer
@@ -1233,9 +1252,10 @@ maybe_send_catchup(_Right, #state { members_state = undefined }) ->
 maybe_send_catchup(_Right, #state { self          = Self,
                                     right         = {Right, _MRef},
                                     view          = View,
-                                    members_state = MembersState }) ->
+                                    members_state = MembersState,
+                                    cast          = Cast}) ->
     send_right(Right, View,
-               {catchup, Self, prepare_members_state(MembersState)}).
+               {catchup, Self, prepare_members_state(MembersState)}, Cast).
 
 
 %% ---------------------------------------------------------------------------
@@ -1338,11 +1358,12 @@ maybe_send_activity([], _State) ->
     ok;
 maybe_send_activity(Activity, #state { self  = Self,
                                        right = {Right, _MRefR},
-                                       view  = View }) ->
-    send_right(Right, View, {activity, Self, Activity}).
+                                       view  = View,
+                                       cast  = Cast}) ->
+    send_right(Right, View, {activity, Self, Activity}, Cast).
 
-send_right(Right, View, Msg) ->
-    ok = gen_server2:cast(get_pid(Right), {?TAG, view_version(View), Msg}).
+send_right(Right, View, Msg, Cast) ->
+    ok = Cast(get_pid(Right), {?TAG, view_version(View), Msg}).
 
 callback(Args, Module, Activity) ->
     Result =
