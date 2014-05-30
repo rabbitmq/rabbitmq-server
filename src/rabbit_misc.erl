@@ -1050,10 +1050,8 @@ ensure_timer(State, Idx, After, Msg) ->
 stop_timer(State, Idx) ->
     case element(Idx, State) of
         undefined -> State;
-        TRef      -> case cancel_timer(TRef) of %% TODO bug 25393 comment 3
-                         false -> State;
-                         _     -> setelement(Idx, State, undefined)
-                     end
+        TRef      -> cancel_timer(TRef),
+                     setelement(Idx, State, undefined)
     end.
 
 %% timer:send_after/3 goes through a single timer process but allows
