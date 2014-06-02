@@ -1062,8 +1062,7 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                                   TxnFun)
                         end,
                     try
-                        case gen_server2:call(
-                               get_pid(Left), {add_on_right, Self}, infinity) of
+                        case neighbour_call(Left, {add_on_right, Self}) of
                             {ok, Group1} -> group_to_view(Group1);
                             not_ready    -> join_group(Self, GroupName, TxnFun)
                         end
@@ -1178,6 +1177,8 @@ can_erase_view_member(Self, Self, _LA, _LP) -> false;
 can_erase_view_member(_Self, _Id,   N,   N) -> true;
 can_erase_view_member(_Self, _Id, _LA, _LP) -> false.
 
+neighbour_cast(N, Msg) -> gen_server2:cast(get_pid(N), Msg).
+neighbour_call(N, Msg) -> gen_server2:call(get_pid(N), Msg, infinity).
 
 %% ---------------------------------------------------------------------------
 %% View monitoring and maintanence
@@ -1186,18 +1187,17 @@ can_erase_view_member(_Self, _Id, _LA, _LP) -> false.
 ensure_neighbour(_Ver, Self, {Self, undefined}, Self) ->
     {Self, undefined};
 ensure_neighbour(Ver, Self, {Self, undefined}, RealNeighbour) ->
-    ok = gen_server2:cast(get_pid(RealNeighbour),
-                          {?TAG, Ver, check_neighbours}),
+    ok = neighbour_cast(RealNeighbour, {?TAG, Ver, check_neighbours}),
     {RealNeighbour, maybe_monitor(RealNeighbour, Self)};
 ensure_neighbour(_Ver, _Self, {RealNeighbour, MRef}, RealNeighbour) ->
     {RealNeighbour, MRef};
 ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour) ->
     true = erlang:demonitor(MRef),
     Msg = {?TAG, Ver, check_neighbours},
-    ok = gen_server2:cast(get_pid(RealNeighbour), Msg),
+    ok = neighbour_cast(RealNeighbour, Msg),
     ok = case Neighbour of
              Self -> ok;
-             _    -> gen_server2:cast(get_pid(Neighbour), Msg)
+             _    -> neighbour_cast(Neighbour, Msg)
          end,
     {Neighbour, maybe_monitor(Neighbour, Self)}.
 
@@ -1342,7 +1342,7 @@ maybe_send_activity(Activity, #state { self  = Self,
     send_right(Right, View, {activity, Self, Activity}).
 
 send_right(Right, View, Msg) ->
-    ok = gen_server2:cast(get_pid(Right), {?TAG, view_version(View), Msg}).
+    ok = neighbour_cast(Right, {?TAG, view_version(View), Msg}).
 
 callback(Args, Module, Activity) ->
     Result =
