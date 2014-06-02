@@ -746,7 +746,7 @@ prioritise_info({'DOWN', _MRef, process, LeftPid, _Reason}, _Len,
 %% But prioritise all other DOWNs - we want to make sure we are not
 %% sending activity into the void for too long because our right is
 %% down but we don't know it.
-prioritise_info({'DOWN', MRef, process, Pid, _Reason}, _Len, _State) ->
+prioritise_info({'DOWN', _MRef, process, _Pid, _Reason}, _Len, _State) ->
     1;
 prioritise_info(_, _Len, _State) ->
     0.
@@ -1062,8 +1062,7 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                                   TxnFun)
                         end,
                     try
-                        case ?INSTR_MOD:call(
-                               get_pid(Left), {add_on_right, Self}, infinity) of
+                        case neighbour_call(Left, {add_on_right, Self}) of
                             {ok, Group1} -> group_to_view(Group1);
                             not_ready    -> join_group(Self, GroupName, TxnFun)
                         end
@@ -1178,6 +1177,8 @@ can_erase_view_member(Self, Self, _LA, _LP) -> false;
 can_erase_view_member(_Self, _Id,   N,   N) -> true;
 can_erase_view_member(_Self, _Id, _LA, _LP) -> false.
 
+neighbour_cast(N, Msg) -> ?INSTR_MOD:cast(get_pid(N), Msg).
+neighbour_call(N, Msg) -> ?INSTR_MOD:call(get_pid(N), Msg, infinity).
 
 %% ---------------------------------------------------------------------------
 %% View monitoring and maintanence
@@ -1186,17 +1187,17 @@ can_erase_view_member(_Self, _Id, _LA, _LP) -> false.
 ensure_neighbour(_Ver, Self, {Self, undefined}, Self) ->
     {Self, undefined};
 ensure_neighbour(Ver, Self, {Self, undefined}, RealNeighbour) ->
-    ok = ?INSTR_MOD:cast(get_pid(RealNeighbour), {?TAG, Ver, check_neighbours}),
+    ok = neighbour_cast(RealNeighbour, {?TAG, Ver, check_neighbours}),
     {RealNeighbour, maybe_monitor(RealNeighbour, Self)};
 ensure_neighbour(_Ver, _Self, {RealNeighbour, MRef}, RealNeighbour) ->
     {RealNeighbour, MRef};
 ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour) ->
     true = erlang:demonitor(MRef),
     Msg = {?TAG, Ver, check_neighbours},
-    ok = ?INSTR_MOD:cast(get_pid(RealNeighbour), Msg),
+    ok = neighbour_cast(RealNeighbour, Msg),
     ok = case Neighbour of
              Self -> ok;
-             _    -> ?INSTR_MOD:cast(get_pid(Neighbour), Msg)
+             _    -> neighbour_cast(Neighbour, Msg)
          end,
     {Neighbour, maybe_monitor(Neighbour, Self)}.
 
@@ -1341,7 +1342,7 @@ maybe_send_activity(Activity, #state { self  = Self,
     send_right(Right, View, {activity, Self, Activity}).
 
 send_right(Right, View, Msg) ->
-    ok = ?INSTR_MOD:cast(get_pid(Right), {?TAG, view_version(View), Msg}).
+    ok = neighbour_cast(Right, {?TAG, view_version(View), Msg}).
 
 callback(Args, Module, Activity) ->
     Result =

@@ -135,8 +135,8 @@ boot_ssl() ->
         {ok, []} ->
             ok;
         {ok, SslListeners} ->
-            [start_ssl_listener(Listener, ensure_ssl())
-             || Listener <- SslListeners],
+            SslOpts = ensure_ssl(),
+            [start_ssl_listener(Listener, SslOpts) || Listener <- SslListeners],
             ok
     end.
 
