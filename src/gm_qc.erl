@@ -59,9 +59,24 @@ gm_test(Cmds) ->
 cleanup(S) ->
     S2 = ensure_outstanding_msgs_received(drain_proceeding(S)),
     All = gms(S2),
+    check_stale_members(All, All),
     [gm:leave(GM) || GM <- All],
     [await_death(GM) || GM <- All],
+    gm:forget_group(?GROUP),
     ok.
+
+check_stale_members([], _All) ->
+    ok;
+check_stale_members([H|T], All) ->
+    rabbit_misc:with_exit_handler(
+      fun () -> check_stale_members(T, All) end,
+      fun () ->
+              Members = proplists:get_value(group_members, gm:info(H)),
+              case Members -- All of
+                  []   -> ok;
+                  Rest -> exit({forgot, Rest})
+              end
+      end).
 
 await_death(P) ->
     MRef = erlang:monitor(process, P),
@@ -217,7 +232,6 @@ drain(S) ->
     end.
 
 drain_proceeding(S0) ->
-    timer:sleep(100),
     S = #state{instrumented = Msgs} = drain(S0),
     case dict:size(Msgs) of
         0 -> S;
@@ -253,7 +267,7 @@ handle_msg({instrumented, From, To, Thing}, S = #state{instrumented = Msgs}) ->
     S#state{instrumented = dict:store({From, To}, Q1, Msgs)};
 handle_msg({'EXIT', _From, normal}, S) ->
     S;
-handle_msg({'EXIT', _From, Reason}, S) ->
+handle_msg({'EXIT', _From, Reason}, _S) ->
     %% We just trapped exits to get nicer SASL logging.
     exit(Reason).
 
