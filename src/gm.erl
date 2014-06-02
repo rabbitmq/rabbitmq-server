@@ -610,11 +610,10 @@ handle_call({add_on_right, NewMember}, _From,
     Group = record_new_member_in_group(NewMember, Self, GroupName, TxnFun),
     View1 = group_to_view(Group),
     MembersState1 = remove_erased_members(MembersState, View1),
-    ok = send_right(NewMember, View1,
-                    {catchup, Self, prepare_members_state(MembersState1)}),
     {Result, State1} = change_view(View1, State #state {
                                             members_state = MembersState1 }),
-    handle_callback_result({Result, {ok, Group}, State1}).
+    Reply = {ok, Group, prepare_members_state(MembersState1)},
+    handle_callback_result({Result, Reply, State1}).
 
 handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
@@ -654,16 +653,17 @@ handle_cast(join, State = #state { self          = Self,
                                    module        = Module,
                                    callback_args = Args,
                                    txn_executor  = TxnFun }) ->
-    View = join_group(Self, GroupName, TxnFun),
-    MembersState =
-        case alive_view_members(View) of
-            [Self] -> blank_member_state();
-            _      -> undefined
-        end,
-    State1 = check_neighbours(State #state { view          = View,
-                                             members_state = MembersState }),
-    handle_callback_result(
-      {Module:joined(Args, get_pids(all_known_members(View))), State1});
+    State1 = case join_group(Self, GroupName, TxnFun) of
+                 {ok, View} ->
+                     check_neighbours(
+                       State#state{view          = View,
+                                   members_state = blank_member_state()});
+                 {ok, View, Left, MembersState} ->
+                     initial_catchup(Left, MembersState,
+                                     check_neighbours(State#state{view = View}))
+             end,
+    Members = get_pids(all_known_members(State1#state.view)),
+    handle_callback_result({Module:joined(Args, Members), State1});
 
 handle_cast({validate_members, OldMembers},
             State = #state { view          = View,
@@ -752,19 +752,19 @@ prioritise_info(_, _Len, _State) ->
     0.
 
 
+initial_catchup(Left, MembersStateLeft,
+                State = #state { self          = Self,
+                                 left          = {Left, _MRefL},
+                                 right         = {Right, _MRefR},
+                                 view          = View,
+                                 members_state = undefined }) ->
+    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
+    MembersStateLeft1 = build_members_state(MembersStateLeft),
+    State #state { members_state = MembersStateLeft1 }.
+
 handle_msg(check_neighbours, State) ->
     %% no-op - it's already been done by the calling handle_cast
     {ok, State};
-
-handle_msg({catchup, Left, MembersStateLeft},
-           State = #state { self          = Self,
-                            left          = {Left, _MRefL},
-                            right         = {Right, _MRefR},
-                            view          = View,
-                            members_state = undefined }) ->
-    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
-    MembersStateLeft1 = build_members_state(MembersStateLeft),
-    {ok, State #state { members_state = MembersStateLeft1 }};
 
 handle_msg({catchup, Left, MembersStateLeft},
            State = #state { self = Self,
@@ -1040,11 +1040,11 @@ join_group(Self, GroupName, {error, not_found}, TxnFun) ->
     join_group(Self, GroupName,
                prune_or_create_group(Self, GroupName, TxnFun), TxnFun);
 join_group(Self, _GroupName, #gm_group { members = [Self] } = Group, _TxnFun) ->
-    group_to_view(Group);
+    {ok, group_to_view(Group)};
 join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
     case lists:member(Self, Members) of
         true ->
-            group_to_view(Group);
+            {ok, group_to_view(Group)};
         false ->
             case lists:filter(fun is_member_alive/1, Members) of
                 [] ->
@@ -1063,8 +1063,11 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                         end,
                     try
                         case neighbour_call(Left, {add_on_right, Self}) of
-                            {ok, Group1} -> group_to_view(Group1);
-                            not_ready    -> join_group(Self, GroupName, TxnFun)
+                            {ok, Group1, MembersState1} ->
+                                {ok, group_to_view(Group1), Left,
+                                 build_members_state(MembersState1)};
+                            not_ready ->
+                                join_group(Self, GroupName, TxnFun)
                         end
                     catch
                         exit:{R, _}
