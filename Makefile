@@ -56,6 +56,12 @@ endif
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
+ifdef INSTRUMENT_FOR_QC
+ERLC_OPTS += -DINSTR_MOD=gm_qc
+else
+ERLC_OPTS += -DINSTR_MOD=gen_server2
+endif
+
 include version.mk
 
 PLUGINS_SRC_DIR?=$(shell [ -d "plugins-src" ] && echo "plugins-src" || echo )

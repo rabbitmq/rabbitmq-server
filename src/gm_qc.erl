@@ -35,9 +35,17 @@
 %% Helpers
 -export([do_join/0, do_leave/1, do_send/2, do_proceed/2]).
 
+%% For insertion into gm
+-export([call/3, cast/2]).
+
 -record(state, {seq, instrumented, outstanding}).
 
 prop_gm_test() ->
+    case ?INSTR_MOD of
+        ?MODULE -> ok;
+        _       -> exit(compile_with_INSTRUMENT_FOR_GC)
+    end,
+    erlang:register(?MODULE, self()),
     ?FORALL(Cmds, commands(?MODULE), gm_test(Cmds)).
 
 gm_test(Cmds) ->
@@ -175,10 +183,8 @@ terminate(_Pid, _Reason)           -> ok.
 %% ---------------------------------------------------------------------------
 
 do_join() ->
-    {Call, Cast} = instrumented_funs(),
     {ok, GM} = gm:start_link(?GROUP, ?MODULE, self(),
-                             fun rabbit_misc:execute_mnesia_transaction/1,
-                             Call, Cast),
+                             fun rabbit_misc:execute_mnesia_transaction/1),
     %% TODO do we need to test the joined callback? What is the joined
     %% callback actually for?
     %% receive
@@ -287,20 +293,17 @@ outstanding_msgs(#state{outstanding = Outstanding}) ->
                   (_GM, {_Tree, _Set}, true)  -> true
               end, false, Outstanding).
 
-instrumented_funs() ->
-    Test = self(),
-    {fun (Pid, Msg, infinity) ->
-             Ref = make_ref(),
-             Test ! {instrumented, self(), Pid, {call, Ref}},
-             receive
-                 {proceed, Ref} -> ok
-             end,
-             gen_server2:call(Pid, Msg, infinity)
-     end,
-     fun (Pid, Msg) ->
-             Test ! {instrumented, self(), Pid, {cast, Msg}},
-             ok
-     end}.
+call(Pid, Msg, infinity) ->
+    Ref = make_ref(),
+    whereis(?MODULE) ! {instrumented, self(), Pid, {call, Ref}},
+    receive
+        {proceed, Ref} -> ok
+    end,
+    gen_server2:call(Pid, Msg, infinity).
+
+cast(Pid, Msg) ->
+    whereis(?MODULE) ! {instrumented, self(), Pid, {cast, Msg}},
+    ok.
 
 timestamp() -> timer:now_diff(os:timestamp(), {0, 0, 0}).
 
