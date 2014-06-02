@@ -38,7 +38,7 @@
 %% For insertion into gm
 -export([call/3, cast/2]).
 
--record(state, {seq, instrumented, outstanding}).
+-record(state, {seq, instrumented, outstanding, to_join}).
 
 prop_gm_test() ->
     case ?INSTR_MOD of
@@ -88,7 +88,8 @@ await_death(MRef, P) ->
         {'EXIT', _, normal}             -> await_death(MRef, P);
         {'EXIT', _, Reason}             -> exit(Reason);
         {instrumented, From, To, Thing} -> process_msg(From, To, Thing),
-                                           await_death(MRef, P)
+                                           await_death(MRef, P);
+        {joined, _GM}                   -> await_death(MRef, P)
     end.
 
 %% ---------------------------------------------------------------------------
@@ -97,7 +98,8 @@ await_death(MRef, P) ->
 
 initial_state() -> #state{seq          = 1,
                           outstanding  = dict:new(),
-                          instrumented = dict:new()}.
+                          instrumented = dict:new(),
+                          to_join      = sets:new()}.
 
 command(S = #state{outstanding = Outstanding}) ->
     case dict:size(Outstanding) of
@@ -147,10 +149,8 @@ postcondition(S = #state{outstanding = Outstanding},
 postcondition(S = #state{}, {call, _M, _F, _A}, _Res) ->
     assert(S).
 
-next_state(S = #state{outstanding = Outstanding}, GM,
-           {call, ?MODULE, do_join, []}) ->
-    S#state{outstanding = dict:store(GM, {gb_trees:empty(), gb_sets:empty()},
-                                     Outstanding)};
+next_state(S = #state{to_join = Set}, GM, {call, ?MODULE, do_join, []}) ->
+    S#state{to_join = sets:add_element(GM, Set)};
 
 next_state(S = #state{outstanding = Outstanding}, _Res,
            {call, ?MODULE, do_leave, [GM]}) ->
@@ -186,7 +186,8 @@ next_state(S = #state{instrumented = Msgs}, _Res,
 %% GM
 %% ---------------------------------------------------------------------------
 
-joined(_Pid, _Members)             -> ok.
+joined(Pid, _Members)              -> Pid ! {joined, self()},
+                                      ok.
 members_changed(_Pid, _Bs, _Ds)    -> %%[Pid ! {birth, self(), B} || B <- Bs],
                                       %%[Pid ! {death, self(), D} || D <- Ds],
                                       ok.
@@ -201,11 +202,6 @@ terminate(_Pid, _Reason)           -> ok.
 do_join() ->
     {ok, GM} = gm:start_link(?GROUP, ?MODULE, self(),
                              fun rabbit_misc:execute_mnesia_transaction/1),
-    %% TODO do we need to test the joined callback? What is the joined
-    %% callback actually for?
-    %% receive
-    %%     {joined, GM} -> ok
-    %% end,
     GM.
 
 do_leave(GM) ->
@@ -272,6 +268,11 @@ handle_msg({instrumented, From, To, Thing}, S = #state{instrumented = Msgs}) ->
              error   -> queue:from_list([Thing])
          end,
     S#state{instrumented = dict:store({From, To}, Q1, Msgs)};
+handle_msg({joined, GM}, S = #state{outstanding = Outstanding,
+                                    to_join     = ToJoin}) ->
+    S#state{outstanding = dict:store(GM, {gb_trees:empty(), gb_sets:empty()},
+                                     Outstanding),
+            to_join     = sets:del_element(GM, ToJoin)};
 handle_msg({'EXIT', _From, normal}, S) ->
     S;
 handle_msg({'EXIT', _From, Reason}, _S) ->
@@ -300,13 +301,16 @@ assert(S = #state{outstanding = Outstanding}) ->
     true.
 
 ensure_outstanding_msgs_received(S) ->
-    case outstanding_msgs(S) of
+    case outstanding_joiners(S) orelse outstanding_msgs(S) of
         false -> S;
         true  -> timer:sleep(100),
                  S2 = drain_proceeding(S),
                  assert(S2),
                  ensure_outstanding_msgs_received(S2)
     end.
+
+outstanding_joiners(#state{to_join = ToJoin}) ->
+    sets:size(ToJoin) > 0.
 
 outstanding_msgs(#state{outstanding = Outstanding}) ->
     dict:fold(fun (_GM, {_Tree, Set},  false) -> not gb_sets:is_empty(Set);
