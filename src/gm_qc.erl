@@ -73,13 +73,22 @@ check_stale_members(All) ->
     end.
 
 is_gm_process(Group, P) ->
-    {dictionary, D} = process_info(P, dictionary),
-    {gm, Group} =:= proplists:get_value(process_name, D).
+    case process_info(P, dictionary) of
+        undefined       -> false;
+        {dictionary, D} -> {gm, Group} =:= proplists:get_value(process_name, D)
+    end.
 
 await_death(P) ->
     MRef = erlang:monitor(process, P),
+    await_death(MRef, P).
+
+await_death(MRef, P) ->
     receive
-        {'DOWN', MRef, process, _, _} -> ok
+        {'DOWN', MRef, process, P, _}   -> ok;
+        {'EXIT', _, normal}             -> await_death(MRef, P);
+        {'EXIT', _, Reason}             -> exit(Reason);
+        {instrumented, From, To, Thing} -> process_msg(From, To, Thing),
+                                           await_death(MRef, P)
     end.
 
 %% ---------------------------------------------------------------------------
