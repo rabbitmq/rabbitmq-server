@@ -746,7 +746,7 @@ prioritise_info({'DOWN', _MRef, process, LeftPid, _Reason}, _Len,
 %% But prioritise all other DOWNs - we want to make sure we are not
 %% sending activity into the void for too long because our right is
 %% down but we don't know it.
-prioritise_info({'DOWN', MRef, process, Pid, _Reason}, _Len, _State) ->
+prioritise_info({'DOWN', _MRef, process, _Pid, _Reason}, _Len, _State) ->
     1;
 prioritise_info(_, _Len, _State) ->
     0.
