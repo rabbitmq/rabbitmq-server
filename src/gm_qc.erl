@@ -45,14 +45,11 @@ prop_gm_test() ->
         ?MODULE -> ok;
         _       -> exit(compile_with_INSTRUMENT_FOR_QC)
     end,
+    process_flag(trap_exit, true),
     erlang:register(?MODULE, self()),
     ?FORALL(Cmds, commands(?MODULE), gm_test(Cmds)).
 
 gm_test(Cmds) ->
-    %% Give some feedback on how long our sequences are, since it
-    %% seems easy to end up with lots of tiny sequences and think
-    %% you're doing something.
-    io:format("~p", [length(Cmds)]),
     {_H, State, Res} = run_commands(?MODULE, Cmds),
     cleanup(State),
     ?WHENFAIL(
@@ -90,13 +87,10 @@ command(S = #state{outstanding = Outstanding}) ->
     end.
 
 qc_join(_S)                  -> {call,?MODULE,do_join, []}.
-qc_leave(S)                  -> {call,?MODULE,do_leave,[random(gms(S))]}.
-qc_send(S = #state{seq = N}) -> {call,?MODULE,do_send, [N, random(gms(S))]}.
-qc_proceed(S)                -> {call,?MODULE,do_proceed, [random(gms(S)),
-                                                           random(gms(S))]}.
-
-random([]) -> will_fail_precondition;
-random(L)  -> lists:nth(random:uniform(length(L)), L).
+qc_leave(S)                  -> {call,?MODULE,do_leave,[oneof(gms(S))]}.
+qc_send(S = #state{seq = N}) -> {call,?MODULE,do_send, [N, oneof(gms(S))]}.
+qc_proceed(S)                -> {call,?MODULE,do_proceed, [oneof(gms(S)),
+                                                           oneof(gms(S))]}.
 
 precondition(S, {call, ?MODULE, do_join, []}) ->
     length(gms(S)) < ?MAX_SIZE;
@@ -256,7 +250,12 @@ handle_msg({instrumented, From, To, Thing}, S = #state{instrumented = Msgs}) ->
              {ok, Q} -> queue:in(Thing, Q);
              error   -> queue:from_list([Thing])
          end,
-    S#state{instrumented = dict:store({From, To}, Q1, Msgs)}.
+    S#state{instrumented = dict:store({From, To}, Q1, Msgs)};
+handle_msg({'EXIT', _From, normal}, S) ->
+    S;
+handle_msg({'EXIT', _From, Reason}, S) ->
+    %% We just trapped exits to get nicer SASL logging.
+    exit(Reason).
 
 process_msg(From, _To, {call, Ref}) -> From ! {proceed, Ref};
 process_msg(_From, To, {cast, Msg}) -> gen_server2:cast(To, Msg).

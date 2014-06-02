@@ -15,10 +15,8 @@ main([NodeStr, ModStr, TrialsStr]) ->
     case rpc:call(Node, code, ensure_loaded, [proper]) of
         {module, proper} ->
             case rpc:call(Node, proper, module,
-                          [Mod] ++ [[{numtests, Trials},
-                                     {constraint_tries, 200},
-                                     {start_size, 5},
-                                     long_result]]) of
+                          [Mod] ++ [[{numtests,         Trials},
+                                     {constraint_tries, 200}]]) of
                 [] -> ok;
                 R  -> io:format("~p.~n", [R]),
                       quit(1)
