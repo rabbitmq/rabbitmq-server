@@ -43,7 +43,7 @@
 prop_gm_test() ->
     case ?INSTR_MOD of
         ?MODULE -> ok;
-        _       -> exit(compile_with_INSTRUMENT_FOR_GC)
+        _       -> exit(compile_with_INSTRUMENT_FOR_QC)
     end,
     erlang:register(?MODULE, self()),
     ?FORALL(Cmds, commands(?MODULE), gm_test(Cmds)).
