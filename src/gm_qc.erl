@@ -59,24 +59,22 @@ gm_test(Cmds) ->
 cleanup(S) ->
     S2 = ensure_outstanding_msgs_received(drain_proceeding(S)),
     All = gms(S2),
-    check_stale_members(All, All),
+    check_stale_members(All),
     [gm:leave(GM) || GM <- All],
     [await_death(GM) || GM <- All],
     gm:forget_group(?GROUP),
     ok.
 
-check_stale_members([], _All) ->
-    ok;
-check_stale_members([H|T], All) ->
-    rabbit_misc:with_exit_handler(
-      fun () -> check_stale_members(T, All) end,
-      fun () ->
-              Members = proplists:get_value(group_members, gm:info(H)),
-              case Members -- All of
-                  []   -> ok;
-                  Rest -> exit({forgot, Rest})
-              end
-      end).
+check_stale_members(All) ->
+    GMs = [P || P <- processes(), is_gm_process(?GROUP, P)],
+    case GMs -- All of
+        []   -> ok;
+        Rest -> exit({forgot, Rest})
+    end.
+
+is_gm_process(Group, P) ->
+    {dictionary, D} = process_info(P, dictionary),
+    {gm, Group} =:= proplists:get_value(process_name, D).
 
 await_death(P) ->
     MRef = erlang:monitor(process, P),
