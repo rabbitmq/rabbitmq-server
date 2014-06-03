@@ -17,9 +17,9 @@ to allow this mechanism in addition to the defaults, or:
 
 to allow only this mechanism.
 
-For safety the server must be configured with the SSL options
-fail_if_no_peer_cert set to true and verify set to verify_peer, to
-force all SSL clients to have a verifiable client certificate.
+For safety the server must be configured with the SSL option 'verify'
+set to 'verify_peer', to ensure that if an SSL client presents a
+certificate, it gets verified.
 
 By default this will set the username to an RFC4514-ish string form of
 the certificate's subject's Distinguished Name, similar to that
