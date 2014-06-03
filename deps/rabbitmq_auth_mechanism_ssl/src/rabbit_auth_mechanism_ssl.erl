@@ -35,7 +35,7 @@
 
 %% SASL EXTERNAL. SASL says EXTERNAL means "use credentials
 %% established by means external to the mechanism". We define that to
-%% mean the peer certificate's subject's CN.
+%% mean the peer certificate's subject's DN or CN.
 
 description() ->
     [{description, <<"SSL authentication mechanism using SASL EXTERNAL">>}].
@@ -43,9 +43,13 @@ description() ->
 should_offer(Sock) ->
     case rabbit_net:peercert(Sock) of
         nossl                -> false;
-        {error, no_peercert} -> false;
+        {error, no_peercert} -> true; %% [0]
         {ok, _}              -> true
     end.
+%% We offer EXTERNAL even if there is no peercert since that leads to
+%% a more comprehensible error message - authentication is refused
+%% below with "no peer certificate" rather than have the client fail
+%% to negotiate an authentication mechanism.
 
 init(Sock) ->
     Username = case rabbit_net:peercert(Sock) of
