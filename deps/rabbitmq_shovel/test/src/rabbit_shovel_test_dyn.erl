@@ -224,7 +224,7 @@ set_param_nowait(Name, Value) ->
     ok = rabbit_runtime_parameters:set(
            <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  <<"amqp://">>},
                                          {<<"dest-uri">>, [<<"amqp://">>]} |
-                                         Value], guest()).
+                                         Value], none).
 
 invalid_param(Value, User) ->
     {error_string, _} = rabbit_runtime_parameters:set(
@@ -235,14 +235,12 @@ valid_param(Value, User) ->
            <<"/">>, <<"shovel">>, <<"a">>, Value, User),
     ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>).
 
-invalid_param(Value) -> invalid_param(Value, guest()).
-valid_param(Value) -> valid_param(Value, guest()).
+invalid_param(Value) -> invalid_param(Value, none).
+valid_param(Value) -> valid_param(Value, none).
 
 lookup_user(Name) ->
     {ok, User} = rabbit_auth_backend_internal:check_user_login(Name, []),
     User.
-
-guest() -> lookup_user(<<"guest">>).
 
 clear_param(Name) ->
     rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, Name).

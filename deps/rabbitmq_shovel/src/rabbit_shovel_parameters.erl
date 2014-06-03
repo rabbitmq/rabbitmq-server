@@ -112,6 +112,8 @@ validate_uri(Name, Term, User) ->
         E  -> E
     end.
 
+validate_params_user(#amqp_params_direct{}, none) ->
+    ok;
 validate_params_user(#amqp_params_direct{virtual_host = VHost},
                      User = #user{username     = Username,
                                   auth_backend = M}) ->
