@@ -35,7 +35,7 @@
 
 %% SASL EXTERNAL. SASL says EXTERNAL means "use credentials
 %% established by means external to the mechanism". We define that to
-%% mean the peer certificate's subject's CN.
+%% mean the peer certificate's subject's DN or CN.
 
 description() ->
     [{description, <<"SSL authentication mechanism using SASL EXTERNAL">>}].
