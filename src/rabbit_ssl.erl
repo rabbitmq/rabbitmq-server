@@ -104,15 +104,11 @@ peer_cert_auth_name(common_name, Cert) ->
 
 auth_config_sane() ->
     {ok, Opts} = application:get_env(rabbit, ssl_options),
-    case {proplists:get_value(fail_if_no_peer_cert, Opts),
-          proplists:get_value(verify, Opts)} of
-        {true, verify_peer} ->
-            true;
-        {F, V} ->
-            rabbit_log:warning("SSL certificate authentication disabled, "
-                               "fail_if_no_peer_cert=~p; "
-                               "verify=~p~n", [F, V]),
-            false
+    case proplists:get_value(verify, Opts) of
+        verify_peer -> true;
+        V           -> rabbit_log:warning("SSL certificate authentication "
+                                          "disabled, verify=~p~n", [V]),
+                       false
     end.
 
 %%--------------------------------------------------------------------------
