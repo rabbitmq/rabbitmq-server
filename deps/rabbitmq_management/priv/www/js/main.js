@@ -520,6 +520,12 @@ function postprocess() {
                        'fade');
         }
     });
+    $('.rate-visibility-option').die().live('click', function() {
+        var k = $(this).attr('data-pref');
+        var show = get_pref(k) !== 'true';
+        store_pref(k, '' + show);
+        partial_update();
+    });
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.
     });
