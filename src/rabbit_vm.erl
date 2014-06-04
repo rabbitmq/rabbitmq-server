@@ -86,7 +86,7 @@ mnesia_memory() ->
     case mnesia:system_info(is_running) of
         yes -> lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
                              Tab <- mnesia:system_info(tables)]);
-        no  -> 0
+        _   -> 0
     end.
 
 ets_memory(Name) ->
