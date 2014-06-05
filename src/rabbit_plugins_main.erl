@@ -89,6 +89,13 @@ start() ->
         {error_string, Reason} ->
             print_error("~s", [Reason]),
             rabbit_misc:quit(2);
+        {badrpc, {'EXIT', Reason}} ->
+            print_error("~p", [Reason]),
+            rabbit_misc:quit(2);
+        {badrpc, Reason} ->
+            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
+            print_badrpc_diagnostics([Node]),
+            rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
@@ -124,26 +131,10 @@ action(enable, Node, ToEnable0, Opts, PluginsFile, PluginsDir) ->
     end,
     AllPlugins = rabbit_plugins:list(PluginsDir),
     Enabled = rabbit_plugins:read_enabled(PluginsFile),
-    ImplicitlyEnabled = rabbit_plugins:dependencies(false,
-                                                    Enabled, AllPlugins),
+    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     Missing = ToEnable -- plugin_names(AllPlugins),
-    ExplicitlyEnabled = lists:usort(Enabled ++ ToEnable),
-    OfflineOnly = proplists:get_bool(?OFFLINE_OPT, Opts),
-    NewEnabled =
-        case OfflineOnly of
-            true  -> ToEnable -- Enabled;
-            false ->
-                case rpc:call(Node, rabbit_plugins, active, [], ?RPC_TIMEOUT) of
-                    {badrpc, _} -> rpc_failure(Node);
-                    []          -> ExplicitlyEnabled;
-                    ActiveList  ->
-                        EnabledSet = sets:from_list(ExplicitlyEnabled),
-                        ActiveSet = sets:from_list(ActiveList),
-                        Intersect = sets:intersection(EnabledSet, ActiveSet),
-                        sets:to_list(sets:subtract(EnabledSet, Intersect))
-                end
-        end,
+    NewEnabled = lists:usort(Enabled ++ ToEnable),
     NewImplicitlyEnabled = rabbit_plugins:dependencies(false,
                                                        NewEnabled, AllPlugins),
     MissingDeps = (NewImplicitlyEnabled -- plugin_names(AllPlugins)) -- Missing,
@@ -155,22 +146,23 @@ action(enable, Node, ToEnable0, Opts, PluginsFile, PluginsDir) ->
                              fmt_missing("plugins", Missing) ++
                                  fmt_missing("dependencies", MissingDeps)})
     end,
-    write_enabled_plugins(PluginsFile, ExplicitlyEnabled),
-    case NewEnabled -- (ImplicitlyEnabled -- ExplicitlyEnabled) of
+    write_enabled_plugins(PluginsFile, NewEnabled),
+    case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> print_list("The following plugins have been enabled:",
-                         NewEnabled),
-              action_change(OfflineOnly, Node, enable, NewEnabled)
-    end;
+                         NewImplicitlyEnabled -- ImplicitlyEnabled)
+    end,
+    action_change(Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled);
 
 action(disable, Node, ToDisable0, Opts, PluginsFile, PluginsDir) ->
     case ToDisable0 of
         [] -> throw({error_string, "Not enough arguments for 'disable'"});
         _  -> ok
     end,
-    ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
-    Enabled = rabbit_plugins:read_enabled(PluginsFile),
     AllPlugins = rabbit_plugins:list(PluginsDir),
+    Enabled = rabbit_plugins:read_enabled(PluginsFile),
+    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
+    ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
     Missing = ToDisable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
@@ -178,44 +170,25 @@ action(disable, Node, ToDisable0, Opts, PluginsFile, PluginsDir) ->
                          Missing)
     end,
     ToDisableDeps = rabbit_plugins:dependencies(true, ToDisable, AllPlugins),
-    OfflineOnly = proplists:get_bool(?OFFLINE_OPT, Opts),
-    Active =
-        case OfflineOnly of
-            true  -> Enabled;
-            false -> case rpc:call(Node, rabbit_plugins, active,
-                                   [], ?RPC_TIMEOUT) of
-                         {badrpc, _} -> rpc_failure(Node);
-                         []          -> Enabled;
-                         ActiveList  -> ActiveList
-                     end
-        end,
     NewEnabled = Enabled -- ToDisableDeps,
-    case length(Active) =:= length(NewEnabled) of
+    NewImplicitlyEnabled = rabbit_plugins:dependencies(false,
+                                                       NewEnabled, AllPlugins),
+    case length(Enabled) =:= length(NewEnabled) of
         true  -> io:format("Plugin configuration unchanged.~n");
-        false -> ImplicitlyEnabled =
-                     rabbit_plugins:dependencies(false, Active, AllPlugins),
-                 NewImplicitlyEnabled =
-                     rabbit_plugins:dependencies(false,
-                                                 NewEnabled, AllPlugins),
-                 Disabled = ImplicitlyEnabled -- NewImplicitlyEnabled,
-                 print_list("The following plugins have been disabled:",
-                            Disabled),
-                 write_enabled_plugins(PluginsFile, NewEnabled),
-                 action_change(OfflineOnly, Node, disable, Disabled)
-    end.
+        false -> print_list("The following plugins have been disabled:",
+                            ImplicitlyEnabled -- NewImplicitlyEnabled),
+                 write_enabled_plugins(PluginsFile, NewEnabled)
+    end,
+    action_change(Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled).
 
 %%----------------------------------------------------------------------------
 
-rpc_failure(Node) ->
-    RpcMsg = rabbit_nodes:diagnostics([Node]),
-    Msg = io_lib:format("Unable to contact ~p~n"
-                        "To apply these changes anyway, "
-                        "try again with --offline~n"
-                        "~s", [Node, RpcMsg]),
-    throw({error_string, Msg}).
+fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 
-print_error(Format, Args) ->
-    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
+
+print_badrpc_diagnostics(Nodes) ->
+    fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
 
 usage() ->
     io:format("~s", [rabbit_plugins_usage:usage()]),
@@ -240,9 +213,8 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     AllEnabled = rabbit_plugins:dependencies(false, EnabledExplicitly,
                                              AvailablePlugins),
     EnabledImplicitly = AllEnabled -- EnabledExplicitly,
-    Running = case rpc:call(Node, rabbit_plugins, active,
-                            [], ?RPC_TIMEOUT) of
-                  {badrpc, _} -> AllEnabled;
+    Running = case rpc:call(Node, rabbit_plugins, active, [], ?RPC_TIMEOUT) of
+                  {badrpc, _} -> [];
                   Active      -> Active
               end,
     Missing = [#plugin{name = Name, dependencies = []} ||
@@ -333,35 +305,29 @@ write_enabled_plugins(PluginsFile, Plugins) ->
                                           PluginsFile, Reason}})
     end.
 
-action_change(true, _Node, Action, _Targets) ->
-    io:format("Offline Mode: No plugins were ~p.~n"
-              "Please (re)start the broker to apply your changes.~n",
-              [case Action of
-                   enable  -> started;
-                   disable -> stopped
-               end]);
-action_change(false, Node, Action, Targets) ->
-    rpc_call(Node, rabbit_plugins, Action, [Targets]).
+action_change(Opts, Node, Old, New) ->
+    action_change0(proplists:get_bool(?OFFLINE_OPT, Opts), Node, Old, New).
 
-rpc_call(Node, Mod, Action, Args) ->
-    io:format("Changing plugin configuration on ~p.", [Node]),
-    AsyncKey = rpc:async_call(Node, Mod, Action, Args),
-    rpc_progress(AsyncKey, Node, Action).
+action_change0(true, _Node, Same, Same) ->
+    %% Definitely nothing to do
+    ok;
+action_change0(true, _Node, _Old, _New) ->
+    io:format("Offline change; changes will take effect at broker restart.~n");
+action_change0(false, Node, _Old, New) ->
+    %% Don't care what the Old was in the plugins file, that might not
+    %% match what the server is running - so tell it to ensure we are
+    %% running the right apps even if "nothing has changed".
+    rpc_call(Node, rabbit_plugins, ensure, [New]).
 
-rpc_progress(Key, Node, Action) ->
-    case rpc:nb_yield(Key, 1000) of
-        timeout -> io:format("."),
-                   rpc_progress(Key, Node, Action);
-        {value, {badrpc, nodedown}} ->
-            io:format(". error.~nUnable to contact ~p.~n ", [Node]),
-            io:format("Please start the broker to apply "
-                      "your changes.~n");
-        {value, ok} ->
-            io:format(". done.~n", []);
-        {value, Error} ->
-            io:format(". error.~nUnable to ~p plugin(s).~n"
-                      "Please restart the broker to apply your changes.~n"
-                      "Error: ~p~n",
-                      [Action, Error])
+rpc_call(Node, Mod, Fun, Args) ->
+    io:format("Checking plugin configuration on ~p...", [Node]),
+    case rpc:call(Node, Mod, Fun, Args) of
+        {ok, [], []} ->
+            io:format(" ok.~n", []);
+        {ok, Start, Stop} ->
+            io:format(" started ~p, stopped ~p.~n",
+                      [length(Start), length(Stop)]);
+        {badrpc, _} = Error ->
+            io:format(" failed.~n", []),
+            Error
     end.
-

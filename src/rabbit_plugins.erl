@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 
 -export([setup/0, active/0, read_enabled/1, list/1, dependencies/3]).
--export([enable/1, disable/1]).
+-export([ensure/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -32,26 +32,24 @@
 -spec(read_enabled/1 :: (file:filename()) -> [plugin_name()]).
 -spec(dependencies/3 :: (boolean(), [plugin_name()], [#plugin{}]) ->
                              [plugin_name()]).
--spec(enable/1  :: ([plugin_name()]) -> 'ok').
--spec(disable/1 :: ([plugin_name()]) -> 'ok').
+-spec(ensure/1  :: ([plugin_name()]) -> {'ok', [atom()], [atom()]}).
 -endif.
 
 %%----------------------------------------------------------------------------
 
-enable(Plugins) ->
-    prepare_plugins(Plugins),
-    rabbit:start_apps(Plugins),
-    ok = rabbit_event:notify(plugins_changed, [{enabled, Plugins}]).
-
-disable(Plugins) ->
-    RunningApps = rabbit_misc:which_applications(),
-    ToDisable = [P || P <- Plugins,
-                      proplists:is_defined(P, RunningApps)],
+ensure(Wanted) ->
+    Current = active(),
+    Start = Wanted -- Current,
+    Stop = Current -- Wanted,
+    prepare_plugins(Start),
     %% We need sync_notify here since mgmt will attempt to look at all
     %% the modules for the disabled plugins - if they are unloaded
     %% that won't work.
-    ok = rabbit_event:sync_notify(plugins_changed, [{disabled, ToDisable}]),
-    rabbit:stop_apps(ToDisable).
+    ok = rabbit_event:notify(plugins_changed, [{enabled,  Start},
+                                               {disabled, Stop}]),
+    rabbit:start_apps(Start),
+    rabbit:stop_apps(Stop),
+    {ok, Start, Stop}.
 
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
