@@ -35,7 +35,6 @@
                     {requires,    rabbit_event},
                     {enables,     recovery}]}).
 
-%% TODO: really?
 -import(rabbit_misc, [pget/3]).
 
 %%----------------------------------------------------------------------------
@@ -52,8 +51,8 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event(Event, State) ->
-    case extension_changes(Event) of
-        true  -> rabbit_mgmt_app:reset();
+    case extensions_changed(Event) of
+        true  -> rabbit_mgmt_app:reset_dispatcher();
         false -> ok
     end,
     {ok, State}.
@@ -69,28 +68,23 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-extension_changes(#event{ type = 'plugins_changed', props = Details }) ->
+extensions_changed(#event{ type = 'plugins_changed', props = Details }) ->
     Enabled  = pget(enabled, Details, []),
     Disabled = pget(disabled, Details, []),
     %% We explicitly ignore the case where management has been started, since
     %% regardless of what else has happened, the dispatcher will have been
     %% configured correctly during the plugin's boot sequence.
-    case pget(rabbitmq_management, Enabled, undefined) of
-        undefined -> filter_extensions(lists:concat([Enabled, Disabled]));
-        _         -> false
-    end;
-extension_changes(_) ->
+    not lists:member(rabbitmq_management, Enabled) andalso
+        contains_extension(Enabled ++ Disabled);
+extensions_changed(#event{}) ->
     false.
 
-filter_extensions([]) ->
-    false;
-filter_extensions(Changed) ->
-    Exts = [Mod || Mod <- lists:flatten(
-                            lists:map(fun app_modules/1, Changed)),
-                   {Attr, Bs} <- Mod:module_info(attributes),
-                   lists:member(rabbit_mgmt_extension, Bs) andalso
-                       (Attr =:= behavior orelse Attr =:= behaviour)],
-    Exts /= [].
+contains_extension(Apps) ->
+    [] =/= [Mod || App <- Apps, Mod <- app_modules(App), is_extension(Mod)].
+
+is_extension(Mod) ->
+    lists:member(rabbit_mgmt_extension,
+                 pget(behaviour, Mod:module_info(attributes), [])).
 
 app_modules(App) ->
     {ok, Modules} = application:get_key(App, modules),

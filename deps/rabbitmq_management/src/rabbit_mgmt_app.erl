@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_app).
 
 -behaviour(application).
--export([start/2, stop/1, reset/0]).
+-export([start/2, stop/1, reset_dispatcher/0]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -29,14 +29,14 @@ start(_Type, _StartArgs) ->
     {ok, Listener} = application:get_env(rabbitmq_management, listener),
     setup_wm_logging(),
     register_context(Listener),
-    log_startup(started, Listener),
+    log_startup(Listener),
     rabbit_mgmt_sup_sup:start_link().
 
 stop(_State) ->
     unregister_context(),
     ok.
 
-reset() ->
+reset_dispatcher() ->
     case whereis(rabbit_mgmt_sup_sup) of
         undefined ->
             ok;
@@ -44,7 +44,6 @@ reset() ->
             unregister_context(),
             {ok, Listener} = application:get_env(rabbitmq_management, listener),
             register_context(Listener),
-            log_startup(restarted, Listener),
             ok
     end.
 
@@ -109,9 +108,8 @@ setup_wm_logging() ->
         _    -> webmachine_log:add_handler(webmachine_log_handler, [LogDir])
     end.
 
-log_startup(StartType, Listener) ->
-    rabbit_log:info("Management plugin ~p. Port: ~w~n",
-                    [StartType, port(Listener)]).
+log_startup(Listener) ->
+    rabbit_log:info("Management plugin started. Port: ~w~n", [port(Listener)]).
 
 port(Listener) ->
     proplists:get_value(port, Listener).
