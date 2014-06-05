@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_dispatcher).
@@ -55,6 +55,8 @@ dispatcher() ->
      {["connections", connection, "channels"],                     rabbit_mgmt_wm_connection_channels, []},
      {["channels"],                                                rabbit_mgmt_wm_channels, []},
      {["channels", channel],                                       rabbit_mgmt_wm_channel, []},
+     {["consumers"],                                               rabbit_mgmt_wm_consumers, []},
+     {["consumers", vhost],                                        rabbit_mgmt_wm_consumers, []},
      {["exchanges"],                                               rabbit_mgmt_wm_exchanges, []},
      {["exchanges", vhost],                                        rabbit_mgmt_wm_exchanges, []},
      {["exchanges", vhost, exchange],                              rabbit_mgmt_wm_exchange, []},

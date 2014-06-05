@@ -53,20 +53,10 @@
     with the <code>columns</code> parameter. This is a comma-separated
     list of subfields separated by dots. See the example below.</p>
 
-    <p>URIs which return some forms of numerical data (such as message
-    rates and queue lengths) can return historical samples. To return
-    samples you need to set an age and an increment for the samples
-    you want. The end of the range returned will always correspond to
-    the present. Use <code>msg_rates_age</code>
-    and <code>msg_rates_incr</code> to return samples for messages
-    sent and received, <code>data_rates_age</code>
-    and <code>data_rates_incr</code> to return samples for bytes sent
-    and received, and <code>lengths_age</code>
-    and <code>lengths_incr</code> to return samples for queue
-    lengths. For example,
-    appending <code>?lengths_age=3600&lengths_incr=60</code> will return
-    the last hour's data on queue lengths, with a sample for every minute.</p>
-
+    <p>Most of the GET queries return many fields per
+    object. See <a href="/doc/stats.html">the separate stats
+    documentation</a>.</p>
+    
     <h2>Examples</h2>
 
     <p>A few quick examples for Windows and Unix, using the command line
@@ -275,6 +265,16 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
+        <td class="path">/api/connections/<i>name</i>/channels</td>
+        <td>
+          List of all channels for a given connection.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td class="path">/api/channels</td>
         <td>A list of all open channels.</td>
       </tr>
@@ -285,6 +285,22 @@ Content-Length: 0</pre>
         <td></td>
         <td class="path">/api/channels/<i>channel</i></td>
         <td>Details about an individual channel.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/consumers</td>
+        <td>A list of all consumers.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/consumers/<i>vhost</i></td>
+        <td>A list of all consumers in a given virtual host.</td>
       </tr>
       <tr>
         <td>X</td>

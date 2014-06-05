@@ -728,31 +728,48 @@ function prefix_title(mode, range) {
 }
 
 function rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
+    function show_pref_name(key) {
+        return 'chart-line-' + id + '-' + key;
+    }
+
+    function show(key) {
+        return get_pref(show_pref_name(key)) === 'true';
+    }
+
     var size = get_pref('chart-size-' + id);
-    var show = [];
+    var legend = [];
     chart_data[id] = {};
     chart_data[id]['data'] = {};
     chart_data[id]['fmt'] = axis_fmt;
+    var ix = 0;
     for (var i in items) {
         var name = items[i][0];
         var key = items[i][1];
         var key_details = key + '_details';
         if (key_details in stats) {
-            chart_data[id]['data'][name] = stats[key_details];
-            show.push([name, rate_fmt(stats, key)]);
+            if (show(key)) {
+                chart_data[id]['data'][name] = stats[key_details];
+                chart_data[id]['data'][name].ix = ix;
+            }
+            legend.push([name, key, rate_fmt(stats, key)]);
+            ix++;
         }
     }
     var html = '<div class="box"><div id="chart-' + id +
         '" class="chart chart-' + size +
         (chart_rates ? ' chart-rates' : '') + '"></div>';
     html += '<table class="facts facts-fixed-width">';
-    for (var i = 0; i < show.length; i++) {
-        html += '<tr><th>' + show[i][0] + '</th><td>';
+    for (var i = 0; i < legend.length; i++) {
+        html += '<tr><th><span title="Click to toggle line" ';
+        html += 'class="rate-visibility-option';
+        html += show(legend[i][1]) ? '' : ' rate-visibility-option-hidden';
+        html += '" data-pref="' + show_pref_name(legend[i][1]) + '">';
+        html += legend[i][0] + '</span></th><td>';
         html += '<div class="colour-key" style="background: ' + chart_colors[i];
-        html += ';"></div>' + show[i][1] + '</td></tr>'
+        html += ';"></div>' + legend[i][2] + '</td></tr>'
     }
     html += '</table></div>';
-    return show.length > 0 ? html : '';
+    return legend.length > 0 ? html : '';
 }
 
 function rates_text(items, stats, mode, rate_fmt) {

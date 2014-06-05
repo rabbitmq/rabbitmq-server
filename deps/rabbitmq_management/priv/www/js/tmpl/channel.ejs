@@ -3,7 +3,7 @@
 <div class="section">
 <h2>Overview</h2>
 <div class="hider">
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-ch', channel.message_stats) %>
 <% } %>
 
@@ -38,9 +38,20 @@
 
 <table class="facts">
   <tr>
+    <th>State</th>
+    <td><%= fmt_object_state(channel) %></td>
+  </tr>
+  <tr>
     <th>Prefetch count</th>
     <td><%= channel.prefetch_count %></td>
   </tr>
+  <tr>
+    <th>Global prefetch count</th>
+    <td><%= channel.global_prefetch_count %></td>
+  </tr>
+</table>
+
+<table class="facts">
   <tr>
     <th>Messages unacknowledged</th>
     <td><%= channel.messages_unacknowledged %></td>
@@ -58,13 +69,6 @@
     <td><%= channel.acks_uncommitted %></td>
   </tr>
 </table>
-
-<table class="facts">
-  <tr>
-    <th>State</th>
-    <td><%= fmt_object_state(channel) %></td>
-  </tr>
-</table>
 </div>
 
 </div>
@@ -77,7 +81,7 @@
   </div>
 </div>
 
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode == 'detailed') { %>
 <div class="section">
 <h2>Message rates breakdown</h2>
 <div class="hider updatable">

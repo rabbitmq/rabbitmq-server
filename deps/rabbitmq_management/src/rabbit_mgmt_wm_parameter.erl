@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_parameter).
@@ -50,7 +50,7 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(parameter(ReqData)),
                            ReqData, Context).
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData, Context = #context{user = User}) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found ->
             rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
@@ -60,7 +60,7 @@ accept_content(ReqData, Context) ->
               fun([Value], _) ->
                       case rabbit_runtime_parameters:set(
                              VHost, component(ReqData), name(ReqData),
-                             rabbit_misc:json_to_term(Value)) of
+                             rabbit_misc:json_to_term(Value), User) of
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->

@@ -368,7 +368,7 @@ function y_position() {
 
 function with_update(fun) {
     with_reqs(apply_state(current_reqs), [], function(json) {
-            json.statistics_level = statistics_level;
+            //json.statistics_level = statistics_level;
             var html = format(current_template, json);
             fun(html);
             update_status('ok');
@@ -519,6 +519,12 @@ function postprocess() {
             show_popup('rate-options', format('rate-options', {span: $(this)}),
                        'fade');
         }
+    });
+    $('.rate-visibility-option').die().live('click', function() {
+        var k = $(this).attr('data-pref');
+        var show = get_pref(k) !== 'true';
+        store_pref(k, '' + show);
+        partial_update();
     });
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.
@@ -734,11 +740,26 @@ function publish_msg(params0) {
     params['properties']['delivery_mode'] = parseInt(params['delivery_mode']);
     if (params['headers'] != '')
         params['properties']['headers'] = params['headers'];
-    var props = ['content_type', 'content_encoding', 'priority', 'correlation_id', 'reply_to', 'expiration', 'message_id', 'timestamp', 'type', 'user_id', 'app_id', 'cluster_id'];
+    var props = [['content_type',     'str'],
+                 ['content_encoding', 'str'],
+                 ['correlation_id',   'str'],
+                 ['reply_to',         'str'],
+                 ['expiration',       'str'],
+                 ['message_id',       'str'],
+                 ['type',             'str'],
+                 ['user_id',          'str'],
+                 ['app_id',           'str'],
+                 ['cluster_id',       'str'],
+                 ['priority',         'int'],
+                 ['timestamp',        'int']];
     for (var i in props) {
-        var p = props[i];
-        if (params['props'][p] != '')
-            params['properties'][p] = params['props'][p];
+        var name = props[i][0];
+        var type = props[i][1];
+        if (params['props'][name] != undefined && params['props'][name] != '') {
+            var value = params['props'][name];
+            if (type == 'int') value = parseInt(value);
+            params['properties'][name] = value;
+        }
     }
     with_req('POST', path, JSON.stringify(params), function(resp) {
             var result = jQuery.parseJSON(resp.responseText);
@@ -994,11 +1015,12 @@ function collapse_multifields(params0) {
         var v = params0[name + '_' + id + '_mfvalue'];
         var t = params0[name + '_' + id + '_mftype'];
         var val = null;
+        var top_level = id_parts.length == 1;
         if (t == 'list') {
             val = [];
             id_map[name][id] = val;
         }
-        else if (set(k) || set(v)) {
+        else if ((set(k) && top_level) || set(v)) {
             if (t == 'boolean') {
                 if (v != 'true' && v != 'false')
                     throw(k + ' must be "true" or "false"; got ' + v);
@@ -1015,7 +1037,7 @@ function collapse_multifields(params0) {
             }
         }
         if (val != null) {
-            if (id_parts.length == 1) {
+            if (top_level) {
                 params[name][k] = val;
             }
             else {

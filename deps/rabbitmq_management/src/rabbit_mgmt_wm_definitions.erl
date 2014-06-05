@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_definitions).
@@ -134,10 +134,15 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
                 for_all(exchanges,   All, fun add_exchange/1),
                 for_all(bindings,    All, fun add_binding/1),
                 SuccessFun()
-            catch {error, E} -> ErrorFun(E);
-                  exit:E     -> ErrorFun(E)
+            catch {error, E} -> ErrorFun(format(E));
+                  exit:E     -> ErrorFun(format(E))
             end
     end.
+
+format(#amqp_error{name = Name, explanation = Explanation}) ->
+    list_to_binary(rabbit_misc:format("~s: ~s", [Name, Explanation]));
+format(E) ->
+    list_to_binary(rabbit_misc:format("~p", [E])).
 
 get_part(Name, Parts) ->
     %% TODO any reason not to use lists:keyfind instead?
@@ -207,8 +212,8 @@ add_parameter(Param) ->
     VHost = pget(vhost,     Param),
     Comp  = pget(component, Param),
     Key   = pget(name,      Param),
-    case rabbit_runtime_parameters:set(
-           VHost, Comp, Key, rabbit_misc:json_to_term(pget(value, Param))) of
+    Term  = rabbit_misc:json_to_term(pget(value, Param)),
+    case rabbit_runtime_parameters:set(VHost, Comp, Key, Term, none) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)",
                                                     [VHost, Comp, Key]),

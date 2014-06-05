@@ -7,6 +7,7 @@
   {env, [{listener,          [{port, 15672}]},
          {http_log_dir,      none},
          {load_definitions,  none},
+         {rates_mode,        basic},
          {sample_retention_policies,
           %% List of {MaxAgeSecs, IfTimestampDivisibleBySecs}
           [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},

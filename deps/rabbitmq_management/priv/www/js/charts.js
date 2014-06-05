@@ -19,12 +19,12 @@ function render_chart(div) {
     var rate_mode = div.hasClass('chart-rates');
 
     var out_data = [];
-    var i = 0;
     var data = chart_data[id]['data'];
     var fmt = chart_data[id]['fmt'];
     for (var name in data) {
         var series = data[name];
         var samples = series.samples;
+        var i = series.ix;
         var d = [];
         for (var j = 1; j < samples.length; j++) {
             var x = samples[j].timestamp;
@@ -44,7 +44,6 @@ function render_chart(div) {
             d.push([x, y]);
         }
         out_data.push({data: d, color: chart_colors[i], shadowSize: 0});
-        i++;
     }
     chart_data[id] = {};
 

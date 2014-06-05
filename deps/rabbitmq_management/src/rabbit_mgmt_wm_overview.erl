@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_overview).
@@ -32,12 +32,12 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
+    {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
     Overview0 = [{management_version,  version(rabbitmq_management)},
-                 {statistics_level,    StatsLevel},
+                 {rates_mode,          RatesMode},
                  {exchange_types,      ExchangeTypes},
                  {rabbitmq_version,    version(rabbit)},
                  {cluster_name,        rabbit_nodes:cluster_name()},

@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_util).
@@ -28,7 +28,7 @@
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
--export([filter_conn_ch_list/3, filter_user/2]).
+-export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/1]).
 -export([with_decode/5, decode/1, decode/2, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, is_monitor/1]).
@@ -109,20 +109,38 @@ is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     end.
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
-    ErrFun = fun (Msg) -> not_authorised(Msg, ReqData, Context) end,
+    ErrFun = fun (Msg) ->
+                     rabbit_log:warning("HTTP access denied: user '~s' - ~s~n",
+                                        [Username, Msg]),
+                     not_authorised(Msg, ReqData, Context)
+             end,
     case rabbit_access_control:check_user_pass_login(Username, Password) of
         {ok, User = #user{tags = Tags}} ->
-            case is_mgmt_user(Tags) of
-                true  -> case Fun(User) of
-                             true  -> {true, ReqData,
-                                       Context#context{user     = User,
-                                                       password = Password}};
-                             false -> ErrFun(ErrorMsg)
-                         end;
-                false -> ErrFun(<<"Not management user">>)
+            IPStr = wrq:peer(ReqData),
+            %% inet_parse:address/1 is an undocumented function but
+            %% exists in old versions of Erlang. inet:parse_address/1
+            %% is a documented wrapper round it but introduced in R16B.
+            {ok, IP} = inet_parse:address(IPStr),
+            case rabbit_access_control:check_user_loopback(Username, IP) of
+                ok ->
+                    case is_mgmt_user(Tags) of
+                        true ->
+                            case Fun(User) of
+                                true  -> {true, ReqData,
+                                          Context#context{user     = User,
+                                                          password = Password}};
+                                false -> ErrFun(ErrorMsg)
+                            end;
+                        false ->
+                            ErrFun(<<"Not management user">>)
+                    end;
+                not_allowed ->
+                    ErrFun(<<"User can only log in via localhost">>)
             end;
-        _ ->
-            ErrFun(<<"Login failed">>)
+        {refused, Msg, Args} ->
+            rabbit_log:warning("HTTP access denied: ~s~n",
+                               [rabbit_misc:format(Msg, Args)]),
+            not_authorised(<<"Login failed">>, ReqData, Context)
     end.
 
 vhost(ReqData) ->

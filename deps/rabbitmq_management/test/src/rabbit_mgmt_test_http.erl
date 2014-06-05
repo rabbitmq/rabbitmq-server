@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Console.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_test_http).
@@ -520,21 +520,25 @@ get_conn(Username, Password) ->
                    [LocalPort]),
     {Conn, ConnPath, ChPath, ConnChPath}.
 
-permissions_connection_channel_test() ->
+permissions_connection_channel_consumer_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/user", [{password, <<"user">>},
                              {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
     http_put("/users/monitor", [{password, <<"monitor">>},
-                            {tags, <<"monitoring">>}], ?NO_CONTENT),
+                                {tags, <<"monitoring">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/monitor", PermArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+
     {Conn1, UserConn, UserCh, UserConnCh} = get_conn("user", "user"),
     {Conn2, MonConn, MonCh, MonConnCh} = get_conn("monitor", "monitor"),
     {Conn3, AdmConn, AdmCh, AdmConnCh} = get_conn("guest", "guest"),
-    {ok, _Ch1} = amqp_connection:open_channel(Conn1),
-    {ok, _Ch2} = amqp_connection:open_channel(Conn2),
-    {ok, _Ch3} = amqp_connection:open_channel(Conn3),
-
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    {ok, Ch3} = amqp_connection:open_channel(Conn3),
+    [amqp_channel:subscribe(
+       Ch, #'basic.consume'{queue = <<"test">>}, self()) ||
+        Ch <- [Ch1, Ch2, Ch3]],
     AssertLength = fun (Path, User, Len) ->
                            ?assertEqual(Len,
                                         length(http_get(Path, User, User, ?OK)))
@@ -543,7 +547,7 @@ permissions_connection_channel_test() ->
          AssertLength(P, "user", 1),
          AssertLength(P, "monitor", 3),
          AssertLength(P, "guest", 3)
-     end || P <- ["/connections", "/channels"]],
+     end || P <- ["/connections", "/channels", "/consumers", "/consumers/%2f"]],
 
     AssertRead = fun(Path, UserStatus) ->
                          http_get(Path, "user", "user", UserStatus),
@@ -573,13 +577,22 @@ permissions_connection_channel_test() ->
     http_delete("/users/monitor", ?NO_CONTENT),
     http_get("/connections/foo", ?NOT_FOUND),
     http_get("/channels/foo", ?NOT_FOUND),
+    http_delete("/queues/%2f/test", ?NO_CONTENT),
     ok.
 
-unicode_test() ->
-    QArgs = [],
-    http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
-    http_get("/queues/%2f/♫♪♫♪", ?OK),
-    http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
+consumers_test() ->
+    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+    {Conn, _ConnPath, _ChPath, _ConnChPath} = get_conn("guest", "guest"),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    amqp_channel:subscribe(
+      Ch, #'basic.consume'{queue        = <<"test">>,
+                           no_ack       = false,
+                           consumer_tag = <<"my-ctag">> }, self()),
+    assert_list([[{exclusive,    false},
+                  {ack_required, true},
+                  {consumer_tag, <<"my-ctag">>}]], http_get("/consumers")),
+    amqp_connection:close(Conn),
+    http_delete("/queues/%2f/test", ?NO_CONTENT),
     ok.
 
 defs(Key, URI, CreateMethod, Args) ->
@@ -959,6 +972,15 @@ publish_fail_test() ->
             {payload,          [<<"not a string">>]},
             {payload_encoding, <<"string">>}],
     http_post("/exchanges/%2f/amq.default/publish", Msg3, ?BAD_REQUEST),
+    MsgTemplate = [{exchange,         <<"">>},
+                   {routing_key,      <<"myqueue">>},
+                   {payload,          <<"Hello world">>},
+                   {payload_encoding, <<"string">>}],
+    [http_post("/exchanges/%2f/amq.default/publish",
+               [{properties, [BadProp]} | MsgTemplate], ?BAD_REQUEST)
+     || BadProp <- [{priority,   <<"really high">>},
+                    {timestamp,  <<"recently">>},
+                    {expiration, 1234}]],
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
@@ -1096,6 +1118,8 @@ policy_permissions_test() ->
                   http_put("/policies/v/HA",    Policy, U, U, ?NOT_AUTHORISED),
                   http_put(
                     "/parameters/test/v/good",   Param, U, U, ?NOT_AUTHORISED),
+                  http_put(
+                    "/parameters/test/v/admin",  Param, U, U, ?NOT_AUTHORISED),
                   http_get("/policies",                 U, U, ?NOT_AUTHORISED),
                   http_get("/policies/v",               U, U, ?NOT_AUTHORISED),
                   http_get("/parameters",               U, U, ?NOT_AUTHORISED),
@@ -1116,6 +1140,11 @@ policy_permissions_test() ->
     [Neg(U) || U <- ["mon", "mgmt"]],
     [Pos(U) || U <- ["admin", "policy"]],
     [AlwaysNeg(U) || U <- ["mon", "mgmt", "admin", "policy"]],
+
+    %% This one is deliberately different between admin and policymaker.
+    http_put("/parameters/test/v/admin", Param, "admin", "admin", ?NO_CONTENT),
+    http_put("/parameters/test/v/admin", Param, "policy", "policy",
+             ?BAD_REQUEST),
 
     http_delete("/vhosts/v", ?NO_CONTENT),
     http_delete("/users/admin", ?NO_CONTENT),
