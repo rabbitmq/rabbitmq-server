@@ -794,9 +794,25 @@ config_files() ->
           end,
     case init:get_argument(config) of
         {ok, Files} -> [Abs(File) || [File] <- Files];
-        error       -> case os:getenv("RABBITMQ_CONFIG_FILE") of
-                           false -> [];
-                           File  -> [Abs(File) ++ " (not found)"]
+        error       -> case config_setting() of
+                           none -> [];
+                           File -> [Abs(File) ++ " (not found)"]
+                       end
+    end.
+
+%% This is a pain. We want to know where the config file is. But we
+%% can't specify it on the command line if it is missing or the VM
+%% will fail to start, so we need to find it by some mechanism other
+%% than init:get_arguments/0. We can look at the environment variable
+%% which is responsible for setting it... but that doesn't work for a
+%% Windows service since the variable can change and the service not
+%% be reinstalled, so in that case we add a magic application env.
+config_setting() ->
+    case application:get_env(rabbit, windows_service_config) of
+        {ok, File1} -> File1;
+        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE") of
+                           false -> none;
+                           File2 -> File2
                        end
     end.
 
