@@ -69,13 +69,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 extensions_changed(#event{ type = 'plugins_changed', props = Details }) ->
-    Enabled  = pget(enabled, Details, []),
-    Disabled = pget(disabled, Details, []),
-    %% We explicitly ignore the case where management has been started, since
-    %% regardless of what else has happened, the dispatcher will have been
-    %% configured correctly during the plugin's boot sequence.
-    not lists:member(rabbitmq_management, Enabled) andalso
-        contains_extension(Enabled ++ Disabled);
+    Changed  = pget(enabled, Details, []) ++ pget(disabled, Details, []),
+    %% We explicitly ignore the case where management has been
+    %% started/stopped since the dispatcher is either freshly created
+    %% or about to vanish.
+    not lists:member(rabbitmq_management, Changed) andalso
+        contains_extension(Changed);
 extensions_changed(#event{}) ->
     false.
 

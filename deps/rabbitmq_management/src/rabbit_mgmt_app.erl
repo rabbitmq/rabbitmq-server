@@ -37,15 +37,9 @@ stop(_State) ->
     ok.
 
 reset_dispatcher() ->
-    case whereis(rabbit_mgmt_sup_sup) of
-        undefined ->
-            ok;
-        _Pid ->
-            unregister_context(),
-            {ok, Listener} = application:get_env(rabbitmq_management, listener),
-            register_context(Listener),
-            ok
-    end.
+    unregister_context(),
+    {ok, Listener} = application:get_env(rabbitmq_management, listener),
+    register_context(Listener).
 
 register_context(Listener) ->
     rabbit_web_dispatch:register_context_handler(
