@@ -338,23 +338,6 @@ broker_start() ->
     start_apps(ToBeLoaded),
     ok = log_broker_started(rabbit_plugins:active()).
 
-handle_app_error(Term) ->
-    fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
-            throw({Term, App, ExitReason});
-       (App, Reason) ->
-            throw({Term, App, Reason})
-    end.
-
-start_apps(Apps) ->
-    app_utils:load_applications(Apps),
-    StartupApps = app_utils:app_dependency_order(Apps, false),
-    case whereis(rabbit_boot) of
-        undefined -> run_boot_steps(Apps);
-        _         -> ok
-    end,
-    ok = app_utils:start_applications(StartupApps,
-                                      handle_app_error(could_not_start)).
-
 start_it(StartFun) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
     case catch register(rabbit_boot, Marker) of
@@ -379,13 +362,12 @@ start_it(StartFun) ->
     end.
 
 stop() ->
-    Apps = app_shutdown_order(),
     case whereis(rabbit_boot) of
         undefined -> ok;
-        _         -> app_utils:wait_for_applications(Apps)
+        _         -> await_startup()
     end,
     rabbit_log:info("Stopping RabbitMQ~n"),
-    ok = app_utils:stop_applications(Apps).
+    stop_apps(app_shutdown_order()).
 
 stop_and_halt() ->
     try
@@ -396,21 +378,42 @@ stop_and_halt() ->
     end,
     ok.
 
+start_apps(Apps) ->
+    app_utils:load_applications(Apps),
+    OrderedApps = app_utils:app_dependency_order(Apps, false),
+    case lists:member(rabbit, Apps) of
+        false -> run_boot_steps(Apps); %% plugin activation
+        true  -> ok                    %% will run during start of rabbit app
+    end,
+    ok = app_utils:start_applications(OrderedApps,
+                                      handle_app_error(could_not_start)).
+
 stop_apps(Apps) ->
-    try
-        ok = app_utils:stop_applications(
-               Apps, handle_app_error(error_during_shutdown))
-    after
-        run_cleanup_steps(Apps),
-        [begin
-             {ok, Mods} = application:get_key(App, modules),
-             [begin
-                  code:soft_purge(Mod),
-                  code:delete(Mod),
-                  false = code:is_loaded(Mod)
-              end || Mod <- Mods],
-             application:unload(App)
-         end || App <- Apps]
+    ok = app_utils:stop_applications(
+           Apps, handle_app_error(error_during_shutdown)),
+    case lists:member(rabbit, Apps) of
+        false -> run_cleanup_steps(Apps); %% plugin deactivation
+        true  -> ok                       %% it's all going anyway
+    end,
+    unload_apps(Apps),
+    ok.
+
+unload_apps(Apps) ->
+    [begin
+         {ok, Mods} = application:get_key(App, modules),
+         [begin
+              code:soft_purge(Mod),
+              code:delete(Mod),
+              false = code:is_loaded(Mod)
+          end || Mod <- Mods],
+         application:unload(App)
+     end || App <- Apps].
+
+handle_app_error(Term) ->
+    fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
+            throw({Term, App, ExitReason});
+       (App, Reason) ->
+            throw({Term, App, Reason})
     end.
 
 run_cleanup_steps(Apps) ->
