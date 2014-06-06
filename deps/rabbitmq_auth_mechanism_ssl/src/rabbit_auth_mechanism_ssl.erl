@@ -33,11 +33,6 @@
                     {cleanup,     {rabbit_registry, unregister,
                                    [auth_mechanism, <<"EXTERNAL">>]}}]}).
 
--rabbit_cleanup_step({?MODULE,
-                      [{description, "auth mechanism external"},
-                       {mfa, {rabbit_registry, unregister,
-                              [auth_mechanism, <<"EXTERNAL">>]}}]}).
-
 -record(state, {username = undefined}).
 
 %% SASL EXTERNAL. SASL says EXTERNAL means "use credentials
