@@ -395,19 +395,7 @@ stop_apps(Apps) ->
         false -> run_cleanup_steps(Apps); %% plugin deactivation
         true  -> ok                       %% it's all going anyway
     end,
-    unload_apps(Apps),
     ok.
-
-unload_apps(Apps) ->
-    [begin
-         {ok, Mods} = application:get_key(App, modules),
-         [begin
-              code:soft_purge(Mod),
-              code:delete(Mod),
-              false = code:is_loaded(Mod)
-          end || Mod <- Mods],
-         application:unload(App)
-     end || App <- Apps].
 
 handle_app_error(Term) ->
     fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->

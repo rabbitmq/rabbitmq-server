@@ -49,6 +49,7 @@ ensure(Wanted) ->
                                                {disabled, Stop}]),
     rabbit:start_apps(Start),
     rabbit:stop_apps(Stop),
+    clean_plugins(Stop),
     {ok, Start, Stop}.
 
 %% @doc Prepares the file system and installs all enabled plugins.
@@ -152,6 +153,20 @@ prepare_plugins(Enabled) ->
 
     [prepare_dir_plugin(PluginAppDescPath) ||
         PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
+
+clean_plugins(Plugins) ->
+    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    [clean_plugin(Plugin, ExpandDir) || Plugin <- Plugins].
+
+clean_plugin(Plugin, ExpandDir) ->
+    {ok, Mods} = application:get_key(Plugin, modules),
+    application:unload(Plugin),
+    [begin
+         code:soft_purge(Mod),
+         code:delete(Mod),
+         false = code:is_loaded(Mod)
+     end || Mod <- Mods],
+    delete_recursively(rabbit_misc:format("~s/~s", [ExpandDir, Plugin])).
 
 prepare_dir_plugin(PluginAppDescPath) ->
     code:add_path(filename:dirname(PluginAppDescPath)),
