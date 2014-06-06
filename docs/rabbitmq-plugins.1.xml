@@ -40,6 +40,7 @@
   <refsynopsisdiv>
     <cmdsynopsis>
       <command>rabbitmq-plugins</command>
+      <arg choice="opt">-n <replaceable>node</replaceable></arg>
       <arg choice="req"><replaceable>command</replaceable></arg>
       <arg choice="opt" rep="repeat"><replaceable>command options</replaceable></arg>
     </cmdsynopsis>
@@ -132,9 +133,13 @@
       </varlistentry>
 
       <varlistentry>
-        <term><cmdsynopsis><command>enable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>enable</command> <arg choice="opt">--offline</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
+            <varlistentry>
+              <term>--offline</term>
+              <listitem><para>Just modify the enabled plugins file.</para></listitem>
+            </varlistentry>
             <varlistentry>
               <term>plugin</term>
               <listitem><para>One or more plugins to enable.</para></listitem>
@@ -142,7 +147,9 @@
           </variablelist>
           <para>
             Enables the specified plugins and all their
-            dependencies.
+            dependencies. This will update the enabled plugins file
+            and then connect to the broker and ensure it is running
+            all enabled plugins.
           </para>
 
           <para role="example-prefix">For example:</para>
@@ -156,17 +163,23 @@
       </varlistentry>
 
       <varlistentry>
-        <term><cmdsynopsis><command>disable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>disable</command> <arg choice="opt">--offline</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
+            <varlistentry>
+              <term>--offline</term>
+              <listitem><para>Just modify the enabled plugins file.</para></listitem>
+            </varlistentry>
             <varlistentry>
               <term>plugin</term>
               <listitem><para>One or more plugins to disable.</para></listitem>
             </varlistentry>
           </variablelist>
           <para>
-            Disables the specified plugins and all plugins that
-            depend on them.
+            Disables the specified plugins and all their
+            dependencies. This will update the enabled plugins file
+            and then connect to the broker and ensure it is running
+            all enabled plugins.
           </para>
 
           <para role="example-prefix">For example:</para>
