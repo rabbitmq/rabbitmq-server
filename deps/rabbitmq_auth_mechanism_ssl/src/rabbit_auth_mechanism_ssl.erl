@@ -29,7 +29,14 @@
                     {mfa,         {rabbit_registry, register,
                                    [auth_mechanism, <<"EXTERNAL">>, ?MODULE]}},
                     {requires,    rabbit_registry},
-                    {enables,     kernel_ready}]}).
+                    {enables,     kernel_ready},
+                    {cleanup,     {rabbit_registry, unregister,
+                                   [auth_mechanism, <<"EXTERNAL">>]}}]}).
+
+-rabbit_cleanup_step({?MODULE,
+                      [{description, "auth mechanism external"},
+                       {mfa, {rabbit_registry, unregister,
+                              [auth_mechanism, <<"EXTERNAL">>]}}]}).
 
 -record(state, {username = undefined}).
 
