@@ -38,7 +38,13 @@
 %% For insertion into gm
 -export([call/3, cast/2]).
 
--record(state, {seq, instrumented, outstanding, to_join}).
+-record(state, {seq,          %% symbolic and dynamic
+                instrumented, %% dynamic only
+                outstanding,  %% dynamic only
+                all_join,     %% for symbolic
+                to_join,      %% dynamic only
+                to_leave      %% for symbolic
+               }).
 
 prop_gm_test() ->
     case ?INSTR_MOD of
@@ -58,7 +64,7 @@ gm_test(Cmds) ->
 
 cleanup(S) ->
     S2 = ensure_outstanding_msgs_received(drain_proceeding(S)),
-    All = gmsj(S2),
+    All = gms_joined(S2),
     All = gms(S2), %% assertion - none to join
     check_stale_members(All),
     [gm:leave(GM) || GM <- All],
@@ -98,41 +104,39 @@ await_death(MRef, P) ->
 %% proper_statem
 %% ---------------------------------------------------------------------------
 
-initial_state() -> #state{seq          = 1,
-                          outstanding  = dict:new(),
-                          instrumented = dict:new(),
-                          to_join      = sets:new()}.
+initial_state() -> #state{seq           = 1,
+                          outstanding   = dict:new(),
+                          instrumented  = dict:new(),
+                          all_join      = sets:new(),
+                          to_join       = sets:new(),
+                          to_leave      = sets:new()}.
 
-command(S = #state{outstanding = Outstanding,
-                   to_join     = ToJoin}) ->
-    case {dict:size(Outstanding), sets:size(ToJoin)} of
-        {0, 0} -> qc_join(S);
-        {0, _} -> frequency([{1,  qc_join(S)},
-                             {1,  qc_leave(S)},
-                             {20, qc_proceed(S)}]);
-        _      -> frequency([{1,  qc_join(S)},
-                             {1,  qc_leave(S)},
-                             {10, qc_send(S)},
-                             {20, qc_proceed(S)}])
+command(S) ->
+    case length(gms_symb(S)) of
+        0 -> qc_join(S);
+        _ -> frequency([{1,  qc_join(S)},
+                        {1,  qc_leave(S)},
+                        {10, qc_send(S)},
+                        {20, qc_proceed(S)}])
     end.
 
 qc_join(_S)                  -> {call,?MODULE,do_join, []}.
-qc_leave(S)                  -> {call,?MODULE,do_leave,[oneof(gms(S))]}.
-qc_send(S = #state{seq = N}) -> {call,?MODULE,do_send, [N, oneof(gmsj(S))]}.
-qc_proceed(S)                -> {call,?MODULE,do_proceed, [oneof(gms(S)),
-                                                           oneof(gms(S))]}.
+qc_leave(S)                  -> {call,?MODULE,do_leave,[oneof(gms_symb(S))]}.
+qc_send(S = #state{seq = N}) -> {call,?MODULE,do_send, [N, oneof(gms_symb(S))]}.
+qc_proceed(S)                -> {call,?MODULE,do_proceed, [oneof(gms_symb(S)),
+                                                           oneof(gms_symb(S))]}.
 
 precondition(S, {call, ?MODULE, do_join, []}) ->
-    length(gms(S)) < ?MAX_SIZE;
+    length(gms_symb(S)) < ?MAX_SIZE;
 
 precondition(S, {call, ?MODULE, do_leave, [_GM]}) ->
-    length(gms(S)) > 0;
+    length(gms_symb(S)) > 0;
 
 precondition(S, {call, ?MODULE, do_send, [_N, _GM]}) ->
-    length(gmsj(S)) > 0;
+    length(gms_symb(S)) > 0;
 
 precondition(S, {call, ?MODULE, do_proceed, [GM1, GM2]}) ->
-    length(gms(S)) > 0 andalso GM1 =/= GM2.
+    length(gms_symb(S)) > 0 andalso GM1 =/= GM2.
 
 postcondition(S, {call, ?MODULE, do_join, []}, _GM) ->
     %% TODO figure out how to test birth announcements again
@@ -154,11 +158,13 @@ postcondition(S, {call, ?MODULE, do_leave, [_Dead]}, _Res) ->
 postcondition(S = #state{}, {call, _M, _F, _A}, _Res) ->
     assert(S).
 
-next_state(S = #state{to_join = Set}, GM, {call, ?MODULE, do_join, []}) ->
-    S#state{to_join = sets:add_element(GM, Set)};
+next_state(S = #state{to_join  = ToSet,
+                      all_join = AllSet}, GM, {call, ?MODULE, do_join, []}) ->
+    S#state{to_join  = sets:add_element(GM, ToSet),
+            all_join = sets:add_element(GM, AllSet)};
 
-next_state(S = #state{}, _Res, {call, ?MODULE, do_leave, [_GM]}) ->
-    S;
+next_state(S = #state{to_leave = Set}, Res, {call, ?MODULE, do_leave, [_GM]}) ->
+    S#state{to_leave = sets:add_element(Res, Set)};
 
 next_state(S = #state{seq         = Seq,
                       outstanding = Outstanding}, Msg,
@@ -232,7 +238,11 @@ do_proceed(_From, _To) ->
 gms(#state{outstanding = Outstanding,
            to_join     = ToJoin})       -> dict:fetch_keys(Outstanding) ++
                                                sets:to_list(ToJoin).
-gmsj(#state{outstanding = Outstanding}) -> dict:fetch_keys(Outstanding).
+gms_joined(#state{outstanding = Outstanding}) -> dict:fetch_keys(Outstanding).
+
+gms_symb(#state{all_join = AllJoin,
+                to_leave = ToLeave}) ->
+    sets:to_list(sets:subtract(AllJoin, ToLeave)).
 
 drain(S) ->
     receive
@@ -304,7 +314,7 @@ assert(S = #state{outstanding = Outstanding}) ->
                                                    [{msg, Msg},
                                                     {gm,  GM},
                                                     {all, gms(S),
-                                                    {joined, gmsj(S)}}]});
+                                                    {joined, gms_joined(S)}}]});
                                     false -> ok
                                 end
                        end,
