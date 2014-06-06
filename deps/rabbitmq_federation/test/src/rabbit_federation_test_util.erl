@@ -51,61 +51,72 @@ expect_empty(Ch, Q) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
-set_param(Component, Name, Value) ->
-    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).
+set_upstream(Cfg, Name, URI) ->
+    set_upstream(Cfg, Name, URI, []).
 
-clear_param(Component, Name) ->
-    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Name])).
+set_upstream(Cfg, Name, URI, Extra) ->
+    rabbit_test_util:set_param(Cfg, <<"federation-upstream">>, Name,
+                               [{<<"uri">>, URI} | Extra]).
 
-set_pol(Name, Pattern, Defn) ->
-    rabbitmqctl(fmt("set_policy ~s \"~s\" '~s'", [Name, Pattern, Defn])).
+clear_upstream(Cfg, Name) ->
+    rabbit_test_util:clear_param(Cfg, <<"federation-upstream">>, Name).
 
-clear_pol(Name) ->
-    rabbitmqctl(fmt("clear_policy ~s ", [Name])).
+set_upstream_set(Cfg, Name, Set) ->
+    rabbit_test_util:set_param(
+      Cfg, <<"federation-upstream-set">>, Name,
+      [[{<<"upstream">>, UStream} | Extra] || {UStream, Extra} <- Set]).
 
-fmt(Fmt, Args) ->
-    string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
+set_policy(Cfg, Name, Pattern, UpstreamSet) ->
+    rabbit_test_util:set_policy(Cfg, Name, Pattern, <<"all">>,
+                                [{<<"federation-upstream-set">>, UpstreamSet}]).
 
-start_other_node({Name, Port}) ->
-    start_other_node({Name, Port}, Name).
+set_policy1(Cfg, Name, Pattern, Upstream) ->
+    rabbit_test_util:set_policy(Cfg, Name, Pattern, <<"all">>,
+                                [{<<"federation-upstream">>, Upstream}]).
 
-start_other_node({Name, Port}, Config) ->
-    start_other_node({Name, Port}, Config,
-                     os:getenv("RABBITMQ_ENABLED_PLUGINS_FILE")).
+clear_policy(Cfg, Name) ->
+    rabbit_test_util:clear_policy(Cfg, Name).
 
-start_other_node({Name, Port}, Config, PluginsFile) ->
-    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                " OTHER_PORT=" ++ integer_to_list(Port) ++
-                " OTHER_CONFIG=" ++ Config ++
-                " OTHER_PLUGINS=" ++ PluginsFile ++
-                " start-other-node"),
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    Ch.
+set_policy_upstream(Cfg, Pattern, URI, Extra) ->
+    set_policy_upstreams(Cfg, Pattern, [{URI, Extra}]).
 
-stop_other_node({Name, _Port}) ->
-    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                " stop-other-node"),
-    timer:sleep(1000).
+set_policy_upstreams(Cfg, Pattern, URIExtras) ->
+    put(upstream_num, 1),
+    [set_upstream(Cfg, gen_upstream_name(), URI, Extra)
+     || {URI, Extra} <- URIExtras],
+    set_policy(Cfg, Pattern, Pattern, <<"all">>).
 
-rabbitmqctl(Args) ->
-    execute(plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
-    timer:sleep(100).
+gen_upstream_name() ->
+    list_to_binary("upstream-" ++ integer_to_list(next_upstream_num())).
 
-%% ?assertCmd seems to hang if you background anything. Bah!
-execute(Cmd) ->
-    Res = os:cmd(Cmd ++ " ; echo $?"),
-    case lists:reverse(string:tokens(Res, "\n")) of
-        ["0" | _] -> ok;
-        _         -> exit({command_failed, Cmd, Res})
-    end.
+next_upstream_num() ->
+    R = get(upstream_num) + 1,
+    put (upstream_num, R),
+    R.
 
-policy(UpstreamSet) ->
-    rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
+%% Make sure that even though multiple nodes are in a single
+%% distributed system, we still keep all our process groups separate.
+disambiguate(Rest) ->
+    [Rest,
+     fun (Cfgs) ->
+             [rpc:call(pget(node, Cfg), application, set_env,
+                       [rabbitmq_federation, pgroup_name_cluster_id, true])
+              || Cfg <- Cfgs],
+             Cfgs
+     end].
 
-plugin_dir() ->
-    {ok, [[File]]} = init:get_argument(config),
-    filename:dirname(filename:dirname(File)).
+no_plugins(Cfg) ->
+    [{K, case K of
+             plugins -> none;
+             _       -> V
+         end} || {K, V} <- Cfg].
+
+%% "fake" cfg to let us use various utility functions when running
+%% in-broker tests
+single_cfg() ->
+    [{nodename, 'rabbit-test'},
+     {node,     rabbit_nodes:make('rabbit-test')},
+     {port,     5672}].
 
 %%----------------------------------------------------------------------------
 

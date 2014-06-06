@@ -16,6 +16,7 @@
 
 -module(rabbit_federation_queue_test).
 
+-compile(export_all).
 -include("rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -23,9 +24,11 @@
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1]).
 
--import(rabbit_federation_test_util, [expect/3, set_param/3, clear_param/2,
-         set_pol/3, clear_pol/1, policy/1, start_other_node/1,
-         stop_other_node/1]).
+-import(rabbit_federation_test_util,
+        [expect/3,
+         set_upstream/3, clear_upstream/2, set_policy/4, clear_policy/2,
+         set_policy_upstream/4, set_policy_upstreams/3,
+         disambiguate/1, single_cfg/0]).
 
 -define(UPSTREAM_DOWNSTREAM, [q(<<"upstream">>),
                               q(<<"fed.downstream">>)]).
@@ -74,44 +77,43 @@ bidirectional_test() ->
             q(<<"two">>)]).
 
 dynamic_reconfiguration_test() ->
+    Cfg = single_cfg(),
     with_ch(
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
 
               %% Test that clearing connections works
-              clear_param("federation-upstream", "localhost"),
+              clear_upstream(Cfg, <<"localhost">>),
               expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
 
               %% Test that readding them and changing them works
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://localhost\"}"),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://localhost">>),
               %% Do it twice so we at least hit the no-restart optimisation
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://\"}"),
-              set_param("federation-upstream", "localhost",
-                        "{\"uri\": \"amqp://\"}"),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://">>),
+              set_upstream(Cfg, <<"localhost">>, <<"amqp://">>),
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
       end, [q(<<"upstream">>),
             q(<<"fed.downstream">>)]).
 
 federate_unfederate_test() ->
+    Cfg = single_cfg(),
     with_ch(
       fun (Ch) ->
               expect_no_federation(Ch, <<"upstream">>, <<"downstream">>),
               expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>),
 
               %% Federate it
-              set_pol("dyn", "^downstream\$", policy("upstream")),
+              set_policy(Cfg, <<"dyn">>, <<"^downstream\$">>, <<"upstream">>),
               expect_federation(Ch, <<"upstream">>, <<"downstream">>),
               expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>),
 
               %% Change policy - upstream changes
-              set_pol("dyn", "^downstream\$", policy("upstream2")),
+              set_policy(Cfg, <<"dyn">>, <<"^downstream\$">>, <<"upstream2">>),
               expect_no_federation(Ch, <<"upstream">>, <<"downstream">>),
               expect_federation(Ch, <<"upstream2">>, <<"downstream">>),
 
               %% Unfederate it - no federation
-              clear_pol("dyn"),
+              clear_policy(Cfg, <<"dyn">>),
               expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>)
       end, [q(<<"upstream">>),
             q(<<"upstream2">>),
@@ -121,29 +123,29 @@ federate_unfederate_test() ->
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
 
-restart_upstream_test() ->
-    with_ch(
-      fun (Downstream) ->
-              stop_other_node(?HARE),
-              Upstream = start_other_node(?HARE),
+restart_upstream_with() -> disambiguate(start_ab).
+restart_upstream([Rabbit, Hare]) ->
+    set_policy_upstream(Rabbit, <<"^test$">>, <<"amqp://localhost:5673">>, []),
 
-              declare_queue(Upstream, q(<<"upstream">>)),
-              declare_queue(Downstream, q(<<"hare.downstream">>)),
-              Seq = lists:seq(1, 100),
-              [publish(Upstream, <<>>, <<"upstream">>, <<"bulk">>) || _ <- Seq],
-              expect(Upstream, <<"upstream">>, repeat(25, <<"bulk">>)),
-              expect(Downstream, <<"hare.downstream">>, repeat(25, <<"bulk">>)),
+    {_, Downstream} = rabbit_test_util:connect(Rabbit),
+    {_, Upstream}   = rabbit_test_util:connect(Hare),
 
-              stop_other_node(?HARE),
-              Upstream2 = start_other_node(?HARE),
+    declare_queue(Upstream, q(<<"test">>)),
+    declare_queue(Downstream, q(<<"test">>)),
+    Seq = lists:seq(1, 100),
+    [publish(Upstream, <<>>, <<"test">>, <<"bulk">>) || _ <- Seq],
+    expect(Upstream, <<"test">>, repeat(25, <<"bulk">>)),
+    expect(Downstream, <<"test">>, repeat(25, <<"bulk">>)),
 
-              expect(Upstream2, <<"upstream">>, repeat(25, <<"bulk">>)),
-              expect(Downstream, <<"hare.downstream">>, repeat(25, <<"bulk">>)),
-              expect_empty(Upstream2, <<"upstream">>),
-              expect_empty(Downstream, <<"hare.downstream">>),
+    Hare2 = rabbit_test_configs:restart_node(Hare),
+    {_, Upstream2} = rabbit_test_util:connect(Hare2),
 
-              stop_other_node(?HARE)
-      end, []).
+    expect(Upstream2, <<"test">>, repeat(25, <<"bulk">>)),
+    expect(Downstream, <<"test">>, repeat(25, <<"bulk">>)),
+    expect_empty(Upstream2, <<"test">>),
+    expect_empty(Downstream, <<"test">>),
+
+    ok.
 
 upstream_has_no_federation_test() ->
     %% TODO

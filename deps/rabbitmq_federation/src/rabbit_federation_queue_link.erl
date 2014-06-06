@@ -27,7 +27,7 @@
          terminate/2, code_change/3]).
 
 -import(rabbit_misc, [pget/2]).
--import(rabbit_federation_util, [name/1]).
+-import(rabbit_federation_util, [name/1, pgname/1]).
 
 -record(not_started, {queue, run, upstream, upstream_params}).
 -record(state, {queue, run, conn, ch, dconn, dch, upstream, upstream_params,
@@ -46,16 +46,16 @@ cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 cast(QName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- q(QName)].
 
 join(Name) ->
-    pg2_fixed:create(Name),
-    ok = pg2_fixed:join(Name, self()).
+    pg2_fixed:create(pgname(Name)),
+    ok = pg2_fixed:join(pgname(Name), self()).
 
 all() ->
-    pg2_fixed:create(rabbit_federation_queues),
-    pg2_fixed:get_members(rabbit_federation_queues).
+    pg2_fixed:create(pgname(rabbit_federation_queues)),
+    pg2_fixed:get_members(pgname(rabbit_federation_queues)).
 
 q(QName) ->
-    pg2_fixed:create({rabbit_federation_queue, QName}),
-    pg2_fixed:get_members({rabbit_federation_queue, QName}).
+    pg2_fixed:create(pgname({rabbit_federation_queue, QName})),
+    pg2_fixed:get_members(pgname({rabbit_federation_queue, QName})).
 
 federation_up() ->
     proplists:is_defined(rabbitmq_federation,
