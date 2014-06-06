@@ -59,6 +59,7 @@ gm_test(Cmds) ->
 cleanup(S) ->
     S2 = ensure_outstanding_msgs_received(drain_proceeding(S)),
     All = gmsj(S2),
+    All = gms(S2), %% assertion - none to join
     check_stale_members(All),
     [gm:leave(GM) || GM <- All],
     [await_death(GM) || GM <- All],
@@ -89,7 +90,8 @@ await_death(MRef, P) ->
         {'EXIT', _, Reason}             -> exit(Reason);
         {instrumented, From, To, Thing} -> process_msg(From, To, Thing),
                                            await_death(MRef, P);
-        {joined, _GM}                   -> await_death(MRef, P)
+        {joined, _GM}                   -> await_death(MRef, P);
+        {left, _GM}                     -> await_death(MRef, P)
     end.
 
 %% ---------------------------------------------------------------------------
@@ -144,11 +146,10 @@ postcondition(S, {call, ?MODULE, do_join, []}, _GM) ->
     %%  end || Existing <- gms(S) -- [GM]],
     assert(S);
 
-postcondition(S = #state{outstanding = Outstanding},
-              {call, ?MODULE, do_leave, [Dead]}, _Res) ->
+postcondition(S, {call, ?MODULE, do_leave, [_Dead]}, _Res) ->
     %% TODO figure out how to test death announcements again
     %%[await_death(Existing, Dead, 5) || Existing <- gms(S) -- [Dead]],
-    assert(S#state{outstanding = dict:erase(Dead, Outstanding)});
+    assert(S);
 
 postcondition(S = #state{}, {call, _M, _F, _A}, _Res) ->
     assert(S).
@@ -156,13 +157,8 @@ postcondition(S = #state{}, {call, _M, _F, _A}, _Res) ->
 next_state(S = #state{to_join = Set}, GM, {call, ?MODULE, do_join, []}) ->
     S#state{to_join = sets:add_element(GM, Set)};
 
-next_state(S = #state{outstanding = Outstanding,
-                      to_join     = ToJoin}, _Res,
-           {call, ?MODULE, do_leave, [GM]}) ->
-    true = dict:is_key(GM, Outstanding) orelse
-        sets:is_element(GM, ToJoin),
-    S#state{outstanding = dict:erase(GM, Outstanding),
-            to_join     = sets:del_element(GM, ToJoin)};
+next_state(S = #state{}, _Res, {call, ?MODULE, do_leave, [_GM]}) ->
+    S;
 
 next_state(S = #state{seq         = Seq,
                       outstanding = Outstanding}, Msg,
@@ -200,7 +196,7 @@ members_changed(_Pid, _Bs, _Ds)    -> %%[Pid ! {birth, self(), B} || B <- Bs],
                                       ok.
 %%handle_msg(_Pid, _From, heartbeat) -> ok;
 handle_msg(Pid, _From, Msg)        -> Pid ! {gm, self(), Msg}, ok.
-terminate(_Pid, _Reason)           -> ok.
+terminate(Pid, _Reason)            -> Pid ! {left, self()}.
 
 %% ---------------------------------------------------------------------------
 %% Helpers
@@ -282,6 +278,11 @@ handle_msg({joined, GM}, S = #state{outstanding = Outstanding,
                                     to_join     = ToJoin}) ->
     S#state{outstanding = dict:store(GM, {gb_trees:empty(), gb_sets:empty()},
                                      Outstanding),
+            to_join     = sets:del_element(GM, ToJoin)};
+handle_msg({left, GM}, S = #state{outstanding = Outstanding,
+                                  to_join     = ToJoin}) ->
+    true = dict:is_key(GM, Outstanding) orelse sets:is_element(GM, ToJoin),
+    S#state{outstanding = dict:erase(GM, Outstanding),
             to_join     = sets:del_element(GM, ToJoin)};
 handle_msg({'EXIT', _From, normal}, S) ->
     S;
