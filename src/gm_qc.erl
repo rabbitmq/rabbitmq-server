@@ -33,7 +33,7 @@
 -export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
 
 %% Helpers
--export([do_join/0, do_leave/1, do_send/2, do_proceed/2]).
+-export([do_join/0, do_leave/1, do_send/1, do_proceed/2]).
 
 %% For insertion into gm
 -export([call/3, cast/2]).
@@ -112,31 +112,33 @@ initial_state() -> #state{seq           = 1,
                           to_leave      = sets:new()}.
 
 command(S) ->
-    case length(gms_symb(S)) of
-        0 -> qc_join(S);
-        _ -> frequency([{1,  qc_join(S)},
-                        {1,  qc_leave(S)},
-                        {10, qc_send(S)},
-                        {20, qc_proceed(S)}])
+    case {length(gms_symb_not_left(S)), length(gms_symb(S))} of
+        {0, 0} -> qc_join(S);
+        {0, _} -> frequency([{1, qc_join(S)},
+                             {5, qc_proceed(S)}]);
+        _      -> frequency([{1,  qc_join(S)},
+                             {1,  qc_leave(S)},
+                             {10, qc_send(S)},
+                             {20, qc_proceed(S)}])
     end.
 
-qc_join(_S)                  -> {call,?MODULE,do_join, []}.
-qc_leave(S)                  -> {call,?MODULE,do_leave,[oneof(gms_symb(S))]}.
-qc_send(S = #state{seq = N}) -> {call,?MODULE,do_send, [N, oneof(gms_symb(S))]}.
-qc_proceed(S)                -> {call,?MODULE,do_proceed, [oneof(gms_symb(S)),
-                                                           oneof(gms_symb(S))]}.
+qc_join(_S)   -> {call,?MODULE,do_join, []}.
+qc_leave(S)   -> {call,?MODULE,do_leave,[oneof(gms_symb_not_left(S))]}.
+qc_send(S)    -> {call,?MODULE,do_send, [oneof(gms_symb_not_left(S))]}.
+qc_proceed(S) -> {call,?MODULE,do_proceed, [oneof(gms_symb(S)),
+                                            oneof(gms_symb(S))]}.
 
 precondition(S, {call, ?MODULE, do_join, []}) ->
     length(gms_symb(S)) < ?MAX_SIZE;
 
-precondition(S, {call, ?MODULE, do_leave, [_GM]}) ->
-    length(gms_symb(S)) > 0;
+precondition(_S, {call, ?MODULE, do_leave, [_GM]}) ->
+    true;
 
-precondition(S, {call, ?MODULE, do_send, [_N, _GM]}) ->
-    length(gms_symb(S)) > 0;
+precondition(_S, {call, ?MODULE, do_send, [_GM]}) ->
+    true;
 
-precondition(S, {call, ?MODULE, do_proceed, [GM1, GM2]}) ->
-    length(gms_symb(S)) > 0 andalso GM1 =/= GM2.
+precondition(_S, {call, ?MODULE, do_proceed, [GM1, GM2]}) ->
+    GM1 =/= GM2.
 
 postcondition(S, {call, ?MODULE, do_join, []}, _GM) ->
     %% TODO figure out how to test birth announcements again
@@ -163,19 +165,29 @@ next_state(S = #state{to_join  = ToSet,
     S#state{to_join  = sets:add_element(GM, ToSet),
             all_join = sets:add_element(GM, AllSet)};
 
-next_state(S = #state{to_leave = Set}, Res, {call, ?MODULE, do_leave, [_GM]}) ->
-    S#state{to_leave = sets:add_element(Res, Set)};
+next_state(S = #state{to_leave = Set}, _Res, {call, ?MODULE, do_leave, [GM]}) ->
+    S#state{to_leave = sets:add_element(GM, Set)};
 
 next_state(S = #state{seq         = Seq,
-                      outstanding = Outstanding}, Msg,
-           {call, ?MODULE, do_send, [_, _]}) ->
-    TS = timestamp(),
-    Outstanding1 = dict:map(fun (_GM, {Tree, Set}) ->
-                                    {gb_trees:insert(Msg, TS, Tree),
-                                     gb_sets:add_element({TS, Msg}, Set)}
-                            end, Outstanding),
-    drain(S#state{seq         = Seq + 1,
-                  outstanding = Outstanding1});
+                      outstanding = Outstanding}, _Res,
+           {call, ?MODULE, do_send, [GM]}) ->
+    case is_pid(GM) andalso lists:member(GM, gms(S)) of
+        true ->
+            Msg = [{sequence, Seq},
+                   {sent_to, GM},
+                   {dests,   gms(S)}],
+            gm:broadcast(GM, Msg),
+            TS = timestamp(),
+            Outstanding1 = dict:map(
+                             fun (_GM, {Tree, Set}) ->
+                                     {gb_trees:insert(Msg, TS, Tree),
+                                      gb_sets:add_element({TS, Msg}, Set)}
+                             end, Outstanding),
+            drain(S#state{seq         = Seq + 1,
+                          outstanding = Outstanding1});
+        false ->
+            S
+    end;
 
 next_state(S = #state{instrumented = Msgs}, _Res,
            {call, ?MODULE, do_proceed, [From, To]}) ->
@@ -214,13 +226,11 @@ do_join() ->
     GM.
 
 do_leave(GM) ->
-    gm:leave(GM).
+    gm:leave(GM),
+    GM.
 
-do_send(Seq, GM) ->
-    Msg = [{sequence, Seq},
-           {first_gm, GM}],
-    gm:broadcast(GM, Msg),
-    Msg.
+do_send( _GM) ->
+    ok. %% Do the work in next_state
 
 do_proceed(_From, _To) ->
     ok. %% Do the work in next_state
@@ -240,8 +250,11 @@ gms(#state{outstanding = Outstanding,
                                                sets:to_list(ToJoin).
 gms_joined(#state{outstanding = Outstanding}) -> dict:fetch_keys(Outstanding).
 
-gms_symb(#state{all_join = AllJoin,
-                to_leave = ToLeave}) ->
+gms_symb(#state{all_join = AllJoin}) ->
+    sets:to_list(AllJoin).
+
+gms_symb_not_left(#state{all_join = AllJoin,
+                         to_leave = ToLeave}) ->
     sets:to_list(sets:subtract(AllJoin, ToLeave)).
 
 drain(S) ->
