@@ -320,14 +320,21 @@ action_change0(false, Node, _Old, New) ->
     rpc_call(Node, rabbit_plugins, ensure, [New]).
 
 rpc_call(Node, Mod, Fun, Args) ->
-    io:format("Checking plugin configuration on ~p...", [Node]),
+    io:format("Applying plugin configuration to ~s...", [Node]),
     case rpc:call(Node, Mod, Fun, Args) of
         {ok, [], []} ->
-            io:format(" ok.~n", []);
+            io:format(" nothing to do.~n", []);
+        {ok, Start, []} ->
+            io:format(" started ~b plugin~s.~n", [length(Start), plur(Start)]);
+        {ok, [], Stop} ->
+            io:format(" stopped ~b plugin~s.~n", [length(Stop), plur(Stop)]);
         {ok, Start, Stop} ->
-            io:format(" started ~p, stopped ~p.~n",
-                      [length(Start), length(Stop)]);
+            io:format(" started ~b and stopped ~b plugin~s.~n",
+                      [length(Start), length(Stop), plur(Start ++ Stop)]);
         {badrpc, _} = Error ->
             io:format(" failed.~n", []),
             Error
     end.
+
+plur([_]) -> "";
+plur(_)   -> "s".
