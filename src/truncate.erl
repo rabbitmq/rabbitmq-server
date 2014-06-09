@@ -163,8 +163,14 @@ test_term_limit() ->
     S = <<"abc">>,
     1 = term_size(S, 4, W),
     limit_exceeded = term_size(S, 3, W),
-    62 = term_size([S, S], 100, W),
-    46 = term_size([S, [S]], 100, W),
+    case 100 - term_size([S, S], 100, W) of
+        22 -> ok; %% 32 bit
+        38 -> ok  %% 64 bit
+    end,
+    case 100 - term_size([S, [S]], 100, W) of
+        30 -> ok; %% ditto
+        54 -> ok
+    end,
     limit_exceeded = term_size([S, S], 6, W),
     ok.
 

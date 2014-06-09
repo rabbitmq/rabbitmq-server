@@ -106,23 +106,14 @@ recover() ->
                    mnesia:read({rabbit_exchange, XName}) =:= []
            end,
            fun (X, Tx) ->
-                   case Tx of
-                       true  -> store(X);
-                       false -> ok
-                   end,
-                   callback(X, create, map_create_tx(Tx), [X])
+                   X1 = case Tx of
+                            true  -> store0(X);
+                            false -> rabbit_exchange_decorator:set(X)
+                        end,
+                   callback(X1, create, map_create_tx(Tx), [X1])
            end,
            rabbit_durable_exchange),
-    report_missing_decorators(Xs),
     [XName || #exchange{name = XName} <- Xs].
-
-report_missing_decorators(Xs) ->
-    Mods = lists:usort(lists:append([rabbit_exchange_decorator:select(raw, D) ||
-                                     #exchange{decorators = D} <- Xs])),
-    case [M || M <- Mods, code:which(M) =:= non_existing] of
-        [] -> ok;
-        M  -> rabbit_log:warning("Missing exchange decorators: ~p~n", [M])
-    end.
 
 callback(X = #exchange{type       = XType,
                        decorators = Decorators}, Fun, Serial0, Args) ->
@@ -158,12 +149,13 @@ serial(#exchange{name = XName} = X) ->
     end.
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
-    X = rabbit_policy:set(#exchange{name        = XName,
-                                    type        = Type,
-                                    durable     = Durable,
-                                    auto_delete = AutoDelete,
-                                    internal    = Internal,
-                                    arguments   = Args}),
+    X = rabbit_exchange_decorator:set(
+          rabbit_policy:set(#exchange{name        = XName,
+                                      type        = Type,
+                                      durable     = Durable,
+                                      auto_delete = AutoDelete,
+                                      internal    = Internal,
+                                      arguments   = Args})),
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
@@ -171,13 +163,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
       fun () ->
               case mnesia:wread({rabbit_exchange, XName}) of
                   [] ->
-                      store(X),
-                      ok = case Durable of
-                               true  -> mnesia:write(rabbit_durable_exchange,
-                                                     X, write);
-                               false -> ok
-                           end,
-                      {new, X};
+                      {new, store(X)};
                   [ExistingX] ->
                       {existing, ExistingX}
               end
@@ -195,7 +181,19 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
 map_create_tx(true)  -> transaction;
 map_create_tx(false) -> none.
 
-store(X) -> ok = mnesia:write(rabbit_exchange, X, write).
+
+store(X = #exchange{durable = true}) ->
+    mnesia:write(rabbit_durable_exchange, X#exchange{decorators = undefined},
+                 write),
+    store0(X);
+store(X = #exchange{durable = false}) ->
+    store0(X).
+
+store0(X) ->
+    X1 = rabbit_exchange_decorator:set(X),
+    ok = mnesia:write(rabbit_exchange, rabbit_exchange_decorator:set(X1),
+                      write),
+    X1.
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
@@ -289,16 +287,9 @@ update_scratch(Name, App, Fun) ->
 
 update(Name, Fun) ->
     case mnesia:wread({rabbit_exchange, Name}) of
-        [X = #exchange{durable = Durable}] ->
-            X1 = Fun(X),
-            ok = mnesia:write(rabbit_exchange, X1, write),
-            case Durable of
-                true -> ok = mnesia:write(rabbit_durable_exchange, X1, write);
-                _    -> ok
-            end,
-            X1;
-        [] ->
-            not_found
+        [X] -> X1 = Fun(X),
+               store(X1);
+        []  -> not_found
     end.
 
 info_keys() -> ?INFO_KEYS.
