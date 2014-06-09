@@ -310,7 +310,7 @@ store_queue(Q = #amqqueue{durable = true}) ->
                       Q#amqqueue{slave_pids      = [],
                                  sync_slave_pids = [],
                                  gm_pids         = [],
-                                 decorators      = []}, write),
+                                 decorators      = undefined}, write),
     store_queue0(Q);
 store_queue(Q = #amqqueue{durable = false}) ->
     store_queue0(Q).
