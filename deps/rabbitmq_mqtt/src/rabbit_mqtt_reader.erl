@@ -169,7 +169,7 @@ process_received_bytes(Bytes,
                       Rest,
                       State #state{ parse_state = PS,
                                     proc_state = ProcState1 });
-                {err, Reason, ProcState1} ->
+                {error, Reason, ProcState1} ->
                     log(info, "MQTT protocol error ~p for connection ~p~n",
                         [Reason, ConnStr]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
@@ -184,7 +184,7 @@ process_received_bytes(Bytes,
 
 callback_reply(State, {ok, ProcState}) ->
     {noreply, pstate(State, ProcState), hibernate};
-callback_reply(State, {err, Reason, ProcState}) ->
+callback_reply(State, {error, Reason, ProcState}) ->
     {stop, Reason, pstate(State, ProcState)}.
 
 start_keepalive(_,   0        ) -> ok;
