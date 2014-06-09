@@ -51,10 +51,6 @@ set(X = #exchange{name = Name}) -> X#exchange{policy = set0(Name)}.
 
 set0(Name = #resource{virtual_host = VHost}) -> match(Name, list(VHost)).
 
-set(Q = #amqqueue{name = Name}, Ps) -> Q#amqqueue{policy = match(Name, Ps)};
-set(X = #exchange{name = Name}, Ps) -> rabbit_exchange_decorator:set(
-                                         X#exchange{policy = match(Name, Ps)}).
-
 get(Name, #amqqueue{policy = Policy}) -> get0(Name, Policy);
 get(Name, #exchange{policy = Policy}) -> get0(Name, Policy);
 %% Caution - SLOW.
@@ -102,12 +98,18 @@ recover0() ->
     Policies = list(),
     [rabbit_misc:execute_mnesia_transaction(
        fun () ->
-               mnesia:write(rabbit_durable_exchange, set(X, Policies), write)
-       end) || X <- Xs],
+               mnesia:write(
+                 rabbit_durable_exchange,
+                 rabbit_exchange_decorator:set(
+                   X#exchange{policy = match(Name, Policies)}), write)
+       end) || X = #exchange{name = Name} <- Xs],
     [rabbit_misc:execute_mnesia_transaction(
        fun () ->
-               mnesia:write(rabbit_durable_queue, set(Q, Policies), write)
-       end) || Q <- Qs],
+               mnesia:write(
+                 rabbit_durable_queue,
+                 rabbit_queue_decorator:set(
+                   Q#amqqueue{policy = match(Name, Policies)}), write)
+       end) || Q = #amqqueue{name = Name} <- Qs],
     ok.
 
 invalid_file() ->
