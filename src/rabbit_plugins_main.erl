@@ -41,7 +41,8 @@
 -define(COMMANDS,
         [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
          {enable, [?OFFLINE_DEF]},
-         {disable, [?OFFLINE_DEF]}]).
+         {disable, [?OFFLINE_DEF]},
+         {sync, []}]).
 
 %%----------------------------------------------------------------------------
 
@@ -179,7 +180,13 @@ action(disable, Node, ToDisable0, Opts, PluginsFile, PluginsDir) ->
                             ImplicitlyEnabled -- NewImplicitlyEnabled),
                  write_enabled_plugins(PluginsFile, NewEnabled)
     end,
-    action_change(Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled).
+    action_change(Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled);
+
+action(sync, Node, X, Opts, PluginsFile, PluginsDir) ->
+    AllPlugins = rabbit_plugins:list(PluginsDir),
+    Enabled = rabbit_plugins:read_enabled(PluginsFile),
+    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
+    action_change(Opts, Node, ImplicitlyEnabled, ImplicitlyEnabled).
 
 %%----------------------------------------------------------------------------
 
