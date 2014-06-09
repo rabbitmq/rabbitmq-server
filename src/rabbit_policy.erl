@@ -46,10 +46,8 @@ name(#exchange{policy = Policy}) -> name0(Policy).
 name0(undefined) -> none;
 name0(Policy)    -> pget(name, Policy).
 
-set(Q = #amqqueue{name = Name}) -> rabbit_queue_decorator:set(
-                                     Q#amqqueue{policy = set0(Name)});
-set(X = #exchange{name = Name}) -> rabbit_exchange_decorator:set(
-                                     X#exchange{policy = set0(Name)}).
+set(Q = #amqqueue{name = Name}) -> Q#amqqueue{policy = set0(Name)};
+set(X = #exchange{name = Name}) -> X#exchange{policy = set0(Name)}.
 
 set0(Name = #resource{virtual_host = VHost}) -> match(Name, list(VHost)).
 

@@ -254,15 +254,16 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
 %% effect) this might not be possible to satisfy.
 declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
     ok = check_declare_arguments(QueueName, Args),
-    Q = rabbit_policy:set(#amqqueue{name            = QueueName,
-                                    durable         = Durable,
-                                    auto_delete     = AutoDelete,
-                                    arguments       = Args,
-                                    exclusive_owner = Owner,
-                                    pid             = none,
-                                    slave_pids      = [],
-                                    sync_slave_pids = [],
-                                    gm_pids         = []}),
+    Q = rabbit_queue_decorator:set(
+          rabbit_policy:set(#amqqueue{name            = QueueName,
+                                      durable         = Durable,
+                                      auto_delete     = AutoDelete,
+                                      arguments       = Args,
+                                      exclusive_owner = Owner,
+                                      pid             = none,
+                                      slave_pids      = [],
+                                      sync_slave_pids = [],
+                                      gm_pids         = []})),
     Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
     gen_server2:call(start_queue_process(Node, Q), {init, new}, infinity).
 
@@ -308,12 +309,14 @@ store_queue(Q = #amqqueue{durable = true}) ->
     ok = mnesia:write(rabbit_durable_queue,
                       Q#amqqueue{slave_pids      = [],
                                  sync_slave_pids = [],
-                                 gm_pids         = []}, write),
-    ok = mnesia:write(rabbit_queue, Q, write),
-    ok;
+                                 gm_pids         = [],
+                                 decorators      = []}, write),
+    store_queue0(Q);
 store_queue(Q = #amqqueue{durable = false}) ->
-    ok = mnesia:write(rabbit_queue, Q, write),
-    ok.
+    store_queue0(Q).
+
+store_queue0(Q) ->
+    ok = mnesia:write(rabbit_queue, rabbit_queue_decorator:set(Q), write).
 
 policy_changed(Q1 = #amqqueue{decorators = Decorators1},
                Q2 = #amqqueue{decorators = Decorators2}) ->

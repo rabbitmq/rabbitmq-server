@@ -158,12 +158,13 @@ serial(#exchange{name = XName} = X) ->
     end.
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
-    X = rabbit_policy:set(#exchange{name        = XName,
-                                    type        = Type,
-                                    durable     = Durable,
-                                    auto_delete = AutoDelete,
-                                    internal    = Internal,
-                                    arguments   = Args}),
+    X = rabbit_exchange_decorator:set(
+          rabbit_policy:set(#exchange{name        = XName,
+                                      type        = Type,
+                                      durable     = Durable,
+                                      auto_delete = AutoDelete,
+                                      internal    = Internal,
+                                      arguments   = Args})),
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
@@ -195,7 +196,8 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
 map_create_tx(true)  -> transaction;
 map_create_tx(false) -> none.
 
-store(X) -> ok = mnesia:write(rabbit_exchange, X, write).
+store(X) -> ok = mnesia:write(
+                   rabbit_exchange, rabbit_exchange_decorator:set(X), write).
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
