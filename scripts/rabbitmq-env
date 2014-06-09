@@ -52,4 +52,4 @@ if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
 fi
 
 ## Get configuration variables from the configure environment file
-[ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE}
+[ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true
