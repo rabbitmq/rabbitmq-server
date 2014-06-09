@@ -385,12 +385,12 @@ ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref       = undefined,
                  V when V > 0 -> V + 999; %% always fire later
                  _            -> 0
              end) div 1000,
-    TRef = erlang:send_after(After, self(), {drop_expired, Version}),
+    TRef = rabbit_misc:send_after(After, self(), {drop_expired, Version}),
     State#q{ttl_timer_ref = TRef, ttl_timer_expiry = Expiry};
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
                                     ttl_timer_expiry = TExpiry})
   when Expiry + 1000 < TExpiry ->
-    case erlang:cancel_timer(TRef) of
+    case rabbit_misc:cancel_timer(TRef) of
         false -> State;
         _     -> ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined})
     end;
