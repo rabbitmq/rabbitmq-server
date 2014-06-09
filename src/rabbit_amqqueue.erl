@@ -30,7 +30,7 @@
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
 -export([on_node_down/1]).
--export([update/2, store_queue/1, policy_changed/2]).
+-export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
          cancel_sync_mirrors/1]).
 
@@ -177,6 +177,7 @@
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 -spec(store_queue/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(update_decorators/1 :: (name()) -> 'ok').
 -spec(policy_changed/2 ::
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 -spec(start_mirroring/1 :: (pid()) -> 'ok').
@@ -311,12 +312,22 @@ store_queue(Q = #amqqueue{durable = true}) ->
                                  sync_slave_pids = [],
                                  gm_pids         = [],
                                  decorators      = undefined}, write),
-    store_queue0(Q);
+    store_queue_ram(Q);
 store_queue(Q = #amqqueue{durable = false}) ->
-    store_queue0(Q).
+    store_queue_ram(Q).
 
-store_queue0(Q) ->
+store_queue_ram(Q) ->
     ok = mnesia:write(rabbit_queue, rabbit_queue_decorator:set(Q), write).
+
+update_decorators(Name) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun() ->
+              case mnesia:wread({rabbit_queue, Name}) of
+                  [Q] -> store_queue_ram(Q),
+                         ok;
+                  []  -> ok
+              end
+      end).
 
 policy_changed(Q1 = #amqqueue{decorators = Decorators1},
                Q2 = #amqqueue{decorators = Decorators2}) ->
