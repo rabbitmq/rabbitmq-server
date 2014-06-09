@@ -18,7 +18,7 @@
 
 -behaviour(gen_event).
 
--export([add_handler/0, gc/0]).
+-export([add_handler/0, gc/0, rates_mode/0]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -32,11 +32,26 @@ add_handler() ->
 gc() ->
     erlang:garbage_collect(whereis(rabbit_event)).
 
+rates_mode() ->
+    case application:get_env(rabbitmq_management, rates_mode) of
+        {ok, Mode} -> Mode;
+        _          -> basic
+    end.
+
 %%----------------------------------------------------------------------------
 
 ensure_statistics_enabled() ->
-    {ok, ForceStats} = application:get_env(rabbitmq_management_agent,
-                                           force_fine_statistics),
+    ForceStats = rates_mode() =/= none,
+    case application:get_env(rabbitmq_management_agent,
+                             force_fine_statistics) of
+        {ok, X} ->
+            error_logger:warning_msg(
+              "force_fine_statistics set to ~p; ignored.~n"
+              "Replaced by {rates_mode, none} in the rabbitmq_management "
+              "application.~n", [X]);
+        undefined ->
+            ok
+    end,
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     case {ForceStats, StatsLevel} of
         {true,  fine} ->
