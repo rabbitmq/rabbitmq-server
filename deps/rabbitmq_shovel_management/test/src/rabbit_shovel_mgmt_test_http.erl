@@ -65,8 +65,27 @@ shovels_test() ->
     http_delete("/users/mon", ?NO_CONTENT),
     ok.
 
+%% It's a bit arbitrary to be testing this here, but we want to be
+%% able to test that mgmt extensions can be started and stopped
+%% *somewhere*, and here is as good a place as any.
+dynamic_plugin_enable_disable_test() ->
+    http_get("/shovels", ?OK),
+    disable_plugin("rabbitmq_shovel_management"),
+    http_get("/shovels", ?NOT_FOUND),
+    http_get("/overview", ?OK),
+    disable_plugin("rabbitmq_management"),
+    http_fail("/shovels"),
+    http_fail("/overview"),
+    enable_plugin("rabbitmq_management"),
+    http_get("/shovels", ?NOT_FOUND),
+    http_get("/overview", ?OK),
+    enable_plugin("rabbitmq_shovel_management"),
+    http_get("/shovels", ?OK),
+    http_get("/overview", ?OK),
+    passed.
+
 %%---------------------------------------------------------------------------
-%% TODO this is all copypasta from the mgmt tests
+%% TODO this is mostly copypasta from the mgmt tests
 
 http_get(Path) ->
     http_get(Path, ?OK).
@@ -79,6 +98,9 @@ http_get(Path, User, Pass, CodeExp) ->
         req(get, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
+
+http_fail(Path) ->
+    {error, {failed_connect, _}} = req(get, Path, []).
 
 http_put(Path, List, CodeExp) ->
     http_put_raw(Path, format_for_upload(List), CodeExp).
@@ -179,3 +201,17 @@ test_item(Exp, Act) ->
 test_item0(Exp, Act) ->
     [{did_not_find, ExpI, in, Act} || ExpI <- Exp,
                                       not lists:member(ExpI, Act)].
+%%---------------------------------------------------------------------------
+
+enable_plugin(Plugin) ->
+    plugins_action(enable, [Plugin], []).
+
+disable_plugin(Plugin) ->
+    plugins_action(disable, [Plugin], []).
+
+plugins_action(Command, Args, Opts) ->
+    PluginsFile = os:getenv("RABBITMQ_ENABLED_PLUGINS_FILE"),
+    PluginsDir = os:getenv("RABBITMQ_PLUGINS_DIR"),
+    Node = node(),
+    rpc:call(Node, rabbit_plugins_main, action,
+             [Command, Node, Args, Opts, PluginsFile, PluginsDir]).
