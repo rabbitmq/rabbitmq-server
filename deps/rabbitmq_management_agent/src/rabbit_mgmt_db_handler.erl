@@ -16,6 +16,14 @@
 
 -module(rabbit_mgmt_db_handler).
 
+%% Make sure our database is hooked in *before* listening on the network or
+%% recovering queues (i.e. so there can't be any events fired before it starts).
+-rabbit_boot_step({rabbit_mgmt_db_handler,
+                   [{description, "management agent"},
+                    {mfa,         {?MODULE, add_handler, []}},
+                    {requires,    rabbit_event},
+                    {enables,     recovery}]}).
+
 -behaviour(gen_event).
 
 -export([add_handler/0, gc/0, rates_mode/0]).
@@ -27,7 +35,7 @@
 
 add_handler() ->
     ensure_statistics_enabled(),
-    gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
+    gen_event:add_handler(rabbit_event, ?MODULE, []).
 
 gc() ->
     erlang:garbage_collect(whereis(rabbit_event)).

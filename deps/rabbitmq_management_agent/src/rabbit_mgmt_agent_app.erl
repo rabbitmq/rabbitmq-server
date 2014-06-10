@@ -19,16 +19,6 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 
-%% Make sure our database is hooked in *before* listening on the network or
-%% recovering queues (i.e. so there can't be any events fired before it starts).
--rabbit_boot_step({rabbit_mgmt_db_handler,
-                   [{description, "management agent"},
-                    {mfa,         {rabbit_mgmt_db_handler, add_handler,
-                                   []}},
-                    {requires,    rabbit_event},
-                    {enables,     recovery}]}).
-
-
 start(_Type, _StartArgs) ->
     rabbit_mgmt_agent_sup:start_link().
 
