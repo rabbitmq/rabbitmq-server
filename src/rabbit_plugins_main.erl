@@ -336,8 +336,8 @@ rpc_call(Node, Mod, Fun, Args) ->
         {ok, [], Stop} ->
             io:format(" stopped ~b plugin~s.~n", [length(Stop), plur(Stop)]);
         {ok, Start, Stop} ->
-            io:format(" started ~b and stopped ~b plugin~s.~n",
-                      [length(Start), length(Stop), plur(Start ++ Stop)]);
+            io:format(" stopped ~b plugin~s and started ~b plugin~s.~n",
+                      [length(Stop), plur(Stop), length(Start), plur(Start)]);
         {badrpc, _} = Error ->
             io:format(" failed.~n", []),
             Error
