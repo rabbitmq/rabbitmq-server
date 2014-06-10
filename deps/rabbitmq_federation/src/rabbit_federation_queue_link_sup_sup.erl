@@ -71,4 +71,5 @@ init([]) ->
 id(Q = #amqqueue{}) -> Q#amqqueue{pid             = none,
                                   slave_pids      = none,
                                   sync_slave_pids = none,
-                                  gm_pids         = none}.
+                                  gm_pids         = none,
+                                  decorators      = none}.

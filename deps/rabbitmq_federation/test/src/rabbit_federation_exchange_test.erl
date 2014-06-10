@@ -588,7 +588,18 @@ dynamic_plugin_stop_start_test() ->
               ok = enable_plugin(Cfg, "rabbitmq_federation"),
               assert_connections([X1, X2], [<<"localhost">>]),
 
-              clear_policy(Cfg, <<"dyn">>)
+              %% Test both exchanges work. They are just federated to
+              %% themselves so should duplicate messages.
+              [begin
+                   Q = bind_queue(Ch, X, <<"key">>),
+                   await_binding(Cfg, X, <<"key">>, 2),
+                   publish(Ch, X, <<"key">>, <<"HELLO">>),
+                   expect(Ch, Q, [<<"HELLO">>, <<"HELLO">>]),
+                   delete_queue(Ch, Q)
+               end || X <- [X1, X2]],
+
+              clear_policy(Cfg, <<"dyn">>),
+              assert_connections([X1, X2], [])
       end, [x(X1)]).
 
 %%----------------------------------------------------------------------------
