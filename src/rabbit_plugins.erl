@@ -52,8 +52,8 @@ ensure(FileJustChanged) ->
             %% We need sync_notify here since mgmt will attempt to look at all
             %% the modules for the disabled plugins - if they are unloaded
             %% that won't work.
-            ok = rabbit_event:notify(plugins_changed, [{enabled,  Start},
-                                                       {disabled, Stop}]),
+            ok = rabbit_event:sync_notify(plugins_changed, [{enabled,  Start},
+                                                            {disabled, Stop}]),
             rabbit:stop_apps(Stop),
             clean_plugins(Stop),
             {ok, Start, Stop};
