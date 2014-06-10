@@ -50,11 +50,14 @@ init([]) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(Event, State) ->
+handle_event(Event = #event{type = plugins_changed}, State) ->
     case extensions_changed(Event) of
         true  -> rabbit_mgmt_app:reset_dispatcher();
         false -> ok
     end,
+    {ok, State};
+
+handle_event(_Event, State) ->
     {ok, State}.
 
 handle_info(_Info, State) ->
@@ -68,15 +71,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-extensions_changed(#event{ type = 'plugins_changed', props = Details }) ->
+extensions_changed(#event{type = plugins_changed, props = Details }) ->
     Changed  = pget(enabled, Details, []) ++ pget(disabled, Details, []),
     %% We explicitly ignore the case where management has been
     %% started/stopped since the dispatcher is either freshly created
     %% or about to vanish.
     not lists:member(rabbitmq_management, Changed) andalso
-        contains_extension(Changed);
-extensions_changed(#event{}) ->
-    false.
+        contains_extension(Changed).
 
 contains_extension(Apps) ->
     [] =/= [Mod || App <- Apps, Mod <- app_modules(App), is_extension(Mod)].
@@ -88,4 +89,3 @@ is_extension(Mod) ->
 app_modules(App) ->
     {ok, Modules} = application:get_key(App, modules),
     Modules.
-
