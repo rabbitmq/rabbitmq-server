@@ -25,22 +25,19 @@
 
 -behaviour(gen_event).
 
--export([add_handler/0]).
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "management extension handling"},
-                    {mfa,         {?MODULE, add_handler, []}},
+                    {mfa,         {gen_event, add_handler,
+                                   [rabbit_event, ?MODULE, []]}},
+                    {cleanup,     {gen_event, delete_handler,
+                                   [rabbit_event, ?MODULE, []]}},
                     {requires,    rabbit_event},
                     {enables,     recovery}]}).
 
 -import(rabbit_misc, [pget/3]).
-
-%%----------------------------------------------------------------------------
-
-add_handler() ->
-    gen_event:add_handler(rabbit_event, ?MODULE, []).
 
 %%----------------------------------------------------------------------------
 
