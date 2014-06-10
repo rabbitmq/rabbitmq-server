@@ -21,6 +21,8 @@
 -rabbit_boot_step({rabbit_mgmt_db_handler,
                    [{description, "management agent"},
                     {mfa,         {?MODULE, add_handler, []}},
+                    {cleanup,     {gen_event, delete_handler,
+                                   [rabbit_event, ?MODULE, []]}},
                     {requires,    rabbit_event},
                     {enables,     recovery}]}).
 
