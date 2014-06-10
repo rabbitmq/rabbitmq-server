@@ -133,12 +133,16 @@
       </varlistentry>
 
       <varlistentry>
-        <term><cmdsynopsis><command>enable</command> <arg choice="opt">--offline</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>enable</command> <arg choice="opt">--offline</arg> <arg choice="opt">--online</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
             <varlistentry>
               <term>--offline</term>
               <listitem><para>Just modify the enabled plugins file.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>--online</term>
+              <listitem><para>Treat failure to connect to the running broker as fatal.</para></listitem>
             </varlistentry>
             <varlistentry>
               <term>plugin</term>
@@ -148,8 +152,12 @@
           <para>
             Enables the specified plugins and all their
             dependencies. This will update the enabled plugins file
-            and then connect to the broker and ensure it is running
-            all enabled plugins.
+            and then attempt to connect to the broker and ensure it is
+            running all enabled plugins. By default if it is not
+            possible to connect to the running broker (for example if
+            it is stopped) then a warning is displayed. Specify
+            <command>--online</command> or
+            <command>--offline</command> to change this.
           </para>
 
           <para role="example-prefix">For example:</para>
@@ -163,12 +171,16 @@
       </varlistentry>
 
       <varlistentry>
-        <term><cmdsynopsis><command>disable</command> <arg choice="opt">--offline</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>disable</command> <arg choice="opt">--offline</arg> <arg choice="opt">--online</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
             <varlistentry>
               <term>--offline</term>
               <listitem><para>Just modify the enabled plugins file.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>--online</term>
+              <listitem><para>Treat failure to connect to the running broker as fatal.</para></listitem>
             </varlistentry>
             <varlistentry>
               <term>plugin</term>
@@ -178,8 +190,12 @@
           <para>
             Disables the specified plugins and all their
             dependencies. This will update the enabled plugins file
-            and then connect to the broker and ensure it is running
-            all enabled plugins.
+            and then attempt to connect to the broker and ensure it is
+            running all enabled plugins. By default if it is not
+            possible to connect to the running broker (for example if
+            it is stopped) then a warning is displayed. Specify
+            <command>--online</command> or
+            <command>--offline</command> to change this.
           </para>
 
           <para role="example-prefix">For example:</para>

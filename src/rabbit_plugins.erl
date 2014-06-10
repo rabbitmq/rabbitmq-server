@@ -32,25 +32,34 @@
 -spec(read_enabled/1 :: (file:filename()) -> [plugin_name()]).
 -spec(dependencies/3 :: (boolean(), [plugin_name()], [#plugin{}]) ->
                              [plugin_name()]).
--spec(ensure/1  :: ([plugin_name()]) -> {'ok', [atom()], [atom()]}).
+-spec(ensure/1  :: (string()) -> {'ok', [atom()], [atom()]} | {error, any()}).
 -endif.
 
 %%----------------------------------------------------------------------------
 
-ensure(Wanted) ->
-    Current = active(),
-    Start = Wanted -- Current,
-    Stop = Current -- Wanted,
-    prepare_plugins(Start),
-    rabbit:start_apps(Start),
-    %% We need sync_notify here since mgmt will attempt to look at all
-    %% the modules for the disabled plugins - if they are unloaded
-    %% that won't work.
-    ok = rabbit_event:notify(plugins_changed, [{enabled,  Start},
-                                               {disabled, Stop}]),
-    rabbit:stop_apps(Stop),
-    clean_plugins(Stop),
-    {ok, Start, Stop}.
+ensure(FileJustChanged) ->
+    {ok, OurFile} = application:get_env(rabbit, enabled_plugins_file),
+    case OurFile of
+        FileJustChanged ->
+            {ok, Dir} = application:get_env(rabbit, plugins_dir),
+            Enabled = read_enabled(OurFile),
+            Wanted = dependencies(false, Enabled, list(Dir)),
+            prepare_plugins(Enabled),
+            Current = active(),
+            Start = Wanted -- Current,
+            Stop = Current -- Wanted,
+            rabbit:start_apps(Start),
+            %% We need sync_notify here since mgmt will attempt to look at all
+            %% the modules for the disabled plugins - if they are unloaded
+            %% that won't work.
+            ok = rabbit_event:notify(plugins_changed, [{enabled,  Start},
+                                                       {disabled, Stop}]),
+            rabbit:stop_apps(Stop),
+            clean_plugins(Stop),
+            {ok, Start, Stop};
+        _ ->
+            {error, {enabled_plugins_mismatch, FileJustChanged, OurFile}}
+    end.
 
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
@@ -70,7 +79,7 @@ setup() ->
 %% @doc Lists the plugins which are currently running.
 active() ->
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    InstalledPlugins = [ P#plugin.name || P <- list(ExpandDir) ],
+    InstalledPlugins = plugin_names(list(ExpandDir)),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
 
@@ -91,7 +100,7 @@ list(PluginsDir) ->
         _  -> error_logger:warning_msg(
                 "Problem reading some plugins: ~p~n", [Problems])
     end,
-    Plugins.
+    ensure_dependencies(Plugins).
 
 %% @doc Read the list of enabled plugins from the supplied term file.
 read_enabled(PluginsFile) ->
@@ -112,19 +121,36 @@ dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun ({App, _Deps}) -> [{App, App}] end,
                 fun ({App,  Deps}) -> [{App, Dep} || Dep <- Deps] end,
-                lists:ukeysort(
-                  1, [{Name, Deps} ||
-                         #plugin{name         = Name,
-                                 dependencies = Deps} <- AllPlugins] ++
-                      [{Dep,   []} ||
-                          #plugin{dependencies = Deps} <- AllPlugins,
-                          Dep                          <- Deps])),
+                [{Name, Deps} || #plugin{name         = Name,
+                                         dependencies = Deps} <- AllPlugins]),
     Dests = case Reverse of
                 false -> digraph_utils:reachable(Sources, G);
                 true  -> digraph_utils:reaching(Sources, G)
             end,
     true = digraph:delete(G),
     Dests.
+
+%% Make sure we don't list OTP apps in here, and also that we create
+%% fake plugins for missing dependencies.
+ensure_dependencies(Plugins) ->
+    Names = plugin_names(Plugins),
+    NotThere = [Dep || #plugin{dependencies = Deps} <- Plugins,
+                       Dep                          <- Deps,
+                       not lists:member(Dep, Names)],
+    {OTP, Missing} = lists:partition(fun is_loadable/1, NotThere),
+    Plugins1 = [P#plugin{dependencies = Deps -- OTP}
+                || P = #plugin{dependencies = Deps} <- Plugins],
+    Fake = [#plugin{name         = Name,
+                    dependencies = []}|| Name <- Missing],
+    Plugins1 ++ Fake.
+
+is_loadable(App) ->
+    case application:load(App) of
+        {error, {already_loaded, _}} -> true;
+        ok                           -> application:unload(App),
+                                        true;
+        _                            -> false
+   end.
 
 %%----------------------------------------------------------------------------
 
@@ -206,8 +232,7 @@ plugin_info(Base, {app, App0}) ->
 mkplugin(Name, Props, Type, Location) ->
     Version = proplists:get_value(vsn, Props, "0"),
     Description = proplists:get_value(description, Props, ""),
-    Dependencies =
-        filter_applications(proplists:get_value(applications, Props, [])),
+    Dependencies = proplists:get_value(applications, Props, []),
     #plugin{name = Name, version = Version, description = Description,
             dependencies = Dependencies, location = Location, type = Type}.
 
@@ -238,18 +263,6 @@ parse_binary(Bin) ->
         Term
     catch
         Err -> {error, {invalid_app, Err}}
-    end.
-
-filter_applications(Applications) ->
-    [Application || Application <- Applications,
-                    not is_available_app(Application)].
-
-is_available_app(Application) ->
-    case application:load(Application) of
-        {error, {already_loaded, _}} -> true;
-        ok                           -> application:unload(Application),
-                                        true;
-        _                            -> false
     end.
 
 plugin_names(Plugins) ->

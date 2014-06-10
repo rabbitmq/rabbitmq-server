@@ -26,6 +26,7 @@
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
 -define(OFFLINE_OPT, "--offline").
+-define(ONLINE_OPT, "--online").
 
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
@@ -33,6 +34,7 @@
 -define(ENABLED_DEF, {?ENABLED_OPT, flag}).
 -define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
 -define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
+-define(ONLINE_DEF, {?ONLINE_OPT, flag}).
 
 -define(RPC_TIMEOUT, infinity).
 
@@ -40,8 +42,8 @@
 
 -define(COMMANDS,
         [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
-         {enable, [?OFFLINE_DEF]},
-         {disable, [?OFFLINE_DEF]},
+         {enable, [?OFFLINE_DEF, ?ONLINE_DEF]},
+         {disable, [?OFFLINE_DEF, ?ONLINE_DEF]},
          {sync, []}]).
 
 %%----------------------------------------------------------------------------
@@ -153,7 +155,8 @@ action(enable, Node, ToEnable0, Opts, PluginsFile, PluginsDir) ->
         _  -> print_list("The following plugins have been enabled:",
                          NewImplicitlyEnabled -- ImplicitlyEnabled)
     end,
-    action_change(Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled);
+    action_change(
+      Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled, PluginsFile);
 
 action(disable, Node, ToDisable0, Opts, PluginsFile, PluginsDir) ->
     case ToDisable0 of
@@ -180,13 +183,11 @@ action(disable, Node, ToDisable0, Opts, PluginsFile, PluginsDir) ->
                             ImplicitlyEnabled -- NewImplicitlyEnabled),
                  write_enabled_plugins(PluginsFile, NewEnabled)
     end,
-    action_change(Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled);
+    action_change(
+      Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled, PluginsFile);
 
-action(sync, Node, X, Opts, PluginsFile, PluginsDir) ->
-    AllPlugins = rabbit_plugins:list(PluginsDir),
-    Enabled = rabbit_plugins:read_enabled(PluginsFile),
-    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
-    action_change(Opts, Node, ImplicitlyEnabled, ImplicitlyEnabled).
+action(sync, Node, [], _Opts, PluginsFile, _PluginsDir) ->
+    sync(Node, true, PluginsFile).
 
 %%----------------------------------------------------------------------------
 
@@ -312,21 +313,23 @@ write_enabled_plugins(PluginsFile, Plugins) ->
                                           PluginsFile, Reason}})
     end.
 
-action_change(Opts, Node, Old, New) ->
-    action_change0(proplists:get_bool(?OFFLINE_OPT, Opts), Node, Old, New).
+action_change(Opts, Node, Old, New, PluginsFile) ->
+    action_change0(proplists:get_bool(?OFFLINE_OPT, Opts),
+                   proplists:get_bool(?ONLINE_OPT, Opts),
+                   Node, Old, New, PluginsFile).
 
-action_change0(true, _Node, Same, Same) ->
+action_change0(true, _Online, _Node, Same, Same, _PluginsFile) ->
     %% Definitely nothing to do
     ok;
-action_change0(true, _Node, _Old, _New) ->
+action_change0(true, _Online, _Node, _Old, _New, _PluginsFile) ->
     io:format("Offline change; changes will take effect at broker restart.~n");
-action_change0(false, Node, _Old, New) ->
-    %% Don't care what the Old was in the plugins file, that might not
-    %% match what the server is running - so tell it to ensure we are
-    %% running the right apps even if "nothing has changed".
-    rpc_call(Node, rabbit_plugins, ensure, [New]).
+action_change0(false, Online, Node, _Old, _New, PluginsFile) ->
+    sync(Node, Online, PluginsFile).
 
-rpc_call(Node, Mod, Fun, Args) ->
+sync(Node, ForceOnline, PluginsFile) ->
+    rpc_call(Node, ForceOnline, rabbit_plugins, ensure, [PluginsFile]).
+
+rpc_call(Node, Online, Mod, Fun, Args) ->
     io:format("Applying plugin configuration to ~s...", [Node]),
     case rpc:call(Node, Mod, Fun, Args) of
         {ok, [], []} ->
@@ -338,6 +341,19 @@ rpc_call(Node, Mod, Fun, Args) ->
         {ok, Start, Stop} ->
             io:format(" stopped ~b plugin~s and started ~b plugin~s.~n",
                       [length(Stop), plur(Stop), length(Start), plur(Start)]);
+        {badrpc, nodedown} = Error ->
+            io:format(" failed.~n", []),
+            case Online of
+                true  -> Error;
+                false -> io:format(
+                           " * Could not contact node ~s.~n"
+                           " * Changes will take effect at broker restart.~n"
+                           " * Specify --online for diagnostics and to treat "
+                           "this as a failure.~n"
+                           " * Specify --offline to disable changes to running "
+                           "broker.~n",
+                           [Node])
+            end;
         {badrpc, _} = Error ->
             io:format(" failed.~n", []),
             Error
