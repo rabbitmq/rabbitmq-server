@@ -22,7 +22,6 @@
                     {mfa, {rabbit_exchange_decorator, register,
                            [<<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
-                    {requires, rabbit_federation_upstream_exchange},
                     {cleanup, {rabbit_exchange_decorator, unregister,
                                [<<"federation">>]}},
                     {enables, recovery}]}).
@@ -36,9 +35,6 @@
          add_binding/3, remove_bindings/3, route/2, active_for/1]).
 
 %%----------------------------------------------------------------------------
-
-map_create_tx(true)  -> transaction;
-map_create_tx(false) -> none.
 
 description() ->
     [{description, <<"Federation exchange decorator">>}].

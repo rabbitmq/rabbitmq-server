@@ -582,11 +582,15 @@ dynamic_plugin_stop_start_test() ->
               ok = disable_plugin(Cfg, "rabbitmq_federation"),
               %% We can't check with status for obvious reasons...
               undefined = whereis(rabbit_federation_sup),
+              {error, not_found} = rabbit_registry:lookup_module(
+                                     exchange, 'x-federation-upstream'),
 
               %% Create exchange then re-enable plugin, links appear
               declare_exchange(Ch, x(X2)),
               ok = enable_plugin(Cfg, "rabbitmq_federation"),
               assert_connections([X1, X2], [<<"localhost">>]),
+              {ok, _} = rabbit_registry:lookup_module(
+                          exchange, 'x-federation-upstream'),
 
               %% Test both exchanges work. They are just federated to
               %% themselves so should duplicate messages.
