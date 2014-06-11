@@ -112,7 +112,7 @@ term_size([H|T], M, W) ->
         M2             -> lim(term_size(T, M2, W), 2 * W)
     end;
 term_size(X, M, W) ->
-    lim(M, erts_debug:flat_size(X) * W);
+    lim(M, erts_debug:flat_size(X) * W).
 
 lim(S, T) when is_number(S) andalso S > T -> S - T;
 lim(_, _)                                 -> limit_exceeded.
