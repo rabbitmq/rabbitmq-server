@@ -410,7 +410,7 @@ handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
     rabbit_event:notify(
       connection_created,
       [{type, network} | infos(?CREATION_EVENT_KEYS, State)], Ref),
-    State;
+    rabbit_event:init_stats_timer(State, #v1.stats_timer);
 handle_other({'$gen_cast', force_event_refresh}, State) ->
     %% Ignore, we will emit a created event once we start running.
     State;

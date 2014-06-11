@@ -18,23 +18,33 @@
 -include("rabbit.hrl").
 
 -export([start/0, stop/0]).
+-export([action/6]).
 
+-define(NODE_OPT, "-n").
 -define(VERBOSE_OPT, "-v").
 -define(MINIMAL_OPT, "-m").
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
+-define(OFFLINE_OPT, "--offline").
+-define(ONLINE_OPT, "--online").
 
+-define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
 -define(ENABLED_DEF, {?ENABLED_OPT, flag}).
 -define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
+-define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
+-define(ONLINE_DEF, {?ONLINE_OPT, flag}).
 
--define(GLOBAL_DEFS, []).
+-define(RPC_TIMEOUT, infinity).
+
+-define(GLOBAL_DEFS(Node), [?NODE_DEF(Node)]).
 
 -define(COMMANDS,
         [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
-         enable,
-         disable]).
+         {enable, [?OFFLINE_DEF, ?ONLINE_DEF]},
+         {disable, [?OFFLINE_DEF, ?ONLINE_DEF]},
+         {sync, []}]).
 
 %%----------------------------------------------------------------------------
 
@@ -51,11 +61,10 @@
 start() ->
     {ok, [[PluginsFile|_]|_]} =
         init:get_argument(enabled_plugins_file),
+    {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
     {Command, Opts, Args} =
-        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS,
-                                         init:get_plain_arguments())
-        of
+        case parse_arguments(init:get_plain_arguments(), NodeStr) of
             {ok, Res}  -> Res;
             no_command -> print_error("could not recognise command", []),
                           usage()
@@ -67,7 +76,8 @@ start() ->
                             [string:join([atom_to_list(Command) | Args], " ")])
         end,
 
-    case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
+    Node = proplists:get_value(?NODE_OPT, Opts),
+    case catch action(Command, Node, Args, Opts, PluginsFile, PluginsDir) of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
@@ -82,6 +92,13 @@ start() ->
         {error_string, Reason} ->
             print_error("~s", [Reason]),
             rabbit_misc:quit(2);
+        {badrpc, {'EXIT', Reason}} ->
+            print_error("~p", [Reason]),
+            rabbit_misc:quit(2);
+        {badrpc, Reason} ->
+            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
+            print_badrpc_diagnostics([Node]),
+            rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
@@ -92,20 +109,32 @@ stop() ->
 
 %%----------------------------------------------------------------------------
 
-action(list, [], Opts, PluginsFile, PluginsDir) ->
-    action(list, [".*"], Opts, PluginsFile, PluginsDir);
-action(list, [Pat], Opts, PluginsFile, PluginsDir) ->
-    format_plugins(Pat, Opts, PluginsFile, PluginsDir);
+parse_arguments(CmdLine, NodeStr) ->
+    case rabbit_misc:parse_arguments(
+           ?COMMANDS, ?GLOBAL_DEFS(NodeStr), CmdLine) of
+        {ok, {Cmd, Opts0, Args}} ->
+            Opts = [case K of
+                        ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
+                        _         -> {K, V}
+                    end || {K, V} <- Opts0],
+            {ok, {Cmd, Opts, Args}};
+        E ->
+            E
+    end.
 
-action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
+action(list, Node, [], Opts, PluginsFile, PluginsDir) ->
+    action(list, Node, [".*"], Opts, PluginsFile, PluginsDir);
+action(list, Node, [Pat], Opts, PluginsFile, PluginsDir) ->
+    format_plugins(Node, Pat, Opts, PluginsFile, PluginsDir);
+
+action(enable, Node, ToEnable0, Opts, PluginsFile, PluginsDir) ->
     case ToEnable0 of
         [] -> throw({error_string, "Not enough arguments for 'enable'"});
         _  -> ok
     end,
     AllPlugins = rabbit_plugins:list(PluginsDir),
     Enabled = rabbit_plugins:read_enabled(PluginsFile),
-    ImplicitlyEnabled = rabbit_plugins:dependencies(false,
-                                                    Enabled, AllPlugins),
+    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     Missing = ToEnable -- plugin_names(AllPlugins),
     NewEnabled = lists:usort(Enabled ++ ToEnable),
@@ -124,18 +153,20 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> print_list("The following plugins have been enabled:",
-                         NewImplicitlyEnabled -- ImplicitlyEnabled),
-              report_change()
-    end;
+                         NewImplicitlyEnabled -- ImplicitlyEnabled)
+    end,
+    action_change(
+      Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled, PluginsFile);
 
-action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
+action(disable, Node, ToDisable0, Opts, PluginsFile, PluginsDir) ->
     case ToDisable0 of
         [] -> throw({error_string, "Not enough arguments for 'disable'"});
         _  -> ok
     end,
-    ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
-    Enabled = rabbit_plugins:read_enabled(PluginsFile),
     AllPlugins = rabbit_plugins:list(PluginsDir),
+    Enabled = rabbit_plugins:read_enabled(PluginsFile),
+    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
+    ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
     Missing = ToDisable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
@@ -144,30 +175,35 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     end,
     ToDisableDeps = rabbit_plugins:dependencies(true, ToDisable, AllPlugins),
     NewEnabled = Enabled -- ToDisableDeps,
+    NewImplicitlyEnabled = rabbit_plugins:dependencies(false,
+                                                       NewEnabled, AllPlugins),
     case length(Enabled) =:= length(NewEnabled) of
         true  -> io:format("Plugin configuration unchanged.~n");
-        false -> ImplicitlyEnabled =
-                     rabbit_plugins:dependencies(false, Enabled, AllPlugins),
-                 NewImplicitlyEnabled =
-                     rabbit_plugins:dependencies(false,
-                                                 NewEnabled, AllPlugins),
-                 print_list("The following plugins have been disabled:",
+        false -> print_list("The following plugins have been disabled:",
                             ImplicitlyEnabled -- NewImplicitlyEnabled),
-                 write_enabled_plugins(PluginsFile, NewEnabled),
-                 report_change()
-    end.
+                 write_enabled_plugins(PluginsFile, NewEnabled)
+    end,
+    action_change(
+      Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled, PluginsFile);
+
+action(sync, Node, [], _Opts, PluginsFile, _PluginsDir) ->
+    sync(Node, true, PluginsFile).
 
 %%----------------------------------------------------------------------------
 
-print_error(Format, Args) ->
-    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
+
+print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
+
+print_badrpc_diagnostics(Nodes) ->
+    fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
 
 usage() ->
     io:format("~s", [rabbit_plugins_usage:usage()]),
     rabbit_misc:quit(1).
 
 %% Pretty print a list of plugins.
-format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
+format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     Verbose = proplists:get_bool(?VERBOSE_OPT, Opts),
     Minimal = proplists:get_bool(?MINIMAL_OPT, Opts),
     Format = case {Verbose, Minimal} of
@@ -182,9 +218,14 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
 
     AvailablePlugins = rabbit_plugins:list(PluginsDir),
     EnabledExplicitly = rabbit_plugins:read_enabled(PluginsFile),
-    EnabledImplicitly =
-        rabbit_plugins:dependencies(false, EnabledExplicitly,
-                                    AvailablePlugins) -- EnabledExplicitly,
+    AllEnabled = rabbit_plugins:dependencies(false, EnabledExplicitly,
+                                             AvailablePlugins),
+    EnabledImplicitly = AllEnabled -- EnabledExplicitly,
+    {StatusMsg, Running} =
+        case rpc:call(Node, rabbit_plugins, active, [], ?RPC_TIMEOUT) of
+            {badrpc, _} -> {"[failed to contact ~s - status not shown]", []};
+            Active      -> {"* = running on ~s", Active}
+        end,
     Missing = [#plugin{name = Name, dependencies = []} ||
                   Name <- ((EnabledExplicitly ++ EnabledImplicitly) --
                                plugin_names(AvailablePlugins))],
@@ -192,31 +233,42 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     Plugins = [ Plugin ||
                   Plugin = #plugin{name = Name} <- AvailablePlugins ++ Missing,
                   re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match,
-                  if OnlyEnabled    ->  lists:member(Name, EnabledExplicitly);
-                     OnlyEnabledAll -> (lists:member(Name,
-                                                     EnabledExplicitly) or
-                                        lists:member(Name, EnabledImplicitly));
+                  if OnlyEnabled    -> lists:member(Name, EnabledExplicitly);
+                     OnlyEnabledAll -> lists:member(Name, EnabledExplicitly) or
+                                           lists:member(Name,EnabledImplicitly);
                      true           -> true
                   end],
     Plugins1 = usort_plugins(Plugins),
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
                              #plugin{name = Name} <- Plugins1] ++ [0]),
-    [format_plugin(P, EnabledExplicitly, EnabledImplicitly,
+    case Format of
+        minimal -> ok;
+        _       -> io:format(" Configured: E = explicitly enabled; "
+                             "e = implicitly enabled; ! = missing~n"
+                             " | Status:   ~s~n"
+                             " |/~n", [rabbit_misc:format(StatusMsg, [Node])])
+    end,
+    [format_plugin(P, EnabledExplicitly, EnabledImplicitly, Running,
                    plugin_names(Missing), Format, MaxWidth) || P <- Plugins1],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version,
                       description = Description, dependencies = Deps},
-              EnabledExplicitly, EnabledImplicitly, Missing,
-              Format, MaxWidth) ->
-    Glyph = case {lists:member(Name, EnabledExplicitly),
-                  lists:member(Name, EnabledImplicitly),
-                  lists:member(Name, Missing)} of
-                {true, false, false} -> "[E]";
-                {false, true, false} -> "[e]";
-                {_,        _,  true} -> "[!]";
-                _                    -> "[ ]"
-            end,
+              EnabledExplicitly, EnabledImplicitly, Running,
+              Missing, Format, MaxWidth) ->
+    EnabledGlyph = case {lists:member(Name, EnabledExplicitly),
+                         lists:member(Name, EnabledImplicitly),
+                         lists:member(Name, Missing)} of
+                       {true, false, false} -> "E";
+                       {false, true, false} -> "e";
+                       {_,        _,  true} -> "!";
+                       _                    -> " "
+                   end,
+    RunningGlyph = case lists:member(Name, Running) of
+                       true  -> "*";
+                       false -> " "
+                   end,
+    Glyph = rabbit_misc:format("[~s~s]", [EnabledGlyph, RunningGlyph]),
     Opt = fun (_F, A, A) -> ok;
               ( F, A, _) -> io:format(F, [A])
           end,
@@ -227,9 +279,9 @@ format_plugin(#plugin{name = Name, version = Version,
                    Opt("~s", Version, undefined),
                    io:format("~n");
         verbose -> io:format("~s ~w~n", [Glyph, Name]),
-                   Opt("    Version:     \t~s~n", Version,     undefined),
-                   Opt("    Dependencies:\t~p~n", Deps,        []),
-                   Opt("    Description: \t~s~n", Description, undefined),
+                   Opt("     Version:     \t~s~n", Version,     undefined),
+                   Opt("     Dependencies:\t~p~n", Deps,        []),
+                   Opt("     Description: \t~s~n", Description, undefined),
                    io:format("~n")
     end.
 
@@ -262,6 +314,51 @@ write_enabled_plugins(PluginsFile, Plugins) ->
                                           PluginsFile, Reason}})
     end.
 
-report_change() ->
-    io:format("Plugin configuration has changed. "
-              "Restart RabbitMQ for changes to take effect.~n").
+action_change(Opts, Node, Old, New, PluginsFile) ->
+    action_change0(proplists:get_bool(?OFFLINE_OPT, Opts),
+                   proplists:get_bool(?ONLINE_OPT, Opts),
+                   Node, Old, New, PluginsFile).
+
+action_change0(true, _Online, _Node, Same, Same, _PluginsFile) ->
+    %% Definitely nothing to do
+    ok;
+action_change0(true, _Online, _Node, _Old, _New, _PluginsFile) ->
+    io:format("Offline change; changes will take effect at broker restart.~n");
+action_change0(false, Online, Node, _Old, _New, PluginsFile) ->
+    sync(Node, Online, PluginsFile).
+
+sync(Node, ForceOnline, PluginsFile) ->
+    rpc_call(Node, ForceOnline, rabbit_plugins, ensure, [PluginsFile]).
+
+rpc_call(Node, Online, Mod, Fun, Args) ->
+    io:format("Applying plugin configuration to ~s...", [Node]),
+    case rpc:call(Node, Mod, Fun, Args) of
+        {ok, [], []} ->
+            io:format(" nothing to do.~n", []);
+        {ok, Start, []} ->
+            io:format(" started ~b plugin~s.~n", [length(Start), plur(Start)]);
+        {ok, [], Stop} ->
+            io:format(" stopped ~b plugin~s.~n", [length(Stop), plur(Stop)]);
+        {ok, Start, Stop} ->
+            io:format(" stopped ~b plugin~s and started ~b plugin~s.~n",
+                      [length(Stop), plur(Stop), length(Start), plur(Start)]);
+        {badrpc, nodedown} = Error ->
+            io:format(" failed.~n", []),
+            case Online of
+                true  -> Error;
+                false -> io:format(
+                           " * Could not contact node ~s.~n"
+                           " * Changes will take effect at broker restart.~n"
+                           " * Specify --online for diagnostics and to treat "
+                           "this as a failure.~n"
+                           " * Specify --offline to disable changes to running "
+                           "broker.~n",
+                           [Node])
+            end;
+        Error ->
+            io:format(" failed.~n", []),
+            Error
+    end.
+
+plur([_]) -> "";
+plur(_)   -> "s".
