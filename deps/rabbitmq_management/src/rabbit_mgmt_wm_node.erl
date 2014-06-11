@@ -46,7 +46,7 @@ is_authorized(ReqData, Context) ->
 
 node0(ReqData) ->
     Name = list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))),
-    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(),
+    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData),
                proplists:get_value(name, N) == Name] of
         []     -> not_found;
         [Node] -> augment(ReqData, Name, Node)

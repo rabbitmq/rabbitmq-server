@@ -218,6 +218,10 @@ function fmt_rate_bytes(obj, name, mode) {
                              '<sub>(' + fmt_bytes(obj[name]) + ' total)</sub>');
 }
 
+function fmt_bytes_obj(obj, name, mode) {
+    return fmt_bytes(obj[name]);
+}
+
 function fmt_rate_large(obj, name, mode) {
     return '<strong>' + fmt_rate0(obj, name, mode, fmt_rate_num) +
         '</strong>msg/s';
@@ -266,9 +270,14 @@ function fmt_msgs_axis(num, max) {
     return fmt_si_prefix(num, max, 1000, true);
 }
 
-function fmt_rate_bytes_axis(num, max) {
+function fmt_bytes_axis(num, max) {
     num = parseInt(num);
-    return fmt_bytes(isNaN(num) ? 0 : num) + '/s';
+    return fmt_bytes(isNaN(num) ? 0 : num);
+}
+
+
+function fmt_rate_bytes_axis(num, max) {
+    return fmt_bytes_axis(num, max) + '/s';
 }
 
 function is_stat_empty(obj, name) {
@@ -685,6 +694,11 @@ function queue_lengths(id, stats) {
 function data_rates(id, stats) {
     var items = [['From client', 'recv_oct'], ['To client', 'send_oct']];
     return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_large, fmt_rate_bytes_axis, true, 'Data rates');
+}
+
+function node_stats_chart(id, key, name, stats) {
+    var items = [[name, key]];
+    return rates_chart_or_text(id, stats, items, fmt_bytes_obj, fmt_rate_bytes_large, fmt_bytes_axis, false, name);
 }
 
 function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, chart_rates,

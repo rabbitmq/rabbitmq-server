@@ -87,7 +87,8 @@ listeners() ->
 rabbit_web_dispatch_contexts() ->
     rabbit_mgmt_util:sort_list(
       lists:append(
-        [rabbit_web_dispatch_contexts(N) || N <- rabbit_mgmt_wm_nodes:all_nodes()]),
+        [rabbit_web_dispatch_contexts(N) ||
+            N <- rabbit_mgmt_wm_nodes:all_nodes_raw()]),
       ["description", "port", "node"]).
 
 rabbit_web_dispatch_contexts(N) ->

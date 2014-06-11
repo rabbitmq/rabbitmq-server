@@ -190,7 +190,7 @@ function update_manual(div, query) {
     var path;
     var template;
     if (query == 'memory') {
-        path = current_reqs['node'] + '?memory=true';
+        path = current_reqs['node']['path'] + '?memory=true';
         template = 'memory';
     }
     var data = JSON.parse(sync_get(path));
@@ -410,6 +410,9 @@ function apply_state(reqs) {
                 }
                 else if (type.substring(0, 11) == 'data-rates-') {
                     prefix = 'data_rates';
+                }
+                else if (type == 'node-stats') {
+                    prefix = 'node_stats';
                 }
                 qs.push(prefix + '_age=' + parseInt(range[0]));
                 qs.push(prefix + '_incr=' + parseInt(range[1]));

@@ -2,12 +2,15 @@
 
 <div class="section">
 <h2>Overview</h2>
-<div class="hider updatable">
+<div class="hider">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
+  <%= node_stats_chart('node-stats', 'mem_used', 'Memory', node) %>
+<div class="updatable">
+
   <table class="facts">
     <tr>
       <th>
@@ -91,6 +94,7 @@
       </td>
     </tr>
   </table>
+</div>
 <% } %>
 </div>
 </div>
@@ -130,6 +134,7 @@
     <% } %>
 </table>
 <% } %>
+
 </div>
 </div>
 

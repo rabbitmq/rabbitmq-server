@@ -26,8 +26,9 @@ dispatcher_add(function(sammy) {
 
     sammy.get('#/nodes/:name', function() {
             var name = esc(this.params['name']);
-            render({'node': '/nodes/' + name},
-                   'node', '');
+        render({'node': {path:    '/nodes/' + name,
+                         options: {ranges: ['node-stats']}}},
+                'node', '');
         });
 
     path('#/connections',

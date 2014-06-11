@@ -24,7 +24,7 @@
 -export([start_link/0]).
 
 -export([augment_exchanges/3, augment_queues/3,
-         augment_nodes/1, augment_vhosts/2,
+         augment_nodes/2, augment_vhosts/2,
          get_channel/2, get_connection/2,
          get_all_channels/1, get_all_connections/1,
          get_all_consumers/0, get_all_consumers/1,
@@ -158,6 +158,9 @@
 -define(COARSE_QUEUE_STATS,
         [messages, messages_ready, messages_unacknowledged]).
 
+-define(COARSE_NODE_STATS,
+        [mem_used]).
+
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
 -define(GC_INTERVAL, 5000).
@@ -199,7 +202,7 @@ start_link() ->
 augment_exchanges(Xs, R, M) -> safe_call({augment_exchanges, Xs, R, M}, Xs).
 augment_queues(Qs, R, M)    -> safe_call({augment_queues, Qs, R, M}, Qs).
 augment_vhosts(VHosts, R)   -> safe_call({augment_vhosts, VHosts, R}, VHosts).
-augment_nodes(Nodes)        -> safe_call({augment_nodes, Nodes}, Nodes).
+augment_nodes(Nodes, R)     -> safe_call({augment_nodes, Nodes, R}, Nodes).
 
 get_channel(Name, R)        -> safe_call({get_channel, Name, R}, not_found).
 get_connection(Name, R)     -> safe_call({get_connection, Name, R}, not_found).
@@ -271,8 +274,8 @@ handle_call({augment_queues, Qs, Ranges, full}, _From, State) ->
 handle_call({augment_vhosts, VHosts, Ranges}, _From, State) ->
     reply(vhost_stats(Ranges, VHosts, State), State);
 
-handle_call({augment_nodes, Nodes}, _From, State) ->
-    {reply, node_stats(Nodes, State), State};
+handle_call({augment_nodes, Nodes, Ranges}, _From, State) ->
+    {reply, node_stats(Ranges, Nodes, State), State};
 
 handle_call({get_channel, Name, Ranges}, _From,
             State = #state{tables = Tables}) ->
@@ -473,7 +476,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:timestamp/1, [idle_since]},
                   {fun rabbit_mgmt_format:queue_state/1, [state]}],
-                 [messages, messages_ready, messages_unacknowledged], State);
+                 ?COARSE_QUEUE_STATS, State);
 
 handle_event(Event = #event{type = queue_deleted,
                             props = [{name, Name}],
@@ -570,11 +573,8 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
 %% leak every time a node is permanently removed from the cluster. Do
 %% we care?
 handle_event(#event{type = node_stats, props = Stats, timestamp = Timestamp},
-             State = #state{tables = Tables}) ->
-    Table = orddict:fetch(node_stats, Tables),
-    ets:insert(Table, {{pget(name, Stats), stats},
-                       proplists:delete(name, Stats), Timestamp}),
-    {ok, State};
+             State) ->
+    handle_stats(node_stats, Stats, Timestamp, [], ?COARSE_NODE_STATS, State);
 
 handle_event(_Event, State) ->
     {ok, State}.
@@ -709,6 +709,10 @@ ignore_coarse_sample({coarse, {queue_stats, Q}}, State) ->
     not object_exists(Q, State);
 ignore_coarse_sample(_, _) ->
     false.
+
+%% Node stats do not have a vhost of course
+record_sample({coarse, {node_stats, _Node} = Id}, Args, _State) ->
+    record_sample0(Id, Args);
 
 record_sample({coarse, Id}, Args, State) ->
     record_sample0(Id, Args),
@@ -881,8 +885,9 @@ detail_channel_stats(Ranges, Objs, State) ->
 vhost_stats(Ranges, Objs, State) ->
     merge_stats(Objs, [simple_stats_fun(Ranges, vhost_stats, State)]).
 
-node_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(node_stats, State)]).
+node_stats(Ranges, Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(node_stats, State),
+                       simple_stats_fun(Ranges, node_stats, State)]).
 
 merge_stats(Objs, Funs) ->
     [lists:foldl(fun (Fun, Props) -> Fun(Props) ++ Props end, Obj, Funs)
@@ -962,13 +967,15 @@ format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
                      {details_key(K), Details}]
        end || {K, Stats} <- ManyStats]).
 
-pick_range(K, {RangeL, RangeM, RangeD}) ->
+pick_range(K, {RangeL, RangeM, RangeD, RangeN}) ->
     case {lists:member(K, ?COARSE_QUEUE_STATS),
           lists:member(K, ?FINE_STATS),
-          lists:member(K, ?COARSE_CONN_STATS)} of
-        {true, false, false} -> RangeL;
-        {false, true, false} -> RangeM;
-        {false, false, true} -> RangeD
+          lists:member(K, ?COARSE_CONN_STATS),
+          lists:member(K, ?COARSE_NODE_STATS)} of
+        {true, false, false, false} -> RangeL;
+        {false, true, false, false} -> RangeM;
+        {false, false, true, false} -> RangeD;
+        {false, false, false, true} -> RangeN
     end.
 
 %% We do this when retrieving the queue record rather than when
@@ -1102,6 +1109,7 @@ gc({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
         Stats2 -> ets:insert(ETS, {{{Type, Id}, Key}, Stats2})
     end.
 
+retention_policy(node_stats)             -> global;
 retention_policy(vhost_stats)            -> global;
 retention_policy(queue_stats)            -> basic;
 retention_policy(exchange_stats)         -> basic;
