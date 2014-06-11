@@ -113,11 +113,10 @@ upgrades_required(Scope) ->
 %% -------------------------------------------------------------------
 
 with_upgrade_graph(Fun, Scope) ->
-    Attrs = rabbit_misc:all_module_attributes(rabbit_upgrade),
     case rabbit_misc:build_acyclic_graph(
-           fun ({Module, Steps}) -> vertices(Module, Steps, Scope) end,
-           fun ({Module, Steps}) -> edges(Module, Steps, Scope) end,
-           [{Mod, Steps} || {_, Mod, Steps} <- Attrs]) of
+           fun ({_App, Module, Steps}) -> vertices(Module, Steps, Scope) end,
+           fun ({_App, Module, Steps}) -> edges(Module, Steps, Scope) end,
+           rabbit_misc:all_module_attributes(rabbit_upgrade)) of
         {ok, G} -> try
                        Fun(G)
                    after

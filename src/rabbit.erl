@@ -405,9 +405,7 @@ handle_app_error(Term) ->
     end.
 
 run_cleanup_steps(Apps) ->
-    [run_step(Name, Attributes, cleanup) ||
-        {App, Name, Attributes} <- find_steps(Apps),
-        lists:member(App, Apps)],
+    [run_step(Name, Attrs, cleanup) || {_, Name, Attrs} <- find_steps(Apps)],
     ok.
 
 await_startup() ->
@@ -525,16 +523,12 @@ run_boot_steps() ->
     run_boot_steps([App || {App, _, _} <- application:loaded_applications()]).
 
 run_boot_steps(Apps) ->
-    Steps = find_steps(Apps),
-    [ok = run_step(StepName, Attributes, mfa) ||
-        {_, StepName, Attributes} <- Steps],
+    [ok = run_step(Step, Attrs, mfa) || {_, Step, Attrs} <- find_steps(Apps)],
     ok.
 
-find_steps(BaseApps) ->
-    Apps = BaseApps -- [App || {App, _, _} <- rabbit_misc:which_applications()],
-    FullBoot = sort_boot_steps(
-                 rabbit_misc:all_module_attributes(rabbit_boot_step)),
-    [Step || {App, _, _} = Step <- FullBoot, lists:member(App, Apps)].
+find_steps(Apps) ->
+    All = sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)),
+    [Step || {App, _, _} = Step <- All, lists:member(App, Apps)].
 
 run_step(StepName, Attributes, AttributeName) ->
     case [MFA || {Key, MFA} <- Attributes,
