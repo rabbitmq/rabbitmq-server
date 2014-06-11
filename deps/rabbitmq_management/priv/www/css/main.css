@@ -43,8 +43,11 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .help, .rate-options { color: #888; cursor: pointer; }
 .help:hover, .rate-options:hover { color: #444; }
 
-.rate-visibility-option { cursor: pointer; padding: 4px; }
-.rate-visibility-option:hover { color: #444; }
+.rate-visibility-option { cursor: pointer; padding: 4px; border: 1px solid white; }
+.rate-visibility-option:hover { background: #ddf;
+                                background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #ddf),color-stop(1, #bbf));
+                                border: 1px solid #88d;
+                                border-radius: 3px; }
 
 .rate-visibility-option-hidden { text-decoration: line-through; color: #888; }
 
