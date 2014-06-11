@@ -354,7 +354,7 @@ rpc_call(Node, Online, Mod, Fun, Args) ->
                            "broker.~n",
                            [Node])
             end;
-        {badrpc, _} = Error ->
+        Error ->
             io:format(" failed.~n", []),
             Error
     end.
