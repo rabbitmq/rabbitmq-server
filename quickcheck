@@ -17,7 +17,8 @@ main([NodeStr, ModStr, TrialsStr]) ->
             case rpc:call(Node, proper, module,
                           [Mod] ++ [[{numtests, Trials}, {constraint_tries, 200}]]) of
                 [] -> ok;
-                _  -> quit(1)
+                R  -> io:format("~p.~n", [R]),
+                      quit(1)
             end;
         {badrpc, Reason} ->
             io:format("Could not contact node ~p: ~p.~n", [Node, Reason]),
