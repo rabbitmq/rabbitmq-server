@@ -18,7 +18,7 @@
 
 -export([recover/0, stop/0, start/1, declare/5, declare/6,
          delete_immediately/1, delete/3, purge/1, forget_all_durable/1]).
--export([pseudo_queue/2]).
+-export([pseudo_queue/2, immutable/1]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
@@ -176,6 +176,7 @@
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
+-spec(immutable/1 :: (rabbit_types:amqqueue()) -> rabbit_types:amqqueue()).
 -spec(store_queue/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(update_decorators/1 :: (name()) -> 'ok').
 -spec(policy_changed/2 ::
@@ -722,6 +723,13 @@ pseudo_queue(QueueName, Pid) ->
               arguments    = [],
               pid          = Pid,
               slave_pids   = []}.
+
+immutable(Q) -> Q#amqqueue{pid             = none,
+                           slave_pids      = none,
+                           sync_slave_pids = none,
+                           gm_pids         = none,
+                           policy          = none,
+                           decorators      = none}.
 
 deliver([], _Delivery, _Flow) ->
     %% /dev/null optimisation

@@ -21,7 +21,7 @@
 -export([recover/0, policy_changed/2, callback/4, declare/6,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
-         update_scratch/3, update_decorators/1,
+         update_scratch/3, update_decorators/1, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          route/2, delete/2, validate_binding/2]).
 %% these must be run inside a mnesia tx
@@ -73,6 +73,7 @@
          fun((rabbit_types:exchange()) -> rabbit_types:exchange()))
          -> not_found | rabbit_types:exchange()).
 -spec(update_decorators/1 :: (name()) -> 'ok').
+-spec(immutable/1 :: (rabbit_types:exchange()) -> rabbit_types:exchange()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
@@ -306,6 +307,10 @@ update(Name, Fun) ->
                store(X1);
         []  -> not_found
     end.
+
+immutable(X) -> X#exchange{scratches  = none,
+                           policy     = none,
+                           decorators = none}.
 
 info_keys() -> ?INFO_KEYS.
 
