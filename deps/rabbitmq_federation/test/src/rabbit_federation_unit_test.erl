@@ -105,28 +105,3 @@ remove_credentials_test() ->
     Test(<<"amqp://">>,  <<"localhost:5672/foo">>),
     Test(<<"amqps://">>, <<"localhost:5672/%2f">>),
     ok.
-
-%% If we add a new field to #exchange{} or #amqqueue{} then the
-%% appropriate link_sup_sup:id/1 function needs to be changed. This
-%% test is there to make sure we remember to do so.
-record_size_test() ->
-    12 = tuple_size(#amqqueue{name            = defined,
-                              durable         = defined,
-                              auto_delete     = defined,
-                              exclusive_owner = defined,
-                              arguments       = defined,
-                              pid             = defined,
-                              slave_pids      = defined,
-                              sync_slave_pids = defined,
-                              policy          = defined,
-                              gm_pids         = defined,
-                              decorators      = defined}),
-    10 = tuple_size(#exchange{name        = defined,
-                              type        = defined,
-                              durable     = defined,
-                              auto_delete = defined,
-                              internal    = defined,
-                              arguments   = defined,
-                              scratches   = defined,
-                              policy      = defined,
-                              decorators  = defined}).
