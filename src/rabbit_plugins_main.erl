@@ -221,10 +221,11 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     AllEnabled = rabbit_plugins:dependencies(false, EnabledExplicitly,
                                              AvailablePlugins),
     EnabledImplicitly = AllEnabled -- EnabledExplicitly,
-    Running = case rpc:call(Node, rabbit_plugins, active, [], ?RPC_TIMEOUT) of
-                  {badrpc, _} -> [];
-                  Active      -> Active
-              end,
+    {StatusMsg, Running} =
+        case rpc:call(Node, rabbit_plugins, active, [], ?RPC_TIMEOUT) of
+            {badrpc, _} -> {"[failed to contact ~s - status not shown]", []};
+            Active      -> {"* = running on ~s", Active}
+        end,
     Missing = [#plugin{name = Name, dependencies = []} ||
                   Name <- ((EnabledExplicitly ++ EnabledImplicitly) --
                                plugin_names(AvailablePlugins))],
@@ -244,8 +245,8 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
         minimal -> ok;
         _       -> io:format(" Configured: E = explicitly enabled; "
                              "e = implicitly enabled; ! = missing~n"
-                             " | Status:   * = running on ~s~n"
-                             " |/~n", [Node])
+                             " | Status:   ~s~n"
+                             " |/~n", [rabbit_misc:format(StatusMsg, [Node])])
     end,
     [format_plugin(P, EnabledExplicitly, EnabledImplicitly, Running,
                    plugin_names(Missing), Format, MaxWidth) || P <- Plugins1],
