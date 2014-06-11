@@ -37,7 +37,7 @@
                     {requires,    rabbit_event},
                     {enables,     recovery}]}).
 
--import(rabbit_misc, [pget/3]).
+-import(rabbit_misc, [pget/2, pget/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -47,9 +47,11 @@ init([]) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(Event = #event{type = plugins_changed}, State) ->
-    case extensions_changed(Event) of
-        true  -> rabbit_mgmt_app:reset_dispatcher();
+handle_event(Event = #event{type = plugins_changed, props = Details}, State) ->
+    Enabled = pget(enabled, Details),
+    Disabled = pget(disabled, Details),
+    case extensions_changed(Enabled ++ Disabled) of
+        true  -> rabbit_mgmt_app:reset_dispatcher(Disabled);
         false -> ok
     end,
     {ok, State};
@@ -68,21 +70,17 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-extensions_changed(#event{type = plugins_changed, props = Details }) ->
-    Changed  = pget(enabled, Details, []) ++ pget(disabled, Details, []),
-    %% We explicitly ignore the case where management has been
-    %% started/stopped since the dispatcher is either freshly created
-    %% or about to vanish.
-    not lists:member(rabbitmq_management, Changed) andalso
-        contains_extension(Changed).
-
-contains_extension(Apps) ->
-    [] =/= [Mod || App <- Apps, Mod <- app_modules(App), is_extension(Mod)].
+%% We explicitly ignore the case where management has been
+%% started/stopped since the dispatcher is either freshly created or
+%% about to vanish.
+extensions_changed(Apps) ->
+    not lists:member(rabbitmq_management, Apps) andalso
+        lists:any(fun is_extension/1, [Mod || App <- Apps, Mod <- mods(App)]).
 
 is_extension(Mod) ->
     lists:member(rabbit_mgmt_extension,
                  pget(behaviour, Mod:module_info(attributes), [])).
 
-app_modules(App) ->
+mods(App) ->
     {ok, Modules} = application:get_key(App, modules),
     Modules.
