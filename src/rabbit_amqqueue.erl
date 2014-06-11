@@ -18,7 +18,7 @@
 
 -export([recover/0, stop/0, start/1, declare/5, declare/6,
          delete_immediately/1, delete/3, purge/1, forget_all_durable/1]).
--export([pseudo_queue/2]).
+-export([pseudo_queue/2, immutable/1]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
@@ -30,7 +30,7 @@
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
 -export([on_node_down/1]).
--export([update/2, store_queue/1, policy_changed/2]).
+-export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
          cancel_sync_mirrors/1]).
 
@@ -176,7 +176,9 @@
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
+-spec(immutable/1 :: (rabbit_types:amqqueue()) -> rabbit_types:amqqueue()).
 -spec(store_queue/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(update_decorators/1 :: (name()) -> 'ok').
 -spec(policy_changed/2 ::
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 -spec(start_mirroring/1 :: (pid()) -> 'ok').
@@ -311,12 +313,22 @@ store_queue(Q = #amqqueue{durable = true}) ->
                                  sync_slave_pids = [],
                                  gm_pids         = [],
                                  decorators      = undefined}, write),
-    store_queue0(Q);
+    store_queue_ram(Q);
 store_queue(Q = #amqqueue{durable = false}) ->
-    store_queue0(Q).
+    store_queue_ram(Q).
 
-store_queue0(Q) ->
+store_queue_ram(Q) ->
     ok = mnesia:write(rabbit_queue, rabbit_queue_decorator:set(Q), write).
+
+update_decorators(Name) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun() ->
+              case mnesia:wread({rabbit_queue, Name}) of
+                  [Q] -> store_queue_ram(Q),
+                         ok;
+                  []  -> ok
+              end
+      end).
 
 policy_changed(Q1 = #amqqueue{decorators = Decorators1},
                Q2 = #amqqueue{decorators = Decorators2}) ->
@@ -711,6 +723,13 @@ pseudo_queue(QueueName, Pid) ->
               arguments    = [],
               pid          = Pid,
               slave_pids   = []}.
+
+immutable(Q) -> Q#amqqueue{pid             = none,
+                           slave_pids      = none,
+                           sync_slave_pids = none,
+                           gm_pids         = none,
+                           policy          = none,
+                           decorators      = none}.
 
 deliver([], _Delivery, _Flow) ->
     %% /dev/null optimisation

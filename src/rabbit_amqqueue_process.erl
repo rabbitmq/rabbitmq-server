@@ -1165,7 +1165,7 @@ handle_cast({force_event_refresh, Ref},
                       emit_consumer_created(
                         Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref)
     end,
-    noreply(State);
+    noreply(rabbit_event:init_stats_timer(State, #q.stats_timer));
 
 handle_cast(notify_decorators, State) ->
     notify_decorators(State),

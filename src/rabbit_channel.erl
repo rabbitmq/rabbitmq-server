@@ -341,7 +341,7 @@ handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
 handle_cast({force_event_refresh, Ref}, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
                         Ref),
-    noreply(State);
+    noreply(rabbit_event:init_stats_timer(State, #ch.stats_timer));
 
 handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.

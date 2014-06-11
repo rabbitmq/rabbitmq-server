@@ -20,7 +20,8 @@
 
 -export([recover/0, policy_changed/2, callback/4, declare/6,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
-         lookup/1, lookup_or_die/1, list/1, lookup_scratch/2, update_scratch/3,
+         lookup/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
+         update_scratch/3, update_decorators/1, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          route/2, delete/2, validate_binding/2]).
 %% these must be run inside a mnesia tx
@@ -61,6 +62,7 @@
 -spec(lookup_or_die/1 ::
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit()).
+-spec(list/0 :: () -> [rabbit_types:exchange()]).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
 -spec(lookup_scratch/2 :: (name(), atom()) ->
                                rabbit_types:ok(term()) |
@@ -70,6 +72,8 @@
         (name(),
          fun((rabbit_types:exchange()) -> rabbit_types:exchange()))
          -> not_found | rabbit_types:exchange()).
+-spec(update_decorators/1 :: (name()) -> 'ok').
+-spec(immutable/1 :: (rabbit_types:exchange()) -> rabbit_types:exchange()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
@@ -107,7 +111,7 @@ recover() ->
            end,
            fun (X, Tx) ->
                    X1 = case Tx of
-                            true  -> store0(X);
+                            true  -> store_ram(X);
                             false -> rabbit_exchange_decorator:set(X)
                         end,
                    callback(X1, create, map_create_tx(Tx), [X1])
@@ -185,11 +189,11 @@ map_create_tx(false) -> none.
 store(X = #exchange{durable = true}) ->
     mnesia:write(rabbit_durable_exchange, X#exchange{decorators = undefined},
                  write),
-    store0(X);
+    store_ram(X);
 store(X = #exchange{durable = false}) ->
-    store0(X).
+    store_ram(X).
 
-store0(X) ->
+store_ram(X) ->
     X1 = rabbit_exchange_decorator:set(X),
     ok = mnesia:write(rabbit_exchange, rabbit_exchange_decorator:set(X1),
                       write),
@@ -241,6 +245,8 @@ lookup_or_die(Name) ->
         {error, not_found} -> rabbit_misc:not_found(Name)
     end.
 
+list() -> mnesia:dirty_match_object(rabbit_exchange, #exchange{_ = '_'}).
+
 %% Not dirty_match_object since that would not be transactional when used in a
 %% tx context
 list(VHostPath) ->
@@ -285,12 +291,26 @@ update_scratch(Name, App, Fun) ->
               ok
       end).
 
+update_decorators(Name) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun() ->
+              case mnesia:wread({rabbit_exchange, Name}) of
+                  [X] -> store_ram(X),
+                         ok;
+                  []  -> ok
+              end
+      end).
+
 update(Name, Fun) ->
     case mnesia:wread({rabbit_exchange, Name}) of
         [X] -> X1 = Fun(X),
                store(X1);
         []  -> not_found
     end.
+
+immutable(X) -> X#exchange{scratches  = none,
+                           policy     = none,
+                           decorators = none}.
 
 info_keys() -> ?INFO_KEYS.
 
