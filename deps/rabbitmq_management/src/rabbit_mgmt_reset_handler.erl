@@ -47,7 +47,7 @@ init([]) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(Event = #event{type = plugins_changed, props = Details}, State) ->
+handle_event(#event{type = plugins_changed, props = Details}, State) ->
     Enabled = pget(enabled, Details),
     Disabled = pget(disabled, Details),
     case extensions_changed(Enabled ++ Disabled) of
