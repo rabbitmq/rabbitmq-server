@@ -750,7 +750,7 @@ function rates_chart_and_legend(id, items, stats, rate_fmt, axis_fmt, chart_rate
     var res = rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates);
     var chartHtml = res[0];
     var legend = res[1];
-    
+
     var html = '<div class="box">' + chartHtml;
     html += '<table class="facts facts-fixed-width">';
     for (var i = 0; i < legend.length; i++) {
@@ -763,7 +763,7 @@ function rates_chart_and_legend(id, items, stats, rate_fmt, axis_fmt, chart_rate
         html += ';"></div>' + legend[i].value + '</td></tr>'
     }
     html += '</table></div>';
-    
+
     return legend.length > 0 ? html : '';
 }
 
