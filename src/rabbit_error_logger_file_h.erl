@@ -22,6 +22,8 @@
 -export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2,
          code_change/3]).
 
+-export([safe_handle_event/3]).
+
 %% rabbit_error_logger_file_h is a wrapper around the error_logger_file_h
 %% module because the original's init/1 does not match properly
 %% with the result of closing the old handler when swapping handlers.
@@ -77,8 +79,21 @@ init_file(File, PrevHandler) ->
         Error   -> Error
     end.
 
+handle_event(Event, State) ->
+    safe_handle_event(fun handle_event0/2, Event, State).
+
+safe_handle_event(HandleEvent, Event, State) ->
+    try
+        HandleEvent(Event, State)
+    catch
+        _:Error ->
+            io:format("Event crashed log handler:~n~P~n~P~n",
+                      [Event, 30, Error, 30]),
+            {ok, State}
+    end.
+
 %% filter out "application: foo; exited: stopped; type: temporary"
-handle_event({info_report, _, {_, std_info, _}}, State) ->
+handle_event0({info_report, _, {_, std_info, _}}, State) ->
     {ok, State};
 %% When a node restarts quickly it is possible the rest of the cluster
 %% will not have had the chance to remove its queues from
@@ -88,7 +103,7 @@ handle_event({info_report, _, {_, std_info, _}}, State) ->
 %% logs an event for every one of those messages; in extremis this can
 %% bring the server to its knees just logging "Discarding..."
 %% again and again. So just log the first one, then go silent.
-handle_event(Event = {error, _, {emulator, _, ["Discarding message" ++ _]}},
+handle_event0(Event = {error, _, {emulator, _, ["Discarding message" ++ _]}},
              State) ->
     case get(discarding_message_seen) of
         true      -> {ok, State};
@@ -96,10 +111,10 @@ handle_event(Event = {error, _, {emulator, _, ["Discarding message" ++ _]}},
                      error_logger_file_h:handle_event(t(Event), State)
     end;
 %% Clear this state if we log anything else (but not a progress report).
-handle_event(Event = {info_msg, _, _}, State) ->
+handle_event0(Event = {info_msg, _, _}, State) ->
     erase(discarding_message_seen),
     error_logger_file_h:handle_event(t(Event), State);
-handle_event(Event, State) ->
+handle_event0(Event, State) ->
     error_logger_file_h:handle_event(t(Event), State).
 
 handle_info(Info, State) ->

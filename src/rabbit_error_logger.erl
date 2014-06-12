@@ -27,6 +27,8 @@
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2,
          handle_info/2]).
 
+-import(rabbit_error_logger_file_h, [safe_handle_event/3]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -65,10 +67,13 @@ code_change(_OldVsn, State, _Extra) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event({Kind, _Gleader, {_Pid, Format, Data}}, State) ->
+handle_event(Event, State) ->
+    safe_handle_event(fun handle_event0/2, Event, State).
+
+handle_event0({Kind, _Gleader, {_Pid, Format, Data}}, State) ->
     ok = publish(Kind, Format, Data, State),
     {ok, State};
-handle_event(_Event, State) ->
+handle_event0(_Event, State) ->
     {ok, State}.
 
 handle_info(_Info, State) ->
