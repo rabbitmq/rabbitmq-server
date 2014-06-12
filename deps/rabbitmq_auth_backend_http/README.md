@@ -39,7 +39,10 @@ to use only HTTP, or:
       [{auth_backends, [rabbit_auth_backend_http, rabbit_auth_backend_internal]}]
      }].
 
-to use both HTTP and the internal database.
+to try the HTTP plugin first and then fall back to the internal database.
+
+See http://www.rabbitmq.com/configure.html#configuration-file for more detail
+on `auth_backends`.
 
 # Configuring the plugin
 
