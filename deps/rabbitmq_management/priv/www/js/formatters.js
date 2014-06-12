@@ -266,7 +266,7 @@ function fmt_rate_axis(num, max) {
     return fmt_si_prefix(num, max, 1000, true) + '/s';
 }
 
-function fmt_msgs_axis(num, max) {
+function fmt_num_axis(num, max) {
     return fmt_si_prefix(num, max, 1000, true);
 }
 
@@ -688,17 +688,12 @@ function queue_lengths(id, stats) {
     var items = [['Ready', 'messages_ready'],
                  ['Unacknowledged', 'messages_unacknowledged'],
                  ['Total', 'messages']];
-    return rates_chart_or_text(id, stats, items, fmt_msgs, fmt_msgs_large, fmt_msgs_axis, false, 'Queued messages', 'queued-messages');
+    return rates_chart_or_text(id, stats, items, fmt_msgs, fmt_msgs_large, fmt_num_axis, false, 'Queued messages', 'queued-messages');
 }
 
 function data_rates(id, stats) {
     var items = [['From client', 'recv_oct'], ['To client', 'send_oct']];
     return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_large, fmt_rate_bytes_axis, true, 'Data rates');
-}
-
-function node_stats_chart(id, key, name, stats) {
-    var items = [[name, key]];
-    return rates_chart_or_text(id, stats, items, fmt_bytes_obj, fmt_rate_bytes_large, fmt_bytes_axis, false, name);
 }
 
 function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, chart_rates,
@@ -715,7 +710,7 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, ch
 
     if (keys(stats).length > 0) {
         if (mode == 'chart') {
-            res = rates_chart(id, items, stats, chart_fmt, axis_fmt, chart_rates);
+            res = rates_chart_and_legend(id, items, stats, chart_fmt, axis_fmt, chart_rates);
         }
         else {
             res = rates_text(items, stats, mode, text_fmt);
@@ -741,16 +736,42 @@ function prefix_title(mode, range) {
     }
 }
 
+function node_stats(key, name, stats) {
+    var items = [[name, key]];
+    if (get_pref('rate-mode-node-stats') == 'chart') {
+        return rates_chart('node-stats-' + key, items, stats,
+                           fmt_bytes_obj, fmt_num_axis, false)[0];
+    } else {
+        return 'TODO';
+    }
+}
+
+function rates_chart_and_legend(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
+    var res = rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates);
+    var chartHtml = res[0];
+    var legend = res[1];
+    
+    var html = '<div class="box">' + chartHtml;
+    html += '<table class="facts facts-fixed-width">';
+    for (var i = 0; i < legend.length; i++) {
+        html += '<tr><th><span title="Click to toggle line" ';
+        html += 'class="rate-visibility-option';
+        html += legend[i].show ? '' : ' rate-visibility-option-hidden';
+        html += '" data-pref="chart-line-' + id + legend[i].key + '">';
+        html += legend[i].name + '</span></th><td>';
+        html += '<div class="colour-key" style="background: ' + chart_colors[i];
+        html += ';"></div>' + legend[i].value + '</td></tr>'
+    }
+    html += '</table></div>';
+    
+    return legend.length > 0 ? html : '';
+}
+
 function rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
-    function show_pref_name(key) {
-        return 'chart-line-' + id + '-' + key;
-    }
-
     function show(key) {
-        return get_pref(show_pref_name(key)) === 'true';
+        return get_pref('chart-line-' + id + key) === 'true';
     }
 
-    var size = get_pref('chart-size-' + id);
     var legend = [];
     chart_data[id] = {};
     chart_data[id]['data'] = {};
@@ -765,25 +786,18 @@ function rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
                 chart_data[id]['data'][name] = stats[key_details];
                 chart_data[id]['data'][name].ix = ix;
             }
-            legend.push([name, key, rate_fmt(stats, key)]);
+            legend.push({name:  name,
+                         key:   key,
+                         value: rate_fmt(stats, key),
+                         show:  show(key)});
             ix++;
         }
     }
-    var html = '<div class="box"><div id="chart-' + id +
+    var size = get_pref('chart-size-' + id);
+    var html = '<div id="chart-' + id +
         '" class="chart chart-' + size +
         (chart_rates ? ' chart-rates' : '') + '"></div>';
-    html += '<table class="facts facts-fixed-width">';
-    for (var i = 0; i < legend.length; i++) {
-        html += '<tr><th><span title="Click to toggle line" ';
-        html += 'class="rate-visibility-option';
-        html += show(legend[i][1]) ? '' : ' rate-visibility-option-hidden';
-        html += '" data-pref="' + show_pref_name(legend[i][1]) + '">';
-        html += legend[i][0] + '</span></th><td>';
-        html += '<div class="colour-key" style="background: ' + chart_colors[i];
-        html += ';"></div>' + legend[i][2] + '</td></tr>'
-    }
-    html += '</table></div>';
-    return legend.length > 0 ? html : '';
+    return [html, legend];
 }
 
 function rates_text(items, stats, mode, rate_fmt) {

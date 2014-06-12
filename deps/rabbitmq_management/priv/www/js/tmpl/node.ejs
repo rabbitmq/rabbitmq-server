@@ -8,7 +8,6 @@
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
-  <%= node_stats_chart('node-stats', 'mem_used', 'Memory', node) %>
 <div class="updatable">
 
   <table class="facts">
@@ -18,6 +17,7 @@
       </th>
       <td>
 <%= fmt_resource_bar_count(fmt_fd_used(node.fd_used, node.fd_total), node.fd_total, FD_THRESHOLDS) %>
+  <%= node_stats('fd_used', 'File descriptors', node) %>
       </td>
     </tr>
     <tr>
@@ -26,6 +26,7 @@
       </th>
       <td>
 <%= fmt_resource_bar_count(node.sockets_used, node.sockets_total, FD_THRESHOLDS) %>
+  <%= node_stats('sockets_used', 'Socket descriptors', node) %>
       </td>
     </tr>
     <tr>
@@ -34,6 +35,7 @@
       </th>
      <td>
 <%= fmt_resource_bar_count(node.proc_used, node.proc_total, PROCESS_THRESHOLDS) %>
+  <%= node_stats('proc_used', 'Erlang processes', node) %>
      </td>
     </tr>
   </table>
@@ -52,6 +54,7 @@
 <% } else { %>
    <%= fmt_bytes(node.mem_used) %>
 <% } %>
+  <%= node_stats('mem_used', 'Memory', node) %>
       </td>
     </tr>
     <tr>
@@ -65,6 +68,7 @@
                         node.disk_free_limit / node.disk_free,
                         node.disk_free_alarm ? 'red' : 'green',
                         node.disk_free_alarm ? 'disk_free-alarm' : null) %>
+  <%= node_stats('disk_free', 'Disk free', node) %>
 <% } else { %>
          (not available)
 <% } %>

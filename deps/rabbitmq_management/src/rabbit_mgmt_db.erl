@@ -159,7 +159,7 @@
         [messages, messages_ready, messages_unacknowledged]).
 
 -define(COARSE_NODE_STATS,
-        [mem_used]).
+        [mem_used, fd_used, sockets_used, proc_used, disk_free]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 

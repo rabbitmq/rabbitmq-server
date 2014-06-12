@@ -17,7 +17,6 @@ var chart_chrome = {
 function render_chart(div) {
     var id = div.attr('id').substring('chart-'.length);
     var rate_mode = div.hasClass('chart-rates');
-
     var out_data = [];
     var data = chart_data[id]['data'];
     var fmt = chart_data[id]['fmt'];
