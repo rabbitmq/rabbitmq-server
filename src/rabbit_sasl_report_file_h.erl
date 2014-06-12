@@ -22,6 +22,8 @@
 -export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2,
          code_change/3]).
 
+-import(rabbit_error_logger_file_h, [safe_handle_event/3]).
+
 %% rabbit_sasl_report_file_h is a wrapper around the sasl_report_file_h
 %% module because the original's init/1 does not match properly
 %% with the result of closing the old handler when swapping handlers.
@@ -67,6 +69,9 @@ init_file({File, Type}) ->
     end.
 
 handle_event(Event, State) ->
+    safe_handle_event(fun handle_event0/2, Event, State).
+
+handle_event0(Event, State) ->
     sasl_report_file_h:handle_event(
       truncate:log_event(Event, ?LOG_TRUNC), State).
 
