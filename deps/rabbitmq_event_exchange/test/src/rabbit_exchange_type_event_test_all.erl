@@ -24,6 +24,6 @@ all_tests() ->
 
 tests(Module, Timeout) ->
     {foreach, fun() -> ok end,
-     [{timeout, Timeout, fun Module:F/0} ||
+     [{timeout, Timeout, fun () -> Module:F() end} ||
          {F, _Arity} <- proplists:get_value(exports, Module:module_info()),
          string:right(atom_to_list(F), 5) =:= "_test"]}.
