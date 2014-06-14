@@ -132,17 +132,21 @@ do_connect({Addr, Family},
         {error, _} = E -> E
     end;
 do_connect({Addr, Family},
-           AmqpParams = #amqp_params_network{ssl_options        = SslOpts,
+           AmqpParams = #amqp_params_network{ssl_options        = SslOptions,
                                              port               = Port,
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
            SIF, State) ->
+    GlobalSslOpts = application:get_env(amqp_client, ssl_config, []),
     app_utils:start_applications([asn1, crypto, public_key, ssl]),
     obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
         {ok, Sock} ->
+            SslOpts = orddict:merge(fun (_, _A, B) -> B end,
+                                    GlobalSslOpts,
+                                    SslOptions),
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
