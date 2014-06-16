@@ -568,18 +568,23 @@ do_subscribe(Destination, DestHdr, Frame,
                 _         -> amqp_channel:call(
                                Channel, #'basic.qos'{prefetch_count = Prefetch})
             end,
-            amqp_channel:subscribe(Channel,
-                                   #'basic.consume'{
-                                     queue        = Queue,
-                                     consumer_tag = ConsumerTag,
-                                     no_local     = false,
-                                     no_ack       = (AckMode == auto),
-                                     exclusive    = false,
-                                     arguments    = []},
-                                   self()),
             ExchangeAndKey = rabbit_routing_util:parse_routing(Destination),
-            ok = rabbit_routing_util:ensure_binding(
-                   Queue, ExchangeAndKey, Channel),
+            try
+                amqp_channel:subscribe(Channel,
+                                       #'basic.consume'{
+                                          queue        = Queue,
+                                          consumer_tag = ConsumerTag,
+                                          no_local     = false,
+                                          no_ack       = (AckMode == auto),
+                                          exclusive    = false,
+                                          arguments    = []},
+                                       self()),
+                ok = rabbit_routing_util:ensure_binding(
+                       Queue, ExchangeAndKey, Channel)
+            catch exit:Err ->
+                    ok = maybe_clean_up_queue(Queue, State),
+                    exit(Err)
+            end,
             ok(State#state{subscriptions =
                                dict:store(
                                  ConsumerTag,
@@ -592,6 +597,12 @@ do_subscribe(Destination, DestHdr, Frame,
         {error, _} = Err ->
             Err
     end.
+
+maybe_clean_up_queue(Queue, State = #state{connection = Connection}) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    catch amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
+    catch amqp_channel:close(Channel),
+    ok.
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
