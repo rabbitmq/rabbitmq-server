@@ -132,7 +132,7 @@ do_connect({Addr, Family},
         {error, _} = E -> E
     end;
 do_connect({Addr, Family},
-           AmqpParams = #amqp_params_network{ssl_options        = SslOptions,
+           AmqpParams = #amqp_params_network{ssl_options        = SslOpts0,
                                              port               = Port,
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
@@ -149,7 +149,7 @@ do_connect({Addr, Family},
         {ok, Sock} ->
             SslOpts = orddict:merge(fun (_, _A, B) -> B end,
                                     GlobalSslOpts,
-                                    SslOptions),
+                                    SslOpts0),
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
