@@ -992,7 +992,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
            QueueName,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
                              Q, Durable, AutoDelete, Args, Owner),
-                      rabbit_amqqueue:stat(Q)
+                      case NoWait of
+                          false ->
+                              rabbit_amqqueue:stat(Q);
+                          _ ->
+                              {ok, 0, 0}
+                      end
            end) of
         {ok, MessageCount, ConsumerCount} ->
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
