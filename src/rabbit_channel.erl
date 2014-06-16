@@ -1046,9 +1046,14 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
               _, State = #ch{virtual_host = VHostPath,
                              conn_pid     = ConnPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
+    F = case NoWait of
+            false ->
+                fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end;
+            true ->
+                fun (Q) -> {{ok, 0, 0}, Q} end
+        end,
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
-        rabbit_amqqueue:with_or_die(
-          QueueName, fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end),
+        rabbit_amqqueue:with_or_die(QueueName, F),
     ok = rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
     return_queue_declare_ok(QueueName, NoWait, MessageCount, ConsumerCount,
                             State);
