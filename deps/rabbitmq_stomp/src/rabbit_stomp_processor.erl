@@ -586,7 +586,9 @@ do_subscribe(Destination, DestHdr, Frame,
                     %% and declared by us
                     case Destination of
                         {exchange, _} ->
-                            ok = maybe_clean_up_queue(Queue, State)
+                            ok = maybe_clean_up_queue(Queue, State);
+                        _ ->
+                            ok
                     end,
                     exit(Err)
             end,
