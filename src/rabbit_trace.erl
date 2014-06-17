@@ -55,14 +55,17 @@ enabled(VHost) ->
     lists:member(VHost, VHosts).
 
 tap_in(_Msg, none) -> ok;
-tap_in(Msg = #basic_message{exchange_name = #resource{name = XName}}, TraceX) ->
-    trace(TraceX, Msg, <<"publish">>, XName, []).
+tap_in(Msg = #basic_message{exchange_name = #resource{name = XName,
+                                                      virtual_host = VHost}}, TraceX) ->
+    trace(TraceX, Msg, <<"publish">>, XName,
+          [{<<"vhost">>, longstr, VHost}]).
 
 tap_out(_Msg, none) -> ok;
-tap_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg}, TraceX) ->
+tap_out({#resource{name = QName, virtual_host = VHost}, _QPid, _QMsgId, Redelivered, Msg}, TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
     trace(TraceX, Msg, <<"deliver">>, QName,
-          [{<<"redelivered">>, signedint, RedeliveredNum}]).
+          [{<<"redelivered">>, signedint, RedeliveredNum},
+           {<<"vhost">>, longstr, VHost}]).
 
 %%----------------------------------------------------------------------------
 
