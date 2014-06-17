@@ -16,7 +16,7 @@
 
 -module(rabbit_trace).
 
--export([init/1, enabled/1, tap_in/3, tap_out/3, start/1, stop/1]).
+-export([init/1, enabled/1, tap_in/2, tap_out/2, start/1, stop/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -32,8 +32,8 @@
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
 -spec(enabled/1 :: (rabbit_types:vhost()) -> boolean()).
--spec(tap_in/3 :: (rabbit_types:basic_message(), rabbit_types:username(), state()) -> 'ok').
--spec(tap_out/3 :: (rabbit_amqqueue:qmsg(), rabbit_types:username(), state()) -> 'ok').
+-spec(tap_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
+-spec(tap_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
 
 -spec(start/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(stop/1 :: (rabbit_types:vhost()) -> 'ok').
