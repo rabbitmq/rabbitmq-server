@@ -168,11 +168,10 @@ policy_changed(_X1, _X2) -> ok.
 
 % Check version argument, if supplied
 check_version_arg(XName, Args) ->
-  case get_string_arg(Args, ?RJMS_VERSION_ARG, "pre-1.2.0") of
-    "@RJMS_VERSION@" -> ok;
-    "1.2.0" -> ok;
-    "0.0.0" -> ok;          % 0 means we don't care.  This is for testing.
-    Version -> client_version_error(XName, Version)
+  Version = get_string_arg(Args, ?RJMS_VERSION_ARG, "pre-1.2.0"),
+  case lists:member(Version, ?RJMS_COMPATIBLE_VERSIONS) of
+    true  -> ok;
+    false -> client_version_error(XName, Version)
   end.
 
 % Get a string argument from the args or arguments parameters
