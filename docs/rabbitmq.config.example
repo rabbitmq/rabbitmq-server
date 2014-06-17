@@ -213,7 +213,12 @@
 
    %% Explicitly enable/disable hipe compilation.
    %%
-   %% {hipe_compile, true}
+   %% {hipe_compile, true},
+
+   %% Timeout used when waiting for Mnesia tables in a cluster to
+   %% become available.
+   %%
+   %% {mnesia_table_loading_timeout, 30000}
 
   ]},
 
@@ -257,23 +262,19 @@
    %%                         {certfile,   "/path/to/cert.pem"},
    %%                         {keyfile,    "/path/to/key.pem"}]}]},
 
+   %% One of 'basic', 'detailed' or 'none'. See
+   %% http://www.rabbitmq.com/management.html#fine-stats for more details.
+   %% {rates_mode, basic},
+
    %% Configure how long aggregated data (such as message rates and queue
    %% lengths) is retained. Please read the plugin's documentation in
-   %% https://www.rabbitmq.com/management.html#configuration for more
+   %% http://www.rabbitmq.com/management.html#configuration for more
    %% details.
    %%
    %% {sample_retention_policies,
    %%  [{global,   [{60, 5}, {3600, 60}, {86400, 1200}]},
    %%   {basic,    [{60, 5}, {3600, 60}]},
    %%   {detailed, [{10, 5}]}]}
-  ]},
-
- {rabbitmq_management_agent,
-  [%% Misc/Advanced Options
-   %%
-   %% NB: Change these only if you understand what you are doing!
-   %%
-   %% {force_fine_statistics, true}
   ]},
 
  %% ----------------------------------------------------------------------------
