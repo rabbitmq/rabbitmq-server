@@ -328,15 +328,6 @@ function fmt_download_filename(host) {
         (now.getMonth() + 1) + "-" + now.getDate() + ".json";
 }
 
-function fmt_fd_used(used, total) {
-    if (used == 'install_handle_from_sysinternals') {
-        return '<p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub>' + total + ' available</sub></p>';
-    }
-    else {
-        return used;
-    }
-}
-
 function fmt_table_short(table) {
     return '<table class="mini">' + fmt_table_body(table, ':') + '</table>';
 }
@@ -507,44 +498,6 @@ function fmt_state(colour, text, explanation) {
     return '<div class="colour-key status-key-' + colour + '"></div>' + key;
 }
 
-function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
-    var width = 120;
-
-    var res = '';
-    var other_colour = colour;
-    if (ratio > 1) {
-        ratio = 1 / ratio;
-        inverted = true;
-        colour += '-dark';
-    }
-    else {
-        other_colour += '-dark';
-    }
-    var offset = Math.round(width * (1 - ratio));
-
-    res += '<div class="status-bar" style="width: ' + width + 'px;">';
-    res += '<div class="status-bar-main ' + colour + '" style="background-image: url(img/bg-' + other_colour + '.png); background-position: -' + offset + 'px 0px; background-repeat: no-repeat;">';
-    res += used_label;
-    if (help != null) {
-        res += ' <span class="help" id="' + help + '"></span>';
-    }
-    res += '</div>'; // status-bar-main
-    if (limit_label != null) {
-        res += '<sub>' + limit_label + '</sub>';
-    }
-    res += '</div>'; // status-bar
-    return res;
-}
-
-function fmt_resource_bar_count(used, total, thresholds) {
-    if (typeof used == 'number') {
-        return fmt_resource_bar(used, total + ' available', used / total,
-                                fmt_color(used / total, thresholds));
-    } else {
-        return used;
-    }
-}
-
 function fmt_shortened_uri(uri) {
     if (typeof uri == 'object') {
         var res = '';
@@ -700,12 +653,7 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, ch
                              heading, heading_help) {
     var mode = get_pref('rate-mode-' + id);
     var range = get_pref('chart-range-' + id);
-    var prefix = '<h3>' + heading +
-        ' <span class="rate-options updatable" title="Click to change" for="'
-        + id + '">(' + prefix_title(mode, range) + ')</span>' +
-        (heading_help == undefined ? '' :
-         ' <span class="help" id="' + heading_help + '"></span>') +
-        '</h3>';
+    var prefix = chart_h3(id, heading, heading_help);
     var res;
 
     if (keys(stats).length > 0) {
@@ -723,6 +671,17 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, ch
     return prefix + '<div class="updatable">' + res + '</div>';
 }
 
+function chart_h3(id, heading, heading_help) {
+    var mode = get_pref('rate-mode-' + id);
+    var range = get_pref('chart-range-' + id);
+    return '<h3>' + heading +
+        ' <span class="rate-options updatable" title="Click to change" for="'
+        + id + '">(' + prefix_title(mode, range) + ')</span>' +
+        (heading_help == undefined ? '' :
+         ' <span class="help" id="' + heading_help + '"></span>') +
+        '</h3>';
+}
+
 function prefix_title(mode, range) {
     var desc = CHART_PERIODS[range];
     if (mode == 'chart') {
@@ -736,14 +695,59 @@ function prefix_title(mode, range) {
     }
 }
 
-function node_stats(key, name, stats) {
-    var items = [[name, key]];
+function node_stat_count(used_key, limit_key, stats, thresholds) {
+    var used = stats[used_key];
+    var limit = stats[limit_key];  
+    if (typeof used == 'number') {
+        return node_stat(used_key, limit_key, 'available', stats,
+                         fmt_color(used / limit, thresholds));
+    } else {
+        return used;
+    }
+}
+
+function node_stat(used_key, limit_key, suffix, stats, colour, help, invert) {
+    var used = stats[used_key];
+    var limit = stats[limit_key];
     if (get_pref('rate-mode-node-stats') == 'chart') {
-        return rates_chart('node-stats-' + key, items, stats,
+        var items = [['foo', used_key]];
+        return rates_chart('node-stats-' + used_key, items, stats,
                            fmt_bytes_obj, fmt_num_axis, false)[0];
     } else {
-        return 'TODO';
+        return node_stat_bar(used, limit, suffix, colour, help, invert);
     }
+}
+
+function node_stat_bar(used, limit, suffix, colour, help, invert) {
+    var width = 120;
+
+    var res = '';
+    var other_colour = colour;
+    var ratio = invert ? (limit / used) : (used / limit);
+    if (ratio > 1) {
+        ratio = 1 / ratio;
+        inverted = true;
+        colour += '-dark';
+    }
+    else {
+        other_colour += '-dark';
+    }
+    var offset = Math.round(width * (1 - ratio));
+
+    res += '<div class="status-bar" style="width: ' + width + 'px;">';
+    res += '<div class="status-bar-main ' + colour + '" style="background-image: url(img/bg-' + other_colour + '.png); background-position: -' + offset + 'px 0px; background-repeat: no-repeat;">';
+    res += used;
+    if (help != null) {
+        res += ' <span class="help" id="' + help + '"></span>';
+    }
+    res += '</div>'; // status-bar-main
+    res += '<sub>' + limit + ' ' + suffix + '</sub>';
+    res += '</div>'; // status-bar
+    return res;
+}
+
+function node_stats_prefs() {
+    return chart_h3('node-stats', 'Node statistics');
 }
 
 function rates_chart_and_legend(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
