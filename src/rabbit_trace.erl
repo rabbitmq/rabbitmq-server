@@ -54,22 +54,15 @@ enabled(VHost) ->
     {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
     lists:member(VHost, VHosts).
 
-tap_in(_Msg, _Username, none) -> ok;
-tap_in(Msg = #basic_message{exchange_name = #resource{name = XName,
-                                                      virtual_host = VHost}},
-       Username, TraceX) ->
-    trace(TraceX, Msg, <<"publish">>, XName,
-          [{<<"vhost">>, longstr, VHost},
-           {<<"user">>, longstr, Username}]).
+tap_in(_Msg, none) -> ok;
+tap_in(Msg = #basic_message{exchange_name = #resource{name = XName}}, TraceX) ->
+    trace(TraceX, Msg, <<"publish">>, XName, []).
 
-tap_out(_Msg, _Username, none) -> ok;
-tap_out({#resource{name = QName, virtual_host = VHost}, _QPid, _QMsgId, Redelivered, Msg},
-        Username, TraceX) ->
+tap_out(_Msg, none) -> ok;
+tap_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg}, TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
     trace(TraceX, Msg, <<"deliver">>, QName,
-          [{<<"redelivered">>, signedint, RedeliveredNum},
-           {<<"vhost">>, longstr, VHost},
-           {<<"user">>, longstr, Username}]).
+          [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 %%----------------------------------------------------------------------------
 
