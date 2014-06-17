@@ -59,16 +59,14 @@ stop_child(Q) ->
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
-%% Clean out all transient aspects of the queue. We need to keep the
-%% entire queue around rather than just take its name since we will
-%% want to know its policy to determine how to federate it, and its
-%% immutable properties in case we want to redeclare it upstream. We
-%% don't just take its name and look it up again since that would
-%% introduce race conditions when policies change frequently.  Note
-%% that since we take down all the links and start again when policies
-%% change, the policy will always be correct, so we don't clear it out
-%% here and can trust it.
-id(Q = #amqqueue{}) -> Q#amqqueue{pid             = none,
-                                  slave_pids      = none,
-                                  sync_slave_pids = none,
-                                  gm_pids         = none}.
+%% Clean out all mutable aspects of the queue except policy. We need
+%% to keep the entire queue around rather than just take its name
+%% since we will want to know its policy to determine how to federate
+%% it, and its immutable properties in case we want to redeclare it
+%% upstream. We don't just take its name and look it up again since
+%% that would introduce race conditions when policies change
+%% frequently.  Note that since we take down all the links and start
+%% again when policies change, the policy will always be correct, so
+%% we don't clear it out here and can trust it.
+id(Q = #amqqueue{policy = Policy}) -> Q1 = rabbit_amqqueue:immutable(Q),
+                                      Q1#amqqueue{policy = Policy}.
