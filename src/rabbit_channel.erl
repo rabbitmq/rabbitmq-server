@@ -437,14 +437,20 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
                                      channel    = Channel,
                                      writer_pid = WriterPid,
                                      reader_pid = ReaderPid,
-                                     conn_name  = ConnName
+                                     conn_name  = ConnName,
+                                     virtual_host = VHost,
+                                     user       = #user{
+                                                     username = Username
+                                                  }
                                     }) ->
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log:error("connection ~s, channel ~p - soft error:~n~p~n",
-                             [ConnName, Channel, Reason]),
+            rabbit_log:error("vhost ~s, user ~s, connection ~s, channel ~p - soft error:~n~p~n",
+                             [binary_to_list(VHost),
+                              binary_to_list(Username),
+                              ConnName, Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
         {0, _} ->
