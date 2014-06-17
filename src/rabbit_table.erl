@@ -70,7 +70,7 @@ wait_for_replicated() ->
                  not lists:member({local_content, true}, TabDef)]).
 
 wait(TableNames) ->
-    Timeout = application:get_env(rabbit, mnesia_table_loading_timeout),
+    {ok, Timeout} = application:get_env(rabbit, mnesia_table_loading_timeout),
     case mnesia:wait_for_tables(TableNames, Timeout) of
         ok ->
             ok;
