@@ -669,7 +669,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
               Content, State = #ch{virtual_host    = VHostPath,
                                    tx              = Tx,
                                    confirm_enabled = ConfirmEnabled,
-                                   trace_state     = TraceState}) ->
+                                   trace_state     = TraceState,
+                                   user = #user{username = Username}}) ->
     check_msg_size(Content),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
@@ -690,7 +691,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
-            rabbit_trace:tap_in(Message, TraceState),
+            rabbit_trace:tap_in(Message, Username, TraceState),
             Delivery = rabbit_basic:delivery(
                          Mandatory, DoConfirm, Message, MsgSeqNo),
             QNames = rabbit_exchange:route(Exchange, Delivery),
@@ -1365,7 +1366,8 @@ record_sent(ConsumerTag, AckRequired,
             Msg = {QName, QPid, MsgId, Redelivered, _Message},
             State = #ch{unacked_message_q = UAMQ,
                         next_tag          = DeliveryTag,
-                        trace_state       = TraceState}) ->
+                        trace_state       = TraceState,
+                        user              = #user{username = Username}}) ->
     ?INCR_STATS([{queue_stats, QName, 1}], case {ConsumerTag, AckRequired} of
                                                {none,  true} -> get;
                                                {none, false} -> get_no_ack;
@@ -1376,7 +1378,7 @@ record_sent(ConsumerTag, AckRequired,
         true  -> ?INCR_STATS([{queue_stats, QName, 1}], redeliver, State);
         false -> ok
     end,
-    rabbit_trace:tap_out(Msg, TraceState),
+    rabbit_trace:tap_out(Msg, Username, TraceState),
     UAMQ1 = case AckRequired of
                 true  -> queue:in({DeliveryTag, ConsumerTag, {QPid, MsgId}},
                                   UAMQ);
