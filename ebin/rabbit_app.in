@@ -46,6 +46,7 @@
          {trace_vhosts, []},
          {log_levels, [{connection, info}]},
          {ssl_cert_login_from, distinguished_name},
+         {ssl_handshake_timeout, 5000},
          {reverse_dns_lookups, false},
          {cluster_partition_handling, ignore},
          {tcp_listen_options, [binary,
