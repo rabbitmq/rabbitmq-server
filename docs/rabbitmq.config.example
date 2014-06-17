@@ -103,6 +103,10 @@
    %%
    %% {ssl_cert_login_from, common_name},
 
+   %% SSL handshake timeout, in milliseconds.
+   %%
+   %% {ssl_handshake_timeout, 5000},
+
    %%
    %% Default User / VHost
    %% ====================
