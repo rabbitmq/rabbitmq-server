@@ -697,7 +697,7 @@ function prefix_title(mode, range) {
 
 function node_stat_count(used_key, limit_key, stats, thresholds) {
     var used = stats[used_key];
-    var limit = stats[limit_key];  
+    var limit = stats[limit_key];
     if (typeof used == 'number') {
         return node_stat(used_key, limit_key, 'available', stats,
                          fmt_color(used / limit, thresholds));
