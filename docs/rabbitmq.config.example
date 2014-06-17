@@ -213,7 +213,12 @@
 
    %% Explicitly enable/disable hipe compilation.
    %%
-   %% {hipe_compile, true}
+   %% {hipe_compile, true},
+
+   %% Timeout used when waiting for Mnesia tables in a cluster to
+   %% become available.
+   %%
+   %% {mnesia_table_loading_timeout, 30000}
 
   ]},
 
