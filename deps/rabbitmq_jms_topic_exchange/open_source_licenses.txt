@@ -1,6 +1,6 @@
 open_source_license.txt
 
-JMS Client for Pivotal RabbitMQ 1.2.1 GA
+JMS Client for Pivotal RabbitMQ 1.2.3 GA
 
 
 ===========================================================================
@@ -44,7 +44,7 @@ SECTION 2: Apache License, V2.0
 
 SECTION 3: Mozilla Public License, V1.1
 
-   >>> amqp-client-3.3.0
+   >>> amqp-client-3.3.3
 
 
 
@@ -53,6 +53,7 @@ APPENDIX. Standard License Files
    >>> Apache License, V2.0
 
    >>> Mozilla Public License, V1.1
+
 
 
 
@@ -112,7 +113,7 @@ Code license:  Apache License 2.0
 Mozilla Public License, V1.1 is applicable to the following component(s).
 
 
->>> amqp-client-3.3.0
+>>> amqp-client-3.3.3
 
 The contents of this file are subject to the Mozilla Public License
 Version 1.1 (the "License"); you may not use this file except in
@@ -133,7 +134,7 @@ ADDITIONAL LICENSE INFORMATION:
 
 > Apache 2.0
 
-amqp-client-3.3.0-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
+amqp-client-3.3.3-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
 
 Copyright (c) 2006-2007 Frank Carver
 Copyright (c) 2007-2013 VMware, Inc. All Rights Reserved
@@ -853,4 +854,4 @@ This offer to obtain a copy of the Source Files is valid for three
 years from the date you acquired this Software product.
 Alternatively, the Source Files may accompany the Pivotal product.
 
-[RABBITJMS121GASS050114]
+[RABBITJMS123GASS060314]
