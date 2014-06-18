@@ -86,6 +86,10 @@ start() ->
         {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} ->
             PrintInvalidCommandError(),
             usage();
+        {error, {missing_dependencies, Missing, Blame}} ->
+            print_error("dependent plugins ~p not found; used by ~p.",
+                        [Missing, Blame]),
+            rabbit_misc:quit(2);
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
@@ -137,18 +141,13 @@ action(enable, Node, ToEnable0, Opts, PluginsFile, PluginsDir) ->
     ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     Missing = ToEnable -- plugin_names(AllPlugins),
+    case Missing of
+        [] -> ok;
+        _  -> throw({error_string, fmt_missing(Missing)})
+    end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     NewImplicitlyEnabled = rabbit_plugins:dependencies(false,
                                                        NewEnabled, AllPlugins),
-    MissingDeps = (NewImplicitlyEnabled -- plugin_names(AllPlugins)) -- Missing,
-    case {Missing, MissingDeps} of
-        {[],   []} -> ok;
-        {Miss, []} -> throw({error_string, fmt_missing("plugins",      Miss)});
-        {[], Miss} -> throw({error_string, fmt_missing("dependencies", Miss)});
-        {_,     _} -> throw({error_string,
-                             fmt_missing("plugins", Missing) ++
-                                 fmt_missing("dependencies", MissingDeps)})
-    end,
     write_enabled_plugins(PluginsFile, NewEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
@@ -226,12 +225,9 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
             {badrpc, _} -> {"[failed to contact ~s - status not shown]", []};
             Active      -> {"* = running on ~s", Active}
         end,
-    Missing = [#plugin{name = Name, dependencies = []} ||
-                  Name <- ((EnabledExplicitly ++ EnabledImplicitly) --
-                               plugin_names(AvailablePlugins))],
     {ok, RE} = re:compile(Pattern),
     Plugins = [ Plugin ||
-                  Plugin = #plugin{name = Name} <- AvailablePlugins ++ Missing,
+                  Plugin = #plugin{name = Name} <- AvailablePlugins,
                   re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match,
                   if OnlyEnabled    -> lists:member(Name, EnabledExplicitly);
                      OnlyEnabledAll -> lists:member(Name, EnabledExplicitly) or
@@ -244,25 +240,23 @@ format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
     case Format of
         minimal -> ok;
         _       -> io:format(" Configured: E = explicitly enabled; "
-                             "e = implicitly enabled; ! = missing~n"
+                             "e = implicitly enabled~n"
                              " | Status:   ~s~n"
                              " |/~n", [rabbit_misc:format(StatusMsg, [Node])])
     end,
     [format_plugin(P, EnabledExplicitly, EnabledImplicitly, Running,
-                   plugin_names(Missing), Format, MaxWidth) || P <- Plugins1],
+                   Format, MaxWidth) || P <- Plugins1],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version,
                       description = Description, dependencies = Deps},
-              EnabledExplicitly, EnabledImplicitly, Running,
-              Missing, Format, MaxWidth) ->
+              EnabledExplicitly, EnabledImplicitly, Running, Format,
+              MaxWidth) ->
     EnabledGlyph = case {lists:member(Name, EnabledExplicitly),
-                         lists:member(Name, EnabledImplicitly),
-                         lists:member(Name, Missing)} of
-                       {true, false, false} -> "E";
-                       {false, true, false} -> "e";
-                       {_,        _,  true} -> "!";
-                       _                    -> " "
+                         lists:member(Name, EnabledImplicitly)} of
+                       {true, false} -> "E";
+                       {false, true} -> "e";
+                       _             -> " "
                    end,
     RunningGlyph = case lists:member(Name, Running) of
                        true  -> "*";
@@ -292,8 +286,8 @@ fmt_list(Header, Plugins) ->
     lists:flatten(
       [Header, $\n, [io_lib:format("  ~s~n", [P]) || P <- Plugins]]).
 
-fmt_missing(Desc, Missing) ->
-    fmt_list("The following " ++ Desc ++ " could not be found:", Missing).
+fmt_missing(Missing) ->
+    fmt_list("The following plugins could not be found:", Missing).
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).

@@ -130,19 +130,25 @@ dependencies(Reverse, Sources, AllPlugins) ->
     true = digraph:delete(G),
     Dests.
 
-%% Make sure we don't list OTP apps in here, and also that we create
-%% fake plugins for missing dependencies.
+%% Make sure we don't list OTP apps in here, and also that we detect
+%% missing dependencies.
 ensure_dependencies(Plugins) ->
     Names = plugin_names(Plugins),
     NotThere = [Dep || #plugin{dependencies = Deps} <- Plugins,
                        Dep                          <- Deps,
                        not lists:member(Dep, Names)],
-    {OTP, Missing} = lists:partition(fun is_loadable/1, NotThere),
-    Plugins1 = [P#plugin{dependencies = Deps -- OTP}
-                || P = #plugin{dependencies = Deps} <- Plugins],
-    Fake = [#plugin{name         = Name,
-                    dependencies = []}|| Name <- Missing],
-    Plugins1 ++ Fake.
+    {OTP, Missing} = lists:partition(fun is_loadable/1, lists:usort(NotThere)),
+    case Missing of
+        [] -> ok;
+        _  -> Blame = [Name || #plugin{name         = Name,
+                                       dependencies = Deps} <- Plugins,
+                               lists:any(fun (Dep) ->
+                                                 lists:member(Dep, Missing)
+                                         end, Deps)],
+              throw({error, {missing_dependencies, Missing, Blame}})
+    end,
+    [P#plugin{dependencies = Deps -- OTP}
+     || P = #plugin{dependencies = Deps} <- Plugins].
 
 is_loadable(App) ->
     case application:load(App) of
@@ -161,13 +167,6 @@ prepare_plugins(Enabled) ->
     AllPlugins = list(PluginsDistDir),
     ToUnpack = dependencies(false, Enabled, AllPlugins),
     ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
-
-    case Enabled -- plugin_names(ToUnpackPlugins) of
-        []      -> ok;
-        Missing -> error_logger:warning_msg(
-                     "The following enabled plugins were not found: ~p~n",
-                     [Missing])
-    end,
 
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
