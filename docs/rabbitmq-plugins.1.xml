@@ -224,7 +224,7 @@
             Enables the specified plugins and all their
             dependencies. Unlike <command>rabbitmq-plugins
             enable</command> this command ignores and overwrites any
-            existing plugin configuration. <command>rabbitmq-plugins
+            existing enabled plugins. <command>rabbitmq-plugins
             set</command> with no plugin arguments is a legal command
             meaning "disable all plugins".
           </para>
