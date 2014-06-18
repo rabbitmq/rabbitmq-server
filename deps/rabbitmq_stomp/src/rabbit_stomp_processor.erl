@@ -133,8 +133,10 @@ handle_cast({Command, Frame, FlowPid},
       fun(StateM) -> ensure_receipt(Frame1, StateM) end,
       State);
 
-handle_cast(client_timeout, State) ->
-    {stop, client_timeout, State}.
+handle_cast(client_timeout,
+            State = #state{adapter_info = #amqp_adapter_info{name = S}}) ->
+    rabbit_log:warning("Detected missed client heartbeat(s) on connection ~s, closing it~n", [S]),
+    {stop, {shutdown, client_heartbeat_timeout}, close_connection(State)}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State, hibernate};
