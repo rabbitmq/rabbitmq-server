@@ -437,6 +437,7 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
                                      channel    = Channel,
                                      writer_pid = WriterPid,
                                      reader_pid = ReaderPid,
+                                     conn_pid   = ConnPid,
                                      conn_name  = ConnName,
                                      virtual_host = VHost,
                                      user       = #user{
@@ -447,8 +448,8 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log:error("connection ~s, channel ~p - soft error (vhost '~s', user '~s'):~n~p~n",
-                             [ConnName, Channel,
+            rabbit_log:error("Channel error on connection ~s (~p), channel ~p (vhost '~s', user '~s'):~n~p~n",
+                             [ConnName, ConnPid, Channel,
                               binary_to_list(VHost),
                               binary_to_list(Username),
                               Reason]),
