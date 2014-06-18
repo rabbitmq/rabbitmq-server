@@ -29,16 +29,19 @@
 
 -include("rabbit.hrl").
 
--rabbit_boot_step({?MODULE,
-                   [{description, "HA policy validation"},
-                    {mfa, {rabbit_registry, register,
-                           [policy_validator, <<"ha-mode">>, ?MODULE]}},
-                    {mfa, {rabbit_registry, register,
-                           [policy_validator, <<"ha-params">>, ?MODULE]}},
-                    {mfa, {rabbit_registry, register,
-                           [policy_validator, <<"ha-sync-mode">>, ?MODULE]}},
-                    {requires, rabbit_registry},
-                    {enables, recovery}]}).
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "HA policy validation"},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-mode">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-params">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-sync-mode">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-promote-on-shutdown">>, ?MODULE]}},
+     {requires, rabbit_registry},
+     {enables, recovery}]}).
 
 %%----------------------------------------------------------------------------
 
@@ -374,16 +377,21 @@ validate_policy(KeyList) ->
     Mode = proplists:get_value(<<"ha-mode">>, KeyList, none),
     Params = proplists:get_value(<<"ha-params">>, KeyList, none),
     SyncMode = proplists:get_value(<<"ha-sync-mode">>, KeyList, none),
-    case {Mode, Params, SyncMode} of
-        {none, none, none} ->
+    PromoteOnShutdown = proplists:get_value(
+                          <<"ha-promote-on-shutdown">>, KeyList, none),
+    case {Mode, Params, SyncMode, PromoteOnShutdown} of
+        {none, none, none, none} ->
             ok;
-        {none, _, _} ->
-            {error, "ha-mode must be specified to specify ha-params or "
-             "ha-sync-mode", []};
+        {none, _, _, _} ->
+            {error, "ha-mode must be specified to specify ha-params, "
+             "ha-sync-mode or ha-promote-on-shutdown", []};
         _ ->
             case module(Mode) of
                 {ok, M} -> case M:validate_policy(Params) of
-                               ok -> validate_sync_mode(SyncMode);
+                               ok -> case validate_sync_mode(SyncMode) of
+                                         ok -> validate_pos(PromoteOnShutdown);
+                                         E  -> E
+                                     end;
                                E  -> E
                            end;
                 _       -> {error, "~p is not a valid ha-mode value", [Mode]}
@@ -397,4 +405,13 @@ validate_sync_mode(SyncMode) ->
         none            -> ok;
         Mode            -> {error, "ha-sync-mode must be \"manual\" "
                             "or \"automatic\", got ~p", [Mode]}
+    end.
+
+validate_pos(PromoteOnShutdown) ->
+    case PromoteOnShutdown of
+        <<"always">>      -> ok;
+        <<"when-synced">> -> ok;
+        none              -> ok;
+        Mode              -> {error, "ha-promote-on-shutdown must be "
+                              "\"always\" or \"when-synced\", got ~p", [Mode]}
     end.
