@@ -41,6 +41,7 @@ init() ->
         [] ->
             ok;
         Conf ->
+            rabbit_networking:ensure_ssl(),
             TLSPort = proplists:get_value(port, Conf),
             cowboy:start_listener(https, 100,
                                   cowboy_ssl_transport, Conf,
