@@ -347,7 +347,7 @@ sync(Node, ForceOnline, PluginsFile) ->
     rpc_call(Node, ForceOnline, rabbit_plugins, ensure, [PluginsFile]).
 
 rpc_call(Node, Online, Mod, Fun, Args) ->
-    io:format("Applying plugin configuration to ~s...", [Node]),
+    io:format("~nApplying plugin configuration to ~s...", [Node]),
     case rpc:call(Node, Mod, Fun, Args) of
         {ok, [], []} ->
             io:format(" nothing to do.~n", []);
@@ -364,10 +364,10 @@ rpc_call(Node, Online, Mod, Fun, Args) ->
                 true  -> Error;
                 false -> io:format(
                            " * Could not contact node ~s.~n"
-                           " * Changes will take effect at broker restart.~n"
-                           " * Specify --online for diagnostics and to treat "
-                           "this as a failure.~n"
-                           " * Specify --offline to disable changes to running "
+                           "   Changes will take effect at broker restart.~n"
+                           " * Options: --online  - fail if broker cannot be "
+                           "contacted.~n"
+                           "            --offline - do not try to contact "
                            "broker.~n",
                            [Node])
             end;
