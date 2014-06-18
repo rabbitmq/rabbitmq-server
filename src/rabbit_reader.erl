@@ -581,16 +581,26 @@ maybe_close(State) ->
 termination_kind(normal) -> controlled;
 termination_kind(_)      -> uncontrolled.
 
+log_hard_error(State = #v1{connection_state = CS,
+                           connection = #connection{name     = ConnName,
+                                                    user     = #user{
+                                                                username = Username
+                                                               },
+                                                    vhost    = VHost}},
+               Channel, Reason) ->
+    log(error,
+        "Connection error on connection ~s (~p, ~p), channel ~p (vhost '~s', user '~s'):~n~p~n",
+        [ConnName, self(), CS, Channel,
+         binary_to_list(VHost), binary_to_list(Username), Reason]).
+
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
-    log(error, "AMQP connection ~p (~p), channel ~p - error:~n~p~n",
-        [self(), closed, Channel, Reason]),
+    log_hard_error(State, Channel, Reason),
     State;
 handle_exception(State = #v1{connection = #connection{protocol = Protocol},
                              connection_state = CS},
                  Channel, Reason)
   when ?IS_RUNNING(State) orelse CS =:= closing ->
-    log(error, "AMQP connection ~p (~p), channel ~p - error:~n~p~n",
-        [self(), CS, Channel, Reason]),
+    log_hard_error(State, Channel, Reason),
     {0, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     State1 = close_connection(terminate_channels(State)),
