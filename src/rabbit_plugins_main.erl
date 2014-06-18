@@ -44,6 +44,7 @@
         [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
          {enable, [?OFFLINE_DEF, ?ONLINE_DEF]},
          {disable, [?OFFLINE_DEF, ?ONLINE_DEF]},
+         {set, [?OFFLINE_DEF, ?ONLINE_DEF]},
          {sync, []}]).
 
 %%----------------------------------------------------------------------------
@@ -153,6 +154,27 @@ action(enable, Node, ToEnable0, Opts, PluginsFile, PluginsDir) ->
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> print_list("The following plugins have been enabled:",
                          NewImplicitlyEnabled -- ImplicitlyEnabled)
+    end,
+    action_change(
+      Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled, PluginsFile);
+
+action(set, Node, ToSet0, Opts, PluginsFile, PluginsDir) ->
+    ToSet = [list_to_atom(Name) || Name <- ToSet0],
+    AllPlugins = rabbit_plugins:list(PluginsDir),
+    Enabled = rabbit_plugins:read_enabled(PluginsFile),
+    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
+    Missing = ToSet -- plugin_names(AllPlugins),
+    case Missing of
+        [] -> ok;
+        _  -> throw({error_string, fmt_missing(Missing)})
+    end,
+    NewImplicitlyEnabled = rabbit_plugins:dependencies(false,
+                                                       ToSet, AllPlugins),
+    write_enabled_plugins(PluginsFile, ToSet),
+    case NewImplicitlyEnabled of
+        [] -> io:format("All plugins are now disabled.~n");
+        _  -> print_list("The following plugins are now enabled:",
+                         NewImplicitlyEnabled)
     end,
     action_change(
       Opts, Node, ImplicitlyEnabled, NewImplicitlyEnabled, PluginsFile);
