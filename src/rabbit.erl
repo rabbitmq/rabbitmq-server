@@ -493,6 +493,7 @@ start(normal, []) ->
             log_banner(),
             warn_if_kernel_poll_is_disabled(),
             warn_if_only_one_scheduler(),
+            warn_if_few_async_threads(),
             run_boot_steps(),
             {ok, SupPid};
         Error ->
@@ -827,16 +828,25 @@ warn_if_kernel_poll_is_disabled() ->
         true ->
             ok;
         false ->
-            error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) is disabled. Throughput and CPU utilization may worsen.~n", []),
+            error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) is disabled. Throughput and CPU utilization may worsen.~n"),
             ok
     end.
 
 warn_if_only_one_scheduler() ->
     case erlang:system_info(schedulers) of
         1 ->
-            error_logger:warning_msg("Erlang VM is running with only one scheduler. It will not be able to use multiple CPU cores.~n", []),
+            error_logger:warning_msg("Erlang VM is running with only one scheduler. It will not be able to use multiple CPU cores.~n"),
             ok;
         _ ->
+            ok
+    end.
+
+warn_if_few_async_threads() ->
+    AsyncThreads = erlang:system_info(thread_pool_size),
+    if AsyncThreads < 8 ->
+            error_logger:warning_msg("Erlang VM is running with ~s I/O threads, file I/O performance may worsen ~n", [integer_to_list(AsyncThreads)]),
+            ok;
+       true ->
             ok
     end.
 
