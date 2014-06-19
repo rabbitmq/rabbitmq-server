@@ -440,16 +440,16 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
                                      conn_pid   = ConnPid,
                                      conn_name  = ConnName,
                                      virtual_host = VHost,
-                                     user       = #user{
-                                                     username = Username
-                                                  }
+                                     user         = User
                                     }) ->
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log:error("Channel error on connection ~s (vhost '~s', user '~s', pid: ~p), channel ~p:~n~p~n",
-                             [ConnName, binary_to_list(VHost), binary_to_list(Username),
+            rabbit_log:error("Channel error on connection ~s (vhost '~s',"
+                             " user '~s', pid: ~p), channel ~p:~n~p~n",
+                             [ConnName, binary_to_list(VHost),
+                              binary_to_list(User#user.username),
                               ConnPid, Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};

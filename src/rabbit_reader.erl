@@ -582,15 +582,15 @@ termination_kind(normal) -> controlled;
 termination_kind(_)      -> uncontrolled.
 
 log_hard_error(State = #v1{connection_state = CS,
-                           connection = #connection{name     = ConnName,
-                                                    user     = #user{
-                                                                username = Username
-                                                               },
-                                                    vhost    = VHost}},
+                           connection = #connection{name  = ConnName,
+                                                    user  = User,
+                                                    vhost = VHost}},
                Channel, Reason) ->
     log(error,
-        "Connection error on connection ~s (state: ~p, vhost: '~s', user: '~s', pid: ~p), channel ~p:~n~p~n",
-        [ConnName, CS, binary_to_list(VHost), binary_to_list(Username),
+        "Connection error on connection ~s (state: ~p, vhost: '~s',"
+        " user: '~s', pid: ~p), channel ~p:~n~p~n",
+        [ConnName, CS,
+         binary_to_list(VHost), binary_to_list(User#user.username),
          self(), Channel, Reason]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
