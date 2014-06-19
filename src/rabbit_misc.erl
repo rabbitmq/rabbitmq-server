@@ -45,7 +45,7 @@
 -export([with_local_io/1, local_info_msg/2]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
--export([pid_to_string/1, string_to_pid/1]).
+-export([pid_to_string/1, string_to_pid/1, node_to_fake_pid/1]).
 -export([version_compare/2, version_compare/3]).
 -export([version_minor_equivalent/2]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
@@ -193,6 +193,7 @@
         (rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
+-spec(node_to_fake_pid/1 :: (atom()) -> pid()).
 -spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
 -spec(version_compare/3 ::
         (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
@@ -708,6 +709,10 @@ string_to_pid(Str) ->
         nomatch ->
             throw(Err)
     end.
+
+%% node(node_to_fake_pid(Node)) =:= Node.
+node_to_fake_pid(Node) ->
+    string_to_pid(format("<~s.0.0.0>", [Node])).
 
 version_compare(A, B, lte) ->
     case version_compare(A, B) of
