@@ -27,9 +27,9 @@
    %%
    %% {ssl_listeners, [5671]},
 
-   %% Complete connection handshake timeout, in milliseconds.
+   %% Complete AMQP 0-9-1 connection handshake timeout, in milliseconds.
    %%
-   %% {ssl_handshake_timeout, 10000},
+   %% {handshake_timeout, 10000},
 
    %% Log levels (currently just used for connection logging).
    %% One of 'info', 'warning', 'error' or 'none', in decreasing order
