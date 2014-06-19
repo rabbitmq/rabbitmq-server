@@ -52,6 +52,7 @@
           arguments,                   %% immutable
           pid,                         %% durable (just so we know home node)
           slave_pids, sync_slave_pids, %% transient
+          down_slave_nodes,            %% durable
           policy,                      %% durable, implicit update as above
           gm_pids,                     %% transient
           decorators}).                %% transient, recalculated as above

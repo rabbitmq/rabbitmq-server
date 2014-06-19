@@ -29,7 +29,7 @@
 -export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, activate_limit_all/2, credit/5]).
--export([on_node_down/1]).
+-export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
          cancel_sync_mirrors/1]).
@@ -174,6 +174,7 @@
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(on_node_up/1 :: (node()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 -spec(immutable/1 :: (rabbit_types:amqqueue()) -> rabbit_types:amqqueue()).
@@ -689,6 +690,20 @@ stop_mirroring(QPid)  -> ok = delegate:cast(QPid, stop_mirroring).
 sync_mirrors(QPid)        -> delegate:call(QPid, sync_mirrors).
 cancel_sync_mirrors(QPid) -> delegate:call(QPid, cancel_sync_mirrors).
 
+on_node_up(Node) ->
+    ok = rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   Qs = mnesia:match_object(rabbit_queue,
+                                            #amqqueue{_ = '_'}, write),
+                   [case lists:member(Node, DSNs) of
+                        true  -> DSNs1 = DSNs -- [Node],
+                                 store_queue(
+                                   Q#amqqueue{down_slave_nodes = DSNs1});
+                        false -> ok
+                    end || #amqqueue{down_slave_nodes = DSNs} = Q <- Qs],
+                   ok
+           end).
+
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> QsDels =
@@ -724,12 +739,13 @@ pseudo_queue(QueueName, Pid) ->
               pid          = Pid,
               slave_pids   = []}.
 
-immutable(Q) -> Q#amqqueue{pid             = none,
-                           slave_pids      = none,
-                           sync_slave_pids = none,
-                           gm_pids         = none,
-                           policy          = none,
-                           decorators      = none}.
+immutable(Q) -> Q#amqqueue{pid              = none,
+                           slave_pids       = none,
+                           sync_slave_pids  = none,
+                           down_slave_nodes = none,
+                           gm_pids          = none,
+                           policy           = none,
+                           decorators       = none}.
 
 deliver([], _Delivery, _Flow) ->
     %% /dev/null optimisation
