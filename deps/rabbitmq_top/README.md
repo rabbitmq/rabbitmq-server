@@ -14,7 +14,7 @@ measure of CPU use).
 Click on the process description (e.g. "my queue") to see that
 object's management view.
 
-Click on the process ID (e.g. "<0.3423.0>") to see some more
+Click on the process ID (e.g. "&lt;0.3423.0&gt;") to see some more
 Erlang-ish process details, including the current stacktrace.
 
 # Downloading
