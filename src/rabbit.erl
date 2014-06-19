@@ -803,7 +803,8 @@ log_banner() ->
                 {"sasl log",       log_location(sasl)},
                 {"database dir",   rabbit_mnesia:dir()},
                 {"kernel polling", erlang:system_info(kernel_poll)},
-                {"schedulers",     integer_to_list(erlang:system_info(schedulers))}],
+                {"schedulers",     integer_to_list(erlang:system_info(schedulers))},
+                {"I/O thread pool size", integer_to_list(erlang:system_info(thread_pool_size))}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = fun (K, V) ->
                      rabbit_misc:format(
