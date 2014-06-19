@@ -799,7 +799,9 @@ log_banner() ->
                 {"cookie hash",    rabbit_nodes:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
-                {"database dir",   rabbit_mnesia:dir()}],
+                {"database dir",   rabbit_mnesia:dir()},
+                {"kernel polling", erlang:system_info(kernel_poll)},
+                {"schedulers",     integer_to_list(erlang:system_info(schedulers))}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = fun (K, V) ->
                      rabbit_misc:format(
