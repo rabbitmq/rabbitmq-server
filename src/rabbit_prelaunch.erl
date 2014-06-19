@@ -92,7 +92,7 @@ dist_port_set_check() ->
                     end;
                 {ok, _} ->
                     ok;
-                {error, X} ->
+                {error, _} ->
                     ok
             end
     end.
