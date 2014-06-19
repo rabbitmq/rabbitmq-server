@@ -491,6 +491,8 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
+            warn_if_kernel_poll_is_disabled(),
+            warn_if_only_one_scheduler(),
             run_boot_steps(),
             {ok, SupPid};
         Error ->
@@ -817,6 +819,24 @@ log_banner() ->
                         Format(K, V)
                 end || S <- Settings]),
     error_logger:info_msg("~s", [Banner]).
+
+warn_if_kernel_poll_is_disabled() ->
+    case erlang:system_info(kernel_poll) of
+        true ->
+            ok;
+        false ->
+            error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) is disabled. Throughput and CPU utilization may worsen.~n", []),
+            ok
+    end.
+
+warn_if_only_one_scheduler() ->
+    case erlang:system_info(schedulers) of
+        1 ->
+            error_logger:warning_msg("Erlang VM is running with only one scheduler. It will not be able to use multiple CPU cores.~n", []),
+            ok;
+        _ ->
+            ok
+    end.
 
 home_dir() ->
     case init:get_argument(home) of
