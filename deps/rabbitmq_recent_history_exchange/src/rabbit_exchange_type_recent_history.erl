@@ -72,14 +72,35 @@ delete(transaction, #exchange{ name = XName }, _Bs) ->
 delete(none, _Exchange, _Bs) ->
     ok.
 
-add_binding(transaction, #exchange{ name = XName }, #binding{ destination = QName }) ->
+add_binding(transaction, #exchange{ name = XName },
+            #binding{ destination = #resource{kind = queue} = QName }) ->
     case rabbit_amqqueue:lookup(QName) of
         {error, not_found} ->
-            queue_not_found_error(QName);
+            destination_not_found_error(QName);
         {ok, Q} ->
             Cached = get_msgs_from_cache(XName),
             Msgs = msgs_from_content(XName, Cached),
-            deliver_messages(Q, Msgs)
+            deliver_messages([Q], Msgs)
+    end,
+    ok;
+add_binding(transaction, #exchange{ name = XName },
+            #binding{ destination = #resource{kind = exchange} = DestName }) ->
+    case rabbit_exchange:lookup(DestName) of
+        {error, not_found} ->
+            destination_not_found_error(DestName);
+        {ok, X} ->
+            Cached = get_msgs_from_cache(XName),
+            Msgs = msgs_from_content(XName, Cached),
+            [begin
+                 Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
+                 Qs = rabbit_exchange:route(X, Delivery),
+                 case rabbit_amqqueue:lookup(Qs) of
+                     [] ->
+                         destination_not_found_error(Qs);
+                     QPids ->
+                         deliver_messages(QPids, [Msg])
+                 end
+             end || Msg <- Msgs]
     end,
     ok;
 add_binding(none, _Exchange, _Binding) ->
@@ -161,19 +182,18 @@ msgs_from_content(XName, Cached) ->
               rabbit_basic:message(XName, <<"">>, Props, Payload)
       end, Cached).
 
-deliver_messages(Queue, Msgs) ->
-    error_logger:info_msg("Queue: ~p length: ~p~n", [Queue, length(Msgs)]),
+deliver_messages(Qs, Msgs) ->
     lists:map(
       fun (Msg) ->
               Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
-              rabbit_amqqueue:deliver([Queue], Delivery)
+              rabbit_amqqueue:deliver(Qs, Delivery)
       end, lists:reverse(Msgs)).
 
-queue_not_found_error(QName) ->
+destination_not_found_error(DestName) ->
     rabbit_misc:protocol_error(
       internal_error,
-      "could not find queue '~s'",
-      [QName]).
+      "could not find queue/exchange '~s'",
+      [DestName]).
 
 %% adapted from rabbit_amqqueue.erl
 check_int_arg(Type) ->

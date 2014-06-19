@@ -42,6 +42,68 @@ no_store_test() ->
                   #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
           end, [], Qs, 100, 0).
 
+e2e_test() ->
+    MsgCount = 10,
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Chan,
+                          #'exchange.declare' {
+                            exchange = <<"e1">>,
+                            type = <<"x-recent-history">>,
+                            auto_delete = true
+                           }),
+
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Chan,
+                          #'exchange.declare' {
+                            exchange = <<"e2">>,
+                            type = <<"direct">>,
+                            auto_delete = true
+                           }),
+
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Chan, #'queue.declare' {
+                                   queue     = <<"q">>
+                                  }),
+
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind' {
+                                   queue = Q,
+                                   exchange = <<"e2">>,
+                                   routing_key = <<"">>
+                                  }),
+
+    #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
+    [amqp_channel:call(Chan,
+                       #'basic.publish'{exchange = <<"e1">>},
+                       #amqp_msg{props = #'P_basic'{}, payload = <<>>}) ||
+        _ <- lists:duplicate(MsgCount, const)],
+    amqp_channel:call(Chan, #'tx.commit'{}),
+
+    amqp_channel:call(Chan,
+                      #'exchange.bind' {
+                         source      = <<"e1">>,
+                         destination = <<"e2">>,
+                         routing_key = <<"">>
+                        }),
+
+    #'queue.declare_ok'{message_count = Count, queue = Q} =
+        amqp_channel:call(Chan, #'queue.declare' {
+                                   passive   = true,
+                                   queue     = Q
+                                  }),
+
+    ?assertEqual(MsgCount, Count),
+
+    amqp_channel:call(Chan, #'exchange.delete' { exchange = <<"e1">> }),
+    amqp_channel:call(Chan, #'exchange.delete' { exchange = <<"e2">> }),
+    amqp_channel:call(Chan, #'queue.delete' { queue = Q }),
+    amqp_channel:close(Chan),
+    amqp_connection:close(Conn),
+    ok.
+
 test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
