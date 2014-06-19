@@ -27,7 +27,8 @@
    %%
    %% {ssl_listeners, [5671]},
 
-   %% Complete AMQP 0-9-1 connection handshake timeout, in milliseconds.
+   %% Complete AMQP 0-9-1 connection handshake timeout (including TLS/SSL connections),
+   %% in milliseconds.
    %%
    %% {handshake_timeout, 10000},
 
