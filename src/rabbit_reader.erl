@@ -189,10 +189,10 @@ server_capabilities(_) ->
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 socket_error(Reason) when is_atom(Reason) ->
-    log(error, "error on AMQP connection ~p: ~s~n",
+    log(error, "Error on AMQP connection ~p: ~s~n",
         [self(), rabbit_misc:format_inet_error(Reason)]);
 socket_error(Reason) ->
-    log(error, "error on AMQP connection ~p:~n~p~n", [self(), Reason]).
+    log(error, "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -548,7 +548,12 @@ wait_for_channel_termination(0, TimerRef, State) ->
                  end;
         _     -> State
     end;
-wait_for_channel_termination(N, TimerRef, State) ->
+wait_for_channel_termination(N, TimerRef,
+                             State = #v1{connection_state = CS,
+                                         connection = #connection{
+                                                         name  = ConnName,
+                                                         user  = User,
+                                                         vhost = VHost}}) ->
     receive
         {'DOWN', _MRef, process, ChPid, Reason} ->
             {Channel, State1} = channel_cleanup(ChPid, State),
@@ -558,9 +563,13 @@ wait_for_channel_termination(N, TimerRef, State) ->
                 {_,   controlled} -> wait_for_channel_termination(
                                        N-1, TimerRef, State1);
                 {_, uncontrolled} -> log(error,
-                                         "AMQP connection ~p, channel ~p - "
+                                         "Error on AMQP connection ~p (~s, vhost: '~s',"
+                                         " user: '~s', state: ~p), channel ~p:"
                                          "error while terminating:~n~p~n",
-                                         [self(), Channel, Reason]),
+                                         [self(), ConnName,
+                                          binary_to_list(VHost),
+                                          binary_to_list(User#user.username),
+                                          CS, Channel, Reason]),
                                      wait_for_channel_termination(
                                        N-1, TimerRef, State1)
             end;
@@ -582,16 +591,17 @@ termination_kind(normal) -> controlled;
 termination_kind(_)      -> uncontrolled.
 
 log_hard_error(State = #v1{connection_state = CS,
-                           connection = #connection{name  = ConnName,
-                                                    user  = User,
-                                                    vhost = VHost}},
+                           connection = #connection{
+                                           name  = ConnName,
+                                           user  = User,
+                                           vhost = VHost}},
                Channel, Reason) ->
     log(error,
-        "Connection error on connection ~s (state: ~p, vhost: '~s',"
-        " user: '~s', pid: ~p), channel ~p:~n~p~n",
-        [ConnName, CS,
+        "Error on AMQP connection ~p (~s, vhost: '~s',"
+        " user: '~s', state: ~p), channel ~p:~n~p~n",
+        [self(), ConnName,
          binary_to_list(VHost), binary_to_list(User#user.username),
-         self(), Channel, Reason]).
+         CS, Channel, Reason]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
     log_hard_error(State, Channel, Reason),

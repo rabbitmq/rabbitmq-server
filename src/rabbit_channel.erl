@@ -446,11 +446,11 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log:error("Channel error on connection ~s (vhost '~s',"
-                             " user '~s', pid: ~p), channel ~p:~n~p~n",
-                             [ConnName, binary_to_list(VHost),
+            rabbit_log:error("Channel error on connection ~p (~s, vhost: '~s',"
+                             " user: '~s'), channel ~p:~n~p~n",
+                             [ConnPid, ConnName, binary_to_list(VHost),
                               binary_to_list(User#user.username),
-                              ConnPid, Channel, Reason]),
+                              Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
         {0, _} ->
