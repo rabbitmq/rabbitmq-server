@@ -90,9 +90,9 @@ dist_port_set_check() ->
                         {none, none} -> ok;
                         _            -> rabbit_misc:quit(?DIST_PORT_CONFIGURED)
                     end;
-                {error, _} ->
-                    %% TODO can we present errors more nicely here
-                    %% than after -config has failed?
+                {ok, _} ->
+                    ok;
+                {error, X} ->
                     ok
             end
     end.
