@@ -589,9 +589,9 @@ log_hard_error(State = #v1{connection_state = CS,
                                                     vhost    = VHost}},
                Channel, Reason) ->
     log(error,
-        "Connection error on connection ~s (~p, ~p), channel ~p (vhost '~s', user '~s'):~n~p~n",
-        [ConnName, self(), CS, Channel,
-         binary_to_list(VHost), binary_to_list(Username), Reason]).
+        "Connection error on connection ~s (state: ~p, vhost: '~s', user: '~s', pid: ~p), channel ~p:~n~p~n",
+        [ConnName, CS, binary_to_list(VHost), binary_to_list(Username),
+         self(), Channel, Reason]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
     log_hard_error(State, Channel, Reason),
