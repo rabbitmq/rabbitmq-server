@@ -671,7 +671,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    channel         = ChannelNum,
                                    confirm_enabled = ConfirmEnabled,
                                    trace_state     = TraceState,
-                                   user = #user{username = Username},
+                                   user            = #user{username = Username},
                                    conn_name       = ConnName}) ->
     check_msg_size(Content),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),

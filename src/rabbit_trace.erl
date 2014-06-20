@@ -59,25 +59,26 @@ enabled(VHost) ->
     lists:member(VHost, VHosts).
 
 tap_in(_Msg, _ConnName, _ChannelNum, _Username, none) -> ok;
-tap_in(Msg = #basic_message{exchange_name = #resource{name = XName,
+tap_in(Msg = #basic_message{exchange_name = #resource{name         = XName,
                                                       virtual_host = VHost}},
        ConnName, ChannelNum, Username, TraceX) ->
     trace(TraceX, Msg, <<"publish">>, XName,
-          [{<<"vhost">>, longstr, VHost},
-           {<<"connection">>, longstr, ConnName},
-           {<<"channel">>, signedint, ChannelNum},
-           {<<"user">>, longstr, Username}]).
+          [{<<"vhost">>,      longstr,   VHost},
+           {<<"connection">>, longstr,   ConnName},
+           {<<"channel">>,    signedint, ChannelNum},
+           {<<"user">>,       longstr,   Username}]).
 
 tap_out(_Msg, _ConnName, _ChannelNum, _Username, none) -> ok;
-tap_out({#resource{name = QName, virtual_host = VHost}, _QPid, _QMsgId, Redelivered, Msg},
+tap_out({#resource{name = QName, virtual_host = VHost},
+         _QPid, _QMsgId, Redelivered, Msg},
         ConnName, ChannelNum, Username, TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
     trace(TraceX, Msg, <<"deliver">>, QName,
           [{<<"redelivered">>, signedint, RedeliveredNum},
-           {<<"vhost">>, longstr, VHost},
-           {<<"connection">>, longstr, ConnName},
-           {<<"channel">>, signedint, ChannelNum},
-           {<<"user">>, longstr, Username}]).
+           {<<"vhost">>,       longstr,   VHost},
+           {<<"connection">>,  longstr,   ConnName},
+           {<<"channel">>,     signedint, ChannelNum},
+           {<<"user">>,        longstr,   Username}]).
 
 %%----------------------------------------------------------------------------
 
