@@ -494,6 +494,7 @@ start(normal, []) ->
             log_banner(),
             warn_if_kernel_poll_is_disabled(),
             warn_if_few_async_threads(),
+            warn_if_nagles_algorithm_is_enabled(),
             run_boot_steps(),
             {ok, SupPid};
         Error ->
@@ -825,7 +826,7 @@ warn_if_kernel_poll_is_disabled() ->
             ok;
         false ->
             error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) "
-                                     "is disabled. Throughput and"
+                                     "is disabled. Throughput and "
                                      "CPU utilization may worsen.~n"),
             ok
     end.
@@ -839,6 +840,21 @@ warn_if_few_async_threads() ->
               [integer_to_list(AsyncThreads)]),
             ok;
        true ->
+            ok
+    end.
+
+warn_if_nagles_algorithm_is_enabled() ->
+    IDCOpts = application:get_env(kernel, inet_default_connect_options, []),
+    Msg = "Nagle's algorithm is enabled for sockets, "
+          "network I/O latency will be higher~n",
+    case proplists:lookup(nodelay, IDCOpts) of
+        none ->
+            error_logger:warning_msg(Msg),
+            ok;
+        {nodelay, false} ->
+            error_logger:warning_msg(Msg),
+            ok;
+        {nodelay, true} ->
             ok
     end.
 
