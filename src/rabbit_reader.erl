@@ -1130,7 +1130,7 @@ ic(channel_max,       #connection{channel_max = ChMax})    -> ChMax;
 ic(client_properties, #connection{client_properties = CP}) -> CP;
 ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
 ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
-ic(connected_at,      #connection{connected_at = Timestamp}) -> Timestamp;
+ic(connected_at,      #connection{connected_at = T}) -> timestamp_ms(T);
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
@@ -1172,6 +1172,11 @@ emit_stats(State) ->
         flow -> ensure_stats_timer(State1);
         _    -> State1
     end.
+
+timestamp_ms(unknown) ->
+    unknown;
+timestamp_ms(Timestamp) ->
+    timer:now_diff(Timestamp, {0,0,0}) div 1000.
 
 %% 1.0 stub
 -ifdef(use_specs).
