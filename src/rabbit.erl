@@ -824,14 +824,19 @@ warn_if_kernel_poll_is_disabled() ->
         true ->
             ok;
         false ->
-            error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) is disabled. Throughput and CPU utilization may worsen.~n"),
+            error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) "
+                                     "is disabled. Throughput and"
+                                    "CPU utilization may worsen.~n"),
             ok
     end.
 
 warn_if_few_async_threads() ->
     AsyncThreads = erlang:system_info(thread_pool_size),
     if AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD ->
-            error_logger:warning_msg("Erlang VM is running with ~s I/O threads, file I/O performance may worsen ~n", [integer_to_list(AsyncThreads)]),
+            error_logger:warning_msg(
+              "Erlang VM is running with ~s I/O threads, "
+              "file I/O performance may worsen ~n",
+              [integer_to_list(AsyncThreads)]),
             ok;
        true ->
             ok
