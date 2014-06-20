@@ -826,7 +826,7 @@ warn_if_kernel_poll_is_disabled() ->
         false ->
             error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) "
                                      "is disabled. Throughput and"
-                                    "CPU utilization may worsen.~n"),
+                                     "CPU utilization may worsen.~n"),
             ok
     end.
 
