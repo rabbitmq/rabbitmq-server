@@ -131,6 +131,7 @@ exec ${ERL_DIR}erl \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
+    ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
     -sasl errlog_type error \
     -sasl sasl_error_logger false \
