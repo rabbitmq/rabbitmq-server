@@ -43,7 +43,7 @@
 -record(connection, {name, host, peer_host, port, peer_port,
                      protocol, user, timeout_sec, frame_max, channel_max, vhost,
                      client_properties, capabilities,
-                     auth_mechanism, auth_state}).
+                     auth_mechanism, auth_state, connected_at}).
 
 -record(throttle, {alarmed_by, last_blocked_by, last_blocked_at}).
 
@@ -237,7 +237,8 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                   client_properties  = none,
                   capabilities       = [],
                   auth_mechanism     = none,
-                  auth_state         = none},
+                  auth_state         = none,
+                  connected_at       = os:timestamp()},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
                 pending_recv        = false,
@@ -1129,6 +1130,7 @@ ic(channel_max,       #connection{channel_max = ChMax})    -> ChMax;
 ic(client_properties, #connection{client_properties = CP}) -> CP;
 ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
 ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
+ic(connected_at,      #connection{connected_at = Timestamp}) -> Timestamp;
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
