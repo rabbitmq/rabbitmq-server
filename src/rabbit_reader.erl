@@ -48,7 +48,7 @@
 -record(throttle, {alarmed_by, last_blocked_by, last_blocked_at}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
-                          send_pend, state, channels]).
+                          send_pend, state, channels, connected_at]).
 
 -define(CREATION_EVENT_KEYS,
         [pid, name, port, peer_port, host,
