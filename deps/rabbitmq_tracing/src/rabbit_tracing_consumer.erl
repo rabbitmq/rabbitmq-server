@@ -23,7 +23,8 @@
 -import(rabbit_misc, [pget/2, pget/3, table_lookup/2]).
 
 -record(state, {conn, ch, vhost, queue, file, filename, format}).
--record(log_record, {timestamp, type, exchange, queue, node, routing_keys,
+-record(log_record, {timestamp, type, exchange, queue, node, connection,
+                     vhost, username, channel, routing_keys,
                      properties, payload}).
 
 -define(X, <<"amq.rabbitmq.trace">>).
@@ -125,15 +126,23 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                     <<"publish.", _Rest/binary>> -> {published, none};
                     <<"deliver.", Rest/binary>>  -> {received,  Rest}
                 end,
-    {longstr, Node} = table_lookup(H, <<"node">>),
-    {longstr, X}    = table_lookup(H, <<"exchange_name">>),
-    {array, Keys}   = table_lookup(H, <<"routing_keys">>),
-    {table, Props}  = table_lookup(H, <<"properties">>),
+    {longstr, Node}   = table_lookup(H, <<"node">>),
+    {longstr, X}      = table_lookup(H, <<"exchange_name">>),
+    {array, Keys}     = table_lookup(H, <<"routing_keys">>),
+    {table, Props}    = table_lookup(H, <<"properties">>),
+    {longstr, Conn}   = table_lookup(H, <<"connection">>),
+    {longstr, VHost}  = table_lookup(H, <<"vhost">>),
+    {longstr, User}   = table_lookup(H, <<"user">>),
+    {signedint, Chan} = table_lookup(H, <<"channel">>),
     #log_record{timestamp    = rabbit_mgmt_format:timestamp(os:timestamp()),
                 type         = Type,
                 exchange     = X,
                 queue        = Q,
                 node         = Node,
+                connection   = Conn,
+                vhost        = VHost,
+                username     = User,
+                channel      = Chan,
                 routing_keys = [K || {_, K} <- Keys],
                 properties   = Props,
                 payload      = Payload}.
@@ -146,6 +155,10 @@ log(text, P, Record) ->
         received  -> P("Message received~n~n", [])
     end,
     P("Node:         ~s~n", [Record#log_record.node]),
+    P("Connection:   ~s~n", [Record#log_record.connection]),
+    P("Virtual host: ~s~n", [Record#log_record.vhost]),
+    P("User:         ~s~n", [Record#log_record.username]),
+    P("Channel:      ~p~n", [Record#log_record.channel]),
     P("Exchange:     ~s~n", [Record#log_record.exchange]),
     case Record#log_record.queue of
         none -> ok;
