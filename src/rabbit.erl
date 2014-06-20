@@ -201,6 +201,7 @@
 %% practice 2 processes seems just as fast as any other number > 1,
 %% and keeps the progress bar realistic-ish.
 -define(HIPE_PROCESSES, 2).
+-define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
 %%----------------------------------------------------------------------------
 
@@ -492,7 +493,6 @@ start(normal, []) ->
             print_banner(),
             log_banner(),
             warn_if_kernel_poll_is_disabled(),
-            warn_if_only_one_scheduler(),
             warn_if_few_async_threads(),
             run_boot_steps(),
             {ok, SupPid};
@@ -832,18 +832,9 @@ warn_if_kernel_poll_is_disabled() ->
             ok
     end.
 
-warn_if_only_one_scheduler() ->
-    case erlang:system_info(schedulers) of
-        1 ->
-            error_logger:warning_msg("Erlang VM is running with only one scheduler. It will not be able to use multiple CPU cores.~n"),
-            ok;
-        _ ->
-            ok
-    end.
-
 warn_if_few_async_threads() ->
     AsyncThreads = erlang:system_info(thread_pool_size),
-    if AsyncThreads < 8 ->
+    if AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD ->
             error_logger:warning_msg("Erlang VM is running with ~s I/O threads, file I/O performance may worsen ~n", [integer_to_list(AsyncThreads)]),
             ok;
        true ->
