@@ -147,6 +147,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
+!RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger false ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
