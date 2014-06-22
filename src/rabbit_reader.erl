@@ -558,19 +558,20 @@ wait_for_channel_termination(N, TimerRef,
         {'DOWN', _MRef, process, ChPid, Reason} ->
             {Channel, State1} = channel_cleanup(ChPid, State),
             case {Channel, termination_kind(Reason)} of
-                {undefined,    _} -> exit({abnormal_dependent_exit,
-                                           ChPid, Reason});
-                {_,   controlled} -> wait_for_channel_termination(
-                                       N-1, TimerRef, State1);
-                {_, uncontrolled} -> log(error,
-                                         "Error on AMQP connection ~p (~s, vhost: '~s',"
-                                         " user: '~s', state: ~p), channel ~p:"
-                                         "error while terminating:~n~p~n",
-                                         [self(), ConnName,
-                                          VHost, User#user.username,
-                                          CS, Channel, Reason]),
-                                     wait_for_channel_termination(
-                                       N-1, TimerRef, State1)
+                {undefined,    _} ->
+                    exit({abnormal_dependent_exit,
+                          ChPid, Reason});
+                {_,   controlled} ->
+                    wait_for_channel_termination(
+                      N-1, TimerRef, State1);
+                {_, uncontrolled} ->
+                    log(error, "Error on AMQP connection ~p (~s, vhost: '~s',"
+                               " user: '~s', state: ~p), channel ~p:"
+                               "error while terminating:~n~p~n",
+                        [self(), ConnName, VHost, User#user.username,
+                         CS, Channel, Reason]),
+                    wait_for_channel_termination(
+                      N-1, TimerRef, State1)
             end;
         cancel_wait ->
             exit(channel_termination_timeout)
