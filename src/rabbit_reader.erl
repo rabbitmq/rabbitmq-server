@@ -590,11 +590,11 @@ maybe_close(State) ->
 termination_kind(normal) -> controlled;
 termination_kind(_)      -> uncontrolled.
 
-log_hard_error(State = #v1{connection_state = CS,
-                           connection = #connection{
-                                           name  = ConnName,
-                                           user  = User,
-                                           vhost = VHost}},
+log_hard_error(#v1{connection_state = CS,
+                   connection = #connection{
+                                   name  = ConnName,
+                                   user  = User,
+                                   vhost = VHost}},
                Channel, Reason) ->
     log(error,
         "Error on AMQP connection ~p (~s, vhost: '~s',"
