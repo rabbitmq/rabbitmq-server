@@ -845,12 +845,10 @@ warn_if_nagles_algorithm_is_enabled() ->
     IDCOpts = application:get_env(kernel, inet_default_connect_options, []),
     Msg = "Nagle's algorithm is enabled for sockets, "
           "network I/O latency will be higher~n",
-    case proplists:lookup(nodelay, IDCOpts) of
-        none ->
+    case proplists:get_value(nodelay, IDCOpts, false) of
+        false ->
             error_logger:warning_msg(Msg);
-        {nodelay, false} ->
-            error_logger:warning_msg(Msg);
-        {nodelay, true} ->
+        true ->
             ok
     end.
 
