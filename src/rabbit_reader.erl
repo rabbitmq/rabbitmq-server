@@ -567,8 +567,7 @@ wait_for_channel_termination(N, TimerRef,
                                          " user: '~s', state: ~p), channel ~p:"
                                          "error while terminating:~n~p~n",
                                          [self(), ConnName,
-                                          binary_to_list(VHost),
-                                          binary_to_list(User#user.username),
+                                          VHost, User#user.username,
                                           CS, Channel, Reason]),
                                      wait_for_channel_termination(
                                        N-1, TimerRef, State1)
@@ -600,7 +599,7 @@ log_hard_error(State = #v1{connection_state = CS,
         "Error on AMQP connection ~p (~s, vhost: '~s',"
         " user: '~s', state: ~p), channel ~p:~n~p~n",
         [self(), ConnName,
-         binary_to_list(VHost), binary_to_list(User#user.username),
+         VHost, User#user.username,
          CS, Channel, Reason]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
