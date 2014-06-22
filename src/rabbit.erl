@@ -827,8 +827,7 @@ warn_if_kernel_poll_is_disabled() ->
         false ->
             error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) "
                                      "is disabled. Throughput and "
-                                     "CPU utilization may worsen.~n"),
-            ok
+                                     "CPU utilization may worsen.~n")
     end.
 
 warn_if_few_async_threads() ->
@@ -837,8 +836,7 @@ warn_if_few_async_threads() ->
             error_logger:warning_msg(
               "Erlang VM is running with ~s I/O threads, "
               "file I/O performance may worsen ~n",
-              [integer_to_list(AsyncThreads)]),
-            ok;
+              [integer_to_list(AsyncThreads)]);
        true ->
             ok
     end.
@@ -849,11 +847,9 @@ warn_if_nagles_algorithm_is_enabled() ->
           "network I/O latency will be higher~n",
     case proplists:lookup(nodelay, IDCOpts) of
         none ->
-            error_logger:warning_msg(Msg),
-            ok;
+            error_logger:warning_msg(Msg);
         {nodelay, false} ->
-            error_logger:warning_msg(Msg),
-            ok;
+            error_logger:warning_msg(Msg);
         {nodelay, true} ->
             ok
     end.
