@@ -828,9 +828,8 @@ warn_if_kernel_config_dubious() ->
     AsyncThreads = erlang:system_info(thread_pool_size),
     case AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD of
         true  -> error_logger:warning_msg(
-                   "Erlang VM is running with ~s I/O threads, "
-                   "file I/O performance may worsen ~n",
-                   [integer_to_list(AsyncThreads)]);
+                   "Erlang VM is running with ~b I/O threads, "
+                   "file I/O performance may worsen~n", [AsyncThreads]);
         false -> ok
     end,
     IDCOpts = application:get_env(kernel, inet_default_connect_options, []),
