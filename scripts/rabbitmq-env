@@ -15,6 +15,9 @@
 ##  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 ##
 
+## readlink exits with an error if the given argument is
+## not a symlink
+set +e
 # Determine where this script is really located (if this script is
 # invoked from another script, this is the location of the caller)
 SCRIPT_PATH="$0"
@@ -31,6 +34,7 @@ while [ -h "$SCRIPT_PATH" ] ; do
       SCRIPT_PATH=$FULL_PATH
     fi
 done
+set -e
 
 SCRIPT_DIR=`dirname $SCRIPT_PATH`
 RABBITMQ_HOME="${SCRIPT_DIR}/.."
