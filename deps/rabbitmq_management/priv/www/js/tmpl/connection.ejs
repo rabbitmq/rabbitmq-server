@@ -8,6 +8,10 @@
 <div class="updatable">
 <h3>Details</h3>
 <table class="facts">
+<tr>
+  <th>Connected at</th>
+  <td><%= fmt_string(connection.connected_at) %></td>
+</tr>
 <% if (nodes_interesting) { %>
 <tr>
   <th>Node</th>
