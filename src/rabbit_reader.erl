@@ -48,14 +48,14 @@
 -record(throttle, {alarmed_by, last_blocked_by, last_blocked_at}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
-                          send_pend, state, channels, connected_at]).
+                          send_pend, state, channels]).
 
 -define(CREATION_EVENT_KEYS,
         [pid, name, port, peer_port, host,
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
         peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
-        timeout, frame_max, channel_max, client_properties]).
+        timeout, frame_max, channel_max, client_properties, connected_at]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -1130,7 +1130,7 @@ ic(channel_max,       #connection{channel_max = ChMax})    -> ChMax;
 ic(client_properties, #connection{client_properties = CP}) -> CP;
 ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
 ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
-ic(connected_at,      #connection{connected_at = T}) -> timestamp_ms(T);
+ic(connected_at,      #connection{connected_at = T}) -> timestamp(T);
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
@@ -1173,10 +1173,17 @@ emit_stats(State) ->
         _    -> State1
     end.
 
-timestamp_ms(unknown) ->
+timestamp(unknown) ->
     unknown;
-timestamp_ms(Timestamp) ->
-    timer:now_diff(Timestamp, {0,0,0}) div 1000.
+timestamp(Timestamp) ->
+    {{Y, M, D}, {H, Min, S}} = calendar:now_to_local_time(Timestamp),
+    print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
+
+print(Fmt, Val) when is_list(Val) ->
+    list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
+print(Fmt, Val) ->
+    print(Fmt, [Val]).
+
 
 %% 1.0 stub
 -ifdef(use_specs).
