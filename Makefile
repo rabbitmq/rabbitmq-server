@@ -59,7 +59,7 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_m
 ifdef INSTRUMENT_FOR_QC
 ERLC_OPTS += -DINSTR_MOD=gm_qc
 else
-ERLC_OPTS += -DINSTR_MOD=gen_server2
+ERLC_OPTS += -DINSTR_MOD=gm
 endif
 
 include version.mk
