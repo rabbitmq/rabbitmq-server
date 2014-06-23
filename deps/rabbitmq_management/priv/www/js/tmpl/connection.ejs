@@ -10,7 +10,7 @@
 <table class="facts">
 <tr>
   <th>Connected at</th>
-  <td><%= fmt_string(connection.connected_at) %></td>
+  <td><%= fmt_timestamp(connection.connected_at) %></td>
 </tr>
 <% if (nodes_interesting) { %>
 <tr>

@@ -55,6 +55,10 @@ function fmt_date(d) {
         ":" + f(d.getSeconds());
 }
 
+function fmt_timestamp(ts) {
+    return fmt_date(new Date(ts));
+}
+
 function fmt_time(t, suffix) {
     if (t == undefined || t == 0) return '';
     return t + suffix;
