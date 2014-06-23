@@ -415,6 +415,7 @@ ensure_ping_timer(State) ->
       State, #state.down_ping_timer, ?RABBIT_DOWN_PING_INTERVAL, ping_nodes).
 
 handle_live_rabbit(Node) ->
+    ok = rabbit_amqqueue:on_node_up(Node),
     ok = rabbit_alarm:on_node_up(Node),
     ok = rabbit_mnesia:on_node_up(Node).
 
