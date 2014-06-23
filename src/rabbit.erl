@@ -492,9 +492,7 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
-            warn_if_kernel_poll_is_disabled(),
-            warn_if_few_async_threads(),
-            warn_if_nagles_algorithm_is_enabled(),
+            warn_if_kernel_config_dubious(),
             run_boot_steps(),
             {ok, SupPid};
         Error ->
@@ -820,36 +818,27 @@ log_banner() ->
                 end || S <- Settings]),
     error_logger:info_msg("~s", [Banner]).
 
-warn_if_kernel_poll_is_disabled() ->
+warn_if_kernel_config_dubious() ->
     case erlang:system_info(kernel_poll) of
-        true ->
-            ok;
-        false ->
-            error_logger:warning_msg("Kernel poll (epoll, kqueue, etc) "
-                                     "is disabled. Throughput and "
-                                     "CPU utilization may worsen.~n")
-    end.
-
-warn_if_few_async_threads() ->
+        true  -> ok;
+        false -> error_logger:warning_msg(
+                   "Kernel poll (epoll, kqueue, etc) is disabled. Throughput "
+                   "and CPU utilization may worsen.~n")
+    end,
     AsyncThreads = erlang:system_info(thread_pool_size),
-    if AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD ->
-            error_logger:warning_msg(
-              "Erlang VM is running with ~s I/O threads, "
-              "file I/O performance may worsen ~n",
-              [integer_to_list(AsyncThreads)]);
-       true ->
-            ok
-    end.
-
-warn_if_nagles_algorithm_is_enabled() ->
+    case AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD of
+        true  -> error_logger:warning_msg(
+                   "Erlang VM is running with ~s I/O threads, "
+                   "file I/O performance may worsen ~n",
+                   [integer_to_list(AsyncThreads)]);
+        false -> ok
+    end,
     IDCOpts = application:get_env(kernel, inet_default_connect_options, []),
-    Msg = "Nagle's algorithm is enabled for sockets, "
-          "network I/O latency will be higher~n",
     case proplists:get_value(nodelay, IDCOpts, false) of
-        false ->
-            error_logger:warning_msg(Msg);
-        true ->
-            ok
+        false -> error_logger:warning_msg(
+                   "Nagle's algorithm is enabled for sockets, "
+                   "network I/O latency will be higher~n");
+        true  -> ok
     end.
 
 home_dir() ->
