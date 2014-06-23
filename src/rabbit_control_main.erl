@@ -188,7 +188,12 @@ start() ->
             print_error("~s", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
-            print_error("~p", [Reason]),
+            case Reason of
+                {noproc, Cause} ->
+                    print_noproc_diagnostics(Command, Node, Cause);
+                _ ->
+                    print_error("~p", [Reason])
+            end,
             rabbit_misc:quit(2);
         {badrpc, Reason} ->
             print_error("unable to connect to node ~w: ~w", [Node, Reason]),
@@ -203,7 +208,11 @@ start() ->
             rabbit_misc:quit(2)
     end.
 
-fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
+
+fmt_stderr(Format) ->
+    rabbit_misc:format_stderr(Format ++ "~n", []).
+fmt_stderr(Format, Args) ->
+    rabbit_misc:format_stderr(Format ++ "~n", Args).
 
 print_report(Node, {Descr, Module, InfoFun, KeysFun}) ->
     io:format("~s:~n", [Descr]),
@@ -226,6 +235,26 @@ print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Nodes) ->
     fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
+
+print_noproc_diagnostics(Command, Node, Reason) ->
+    fmt_stderr("unable to execute ~s on node ~s", [Command, Node]),
+    fmt_stderr("~nDIAGNOSTICS~n===========~n"),
+    case rpc:call(Node, application, which_applications, [5000]) of
+        {badrpc, _Reason} ->
+            fmt_stderr("unable to execute ~s on node ~s, "
+               "check that the rabbit app is running~n~n",
+               [Command, Node]);
+        Apps ->
+            S = case proplists:is_defined(rabbit, Apps) of
+                    true ->
+                        "is";
+                    false ->
+                        "is not"
+                end,
+            fmt_stderr("rabbit app on node ~s ~s running~n",
+                       [Node, S])
+        end,
+    print_error("~p", [Reason]).
 
 stop() ->
     ok.
