@@ -1175,9 +1175,8 @@ emit_stats(State) ->
 
 timestamp(unknown) ->
     unknown;
-timestamp(Timestamp) ->
-    {{Y, M, D}, {H, Min, S}} = calendar:now_to_local_time(Timestamp),
-    print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
+timestamp({Mega, Sec, Micro}) ->
+    (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) div 1000.
 
 print(Fmt, Val) when is_list(Val) ->
     list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
