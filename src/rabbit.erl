@@ -832,7 +832,10 @@ warn_if_kernel_config_dubious() ->
                    "file I/O performance may worsen~n", [AsyncThreads]);
         false -> ok
     end,
-    IDCOpts = application:get_env(kernel, inet_default_connect_options, []),
+    IDCOpts = case application:get_env(kernel, inet_default_connect_options) of
+                  undefined -> [];
+                  {ok, Val} -> Val
+              end,
     case proplists:get_value(nodelay, IDCOpts, false) of
         false -> error_logger:warning_msg(
                    "Nagle's algorithm is enabled for sockets, "
