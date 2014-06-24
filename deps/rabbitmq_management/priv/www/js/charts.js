@@ -15,6 +15,10 @@ var chart_chrome = {
     legend: { show: false }
 };
 
+function chart_fill(mode, i) {
+    return mode =='node' && i == 0;
+}
+
 function render_chart(div) {
     var id = div.attr('id').substring('chart-'.length);
     var rate_mode = div.hasClass('chart-rates');
@@ -22,7 +26,8 @@ function render_chart(div) {
     var data = chart_data[id]['data'];
     var fmt = chart_data[id]['fmt'];
 
-    var colors = chart_colors[div.hasClass('chart-full') ? 'full': 'node'];
+    var mode = div.hasClass('chart-full') ? 'full': 'node';
+    var colors = chart_colors[mode];
 
     for (var name in data) {
         var series = data[name];
@@ -46,7 +51,8 @@ function render_chart(div) {
             }
             d.push([x, y]);
         }
-        out_data.push({data: d, color: colors[i], shadowSize: 0});
+        out_data.push({data: d, color: colors[i], shadowSize: 0,
+                       lines: {show: true, fill: chart_fill(mode, i)}});
     }
     chart_data[id] = {};
 
