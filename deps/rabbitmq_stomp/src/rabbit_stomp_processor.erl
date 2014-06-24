@@ -964,7 +964,15 @@ ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
                   end},
                  {durable, true}];
             false ->
-                [{durable, false}]
+                [{subscription_queue_name_gen,
+                  fun () ->
+                          Id = rabbit_guid:gen_secure(),
+                          {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
+                          list_to_binary(
+                            rabbit_stomp_util:durable_subscription_queue(Name,
+                                                                         Id))
+                  end},
+                 {durable, false}]
         end,
     rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, Params, State);
 

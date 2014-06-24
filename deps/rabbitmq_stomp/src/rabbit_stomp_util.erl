@@ -284,7 +284,7 @@ durable_subscription_queue(Destination, SubscriptionId) ->
     %% simply as a convenient means to bound the length.
     rabbit_guid:string(
       erlang:md5(term_to_binary({Destination, SubscriptionId})),
-      "stomp.dsub").
+      "stomp-subscription").
 
 %% ---- Helpers ----
 
