@@ -653,8 +653,9 @@ next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
         timed -> {ensure_sync_timer(State1), 0             }
     end.
 
-backing_queue_timeout(State = #state { backing_queue = BQ }) ->
-    run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
+backing_queue_timeout(State = #state { backing_queue       = BQ,
+                                       backing_queue_state = BQS }) ->
+    State#state{backing_queue_state = BQ:timeout(BQS)}.
 
 ensure_sync_timer(State) ->
     rabbit_misc:ensure_timer(State, #state.sync_timer_ref,

@@ -27,7 +27,6 @@
 
 -export([conserve_resources/3, server_properties/1]).
 
--define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
@@ -216,8 +215,9 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                     exit(normal)
            end,
     log(info, "accepting AMQP connection ~p (~s)~n", [self(), Name]),
+    {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
     ClientSock = socket_op(Sock, SockTransform),
-    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(), handshake_timeout),
+    erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
     {PeerHost, PeerPort, Host, Port} =
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(list_to_binary(Name)),
@@ -231,7 +231,7 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                   peer_port          = PeerPort,
                   protocol           = none,
                   user               = none,
-                  timeout_sec        = ?HANDSHAKE_TIMEOUT,
+                  timeout_sec        = (HandshakeTimeout / 1000),
                   frame_max          = ?FRAME_MIN_SIZE,
                   vhost              = none,
                   client_properties  = none,
@@ -410,7 +410,7 @@ handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
     rabbit_event:notify(
       connection_created,
       [{type, network} | infos(?CREATION_EVENT_KEYS, State)], Ref),
-    State;
+    rabbit_event:init_stats_timer(State, #v1.stats_timer);
 handle_other({'$gen_cast', force_event_refresh}, State) ->
     %% Ignore, we will emit a created event once we start running.
     State;
