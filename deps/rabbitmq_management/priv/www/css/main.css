@@ -166,12 +166,16 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
 .highlight, .micro-highlight { float: left; }
 
-.chart { margin: 0 20px 20px 0; float: left; }
-.chart-small  { width: 400px; height: 100px; }
-.chart-medium { width: 600px; height: 200px; }
-.chart-large  { width: 800px; height: 300px; }
-
+.chart-full { margin: 0 20px 20px 0; float: left; }
+.chart-full-small  { width: 400px; height: 100px; }
+.chart-full-medium { width: 600px; height: 200px; }
+.chart-full-large  { width: 800px; height: 300px; }
 .chart-legend { float: left; }
+
+.chart-node {  }
+.chart-node-small  { width: 130px; height: 40px; }
+.chart-node-medium { width: 250px; height: 70px; }
+.chart-node-large  { width: 400px; height: 100px; }
 
 .micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .micro-highlight a { font-weight: normal !important; color: #888 !important; }

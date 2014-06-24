@@ -711,12 +711,23 @@ function node_stat(used_key, limit_key, suffix, stats, fmt,
     var used = stats[used_key];
     var limit = stats[limit_key];
     if (get_pref('rate-mode-node-stats') == 'chart') {
-        var items = [['foo', used_key]];
-        return rates_chart('node-stats-' + used_key, items, stats,
-                           fmt_bytes_obj, fmt, false)[0];
+        var items = [['Used', used_key], ['Limit', limit_key]];
+        add_fake_limit_details(used_key, limit_key, stats);
+        return rates_chart('node-stats', 'node-stats-' + used_key, items, stats,
+                           fmt_bytes_obj, fmt, 'node', false)[0];
     } else {
         return node_stat_bar(used, limit, suffix, fmt, colour, help, invert);
     }
+}
+
+function add_fake_limit_details(used_key, limit_key, stats) {
+    var source = stats[used_key + '_details'].samples;
+    var limit = stats[limit_key];
+    var dest = [];
+    for (var i in source) {
+        dest[i] = {sample: limit, timestamp: source[i].timestamp};
+    }
+    stats[limit_key + '_details'] = {samples: dest};
 }
 
 function node_stat_bar(used, limit, suffix, fmt, colour, help, invert) {
@@ -752,7 +763,8 @@ function node_stats_prefs() {
 }
 
 function rates_chart_and_legend(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
-    var res = rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates);
+    var res = rates_chart(id, id, items, stats, rate_fmt, axis_fmt, 'full',
+                          chart_rates);
     var chartHtml = res[0];
     var legend = res[1];
 
@@ -764,7 +776,7 @@ function rates_chart_and_legend(id, items, stats, rate_fmt, axis_fmt, chart_rate
         html += legend[i].show ? '' : ' rate-visibility-option-hidden';
         html += '" data-pref="chart-line-' + id + legend[i].key + '">';
         html += legend[i].name + '</span></th><td>';
-        html += '<div class="colour-key" style="background: ' + chart_colors[i];
+        html += '<div class="colour-key" style="background: ' + chart_colors_full[i];
         html += ';"></div>' + legend[i].value + '</td></tr>'
     }
     html += '</table></div>';
@@ -772,7 +784,8 @@ function rates_chart_and_legend(id, items, stats, rate_fmt, axis_fmt, chart_rate
     return legend.length > 0 ? html : '';
 }
 
-function rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
+function rates_chart(type_id, id, items, stats, rate_fmt, axis_fmt,
+                     type, chart_rates) {
     function show(key) {
         return get_pref('chart-line-' + id + key) === 'true';
     }
@@ -798,9 +811,10 @@ function rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
             ix++;
         }
     }
-    var size = get_pref('chart-size-' + id);
+    var size = get_pref('chart-size-' + type_id);
+
     var html = '<div id="chart-' + id +
-        '" class="chart chart-' + size +
+        '" class="chart chart-' + type + ' chart-' + type + '-' + size +
         (chart_rates ? ' chart-rates' : '') + '"></div>';
     return [html, legend];
 }
