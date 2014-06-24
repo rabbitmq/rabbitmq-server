@@ -23,6 +23,7 @@
 
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1]).
+-import(rabbit_test_util, [enable_plugin/2, disable_plugin/2]).
 
 -import(rabbit_federation_test_util,
         [expect/3, expect_empty/2,
@@ -565,6 +566,45 @@ federate_unfederate_test() ->
               clear_policy(Cfg, <<"dyn">>),
               assert_connections(Xs, [])
       end, [x(<<"dyn.exch1">>), x(<<"dyn.exch2">>)]).
+
+dynamic_plugin_stop_start_test() ->
+    Cfg = single_cfg(),
+    X1 = <<"dyn.exch1">>,
+    X2 = <<"dyn.exch2">>,
+    with_ch(
+      fun (Ch) ->
+              set_policy(Cfg, <<"dyn">>, <<"^dyn\\.">>, <<"localhost">>),
+
+              %% Declare federated exchange - get link
+              assert_connections([X1], [<<"localhost">>]),
+
+              %% Disable plugin, link goes
+              ok = disable_plugin(Cfg, "rabbitmq_federation"),
+              %% We can't check with status for obvious reasons...
+              undefined = whereis(rabbit_federation_sup),
+              {error, not_found} = rabbit_registry:lookup_module(
+                                     exchange, 'x-federation-upstream'),
+
+              %% Create exchange then re-enable plugin, links appear
+              declare_exchange(Ch, x(X2)),
+              ok = enable_plugin(Cfg, "rabbitmq_federation"),
+              assert_connections([X1, X2], [<<"localhost">>]),
+              {ok, _} = rabbit_registry:lookup_module(
+                          exchange, 'x-federation-upstream'),
+
+              %% Test both exchanges work. They are just federated to
+              %% themselves so should duplicate messages.
+              [begin
+                   Q = bind_queue(Ch, X, <<"key">>),
+                   await_binding(Cfg, X, <<"key">>, 2),
+                   publish(Ch, X, <<"key">>, <<"HELLO">>),
+                   expect(Ch, Q, [<<"HELLO">>, <<"HELLO">>]),
+                   delete_queue(Ch, Q)
+               end || X <- [X1, X2]],
+
+              clear_policy(Cfg, <<"dyn">>),
+              assert_connections([X1, X2], [])
+      end, [x(X1)]).
 
 %%----------------------------------------------------------------------------
 
