@@ -39,7 +39,7 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
 [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
-
+[ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=${SERVER_ADDITIONAL_ERL_ARGS}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${MNESIA_DIR}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
 
@@ -87,6 +87,8 @@ esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
+set +e
+
 RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
 RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
@@ -98,12 +100,17 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     -extra "${RABBITMQ_NODENAME}"
 
 PRELAUNCH_RESULT=$?
-if [ ${PRELAUNCH_RESULT} = 1 ] ; then
-    exit 1
+if [ ${PRELAUNCH_RESULT} = 2 ] ; then
+    # dist port is mentioned in config, so do not set it
+    true
 elif [ ${PRELAUNCH_RESULT} = 0 ] ; then
     # dist port is not mentioned in the config file, we can set it
     RABBITMQ_DIST_ARG="-kernel inet_dist_listen_min ${RABBITMQ_DIST_PORT} -kernel inet_dist_listen_max ${RABBITMQ_DIST_PORT}"
+else
+    exit ${PRELAUNCH_RESULT}
 fi
+
+set -e
 
 RABBITMQ_CONFIG_ARG=
 [ -f "${RABBITMQ_CONFIG_FILE}.config" ] && RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
@@ -124,6 +131,7 @@ exec ${ERL_DIR}erl \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
+    ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
     -sasl errlog_type error \
     -sasl sasl_error_logger false \

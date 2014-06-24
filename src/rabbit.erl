@@ -201,6 +201,7 @@
 %% practice 2 processes seems just as fast as any other number > 1,
 %% and keeps the progress bar realistic-ish.
 -define(HIPE_PROCESSES, 2).
+-define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
 %%----------------------------------------------------------------------------
 
@@ -491,6 +492,7 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             log_banner(),
+            warn_if_kernel_config_dubious(),
             run_boot_steps(),
             {ok, SupPid};
         Error ->
@@ -815,6 +817,31 @@ log_banner() ->
                         Format(K, V)
                 end || S <- Settings]),
     error_logger:info_msg("~s", [Banner]).
+
+warn_if_kernel_config_dubious() ->
+    case erlang:system_info(kernel_poll) of
+        true  -> ok;
+        false -> error_logger:warning_msg(
+                   "Kernel poll (epoll, kqueue, etc) is disabled. Throughput "
+                   "and CPU utilization may worsen.~n")
+    end,
+    AsyncThreads = erlang:system_info(thread_pool_size),
+    case AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD of
+        true  -> error_logger:warning_msg(
+                   "Erlang VM is running with ~b I/O threads, "
+                   "file I/O performance may worsen~n", [AsyncThreads]);
+        false -> ok
+    end,
+    IDCOpts = case application:get_env(kernel, inet_default_connect_options) of
+                  undefined -> [];
+                  {ok, Val} -> Val
+              end,
+    case proplists:get_value(nodelay, IDCOpts, false) of
+        false -> error_logger:warning_msg(
+                   "Nagle's algorithm is enabled for sockets, "
+                   "network I/O latency will be higher~n");
+        true  -> ok
+    end.
 
 home_dir() ->
     case init:get_argument(home) of

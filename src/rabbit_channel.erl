@@ -433,17 +433,22 @@ send(_Command, #ch{state = closing}) ->
 send(Command, #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Command).
 
-handle_exception(Reason, State = #ch{protocol   = Protocol,
-                                     channel    = Channel,
-                                     writer_pid = WriterPid,
-                                     reader_pid = ReaderPid,
-                                     conn_pid   = ConnPid}) ->
+handle_exception(Reason, State = #ch{protocol     = Protocol,
+                                     channel      = Channel,
+                                     writer_pid   = WriterPid,
+                                     reader_pid   = ReaderPid,
+                                     conn_pid     = ConnPid,
+                                     conn_name    = ConnName,
+                                     virtual_host = VHost,
+                                     user         = User}) ->
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log:error("connection ~p, channel ~p - soft error:~n~p~n",
-                             [ConnPid, Channel, Reason]),
+            rabbit_log:error("Channel error on connection ~p (~s, vhost: '~s',"
+                             " user: '~s'), channel ~p:~n~p~n",
+                             [ConnPid, ConnName, VHost, User#user.username,
+                              Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
         {0, _} ->
@@ -996,7 +1001,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
            QueueName,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
                              Q, Durable, AutoDelete, Args, Owner),
-                      rabbit_amqqueue:stat(Q)
+                      maybe_stat(NoWait, Q)
            end) of
         {ok, MessageCount, ConsumerCount} ->
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
@@ -1052,7 +1057,7 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
         rabbit_amqqueue:with_or_die(
-          QueueName, fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end),
+          QueueName, fun (Q) -> {maybe_stat(NoWait, Q), Q} end),
     ok = rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
     return_queue_declare_ok(QueueName, NoWait, MessageCount, ConsumerCount,
                             State);
@@ -1207,6 +1212,9 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
         {{error, exclusive_consume_unavailable} = E, _Q} ->
             E
     end.
+
+maybe_stat(false, Q) -> rabbit_amqqueue:stat(Q);
+maybe_stat(true, _Q) -> {ok, 0, 0}.
 
 consumer_monitor(ConsumerTag,
                  State = #ch{consumer_mapping = ConsumerMapping,
