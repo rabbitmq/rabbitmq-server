@@ -52,9 +52,7 @@
 <% if (user_monitor) { %>
 <div class="section">
 <h2>Nodes</h2>
-<div class="hider">
-<%= node_stats_prefs() %>
-<div class="updatable">
+<div class="hider updatable">
 <table class="list">
   <tr>
     <th>Name</th>
@@ -103,33 +101,32 @@
 <% } else { %>
      <td>
 <% if (node.fd_used != 'install_handle_from_sysinternals') { %>
-        <%= node_stat_count('fd_used', 'fd_total', node, FD_THRESHOLDS) %>
+        <%= node_stat_count_bar('fd_used', 'fd_total', node, FD_THRESHOLDS) %>
 <% } else { %>
         <p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub><%= node.fd_total %> available</sub></p>
 
 <% } %>
      </td>
      <td>
-        <%= node_stat_count('sockets_used', 'sockets_total', node, FD_THRESHOLDS) %>
+        <%= node_stat_count_bar('sockets_used', 'sockets_total', node, FD_THRESHOLDS) %>
      </td>
      <td>
-        <%= node_stat_count('proc_used', 'proc_total', node, PROCESS_THRESHOLDS) %>
+        <%= node_stat_count_bar('proc_used', 'proc_total', node, PROCESS_THRESHOLDS) %>
      </td>
      <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <%= node_stat('mem_used', 'mem_limit', 'high watermark', node, fmt_bytes_axis,
-                 node.mem_alarm ? 'red' : 'green',
-                 node.mem_alarm ? 'memory-alarm' : null) %>
+<%= node_stat_bar('mem_used', 'mem_limit', 'high watermark', node, fmt_bytes_axis,
+                  node.mem_alarm ? 'red' : 'green',
+                  node.mem_alarm ? 'memory-alarm' : null) %>
 <% } else { %>
        <%= fmt_bytes(node.mem_used) %>
 <% } %>
      </td>
      <td>
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
-   <%= node_stat('disk_free', 'disk_free_limit', 'low watermark', node, fmt_bytes_axis,
-                 node.disk_free_alarm ? 'red' : 'green',
-                 node.disk_free_alarm ? 'disk_free-alarm' : null,
-                 true) %>
+<%= node_stat_bar('disk_free', 'disk_free_limit', 'low watermark', node, fmt_bytes_axis,
+                   node.disk_free_alarm ? 'red' : 'green',
+                   node.disk_free_alarm ? 'disk_free-alarm' : null, true) %>
 <% } else { %>
          (not available)
 <% } %>
@@ -158,7 +155,6 @@
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
 <% } %>
-</div>
 </div>
 </div>
 

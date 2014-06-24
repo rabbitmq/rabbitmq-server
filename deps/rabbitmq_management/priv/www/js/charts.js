@@ -4,23 +4,14 @@ function render_charts() {
     });
 }
 
-var chart_colors_full = ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666666', '#aaaaaa'];
+var chart_colors = {full: ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666666', '#aaaaaa'],
+                    node: ['#6ae26a', '#e24545']};
 
-var chart_chrome_full = {
+var chart_chrome = {
     series: { lines: { show: true } },
     grid:   { borderWidth: 2, borderColor: "#aaa" },
     xaxis:  { tickColor: "#fff", mode: "time", timezone: "browser" },
     yaxis:  { tickColor: "#eee", min: 0 },
-    legend: { show: false }
-};
-
-var chart_colors_node = ['#6ae26a', '#e24545'];
-
-var chart_chrome_node = {
-    series: { lines: { show: true, lineWidth: 2, fill: true } },
-    grid:   { borderWidth: 0 },
-    xaxis:  { show: false },
-    yaxis:  { show: false, min: 0 },
     legend: { show: false }
 };
 
@@ -31,16 +22,7 @@ function render_chart(div) {
     var data = chart_data[id]['data'];
     var fmt = chart_data[id]['fmt'];
 
-    var colors;
-    var chrome;
-    if (div.hasClass('chart-full')) {
-        colors = chart_colors_full;
-        chrome = chart_chrome_full;
-    }
-    else {
-        colors = chart_colors_node;
-        chrome = chart_chrome_node;
-    }
+    var colors = chart_colors[div.hasClass('chart-full') ? 'full': 'node'];
 
     for (var name in data) {
         var series = data[name];
@@ -68,8 +50,8 @@ function render_chart(div) {
     }
     chart_data[id] = {};
 
-    chrome.yaxis.tickFormatter = fmt_y_axis(fmt);
-    $.plot(div, out_data, chrome);
+    chart_chrome.yaxis.tickFormatter = fmt_y_axis(fmt);
+    $.plot(div, out_data, chart_chrome);
 }
 
 function fmt_y_axis(fmt) {

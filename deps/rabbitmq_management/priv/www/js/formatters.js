@@ -222,6 +222,10 @@ function fmt_bytes_obj(obj, name, mode) {
     return fmt_bytes(obj[name]);
 }
 
+function fmt_num_obj(obj, name, mode) {
+    return obj[name];
+}
+
 function fmt_rate_large(obj, name, mode) {
     return '<strong>' + fmt_rate0(obj, name, mode, fmt_rate_num) +
         '</strong>msg/s';
@@ -658,7 +662,8 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, ch
 
     if (keys(stats).length > 0) {
         if (mode == 'chart') {
-            res = rates_chart_and_legend(id, items, stats, chart_fmt, axis_fmt, chart_rates);
+            res = rates_chart_and_legend(
+                id, id, items, stats, chart_fmt, axis_fmt, 'full', chart_rates);
         }
         else {
             res = rates_text(items, stats, mode, text_fmt);
@@ -699,24 +704,36 @@ function node_stat_count(used_key, limit_key, stats, thresholds) {
     var used = stats[used_key];
     var limit = stats[limit_key];
     if (typeof used == 'number') {
-        return node_stat(used_key, limit_key, 'available', stats, fmt_num_axis,
+        return node_stat(used_key, limit_key, 'available', stats,
+                         fmt_num_obj, fmt_num_axis,
                          fmt_color(used / limit, thresholds));
     } else {
         return used;
     }
 }
 
-function node_stat(used_key, limit_key, suffix, stats, fmt,
-                   colour, help, invert) {
+function node_stat_count_bar(used_key, limit_key, stats, thresholds) {
     var used = stats[used_key];
     var limit = stats[limit_key];
+    if (typeof used == 'number') {
+        return node_stat_bar(used_key, limit_key, 'available', stats,
+                             fmt_num_axis, fmt_color(used / limit, thresholds));
+    } else {
+        return used;
+    }
+}
+
+function node_stat(used_key, limit_key, suffix, stats, rate_fmt, axis_fmt,
+                   colour, help, invert) {
     if (get_pref('rate-mode-node-stats') == 'chart') {
         var items = [['Used', used_key], ['Limit', limit_key]];
         add_fake_limit_details(used_key, limit_key, stats);
-        return rates_chart('node-stats', 'node-stats-' + used_key, items, stats,
-                           fmt_bytes_obj, fmt, 'node', false)[0];
+        return rates_chart_and_legend(
+            'node-stats', 'node-stats-' + used_key, items, stats,
+            rate_fmt, axis_fmt, 'node', false);
     } else {
-        return node_stat_bar(used, limit, suffix, fmt, colour, help, invert);
+        return node_stat_bar(used_key, limit_key, suffix, stats, fmt, colour,
+                             help, invert);
     }
 }
 
@@ -730,7 +747,10 @@ function add_fake_limit_details(used_key, limit_key, stats) {
     stats[limit_key + '_details'] = {samples: dest};
 }
 
-function node_stat_bar(used, limit, suffix, fmt, colour, help, invert) {
+function node_stat_bar(used_key, limit_key, suffix, stats, fmt, colour,
+                       help, invert) {
+    var used = stats[used_key];
+    var limit = stats[limit_key];
     var width = 120;
 
     var res = '';
@@ -755,6 +775,7 @@ function node_stat_bar(used, limit, suffix, fmt, colour, help, invert) {
     res += '</div>'; // status-bar-main
     res += '<sub>' + fmt(limit) + ' ' + suffix + '</sub>';
     res += '</div>'; // status-bar
+
     return res;
 }
 
@@ -762,34 +783,13 @@ function node_stats_prefs() {
     return chart_h3('node-stats', 'Node statistics');
 }
 
-function rates_chart_and_legend(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
-    var res = rates_chart(id, id, items, stats, rate_fmt, axis_fmt, 'full',
-                          chart_rates);
-    var chartHtml = res[0];
-    var legend = res[1];
-
-    var html = '<div class="box">' + chartHtml;
-    html += '<table class="facts facts-fixed-width">';
-    for (var i = 0; i < legend.length; i++) {
-        html += '<tr><th><span title="Click to toggle line" ';
-        html += 'class="rate-visibility-option';
-        html += legend[i].show ? '' : ' rate-visibility-option-hidden';
-        html += '" data-pref="chart-line-' + id + legend[i].key + '">';
-        html += legend[i].name + '</span></th><td>';
-        html += '<div class="colour-key" style="background: ' + chart_colors_full[i];
-        html += ';"></div>' + legend[i].value + '</td></tr>'
-    }
-    html += '</table></div>';
-
-    return legend.length > 0 ? html : '';
-}
-
-function rates_chart(type_id, id, items, stats, rate_fmt, axis_fmt,
-                     type, chart_rates) {
+function rates_chart_and_legend(type_id, id, items, stats, rate_fmt, axis_fmt,
+                                type, chart_rates) {
     function show(key) {
         return get_pref('chart-line-' + id + key) === 'true';
     }
 
+    var size = get_pref('chart-size-' + type_id);
     var legend = [];
     chart_data[id] = {};
     chart_data[id]['data'] = {};
@@ -811,12 +811,23 @@ function rates_chart(type_id, id, items, stats, rate_fmt, axis_fmt,
             ix++;
         }
     }
-    var size = get_pref('chart-size-' + type_id);
 
-    var html = '<div id="chart-' + id +
-        '" class="chart chart-' + type + ' chart-' + type + '-' + size +
+    var html = '<div class="box"><div id="chart-' + id +
+        '" class="chart chart-' + type + ' chart-' + size +
         (chart_rates ? ' chart-rates' : '') + '"></div>';
-    return [html, legend];
+    html += '<table class="facts facts-fixed-width">';
+    for (var i = 0; i < legend.length; i++) {
+        html += '<tr><th><span title="Click to toggle line" ';
+        html += 'class="rate-visibility-option';
+        html += legend[i].show ? '' : ' rate-visibility-option-hidden';
+        html += '" data-pref="chart-line-' + id + legend[i].key + '">';
+        html += legend[i].name + '</span></th><td>';
+        html += '<div class="colour-key" style="background: ' + chart_colors[type][i];
+        html += ';"></div>' + legend[i].value + '</td></tr>'
+    }
+    html += '</table></div>';
+
+    return legend.length > 0 ? html : '';
 }
 
 function rates_text(items, stats, mode, rate_fmt) {

@@ -41,15 +41,14 @@
         <%= node_stat_count('proc_used', 'proc_total', node, PROCESS_THRESHOLDS) %>
      </td>
     </tr>
-  </table>
-  <table class="facts">
     <tr>
       <th>
         Memory
       </th>
       <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <%= node_stat('mem_used', 'mem_limit', 'high watermark', node, fmt_bytes_axis,
+   <%= node_stat('mem_used', 'mem_limit', 'high watermark', node,
+                 fmt_bytes_obj, fmt_bytes_axis,
                  node.mem_alarm ? 'red' : 'green',
                  node.mem_alarm ? 'memory-alarm' : null) %>
 <% } else { %>
@@ -63,7 +62,8 @@
       </th>
       <td>
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
-   <%= node_stat('disk_free', 'disk_free_limit', 'low watermark', node, fmt_bytes_axis,
+   <%= node_stat('disk_free', 'disk_free_limit', 'low watermark', node,
+                 fmt_bytes_obj, fmt_bytes_axis,
                  node.disk_free_alarm ? 'red' : 'green',
                  node.disk_free_alarm ? 'disk_free-alarm' : null,
                  true) %>
