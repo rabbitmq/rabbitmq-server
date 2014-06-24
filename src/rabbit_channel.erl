@@ -433,23 +433,21 @@ send(_Command, #ch{state = closing}) ->
 send(Command, #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Command).
 
-handle_exception(Reason, State = #ch{protocol   = Protocol,
-                                     channel    = Channel,
-                                     writer_pid = WriterPid,
-                                     reader_pid = ReaderPid,
-                                     conn_pid   = ConnPid,
-                                     conn_name  = ConnName,
+handle_exception(Reason, State = #ch{protocol     = Protocol,
+                                     channel      = Channel,
+                                     writer_pid   = WriterPid,
+                                     reader_pid   = ReaderPid,
+                                     conn_pid     = ConnPid,
+                                     conn_name    = ConnName,
                                      virtual_host = VHost,
-                                     user         = User
-                                    }) ->
+                                     user         = User}) ->
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
             rabbit_log:error("Channel error on connection ~p (~s, vhost: '~s',"
                              " user: '~s'), channel ~p:~n~p~n",
-                             [ConnPid, ConnName, binary_to_list(VHost),
-                              binary_to_list(User#user.username),
+                             [ConnPid, ConnName, VHost, User#user.username,
                               Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
