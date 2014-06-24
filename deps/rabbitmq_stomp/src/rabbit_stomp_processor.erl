@@ -429,7 +429,7 @@ maybe_delete_durable_sub({topic, Name}, Frame,
                                            ?HEADER_PERSISTENT, false) of
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-            QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
+            QName = rabbit_stomp_util:subscription_queue_name(Name, Id),
             amqp_channel:call(Channel,
                               #'queue.delete'{queue  = list_to_binary(QName),
                                               nowait = false}),
@@ -959,12 +959,20 @@ ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
                           {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
                           {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
                           list_to_binary(
-                            rabbit_stomp_util:durable_subscription_queue(Name,
-                                                                         Id))
+                            rabbit_stomp_util:subscription_queue_name(Name,
+                                                                      Id))
                   end},
                  {durable, true}];
             false ->
-                [{durable, false}]
+                [{subscription_queue_name_gen,
+                  fun () ->
+                          Id = rabbit_guid:gen_secure(),
+                          {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
+                          list_to_binary(
+                            rabbit_stomp_util:subscription_queue_name(Name,
+                                                                      Id))
+                  end},
+                 {durable, false}]
         end,
     rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, Params, State);
 
