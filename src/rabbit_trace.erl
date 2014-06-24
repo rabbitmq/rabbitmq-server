@@ -32,10 +32,10 @@
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
 -spec(enabled/1 :: (rabbit_types:vhost()) -> boolean()).
--spec(tap_in/5 :: (rabbit_types:basic_message(), string(),
+-spec(tap_in/5 :: (rabbit_types:basic_message(), binary(),
                    rabbit_channel:channel_number(),
                    rabbit_types:username(), state()) -> 'ok').
--spec(tap_out/5 :: (rabbit_amqqueue:qmsg(), string(),
+-spec(tap_out/5 :: (rabbit_amqqueue:qmsg(), binary(),
                     rabbit_channel:channel_number(),
                     rabbit_types:username(), state()) -> 'ok').
 
