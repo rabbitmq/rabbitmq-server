@@ -52,7 +52,9 @@
 <% if (user_monitor) { %>
 <div class="section">
 <h2>Nodes</h2>
-<div class="hider updatable">
+<div class="hider">
+<%= node_stats_prefs() %>
+<div class="updatable">
 <table class="list">
   <tr>
     <th>Name</th>
@@ -115,7 +117,7 @@
      </td>
      <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <%= node_stat('mem_used', 'mem_limit', 'high watermark', node,
+   <%= node_stat('mem_used', 'mem_limit', 'high watermark', node, fmt_bytes_axis,
                  node.mem_alarm ? 'red' : 'green',
                  node.mem_alarm ? 'memory-alarm' : null) %>
 <% } else { %>
@@ -124,7 +126,7 @@
      </td>
      <td>
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
-   <%= node_stat('disk_free', 'disk_free_limit', 'low watermark', node,
+   <%= node_stat('disk_free', 'disk_free_limit', 'low watermark', node, fmt_bytes_axis,
                  node.disk_free_alarm ? 'red' : 'green',
                  node.disk_free_alarm ? 'disk_free-alarm' : null,
                  true) %>
@@ -156,6 +158,7 @@
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
 <% } %>
+</div>
 </div>
 </div>
 

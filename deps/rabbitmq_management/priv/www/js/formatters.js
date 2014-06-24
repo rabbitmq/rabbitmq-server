@@ -699,26 +699,27 @@ function node_stat_count(used_key, limit_key, stats, thresholds) {
     var used = stats[used_key];
     var limit = stats[limit_key];
     if (typeof used == 'number') {
-        return node_stat(used_key, limit_key, 'available', stats,
+        return node_stat(used_key, limit_key, 'available', stats, fmt_num_axis,
                          fmt_color(used / limit, thresholds));
     } else {
         return used;
     }
 }
 
-function node_stat(used_key, limit_key, suffix, stats, colour, help, invert) {
+function node_stat(used_key, limit_key, suffix, stats, fmt,
+                   colour, help, invert) {
     var used = stats[used_key];
     var limit = stats[limit_key];
     if (get_pref('rate-mode-node-stats') == 'chart') {
         var items = [['foo', used_key]];
         return rates_chart('node-stats-' + used_key, items, stats,
-                           fmt_bytes_obj, fmt_num_axis, false)[0];
+                           fmt_bytes_obj, fmt, false)[0];
     } else {
-        return node_stat_bar(used, limit, suffix, colour, help, invert);
+        return node_stat_bar(used, limit, suffix, fmt, colour, help, invert);
     }
 }
 
-function node_stat_bar(used, limit, suffix, colour, help, invert) {
+function node_stat_bar(used, limit, suffix, fmt, colour, help, invert) {
     var width = 120;
 
     var res = '';
@@ -736,12 +737,12 @@ function node_stat_bar(used, limit, suffix, colour, help, invert) {
 
     res += '<div class="status-bar" style="width: ' + width + 'px;">';
     res += '<div class="status-bar-main ' + colour + '" style="background-image: url(img/bg-' + other_colour + '.png); background-position: -' + offset + 'px 0px; background-repeat: no-repeat;">';
-    res += used;
+    res += fmt(used);
     if (help != null) {
         res += ' <span class="help" id="' + help + '"></span>';
     }
     res += '</div>'; // status-bar-main
-    res += '<sub>' + limit + ' ' + suffix + '</sub>';
+    res += '<sub>' + fmt(limit) + ' ' + suffix + '</sub>';
     res += '</div>'; // status-bar
     return res;
 }

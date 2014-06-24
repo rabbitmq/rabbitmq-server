@@ -9,7 +9,8 @@ dispatcher_add(function(sammy) {
                                      options: {ranges: ['lengths-over',
                                                         'msg-rates-over']}}};
             if (user_monitor) {
-                reqs['nodes'] = '/nodes';
+                reqs['nodes'] = {path: '/nodes',
+                                 options: {ranges: ['node-stats']}};
             }
             render(reqs, 'overview', '#/');
         });
