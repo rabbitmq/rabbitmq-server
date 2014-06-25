@@ -363,6 +363,7 @@ await_cluster_recovery() ->
                        []),
     Nodes = rabbit_mnesia:cluster_nodes(all),
     run_outside_applications(fun () ->
+                                     rabbit_networking:killall(),
                                      rabbit:stop(),
                                      wait_for_cluster_recovery(Nodes)
                              end),
