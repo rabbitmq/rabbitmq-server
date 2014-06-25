@@ -110,14 +110,37 @@
       set an age and an increment for the samples you want. The end of
       the range returned will always correspond to the present.
     </p>
+
     <p>
-      Use <code>msg_rates_age</code>
-      and <code>msg_rates_incr</code> to return samples for messages
-      sent and received, <code>data_rates_age</code>
-      and <code>data_rates_incr</code> to return samples for bytes
-      sent and received, and <code>lengths_age</code>
-      and <code>lengths_incr</code> to return samples for queue
-      lengths. For example,
+      Different types of data take different query parameters to
+      return samples, as in the following table. You can specify more
+      than one set of parameters if the resource you are requesting
+      can generate more than one type of sample (for example, queues
+      can return message rates and queue lengths).
+    </p>
+
+    <table>
+      <tr>
+        <td>Messages sent and received</td>
+        <td><code>msg_rates_age</code> / <code>msg_rates_incr</code></td>
+      </tr>
+      <tr>
+        <td>Bytes sent and received</td>
+        <td><code>data_rates_age</code> / <code>data_rates_incr</code>
+        </td>
+      </tr>
+      <tr>
+        <td>Queue lengths</td>
+        <td><code>lengths_age</code> / <code>lengths_incr</code></td>
+      </tr>
+      <tr>
+        <td>Node statistics (e.g. file descriptors, disk space used)</td>
+        <td><code>node_stats_age</code> / <code>node_stats_incr</code></td>
+      </tr>
+    </table>
+
+    <p>
+      For example,
       appending <code>?lengths_age=3600&lengths_incr=60</code> will
       return the last hour's data on queue lengths, with a sample for
       every minute.
