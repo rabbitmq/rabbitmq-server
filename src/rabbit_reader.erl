@@ -1173,8 +1173,6 @@ emit_stats(State) ->
         _    -> State1
     end.
 
-timestamp(unknown) ->
-    unknown;
 timestamp({Mega, Sec, Micro}) ->
     (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) div 1000.
 
