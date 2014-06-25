@@ -255,6 +255,9 @@
 -spec(store_proc_name/1 :: (rabbit_types:proc_type_and_name()) -> ok).
 -spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
                           -> float()).
+-spec(timestamp/1 :: ({pos_integer(),
+                       pos_integer(),
+                       pos_integer()}) -> pos_integer()).
 -endif.
 
 %%----------------------------------------------------------------------------
