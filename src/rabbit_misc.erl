@@ -71,6 +71,7 @@
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
+-export([timestamp/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1015,6 +1016,9 @@ term_to_json(L) when is_list(L) ->
 term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
+
+timestamp({Mega, Sec, Micro}) ->
+    (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) div 1000.
 
 check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
 check_expiry(_N)                           -> ok.
