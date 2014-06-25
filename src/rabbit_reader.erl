@@ -1178,11 +1178,6 @@ timestamp(unknown) ->
 timestamp({Mega, Sec, Micro}) ->
     (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) div 1000.
 
-print(Fmt, Val) when is_list(Val) ->
-    list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
-print(Fmt, Val) ->
-    print(Fmt, [Val]).
-
 
 %% 1.0 stub
 -ifdef(use_specs).
