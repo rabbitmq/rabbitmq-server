@@ -732,8 +732,8 @@ function node_stat(used_key, limit_key, suffix, stats, rate_fmt, axis_fmt,
             'node-stats', 'node-stats-' + used_key, items, stats,
             rate_fmt, axis_fmt, 'node', false);
     } else {
-        return node_stat_bar(used_key, limit_key, suffix, stats, fmt, colour,
-                             help, invert);
+        return node_stat_bar(used_key, limit_key, suffix, stats, axis_fmt,
+                             colour, help, invert);
     }
 }
 
