@@ -304,8 +304,8 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     RemoveWhenOffline = proplists:get_bool(?OFFLINE_OPT, Opts),
     Inform("Removing node ~p from cluster", [ClusterNode]),
     case RemoveWhenOffline of
-        true  -> become_and_apply(Node, rabbit_mnesia, forget_cluster_node,
-                                  [ClusterNode, true]);
+        true  -> become(Node),
+                 rabbit_mnesia:forget_cluster_node(ClusterNode, true);
         false -> rpc_call(Node, rabbit_mnesia, forget_cluster_node,
                           [ClusterNode, false])
     end;
@@ -659,17 +659,16 @@ start_distribution() ->
     CtlNodeName = rabbit_misc:format("rabbitmqctl-~s", [os:getpid()]),
     {ok, _} = net_kernel:start([list_to_atom(CtlNodeName), shortnames]).
 
-become_and_apply(BecomeNode, M, F, A) ->
+become(BecomeNode) ->
     case net_adm:ping(BecomeNode) of
         pong -> exit({node_running, BecomeNode});
-        pang -> io:format("  * Impersonating node ~s...", [BecomeNode]),
+        pang -> io:format("  * Impersonating node: ~s...", [BecomeNode]),
                 error_logger:tty(false),
                 ok = net_kernel:stop(),
                 {ok, _} = net_kernel:start([BecomeNode, shortnames]),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
-                io:format("  * Mnesia dir: ~s~n", [Dir]),
-                apply(M, F, A)
+                io:format("  * Mnesia directory  : ~s~n", [Dir])
     end.
 
 %%----------------------------------------------------------------------------

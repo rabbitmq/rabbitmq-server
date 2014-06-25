@@ -29,7 +29,6 @@ exec ${ERL_DIR}erl \
     ${RABBITMQ_CTL_ERL_ARGS} \
     -boot "${CLEAN_BOOT_FILE}" \
     -sasl errlog_type error \
-    -sasl sasl_error_logger false \
     -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
     -s rabbit_control_main \
     -nodename $RABBITMQ_NODENAME \
