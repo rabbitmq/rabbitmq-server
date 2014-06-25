@@ -238,7 +238,7 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                   capabilities       = [],
                   auth_mechanism     = none,
                   auth_state         = none,
-                  connected_at       = os:timestamp()},
+                  connected_at       = timestamp(os:timestamp())},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
                 pending_recv        = false,
@@ -1130,7 +1130,7 @@ ic(channel_max,       #connection{channel_max = ChMax})    -> ChMax;
 ic(client_properties, #connection{client_properties = CP}) -> CP;
 ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
 ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
-ic(connected_at,      #connection{connected_at = T}) -> timestamp(T);
+ic(connected_at,      #connection{connected_at = T}) -> T;
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
