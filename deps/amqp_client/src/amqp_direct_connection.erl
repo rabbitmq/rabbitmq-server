@@ -34,14 +34,16 @@
                 params,
                 adapter_info,
                 collector,
-                closing_reason %% undefined | Reason
+                closing_reason, %% undefined | Reason
+                connected_at
                }).
 
 -define(INFO_KEYS, [type]).
 
 -define(CREATION_EVENT_KEYS, [pid, protocol, host, port, name,
                               peer_host, peer_port,
-                              user, vhost, client_properties, type]).
+                              user, vhost, client_properties, type,
+                              connected_at]).
 
 %%---------------------------------------------------------------------------
 
@@ -94,6 +96,7 @@ i(user,              #state{params = P}) -> P#amqp_params_direct.username;
 i(vhost,             #state{params = P}) -> P#amqp_params_direct.virtual_host;
 i(client_properties, #state{params = P}) ->
     P#amqp_params_direct.client_properties;
+i(connected_at,      #state{connected_at = T}) -> T;
 %% Optional adapter info
 i(protocol,     #state{adapter_info = I}) -> I#amqp_adapter_info.protocol;
 i(host,         #state{adapter_info = I}) -> I#amqp_adapter_info.host;
@@ -122,7 +125,8 @@ connect(Params = #amqp_params_direct{username     = Username,
     State1 = State#state{node         = Node,
                          vhost        = VHost,
                          params       = Params,
-                         adapter_info = ensure_adapter_info(Info)},
+                         adapter_info = ensure_adapter_info(Info),
+                         connected_at = rabbit_misc:timestamp(os:timestamp())},
     case rpc:call(Node, rabbit_direct, connect,
                   [{Username, Password}, VHost, ?PROTOCOL, self(),
                    connection_info(State1)]) of
