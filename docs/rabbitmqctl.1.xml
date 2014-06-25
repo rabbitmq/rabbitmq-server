@@ -406,11 +406,15 @@
               online, except when using the <command>--offline</command> flag.
             </para>
             <para>
-              When using the <command>--offline</command> flag the node you
-              connect to will become the canonical source for cluster metadata
-              (e.g. which queues exist), even if it was not before. Therefore
-              you should use this command on the latest node to shut down if
-              at all possible.
+              When using the <command>--offline</command> flag
+              rabbitmqctl will not attempt to connect to a node as
+              normal; instead it will temporarily become the node in
+              order to make the change. This is useful if the node
+              cannot be started normally. In this case the node will
+              become the canonical source for cluster metadata
+              (e.g. which queues exist), even if it was not
+              before. Therefore you should use this command on the
+              latest node to shut down if at all possible.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl -n hare@mcnulty forget_cluster_node rabbit@stringer</screen>
