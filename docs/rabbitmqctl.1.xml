@@ -1477,7 +1477,7 @@
               </varlistentry>
               <varlistentry>
                 <term>connected_at</term>
-                <listitem><para>Date and time this connection was established.</para></listitem>
+                <listitem><para>Timestamp this connection was established.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
