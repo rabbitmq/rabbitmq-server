@@ -16,7 +16,7 @@
 
 -module(gm_qc).
 -ifdef(use_proper_qc).
-%%-include("rabbit.hrl").
+
 -include_lib("proper/include/proper.hrl").
 
 -define(GROUP, test_group).
@@ -64,12 +64,12 @@ gm_test(Cmds) ->
        aggregate(command_names(Cmds), Res =:= ok)).
 
 cleanup(S) ->
-    S2 = ensure_outstanding_msgs_received(drain_proceeding(S)),
+    S2 = ensure_outstanding_msgs_received(drain_and_proceed_gms(S)),
     All = gms_joined(S2),
     All = gms(S2), %% assertion - none to join
     check_stale_members(All),
     [gm:leave(GM) || GM <- All],
-    drain_proceeding(S2),
+    drain_and_proceed_gms(S2),
     [await_death(GM) || GM <- All],
     gm:forget_group(?GROUP),
     ok.
@@ -150,20 +150,9 @@ precondition(_S, {call, ?MODULE, do_proceed2, [GM1, GM2]}) ->
     GM1 =/= GM2.
 
 postcondition(S, {call, ?MODULE, do_join, []}, _GM) ->
-    %% TODO figure out how to test birth announcements again
-    %% [begin
-    %%      gm:broadcast(Existing, heartbeat),
-    %%      receive
-    %%          {birth, Existing, GM} -> ok
-    %%      after 1000 ->
-    %%              exit({birth_timeout, Existing, did_not_announce, GM})
-    %%      end
-    %%  end || Existing <- gms(S) -- [GM]],
     assert(S);
 
 postcondition(S, {call, ?MODULE, do_leave, [_Dead]}, _Res) ->
-    %% TODO figure out how to test death announcements again
-    %%[await_death(Existing, Dead, 5) || Existing <- gms(S) -- [Dead]],
     assert(S);
 
 postcondition(S = #state{}, {call, _M, _F, _A}, _Res) ->
@@ -182,6 +171,7 @@ next_state(S = #state{seq         = Seq,
            {call, ?MODULE, do_send, [GM]}) ->
     case is_pid(GM) andalso lists:member(GM, gms(S)) of
         true ->
+            %% Dynamic state, i.e. runtime
             Msg = [{sequence, Seq},
                    {sent_to, GM},
                    {dests,   gms(S)}],
@@ -208,7 +198,7 @@ proceed(K, S = #state{instrumented = Msgs}) ->
     case dict:find(K, Msgs) of
         {ok, Q} -> case queue:out(Q) of
                        {{value, Thing}, Q2} ->
-                           S2 = process_msg(K, Thing, S),
+                           S2 = proceed(K, Thing, S),
                            S2#state{instrumented = dict:store(K, Q2, Msgs)};
                        {empty, _} ->
                            S
@@ -220,14 +210,11 @@ proceed(K, S = #state{instrumented = Msgs}) ->
 %% GM
 %% ---------------------------------------------------------------------------
 
-joined(Pid, _Members)              -> Pid ! {joined, self()},
-                                      ok.
-members_changed(_Pid, _Bs, _Ds)    -> %%[Pid ! {birth, self(), B} || B <- Bs],
-                                      %%[Pid ! {death, self(), D} || D <- Ds],
-                                      ok.
-%%handle_msg(_Pid, _From, heartbeat) -> ok;
-handle_msg(Pid, _From, Msg)        -> Pid ! {gm, self(), Msg}, ok.
-terminate(Pid, _Reason)            -> Pid ! {left, self()}.
+joined(Pid, _Members)           -> Pid ! {joined, self()},
+                                   ok.
+members_changed(_Pid, _Bs, _Ds) -> ok.
+handle_msg(Pid, _From, Msg)     -> Pid ! {gm, self(), Msg}, ok.
+terminate(Pid, _Reason)         -> Pid ! {left, self()}.
 
 %% ---------------------------------------------------------------------------
 %% Helpers
@@ -242,33 +229,25 @@ do_leave(GM) ->
     gm:leave(GM),
     GM.
 
-do_send( _GM) ->
-    ok. %% Do the work in next_state
+%% We need to update the state, so do the work in next_state
+do_send( _GM)           -> ok.
+do_proceed1(_Pid)       -> ok.
+do_proceed2(_From, _To) -> ok.
 
-do_proceed1(_Pid) ->
-    ok. %% Do the work in next_state
-
-do_proceed2(_From, _To) ->
-    ok. %% Do the work in next_state
-
-%% await_death(GM, ToDie, 0) ->
-%%     exit({death_msg_timeout, GM, ToDie});
-%% await_death(GM, ToDie, N) ->
-%%     gm:broadcast(GM, heartbeat),
-%%     receive
-%%         {death, GM, ToDie} -> ok
-%%     after 100 ->
-%%             await_death(GM, ToDie, N - 1)
-%%     end.
-
+%% All GMs, joined and to join
 gms(#state{outstanding = Outstanding,
-           to_join     = ToJoin})       -> dict:fetch_keys(Outstanding) ++
-                                               sets:to_list(ToJoin).
-gms_joined(#state{outstanding = Outstanding}) -> dict:fetch_keys(Outstanding).
+           to_join     = ToJoin}) ->
+    dict:fetch_keys(Outstanding) ++ sets:to_list(ToJoin).
 
+%% All GMs, joined and to join
+gms_joined(#state{outstanding = Outstanding}) ->
+    dict:fetch_keys(Outstanding).
+
+%% All GMs including those that have left (symbolic)
 gms_symb(#state{all_join = AllJoin}) ->
     sets:to_list(AllJoin).
 
+%% All GMs not including those that have left (symbolic)
 gms_symb_not_left(#state{all_join = AllJoin,
                          to_leave = ToLeave}) ->
     sets:to_list(sets:subtract(AllJoin, ToLeave)).
@@ -279,7 +258,7 @@ drain(S) ->
     after 10 -> S
     end.
 
-drain_proceeding(S0) ->
+drain_and_proceed_gms(S0) ->
     S = #state{instrumented = Msgs} = drain(S0),
     case dict:size(Msgs) of
         0 -> S;
@@ -287,10 +266,10 @@ drain_proceeding(S0) ->
                     fun (Key, Q, Si) ->
                             lists:foldl(
                               fun (Msg, Sij) ->
-                                      process_msg(Key, Msg, Sij)
+                                      proceed(Key, Msg, Sij)
                               end, Si, queue:to_list(Q))
                     end, S, Msgs),
-             drain_proceeding(S1#state{instrumented = dict:new()})
+             drain_and_proceed_gms(S1#state{instrumented = dict:new()})
     end.
 
 handle_msg({gm, GM, Msg}, S = #state{outstanding = Outstanding}) ->
@@ -336,20 +315,29 @@ handle_msg({'EXIT', _From, Reason}, _S) ->
     %% We just trapped exits to get nicer SASL logging.
     exit(Reason).
 
-process_msg({_From, To}, {cast, Msg},   S) -> gen_server2:cast(To, Msg), S;
-process_msg({_From, To}, {info, Msg},   S) -> To ! Msg,                  S;
-process_msg({From, _To}, {wait, Ref},   S) -> From ! {proceed, Ref},     S;
-process_msg({From, To},  {mon, Ref},    S) -> do_monitor(From, To, Ref,  S);
-process_msg(_Pid,        {demon, MRef}, S) -> erlang:demonitor(MRef),    S;
-process_msg(Pid,         {wait, Ref},   S) -> Pid  ! {proceed, Ref},     S.
+proceed({_From, To}, {cast, Msg},   S) -> gen_server2:cast(To, Msg), S;
+proceed({_From, To}, {info, Msg},   S) -> To ! Msg,                  S;
+proceed({From, _To}, {wait, Ref},   S) -> From ! {proceed, Ref},     S;
+proceed({From, To},  {mon, Ref},    S) -> add_monitor(From, To, Ref, S);
+proceed(_Pid,        {demon, MRef}, S) -> erlang:demonitor(MRef),    S;
+proceed(Pid,         {wait, Ref},   S) -> Pid  ! {proceed, Ref},     S.
 
 %% NB From here is To in handle_msg/DOWN above, since the msg is going
 %% the other way
-do_monitor(From, To, Ref, S = #state{monitors = Mons}) ->
+add_monitor(From, To, Ref, S = #state{monitors = Mons}) ->
     MRef = erlang:monitor(process, To),
     From ! {mref, Ref, MRef},
     S#state{monitors = dict:store(MRef, From, Mons)}.
 
+timestamp() -> timer:now_diff(os:timestamp(), {0, 0, 0}).
+
+%% ----------------------------------------------------------------------------
+%% Assertions
+%% ----------------------------------------------------------------------------
+
+%% Ensure we have received outstanding messages.
+%% TODO do we need this in postconditions? We could just call it after
+%% the test and maybe lose some timeouts.
 assert(S = #state{outstanding = Outstanding}) ->
     TS = timestamp(),
     dict:fold(fun (GM, {_Tree, Set}, none) ->
@@ -373,7 +361,7 @@ ensure_outstanding_msgs_received(S) ->
     case outstanding_joiners(S) orelse outstanding_msgs(S) of
         false -> S;
         true  -> timer:sleep(100),
-                 S2 = drain_proceeding(S),
+                 S2 = drain_and_proceed_gms(S),
                  assert(S2),
                  ensure_outstanding_msgs_received(S2)
     end.
@@ -385,6 +373,10 @@ outstanding_msgs(#state{outstanding = Outstanding}) ->
     dict:fold(fun (_GM, {_Tree, Set},  false) -> not gb_sets:is_empty(Set);
                   (_GM, {_Tree, _Set}, true)  -> true
               end, false, Outstanding).
+
+%% ---------------------------------------------------------------------------
+%% For insertion into GM
+%% ---------------------------------------------------------------------------
 
 call(Pid, Msg, infinity) ->
     Ref = make_ref(),
@@ -416,8 +408,6 @@ execute_mnesia_transaction(Fun) ->
         {proceed, Ref} -> ok
     end,
     rabbit_misc:execute_mnesia_transaction(Fun).
-
-timestamp() -> timer:now_diff(os:timestamp(), {0, 0, 0}).
 
 -else.
 

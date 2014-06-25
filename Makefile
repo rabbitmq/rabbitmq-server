@@ -20,7 +20,7 @@ MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
 USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
-QC_MODULES := rabbit_backing_queue_qc
+QC_MODULES := rabbit_backing_queue_qc gm_qc
 QC_TRIALS ?= 100
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
