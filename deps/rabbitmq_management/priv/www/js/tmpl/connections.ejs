@@ -45,7 +45,7 @@
 <% } %>
     <td><%= fmt_rate_bytes(connection, 'recv_oct') %></td>
     <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>
-    <td><%= fmt_timestamp(connection.connected_at) %></td>
+    <td><%= fmt_timestamp_mini(connection.connected_at) %></td>
     <td><%= connection.channels %></td>
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(connection.vhost) %></td>

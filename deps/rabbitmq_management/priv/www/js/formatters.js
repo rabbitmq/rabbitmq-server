@@ -46,17 +46,31 @@ function fmt_boolean(b) {
 }
 
 function fmt_date(d) {
+    var res = fmt_date0(d);
+    return res[0] + ' ' + res[1];
+}
+
+function fmt_date_mini(d) {
+    var res = fmt_date0(d);
+    return res[1] + '<sub>' + res[0] + '</sub>';
+}
+
+function fmt_date0(d) {
     function f(i) {
         return i < 10 ? "0" + i : i;
     }
 
-    return d.getFullYear() + "-" + f(d.getMonth() + 1) + "-" +
-        f(d.getDate()) + " " + f(d.getHours()) + ":" + f(d.getMinutes()) +
-        ":" + f(d.getSeconds());
+    return [d.getFullYear() + "-" + f(d.getMonth() + 1) + "-" +
+            f(d.getDate()), f(d.getHours()) + ":" + f(d.getMinutes()) +
+        ":" + f(d.getSeconds())];
 }
 
 function fmt_timestamp(ts) {
     return fmt_date(new Date(ts));
+}
+
+function fmt_timestamp_mini(ts) {
+    return fmt_date_mini(new Date(ts));
 }
 
 function fmt_time(t, suffix) {
