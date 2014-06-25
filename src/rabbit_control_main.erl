@@ -131,6 +131,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    start_distribution(),
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
         case parse_arguments(init:get_plain_arguments(), NodeStr) of
@@ -302,8 +303,12 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     RemoveWhenOffline = proplists:get_bool(?OFFLINE_OPT, Opts),
     Inform("Removing node ~p from cluster", [ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, forget_cluster_node,
-             [ClusterNode, RemoveWhenOffline]);
+    case RemoveWhenOffline of
+        true  -> become_and_apply(Node, rabbit_mnesia, forget_cluster_node,
+                                  [ClusterNode, true]);
+        false -> rpc_call(Node, rabbit_mnesia, forget_cluster_node,
+                          [ClusterNode, false])
+    end;
 
 action(sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -648,6 +653,23 @@ exit_loop(Port) ->
     receive
         {Port, {exit_status, Rc}} -> Rc;
         {Port, _}                 -> exit_loop(Port)
+    end.
+
+start_distribution() ->
+    CtlNodeName = rabbit_misc:format("rabbitmqctl-~s", [os:getpid()]),
+    {ok, _} = net_kernel:start([list_to_atom(CtlNodeName), shortnames]).
+
+become_and_apply(BecomeNode, M, F, A) ->
+    case net_adm:ping(BecomeNode) of
+        pong -> exit({node_running, BecomeNode});
+        pang -> io:format("  * Impersonating node ~s...", [BecomeNode]),
+                error_logger:tty(false),
+                ok = net_kernel:stop(),
+                {ok, _} = net_kernel:start([BecomeNode, shortnames]),
+                io:format(" done~n", []),
+                Dir = mnesia:system_info(directory),
+                io:format("  * Mnesia dir: ~s~n", [Dir]),
+                apply(M, F, A)
     end.
 
 %%----------------------------------------------------------------------------
