@@ -188,29 +188,27 @@ start() ->
             print_error("~s", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
-            case Reason of
-                {noproc, Cause} ->
-                    print_noproc_diagnostics(Command, Node, Cause);
-                _ ->
-                    print_error("~p", [Reason])
-            end,
+            print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, Reason} ->
-            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
-            print_badrpc_diagnostics([Node]),
-            rabbit_misc:quit(2);
+            fail_on_badrpc(Node, Reason);
         {badrpc_multi, Reason, Nodes} ->
-            print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
-            print_badrpc_diagnostics(Nodes),
-            rabbit_misc:quit(2);
+            fail_on_badrpc_multi(Nodes, Reason);
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
     end.
 
+fail_on_badrpc(Node, Reason) ->
+    print_error("unable to connect to node ~w: ~w", [Node, Reason]),
+    print_badrpc_diagnostics([Node]),
+    rabbit_misc:quit(2).
 
-fmt_stderr(Format) ->
-    rabbit_misc:format_stderr(Format ++ "~n", []).
+fail_on_badrpc_multi(Nodes, Reason) ->
+    print_error("unable to connect to nodes ~w: ~w", [Nodes, Reason]),
+    print_badrpc_diagnostics(Nodes),
+    rabbit_misc:quit(2).
+
 fmt_stderr(Format, Args) ->
     rabbit_misc:format_stderr(Format ++ "~n", Args).
 
@@ -235,26 +233,6 @@ print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Nodes) ->
     fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
-
-print_noproc_diagnostics(Command, Node, Reason) ->
-    fmt_stderr("unable to execute ~s on node ~s", [Command, Node]),
-    fmt_stderr("~nDIAGNOSTICS~n===========~n"),
-    case rpc:call(Node, application, which_applications, [5000]) of
-        {badrpc, _Reason} ->
-            fmt_stderr("unable to execute ~s on node ~s, "
-               "check that the rabbit app is running~n~n",
-               [Command, Node]);
-        Apps ->
-            S = case proplists:is_defined(rabbit, Apps) of
-                    true ->
-                        "is";
-                    false ->
-                        "is not"
-                end,
-            fmt_stderr("rabbit app on node ~s ~s running~n",
-                       [Node, S])
-        end,
-    print_error("~p", [Reason]).
 
 stop() ->
     ok.
@@ -354,77 +332,94 @@ action(wait, Node, [PidFile, App], _Opts, Inform) ->
     wait_for_application(Node, PidFile, list_to_atom(App), Inform);
 
 action(status, Node, [], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Status of node ~p", [Node]),
     display_call_result(Node, {rabbit, status, []});
 
 action(cluster_status, Node, [], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Cluster status of node ~p", [Node]),
     display_call_result(Node, {rabbit_mnesia, status, []});
 
 action(environment, Node, _App, _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Application environment of node ~p", [Node]),
     display_call_result(Node, {rabbit, environment, []});
 
 action(rotate_logs, Node, [], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Reopening logs for node ~p", [Node]),
     call(Node, {rabbit, rotate_logs, [""]});
 action(rotate_logs, Node, Args = [Suffix], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Rotating logs to files with suffix \"~s\"", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});
 
 action(close_connection, Node, [PidStr, Explanation], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Closing connection \"~s\"", [PidStr]),
     rpc_call(Node, rabbit_networking, close_connection,
              [rabbit_misc:string_to_pid(PidStr), Explanation]);
 
 action(add_user, Node, Args = [Username, _Password], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Creating user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, add_user, Args});
 
 action(delete_user, Node, Args = [_Username], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Deleting user \"~s\"", Args),
     call(Node, {rabbit_auth_backend_internal, delete_user, Args});
 
 action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Changing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, change_password, Args});
 
 action(clear_password, Node, Args = [Username], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Clearing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, clear_password, Args});
 
 action(set_user_tags, Node, [Username | TagsStr], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Tags = [list_to_atom(T) || T <- TagsStr],
     Inform("Setting tags for user \"~s\" to ~p", [Username, Tags]),
     rpc_call(Node, rabbit_auth_backend_internal, set_tags,
              [list_to_binary(Username), Tags]);
 
 action(list_users, Node, [], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing users", []),
     display_info_list(
       call(Node, {rabbit_auth_backend_internal, list_users, []}),
       rabbit_auth_backend_internal:user_info_keys());
 
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Creating vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, add, Args});
 
 action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Deleting vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, delete, Args});
 
 action(list_vhosts, Node, Args, _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing vhosts", []),
     ArgAtoms = default_if_empty(Args, [name]),
     display_info_list(call(Node, {rabbit_vhost, info_all, []}), ArgAtoms);
 
 action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing permissions for user ~p", Args),
     display_info_list(call(Node, {rabbit_auth_backend_internal,
                                   list_user_permissions, Args}),
                       rabbit_auth_backend_internal:user_perms_info_keys());
 
 action(list_queues, Node, Args, Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing queues", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     ArgAtoms = default_if_empty(Args, [name, messages]),
@@ -433,6 +428,7 @@ action(list_queues, Node, Args, Opts, Inform) ->
                       ArgAtoms);
 
 action(list_exchanges, Node, Args, Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing exchanges", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     ArgAtoms = default_if_empty(Args, [name, type]),
@@ -441,6 +437,7 @@ action(list_exchanges, Node, Args, Opts, Inform) ->
                       ArgAtoms);
 
 action(list_bindings, Node, Args, Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing bindings", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     ArgAtoms = default_if_empty(Args, [source_name, source_kind,
@@ -451,6 +448,7 @@ action(list_bindings, Node, Args, Opts, Inform) ->
                       ArgAtoms);
 
 action(list_connections, Node, Args, _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing connections", []),
     ArgAtoms = default_if_empty(Args, [user, peer_host, peer_port, state]),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
@@ -458,6 +456,7 @@ action(list_connections, Node, Args, _Opts, Inform) ->
                       ArgAtoms);
 
 action(list_channels, Node, Args, _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing channels", []),
     ArgAtoms = default_if_empty(Args, [pid, user, consumer_count,
                                        messages_unacknowledged]),
@@ -465,22 +464,26 @@ action(list_channels, Node, Args, _Opts, Inform) ->
                       ArgAtoms);
 
 action(list_consumers, Node, _Args, Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     display_info_list(rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]),
                       rabbit_amqqueue:consumer_info_keys());
 
 action(trace_on, Node, [], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Starting tracing for vhost \"~s\"", [VHost]),
     rpc_call(Node, rabbit_trace, start, [list_to_binary(VHost)]);
 
 action(trace_off, Node, [], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Stopping tracing for vhost \"~s\"", [VHost]),
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
 action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Frac = list_to_float(case string:chr(Arg, $.) of
                              0 -> Arg ++ ".0";
                              _ -> Arg
@@ -489,6 +492,7 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Setting permissions for user \"~s\" in vhost \"~s\"",
            [Username, VHost]),
@@ -496,6 +500,7 @@ action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
                 [Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, [Username], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Clearing permissions for user \"~s\" in vhost \"~s\"",
            [Username, VHost]),
@@ -503,6 +508,7 @@ action(clear_permissions, Node, [Username], Opts, Inform) ->
                 [Username, VHost]});
 
 action(list_permissions, Node, [], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost \"~s\"", [VHost]),
     display_info_list(call(Node, {rabbit_auth_backend_internal,
@@ -510,6 +516,7 @@ action(list_permissions, Node, [], Opts, Inform) ->
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
 
 action(set_parameter, Node, [Component, Key, Value], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Setting runtime parameter ~p for component ~p to ~p",
            [Key, Component, Value]),
@@ -518,6 +525,7 @@ action(set_parameter, Node, [Component, Key, Value], Opts, Inform) ->
       [VHostArg, list_to_binary(Component), list_to_binary(Key), Value, none]);
 
 action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Clearing runtime parameter ~p for component ~p", [Key, Component]),
     rpc_call(Node, rabbit_runtime_parameters, clear, [VHostArg,
@@ -525,6 +533,7 @@ action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
                                                       list_to_binary(Key)]);
 
 action(list_parameters, Node, [], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Listing runtime parameters", []),
     display_info_list(
@@ -532,6 +541,7 @@ action(list_parameters, Node, [], Opts, Inform) ->
       rabbit_runtime_parameters:info_keys());
 
 action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Msg = "Setting policy ~p for pattern ~p to ~p with priority ~p",
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     PriorityArg = proplists:get_value(?PRIORITY_OPT, Opts),
@@ -542,17 +552,20 @@ action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
       [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]);
 
 action(clear_policy, Node, [Key], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Clearing policy ~p", [Key]),
     rpc_call(Node, rabbit_policy, delete, [VHostArg, list_to_binary(Key)]);
 
 action(list_policies, Node, [], Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Listing policies", []),
     display_info_list(rpc_call(Node, rabbit_policy, list_formatted, [VHostArg]),
                       rabbit_policy:info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),
     [begin ok = action(Action, N, [], [], Inform), io:nl() end ||
         N      <- unsafe_rpc(Node, rabbit_mnesia, cluster_nodes, [running]),
@@ -567,6 +580,7 @@ action(set_cluster_name, Node, [Name], _Opts, Inform) ->
     rpc_call(Node, rabbit_nodes, set_cluster_name, [list_to_binary(Name)]);
 
 action(eval, Node, [Expr], _Opts, _Inform) ->
+    quit_if_rabbit_app_is_not_running(Node),
     case erl_scan:string(Expr) of
         {ok, Scanned, _} ->
             case erl_parse:parse_exprs(Scanned) of
@@ -742,6 +756,23 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
     case rpc_call(Node, Mod, Fun, Args) of
         {badrpc, _} = Res -> throw(Res);
         Normal            -> Normal
+    end.
+
+quit_if_rabbit_app_is_not_running(Node) ->
+    case rpc:call(Node, application, which_applications, [5000]) of
+        {badrpc, Reason} ->
+            fail_on_badrpc(Node, Reason);
+        Apps ->
+            case proplists:is_defined(rabbit, Apps) of
+                true ->
+                    ok;
+                false ->
+                    fmt_stderr("rabbit app is not running on node ~s, "
+                               "please start it with rabbitmqctl start_app "
+                               "and try again",
+                               [Node]),
+                    rabbit_misc:quit(2)
+            end
     end.
 
 call(Node, {Mod, Fun, Args}) ->
