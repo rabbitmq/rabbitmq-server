@@ -53,7 +53,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          listeners()},
-                     {contexts,           rabbit_web_dispatch_contexts()}];
+                     {contexts,           web_contexts(ReqData)}];
             _ ->
                 Overview0 ++
                     [{K, {struct, V}} ||
@@ -84,14 +84,13 @@ listeners() ->
 
 %%--------------------------------------------------------------------
 
-rabbit_web_dispatch_contexts() ->
+web_contexts(ReqData) ->
     rabbit_mgmt_util:sort_list(
       lists:append(
-        [rabbit_web_dispatch_contexts(N) ||
-            N <- rabbit_mgmt_wm_nodes:all_nodes_raw()]),
+        [fmt_contexts(N) || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData)]),
       ["description", "port", "node"]).
 
-rabbit_web_dispatch_contexts(N) ->
+fmt_contexts(N) ->
     [[{node, pget(name, N)} | C] || C <- pget(contexts, N, [])].
 
 erl_version(K) ->
