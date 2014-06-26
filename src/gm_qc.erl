@@ -64,7 +64,7 @@ gm_test(Cmds) ->
        aggregate(command_names(Cmds), Res =:= ok)).
 
 cleanup(S) ->
-    S2 = ensure_outstanding_msgs_received(drain_and_proceed_gms(S)),
+    S2 = ensure_joiners_joined_and_msgs_received(S),
     All = gms_joined(S2),
     All = gms(S2), %% assertion - none to join
     check_stale_members(All),
@@ -149,14 +149,8 @@ precondition(_S, {call, ?MODULE, do_proceed1, [_GM]}) ->
 precondition(_S, {call, ?MODULE, do_proceed2, [GM1, GM2]}) ->
     GM1 =/= GM2.
 
-postcondition(S, {call, ?MODULE, do_join, []}, _GM) ->
-    assert(S);
-
-postcondition(S, {call, ?MODULE, do_leave, [_Dead]}, _Res) ->
-    assert(S);
-
 postcondition(S = #state{}, {call, _M, _F, _A}, _Res) ->
-    assert(S).
+    true.
 
 next_state(S = #state{to_join  = ToSet,
                       all_join = AllSet}, GM, {call, ?MODULE, do_join, []}) ->
@@ -176,11 +170,9 @@ next_state(S = #state{seq         = Seq,
                    {sent_to, GM},
                    {dests,   gms(S)}],
             gm:broadcast(GM, Msg),
-            TS = timestamp(),
             Outstanding1 = dict:map(
-                             fun (_GM, {Tree, Set}) ->
-                                     {gb_trees:insert(Msg, TS, Tree),
-                                      gb_sets:add_element({TS, Msg}, Set)}
+                             fun (_GM, Set) ->
+                                     gb_sets:add_element(Msg, Set)
                              end, Outstanding),
             drain(S#state{seq         = Seq + 1,
                           outstanding = Outstanding1});
@@ -274,17 +266,9 @@ drain_and_proceed_gms(S0) ->
 
 handle_msg({gm, GM, Msg}, S = #state{outstanding = Outstanding}) ->
     case dict:find(GM, Outstanding) of
-        {ok, {Tree, Set}} ->
-            case gb_trees:lookup(Msg, Tree) of
-                {value, TS} ->
-                    TreeSet = {gb_trees:delete(Msg, Tree),
-                               gb_sets:del_element({TS, Msg}, Set)},
-                    S#state{outstanding = dict:store(GM, TreeSet, Outstanding)};
-                none ->
-                    %% Message from GM that joined after we
-                    %% broadcast the message. OK.
-                    S
-            end;
+        {ok, Set} ->
+            Set2 = gb_sets:del_element(Msg, Set),
+            S#state{outstanding = dict:store(GM, Set2, Outstanding)};
         error ->
             %% Message from GM that has already died. OK.
             S
@@ -297,8 +281,7 @@ handle_msg({instrumented, Key, Thing}, S = #state{instrumented = Msgs}) ->
     S#state{instrumented = dict:store(Key, Q1, Msgs)};
 handle_msg({joined, GM}, S = #state{outstanding = Outstanding,
                                     to_join     = ToJoin}) ->
-    S#state{outstanding = dict:store(GM, {gb_trees:empty(), gb_sets:empty()},
-                                     Outstanding),
+    S#state{outstanding = dict:store(GM, gb_sets:empty(), Outstanding),
             to_join     = sets:del_element(GM, ToJoin)};
 handle_msg({left, GM}, S = #state{outstanding = Outstanding,
                                   to_join     = ToJoin}) ->
@@ -335,44 +318,26 @@ timestamp() -> timer:now_diff(os:timestamp(), {0, 0, 0}).
 %% Assertions
 %% ----------------------------------------------------------------------------
 
-%% Ensure we have received outstanding messages.
-%% TODO do we need this in postconditions? We could just call it after
-%% the test and maybe lose some timeouts.
-assert(S = #state{outstanding = Outstanding}) ->
-    TS = timestamp(),
-    dict:fold(fun (GM, {_Tree, Set}, none) ->
-                       case gb_sets:size(Set) of
-                           0 -> ok;
-                           _ -> {TS0, Msg} = gb_sets:smallest(Set),
-                                case TS0 + ?MSG_TIMEOUT < TS of
-                                    true  -> exit({msg_timeout,
-                                                   [{msg, Msg},
-                                                    {gm,  GM},
-                                                    {all, gms(S),
-                                                    {joined, gms_joined(S)}}]});
-                                    false -> ok
-                                end
-                       end,
-                      none
-              end, none, Outstanding),
-    true.
-
-ensure_outstanding_msgs_received(S) ->
-    case outstanding_joiners(S) orelse outstanding_msgs(S) of
-        false -> S;
-        true  -> timer:sleep(100),
-                 S2 = drain_and_proceed_gms(S),
-                 assert(S2),
-                 ensure_outstanding_msgs_received(S2)
+ensure_joiners_joined_and_msgs_received(S0) ->
+    S = drain_and_proceed_gms(S0),
+    case outstanding_joiners(S) of
+        true  -> ensure_joiners_joined_and_msgs_received(S);
+        false -> case outstanding_msgs(S) of
+                     []  -> S;
+                     Out -> exit({outstanding_msgs, Out})
+                 end
     end.
 
 outstanding_joiners(#state{to_join = ToJoin}) ->
     sets:size(ToJoin) > 0.
 
 outstanding_msgs(#state{outstanding = Outstanding}) ->
-    dict:fold(fun (_GM, {_Tree, Set},  false) -> not gb_sets:is_empty(Set);
-                  (_GM, {_Tree, _Set}, true)  -> true
-              end, false, Outstanding).
+    dict:fold(fun (GM, Set, OS) ->
+                      case gb_sets:is_empty(Set) of
+                          true  -> OS;
+                          false -> [{GM, gb_sets:to_list(Set)} | OS]
+                      end
+              end, [], Outstanding).
 
 %% ---------------------------------------------------------------------------
 %% For insertion into GM
