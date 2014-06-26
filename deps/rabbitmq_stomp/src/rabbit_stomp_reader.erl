@@ -88,6 +88,8 @@ mainloop(State0 = #reader_state{socket = Sock}) ->
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
             throw({inet_error, Reason});
+        {inet_reply, _Sock, {error, closed}} ->
+            ok;
         {conserve_resources, Conserve} ->
             mainloop(State#reader_state{conserve_resources = Conserve});
         {bump_credit, Msg} ->
