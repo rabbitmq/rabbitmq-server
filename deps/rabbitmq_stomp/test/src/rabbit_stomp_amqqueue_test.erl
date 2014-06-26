@@ -110,7 +110,7 @@ test_unsubscribe_ack(Channel, Client, Version) ->
                           rabbit_stomp_util:msg_header_name(Version), Hdrs1)},
                        {"receipt", "rcpt2"}]),
 
-    {ok, Client3, Hdrs2, Body2} = stomp_receive(Client2, "ERROR"),
+    {ok, _Client3, Hdrs2, _Body2} = stomp_receive(Client2, "ERROR"),
     ?assertEqual("Subscription not found",
                  proplists:get_value("message", Hdrs2)),
     ok.
@@ -191,8 +191,8 @@ test_temp_destination_queue(Channel, Client, _Version) ->
                                                {"reply-to", "/temp-queue/foo"}],
                                               ["ping"]),
     amqp_channel:call(Channel,#'basic.consume'{queue  = ?QUEUE, no_ack = true}),
-    receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
-    receive {#'basic.deliver'{delivery_tag = DTag},
+    receive #'basic.consume_ok'{consumer_tag = _Tag} -> ok end,
+    receive {#'basic.deliver'{delivery_tag = _DTag},
              #'amqp_msg'{payload = <<"ping">>,
                          props   = #'P_basic'{reply_to = ReplyTo}}} -> ok
     end,
@@ -202,14 +202,14 @@ test_temp_destination_queue(Channel, Client, _Version) ->
     {ok, _Client1, _, [<<"pong">>]} = stomp_receive(Client, "MESSAGE"),
     ok.
 
-test_temp_destination_in_send(Channel, Client, _Version) ->
+test_temp_destination_in_send(_Channel, Client, _Version) ->
     rabbit_stomp_client:send( Client, "SEND", [{"destination", "/temp-queue/foo"}],
                                               ["poing"]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
     "Invalid destination" = proplists:get_value("message", Hdrs),
     ok.
 
-test_blank_destination_in_send(Channel, Client, _Version) ->
+test_blank_destination_in_send(_Channel, Client, _Version) ->
     rabbit_stomp_client:send( Client, "SEND", [{"destination", ""}],
                                               ["poing"]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
