@@ -119,9 +119,11 @@ ensure_endpoint(dest, Channel, {exchange, {Name, _}}, Params, State) ->
 ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
     {ok, undefined, State};
 
-ensure_endpoint(_, _Ch, {Type, Name}, _Params, State)
-  when Type =:= reply_queue orelse Type =:= amqqueue ->
-    {ok, list_to_binary(Name), State};
+ensure_endpoint(_, _Ch, {amqqueue, Name}, _Params, State) ->
+  {ok, list_to_binary(Name), State};
+
+ensure_endpoint(_, _Ch, {reply_queue, Name}, _Params, State) ->
+  {ok, list_to_binary(Name), State};
 
 ensure_endpoint(_Direction, _Ch, _Endpoint, _Params, _State) ->
     {error, invalid_endpoint}.
