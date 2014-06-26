@@ -105,6 +105,7 @@ ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
                                     #'queue.declare'{queue  = Queue,
                                                      nowait = true},
                                     queue, Params),
+                         io:format("queue.declare method: ~p~n", [Method]),
                          amqp_channel:cast(Channel, Method),
                          sets:add_element(Queue, State)
              end,
@@ -167,22 +168,22 @@ check_exchange(ExchangeName, Channel, true) ->
     ok.
 
 queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
-    Method1 = case proplists:get_value(durable, Params, false) of
-                  true  -> Method#'queue.declare'{durable     = true};
-                  false -> Method#'queue.declare'{auto_delete = true,
+    Args    = proplists:get_value(arguments, Params, []),
+    Method1 = Method#'queue.declare'{arguments = Args},
+    Method2 = case proplists:get_value(durable, Params, false) of
+                  true  -> Method1#'queue.declare'{durable     = true};
+                  false -> Method1#'queue.declare'{auto_delete = true,
                                                   exclusive   = true}
               end,
-    Method2 = Method1#'queue.declare'{durable   = proplists:get_value(durable, Params)},
-    Method3 = Method2#'queue.declare'{arguments = proplists:get_value(arguments, Params)},
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
-            Method3#'queue.declare'{queue = SQNG()};
+            Method2#'queue.declare'{queue = SQNG()};
         {exchange, SQNG} when is_function(SQNG) ->
-            Method3#'queue.declare'{queue = SQNG()};
+            Method2#'queue.declare'{queue = SQNG()};
         {'reply-queue', SQNG} when is_function(SQNG) ->
-            Method3#'queue.declare'{queue = SQNG()};
+            Method2#'queue.declare'{queue = SQNG()};
         _ ->
-            Method3
+            Method2
     end.
 
 %% --------------------------------------------------------------------------
