@@ -218,7 +218,7 @@ sec_to_triple(Sec) -> {Sec div 1000000, Sec rem 1000000, 0}.
 
 range(F, L, I) ->
     R = #range{first = F * 1000, last = L * 1000, incr = I * 1000},
-    {R, R, R}.
+    {R, R, R, R}.
 
 get_x(Name, Range) ->
     [X] = rabbit_mgmt_db:augment_exchanges([x2(Name)], Range, full),
@@ -244,7 +244,7 @@ details0(R, AR, A, L) ->
      {avg_rate, AR},
      {avg,      A}].
 
-simple_details(Thing, N, {#range{first = First, last = Last}, _, _}) ->
+simple_details(Thing, N, {#range{first = First, last = Last}, _, _, _}) ->
     [{Thing, N},
      {atom_suffix(Thing, "_details"),
       details0(0.0, 0.0, N * 1.0, [{Last, N}, {First, N}])}].
