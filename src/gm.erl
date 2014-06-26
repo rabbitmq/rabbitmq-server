@@ -388,6 +388,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, prioritise_info/3]).
 
+%% For INSTR_MOD callbacks
+-export([call/3, cast/2, monitor/1, demonitor/1]).
+
 -ifndef(use_specs).
 -export([behaviour_info/1]).
 -endif.
@@ -1177,8 +1180,8 @@ can_erase_view_member(Self, Self, _LA, _LP) -> false;
 can_erase_view_member(_Self, _Id,   N,   N) -> true;
 can_erase_view_member(_Self, _Id, _LA, _LP) -> false.
 
-neighbour_cast(N, Msg) -> gen_server2:cast(get_pid(N), Msg).
-neighbour_call(N, Msg) -> gen_server2:call(get_pid(N), Msg, infinity).
+neighbour_cast(N, Msg) -> ?INSTR_MOD:cast(get_pid(N), Msg).
+neighbour_call(N, Msg) -> ?INSTR_MOD:call(get_pid(N), Msg, infinity).
 
 %% ---------------------------------------------------------------------------
 %% View monitoring and maintanence
@@ -1192,7 +1195,7 @@ ensure_neighbour(Ver, Self, {Self, undefined}, RealNeighbour) ->
 ensure_neighbour(_Ver, _Self, {RealNeighbour, MRef}, RealNeighbour) ->
     {RealNeighbour, MRef};
 ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour) ->
-    true = erlang:demonitor(MRef),
+    true = ?INSTR_MOD:demonitor(MRef),
     Msg = {?TAG, Ver, check_neighbours},
     ok = neighbour_cast(RealNeighbour, Msg),
     ok = case Neighbour of
@@ -1202,7 +1205,7 @@ ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour) ->
     {Neighbour, maybe_monitor(Neighbour, Self)}.
 
 maybe_monitor( Self,  Self) -> undefined;
-maybe_monitor(Other, _Self) -> erlang:monitor(process, get_pid(Other)).
+maybe_monitor(Other, _Self) -> ?INSTR_MOD:monitor(get_pid(Other)).
 
 check_neighbours(State = #state { self             = Self,
                                   left             = Left,
@@ -1461,3 +1464,12 @@ last_pub(  [], LP) -> LP;
 last_pub(List, LP) -> {PubNum, _Msg} = lists:last(List),
                       true = PubNum > LP, %% ASSERTION
                       PubNum.
+
+%% ---------------------------------------------------------------------------
+
+%% Uninstrumented versions
+
+call(Pid, Msg, Timeout) -> gen_server2:call(Pid, Msg, Timeout).
+cast(Pid, Msg)          -> gen_server2:cast(Pid, Msg).
+monitor(Pid)            -> erlang:monitor(process, Pid).
+demonitor(MRef)         -> erlang:demonitor(MRef).
