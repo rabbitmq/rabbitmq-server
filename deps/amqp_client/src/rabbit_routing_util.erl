@@ -98,14 +98,14 @@ ensure_endpoint(_Dir, _Channel, {queue, undefined}, _Params, State) ->
     {ok, undefined, State};
 
 ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
+    Params1 = rabbit_misc:pset(durable, true, Params),
     Queue = list_to_binary(Name),
     State1 = case sets:is_element(Queue, State) of
                  true -> State;
                  _    -> Method = queue_declare_method(
                                     #'queue.declare'{queue  = Queue,
                                                      nowait = true},
-                                    queue, Params),
-                         io:format("queue.declare method: ~p~n", [Method]),
+                                    queue, Params1),
                          amqp_channel:cast(Channel, Method),
                          sets:add_element(Queue, State)
              end,
@@ -173,7 +173,7 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
     Method2 = case proplists:get_value(durable, Params, false) of
                   true  -> Method1#'queue.declare'{durable     = true};
                   false -> Method1#'queue.declare'{auto_delete = true,
-                                                  exclusive   = true}
+                                                   exclusive   = true}
               end,
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
