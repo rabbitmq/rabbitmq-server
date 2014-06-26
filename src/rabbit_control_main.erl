@@ -114,16 +114,10 @@
          {"Policies",   rabbit_policy,             list_formatted, info_keys},
          {"Parameters", rabbit_runtime_parameters, list_formatted, info_keys}]).
 
--define(COMMANDS_THAT_REQUIRE_RABBIT_APP_TO_BE_RUNNING,
-       [status, cluster_status, environment, rotate_logs,
-        close_connection, add_user, delete_user, change_password,
-        clear_password, set_user_tags, list_users, add_vhost,
-        delete_vhost, list_vhosts, list_user_permissions, list_queues,
-        list_exchanges, list_bindings, list_connections,
-        list_channels, list_consumers, trace_on, trace_off,
-        set_vm_memory_high_watermark, set_permissions, clear_permissions,
-        list_permissions, set_parameter, clear_parameter, list_parameters,
-        set_policy, clear_policy, list_policies, report, eval]).
+-define(COMMANDS_NOT_REQUIRING_APP,
+        [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
+         join_cluster, change_cluster_node_type, update_cluster_nodes,
+         forget_cluster_node, cluster_status, status, environment, eval]).
 
 %%----------------------------------------------------------------------------
 
@@ -151,12 +145,9 @@ start() ->
         end,
     Quiet = proplists:get_bool(?QUIET_OPT, Opts),
     Node = proplists:get_value(?NODE_OPT, Opts),
-    case lists:member(Command, ?COMMANDS_THAT_REQUIRE_RABBIT_APP_TO_BE_RUNNING) of
-        true ->
-            quit_if_rabbit_app_is_not_running(Node),
-            ok;
-        false ->
-            ok
+    case lists:member(Command, ?COMMANDS_NOT_REQUIRING_APP) of
+        false -> ensure_app_running(Node);
+        true  -> ok
     end,
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
@@ -563,7 +554,6 @@ action(set_cluster_name, Node, [Name], _Opts, Inform) ->
     rpc_call(Node, rabbit_nodes, set_cluster_name, [list_to_binary(Name)]);
 
 action(eval, Node, [Expr], _Opts, _Inform) ->
-    quit_if_rabbit_app_is_not_running(Node),
     case erl_scan:string(Expr) of
         {ok, Scanned, _} ->
             case erl_parse:parse_exprs(Scanned) of
@@ -741,7 +731,7 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
         Normal            -> Normal
     end.
 
-quit_if_rabbit_app_is_not_running(Node) ->
+ensure_app_running(Node) ->
     case rpc:call(Node, application, which_applications, [5000]) of
         {badrpc, Reason} ->
             fail_on_badrpc(Node, Reason);
