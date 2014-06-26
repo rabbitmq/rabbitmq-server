@@ -17,7 +17,7 @@ function message_rates(id, stats) {
 
 function queue_lengths(id, stats) {
     var items = [['Ready', 'messages_ready'],
-                 ['Unacknowledged', 'messages_unacknowledged'],
+                 ['Unacked', 'messages_unacknowledged'],
                  ['Total', 'messages']];
     return rates_chart_or_text(id, stats, items, fmt_msgs, fmt_msgs_large, fmt_num_axis, false, 'Queued messages', 'queued-messages');
 }

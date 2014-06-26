@@ -108,14 +108,17 @@ small { font-size: 0.8em; color: #888; }
 #main sub a:hover { color: #444; }
 .unknown { color: #888; }
 
-table.facts { float: left; margin-right: 50px; }
+table.facts { float: left; }
 table.facts th { color: black; text-align: right; border-right: 1px solid #ccc; }
 table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px; }
 
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
-table.facts-fixed-width th, table.facts-fixed-width td { width: 130px; }
+table.facts-fixed-width th { width: 80px; }
+table.facts-fixed-width td { width: 130px; }
+
+table.facts-l { margin-right: 50px; }
 
 table.mini th { border: none; padding: 0 2px 2px 2px; text-align: right; }
 table.mini td { border: none; padding: 0 2px 2px 2px; }
