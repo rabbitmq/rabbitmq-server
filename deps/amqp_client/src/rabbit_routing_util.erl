@@ -79,8 +79,8 @@ parse_endpoint0(Type,     Rest,               _) ->
 
 %% --------------------------------------------------------------------------
 
-ensure_endpoint(Dir, Channel, EndPoint, State) ->
-    ensure_endpoint(Dir, Channel, EndPoint, [], State).
+ensure_endpoint(Dir, Channel, Endpoint, State) ->
+    ensure_endpoint(Dir, Channel, Endpoint, [], State).
 
 ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
     check_exchange(Name, Channel,
