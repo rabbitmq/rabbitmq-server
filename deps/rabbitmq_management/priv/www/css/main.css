@@ -170,6 +170,7 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 .chart-small  { width: 400px; height: 100px; }
 .chart-medium { width: 600px; height: 200px; }
 .chart-large  { width: 800px; height: 300px; }
+
 .chart-legend { float: left; }
 
 .micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }

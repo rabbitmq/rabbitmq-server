@@ -662,7 +662,7 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, ch
 
     if (keys(stats).length > 0) {
         if (mode == 'chart') {
-            res = rates_chart_and_legend(
+            res = rates_chart(
                 id, id, items, stats, chart_fmt, axis_fmt, 'full', chart_rates);
         }
         else {
@@ -728,9 +728,8 @@ function node_stat(used_key, limit_key, suffix, stats, rate_fmt, axis_fmt,
     if (get_pref('rate-mode-node-stats') == 'chart') {
         var items = [['Used', used_key], ['Limit', limit_key]];
         add_fake_limit_details(used_key, limit_key, stats);
-        return rates_chart_and_legend(
-            'node-stats', 'node-stats-' + used_key, items, stats,
-            rate_fmt, axis_fmt, 'node', false);
+        return rates_chart('node-stats', 'node-stats-' + used_key, items, stats,
+                           rate_fmt, axis_fmt, 'node', false);
     } else {
         return node_stat_bar(used_key, limit_key, suffix, stats, axis_fmt,
                              colour, help, invert);
@@ -783,8 +782,8 @@ function node_stats_prefs() {
     return chart_h3('node-stats', 'Node statistics');
 }
 
-function rates_chart_and_legend(type_id, id, items, stats, rate_fmt, axis_fmt,
-                                type, chart_rates) {
+function rates_chart(type_id, id, items, stats, rate_fmt, axis_fmt, type,
+                     chart_rates) {
     function show(key) {
         return get_pref('chart-line-' + id + key) === 'true';
     }
@@ -811,7 +810,6 @@ function rates_chart_and_legend(type_id, id, items, stats, rate_fmt, axis_fmt,
             ix++;
         }
     }
-
     var html = '<div class="box"><div id="chart-' + id +
         '" class="chart chart-' + type + ' chart-' + size +
         (chart_rates ? ' chart-rates' : '') + '"></div>';
@@ -826,7 +824,6 @@ function rates_chart_and_legend(type_id, id, items, stats, rate_fmt, axis_fmt,
         html += ';"></div>' + legend[i].value + '</td></tr>'
     }
     html += '</table></div>';
-
     return legend.length > 0 ? html : '';
 }
 

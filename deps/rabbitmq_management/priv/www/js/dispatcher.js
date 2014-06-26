@@ -9,8 +9,7 @@ dispatcher_add(function(sammy) {
                                      options: {ranges: ['lengths-over',
                                                         'msg-rates-over']}}};
             if (user_monitor) {
-                reqs['nodes'] = {path: '/nodes',
-                                 options: {ranges: ['node-stats']}};
+                reqs['nodes'] = '/nodes';
             }
             render(reqs, 'overview', '#/');
         });
@@ -27,10 +26,10 @@ dispatcher_add(function(sammy) {
 
     sammy.get('#/nodes/:name', function() {
             var name = esc(this.params['name']);
-        render({'node': {path:    '/nodes/' + name,
-                         options: {ranges: ['node-stats']}}},
-                'node', '');
-        });
+            render({'node': {path:    '/nodes/' + name,
+                             options: {ranges: ['node-stats']}}},
+                   'node', '');
+            });
 
     path('#/connections',
          {'connections': {path: '/connections', options: {sort:true}}},
