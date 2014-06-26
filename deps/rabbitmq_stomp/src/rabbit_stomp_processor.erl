@@ -609,7 +609,7 @@ do_subscribe(Destination, DestHdr, Frame,
             Err
     end.
 
-maybe_clean_up_queue(Queue, State = #state{connection = Connection}) ->
+maybe_clean_up_queue(Queue, #state{connection = Connection}) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     catch amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
     catch amqp_channel:close(Channel),
@@ -946,7 +946,7 @@ millis_to_seconds(M)               -> M div 1000.
 %% Queue Setup
 %%----------------------------------------------------------------------------
 
-ensure_endpoint(Direction, {queue, []}, Frame, Channel, State) ->
+ensure_endpoint(_Direction, {queue, []}, _Frame, _Channel, _State) ->
     {error, {invalid_destination, "Destination cannot be blank"}};
 
 ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
