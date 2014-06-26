@@ -98,14 +98,13 @@ ensure_endpoint(_Dir, _Channel, {queue, undefined}, _Params, State) ->
     {ok, undefined, State};
 
 ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
-    Params1 = rabbit_misc:pset(durable, true, Params),
     Queue = list_to_binary(Name),
     State1 = case sets:is_element(Queue, State) of
                  true -> State;
                  _    -> Method = queue_declare_method(
                                     #'queue.declare'{queue  = Queue,
                                                      nowait = true},
-                                    queue, Params1),
+                                    queue, Params),
                          amqp_channel:cast(Channel, Method),
                          sets:add_element(Queue, State)
              end,
@@ -173,15 +172,17 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
                   false -> Method#'queue.declare'{auto_delete = true,
                                                   exclusive   = true}
               end,
+    Method2 = Method1#'queue.declare'{durable   = proplists:get_value(durable, Params)},
+    Method3 = Method2#'queue.declare'{arguments = proplists:get_value(arguments, Params)},
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
-            Method1#'queue.declare'{queue = SQNG()};
+            Method3#'queue.declare'{queue = SQNG()};
         {exchange, SQNG} when is_function(SQNG) ->
-            Method1#'queue.declare'{queue = SQNG()};
+            Method3#'queue.declare'{queue = SQNG()};
         {'reply-queue', SQNG} when is_function(SQNG) ->
-            Method1#'queue.declare'{queue = SQNG()};
+            Method3#'queue.declare'{queue = SQNG()};
         _ ->
-            Method1
+            Method3
     end.
 
 %% --------------------------------------------------------------------------
