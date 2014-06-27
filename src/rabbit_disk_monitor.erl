@@ -107,8 +107,8 @@ init([Limit]) ->
             {stop, unsupported_platform}
     end.
 
-handle_call(get_disk_free_limit, _From, State) ->
-    {reply, interpret_limit(State#state.limit), State};
+handle_call(get_disk_free_limit, _From, State = #state{limit = Limit}) ->
+    {reply, Limit, State};
 
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
     {reply, ok, set_disk_limits(State, Limit)};
@@ -153,29 +153,29 @@ code_change(_OldVsn, State, _Extra) ->
 % the partition / drive containing this directory will be monitored
 dir() -> rabbit_mnesia:dir().
 
-set_disk_limits(State, Limit) ->
+set_disk_limits(State, Limit0) ->
+    Limit = interpret_limit(Limit0),
     State1 = State#state { limit = Limit },
     rabbit_log:info("Disk free limit set to ~pMB~n",
-                    [trunc(interpret_limit(Limit) / 1000000)]),
+                    [trunc(Limit / 1000000)]),
     internal_update(State1).
 
 internal_update(State = #state { limit   = Limit,
                                  dir     = Dir,
                                  alarmed = Alarmed}) ->
-    CurrentFreeBytes = get_disk_free(Dir),
-    LimitBytes = interpret_limit(Limit),
-    NewAlarmed = CurrentFreeBytes < LimitBytes,
+    CurrentFree = get_disk_free(Dir),
+    NewAlarmed = CurrentFree < Limit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
-            emit_update_info("insufficient", CurrentFreeBytes, LimitBytes),
+            emit_update_info("insufficient", CurrentFree, Limit),
             rabbit_alarm:set_alarm({{resource_limit, disk, node()}, []});
         {true, false} ->
-            emit_update_info("sufficient", CurrentFreeBytes, LimitBytes),
+            emit_update_info("sufficient", CurrentFree, Limit),
             rabbit_alarm:clear_alarm({resource_limit, disk, node()});
         _ ->
             ok
     end,
-    State #state {alarmed = NewAlarmed, actual = CurrentFreeBytes}.
+    State #state {alarmed = NewAlarmed, actual = CurrentFree}.
 
 get_disk_free(Dir) ->
     get_disk_free(Dir, os:type()).

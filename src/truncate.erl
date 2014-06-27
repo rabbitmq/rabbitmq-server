@@ -102,17 +102,17 @@ term_limit(Thing, Max) ->
 term_size(B, M, _W) when is_bitstring(B) -> lim(M, size(B));
 term_size(A, M, W) when is_atom(A)       -> lim(M, 2 * W);
 term_size(N, M, W) when is_number(N)     -> lim(M, 2 * W);
-term_size(F, M, W) when is_function(F)   -> lim(M, erts_debug:flat_size(F) * W);
-term_size(P, M, W) when is_pid(P)        -> lim(M, erts_debug:flat_size(P) * W);
 term_size(T, M, W) when is_tuple(T)      -> tuple_term_size(
                                               T, M, 1, tuple_size(T), W);
-term_size([], M, _W)    ->
+term_size([], M, _W) ->
     M;
 term_size([H|T], M, W) ->
     case term_size(H, M, W) of
         limit_exceeded -> limit_exceeded;
         M2             -> lim(term_size(T, M2, W), 2 * W)
-    end.
+    end;
+term_size(X, M, W) ->
+    lim(M, erts_debug:flat_size(X) * W).
 
 lim(S, T) when is_number(S) andalso S > T -> S - T;
 lim(_, _)                                 -> limit_exceeded.
@@ -156,6 +156,8 @@ test_short_examples_exactly() ->
     P = spawn(fun() -> receive die -> ok end end),
     F([0, 0.0, <<1:1>>, F, P], [0, 0.0, <<1:1>>, F, P]),
     P ! die,
+    R = make_ref(),
+    F([R], [R]),
     ok.
 
 test_term_limit() ->
@@ -163,8 +165,14 @@ test_term_limit() ->
     S = <<"abc">>,
     1 = term_size(S, 4, W),
     limit_exceeded = term_size(S, 3, W),
-    62 = term_size([S, S], 100, W),
-    46 = term_size([S, [S]], 100, W),
+    case 100 - term_size([S, S], 100, W) of
+        22 -> ok; %% 32 bit
+        38 -> ok  %% 64 bit
+    end,
+    case 100 - term_size([S, [S]], 100, W) of
+        30 -> ok; %% ditto
+        54 -> ok
+    end,
     limit_exceeded = term_size([S, S], 6, W),
     ok.
 

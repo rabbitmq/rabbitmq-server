@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -e
 ##  The contents of this file are subject to the Mozilla Public License
 ##  Version 1.1 (the "License"); you may not use this file except in
 ##  compliance with the License. You may obtain a copy of the License
@@ -15,10 +15,14 @@
 ##  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 ##
 
+# We set +e here since since our test for "readlink -f" below needs to
+# be able to fail.
+set +e
 # Determine where this script is really located (if this script is
 # invoked from another script, this is the location of the caller)
 SCRIPT_PATH="$0"
 while [ -h "$SCRIPT_PATH" ] ; do
+    # Determine if readlink -f is supported at all. TODO clean this up.
     FULL_PATH=`readlink -f $SCRIPT_PATH 2>/dev/null`
     if [ "$?" != "0" ]; then
       REL_PATH=`readlink $SCRIPT_PATH`
@@ -31,6 +35,7 @@ while [ -h "$SCRIPT_PATH" ] ; do
       SCRIPT_PATH=$FULL_PATH
     fi
 done
+set -e
 
 SCRIPT_DIR=`dirname $SCRIPT_PATH`
 RABBITMQ_HOME="${SCRIPT_DIR}/.."
@@ -52,4 +57,4 @@ if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
 fi
 
 ## Get configuration variables from the configure environment file
-[ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE}
+[ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true

@@ -16,8 +16,8 @@
 
 -module(rabbit_networking).
 
--export([boot/0, start/0, start_tcp_listener/1, start_ssl_listener/2,
-         stop_tcp_listener/1, on_node_down/1, active_listeners/0,
+-export([boot/0, start/0, killall/0, start_tcp_listener/1, start_ssl_listener/2,
+         on_node_down/1, active_listeners/0,
          node_listeners/1, register_connection/1, unregister_connection/1,
          connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
@@ -60,10 +60,10 @@
 -type(label() :: string()).
 
 -spec(start/0 :: () -> 'ok').
+-spec(killall/0 :: () -> 'ok').
 -spec(start_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(start_ssl_listener/2 ::
         (listener_config(), rabbit_types:infos()) -> 'ok').
--spec(stop_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(register_connection/1 :: (pid()) -> ok).
@@ -144,6 +144,25 @@ start() -> rabbit_sup:start_supervisor_child(
              rabbit_tcp_client_sup, rabbit_client_sup,
              [{local, rabbit_tcp_client_sup},
               {rabbit_connection_sup,start_link,[]}]).
+
+%% We are going to stop for pause-minority, so we are already
+%% compromised; anything we confirm from now on is not going to be
+%% remembered after we come back. Since rabbit:stop/0 may take a while
+%% to gracefully shut down, we should stop talking to the outside
+%% world *immediately*.
+killall() ->
+    %% Stop ASAP
+    kill_connections(),
+    {ok, TCPListeners} = application:get_env(rabbit, tcp_listeners),
+    {ok, SSLListeners} = application:get_env(rabbit, ssl_listeners),
+    [stop_listener(L) || L <- TCPListeners ++ SSLListeners],
+    %% In case anything reconnected while we were stopping listeners
+    kill_connections(),
+    ok.
+
+kill_connections() ->
+    Conns = connections_local() ++ rabbit_direct:list_local(),
+    [exit(P, kill) || P <- Conns].
 
 ensure_ssl() ->
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
@@ -245,12 +264,12 @@ start_listener0(Address, Protocol, Label, OnConnect) ->
                                         {rabbit_misc:ntoa(IPAddress), Port}})
     end.
 
-stop_tcp_listener(Listener) ->
-    [stop_tcp_listener0(Address) ||
+stop_listener(Listener) ->
+    [stop_listener0(Address) ||
         Address <- tcp_listener_addresses(Listener)],
     ok.
 
-stop_tcp_listener0({IPAddress, Port, _Family}) ->
+stop_listener0({IPAddress, Port, _Family}) ->
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
     ok = supervisor:terminate_child(rabbit_sup, Name),
     ok = supervisor:delete_child(rabbit_sup, Name).
