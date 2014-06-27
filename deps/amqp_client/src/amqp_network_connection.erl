@@ -145,9 +145,9 @@ do_connect({Addr, Family},
                          Timeout) of
         {ok, Sock} ->
             SslOpts = orddict:merge(fun (_, _A, B) -> B end,
-                                    GlobalSslOpts,
-                                    SslOpts0),
-            case ssl:connect(Sock, SslOpts) of
+                                    orddict:from_list(GlobalSslOpts),
+                                    orddict:from_list(SslOpts0)),
+            case ssl:connect(Sock, orddict:to_list(SslOpts)) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
                     try_handshake(AmqpParams, SIF,
