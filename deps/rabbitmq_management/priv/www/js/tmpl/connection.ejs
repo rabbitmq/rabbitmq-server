@@ -7,7 +7,7 @@
 
 <div class="updatable">
 <h3>Details</h3>
-<table class="facts">
+<table class="facts facts-l">
 <% if (nodes_interesting) { %>
 <tr>
   <th>Node</th>
@@ -27,6 +27,10 @@
 <tr>
  <th>Protocol</th>
  <td><%= connection.protocol %></td>
+</tr>
+<tr>
+  <th>Connected at</th>
+  <td><%= fmt_timestamp(connection.connected_at) %></td>
 </tr>
 
 <% if (connection.ssl) { %>

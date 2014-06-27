@@ -46,13 +46,31 @@ function fmt_boolean(b) {
 }
 
 function fmt_date(d) {
+    var res = fmt_date0(d);
+    return res[0] + ' ' + res[1];
+}
+
+function fmt_date_mini(d) {
+    var res = fmt_date0(d);
+    return res[1] + '<sub>' + res[0] + '</sub>';
+}
+
+function fmt_date0(d) {
     function f(i) {
         return i < 10 ? "0" + i : i;
     }
 
-    return d.getFullYear() + "-" + f(d.getMonth() + 1) + "-" +
-        f(d.getDate()) + " " + f(d.getHours()) + ":" + f(d.getMinutes()) +
-        ":" + f(d.getSeconds());
+    return [d.getFullYear() + "-" + f(d.getMonth() + 1) + "-" +
+            f(d.getDate()), f(d.getHours()) + ":" + f(d.getMinutes()) +
+        ":" + f(d.getSeconds())];
+}
+
+function fmt_timestamp(ts) {
+    return fmt_date(new Date(ts));
+}
+
+function fmt_timestamp_mini(ts) {
+    return fmt_date_mini(new Date(ts));
 }
 
 function fmt_time(t, suffix) {
@@ -218,6 +236,14 @@ function fmt_rate_bytes(obj, name, mode) {
                              '<sub>(' + fmt_bytes(obj[name]) + ' total)</sub>');
 }
 
+function fmt_bytes_obj(obj, name, mode) {
+    return fmt_bytes(obj[name]);
+}
+
+function fmt_num_obj(obj, name, mode) {
+    return obj[name];
+}
+
 function fmt_rate_large(obj, name, mode) {
     return '<strong>' + fmt_rate0(obj, name, mode, fmt_rate_num) +
         '</strong>msg/s';
@@ -262,13 +288,18 @@ function fmt_rate_axis(num, max) {
     return fmt_si_prefix(num, max, 1000, true) + '/s';
 }
 
-function fmt_msgs_axis(num, max) {
+function fmt_num_axis(num, max) {
     return fmt_si_prefix(num, max, 1000, true);
 }
 
-function fmt_rate_bytes_axis(num, max) {
+function fmt_bytes_axis(num, max) {
     num = parseInt(num);
-    return fmt_bytes(isNaN(num) ? 0 : num) + '/s';
+    return fmt_bytes(isNaN(num) ? 0 : num);
+}
+
+
+function fmt_rate_bytes_axis(num, max) {
+    return fmt_bytes_axis(num, max) + '/s';
 }
 
 function is_stat_empty(obj, name) {
@@ -317,15 +348,6 @@ function fmt_download_filename(host) {
     var now = new Date();
     return host.replace('@', '_') + "_" + now.getFullYear() + "-" +
         (now.getMonth() + 1) + "-" + now.getDate() + ".json";
-}
-
-function fmt_fd_used(used, total) {
-    if (used == 'install_handle_from_sysinternals') {
-        return '<p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub>' + total + ' available</sub></p>';
-    }
-    else {
-        return used;
-    }
 }
 
 function fmt_table_short(table) {
@@ -498,44 +520,6 @@ function fmt_state(colour, text, explanation) {
     return '<div class="colour-key status-key-' + colour + '"></div>' + key;
 }
 
-function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
-    var width = 120;
-
-    var res = '';
-    var other_colour = colour;
-    if (ratio > 1) {
-        ratio = 1 / ratio;
-        inverted = true;
-        colour += '-dark';
-    }
-    else {
-        other_colour += '-dark';
-    }
-    var offset = Math.round(width * (1 - ratio));
-
-    res += '<div class="status-bar" style="width: ' + width + 'px;">';
-    res += '<div class="status-bar-main ' + colour + '" style="background-image: url(img/bg-' + other_colour + '.png); background-position: -' + offset + 'px 0px; background-repeat: no-repeat;">';
-    res += used_label;
-    if (help != null) {
-        res += ' <span class="help" id="' + help + '"></span>';
-    }
-    res += '</div>'; // status-bar-main
-    if (limit_label != null) {
-        res += '<sub>' + limit_label + '</sub>';
-    }
-    res += '</div>'; // status-bar
-    return res;
-}
-
-function fmt_resource_bar_count(used, total, thresholds) {
-    if (typeof used == 'number') {
-        return fmt_resource_bar(used, total + ' available', used / total,
-                                fmt_color(used / total, thresholds));
-    } else {
-        return used;
-    }
-}
-
 function fmt_shortened_uri(uri) {
     if (typeof uri == 'object') {
         var res = '';
@@ -660,115 +644,6 @@ function fmt_highlight_filter(text) {
             fmt_escape_html(text.substring(ix, ix + l)) + '</span>' +
             fmt_escape_html(text.substring(ix + l));
     }
-}
-
-function message_rates(id, stats) {
-    var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
-                 ['Publish (In)', 'publish_in'],
-                 ['Publish (Out)', 'publish_out'],
-                 ['Deliver', 'deliver'],
-                 ['Redelivered', 'redeliver'],
-                 ['Acknowledge', 'ack'],
-                 ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
-                 ['Get (noack)', 'get_no_ack'],
-                 ['Return', 'return_unroutable']];
-    return rates_chart_or_text(id, stats, items, fmt_rate, fmt_rate_large, fmt_rate_axis, true, 'Message rates', 'message-rates');
-}
-
-function queue_lengths(id, stats) {
-    var items = [['Ready', 'messages_ready'],
-                 ['Unacknowledged', 'messages_unacknowledged'],
-                 ['Total', 'messages']];
-    return rates_chart_or_text(id, stats, items, fmt_msgs, fmt_msgs_large, fmt_msgs_axis, false, 'Queued messages', 'queued-messages');
-}
-
-function data_rates(id, stats) {
-    var items = [['From client', 'recv_oct'], ['To client', 'send_oct']];
-    return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_large, fmt_rate_bytes_axis, true, 'Data rates');
-}
-
-function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, chart_rates,
-                             heading, heading_help) {
-    var mode = get_pref('rate-mode-' + id);
-    var range = get_pref('chart-range-' + id);
-    var prefix = '<h3>' + heading +
-        ' <span class="rate-options updatable" title="Click to change" for="'
-        + id + '">(' + prefix_title(mode, range) + ')</span>' +
-        (heading_help == undefined ? '' :
-         ' <span class="help" id="' + heading_help + '"></span>') +
-        '</h3>';
-    var res;
-
-    if (keys(stats).length > 0) {
-        if (mode == 'chart') {
-            res = rates_chart(id, items, stats, chart_fmt, axis_fmt, chart_rates);
-        }
-        else {
-            res = rates_text(items, stats, mode, text_fmt);
-        }
-        if (res == "") res = '<p>Waiting for data...</p>';
-    }
-    else {
-        res = '<p>Currently idle</p>';
-    }
-    return prefix + '<div class="updatable">' + res + '</div>';
-}
-
-function prefix_title(mode, range) {
-    var desc = CHART_PERIODS[range];
-    if (mode == 'chart') {
-        return 'chart: ' + desc.toLowerCase();
-    }
-    else if (mode == 'curr') {
-        return 'current value';
-    }
-    else {
-        return 'moving average: ' + desc.toLowerCase();
-    }
-}
-
-function rates_chart(id, items, stats, rate_fmt, axis_fmt, chart_rates) {
-    var size = get_pref('chart-size-' + id);
-    var show = [];
-    chart_data[id] = {};
-    chart_data[id]['data'] = {};
-    chart_data[id]['fmt'] = axis_fmt;
-    for (var i in items) {
-        var name = items[i][0];
-        var key = items[i][1];
-        var key_details = key + '_details';
-        if (key_details in stats) {
-            chart_data[id]['data'][name] = stats[key_details];
-            show.push([name, rate_fmt(stats, key)]);
-        }
-    }
-    var html = '<div class="box"><div id="chart-' + id +
-        '" class="chart chart-' + size +
-        (chart_rates ? ' chart-rates' : '') + '"></div>';
-    html += '<table class="facts facts-fixed-width">';
-    for (var i = 0; i < show.length; i++) {
-        html += '<tr><th>' + show[i][0] + '</th><td>';
-        html += '<div class="colour-key" style="background: ' + chart_colors[i];
-        html += ';"></div>' + show[i][1] + '</td></tr>'
-    }
-    html += '</table></div>';
-    return show.length > 0 ? html : '';
-}
-
-function rates_text(items, stats, mode, rate_fmt) {
-    var res = '';
-    for (var i in items) {
-        var name = items[i][0];
-        var key = items[i][1];
-        var key_details = key + '_details';
-        if (key_details in stats) {
-            var details = stats[key_details];
-            res += '<div class="highlight">' + name;
-            res += rate_fmt(stats, key, mode);
-            res += '</div>';
-        }
-    }
-    return res == '' ? '' : '<div class="box">' + res + '</div>';
 }
 
 function filter_ui(items) {

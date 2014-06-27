@@ -12,7 +12,7 @@
     <th colspan="2">Overview</th>
     <th colspan="3">Messages</th>
     <th colspan="2">Data rates</th>
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
     <th colspan="2">Message rates</th>
 <% } %>
   </tr>
@@ -24,7 +24,7 @@
       <th><%= fmt_sort('Total',        'messages') %></th>
       <th><%= fmt_sort('From clients', 'recv_oct_details.rate') %></th>
       <th><%= fmt_sort('To clients',   'send_oct_details.rate') %></th>
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
       <th><%= fmt_sort('publish',      'message_stats.publish_details.rate') %></th>
       <th><%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %>
 <% } %>
@@ -44,7 +44,7 @@
          <td class="r"><%= fmt_string(vhost.messages) %></td>
          <td class="r"><%= fmt_rate_bytes(vhost, 'recv_oct') %></td>
          <td class="r"><%= fmt_rate_bytes(vhost, 'send_oct') %></td>
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
          <td class="r"><%= fmt_rate(vhost.message_stats, 'publish') %></td>
          <td class="r"><%= fmt_deliver_rate(vhost.message_stats, false) %></td>
 <% } %>

@@ -2,19 +2,27 @@
 
 <div class="section">
 <h2>Overview</h2>
-<div class="hider updatable">
+<div class="hider">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
+  <%= node_stats_prefs() %>
+
+<div class="updatable">
   <table class="facts">
     <tr>
       <th>
         File descriptors <span class="help" id="file-descriptors"></span>
       </th>
       <td>
-<%= fmt_resource_bar_count(fmt_fd_used(node.fd_used, node.fd_total), node.fd_total, FD_THRESHOLDS) %>
+<% if (node.fd_used != 'install_handle_from_sysinternals') { %>
+        <%= node_stat_count('fd_used', 'fd_total', node, FD_THRESHOLDS) %>
+<% } else { %>
+        <p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub><%= node.fd_total %> available</sub></p>
+
+<% } %>
       </td>
     </tr>
     <tr>
@@ -22,7 +30,7 @@
         Socket descriptors <span class="help" id="socket-descriptors"></span>
       </th>
       <td>
-<%= fmt_resource_bar_count(node.sockets_used, node.sockets_total, FD_THRESHOLDS) %>
+        <%= node_stat_count('sockets_used', 'sockets_total', node, FD_THRESHOLDS) %>
       </td>
     </tr>
     <tr>
@@ -30,22 +38,19 @@
         Erlang processes
       </th>
      <td>
-<%= fmt_resource_bar_count(node.proc_used, node.proc_total, PROCESS_THRESHOLDS) %>
+        <%= node_stat_count('proc_used', 'proc_total', node, PROCESS_THRESHOLDS) %>
      </td>
     </tr>
-  </table>
-  <table class="facts">
     <tr>
       <th>
         Memory
       </th>
       <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <%= fmt_resource_bar(fmt_bytes(node.mem_used),
-                        fmt_bytes(node.mem_limit) + ' high watermark',
-                        node.mem_used / node.mem_limit,
-                        node.mem_alarm ? 'red' : 'green',
-                        node.mem_alarm ? 'memory-alarm' : null) %>
+   <%= node_stat('mem_used', 'mem_limit', 'high watermark', node,
+                 fmt_bytes_obj, fmt_bytes_axis,
+                 node.mem_alarm ? 'red' : 'green',
+                 node.mem_alarm ? 'memory-alarm' : null) %>
 <% } else { %>
    <%= fmt_bytes(node.mem_used) %>
 <% } %>
@@ -57,11 +62,11 @@
       </th>
       <td>
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
-   <%= fmt_resource_bar(fmt_bytes(node.disk_free),
-                        fmt_bytes(node.disk_free_limit) + ' low watermark',
-                        node.disk_free_limit / node.disk_free,
-                        node.disk_free_alarm ? 'red' : 'green',
-                        node.disk_free_alarm ? 'disk_free-alarm' : null) %>
+   <%= node_stat('disk_free', 'disk_free_limit', 'low watermark', node,
+                 fmt_bytes_obj, fmt_bytes_axis,
+                 node.disk_free_alarm ? 'red' : 'green',
+                 node.disk_free_alarm ? 'disk_free-alarm' : null,
+                 true) %>
 <% } else { %>
          (not available)
 <% } %>
@@ -91,6 +96,7 @@
       </td>
     </tr>
   </table>
+</div>
 <% } %>
 </div>
 </div>
@@ -165,8 +171,8 @@
       <td><%= node.os_pid %></td>
     </tr>
     <tr>
-      <th>Statistics</th>
-      <td><%= node.statistics_level %></td>
+      <th>Rates mode</th>
+      <td><%= node.rates_mode %></td>
     </tr>
   </table>
 

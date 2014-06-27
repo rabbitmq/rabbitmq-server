@@ -190,7 +190,7 @@ function update_manual(div, query) {
     var path;
     var template;
     if (query == 'memory') {
-        path = current_reqs['node'] + '?memory=true';
+        path = current_reqs['node']['path'] + '?memory=true';
         template = 'memory';
     }
     var data = JSON.parse(sync_get(path));
@@ -368,7 +368,7 @@ function y_position() {
 
 function with_update(fun) {
     with_reqs(apply_state(current_reqs), [], function(json) {
-            json.statistics_level = statistics_level;
+            //json.statistics_level = statistics_level;
             var html = format(current_template, json);
             fun(html);
             update_status('ok');
@@ -410,6 +410,9 @@ function apply_state(reqs) {
                 }
                 else if (type.substring(0, 11) == 'data-rates-') {
                     prefix = 'data_rates';
+                }
+                else if (type == 'node-stats') {
+                    prefix = 'node_stats';
                 }
                 qs.push(prefix + '_age=' + parseInt(range[0]));
                 qs.push(prefix + '_incr=' + parseInt(range[1]));
@@ -519,6 +522,12 @@ function postprocess() {
             show_popup('rate-options', format('rate-options', {span: $(this)}),
                        'fade');
         }
+    });
+    $('.rate-visibility-option').die().live('click', function() {
+        var k = $(this).attr('data-pref');
+        var show = get_pref(k) !== 'true';
+        store_pref(k, '' + show);
+        partial_update();
     });
     $('input, select').live('focus', function() {
         update_counter = 0; // If there's interaction, reset the counter.

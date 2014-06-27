@@ -16,19 +16,20 @@
 
 -module(rabbit_mgmt_dispatcher).
 
--export([modules/0, build_dispatcher/0]).
+-export([modules/1, build_dispatcher/1]).
 
 -behaviour(rabbit_mgmt_extension).
 -export([dispatcher/0, web_ui/0]).
 
-build_dispatcher() ->
+build_dispatcher(Ignore) ->
     [{["api" | Path], Mod, Args} ||
         {Path, Mod, Args} <-
-            lists:append([Module:dispatcher() || Module <- modules()])].
+            lists:append([Module:dispatcher() || Module <- modules(Ignore)])].
 
-modules() ->
-    [Module || {Module, Behaviours} <-
+modules(IgnoreApps) ->
+    [Module || {App, Module, Behaviours} <-
                    rabbit_misc:all_module_attributes(behaviour),
+               not lists:member(App, IgnoreApps),
                lists:member(rabbit_mgmt_extension, Behaviours)].
 
 %%----------------------------------------------------------------------------
@@ -55,6 +56,8 @@ dispatcher() ->
      {["connections", connection, "channels"],                     rabbit_mgmt_wm_connection_channels, []},
      {["channels"],                                                rabbit_mgmt_wm_channels, []},
      {["channels", channel],                                       rabbit_mgmt_wm_channel, []},
+     {["consumers"],                                               rabbit_mgmt_wm_consumers, []},
+     {["consumers", vhost],                                        rabbit_mgmt_wm_consumers, []},
      {["exchanges"],                                               rabbit_mgmt_wm_exchanges, []},
      {["exchanges", vhost],                                        rabbit_mgmt_wm_exchanges, []},
      {["exchanges", vhost, exchange],                              rabbit_mgmt_wm_exchange, []},

@@ -4,13 +4,13 @@
   <h2>Overview</h2>
   <div class="hider">
     <%= queue_lengths('lengths-q', queue) %>
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-q', queue.message_stats) %>
 <% } %>
 
     <div class="updatable">
     <h3>Details</h3>
-    <table class="facts">
+    <table class="facts facts-l">
       <tr>
         <th>Parameters</th>
         <td><%= fmt_parameters(queue) %></td>
@@ -31,7 +31,7 @@
       </tr>
     </table>
 
-    <table class="facts">
+    <table class="facts facts-l">
       <tr>
         <th>State</th>
         <td><%= fmt_object_state(queue) %></td>
@@ -144,7 +144,7 @@
   </div>
 </div>
 
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode == 'detailed') { %>
 <div class="section-hidden">
 <h2>Message rates breakdown</h2>
 <div class="hider updatable">

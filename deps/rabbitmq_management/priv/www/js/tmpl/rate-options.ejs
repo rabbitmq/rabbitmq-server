@@ -18,7 +18,9 @@
       <td>
         <%= fmt_radio('mode', 'Chart',         'chart', mode) %>
         <%= fmt_radio('mode', 'Current value',  'curr', mode) %>
-        <%= fmt_radio('mode', 'Moving average',  'avg', mode) %>
+        <% if (id != 'node-stats') { %>
+             <%= fmt_radio('mode', 'Moving average',  'avg', mode) %>
+        <% } %>
       </td>
     </tr>
     <tr>
