@@ -176,6 +176,10 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
             Method1#'queue.declare'{queue = SQNG()};
+        {exchange, SQNG} when is_function(SQNG) ->
+            Method1#'queue.declare'{queue = SQNG()};
+        {'reply-queue', SQNG} when is_function(SQNG) ->
+            Method1#'queue.declare'{queue = SQNG()};
         _ ->
             Method1
     end.
