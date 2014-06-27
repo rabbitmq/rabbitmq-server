@@ -406,8 +406,6 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
               {noreply, State}
       end, Upstream, UParams, DownXName, S0).
 
-%% local / disconnected never gets invoked, see handle_info({'DOWN', ...
-
 consume_from_upstream_queue(
   State = #state{upstream            = Upstream,
                  upstream_params     = UParams,

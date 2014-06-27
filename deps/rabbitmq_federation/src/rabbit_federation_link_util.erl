@@ -115,7 +115,7 @@ connection_error(remote_start, E, Upstream, UParams, XorQName, State) ->
 connection_error(remote, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_info(XorQName, "~s disconnected from ~s~n~p~n",
+    log_info(XorQName, "disconnected from ~s~n~p~n",
              [rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
