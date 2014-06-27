@@ -71,7 +71,7 @@
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
--export([timestamp/1]).
+-export([now_to_ms/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -255,7 +255,7 @@
 -spec(store_proc_name/1 :: (rabbit_types:proc_type_and_name()) -> ok).
 -spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
                           -> float()).
--spec(timestamp/1 :: ({non_neg_integer(),
+-spec(now_to_ms/1 :: ({non_neg_integer(),
                        non_neg_integer(),
                        non_neg_integer()}) -> pos_integer()).
 -endif.
@@ -1020,7 +1020,7 @@ term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
 
-timestamp({Mega, Sec, Micro}) ->
+now_to_ms({Mega, Sec, Micro}) ->
     (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) div 1000.
 
 check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
