@@ -118,6 +118,7 @@ node_down(Node, _State) ->
 handle_msg({request_start, Node},
            not_healing, Partitions) ->
     rabbit_log:info("Autoheal request received from ~p~n", [Node]),
+    rabbit_node_monitor:ping_all(),
     case rabbit_node_monitor:all_rabbit_nodes_up() of
         false -> not_healing;
         true  -> AllPartitions = all_partitions(Partitions),

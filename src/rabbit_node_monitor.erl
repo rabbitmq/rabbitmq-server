@@ -31,7 +31,7 @@
          code_change/3]).
 
  %% Utils
--export([all_rabbit_nodes_up/0, run_outside_applications/1]).
+-export([all_rabbit_nodes_up/0, run_outside_applications/1, ping_all/0]).
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
@@ -63,6 +63,7 @@
 
 -spec(all_rabbit_nodes_up/0 :: () -> boolean()).
 -spec(run_outside_applications/1 :: (fun (() -> any())) -> pid()).
+-spec(ping_all/0 :: () -> 'ok').
 
 -endif.
 
@@ -301,12 +302,11 @@ handle_info(ping_nodes, State) ->
     %% to ping the nodes that are up, after all.
     State1 = State#state{down_ping_timer = undefined},
     Self = self(),
-    %% all_nodes_up() both pings all the nodes and tells us if we need to again.
-    %%
     %% We ping in a separate process since in a partition it might
     %% take some noticeable length of time and we don't want to block
     %% the node monitor for that long.
     spawn_link(fun () ->
+                       ping_all(),
                        case all_nodes_up() of
                            true  -> ok;
                            false -> Self ! ping_again
@@ -361,11 +361,10 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
 await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
                        []),
-    Nodes = rabbit_mnesia:cluster_nodes(all),
     run_outside_applications(fun () ->
                                      rabbit_networking:killall(),
                                      rabbit:stop(),
-                                     wait_for_cluster_recovery(Nodes)
+                                     wait_for_cluster_recovery()
                              end),
     ok.
 
@@ -382,11 +381,12 @@ run_outside_applications(Fun) ->
                   end
           end).
 
-wait_for_cluster_recovery(Nodes) ->
+wait_for_cluster_recovery() ->
+    ping_all(),
     case majority() of
         true  -> rabbit:start();
         false -> timer:sleep(?RABBIT_DOWN_PING_INTERVAL),
-                 wait_for_cluster_recovery(Nodes)
+                 wait_for_cluster_recovery()
     end.
 
 handle_dead_rabbit(Node, State = #state{partitions = Partitions,
@@ -454,6 +454,11 @@ del_node(Node, Nodes) -> Nodes -- [Node].
 %% functions here. "rabbit" in a function's name implies we test if
 %% the rabbit application is up, not just the node.
 
+%% As we use these functions to decide what to do in pause_minority
+%% state, they *must* be fast, even in the case where TCP connections
+%% are timing out. So that means we should be careful about whether we
+%% connect to nodes which are currently disconnected.
+
 majority() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
@@ -466,9 +471,14 @@ all_rabbit_nodes_up() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
 
-alive_nodes(Nodes) -> [N || N <- Nodes, pong =:= net_adm:ping(N)].
+alive_nodes(Nodes) -> [N || N <- Nodes, lists:member(N, [node()|nodes()])].
 
 alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_mnesia:cluster_nodes(all)).
 
 alive_rabbit_nodes(Nodes) ->
     [N || N <- alive_nodes(Nodes), rabbit:is_running(N)].
+
+%% This one is allowed to connect!
+ping_all() ->
+    [net_adm:ping(N) || N <- rabbit_mnesia:cluster_nodes(all)],
+    ok.
