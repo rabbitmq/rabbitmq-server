@@ -1,7 +1,10 @@
 RELEASABLE:=true
-DEPS:=rabbitmq-web-dispatch webmachine-wrapper rabbitmq-server rabbitmq-erlang-client rabbitmq-management-agent
-WITH_BROKER_TEST_COMMANDS:=rabbit_mgmt_test_all:all_tests()
+DEPS:=rabbitmq-web-dispatch webmachine-wrapper rabbitmq-server rabbitmq-erlang-client rabbitmq-management-agent rabbitmq-test
+FILTER:=all
+COVER:=false
+WITH_BROKER_TEST_COMMANDS:=rabbit_test_runner:run_in_broker(\"$(PACKAGE_DIR)/test/ebin\",\"$(FILTER)\")
 WITH_BROKER_TEST_CONFIG:=$(PACKAGE_DIR)/etc/rabbit-test
+STANDALONE_TEST_COMMANDS:=rabbit_test_runner:run_multi(\"$(UMBRELLA_BASE_DIR)/rabbitmq-server\",\"$(PACKAGE_DIR)/test/ebin\",\"$(FILTER)\",$(COVER),\"/tmp/rabbitmq-multi-node/plugins\")
 WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/src/rabbitmqadmin-test.py
 
 CONSTRUCT_APP_PREREQS:=$(shell find $(PACKAGE_DIR)/priv -type f) $(PACKAGE_DIR)/bin/rabbitmqadmin
@@ -16,3 +19,7 @@ $(PACKAGE_DIR)+pre-test::
 	  echo "Need Erlang/OTP R14A or higher" ; \
 	  exit 1 ; \
 	fi
+	rm -rf /tmp/rabbitmq-multi-node/plugins
+	mkdir -p /tmp/rabbitmq-multi-node/plugins/plugins
+	cp -p $(UMBRELLA_BASE_DIR)/rabbitmq-management/dist/*.ez /tmp/rabbitmq-multi-node/plugins/plugins
+
