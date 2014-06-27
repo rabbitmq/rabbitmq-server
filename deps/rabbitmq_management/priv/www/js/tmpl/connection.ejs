@@ -28,6 +28,10 @@
  <th>Protocol</th>
  <td><%= connection.protocol %></td>
 </tr>
+<tr>
+  <th>Connected at</th>
+  <td><%= fmt_timestamp(connection.connected_at) %></td>
+</tr>
 
 <% if (connection.ssl) { %>
 <tr>
