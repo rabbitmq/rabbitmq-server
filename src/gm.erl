@@ -570,11 +570,6 @@ init([GroupName, Module, Args, TxnFun]) ->
                   txn_executor        = TxnFun }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-
-handle_call({confirmed_broadcast, _Msg}, _From,
-            State = #state { members_state = undefined }) ->
-    reply(not_joined, State);
-
 handle_call({confirmed_broadcast, Msg}, _From,
             State = #state { self          = Self,
                              right         = {Self, undefined},
@@ -590,20 +585,12 @@ handle_call({confirmed_broadcast, Msg}, From, State) ->
     handle_callback_result({Result, flush_broadcast_buffer(
                                       State1 #state { confirms = Confirms1 })});
 
-handle_call(info, _From,
-            State = #state { members_state = undefined }) ->
-    reply(not_joined, State);
-
 handle_call(info, _From, State = #state { group_name = GroupName,
                                           module     = Module,
                                           view       = View }) ->
     reply([{group_name,    GroupName},
            {module,        Module},
            {group_members, get_pids(alive_view_members(View))}], State);
-
-handle_call({add_on_right, _NewMember}, _From,
-            State = #state { members_state = undefined }) ->
-    reply(not_ready, State);
 
 handle_call({add_on_right, NewMember}, _From,
             State = #state { self          = Self,
@@ -633,10 +620,6 @@ handle_cast({?TAG, ReqVer, Msg},
     handle_callback_result(
       if_callback_success(
         Result, fun handle_msg_true/3, fun handle_msg_false/3, Msg, State1));
-
-handle_cast({broadcast, _Msg, _SizeHint},
-            State = #state { members_state = undefined }) ->
-    noreply(State);
 
 handle_cast({broadcast, Msg, _SizeHint},
             State = #state { self          = Self,
