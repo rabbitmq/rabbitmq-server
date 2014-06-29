@@ -733,20 +733,15 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
     end.
 
 quit_if_rabbit_app_is_not_running(Node) ->
-    case rpc:call(Node, application, which_applications, [5000]) of
-        {badrpc, Reason} ->
-            fail_on_badrpc(Node, Reason);
-        Apps ->
-            case proplists:is_defined(rabbit, Apps) of
-                true ->
-                    ok;
-                false ->
-                    fmt_stderr("rabbit app is not running on node ~s, "
-                               "please start it with rabbitmqctl start_app "
-                               "and try again",
-                               [Node]),
-                    rabbit_misc:quit(2)
-            end
+    case rabbit:is_running(Node) of
+        true ->
+            ok;
+        false ->
+            fmt_stderr("rabbit app is not running on node ~s, "
+                       "please start it with rabbitmqctl start_app "
+                       "and try again",
+                       [Node]),
+            rabbit_misc:quit(2)
     end.
 
 call(Node, {Mod, Fun, Args}) ->
