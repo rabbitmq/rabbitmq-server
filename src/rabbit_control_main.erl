@@ -114,8 +114,10 @@
          {"Policies",   rabbit_policy,             list_formatted, info_keys},
          {"Parameters", rabbit_runtime_parameters, list_formatted, info_keys}]).
 
--define(COMMANDS_THAT_DO_NOT_REQUIRE_RABBIT_APP_TO_BE_RUNNING,
-       [start_app, stop_app, status, cluster_status, environment, eval, rotate_logs]).
+-define(COMMANDS_NOT_REQUIRING_APP,
+        [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
+         join_cluster, change_cluster_node_type, update_cluster_nodes,
+         forget_cluster_node, cluster_status, status, environment, eval]).
 
 %%----------------------------------------------------------------------------
 
@@ -143,12 +145,9 @@ start() ->
         end,
     Quiet = proplists:get_bool(?QUIET_OPT, Opts),
     Node = proplists:get_value(?NODE_OPT, Opts),
-    case lists:member(Command, ?COMMANDS_THAT_DO_NOT_REQUIRE_RABBIT_APP_TO_BE_RUNNING) of
-        true ->
-            ok;
-        false ->
-            quit_if_rabbit_app_is_not_running(Node),
-            ok
+    case lists:member(Command, ?COMMANDS_NOT_REQUIRING_APP) of
+        false -> ensure_app_running(Node);
+        true  -> ok
     end,
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
@@ -732,16 +731,21 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
         Normal            -> Normal
     end.
 
-quit_if_rabbit_app_is_not_running(Node) ->
-    case rabbit:is_running(Node) of
-        true ->
-            ok;
-        false ->
-            fmt_stderr("rabbit app is not running on node ~s, "
-                       "please start it with rabbitmqctl start_app "
-                       "and try again",
-                       [Node]),
-            rabbit_misc:quit(2)
+ensure_app_running(Node) ->
+    case rpc:call(Node, application, which_applications, [5000]) of
+        {badrpc, Reason} ->
+            fail_on_badrpc(Node, Reason);
+        Apps ->
+            case proplists:is_defined(rabbit, Apps) of
+                true ->
+                    ok;
+                false ->
+                    fmt_stderr("rabbit app is not running on node ~s, "
+                               "please start it with rabbitmqctl start_app "
+                               "and try again",
+                               [Node]),
+                    rabbit_misc:quit(2)
+            end
     end.
 
 call(Node, {Mod, Fun, Args}) ->
