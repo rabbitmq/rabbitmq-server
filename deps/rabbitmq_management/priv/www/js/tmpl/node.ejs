@@ -102,6 +102,13 @@
 </div>
 
 <div class="section">
+<h2>Paths</h2>
+<div class="hider">
+    <%= format('paths', {node: node}) %>
+</div>
+</div>
+
+<div class="section">
 <h2>Memory details</h2>
 <div class="hider">
   <div id="memory-details"></div>
@@ -173,6 +180,10 @@
     <tr>
       <th>Rates mode</th>
       <td><%= node.rates_mode %></td>
+    </tr>
+    <tr>
+      <th>Net ticktime</th>
+      <td><%= node.net_ticktime %>s</td>
     </tr>
   </table>
 

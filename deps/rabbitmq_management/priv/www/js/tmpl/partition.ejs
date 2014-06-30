@@ -51,4 +51,52 @@
   network partitions.</a>
 </p>
 <% } %>
+<%
+   var ticktime = null;
+   var ticktimes_unequal = false;
+   for (var i = 0; i < nodes.length; i++) {
+     var node_ticktime = nodes[i].net_ticktime;
+     if (node_ticktime != undefined) {
+
+       if (ticktime != null && node_ticktime != ticktime) {
+         ticktimes_unequal = true;
+       }
+       ticktime = nodes[i].net_ticktime;
+     }
+   }
+   if (ticktimes_unequal) {
+%>
+<p class="status-error">
+  The <code>kernel</code> <code>net_ticktime</code> values are set
+  differently for different nodes in this cluster.
+</p>
+<p>
+  The values are:
+</p>
+  <table class="list">
+    <tr><th>Node</th><th>net_ticktime</th></tr>
+<%
+   for (var i = 0; i < nodes.length; i++) {
+%>
+      <tr<%= alt_rows(i)%>>
+        <td><%= nodes[i].name %></td>
+        <td><%= nodes[i].net_ticktime %></td>
+      </tr>
+<%
+   }
+%>
+  </table>
+<p>
+  This is a dangerous configuration; use of substantially
+  unequal <code>net_timetime</code> values can lead to partitions
+  being falsely detected.
+</p>
+<p>
+  <a target="_blank"
+  href="http://www.rabbitmq.com/nettick.html">More information on
+  <code>net_ticktime</code>.</a>
+</p>
+<%
+   }
+%>
 </div>
