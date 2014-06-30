@@ -51,11 +51,22 @@
 
 <% if (user_monitor) { %>
 <div class="section">
+<% if (nodes.length == 1) { %>
+<h2>Node</h2>
+<% } else { %>
 <h2>Nodes</h2>
+<% } %>
+
 <div class="hider updatable">
+<% if (nodes.length == 1) { %>
+    <p>Node: <%= nodes[0].name %> <a href="#/nodes/<%= esc(nodes[0].name) %>">(More about this node)</a></p>
+<% } %>
+
 <table class="list">
   <tr>
+<% if (nodes.length > 1) { %>
     <th>Name</th>
+<% } %>
     <th>
       File descriptors <span class="help" id="file-descriptors"></span>
     </th>
@@ -81,12 +92,14 @@
      var node = nodes[i];
 %>
    <tr<%= alt_rows(i)%>>
+<% if (nodes.length > 1) { %>
      <td>
        <%= link_node(node.name) %>
        <% if (rabbit_versions_interesting) { %>
          <sub>RabbitMQ <%= fmt_rabbit_version(node.applications) %></sub>
        <% } %>
      </td>
+<% } %>
 <% if (!node.running) { %>
      <td colspan="6">
        <div class="status-red">
@@ -161,7 +174,7 @@
 <% } %>
 
 <% if (nodes.length == 1 && nodes[0].os_pid != undefined) { %>
-    <h3>Paths for <%= nodes[0].name %></h3>
+    <h3>Paths</h3>
     <%= format('paths', {node: nodes[0]}) %>
 <% } %>
 
