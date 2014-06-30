@@ -21,7 +21,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate/5, notify/4, notify_clear/3]).
--export([register/0, validate_policy/1]).
+-export([register/0, validate_policy/1, adjust/1]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "federation parameters"},

@@ -40,7 +40,9 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
+    R = supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []),
+    rabbit_federation_event:add_handler(),
+    R.
 
 %%----------------------------------------------------------------------------
 
