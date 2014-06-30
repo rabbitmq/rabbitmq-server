@@ -24,7 +24,7 @@
          start_fhc/0]).
 -export([start/2, stop/1]).
 -export([start_apps/1, stop_apps/1]).
--export([log_location/1]). %% for testing
+-export([log_location/1, config_files/0]). %% for testing and mgmt-agent
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
