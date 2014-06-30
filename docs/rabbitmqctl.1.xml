@@ -1475,6 +1475,10 @@
                 <term>send_pend</term>
                 <listitem><para>Send queue size.</para></listitem>
               </varlistentry>
+              <varlistentry>
+                <term>connected_at</term>
+                <listitem><para>Date and time this connection was established, as timestamp.</para></listitem>
+              </varlistentry>
             </variablelist>
             <para>
               If no <command>connectioninfoitem</command>s are

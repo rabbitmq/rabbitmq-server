@@ -78,9 +78,10 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
               %% get here.
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
-                  [Q = #amqqueue { pid        = QPid,
-                                   slave_pids = SPids,
-                                   gm_pids    = GMPids }] ->
+                  [Q = #amqqueue { pid              = QPid,
+                                   slave_pids       = SPids,
+                                   gm_pids          = GMPids,
+                                   down_slave_nodes = DSNs}] ->
                       {DeadGM, AliveGM} = lists:partition(
                                             fun ({GM, _}) ->
                                                     lists:member(GM, DeadGMPids)
@@ -89,6 +90,9 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                       AlivePids = [Pid || {_GM, Pid} <- AliveGM],
                       Alive     = [Pid || Pid <- [QPid | SPids],
                                           lists:member(Pid, AlivePids)],
+                      DSNs1     = [node(Pid) ||
+                                      Pid <- SPids,
+                                      not lists:member(Pid, AlivePids)] ++ DSNs,
                       {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
@@ -97,9 +101,10 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
                               %% become the master.
-                              Q1 = Q#amqqueue{pid        = QPid1,
-                                              slave_pids = SPids1,
-                                              gm_pids    = AliveGM},
+                              Q1 = Q#amqqueue{pid              = QPid1,
+                                              slave_pids       = SPids1,
+                                              gm_pids          = AliveGM,
+                                              down_slave_nodes = DSNs1},
                               store_updated_slaves(Q1),
                               %% If we add and remove nodes at the same time we
                               %% might tell the old master we need to sync and
@@ -109,8 +114,9 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                           _ ->
                               %% Master has changed, and we're not it.
                               %% [1].
-                              Q1 = Q#amqqueue{slave_pids = Alive,
-                                              gm_pids    = AliveGM},
+                              Q1 = Q#amqqueue{slave_pids       = Alive,
+                                              gm_pids          = AliveGM,
+                                              down_slave_nodes = DSNs1},
                               store_updated_slaves(Q1)
                       end,
                       {ok, QPid1, DeadPids}
@@ -239,12 +245,16 @@ log(Level, QName, Fmt, Args) ->
     rabbit_log:log(mirroring, Level, "Mirrored ~s: " ++ Fmt,
                    [rabbit_misc:rs(QName) | Args]).
 
-store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
-                                   sync_slave_pids = SSPids}) ->
+store_updated_slaves(Q = #amqqueue{pid              = MPid,
+                                   slave_pids       = SPids,
+                                   sync_slave_pids  = SSPids,
+                                   down_slave_nodes = DSNs}) ->
     %% TODO now that we clear sync_slave_pids in rabbit_durable_queue,
     %% do we still need this filtering?
     SSPids1 = [SSPid || SSPid <- SSPids, lists:member(SSPid, SPids)],
-    Q1 = Q#amqqueue{sync_slave_pids = SSPids1},
+    DSNs1 = DSNs -- [node(P) || P <- [MPid | SPids]],
+    Q1 = Q#amqqueue{sync_slave_pids  = SSPids1,
+                    down_slave_nodes = DSNs1},
     ok = rabbit_amqqueue:store_queue(Q1),
     %% Wake it up so that we emit a stats event
     rabbit_amqqueue:notify_policy_changed(Q1),

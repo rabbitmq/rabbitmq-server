@@ -82,6 +82,8 @@ set(VHost, Component, Name, Term, User) ->
 
 set_global(Name, Term) ->
     mnesia_update(Name, Term),
+    event_notify(parameter_set, none, global, [{name,  Name},
+                                               {value, Term}]),
     ok.
 
 format_error(L) ->
@@ -164,6 +166,8 @@ mnesia_clear(VHost, Component, Name) ->
 
 event_notify(_Event, _VHost, <<"policy">>, _Props) ->
     ok;
+event_notify(Event, none, Component, Props) ->
+    rabbit_event:notify(Event, [{component, Component} | Props]);
 event_notify(Event, VHost, Component, Props) ->
     rabbit_event:notify(Event, [{vhost,     VHost},
                                 {component, Component} | Props]).

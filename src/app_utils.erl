@@ -17,7 +17,7 @@
 
 -export([load_applications/1, start_applications/1, start_applications/2,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
-         wait_for_applications/1]).
+         wait_for_applications/1, app_dependencies/1]).
 
 -ifdef(use_specs).
 
@@ -30,6 +30,7 @@
 -spec stop_applications([atom()], error_handler())  -> 'ok'.
 -spec wait_for_applications([atom()])               -> 'ok'.
 -spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
+-spec app_dependencies(atom())                      -> [atom()].
 
 -endif.
 
@@ -74,8 +75,8 @@ wait_for_applications(Apps) ->
 
 app_dependency_order(RootApps, StripUnreachable) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
-                fun (App, _Deps) -> [{App, App}] end,
-                fun (App,  Deps) -> [{Dep, App} || Dep <- Deps] end,
+                fun ({App, _Deps}) -> [{App, App}] end,
+                fun ({App,  Deps}) -> [{Dep, App} || Dep <- Deps] end,
                 [{App, app_dependencies(App)} ||
                     {App, _Desc, _Vsn} <- application:loaded_applications()]),
     try
