@@ -155,6 +155,12 @@
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
 <% } %>
+
+<% if (nodes.length == 1 && nodes[0].os_pid != undefined) { %>
+    <h3>Paths for <%= nodes[0].name %></h3>
+    <%= format('paths', {node: nodes[0]}) %>
+<% } %>
+
 </div>
 </div>
 
