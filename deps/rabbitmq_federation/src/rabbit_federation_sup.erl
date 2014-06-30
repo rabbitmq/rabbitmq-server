@@ -42,9 +42,12 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
+    R = supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []),
+    rabbit_federation_event:add_handler(),
+    R.
 
 stop() ->
+    rabbit_federation_event:remove_handler(),
     ok = supervisor:terminate_child(rabbit_sup, ?MODULE),
     ok = supervisor:delete_child(rabbit_sup, ?MODULE).
 

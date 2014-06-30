@@ -21,7 +21,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate/5, notify/4, notify_clear/3]).
--export([register/0, unregister/0, validate_policy/1]).
+-export([register/0, unregister/0, validate_policy/1, adjust/1]).
 
 -define(RUNTIME_PARAMETERS,
         [{runtime_parameter, <<"federation">>},
