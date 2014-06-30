@@ -187,7 +187,7 @@ function rates_chart(type_id, id, items, stats, rate_fmt, axis_fmt, type,
     var html = '<div class="box"><div id="chart-' + id +
         '" class="chart chart-' + type + ' chart-' + size +
         (chart_rates ? ' chart-rates' : '') + '"></div>';
-    html += '<table class="facts facts-fixed-width">';
+    html += '<table class="legend">';
     for (var i = 0; i < legend.length; i++) {
         html += '<tr><th><span title="Click to toggle line" ';
         html += 'class="rate-visibility-option';

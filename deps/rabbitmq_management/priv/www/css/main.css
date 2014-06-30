@@ -43,13 +43,16 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .help, .rate-options { color: #888; cursor: pointer; }
 .help:hover, .rate-options:hover { color: #444; }
 
-.rate-visibility-option { cursor: pointer; padding: 4px; border: 1px solid white; }
+.rate-visibility-option { cursor: pointer; padding: 4px; background: #fafafa; border: 1px solid f0f0f0; border-radius: 3px; display:block; }
 .rate-visibility-option:hover { background: #ddf;
                                 background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #ddf),color-stop(1, #bbf));
                                 border: 1px solid #88d;
                                 border-radius: 3px; }
 
 .rate-visibility-option-hidden { text-decoration: line-through; color: #888; }
+
+table.legend th { padding: 4px 10px 4px 0; width: 80px; }
+table.legend td { padding: 4px 0 4px 10px; width: 130px; }
 
 .tag-link { color: #444; cursor: pointer; }
 .tag-link:hover { color: #888; }
@@ -109,14 +112,11 @@ small { font-size: 0.8em; color: #888; }
 .unknown { color: #888; }
 
 table.facts { float: left; }
-table.facts th { color: black; text-align: right; border-right: 1px solid #ccc; }
+table.facts th, table.legend th { color: black; text-align: right; border-right: 1px solid #ccc; }
 table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px; }
 
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
-
-table.facts-fixed-width th { width: 80px; }
-table.facts-fixed-width td { width: 130px; }
 
 table.facts-l { margin-right: 50px; }
 
