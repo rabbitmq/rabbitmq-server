@@ -15,6 +15,7 @@
           {resource_access_query, {constant, true}},
           {tag_queries,           [{administrator, {constant, false}}]},
           {use_ssl,               false},
+          {use_starttls,          false},
           {ssl_options,           []},
           {port,                  389},
           {timeout,               infinity},
