@@ -200,26 +200,19 @@ start() ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, Reason} ->
-            fail_on_badrpc(Node, Reason);
+            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
+            print_badrpc_diagnostics([Node]),
+            rabbit_misc:quit(2);
         {badrpc_multi, Reason, Nodes} ->
-            fail_on_badrpc_multi(Nodes, Reason);
+            print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
+            print_badrpc_diagnostics(Nodes),
+            rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
     end.
 
-fail_on_badrpc(Node, Reason) ->
-    print_error("unable to connect to node ~w: ~w", [Node, Reason]),
-    print_badrpc_diagnostics([Node]),
-    rabbit_misc:quit(2).
-
-fail_on_badrpc_multi(Nodes, Reason) ->
-    print_error("unable to connect to nodes ~w: ~w", [Nodes, Reason]),
-    print_badrpc_diagnostics(Nodes),
-    rabbit_misc:quit(2).
-
-fmt_stderr(Format, Args) ->
-    rabbit_misc:format_stderr(Format ++ "~n", Args).
+fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 
 print_report(Node, {Descr, Module, InfoFun, KeysFun}) ->
     io:format("~s:~n", [Descr]),
