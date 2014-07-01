@@ -170,12 +170,12 @@ check_exchange(ExchangeName, Channel, true) ->
     ok.
 
 queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
-    Args    = proplists:get_value(arguments, Params, []),
     Method1 = case proplists:get_value(durable, Params, false) of
                   true  -> Method#'queue.declare'{durable     = true};
                   false -> Method#'queue.declare'{auto_delete = true,
                                                   exclusive   = true}
               end,
+    Args    = proplists:get_value(arguments, Params, []),
     Method2 = Method1#'queue.declare'{arguments = Args},
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
