@@ -18,7 +18,11 @@
 -include("rabbit.hrl").
 
 -export([setup/0, active/0, read_enabled/1, list/1, dependencies/3]).
+-export([info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([ensure/1]).
+
+-define(INFO_KEYS, [name, version, description, dependencies, type, location,
+                    running, enabled]).
 
 %%----------------------------------------------------------------------------
 
@@ -33,6 +37,13 @@
 -spec(dependencies/3 :: (boolean(), [plugin_name()], [#plugin{}]) ->
                              [plugin_name()]).
 -spec(ensure/1  :: (string()) -> {'ok', [atom()], [atom()]} | {error, any()}).
+
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (string()) -> rabbit_types:infos()).
+-spec(info/2 :: (string(), rabbit_types:info_keys()) -> rabbit_types:infos()).
+-spec(info_all/0 :: () -> [rabbit_types:infos()]).
+-spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
+
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -157,6 +168,54 @@ is_loadable(App) ->
                                         true;
         _                            -> false
    end.
+
+%%----------------------------------------------------------------------------
+
+info_keys() -> ?INFO_KEYS.
+
+info(Name) -> info(Name, info_keys()).
+info(Name, Items) ->
+    {Plugins, EIA} = info_raw(),
+    case [P || P = #plugin{name = N} <- Plugins, N =:= Name] of
+        [Plugin] -> infos(Items, Plugin, EIA);
+        []       -> not_found
+    end.
+
+info_all() -> info_all(info_keys()).
+info_all(Items) ->
+    {Plugins0, EIA} = info_raw(),
+    Plugins = lists:sort(fun (#plugin{name = A}, #plugin{name = B}) ->
+                                 A =< B
+                         end, Plugins0),
+    [infos(Items, Plugin, EIA) || Plugin <- Plugins].
+
+infos(Items, Plugin, EIA) -> [{Item, i(Item, Plugin, EIA)} || Item <- Items].
+
+i(name,         #plugin{name         = Name}, _EIA) -> Name;
+i(version,      #plugin{version      = Ver},  _EIA) -> list_to_binary(Ver);
+i(description,  #plugin{description  = Desc}, _EIA) -> list_to_binary(Desc);
+i(dependencies, #plugin{dependencies = Deps}, _EIA) -> Deps;
+i(type,         #plugin{type         = Type}, _EIA) -> Type;
+i(location,     #plugin{location     = Loc},  _EIA) -> list_to_binary(Loc);
+i(running, #plugin{name = Name}, {_Exp, _Imp, Act}) ->
+    lists:member(Name, Act);
+i(enabled, #plugin{name = Name}, {Exp, Imp, _Act}) ->
+    case {lists:member(Name, Exp), lists:member(Name, Imp)} of
+        {true, _} -> explicit;
+        {_, true} -> implicit;
+        _         -> false
+    end;
+i(Item, _, _) ->
+    throw({bad_argument, Item}).
+
+info_raw() ->
+    {ok, Dir} = application:get_env(rabbit, plugins_dir),
+    {ok, File} = application:get_env(rabbit, enabled_plugins_file),
+    Explicit = read_enabled(File),
+    List = list(Dir),
+    Implicit = dependencies(false, Explicit, List),
+    Active = active(),
+    {List, {Explicit, Implicit, Active}}.
 
 %%----------------------------------------------------------------------------
 
