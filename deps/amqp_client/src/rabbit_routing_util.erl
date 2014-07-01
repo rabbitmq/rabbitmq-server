@@ -171,12 +171,12 @@ check_exchange(ExchangeName, Channel, true) ->
 
 queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
     Args    = proplists:get_value(arguments, Params, []),
-    Method1 = Method#'queue.declare'{arguments = Args},
-    Method2 = case proplists:get_value(durable, Params, false) of
-                  true  -> Method1#'queue.declare'{durable     = true};
-                  false -> Method1#'queue.declare'{auto_delete = true,
-                                                   exclusive   = true}
+    Method1 = case proplists:get_value(durable, Params, false) of
+                  true  -> Method#'queue.declare'{durable     = true};
+                  false -> Method#'queue.declare'{auto_delete = true,
+                                                  exclusive   = true}
               end,
+    Method2 = Method1#'queue.declare'{arguments = Args},
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
             Method2#'queue.declare'{queue = SQNG()};
