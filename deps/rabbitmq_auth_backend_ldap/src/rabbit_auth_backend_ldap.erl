@@ -299,7 +299,8 @@ eldap_open(Servers, Opts) ->
                 {false, _}     -> {ok, LDAP};
                 {true,  false} -> exit({starttls_requires_min_r16b3});
                 {true,  _}     -> TLSOpts = env(ssl_options),
-                                  case eldap:start_tls(LDAP, TLSOpts) of
+                                  ELDAP = eldap, %% Fool xref
+                                  case ELDAP:start_tls(LDAP, TLSOpts) of
                                       ok    -> {ok, LDAP};
                                       Error -> Error
                                   end
