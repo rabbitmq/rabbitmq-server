@@ -18,7 +18,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--export([register/0]).
+-export([register/0, unregister/0]).
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -31,6 +31,7 @@
 -rabbit_boot_step({rabbit_event_exchange,
                    [{description, "event exchange"},
                     {mfa,         {?MODULE, register, []}},
+                    {cleanup,     {?MODULE, unregister, []}},
                     {requires,    recovery},
                     {enables,     routing_ready}]}).
 
@@ -40,8 +41,11 @@ register() ->
     rabbit_exchange:declare(x(), topic, true, false, true, []),
     gen_event:add_handler(rabbit_event, ?MODULE, []).
 
+unregister() ->
+    gen_event:delete_handler(rabbit_event, ?MODULE, []).
+
 x() ->
-    {ok, DefaultVHost} = application:get_env(default_vhost),    
+    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
     rabbit_misc:r(DefaultVHost, exchange, ?EXCH_NAME).
 
 %%----------------------------------------------------------------------------
