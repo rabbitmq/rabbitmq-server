@@ -83,9 +83,7 @@
       Disk space
     </th>
     <th>Uptime</th>
-<% if (nodes.length > 1) { %>
-    <th>Type</th>
-<% } %>
+    <th>Info</th>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
@@ -150,21 +148,17 @@
        <%= fmt_uptime(node.uptime) %>
      </td>
 <% } %>
-<% if (nodes.length > 1) { %>
      <td class="c">
        <% if (node.type == 'disc') { %>
          <acronym title="Broker definitions are held on disc.">Disc</acronym>
        <% } else { %>
          <acronym title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
        <% } %>
+       <%= fmt_plugins_small(node) %>
        <% if (overview.statistics_db_node == node.name) { %>
          <acronym title="This node contains the management statistics database">Stats</acronym>
        <% } %>
-       <% if (overview.node == node.name) { %>
-         <acronym title="You are accessing the management UI from this node.">*</acronym>
-       <% } %>
      </td>
-<% } %>
    </tr>
 <% } %>
 </table>

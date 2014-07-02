@@ -274,6 +274,9 @@ HELP = {
     and regular expressions are matched in a case-insensitive manner.<br/></br/> \
     (<a href="https://developer.mozilla.org/en/docs/Web/JavaScript/Guide/Regular_Expressions" target="_blank">Regular expression reference</a>)',
 
+    'plugins' :
+    'Note that only plugins which are both explicitly enabled and running are shown here.',
+
     'foo': 'foo' // No comma.
 };
 

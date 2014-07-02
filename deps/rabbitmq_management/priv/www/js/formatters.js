@@ -427,6 +427,30 @@ function fmt_uptime(u) {
         return min + 'm ' + sec + 's';
 }
 
+function fmt_plugins_small(node) {
+    if (node.applications === undefined) return '';
+    var plugins = [];
+    for (var i = 0; i < node.applications.length; i++) {
+        var application = node.applications[i];
+        if (node.enabled_plugins.indexOf(application.name) != -1) {
+            plugins.push(application.name);
+        }
+    }
+    return '<acronym title="Plugins: ' + plugins.join(", ") + '">' +
+        plugins.length + '</acronym>';
+}
+
+function get_plugins_list(node) {
+    var result = [];
+    for (var i = 0; i < node.applications.length; i++) {
+        var application = node.applications[i];
+        if (node.enabled_plugins.indexOf(application.name) != -1) {
+            result.push(application);
+        }
+    }
+    return result;
+}
+
 function fmt_rabbit_version(applications) {
     for (var i in applications) {
         if (applications[i].name == 'rabbit') {

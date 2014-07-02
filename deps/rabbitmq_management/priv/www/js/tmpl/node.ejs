@@ -2,12 +2,13 @@
 
 <div class="section">
 <h2>Overview</h2>
-<div class="hider">
+<div class="hider updatable">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
+
   <div class="box">
   <table class="facts facts-l">
     <tr>
@@ -34,8 +35,39 @@
 
   <%= format('paths', {node: node}) %>
   </div>
-  <%= node_stats_prefs() %>
 
+  <h3>Plugins <span class="help" id="plugins"></span></h3>
+  <table class="list">
+    <tr>
+      <th>Name</th>
+      <th>Version</th>
+      <th>Description</th>
+    </tr>
+    <%
+       var plugins = get_plugins_list(node);
+       for (var j = 0; j < plugins.length; j++) {
+         var application = plugins[j];
+    %>
+           <tr<%= alt_rows(j)%>>
+             <td><%= application.name %></td>
+             <td><%= application.version %></td>
+             <td><%= application.description %></td>
+           </tr>
+    <% } %>
+  </table>
+<% } %>
+</div>
+</div>
+
+<div class="section">
+<h2>Statistics</h2>
+<div class="hider">
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
+<% } else { %>
+  <%= node_stats_prefs() %>
 <div class="updatable">
   <table class="facts">
     <tr>
@@ -150,7 +182,7 @@
   </table>
   </div>
 
-<h3>Applications</h3>
+<h3>All applications</h3>
 <table class="list">
     <tr>
       <th>Name</th>
