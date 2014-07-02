@@ -247,33 +247,24 @@ with_ldap({error, _} = E, _Fun, _State) ->
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
 with_ldap({ok, Creds}, Fun, Servers) ->
-    Opts0 = [{ssl, env(use_ssl)}, {port, env(port)}],
-    SSLOpts = env(ssl_options),
-    %% We can't just pass through [] as sslopts in the old case, eldap
-    %% exit()s when you do that.
-    Opts1 = case {SSLOpts, rabbit_misc:version_compare(
-                             erlang:system_info(version), "5.10")} of %% R16A
-                {[], _}  -> Opts0;
-                {_,  lt} -> exit({ssl_options_requires_min_r16a});
-                {_,  _}  -> [{sslopts, SSLOpts} | Opts0]
-            end,
-    Opts2 = case env(log) of
+    Opts0 = [{port, env(port)}],
+    Opts1 = case env(log) of
                 network ->
                     Pre = "    LDAP network traffic: ",
                     rabbit_log:info(
                       "    LDAP connecting to servers: ~p~n", [Servers]),
                     [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
                               (2, S, A) -> rabbit_log:info   (Pre ++ S, A)
-                           end} | Opts1];
+                           end} | Opts0];
                 _ ->
-                    Opts1
+                    Opts0
             end,
     %% eldap defaults to 'infinity' but doesn't allow you to set that. Harrumph.
     Opts = case env(timeout) of
-               infinity -> Opts2;
-               MS       -> [{timeout, MS} | Opts2]
+               infinity -> Opts1;
+               MS       -> [{timeout, MS} | Opts1]
            end,
-    case eldap:open(Servers, Opts) of
+    case eldap_open(Servers, Opts) of
         {ok, LDAP} ->
             try Creds of
                 anon ->
@@ -299,6 +290,39 @@ with_ldap({ok, Creds}, Fun, Servers) ->
             ?L1("connect error: ~p", [Error]),
             Error
     end.
+
+eldap_open(Servers, Opts) ->
+    case eldap:open(Servers, ssl_opts() ++ Opts) of
+        {ok, LDAP} ->
+            TLS = env(use_starttls),
+            case {TLS, at_least("5.10.4")} of %%R16B03
+                {false, _}     -> {ok, LDAP};
+                {true,  false} -> exit({starttls_requires_min_r16b3});
+                {true,  _}     -> TLSOpts = env(ssl_options),
+                                  case eldap:start_tls(LDAP, TLSOpts) of
+                                      ok    -> {ok, LDAP};
+                                      Error -> Error
+                                  end
+            end;
+        Error ->
+            Error
+    end.
+
+ssl_opts() ->
+    %% We must make sure not to add SSL options unless a) we have at least R16A
+    %% b) we have SSL turned on (or it breaks StartTLS...)
+    case env(use_ssl) of
+        false -> [{ssl, false}];
+        true  -> SSLOpts = env(ssl_options),
+                 case {SSLOpts, at_least("5.10")} of %% R16A
+                     {[], _}  -> [{ssl, true}];
+                     {_,  lt} -> exit({ssl_options_requires_min_r16a});
+                     {_,  _}  -> [{ssl, true}, {sslopts, SSLOpts}]
+                 end
+    end.
+
+at_least(Ver) ->
+    rabbit_misc:version_compare(erlang:system_info(version), Ver) =/= lt.
 
 env(F) ->
     {ok, V} = application:get_env(rabbitmq_auth_backend_ldap, F),

@@ -32,7 +32,8 @@ start(_Type, _StartArgs) ->
                    "in the list of auth_backends. LDAP auth will not work.~n")
     end,
     {ok, SSL} = application:get_env(rabbitmq_auth_backend_ldap, use_ssl),
-    case SSL of
+    {ok, TLS} = application:get_env(rabbitmq_auth_backend_ldap, use_starttls),
+    case SSL orelse TLS of
         true  -> rabbit_networking:ensure_ssl();
         false -> ok
     end,
