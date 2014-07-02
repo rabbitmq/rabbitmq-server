@@ -8,6 +8,32 @@
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
+  <div class="box">
+  <table class="facts">
+    <tr>
+      <th>Uptime</th>
+      <td><%= fmt_uptime(node.uptime) %></td>
+    </tr>
+<% if (rabbit_versions_interesting) { %>
+    <tr>
+      <th>RabbitMQ Version</th>
+      <td><%= fmt_rabbit_version(node.applications) %></td>
+    </tr>
+<% } %>
+    <tr>
+      <th>Type</th>
+      <td>
+       <% if (node.type == 'disc') { %>
+         <acronym title="Broker definitions are held on disc.">Disc</acronym>
+       <% } else { %>
+         <acronym title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
+       <% } %>
+      </td>
+    </tr>
+  </table>
+
+  <%= format('paths', {node: node}) %>
+  </div>
   <%= node_stats_prefs() %>
 
 <div class="updatable">
@@ -74,37 +100,8 @@
     </tr>
   </table>
 
-  <table class="facts">
-    <tr>
-      <th>Uptime</th>
-      <td><%= fmt_uptime(node.uptime) %></td>
-    </tr>
-<% if (rabbit_versions_interesting) { %>
-    <tr>
-      <th>RabbitMQ Version</th>
-      <td><%= fmt_rabbit_version(node.applications) %></td>
-    </tr>
-<% } %>
-    <tr>
-      <th>Type</th>
-      <td>
-       <% if (node.type == 'disc') { %>
-         <acronym title="Broker definitions are held on disc.">Disc</acronym>
-       <% } else { %>
-         <acronym title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
-       <% } %>
-      </td>
-    </tr>
-  </table>
 </div>
 <% } %>
-</div>
-</div>
-
-<div class="section">
-<h2>Paths</h2>
-<div class="hider">
-    <%= format('paths', {node: node}) %>
 </div>
 </div>
 
@@ -113,52 +110,6 @@
 <div class="hider">
   <div id="memory-details"></div>
   <button class="update-manual memory-button" for="memory-details" query="memory">Update</button>
-</div>
-</div>
-
-<div class="section-hidden">
-<h2>Applications</h2>
-<div class="hider updatable">
-<% if (!node.running) { %>
-<p class="warning">Node not running</p>
-<% } else if (node.os_pid == undefined) { %>
-<p class="warning">Node statistics not available</p>
-<% } else { %>
-<table class="list">
-    <tr>
-      <th>Name</th>
-      <th>Version</th>
-    </tr>
-    <%
-      for (var j = 0; j < node.applications.length; j++) {
-        var application = node.applications[j];
-    %>
-       <tr<%= alt_rows(j)%>>
-         <td>
-           <%= application.name %>
-           <sub><%= application.description %></sub>
-         </td>
-         <td><%= application.version %></td>
-       </tr>
-    <% } %>
-</table>
-<% } %>
-</div>
-</div>
-
-<div class="section-hidden">
-<h2>Registry</h2>
-<div class="hider updatable">
-<% if (!node.running) { %>
-<p class="warning">Node not running</p>
-<% } else if (node.os_pid == undefined) { %>
-<p class="warning">Node statistics not available</p>
-<% } else { %>
-<h3>Exchange types</h3>
-<%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
-<h3>Authentication mechanisms</h3>
-<%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
-<% } %>
 </div>
 </div>
 
@@ -197,6 +148,32 @@
       <td><%= node.processors %></td>
     </tr>
   </table>
+  </div>
+
+<h3>Applications</h3>
+<table class="list">
+    <tr>
+      <th>Name</th>
+      <th>Version</th>
+      <th>Description</th>
+    </tr>
+    <%
+      for (var j = 0; j < node.applications.length; j++) {
+        var application = node.applications[j];
+    %>
+       <tr<%= alt_rows(j)%>>
+         <td><%= application.name %></td>
+         <td><%= application.version %></td>
+         <td><%= application.description %></td>
+       </tr>
+    <% } %>
+</table>
+
+<h3>Exchange types</h3>
+<%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
+<h3>Authentication mechanisms</h3>
+<%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
+
 <% } %>
 </div>
 </div>
