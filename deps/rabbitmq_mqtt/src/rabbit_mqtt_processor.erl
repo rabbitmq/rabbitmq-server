@@ -42,11 +42,16 @@ info(client_id, #proc_state{ client_id = ClientId }) -> ClientId.
 process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState = #proc_state{ connection = undefined } )
   when Type =/= ?CONNECT ->
-    {err, connect_expected, PState};
+    {error, connect_expected, PState};
 process_frame(Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState ) ->
     %%rabbit_log:info("MQTT received frame ~p ~n", [Frame]),
-    process_request(Type, Frame, PState).
+    try process_request(Type, Frame, PState) of
+        Result -> Result
+    catch _:Error ->
+        close_connection(PState),
+        {error, Error}
+    end.
 
 process_request(?CONNECT,
                 #mqtt_frame{ variable = #mqtt_frame_connect{
@@ -113,7 +118,7 @@ process_request(?PUBACK,
 process_request(?PUBLISH,
                 #mqtt_frame{
                   fixed = #mqtt_frame_fixed{ qos = ?QOS_2 }}, PState) ->
-    {err, qos2_not_supported, PState};
+    {error, qos2_not_supported, PState};
 process_request(?PUBLISH,
                 #mqtt_frame{
                   fixed = #mqtt_frame_fixed{ qos    = Qos,

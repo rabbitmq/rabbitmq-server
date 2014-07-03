@@ -205,15 +205,19 @@ process_received_bytes(Bytes,
                       Rest,
                       State #state{ parse_state = PS,
                                     proc_state = ProcState1 });
-                {err, Reason, ProcState1} ->
+                {error, Reason, ProcState1} ->
                     log(info, "MQTT protocol error ~p for connection ~p~n",
-                        [Reason, ConnStr]),
+                        [ConnStr, Reason]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
+                {error, Error} ->
+                    log(error, "MQTT detected framing error '~p' for connection ~p~n",
+                        [Error, ConnStr]),
+                    {stop, {shutdown, Error}, State};
                 {stop, ProcState1} ->
                     {stop, normal, pstate(State, ProcState1)}
             end;
         {error, Error} ->
-            log(error, "MQTT detected framing error ~p for connection ~p~n",
+            log(error, "MQTT detected framing error '~p' for connection ~p~n",
                 [ConnStr, Error]),
             {stop, {shutdown, Error}, State}
     end.
