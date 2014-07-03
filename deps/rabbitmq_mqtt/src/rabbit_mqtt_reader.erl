@@ -67,7 +67,7 @@ handle_cast({go, Sock0, SockTransform, KeepaliveSup}, undefined) ->
                      hibernate};
                 {error, Reason} ->
                     rabbit_net:fast_close(Sock0),
-                    {stop, {network_error, Reason}, undefined}
+                    {stop, {network_error, Reason, ConnStr}, undefined}
             end;
         {network_error, Reason} ->
             rabbit_net:fast_close(Sock0),
@@ -144,11 +144,29 @@ handle_info(keepalive_timeout, State = #state { conn_name = ConnStr }) ->
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
-terminate({network_error, {ssl_upgrade_error, closed}}, _State) ->
-    log(error, "MQTT detected TLS/SSL upgrade error: connection closed~n");
+terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
+    log(error, "MQTT detected TLS upgrade error on ~s: connection closed~n",
+       [ConnStr]);
 
-terminate({network_error, {ssl_upgrade_error, Reason}}, _State) ->
-    log(error, "MQTT detected TLS/SSL upgrade error: ~p~n", [Reason]);
+terminate({network_error,
+           {ssl_upgrade_error,
+            {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
+    log(error, "MQTT detected TLS upgrade error on ~s: handshake failure~n",
+       [ConnStr]);
+
+terminate({network_error,
+           {ssl_upgrade_error,
+            {tls_alert, Alert}}, ConnStr}, _State) ->
+    log(error, "MQTT detected TLS upgrade error on ~s: alert ~s~n",
+       [ConnStr, Alert]);
+
+terminate({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
+    log(error, "MQTT detected TLS upgrade error on ~s: ~p~n",
+        [ConnStr, Reason]);
+
+terminate({network_error, Reason, ConnStr}, _State) ->
+    log(error, "MQTT detected network error on ~s: ~p~n",
+        [ConnStr, Reason]);
 
 terminate({network_error, Reason}, _State) ->
     log(error, "MQTT detected network error: ~p~n", [Reason]);
