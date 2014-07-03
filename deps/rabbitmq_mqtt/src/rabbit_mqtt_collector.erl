@@ -72,6 +72,9 @@ handle_call(Msg, _From, State) ->
 handle_cast(Msg, State) ->
     {stop, {unhandled_cast, Msg}, State}.
 
+handle_info({'EXIT', _, {shutdown, closed}}, State) ->
+    {stop, {shutdown, closed}, State};
+
 handle_info({'DOWN', MRef, process, DownPid, _Reason},
             State = #state{client_ids = Ids}) ->
     Ids1 = dict:filter(fun (ClientId, {Pid, M})

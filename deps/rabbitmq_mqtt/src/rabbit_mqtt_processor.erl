@@ -46,7 +46,12 @@ process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
 process_frame(Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState ) ->
     %%rabbit_log:info("MQTT received frame ~p ~n", [Frame]),
-    process_request(Type, Frame, PState).
+    try process_request(Type, Frame, PState) of
+        Result -> Result
+    catch _:Error ->
+        close_connection(PState),
+        {error, Error}
+    end.
 
 process_request(?CONNECT,
                 #mqtt_frame{ variable = #mqtt_frame_connect{
