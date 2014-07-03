@@ -69,6 +69,9 @@ handle_cast({go, Sock0, SockTransform, KeepaliveSup}, undefined) ->
                     rabbit_net:fast_close(Sock0),
                     {stop, {network_error, Reason}, undefined}
             end;
+        {network_error, Reason} ->
+            rabbit_net:fast_close(Sock0),
+            {stop, {shutdown, Reason}, undefined};
         {error, enotconn} ->
             rabbit_net:fast_close(Sock0),
             {stop, shutdown, undefined};
@@ -141,6 +144,15 @@ handle_info(keepalive_timeout, State = #state { conn_name = ConnStr }) ->
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
+terminate({network_error, {ssl_upgrade_error, closed}}, _State) ->
+    log(error, "MQTT detected TLS/SSL upgrade error: connection closed~n");
+
+terminate({network_error, {ssl_upgrade_error, Reason}}, _State) ->
+    log(error, "MQTT detected TLS/SSL upgrade error: ~p~n", [Reason]);
+
+terminate({network_error, Reason}, _State) ->
+    log(error, "MQTT detected network error: ~p~n", [Reason]);
+
 terminate(_Reason, State = #state{ proc_state = ProcState}) ->
     rabbit_mqtt_processor:close_connection(ProcState),
     ok.
@@ -195,15 +207,26 @@ pstate(State = #state {}, PState = #proc_state{}) ->
 
 %%----------------------------------------------------------------------------
 
+log(Level, Fmt)       -> rabbit_log:log(connection, Level, Fmt, []).
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
+
+send_will_and_terminate(PState, State) ->
+    rabbit_mqtt_processor:send_will(PState),
+    % todo: flush channel after publish
+    {stop, {shutdown, conn_closed}, State}.
+
+network_error(closed,
+              State = #state{ conn_name  = ConnStr,
+                              proc_state = PState }) ->
+    log(info, "MQTT detected network error for ~p: peer closed TCP connection~n",
+        [ConnStr]),
+    send_will_and_terminate(PState, State);
 
 network_error(Reason,
               State = #state{ conn_name  = ConnStr,
                               proc_state = PState }) ->
     log(info, "MQTT detected network error for ~p: ~p~n", [ConnStr, Reason]),
-    rabbit_mqtt_processor:send_will(PState),
-    % todo: flush channel after publish
-    {stop, {shutdown, conn_closed}, State}.
+    send_will_and_terminate(PState, State).
 
 run_socket(State = #state{ connection_state = blocked }) ->
     State;
