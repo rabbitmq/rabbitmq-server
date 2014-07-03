@@ -458,6 +458,44 @@
           </listitem>
         </varlistentry>
         <varlistentry>
+          <term><cmdsynopsis><command>force_boot</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Ensure that the node will start next time, even if it
+              was not the last to shut down.
+            </para>
+            <para>
+              Normally when you shut down a RabbitMQ cluster
+              altogether, the first node you restart should be the
+              last one to go down, since it may have seen things
+              happen that other nodes did not. But sometimes
+              that's not possible: for instance if the entire cluster
+              loses power then all nodes may think they were not the
+              last to shut down.
+            </para>
+            <para>
+              In such a case you can invoke <command>rabbitmqctl
+              force_boot</command> while the node is down. This will
+              tell the node to unconditionally start next time you ask
+              it to. If any changes happened to the cluster after this
+              node shut down, they will be lost.
+            </para>
+            <para>
+              If the last node to go down is permanently lost then you
+              should use <command>rabbitmqctl forget_cluster_node
+              --offline</command> in preference to this command, as it
+              will ensure that mirrored queues which were mastered on
+              the lost node get promoted.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl force_boot</screen>
+            <para role="example">
+              This will force the node not to wait for other nodes
+              next time it is started.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
           <term><cmdsynopsis><command>sync_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
           </term>
           <listitem>
@@ -1478,6 +1516,10 @@
               <varlistentry>
                 <term>send_pend</term>
                 <listitem><para>Send queue size.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>connected_at</term>
+                <listitem><para>Date and time this connection was established, as timestamp.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>

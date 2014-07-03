@@ -388,6 +388,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, prioritise_info/3]).
 
+%% For INSTR_MOD callbacks
+-export([call/3, cast/2, monitor/1, demonitor/1]).
+
 -ifndef(use_specs).
 -export([behaviour_info/1]).
 -endif.
@@ -567,11 +570,6 @@ init([GroupName, Module, Args, TxnFun]) ->
                   txn_executor        = TxnFun }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-
-handle_call({confirmed_broadcast, _Msg}, _From,
-            State = #state { members_state = undefined }) ->
-    reply(not_joined, State);
-
 handle_call({confirmed_broadcast, Msg}, _From,
             State = #state { self          = Self,
                              right         = {Self, undefined},
@@ -587,20 +585,12 @@ handle_call({confirmed_broadcast, Msg}, From, State) ->
     handle_callback_result({Result, flush_broadcast_buffer(
                                       State1 #state { confirms = Confirms1 })});
 
-handle_call(info, _From,
-            State = #state { members_state = undefined }) ->
-    reply(not_joined, State);
-
 handle_call(info, _From, State = #state { group_name = GroupName,
                                           module     = Module,
                                           view       = View }) ->
     reply([{group_name,    GroupName},
            {module,        Module},
            {group_members, get_pids(alive_view_members(View))}], State);
-
-handle_call({add_on_right, _NewMember}, _From,
-            State = #state { members_state = undefined }) ->
-    reply(not_ready, State);
 
 handle_call({add_on_right, NewMember}, _From,
             State = #state { self          = Self,
@@ -610,11 +600,10 @@ handle_call({add_on_right, NewMember}, _From,
     Group = record_new_member_in_group(NewMember, Self, GroupName, TxnFun),
     View1 = group_to_view(Group),
     MembersState1 = remove_erased_members(MembersState, View1),
-    ok = send_right(NewMember, View1,
-                    {catchup, Self, prepare_members_state(MembersState1)}),
     {Result, State1} = change_view(View1, State #state {
                                             members_state = MembersState1 }),
-    handle_callback_result({Result, {ok, Group}, State1}).
+    Reply = {ok, Group, prepare_members_state(MembersState1)},
+    handle_callback_result({Result, Reply, State1}).
 
 handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
@@ -631,10 +620,6 @@ handle_cast({?TAG, ReqVer, Msg},
     handle_callback_result(
       if_callback_success(
         Result, fun handle_msg_true/3, fun handle_msg_false/3, Msg, State1));
-
-handle_cast({broadcast, _Msg, _SizeHint},
-            State = #state { members_state = undefined }) ->
-    noreply(State);
 
 handle_cast({broadcast, Msg, _SizeHint},
             State = #state { self          = Self,
@@ -654,16 +639,17 @@ handle_cast(join, State = #state { self          = Self,
                                    module        = Module,
                                    callback_args = Args,
                                    txn_executor  = TxnFun }) ->
-    View = join_group(Self, GroupName, TxnFun),
-    MembersState =
-        case alive_view_members(View) of
-            [Self] -> blank_member_state();
-            _      -> undefined
-        end,
-    State1 = check_neighbours(State #state { view          = View,
-                                             members_state = MembersState }),
-    handle_callback_result(
-      {Module:joined(Args, get_pids(all_known_members(View))), State1});
+    State1 = case join_group(Self, GroupName, TxnFun) of
+                 {ok, View} ->
+                     check_neighbours(
+                       State#state{view          = View,
+                                   members_state = blank_member_state()});
+                 {ok, View, Left, MembersState} ->
+                     initial_catchup(Left, MembersState,
+                                     check_neighbours(State#state{view = View}))
+             end,
+    Members = get_pids(all_known_members(State1#state.view)),
+    handle_callback_result({Module:joined(Args, Members), State1});
 
 handle_cast({validate_members, OldMembers},
             State = #state { view          = View,
@@ -752,19 +738,19 @@ prioritise_info(_, _Len, _State) ->
     0.
 
 
+initial_catchup(Left, MembersStateLeft,
+                State = #state { self          = Self,
+                                 left          = {Left, _MRefL},
+                                 right         = {Right, _MRefR},
+                                 view          = View,
+                                 members_state = undefined }) ->
+    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
+    MembersStateLeft1 = build_members_state(MembersStateLeft),
+    State #state { members_state = MembersStateLeft1 }.
+
 handle_msg(check_neighbours, State) ->
     %% no-op - it's already been done by the calling handle_cast
     {ok, State};
-
-handle_msg({catchup, Left, MembersStateLeft},
-           State = #state { self          = Self,
-                            left          = {Left, _MRefL},
-                            right         = {Right, _MRefR},
-                            view          = View,
-                            members_state = undefined }) ->
-    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
-    MembersStateLeft1 = build_members_state(MembersStateLeft),
-    {ok, State #state { members_state = MembersStateLeft1 }};
 
 handle_msg({catchup, Left, MembersStateLeft},
            State = #state { self = Self,
@@ -1040,11 +1026,11 @@ join_group(Self, GroupName, {error, not_found}, TxnFun) ->
     join_group(Self, GroupName,
                prune_or_create_group(Self, GroupName, TxnFun), TxnFun);
 join_group(Self, _GroupName, #gm_group { members = [Self] } = Group, _TxnFun) ->
-    group_to_view(Group);
+    {ok, group_to_view(Group)};
 join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
     case lists:member(Self, Members) of
         true ->
-            group_to_view(Group);
+            {ok, group_to_view(Group)};
         false ->
             case lists:filter(fun is_member_alive/1, Members) of
                 [] ->
@@ -1063,8 +1049,11 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                         end,
                     try
                         case neighbour_call(Left, {add_on_right, Self}) of
-                            {ok, Group1} -> group_to_view(Group1);
-                            not_ready    -> join_group(Self, GroupName, TxnFun)
+                            {ok, Group1, MembersState1} ->
+                                {ok, group_to_view(Group1), Left,
+                                 build_members_state(MembersState1)};
+                            not_ready ->
+                                join_group(Self, GroupName, TxnFun)
                         end
                     catch
                         exit:{R, _}
@@ -1177,8 +1166,8 @@ can_erase_view_member(Self, Self, _LA, _LP) -> false;
 can_erase_view_member(_Self, _Id,   N,   N) -> true;
 can_erase_view_member(_Self, _Id, _LA, _LP) -> false.
 
-neighbour_cast(N, Msg) -> gen_server2:cast(get_pid(N), Msg).
-neighbour_call(N, Msg) -> gen_server2:call(get_pid(N), Msg, infinity).
+neighbour_cast(N, Msg) -> ?INSTR_MOD:cast(get_pid(N), Msg).
+neighbour_call(N, Msg) -> ?INSTR_MOD:call(get_pid(N), Msg, infinity).
 
 %% ---------------------------------------------------------------------------
 %% View monitoring and maintanence
@@ -1192,7 +1181,7 @@ ensure_neighbour(Ver, Self, {Self, undefined}, RealNeighbour) ->
 ensure_neighbour(_Ver, _Self, {RealNeighbour, MRef}, RealNeighbour) ->
     {RealNeighbour, MRef};
 ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour) ->
-    true = erlang:demonitor(MRef),
+    true = ?INSTR_MOD:demonitor(MRef),
     Msg = {?TAG, Ver, check_neighbours},
     ok = neighbour_cast(RealNeighbour, Msg),
     ok = case Neighbour of
@@ -1202,7 +1191,7 @@ ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour) ->
     {Neighbour, maybe_monitor(Neighbour, Self)}.
 
 maybe_monitor( Self,  Self) -> undefined;
-maybe_monitor(Other, _Self) -> erlang:monitor(process, get_pid(Other)).
+maybe_monitor(Other, _Self) -> ?INSTR_MOD:monitor(get_pid(Other)).
 
 check_neighbours(State = #state { self             = Self,
                                   left             = Left,
@@ -1461,3 +1450,12 @@ last_pub(  [], LP) -> LP;
 last_pub(List, LP) -> {PubNum, _Msg} = lists:last(List),
                       true = PubNum > LP, %% ASSERTION
                       PubNum.
+
+%% ---------------------------------------------------------------------------
+
+%% Uninstrumented versions
+
+call(Pid, Msg, Timeout) -> gen_server2:call(Pid, Msg, Timeout).
+cast(Pid, Msg)          -> gen_server2:cast(Pid, Msg).
+monitor(Pid)            -> erlang:monitor(process, Pid).
+demonitor(MRef)         -> erlang:demonitor(MRef).

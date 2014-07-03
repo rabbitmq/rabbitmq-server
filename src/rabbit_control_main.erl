@@ -54,6 +54,7 @@
          change_cluster_node_type,
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
+         force_boot,
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
          {cancel_sync_queue, [?VHOST_DEF]},
@@ -308,6 +309,13 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
                  rabbit_mnesia:forget_cluster_node(ClusterNode, true);
         false -> rpc_call(Node, rabbit_mnesia, forget_cluster_node,
                           [ClusterNode, false])
+    end;
+
+action(force_boot, _Node, [], _Opts, Inform) ->
+    Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
+    case rabbit:is_running(Node) of
+        false -> rabbit_mnesia:force_load_next_boot();
+        true  -> {error, rabbit_running}
     end;
 
 action(sync_queue, Node, [Q], Opts, Inform) ->
