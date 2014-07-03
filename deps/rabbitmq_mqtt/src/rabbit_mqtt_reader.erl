@@ -156,6 +156,12 @@ terminate({network_error,
 
 terminate({network_error,
            {ssl_upgrade_error,
+            {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
+    log(error, "MQTT detected TLS certificate verification error on ~s: alert 'unknown CA'~n",
+       [ConnStr]);
+
+terminate({network_error,
+           {ssl_upgrade_error,
             {tls_alert, Alert}}, ConnStr}, _State) ->
     log(error, "MQTT detected TLS upgrade error on ~s: alert ~s~n",
        [ConnStr, Alert]);
