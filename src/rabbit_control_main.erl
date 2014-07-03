@@ -306,7 +306,7 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     rpc_call(Node, rabbit_mnesia, forget_cluster_node,
              [ClusterNode, RemoveWhenOffline]);
 
-action(force_boot, _Node, [], _Opts, Inform) ->
+action(force_boot, Node, [], _Opts, Inform) ->
     Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
     case rabbit:is_running(Node) of
         false -> rabbit_mnesia:force_load_next_boot();
