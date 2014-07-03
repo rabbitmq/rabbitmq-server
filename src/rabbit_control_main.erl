@@ -308,7 +308,10 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
 
 action(force_boot, _Node, [], _Opts, Inform) ->
     Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
-    rabbit_mnesia:force_load_next_boot();
+    case rabbit:is_running(Node) of
+        false -> rabbit_mnesia:force_load_next_boot();
+        true  -> {error, rabbit_running}
+    end;
 
 action(sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
