@@ -135,7 +135,8 @@ handle_cast({Command, Frame, FlowPid},
 
 handle_cast(client_timeout,
             State = #state{adapter_info = #amqp_adapter_info{name = S}}) ->
-    rabbit_log:warning("Detected missed client heartbeat(s) on connection ~s, closing it~n", [S]),
+    rabbit_log:warning("STOMP detected missed client heartbeat(s) "
+                       "on connection ~s, closing it~n", [S]),
     {stop, {shutdown, client_heartbeat_timeout}, close_connection(State)}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
