@@ -41,6 +41,7 @@ init(SupHelperPid, ProcessorPid, Configuration) ->
     Reply.
 
 go(SupHelperPid, ProcessorPid, Configuration) ->
+    process_flag(trap_exit, true),
     receive
         {go, Sock0, SockTransform} ->
             case rabbit_net:connection_string(Sock0, inbound) of
@@ -99,7 +100,13 @@ mainloop(State0 = #reader_state{socket = Sock}) ->
             mainloop(State#reader_state{conserve_resources = Conserve});
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
-            mainloop(State)
+            mainloop(State);
+        {'EXIT', _From, shutdown} ->
+            ok;
+        Other ->
+            log(warning, "STOMP connection ~p received "
+                "an unexpected message ~p~n", [Other]),
+            ok
     end.
 
 process_received_bytes([], State) ->
