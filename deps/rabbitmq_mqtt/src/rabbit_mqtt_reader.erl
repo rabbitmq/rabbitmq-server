@@ -47,7 +47,7 @@ handle_cast({go, Sock0, SockTransform, KeepaliveSup}, undefined) ->
     process_flag(trap_exit, true),
     case rabbit_net:connection_string(Sock0, inbound) of
         {ok, ConnStr} ->
-            log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
+            log(info, "accepting MQTT connection ~p (~s)~n", [self(), ConnStr]),
             case SockTransform(Sock0) of
                 {ok, Sock} ->
                     rabbit_alarm:register(
