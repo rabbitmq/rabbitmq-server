@@ -43,38 +43,45 @@ init(SupHelperPid, ProcessorPid, Configuration) ->
 go(SupHelperPid, ProcessorPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
-            {ok, Sock} = SockTransform(Sock0),
-            case rabbit_net:connection_string(Sock, inbound) of
+            case rabbit_net:connection_string(Sock0, inbound) of
                 {ok, ConnStr} ->
-                    ProcInitArgs = processor_args(SupHelperPid, Configuration, Sock),
-                    rabbit_stomp_processor:init_arg(ProcessorPid, ProcInitArgs),
-                    log(info, "accepting STOMP connection ~p (~s)~n",
-                        [self(), ConnStr]),
+                    case SockTransform(Sock0) of
+                        {ok, Sock} ->
 
-                    ParseState = rabbit_stomp_frame:initial_state(),
-                    try
-                        mainloop(
-                          register_resource_alarm(
-                            #reader_state{socket             = Sock,
-                                          parse_state        = ParseState,
-                                          processor          = ProcessorPid,
-                                          state              = running,
-                                          conserve_resources = false,
-                                          recv_outstanding   = false})),
-                        log(info, "closing STOMP connection ~p (~s)~n",
-                            [self(), ConnStr])
-                    catch
-                        _:Ex -> log(error, "closing STOMP connection "
-                                    "~p (~s):~n~p~n", [self(), ConnStr, Ex])
-                    end,
-                    done;
-                {error, enotconn} ->
-                    rabbit_net:fast_close(Sock),
-                    done;
-                {error, Reason} ->
-                    log(warning, "STOMP network error while starting up: ~p~n",
-                        [Reason]),
-                    rabbit_net:fast_close(Sock)
+                            ProcInitArgs = processor_args(SupHelperPid,
+                                                          Configuration,
+                                                          Sock),
+                            rabbit_stomp_processor:init_arg(ProcessorPid,
+                                                            ProcInitArgs),
+                            log(info, "accepting STOMP connection ~p (~s)~n",
+                                [self(), ConnStr]),
+
+                            ParseState = rabbit_stomp_frame:initial_state(),
+                            try
+                                mainloop(
+                                  register_resource_alarm(
+                                    #reader_state{socket             = Sock,
+                                                  parse_state        = ParseState,
+                                                  processor          = ProcessorPid,
+                                                  state              = running,
+                                                  conserve_resources = false,
+                                                  recv_outstanding   = false})),
+                                log(info, "closing STOMP connection ~p (~s)~n",
+                                    [self(), ConnStr])
+                            catch _:Ex ->
+                                log_network_error(ConnStr, Ex),
+                                rabbit_net:fast_close(Sock),
+                                exit(normal)
+                            end,
+                            done;
+                        {error, enotconn} ->
+                            rabbit_net:fast_close(Sock0),
+                            exit(normal);
+                        {error, Reason} ->
+                            log_network_error(ConnStr, Reason),
+                            rabbit_net:fast_close(Sock0),
+                            exit(normal)
+                        end
             end
     end.
 
@@ -181,3 +188,28 @@ ssl_login_name(Sock, #stomp_configuration{ssl_cert_login = true}) ->
         {error, no_peercert} -> none;
         nossl                -> none
     end.
+
+%%----------------------------------------------------------------------------
+
+log_network_error(ConnStr, {ssl_upgrade_error,
+                            {tls_alert, "handshake failure"}}) ->
+    log(error, "STOMP detected TLS upgrade error on "
+        "~p (~s): handshake failure~n", [self(), ConnStr]);
+
+log_network_error(ConnStr, {ssl_upgrade_error,
+                            {tls_alert, "unknown ca"}}) ->
+    log(error, "STOMP detected TLS certificate "
+        "verification error on "
+        "~p (~s): alert 'unknown CA'~n", [self(), ConnStr]);
+
+log_network_error(ConnStr, {ssl_upgrade_error, {tls_alert, Alert}}) ->
+    log(error, "STOMP detected TLS upgrade error on "
+        "~p (~s): alert ~s~n", [self(), ConnStr, Alert]);
+
+log_network_error(ConnStr, {ssl_upgrade_error, closed}) ->
+    log(error, "STOMP detected TLS upgrade error on "
+        "~p (~s): connection closed~n", [self(), ConnStr]);
+
+log_network_error(ConnStr, Ex) ->
+    log(error, "STOMP detected network error on "
+        "~p (~s):~n~p~n", [self(), ConnStr, Ex]).
