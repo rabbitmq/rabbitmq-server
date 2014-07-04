@@ -177,13 +177,13 @@ terminate({network_error, Reason, ConnStr}, _State) ->
 terminate({network_error, Reason}, _State) ->
     log(error, "MQTT detected network error: ~p~n", [Reason]);
 
-terminate(normal, State = #state{proc_state = ProcState,
-                                 conn_name  = ConnName}) ->
+terminate(normal, #state{proc_state = ProcState,
+                         conn_name  = ConnName}) ->
     rabbit_mqtt_processor:close_connection(ProcState),
     log(info, "closing MQTT connection ~p (~s)~n", [self(), ConnName]),
     ok;
 
-terminate(_Reason, State = #state{proc_state = ProcState}) ->
+terminate(_Reason, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:close_connection(ProcState),
     ok.
 
@@ -241,7 +241,6 @@ pstate(State = #state {}, PState = #proc_state{}) ->
 
 %%----------------------------------------------------------------------------
 
-log(Level, Fmt)       -> rabbit_log:log(connection, Level, Fmt, []).
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 send_will_and_terminate(PState, State) ->
