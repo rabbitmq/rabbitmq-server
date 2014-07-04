@@ -230,7 +230,7 @@ process_received_bytes(Bytes,
 
 callback_reply(State, {ok, ProcState}) ->
     {noreply, pstate(State, ProcState), hibernate};
-callback_reply(State, {err, Reason, ProcState}) ->
+callback_reply(State, {error, Reason, ProcState}) ->
     {stop, Reason, pstate(State, ProcState)}.
 
 start_keepalive(_,   0        ) -> ok;
