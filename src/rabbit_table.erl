@@ -70,7 +70,12 @@ wait_for_replicated() ->
                  not lists:member({local_content, true}, TabDef)]).
 
 wait(TableNames) ->
-    {ok, Timeout} = application:get_env(rabbit, mnesia_table_loading_timeout),
+    %% We might be in ctl here for offline ops, in which case we can't
+    %% get_env() for the rabbit app.
+    Timeout = case application:get_env(rabbit, mnesia_table_loading_timeout) of
+                  {ok, T}   -> T;
+                  undefined -> 30000
+              end,
     case mnesia:wait_for_tables(TableNames, Timeout) of
         ok ->
             ok;
