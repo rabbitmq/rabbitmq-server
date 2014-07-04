@@ -62,7 +62,6 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 !RABBITMQ_CTL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
--sname rabbitmqctl!RANDOM!!TIME:~9! ^
 -s rabbit_control_main ^
 -nodename !RABBITMQ_NODENAME! ^
 -extra !STAR!
