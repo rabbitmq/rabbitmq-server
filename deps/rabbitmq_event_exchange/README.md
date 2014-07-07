@@ -46,6 +46,73 @@ Each event has various properties associated with it. These are
 translated into AMQPish terms and inserted in the message headers. The
 message body is always blank.
 
+## Events
+
+So far RabbitMQ and related plugins emit events with the following routing keys:
+
+### RabbitMQ Broker
+
+Queue, Exchanges and Bindings events:
+
+- 'queue.deleted'
+- 'queue.created'
+- 'exchange.created'
+- 'exchange.deleted'
+- 'binding.created'
+- 'binding.deleted'
+
+Connection and Channel events:
+
+- 'connection.created'
+- 'connection.closed'
+- 'channel.created'
+- 'channel.closed'
+
+Consumer events:
+
+- 'consumer.created'
+- 'consumer.deleted'
+
+Policies and Parameters events:
+
+- 'policy.set'
+- 'policy.cleared'
+- 'parameter.set'
+
+Vhost events:
+
+- 'vhost.created'
+- 'vhost.deleted'
+
+User related events:
+
+- 'user.authentication.success'
+- 'user.authentication.failure'
+- 'user.created'
+- 'user.deleted'
+- 'user.password.changed'
+- 'user.password.cleared'
+- 'user.tags.set'
+
+Permissions events:
+
+- 'permission.created'
+- 'permission.deleted'
+
+### Shovel Plugin
+
+Worker events:
+
+- 'shovel.worker.status'
+- 'shovel.worker.removed'
+
+### Federation Plugin
+
+Link events:
+
+- 'federation.link.status'
+- 'federation.link.removed'
+
 ## Example
 
 There is a usage example using the Java client in `examples/java`.
