@@ -294,10 +294,10 @@ handle_frame("SEND", Frame, State) ->
         end);
 
 handle_frame("ACK", Frame, State) ->
-    ack_action("ACK", Frame, State, fun create_ack_method/2);
+    ack_action("ACK", Frame, State, fun create_ack_method/3);
 
 handle_frame("NACK", Frame, State) ->
-    ack_action("NACK", Frame, State, fun create_nack_method/2);
+    ack_action("NACK", Frame, State, fun create_nack_method/3);
 
 handle_frame("BEGIN", Frame, State) ->
     transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
@@ -329,7 +329,8 @@ ack_action(Command, Frame,
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
                     case dict:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
-                            Method = MethodFun(DeliveryTag, Sub),
+                            Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", true),
+                            Method = MethodFun(DeliveryTag, Sub, Requeue),
                             case transactional(Frame) of
                                 {yes, Transaction} ->
                                     extend_transaction(
@@ -656,13 +657,14 @@ do_send(Destination, _DestHdr,
             Err
     end.
 
-create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
+create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}, _) ->
     #'basic.ack'{delivery_tag = DeliveryTag,
                  multiple     = IsMulti}.
 
-create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
+create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}, Requeue) ->
     #'basic.nack'{delivery_tag = DeliveryTag,
-                  multiple     = IsMulti}.
+                  multiple     = IsMulti,
+                  requeue      = Requeue}.
 
 negotiate_version(Frame) ->
     ClientVers = re:split(rabbit_stomp_frame:header(
