@@ -54,65 +54,65 @@ So far RabbitMQ and related plugins emit events with the following routing keys:
 
 Queue, Exchange and Binding events:
 
-- 'queue.deleted'
-- 'queue.created'
-- 'exchange.created'
-- 'exchange.deleted'
-- 'binding.created'
-- 'binding.deleted'
+- `queue.deleted`
+- `queue.created`
+- `exchange.created`
+- `exchange.deleted`
+- `binding.created`
+- `binding.deleted`
 
 Connection and Channel events:
 
-- 'connection.created'
-- 'connection.closed'
-- 'channel.created'
-- 'channel.closed'
+- `connection.created`
+- `connection.closed`
+- `channel.created`
+- `channel.closed`
 
 Consumer events:
 
-- 'consumer.created'
-- 'consumer.deleted'
+- `consumer.created`
+- `consumer.deleted`
 
 Policy and Parameter events:
 
-- 'policy.set'
-- 'policy.cleared'
-- 'parameter.set'
-- 'parameter.cleared'
+- `policy.set`
+- `policy.cleared`
+- `parameter.set`
+- `parameter.cleared`
 
 Virtual host events:
 
-- 'vhost.created'
-- 'vhost.deleted'
+- `vhost.created`
+- `vhost.deleted`
 
 User related events:
 
-- 'user.authentication.success'
-- 'user.authentication.failure'
-- 'user.created'
-- 'user.deleted'
-- 'user.password.changed'
-- 'user.password.cleared'
-- 'user.tags.set'
+- `user.authentication.success`
+- `user.authentication.failure`
+- `user.created`
+- `user.deleted`
+- `user.password.changed`
+- `user.password.cleared`
+- `user.tags.set`
 
 Permission events:
 
-- 'permission.created'
-- 'permission.deleted'
+- `permission.created`
+- `permission.deleted`
 
 ### Shovel Plugin
 
 Worker events:
 
-- 'shovel.worker.status'
-- 'shovel.worker.removed'
+- `shovel.worker.status`
+- `shovel.worker.removed`
 
 ### Federation Plugin
 
 Link events:
 
-- 'federation.link.status'
-- 'federation.link.removed'
+- `federation.link.status`
+- `federation.link.removed`
 
 ## Example
 
