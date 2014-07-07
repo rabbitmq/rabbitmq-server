@@ -52,7 +52,7 @@ So far RabbitMQ and related plugins emit events with the following routing keys:
 
 ### RabbitMQ Broker
 
-Queue, Exchanges and Bindings events:
+Queue, Exchange and Binding events:
 
 - 'queue.deleted'
 - 'queue.created'
@@ -73,13 +73,14 @@ Consumer events:
 - 'consumer.created'
 - 'consumer.deleted'
 
-Policies and Parameters events:
+Policy and Parameter events:
 
 - 'policy.set'
 - 'policy.cleared'
 - 'parameter.set'
+- 'parameter.cleared'
 
-Vhost events:
+Virtual host events:
 
 - 'vhost.created'
 - 'vhost.deleted'
@@ -94,7 +95,7 @@ User related events:
 - 'user.password.cleared'
 - 'user.tags.set'
 
-Permissions events:
+Permission events:
 
 - 'permission.created'
 - 'permission.deleted'
