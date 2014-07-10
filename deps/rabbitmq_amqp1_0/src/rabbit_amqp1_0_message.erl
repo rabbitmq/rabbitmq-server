@@ -161,27 +161,23 @@ translate_properties(Props10, Props10Bin,
                              Else                    -> Else
                          end,
       message_id       = unwrap(Props10#'v1_0.properties'.message_id),
-      user_id          = unwrap(Props10#'v1_0.properties'.user_id)}.
+      user_id          = unwrap(Props10#'v1_0.properties'.user_id),
+      timestamp        = unwrap(Props10#'v1_0.properties'.creation_time)}.
 
 routing_key(Props10) ->
     unwrap(Props10#'v1_0.properties'.subject).
 
-unwrap({utf8, Bin})  -> Bin;
-unwrap({binary, Bin})-> Bin;
-unwrap({ubyte, Num}) -> Num;
-unwrap({uint, Num})  -> Num;
-unwrap({ulong, Num}) -> Num;
-unwrap({long, Num})  -> Num;
-unwrap(undefined)    -> undefined.
+unwrap(undefined)      -> undefined;
+unwrap({_Type, Thing}) -> Thing.
 
 to_expiration(undefined) ->
     undefined;
 to_expiration({timestamp, Num}) ->
     list_to_binary(integer_to_list(Num)).
 
-to_absolute_expiry_time(undefined) ->
+from_expiration(undefined) ->
     undefined;
-to_absolute_expiry_time(MaybeIntegerBin) ->
+from_expiration(MaybeIntegerBin) ->
     case catch list_to_integer(binary_to_list(MaybeIntegerBin)) of
         {'EXIT', {badarg, _}} ->
             undefined;
@@ -210,7 +206,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                      _ -> false
                  end,
        priority = wrap(ubyte, Props#'P_basic'.priority),
-       ttl = undefined,
+       ttl = from_expiration(Props#'P_basic'.expiration),
        first_acquirer = not Redelivered,
        delivery_count = undefined},
     HeadersBin = rabbit_amqp1_0_framing:encode_bin(Header10),
@@ -225,23 +221,22 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                 Props10Bin;
             undefined ->
                 Props10 = #'v1_0.properties'{
-                  message_id = wrap(Props#'P_basic'.message_id),
-                  user_id = wrap(Props#'P_basic'.user_id),
+                  message_id = wrap(utf8, Props#'P_basic'.message_id),
+                  user_id = wrap(utf8, Props#'P_basic'.user_id),
                   to = undefined,
-                  subject = wrap(RKey),
+                  subject = wrap(utf8, RKey),
                   reply_to = case Props#'P_basic'.reply_to of
                                  undefined ->
                                      undefined;
                                  _ ->
-                                     wrap(<<"/queue/",
+                                     wrap(utf8,
+                                          <<"/queue/",
                                             (Props#'P_basic'.reply_to)/binary>>)
                              end,
-                  correlation_id = wrap(Props#'P_basic'.correlation_id),
-                  content_type = wrap(Props#'P_basic'.content_type),
-                  content_encoding = wrap(Props#'P_basic'.content_encoding),
-                  absolute_expiry_time = to_absolute_expiry_time(
-                                           Props#'P_basic'.expiration),
-                  creation_time = wrap(timstamp, Props#'P_basic'.timestamp)},
+                  correlation_id = wrap(utf8, Props#'P_basic'.correlation_id),
+                  content_type = wrap(symbol, Props#'P_basic'.content_type),
+                  content_encoding = wrap(symbol, Props#'P_basic'.content_encoding),
+                  creation_time = wrap(timestamp, Props#'P_basic'.timestamp)},
                 rabbit_amqp1_0_framing:encode_bin(Props10)
         end,
     AppPropsBin =
@@ -264,10 +259,6 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
             {_, FBin} -> FBin
     end,
     [HeadersBin, MsgAnnoBin, PropsBin, AppPropsBin, DataBin, FooterBin].
-
-wrap(Bin) when is_binary(Bin) -> {utf8, Bin};
-wrap(Num) when is_number(Num) -> {ulong, Num};
-wrap(undefined)               -> undefined.
 
 wrap(_Type, undefined) ->
     undefined;
