@@ -19,6 +19,10 @@
 # Non-empty defaults should be set in rabbitmq-env
 . `dirname $0`/rabbitmq-env
 
+# rabbitmqctl starts distribution itself, so we need to make sure epmd
+# is running.
+${ERL_DIR}erl -sname rabbitmqctl-prelaunch-$$ -eval 'erlang:halt().'
+
 # We specify Mnesia dir and sasl error logger since some actions
 # (e.g. forget_cluster_node --offline) require us to impersonate the
 # real node.
@@ -27,7 +31,6 @@ exec ${ERL_DIR}erl \
     -noinput \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \
-    -sname rabbitmqctl$$ \
     -boot "${CLEAN_BOOT_FILE}" \
     -sasl errlog_type error \
     -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
