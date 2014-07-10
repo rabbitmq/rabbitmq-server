@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<project name="RabbitMQ AMQP 1.0 tests using Proton client" default="test">
+    <target name="test-build">
+        <mkdir dir="build/classes"/>
+
+        <javac srcdir="test" destdir="build/classes" debug="true">
+            <classpath>
+                <fileset dir="build/lib">
+                    <include name="**/*.jar"/>
+                </fileset>
+            </classpath>
+        </javac>
+    </target>
+
+    <target name="test" depends="test-build">
+        <mkdir dir="build/test-output"/>
+
+        <junit printSummary="withOutAndErr" fork="yes" failureproperty="test.failed">
+            <classpath>
+                <fileset dir="build/lib">
+                    <include name="**/*.jar"/>
+                </fileset>
+                <pathelement location="build/classes"/>
+            </classpath>
+            <formatter type="plain"/>
+            <test todir="build/test-output" name="com.rabbitmq.amqp1_0.tests.proton.ProtonTests"/>
+        </junit>
+        <fail message="Tests failed" if="test.failed" />
+    </target>
+</project>

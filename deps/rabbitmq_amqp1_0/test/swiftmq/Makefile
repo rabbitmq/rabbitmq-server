@@ -12,7 +12,7 @@ build/lib: $(CLIENT_PKG)
 	mkdir -p build/lib
 	mv build/tmp/$(CLIENT_DIR)/jars/*.jar build/lib
 	rm -rf build/tmp
-	cp lib/*.jar build/lib
+	cp ../lib-java/*.jar build/lib
 
 $(CLIENT_PKG):
 	@echo
