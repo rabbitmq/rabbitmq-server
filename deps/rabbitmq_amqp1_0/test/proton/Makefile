@@ -1,21 +1,23 @@
-# Check before changing this - do other versions build on platforms we care
-# about? Neither 0.2 nor 0.5 build on a Mac for example.
-PROTON_VER=0.4
+PROTON_VER=0.7
 PROTON_DIR=qpid-proton-$(PROTON_VER)
 PROTON_TARBALL=$(PROTON_DIR).tar.gz
-PROTON_URL=http://apache.mirror.anlx.net/qpid/proton/$(PROTON_VER)/$(PROTON_TARBALL)
+PROTON_URL=http://www.mirrorservice.org/sites/ftp.apache.org/qpid/proton/$(PROTON_VER)/$(PROTON_TARBALL)
 
-deps: proton
+.PHONY: test
 
-proton: $(PROTON_TARBALL)
-	rm -rf tmp
-	mkdir tmp
-	tar xvzf $(PROTON_TARBALL) -C tmp
-	cd tmp/$(PROTON_DIR) && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/not-going-to-install .. && make all
-	cp tmp/$(PROTON_DIR)/build/proton-c/proton .
+test: build/lib
+	ant test
+
+build/lib: $(PROTON_TARBALL)
+	mkdir -p build/tmp
+	tar xvz -C build/tmp -f $(PROTON_TARBALL)
+	cd build/tmp/$(PROTON_DIR)/proton-j && mvn package
+	mkdir -p build/lib
+	cp build/tmp/$(PROTON_DIR)/proton-j/target/proton-j-$(PROTON_VER).jar build/lib
+	cp ../lib-java/*.jar build/lib
+
+clean:
+	rm -rf build $(PROTON_TARBALL)
 
 $(PROTON_TARBALL):
 	wget $(PROTON_URL)
-
-clean:
-	rm -rf $(PROTON_DIR) $(PROTON_TARBALL) proton tmp
