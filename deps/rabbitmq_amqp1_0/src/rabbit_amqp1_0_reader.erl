@@ -95,8 +95,7 @@ server_properties() ->
     %% The atom doesn't match anything, it's just "not 0-9-1".
     Raw = lists:keydelete(
           <<"capabilities">>, 1, rabbit_reader:server_properties(amqp_1_0)),
-    {map, [{{symbol, binary_to_list(K)}, {utf8, V}}
-           || {K, longstr, V}  <- Raw]}.
+    {map, [{{symbol, K}, {utf8, V}} || {K, longstr, V}  <- Raw]}.
 
 %%--------------------------------------------------------------------------
 
@@ -466,7 +465,7 @@ handle_1_0_session_frame(Channel, Frame, State) ->
     end.
 
 %% TODO: write a proper ANONYMOUS plugin and unify with STOMP
-handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism = {symbol, "ANONYMOUS"},
+handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism = {symbol, <<"ANONYMOUS">>},
                                         hostname = _Hostname},
                       State = #v1{connection_state = starting,
                                   sock             = Sock}) ->
@@ -488,7 +487,7 @@ handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism        = {symbol, Mechanism},
                       State0 = #v1{connection_state = starting,
                                    connection       = Connection,
                                    sock             = Sock}) ->
-    AuthMechanism = auth_mechanism_to_module(list_to_binary(Mechanism), Sock),
+    AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
     State = State0#v1{connection       =
                           Connection#connection{
                             auth_mechanism    = {Mechanism, AuthMechanism},
