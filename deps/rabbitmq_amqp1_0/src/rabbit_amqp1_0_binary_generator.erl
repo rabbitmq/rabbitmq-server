@@ -75,8 +75,7 @@ generate({uuid,     V})                           -> <<16#98,V:16/binary>>;
 
 generate({utf8, V}) when size(V) < ?VAR_1_LIMIT -> [<<16#a1,(size(V)):8>>,  V];
 generate({utf8, V})                             -> [<<16#b1,(size(V)):32>>, V];
-generate({symbol, V})                           -> [<<16#a3,(length(V)):8>>,
-                                                    list_to_binary(V)];
+generate({symbol, V})                           -> [<<16#a3,(size(V)):8>>,  V];
 generate({binary, V}) ->
     Size = iolist_size(V),
     if  Size < ?VAR_1_LIMIT -> [<<16#a0,Size:8>>,  V];

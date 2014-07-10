@@ -43,8 +43,6 @@ parse_described(Bin) ->
 parse_primitive0(<<Type,Rest/binary>>) ->
     parse_primitive(Type, Rest).
 
--define(SYM(V), {symbol, binary_to_list(V)}).
-
 %% Constants
 parse_primitive(16#40, Rest) -> {null,       Rest};
 parse_primitive(16#41, Rest) -> {true,       Rest};
@@ -76,8 +74,8 @@ parse_primitive(16#98, <<Uuid:16/binary,R/binary>>) -> {{uuid, Uuid},    R};
 %% Variable-widths
 parse_primitive(16#a0,<<S:8/unsigned, V:S/binary,R/binary>>)-> {{binary, V}, R};
 parse_primitive(16#a1,<<S:8/unsigned, V:S/binary,R/binary>>)-> {{utf8, V},   R};
-parse_primitive(16#a3,<<S:8/unsigned, V:S/binary,R/binary>>)-> {?SYM(V),     R};
-parse_primitive(16#b3,<<S:32/unsigned,V:S/binary,R/binary>>)-> {?SYM(V),     R};
+parse_primitive(16#a3,<<S:8/unsigned, V:S/binary,R/binary>>)-> {{symbol, V}, R};
+parse_primitive(16#b3,<<S:32/unsigned,V:S/binary,R/binary>>)-> {{symbol, V}, R};
 parse_primitive(16#b0,<<S:32/unsigned,V:S/binary,R/binary>>)-> {{binary, V}, R};
 parse_primitive(16#b1,<<S:32/unsigned,V:S/binary,R/binary>>)-> {{utf8, V},   R};
 
