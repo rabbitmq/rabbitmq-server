@@ -21,7 +21,7 @@
 
 # rabbitmqctl starts distribution itself, so we need to make sure epmd
 # is running.
-${ERL_DIR}erl -sname rabbitmqctl-prelaunch-$$ -eval 'erlang:halt().'
+${ERL_DIR}erl -sname rabbitmqctl-prelaunch-$$ -noinput -eval 'erlang:halt().'
 
 # We specify Mnesia dir and sasl error logger since some actions
 # (e.g. forget_cluster_node --offline) require us to impersonate the

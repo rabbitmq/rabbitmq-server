@@ -57,7 +57,7 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 
 rem rabbitmqctl starts distribution itself, so we need to make sure epmd
 rem is running.
-"!ERLANG_HOME!\bin\erl.exe" -sname rabbitmqctl-prelaunch-!RANDOM!!TIME:~9! -eval "erlang:halt()."
+"!ERLANG_HOME!\bin\erl.exe" -sname rabbitmqctl-prelaunch-!RANDOM!!TIME:~9! -noinput -eval "erlang:halt()."
 
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!TDP0!..\ebin" ^
