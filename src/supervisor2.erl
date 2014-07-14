@@ -680,11 +680,12 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State)
   when ?is_simple(State) ->
-    try_restart(RestartType, Reason, Child, State);
+    try_restart(RestartType, Reason, Child, State#state{restarts = []});
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State) ->
     case get_child(Child#child.name, State) of
         {value, Child1} ->
-            try_restart(RestartType, Reason, Child1, State);
+            try_restart(RestartType, Reason, Child1,
+                        State#state{restarts = []});
         _What ->
             {noreply, State}
     end;
@@ -917,7 +918,7 @@ do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
             _TRef = erlang:send_after(trunc(Delay*1000), self(),
                                       {delayed_restart,
                                        {{RestartType, Delay}, Reason, Child}}),
-            {ok, state_del_child(Child, State#state{restarts = []})}
+            {ok, state_del_child(Child, State)}
     end.
 
 restart(Child, State) ->
