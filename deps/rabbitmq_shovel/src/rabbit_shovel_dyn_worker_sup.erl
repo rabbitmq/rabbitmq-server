@@ -30,7 +30,7 @@ start_link(Name, Config) ->
 %%----------------------------------------------------------------------------
 
 init([Name, Config]) ->
-    {ok, {{one_for_one, 3, 10},
+    {ok, {{one_for_one, 0, 1},
           [{Name,
             {rabbit_shovel_worker, start_link, [dynamic, Name, Config]},
             case pget(<<"reconnect-delay">>, Config, 1) of

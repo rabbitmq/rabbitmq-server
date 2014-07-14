@@ -36,4 +36,4 @@ init([Name, Config]) ->
                    16#ffffffff,
                    worker,
                    [rabbit_shovel_worker]}],
-    {ok, {{one_for_one, 3, 10}, ChildSpecs}}.
+    {ok, {{one_for_one, 0, 1}, ChildSpecs}}.
