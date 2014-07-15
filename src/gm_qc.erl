@@ -149,7 +149,7 @@ precondition(_S, {call, ?MODULE, do_proceed1, [_GM]}) ->
 precondition(_S, {call, ?MODULE, do_proceed2, [GM1, GM2]}) ->
     GM1 =/= GM2.
 
-postcondition(S = #state{}, {call, _M, _F, _A}, _Res) ->
+postcondition(_S, {call, _M, _F, _A}, _Res) ->
     true.
 
 next_state(S = #state{to_join  = ToSet,
@@ -163,12 +163,12 @@ next_state(S = #state{to_leave = Set}, _Res, {call, ?MODULE, do_leave, [GM]}) ->
 next_state(S = #state{seq         = Seq,
                       outstanding = Outstanding}, _Res,
            {call, ?MODULE, do_send, [GM]}) ->
-    case is_pid(GM) andalso lists:member(GM, gms(S)) of
+    case is_pid(GM) andalso lists:member(GM, gms_joined(S)) of
         true ->
             %% Dynamic state, i.e. runtime
             Msg = [{sequence, Seq},
                    {sent_to, GM},
-                   {dests,   gms(S)}],
+                   {dests,   gms_joined(S)}],
             gm:broadcast(GM, Msg),
             Outstanding1 = dict:map(
                              fun (_GM, Set) ->
@@ -311,8 +311,6 @@ add_monitor(From, To, Ref, S = #state{monitors = Mons}) ->
     MRef = erlang:monitor(process, To),
     From ! {mref, Ref, MRef},
     S#state{monitors = dict:store(MRef, From, Mons)}.
-
-timestamp() -> timer:now_diff(os:timestamp(), {0, 0, 0}).
 
 %% ----------------------------------------------------------------------------
 %% Assertions
