@@ -149,7 +149,7 @@ precondition(_S, {call, ?MODULE, do_proceed1, [_GM]}) ->
 precondition(_S, {call, ?MODULE, do_proceed2, [GM1, GM2]}) ->
     GM1 =/= GM2.
 
-postcondition(S = #state{}, {call, _M, _F, _A}, _Res) ->
+postcondition(_S, {call, _M, _F, _A}, _Res) ->
     true.
 
 next_state(S = #state{to_join  = ToSet,
@@ -311,8 +311,6 @@ add_monitor(From, To, Ref, S = #state{monitors = Mons}) ->
     MRef = erlang:monitor(process, To),
     From ! {mref, Ref, MRef},
     S#state{monitors = dict:store(MRef, From, Mons)}.
-
-timestamp() -> timer:now_diff(os:timestamp(), {0, 0, 0}).
 
 %% ----------------------------------------------------------------------------
 %% Assertions
