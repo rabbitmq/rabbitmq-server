@@ -163,12 +163,12 @@ next_state(S = #state{to_leave = Set}, _Res, {call, ?MODULE, do_leave, [GM]}) ->
 next_state(S = #state{seq         = Seq,
                       outstanding = Outstanding}, _Res,
            {call, ?MODULE, do_send, [GM]}) ->
-    case is_pid(GM) andalso lists:member(GM, gms(S)) of
+    case is_pid(GM) andalso lists:member(GM, gms_joined(S)) of
         true ->
             %% Dynamic state, i.e. runtime
             Msg = [{sequence, Seq},
                    {sent_to, GM},
-                   {dests,   gms(S)}],
+                   {dests,   gms_joined(S)}],
             gm:broadcast(GM, Msg),
             Outstanding1 = dict:map(
                              fun (_GM, Set) ->
