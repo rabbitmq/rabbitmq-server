@@ -680,12 +680,12 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State)
   when ?is_simple(State) ->
-    try_restart(RestartType, Reason, Child, State#state{restarts = []});
+    try_restart(delayed_restart_type(RestartType, State), Reason, Child, State);
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State) ->
     case get_child(Child#child.name, State) of
         {value, Child1} ->
-            try_restart(RestartType, Reason, Child1,
-                        State#state{restarts = []});
+            try_restart(delayed_restart_type(RestartType, State),
+                        Reason, Child1, State);
         _What ->
             {noreply, State}
     end;
@@ -844,6 +844,11 @@ try_restart(RestartType, Reason, Child, State) ->
         {shutdown, State2} -> {stop, shutdown, State2}
     end.
 
+delayed_restart_type(_RestartType, #state{intensity = 0}) ->
+    unconditional_delayed_restart;
+delayed_restart_type(RestartType, _State) ->
+    RestartType.
+
 do_restart(RestartType, Reason, Child, State) ->
     maybe_report_error(RestartType, Reason, Child, State),
     handle_restart(RestartType, Reason, Child, State).
@@ -882,7 +887,13 @@ handle_restart({transient, _Delay}=Restart, Reason, Child, State) ->
 handle_restart({intrinsic, _Delay}=Restart, Reason, Child, State) ->
     restart_if_explicit_or_abnormal(defer_to_restart_delay(Restart, Reason),
                                     fun delete_child_and_stop/2,
-                                    Reason, Child, State).
+                                    Reason, Child, State);
+handle_restart(unconditional_delayed_restart, _Reason, Child, State) ->
+    %% We don't need to check the reason here, we have already checked
+    %% it the first time through, before the delay. And we need to
+    %% shortcut add_restart/1 as it will refuse the restart since we
+    %% have intensity = 0.
+    maybe_restart(State#state.strategy, Child, State).
 
 restart_if_explicit_or_abnormal(RestartHow, Otherwise, Reason, Child, State) ->
     case ?is_explicit_restart(Reason) orelse is_abnormal_termination(Reason) of
