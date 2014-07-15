@@ -619,13 +619,22 @@ handle_call({add_on_right, NewMember}, _From,
                                             members_state = MembersState1 }),
     handle_callback_result({Result, {ok, Group}, State1}).
 
+%% add_on_right causes a catchup to be sent immediately from the left,
+%% so we can never see this from the left neighbour. However, it's
+%% possible for the right neighbour to send us a check_neighbours
+%% immediately before that. We can't possibly handle it, but if we're
+%% in this state we know a catchup is coming imminently anyway. So
+%% just ignore it.
+handle_cast({?TAG, _ReqVer, check_neighbours},
+            State = #state { members_state = undefined }) ->
+    noreply(State);
+
 handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
                              members_state = MembersState,
                              group_name    = GroupName }) ->
     {Result, State1} =
-        case needs_view_update(
-               ReqVer, View) andalso MembersState =/= undefined of
+        case needs_view_update(ReqVer, View) of
             true  -> View1 = group_to_view(dirty_read_group(GroupName)),
                      MemberState1 = remove_erased_members(MembersState, View1),
                      change_view(View1, State #state {
