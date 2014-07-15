@@ -28,12 +28,16 @@
 %%    Delay has passed *and* the MaxT and MaxR parameters allow the
 %%    child to be restarted.
 %%
-%%    Also note that the Delay is a *minimum*. There is no guarantee
-%%    that the child will be restarted within that time, especially if
-%%    other processes are dying and being restarted at the same time -
-%%    essentially we have to wait for the delay to have passed and for
-%%    the MaxT and MaxR parameters to permit the child to be
-%%    restarted. This may require waiting for longer than Delay.
+%%    In general the MaxT and MaxR values will be respected when
+%%    retrying after the delay; it is quite possible that the attempt
+%%    to restart will still be over the limit (for example if Delay <
+%%    MaxT or other children have restarted meanwhile), in which case
+%%    the child will simply wait another Delay until it is under the
+%%    limit.
+%%
+%%    The exception to this case is when MaxR =:= 0. In this case the
+%%    child will be unconditionally started after the delay, rather
+%%    than having its restart delayed and delayed forever.
 %%
 %%    Sometimes, you may wish for a transient or intrinsic child to
 %%    exit abnormally so that it gets restarted, but still log
