@@ -33,7 +33,7 @@
 -callback description() -> [proplists:property()].
 
 -callback intercept(original_method(), rabbit_types:vhost()) ->
-    rabbit_types:ok_or_error2(processed_method(), any()).
+    processed_method() | rabbit_misc:channel_or_connection_exit().
 
 %% Whether the interceptor wishes to intercept the amqp method
 -callback applies_to(intercept_method()) -> boolean().
@@ -62,20 +62,15 @@ intercept_method(M, VHost) ->
 intercept_method(M, _VHost, []) ->
     M;
 intercept_method(M, VHost, [I]) ->
-    case I:intercept(M, VHost) of
-        {ok, M2} ->
-            case validate_method(M, M2) of
-                true ->
-                    M2;
-                _   ->
-                    internal_error("Interceptor: ~p expected "
-                                   "to return method: ~p but returned: ~p",
-                                   [I, rabbit_misc:method_record_type(M),
-                                       rabbit_misc:method_record_type(M2)])
-            end;
-        {error, Reason} ->
-            internal_error("Interceptor: ~p failed with reason: ~p",
-                           [I, Reason])
+    M2 = I:intercept(M, VHost),
+    case validate_method(M, M2) of
+        true ->
+            M2;
+        _   ->
+            internal_error("Interceptor: ~p expected "
+                                "to return method: ~p but returned: ~p",
+                                [I, rabbit_misc:method_record_type(M),
+                                 rabbit_misc:method_record_type(M2)])
     end;
 intercept_method(M, _VHost, Is) ->
     internal_error("More than one interceptor for method: ~p -- ~p",

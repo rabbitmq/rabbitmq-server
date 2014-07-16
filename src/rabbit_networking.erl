@@ -37,8 +37,6 @@
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
 
--define(SSL_TIMEOUT, 5). %% seconds
-
 -define(FIRST_TEST_BIND_PORT, 10000).
 
 %%----------------------------------------------------------------------------
@@ -187,9 +185,14 @@ ensure_ssl() ->
             end
     end.
 
+ssl_timeout() ->
+    {ok, Val} = application:get_env(rabbit, ssl_handshake_timeout),
+    Val.
+
 ssl_transform_fun(SslOpts) ->
     fun (Sock) ->
-            case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
+            Timeout = ssl_timeout(),
+            case catch ssl:ssl_accept(Sock, SslOpts, Timeout) of
                 {ok, SslSock} ->
                     {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
                 {error, timeout} ->
@@ -204,7 +207,7 @@ ssl_transform_fun(SslOpts) ->
                     %% form, according to the TLS spec). So we give
                     %% the ssl_connection a little bit of time to send
                     %% such alerts.
-                    timer:sleep(?SSL_TIMEOUT * 1000),
+                    timer:sleep(Timeout),
                     {error, {ssl_upgrade_error, Reason}};
                 {'EXIT', Reason} ->
                     {error, {ssl_upgrade_failure, Reason}}

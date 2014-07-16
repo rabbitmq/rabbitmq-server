@@ -114,8 +114,8 @@ upgrades_required(Scope) ->
 
 with_upgrade_graph(Fun, Scope) ->
     case rabbit_misc:build_acyclic_graph(
-           fun (Module, Steps) -> vertices(Module, Steps, Scope) end,
-           fun (Module, Steps) -> edges(Module, Steps, Scope) end,
+           fun ({_App, Module, Steps}) -> vertices(Module, Steps, Scope) end,
+           fun ({_App, Module, Steps}) -> edges(Module, Steps, Scope) end,
            rabbit_misc:all_module_attributes(rabbit_upgrade)) of
         {ok, G} -> try
                        Fun(G)
@@ -161,7 +161,7 @@ heads(G) ->
 
 categorise_by_scope(Version) when is_list(Version) ->
     Categorised =
-        [{Scope, Name} || {_Module, Attributes} <-
+        [{Scope, Name} || {_App, _Module, Attributes} <-
                               rabbit_misc:all_module_attributes(rabbit_upgrade),
                           {Name, Scope, _Requires} <- Attributes,
                           lists:member(Name, Version)],
