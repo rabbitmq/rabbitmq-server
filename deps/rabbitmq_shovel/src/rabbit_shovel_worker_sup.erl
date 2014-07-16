@@ -20,6 +20,7 @@
 -export([start_link/2, init/1]).
 
 -include("rabbit_shovel.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 start_link(ShovelName, ShovelConfig) ->
     mirrored_supervisor:start_link({local, ShovelName}, ShovelName,
@@ -36,4 +37,4 @@ init([Name, Config]) ->
                    16#ffffffff,
                    worker,
                    [rabbit_shovel_worker]}],
-    {ok, {{one_for_one, 3, 10}, ChildSpecs}}.
+    {ok, {{one_for_one, 1, ?MAX_WAIT}, ChildSpecs}}.
