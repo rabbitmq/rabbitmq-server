@@ -23,17 +23,9 @@
 %%    stopping the supervisor, the supervisor instead continues and
 %%    tries to start up the child again, Delay seconds later.
 %%
-%%    Note that you can never restart more frequently than the MaxT
-%%    and MaxR parameters allow: i.e. you must wait until *both* the
-%%    Delay has passed *and* the MaxT and MaxR parameters allow the
-%%    child to be restarted.
-%%
-%%    Also note that the Delay is a *minimum*. There is no guarantee
-%%    that the child will be restarted within that time, especially if
-%%    other processes are dying and being restarted at the same time -
-%%    essentially we have to wait for the delay to have passed and for
-%%    the MaxT and MaxR parameters to permit the child to be
-%%    restarted. This may require waiting for longer than Delay.
+%%    Note that if a child is delay-restarted this will reset the
+%%    count of restarts towrds MaxR and MaxT. This matters if MaxT >
+%%    Delay, since otherwise we would fail to restart after the delay.
 %%
 %%    Sometimes, you may wish for a transient or intrinsic child to
 %%    exit abnormally so that it gets restarted, but still log
@@ -680,15 +672,21 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State)
   when ?is_simple(State) ->
-    try_restart(RestartType, Reason, Child, State#state{restarts = []});
+    try_restart(RestartType, Reason, Child, State#state{restarts = []});  %% [1]
 handle_info({delayed_restart, {RestartType, Reason, Child}}, State) ->
     case get_child(Child#child.name, State) of
         {value, Child1} ->
             try_restart(RestartType, Reason, Child1,
-                        State#state{restarts = []});
+                        State#state{restarts = []}); %% [1]
         _What ->
             {noreply, State}
     end;
+%% [1] When we receive a delayed_restart message we want to reset the
+%% restarts field since otherwise the MaxT might not have elapsed and
+%% we would just delay again and again. Since a common use of the
+%% delayed restart feature is for MaxR = 1, MaxT = some huge number
+%% (so that we don't end up bouncing around in non-delayed restarts)
+%% this is important.
 
 handle_info(Msg, State) ->
     error_logger:error_msg("Supervisor received unexpected message: ~p~n", 
