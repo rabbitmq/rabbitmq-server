@@ -91,8 +91,8 @@ children(Sup, UpstreamName) ->
 %%----------------------------------------------------------------------------
 
 init(XorQ) ->
-    %% 1, ?MAX_WAIT so that we always give up straight away and get
-    %% into the reconnect delay
+    %% 1, ?MAX_WAIT so that we always give up after one fast retry and get
+    %% into the reconnect delay.
     {ok, {{one_for_one, 1, ?MAX_WAIT}, specs(XorQ)}}.
 
 specs(XorQ) ->
