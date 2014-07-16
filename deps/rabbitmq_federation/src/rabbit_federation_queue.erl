@@ -18,9 +18,11 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, "federation queue decorator"},
-                    {mfa, {rabbit_registry, register,
-                           [queue_decorator, <<"federation">>, ?MODULE]}},
+                    {mfa, {rabbit_queue_decorator, register,
+                           [<<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
+                    {cleanup, {rabbit_queue_decorator, unregister,
+                               [<<"federation">>]}},
                     {enables, recovery}]}).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
