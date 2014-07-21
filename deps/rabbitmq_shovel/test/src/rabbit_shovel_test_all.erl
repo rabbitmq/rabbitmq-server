@@ -19,7 +19,7 @@
 -export([all_tests/0]).
 
 all_tests() ->
-%%    ok = eunit:test(tests(rabbit_shovel_test, 60), [verbose]),
+    ok = eunit:test(tests(rabbit_shovel_test, 60), [verbose]),
     ok = eunit:test(tests(rabbit_shovel_test_dyn, 60), [verbose]).
 
 tests(Module, Timeout) ->
