@@ -29,6 +29,18 @@ simple_test() ->
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 
+set_properties_test() ->
+    with_ch(
+      fun (Ch) ->
+              Ps = [{<<"src-queue">>,      <<"src">>},
+                    {<<"dest-queue">>,     <<"dest">>},
+                    {<<"publish-properties">>, [{<<"cluster_id">>, <<"x">>}]}],
+              set_param(<<"test">>, Ps),
+              #amqp_msg{props = #'P_basic'{cluster_id = Cluster}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>),
+              ?assertEqual(<<"x">>, Cluster)
+      end).
+
 exchange_test() ->
     with_ch(
       fun (Ch) ->
@@ -141,6 +153,11 @@ validation_test() ->
     invalid_param([{<<"ack-mode">>,        <<"whenever">>} | QURIs]),
     invalid_param([{<<"delete-after">>,    <<"whenever">>} | QURIs]),
 
+    %% Check properties have to look property-ish
+    invalid_param([{<<"publish-properties">>, [{<<"nonexistent">>, <<>>}]}]),
+    invalid_param([{<<"publish-properties">>, [{<<"cluster_id">>, 2}]}]),
+    invalid_param([{<<"publish-properties">>, <<"something">>}]),
+
     %% Can't use explicit message count and no-ack together
     invalid_param([{<<"delete-after">>,    1},
                    {<<"ack-mode">>,        <<"no-ack">>} | QURIs]),
@@ -197,13 +214,14 @@ expect(Ch, Q, Payload) ->
     receive
         #'basic.consume_ok'{consumer_tag = CTag} -> ok
     end,
-    receive
-        {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
-            ok
-    after 1000 ->
-            exit({not_received, Payload})
-    end,
-    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}).
+    Msg = receive
+              {#'basic.deliver'{}, #amqp_msg{payload = Payload} = M} ->
+                  M
+          after 1000 ->
+                  exit({not_received, Payload})
+          end,
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+    Msg.
 
 expect_empty(Ch, Q) ->
     ?assertMatch(#'basic.get_empty'{},
