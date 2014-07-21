@@ -153,7 +153,8 @@ main_test() ->
          {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
          {publish_properties, [{delivery_mode, 2},
                                {cluster_id,    <<"my-cluster">>},
-                               {content_type,  ?SHOVELLED}]}
+                               {content_type,  ?SHOVELLED}]},
+         {add_forward_headers, true}
         ]}],
       infinity),
 
@@ -196,7 +197,9 @@ main_test() ->
                             routing_key = ?FROM_SHOVEL },
          #amqp_msg { payload = <<42>>,
                      props   = #'P_basic' { delivery_mode = 2,
-                                            content_type  = ?SHOVELLED }
+                                            content_type  = ?SHOVELLED,
+                                            headers       = [{<<"x-shovelled">>,
+                                                              _, _}]}
                    }} ->
             ok = amqp_channel:call(Chan, #'basic.ack'{ delivery_tag = AckTag })
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)

@@ -25,8 +25,6 @@
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
--define(ROUTING_HEADER, <<"x-shovelled">>).
-
 -rabbit_boot_step({?MODULE,
                    [{description, "shovel parameters"},
                     {mfa, {rabbit_shovel_parameters, register, []}},
@@ -205,17 +203,17 @@ parse({VHost, Name}, Def) ->
              end,
     AddHeaders = pget(<<"add-forward-headers">>, Def, false),
     Table0 = [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
+              {<<"shovel-type">>,  <<"dynamic">>},
               {<<"shovel-name">>,  Name},
               {<<"shovel-vhost">>, VHost}],
     SetProps = lookup_indices(pget(<<"set-properties">>, Def, []),
                               record_info(fields, 'P_basic')),
-    PubPropsFun = fun (SrcURI, DestURI, P0 = #'P_basic'{headers = H}) ->
+    PubPropsFun = fun (SrcURI, DestURI, P0) ->
                           P = set_properties(P0, SetProps),
                           case AddHeaders of
-                              true  -> H1 = update_headers(
-                                              Table0, Table1 ++ Table2,
-                                              SrcURI, DestURI, H),
-                                       P#'P_basic'{headers = H1};
+                              true  -> rabbit_shovel_util:update_headers(
+                                         Table0, Table1 ++ Table2,
+                                         SrcURI, DestURI, P);
                               false -> P
                           end
                   end,
@@ -259,13 +257,6 @@ ensure_queue(Conn, Queue) ->
     after
         catch amqp_channel:close(Ch)
     end.
-
-update_headers(Table0, Table1, SrcURI, DestURI, Headers) ->
-    Table = Table0 ++ [{<<"src-uri">>,  SrcURI},
-                       {<<"dest-uri">>, DestURI}] ++ Table1,
-    rabbit_basic:prepend_table_header(
-      ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
-      Headers).
 
 opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
 opt_b2a(N)                   -> N.
