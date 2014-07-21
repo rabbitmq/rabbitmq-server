@@ -89,6 +89,7 @@ validation(User) ->
      {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
      {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
+     {<<"set-properties">>,  fun validate_properties/2,  optional},
      {<<"ack-mode">>,        rabbit_parameter_validation:enum(
                                ['no-ack', 'on-publish', 'on-confirm']), optional},
      {<<"delete-after">>,    fun validate_delete_after/2, optional}
@@ -135,6 +136,25 @@ validate_delete_after(_Name, N) when is_integer(N) -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~s should be number, \"never\" or \"queue-length\", actually was "
      "~p", [Name, Term]}.
+
+%% TODO headers?
+validate_properties(Name, Term) ->
+    Str = fun rabbit_parameter_validation:binary/2,
+    Num = fun rabbit_parameter_validation:number/2,
+    rabbit_parameter_validation:proplist(
+      Name, [{<<"content_type">>,     Str, optional},
+             {<<"content_encoding">>, Str, optional},
+             {<<"delivery_mode">>,    Num, optional},
+             {<<"priority">>,         Num, optional},
+             {<<"correlation_id">>,   Str, optional},
+             {<<"reply_to">>,         Str, optional},
+             {<<"expiration">>,       Str, optional},
+             {<<"message_id">>,       Str, optional},
+             {<<"timestamp">>,        Num, optional},
+             {<<"type">>,             Str, optional},
+             {<<"user_id">>,          Str, optional},
+             {<<"app_id">>,           Str, optional},
+             {<<"cluster_id">>,       Str, optional}], Term).
 
 %%----------------------------------------------------------------------------
 
@@ -187,7 +207,10 @@ parse({VHost, Name}, Def) ->
     Table0 = [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
               {<<"shovel-name">>,  Name},
               {<<"shovel-vhost">>, VHost}],
-    PubPropsFun = fun (SrcURI, DestURI, P = #'P_basic'{headers = H}) ->
+    SetProps = lookup_indices(pget(<<"set-properties">>, Def, []),
+                              record_info(fields, 'P_basic')),
+    PubPropsFun = fun (SrcURI, DestURI, P0 = #'P_basic'{headers = H}) ->
+                          P = set_properties(P0, SetProps),
                           case AddHeaders of
                               true  -> H1 = update_headers(
                                               Table0, Table1 ++ Table2,
@@ -246,3 +269,17 @@ update_headers(Table0, Table1, SrcURI, DestURI, Headers) ->
 
 opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
 opt_b2a(N)                   -> N.
+
+set_properties(Props, []) ->
+    Props;
+set_properties(Props, [{Ix, V} | Rest]) ->
+    set_properties(setelement(Ix, Props, V), Rest).
+
+lookup_indices(KVs, L) ->
+    [{1 + list_find(list_to_atom(binary_to_list(K)), L), V} || {K, V} <- KVs].
+
+list_find(K, L) -> list_find(K, L, 1).
+
+list_find(K, [K|_], N) -> N;
+list_find(K, [],   _N) -> exit({not_found, K});
+list_find(K, [_|L], N) -> list_find(K, L, N + 1).
