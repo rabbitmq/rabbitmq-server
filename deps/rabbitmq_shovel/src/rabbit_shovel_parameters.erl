@@ -87,7 +87,7 @@ validation(User) ->
      {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
      {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
-     {<<"set-properties">>,  fun validate_properties/2,  optional},
+     {<<"publish-properties">>, fun validate_properties/2,  optional},
      {<<"ack-mode">>,        rabbit_parameter_validation:enum(
                                ['no-ack', 'on-publish', 'on-confirm']), optional},
      {<<"delete-after">>,    fun validate_delete_after/2, optional}
@@ -206,7 +206,7 @@ parse({VHost, Name}, Def) ->
               {<<"shovel-type">>,  <<"dynamic">>},
               {<<"shovel-name">>,  Name},
               {<<"shovel-vhost">>, VHost}],
-    SetProps = lookup_indices(pget(<<"set-properties">>, Def, []),
+    SetProps = lookup_indices(pget(<<"publish-properties">>, Def, []),
                               record_info(fields, 'P_basic')),
     PubPropsFun = fun (SrcURI, DestURI, P0) ->
                           P = set_properties(P0, SetProps),

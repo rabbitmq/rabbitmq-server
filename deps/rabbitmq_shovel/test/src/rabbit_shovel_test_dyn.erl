@@ -34,11 +34,11 @@ set_properties_test() ->
       fun (Ch) ->
               Ps = [{<<"src-queue">>,      <<"src">>},
                     {<<"dest-queue">>,     <<"dest">>},
-                    {<<"set-properties">>, [{<<"cluster_id">>, <<"mine">>}]}],
+                    {<<"publish-properties">>, [{<<"cluster_id">>, <<"x">>}]}],
               set_param(<<"test">>, Ps),
               #amqp_msg{props = #'P_basic'{cluster_id = Cluster}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>),
-              ?assertEqual(<<"mine">>, Cluster)
+              ?assertEqual(<<"x">>, Cluster)
       end).
 
 exchange_test() ->
@@ -154,9 +154,9 @@ validation_test() ->
     invalid_param([{<<"delete-after">>,    <<"whenever">>} | QURIs]),
 
     %% Check properties have to look property-ish
-    invalid_param([{<<"set-properties">>, [{<<"nonexistent">>, <<"foo">>}]}]),
-    invalid_param([{<<"set-properties">>, [{<<"cluster_id">>, 2}]}]),
-    invalid_param([{<<"set-properties">>, <<"something">>}]),
+    invalid_param([{<<"publish-properties">>, [{<<"nonexistent">>, <<>>}]}]),
+    invalid_param([{<<"publish-properties">>, [{<<"cluster_id">>, 2}]}]),
+    invalid_param([{<<"publish-properties">>, <<"something">>}]),
 
     %% Can't use explicit message count and no-ack together
     invalid_param([{<<"delete-after">>,    1},
