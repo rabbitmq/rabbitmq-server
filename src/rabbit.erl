@@ -365,10 +365,11 @@ start_it(StartFun) ->
 stop() ->
     case whereis(rabbit_boot) of
         undefined -> ok;
-        _         -> await_startup()
+        _         -> await_startup(true)
     end,
     rabbit_log:info("Stopping RabbitMQ~n"),
-    stop_apps(app_shutdown_order()).
+    Apps = ?APPS ++ rabbit_plugins:active(),
+    stop_apps(app_utils:app_dependency_order(Apps, true)).
 
 stop_and_halt() ->
     try
@@ -410,7 +411,20 @@ run_cleanup_steps(Apps) ->
     ok.
 
 await_startup() ->
-    app_utils:wait_for_applications(app_startup_order()).
+    await_startup(false).
+
+await_startup(HaveSeenRabbitBoot) ->
+    %% We don't take absence of rabbit_boot as evidence we've started,
+    %% since there's a small window before it is registered.
+    case whereis(rabbit_boot) of
+        undefined -> case HaveSeenRabbitBoot orelse is_running() of
+                         true  -> ok;
+                         false -> timer:sleep(100),
+                                  await_startup(false)
+                     end;
+        _         -> timer:sleep(100),
+                     await_startup(true)
+    end.
 
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
@@ -461,6 +475,9 @@ listeners() ->
                   ip_address = IP,
                   port       = Port} <- Listeners, Node =:= node()].
 
+%% TODO this only determines if the rabbit application has started,
+%% not if it is running, never mind plugins. It would be nice to have
+%% more nuance here.
 is_running() -> is_running(node()).
 
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
@@ -506,17 +523,6 @@ stop(_State) ->
              false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
-
-%%---------------------------------------------------------------------------
-%% application life cycle
-
-app_startup_order() ->
-    ok = app_utils:load_applications(?APPS),
-    app_utils:app_dependency_order(?APPS, false).
-
-app_shutdown_order() ->
-    Apps = ?APPS ++ rabbit_plugins:active(),
-    app_utils:app_dependency_order(Apps, true).
 
 %%---------------------------------------------------------------------------
 %% boot step logic
