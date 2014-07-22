@@ -1565,15 +1565,22 @@ send_nacks(_, State) ->
 send_confirms(State = #ch{tx = none, confirmed = []}) ->
     State;
 send_confirms(State = #ch{tx = none, confirmed = C}) ->
-    MsgSeqNos =
-        lists:foldl(
-          fun ({MsgSeqNo, XName}, MSNs) ->
-                  ?INCR_STATS([{exchange_stats, XName, 1}], confirm, State),
-                  [MsgSeqNo | MSNs]
-          end, [], lists:append(C)),
-    send_confirms(MsgSeqNos, State#ch{confirmed = []});
+    case rabbit_node_monitor:pause_minority_guard() of
+        ok      -> MsgSeqNos =
+                       lists:foldl(
+                         fun ({MsgSeqNo, XName}, MSNs) ->
+                                 ?INCR_STATS([{exchange_stats, XName, 1}],
+                                             confirm, State),
+                                 [MsgSeqNo | MSNs]
+                         end, [], lists:append(C)),
+                   send_confirms(MsgSeqNos, State#ch{confirmed = []});
+        pausing -> State#ch{confirmed = []}
+    end;
 send_confirms(State) ->
-    maybe_complete_tx(State).
+    case rabbit_node_monitor:pause_minority_guard() of
+        ok      -> maybe_complete_tx(State);
+        pausing -> State
+    end.
 
 send_confirms([], State) ->
     State;

@@ -25,6 +25,7 @@
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
 -export([partitions/0, partitions/1, subscribe/1]).
+-export([pause_minority_guard/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -60,6 +61,7 @@
 -spec(partitions/0 :: () -> [node()]).
 -spec(partitions/1 :: ([node()]) -> [{node(), [node()]}]).
 -spec(subscribe/1 :: (pid()) -> 'ok').
+-spec(pause_minority_guard/0 :: () -> 'ok' | 'pausing').
 
 -spec(all_rabbit_nodes_up/0 :: () -> boolean()).
 -spec(run_outside_applications/1 :: (fun (() -> any())) -> pid()).
@@ -191,6 +193,47 @@ partitions(Nodes) ->
 
 subscribe(Pid) ->
     gen_server:cast(?SERVER, {subscribe, Pid}).
+
+%%----------------------------------------------------------------------------
+%% pause_minority safety
+%%----------------------------------------------------------------------------
+
+%% If we are in a minority and pause_minority mode then a) we are
+%% going to shut down imminently and b) we should not confirm anything
+%% until then, since anything we confirm is likely to be lost.
+%%
+%% We could confirm something by having an HA queue see the minority
+%% state (and fail over into it) before the node monitor stops us, or
+%% by using unmirrored queues and just having them vanish (and
+%% confiming messages as thrown away).
+%%
+%% So we have channels call in here before issuing confirms, to do a
+%% lightweight check that we have not entered a minority state.
+
+pause_minority_guard() ->
+    case get(pause_minority_guard) of
+        not_minority_mode ->
+            ok;
+        undefined ->
+            {ok, M} = application:get_env(rabbit, cluster_partition_handling),
+            case M of
+                pause_minority -> pause_minority_guard([]);
+                _              -> put(pause_minority_guard, not_minority_mode),
+                                  ok
+            end;
+        {minority_mode, Nodes} ->
+            pause_minority_guard(Nodes)
+    end.
+
+pause_minority_guard(LastNodes) ->
+    case nodes() of
+        LastNodes -> ok;
+        _         -> put(pause_minority_guard, {minority_mode, nodes()}),
+                     case majority() of
+                         false -> pausing;
+                         true  -> ok
+                     end
+    end.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -362,7 +405,6 @@ await_cluster_recovery() ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
                        []),
     run_outside_applications(fun () ->
-                                     rabbit_networking:killall(),
                                      rabbit:stop(),
                                      wait_for_cluster_recovery()
                              end),
