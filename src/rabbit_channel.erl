@@ -1574,7 +1574,7 @@ send_confirms(State = #ch{tx = none, confirmed = C}) ->
                                  [MsgSeqNo | MSNs]
                          end, [], lists:append(C)),
                    send_confirms(MsgSeqNos, State#ch{confirmed = []});
-        pausing -> State#ch{confirmed = []}
+        pausing -> State
     end;
 send_confirms(State) ->
     case rabbit_node_monitor:pause_minority_guard() of
