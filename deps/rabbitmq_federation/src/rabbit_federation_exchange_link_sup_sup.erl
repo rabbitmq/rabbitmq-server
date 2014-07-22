@@ -62,4 +62,5 @@ init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
 %% See comment in rabbit_federation_queue_link_sup_sup:id/1
-id(X = #exchange{}) -> X#exchange{scratches = none}.
+id(X = #exchange{policy = Policy}) -> X1 = rabbit_exchange:immutable(X),
+                                      X1#exchange{policy = Policy}.

@@ -23,6 +23,7 @@
 
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_federation_util, [name/1]).
+-import(rabbit_test_util, [enable_plugin/2, disable_plugin/2]).
 
 -import(rabbit_federation_test_util,
         [expect/3,
@@ -119,6 +120,32 @@ federate_unfederate_test() ->
             q(<<"upstream2">>),
             q(<<"downstream">>)]).
 
+dynamic_plugin_stop_start_test() ->
+    Cfg = single_cfg(),
+    Q1 = <<"dyn.q1">>,
+    Q2 = <<"dyn.q2">>,
+    U = <<"upstream">>,
+    with_ch(
+      fun (Ch) ->
+              set_policy(Cfg, <<"dyn">>, <<"^dyn\\.">>, U),
+              %% Declare federated queue - get link
+              expect_federation(Ch, U, Q1),
+
+              %% Disable plugin, link goes
+              ok = disable_plugin(Cfg, "rabbitmq_federation"),
+              expect_no_federation(Ch, U, Q1),
+
+              %% Create exchange then re-enable plugin, links appear
+              declare_queue(Ch, q(Q2)),
+              ok = enable_plugin(Cfg, "rabbitmq_federation"),
+              expect_federation(Ch, U, Q1),
+              expect_federation(Ch, U, Q2),
+
+              clear_policy(Cfg, <<"dyn">>),
+              expect_no_federation(Ch, U, Q1),
+              expect_no_federation(Ch, U, Q2),
+              delete_queue(Ch, Q2)
+      end, [q(Q1), q(U)]).
 
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
