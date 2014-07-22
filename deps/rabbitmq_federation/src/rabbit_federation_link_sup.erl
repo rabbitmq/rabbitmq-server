@@ -59,12 +59,12 @@ adjust(Sup, XorQ, {clear_upstream, UpstreamName}) ->
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
 adjust(Sup, X = #exchange{name = XName}, {upstream_set, _Set}) ->
+    adjust(Sup, X, everything),
     case rabbit_federation_upstream:federate(X) of
         false -> ok;
         true  -> ok = rabbit_federation_db:prune_scratch(
                         XName, rabbit_federation_upstream:for(X))
-    end,
-    adjust(Sup, X, everything);
+    end;
 adjust(Sup, Q = #amqqueue{}, {upstream_set, _}) ->
     adjust(Sup, Q, everything);
 adjust(Sup, XorQ, {clear_upstream_set, _}) ->
