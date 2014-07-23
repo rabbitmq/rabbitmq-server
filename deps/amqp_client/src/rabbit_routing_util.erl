@@ -79,8 +79,8 @@ parse_endpoint0(Type,     Rest,               _) ->
 
 %% --------------------------------------------------------------------------
 
-ensure_endpoint(Dir, Channel, EndPoint, State) ->
-    ensure_endpoint(Dir, Channel, EndPoint, [], State).
+ensure_endpoint(Dir, Channel, Endpoint, State) ->
+    ensure_endpoint(Dir, Channel, Endpoint, [], State).
 
 ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
     check_exchange(Name, Channel,
@@ -119,9 +119,11 @@ ensure_endpoint(dest, Channel, {exchange, {Name, _}}, Params, State) ->
 ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
     {ok, undefined, State};
 
-ensure_endpoint(_, _Ch, {Type, Name}, _Params, State)
-  when Type =:= reply_queue orelse Type =:= amqqueue ->
-    {ok, list_to_binary(Name), State};
+ensure_endpoint(_, _Ch, {amqqueue, Name}, _Params, State) ->
+  {ok, list_to_binary(Name), State};
+
+ensure_endpoint(_, _Ch, {reply_queue, Name}, _Params, State) ->
+  {ok, list_to_binary(Name), State};
 
 ensure_endpoint(_Direction, _Ch, _Endpoint, _Params, _State) ->
     {error, invalid_endpoint}.
@@ -167,17 +169,43 @@ check_exchange(ExchangeName, Channel, true) ->
     #'exchange.declare_ok'{} = amqp_channel:call(Channel, XDecl),
     ok.
 
+update_queue_declare_arguments(Method, Params) ->
+    Method#'queue.declare'{arguments =
+                               proplists:get_value(arguments, Params, [])}.
+
+update_queue_declare_exclusive(Method, Params) ->
+    case proplists:get_value(exclusive, Params) of
+        undefined -> Method;
+        Val       -> Method#'queue.declare'{exclusive = Val}
+    end.
+
+update_queue_declare_auto_delete(Method, Params) ->
+    case proplists:get_value(auto_delete, Params) of
+        undefined -> Method;
+        Val       -> Method#'queue.declare'{auto_delete = Val}
+    end.
+
 queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
+    %% defaults
     Method1 = case proplists:get_value(durable, Params, false) of
                   true  -> Method#'queue.declare'{durable     = true};
                   false -> Method#'queue.declare'{auto_delete = true,
                                                   exclusive   = true}
               end,
+    %% set the rest of queue.declare fields from Params
+    Method2 = lists:foldl(fun (F, Acc) -> F(Acc, Params) end,
+                Method1, [fun update_queue_declare_arguments/2,
+                          fun update_queue_declare_exclusive/2,
+                          fun update_queue_declare_auto_delete/2]),
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
-            Method1#'queue.declare'{queue = SQNG()};
+            Method2#'queue.declare'{queue = SQNG()};
+        {exchange, SQNG} when is_function(SQNG) ->
+            Method2#'queue.declare'{queue = SQNG()};
+        {'reply-queue', SQNG} when is_function(SQNG) ->
+            Method2#'queue.declare'{queue = SQNG()};
         _ ->
-            Method1
+            Method2
     end.
 
 %% --------------------------------------------------------------------------
@@ -193,4 +221,3 @@ unescape(Str) -> unescape(Str, []).
 unescape("%2F" ++ Str, Acc) -> unescape(Str, [$/ | Acc]);
 unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
 unescape([],           Acc) -> lists:reverse(Acc).
-
