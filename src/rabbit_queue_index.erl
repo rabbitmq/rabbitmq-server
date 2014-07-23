@@ -140,8 +140,11 @@
 -define(MSG_ID_BYTES, 16). %% md5sum is 128 bit or 16 bytes
 -define(MSG_ID_BITS, (?MSG_ID_BYTES * 8)).
 
-%% 16 bytes for md5sum + 8 for expiry
--define(PUB_RECORD_BODY_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES)).
+-define(SIZE_BYTES, 4).
+-define(SIZE_BITS, (?SIZE_BYTES * 8)).
+
+%% 16 bytes for md5sum + 8 for expiry + 4 for size
+-define(PUB_RECORD_BODY_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES + ?SIZE_BYTES)).
 %% + 2 for seq, bits and prefix
 -define(PUB_RECORD_BYTES, (?PUB_RECORD_BODY_BYTES + 2)).
 
@@ -199,7 +202,8 @@
 -spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
 -spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate(), on_sync_fun()) ->
-                        {'undefined' | non_neg_integer(), qistate()}).
+                        {'undefined' | non_neg_integer(),
+                         'undefined' | non_neg_integer(), qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
 -spec(publish/5 :: (rabbit_types:msg_id(), seq_id(),
@@ -410,12 +414,13 @@ init_clean(RecoveredCounts, State) ->
         lists:foldl(
           fun ({Seg, UnackedCount}, SegmentsN) ->
                   Segment = segment_find_or_new(Seg, Dir, SegmentsN),
-                  segment_store(Segment #segment { unacked = UnackedCount },
-                                SegmentsN)
+                  segment_store(
+                    Segment #segment { unacked = UnackedCount },
+                    SegmentsN)
           end, Segments, RecoveredCounts),
     %% the counts above include transient messages, which would be the
     %% wrong thing to return
-    {undefined, State1 # qistate { segments = Segments1 }}.
+    {undefined, undefined, State1 # qistate { segments = Segments1 }}.
 
 init_dirty(CleanShutdown, ContainsCheckFun, State) ->
     %% Recover the journal completely. This will also load segments
@@ -424,7 +429,7 @@ init_dirty(CleanShutdown, ContainsCheckFun, State) ->
     %% and the journal.
     State1 = #qistate { dir = Dir, segments = Segments } =
         recover_journal(State),
-    {Segments1, Count, DirtyCount} =
+    {Segments1, Count, Bytes, DirtyCount} =
         %% Load each segment in turn and filter out messages that are
         %% not in the msg_store, by adding acks to the journal. These
         %% acks only go to the RAM journal as it doesn't matter if we
@@ -433,16 +438,18 @@ init_dirty(CleanShutdown, ContainsCheckFun, State) ->
         %% dirty count here, so we can call maybe_flush_journal below
         %% and avoid unnecessary file system operations.
         lists:foldl(
-          fun (Seg, {Segments2, CountAcc, DirtyCount}) ->
-                  {Segment = #segment { unacked = UnackedCount }, Dirty} =
+          fun (Seg, {Segments2, CountAcc, BytesAcc, DirtyCount}) ->
+                  {{Segment = #segment { unacked = UnackedCount }, Dirty},
+                   UnackedBytes} =
                       recover_segment(ContainsCheckFun, CleanShutdown,
                                       segment_find_or_new(Seg, Dir, Segments2)),
                   {segment_store(Segment, Segments2),
-                   CountAcc + UnackedCount, DirtyCount + Dirty}
-          end, {Segments, 0, 0}, all_segment_nums(State1)),
+                   CountAcc + UnackedCount,
+                   BytesAcc + UnackedBytes, DirtyCount + Dirty}
+          end, {Segments, 0, 0, 0}, all_segment_nums(State1)),
     State2 = maybe_flush_journal(State1 #qistate { segments = Segments1,
                                                    dirty_count = DirtyCount }),
-    {Count, State2}.
+    {Count, Bytes, State2}.
 
 terminate(State = #qistate { journal_handle = JournalHdl,
                              segments = Segments }) ->
@@ -464,12 +471,13 @@ recover_segment(ContainsCheckFun, CleanShutdown,
     {SegEntries1, UnackedCountDelta} =
         segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
-      fun (RelSeq, {{MsgId, _MsgProps, _IsPersistent}, Del, no_ack},
-           SegmentAndDirtyCount) ->
-              recover_message(ContainsCheckFun(MsgId), CleanShutdown,
-                              Del, RelSeq, SegmentAndDirtyCount)
+      fun (RelSeq, {{MsgId, MsgProps, _IsPersistent}, Del, no_ack},
+           {SegmentAndDirtyCount, Bytes}) ->
+              {recover_message(ContainsCheckFun(MsgId), CleanShutdown,
+                               Del, RelSeq, SegmentAndDirtyCount),
+               Bytes + MsgProps#message_properties.size}
       end,
-      {Segment #segment { unacked = UnackedCount + UnackedCountDelta }, 0},
+      {{Segment #segment { unacked = UnackedCount + UnackedCountDelta }, 0}, 0},
       SegEntries1).
 
 recover_message( true,  true,   _Del, _RelSeq, SegmentAndDirtyCount) ->
@@ -549,13 +557,15 @@ scan_segments(Fun, Acc, State) ->
 %% expiry/binary manipulation
 %%----------------------------------------------------------------------------
 
-create_pub_record_body(MsgId, #message_properties { expiry = Expiry }) ->
-    [MsgId, expiry_to_binary(Expiry)].
+create_pub_record_body(MsgId, #message_properties { expiry = Expiry,
+                                                    size   = Size}) ->
+    [MsgId, expiry_to_binary(Expiry), <<Size:?SIZE_BITS>>].
 
 expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
 expiry_to_binary(Expiry)    -> <<Expiry:?EXPIRY_BITS>>.
 
-parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS>>) ->
+parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
+                        Size:?SIZE_BITS>>) ->
     %% work around for binary data fragmentation. See
     %% rabbit_msg_file:read_next/2
     <<MsgId:?MSG_ID_BYTES/binary>> = <<MsgIdNum:?MSG_ID_BITS>>,
@@ -563,7 +573,8 @@ parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS>>) ->
               ?NO_EXPIRY -> undefined;
               X          -> X
           end,
-    {MsgId, #message_properties { expiry = Exp }}.
+    {MsgId, #message_properties { expiry = Exp,
+                                  size   = Size }}.
 
 %%----------------------------------------------------------------------------
 %% journal manipulation
