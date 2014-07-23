@@ -80,6 +80,30 @@
           <%= fmt_num_thousands(queue.backing_queue_status.persistent_count) %> msg
         </td>
       </tr>
+      <tr>
+        <th>
+          Bytes length (total)
+        </th>
+        <td>
+          <%= fmt_bytes(queue.backing_queue_status.bytes) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Bytes length (in RAM)
+        </th>
+        <td>
+          <%= fmt_bytes(queue.backing_queue_status.ram_msg_bytes) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Bytes length (persistent)
+        </th>
+        <td>
+          <%= fmt_bytes(queue.backing_queue_status.persistent_bytes) %>
+        </td>
+      </tr>
     </table>
 
     <table class="facts">
