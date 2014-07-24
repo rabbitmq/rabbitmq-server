@@ -37,6 +37,9 @@
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
          get_memory_limit/0]).
 
+%% for tests
+-export([parse_line_linux/1]).
+
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
@@ -306,15 +309,29 @@ parse_line_mach(Line) ->
             {list_to_atom(Name), list_to_integer(Value)}
     end.
 
-%% A line looks like "FooBar: 123456 kB"
+extract_name_and_value_linux(Line) ->
+    {Name, Value, UnitRest} =
+        case string:tokens(Line, ":") of
+            %% no colon in the line
+            [S] ->
+                [K, RHS] = re:split(S, "\s", [{parts, 2}, {return, list}]),
+                [V | Unit] = string:tokens(RHS, " "),
+                {K, V, Unit};
+            [K, RHS | _Rest] ->
+                [V | Unit] = string:tokens(RHS, " "),
+                {K, V, Unit}
+        end,
+    Value1 = case UnitRest of
+        []     -> list_to_integer(Value); %% no units
+        ["kB"] -> list_to_integer(Value) * 1024
+    end,
+    {Name, Value1}.
+
+%% A line looks like "MemTotal:         502968 kB"
+%% or (with broken OS/modules) "Readahead      123456 kB"
 parse_line_linux(Line) ->
-    [Name, RHS | _Rest] = string:tokens(Line, ":"),
-    [Value | UnitsRest] = string:tokens(RHS, " "),
-    Value1 = case UnitsRest of
-                 [] -> list_to_integer(Value); %% no units
-                 ["kB"] -> list_to_integer(Value) * 1024
-             end,
-    {list_to_atom(Name), Value1}.
+    {Name, Val} = extract_name_and_value_linux(Line),
+    {list_to_atom(Name), Val}.
 
 %% A line looks like "Memory size: 1024 Megabytes"
 parse_line_sunos(Line) ->
