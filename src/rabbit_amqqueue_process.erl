@@ -84,6 +84,7 @@
          memory,
          slave_pids,
          synchronised_slave_pids,
+         down_slave_nodes,
          backing_queue_status,
          state
         ]).
@@ -385,12 +386,12 @@ ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref       = undefined,
                  V when V > 0 -> V + 999; %% always fire later
                  _            -> 0
              end) div 1000,
-    TRef = erlang:send_after(After, self(), {drop_expired, Version}),
+    TRef = rabbit_misc:send_after(After, self(), {drop_expired, Version}),
     State#q{ttl_timer_ref = TRef, ttl_timer_expiry = Expiry};
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
                                     ttl_timer_expiry = TExpiry})
   when Expiry + 1000 < TExpiry ->
-    case erlang:cancel_timer(TRef) of
+    case rabbit_misc:cancel_timer(TRef) of
         false -> State;
         _     -> ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined})
     end;
@@ -810,6 +811,14 @@ i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
         false -> '';
         true  -> SSPids
     end;
+i(down_slave_nodes, #q{q = #amqqueue{name    = Name,
+                                     durable = Durable}}) ->
+    {ok, Q = #amqqueue{down_slave_nodes = Nodes}} =
+        rabbit_amqqueue:lookup(Name),
+    case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false -> '';
+        true  -> Nodes
+    end;
 i(state, #q{status = running}) -> credit_flow:state();
 i(state, #q{status = State})   -> State;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
@@ -1165,7 +1174,7 @@ handle_cast({force_event_refresh, Ref},
                       emit_consumer_created(
                         Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref)
     end,
-    noreply(State);
+    noreply(rabbit_event:init_stats_timer(State, #q.stats_timer));
 
 handle_cast(notify_decorators, State) ->
     notify_decorators(State),
