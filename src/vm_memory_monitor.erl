@@ -80,7 +80,19 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-get_total_memory() -> get_total_memory(os:type()).
+get_total_memory() ->
+    try
+        get_total_memory(os:type())
+    catch _:Error ->
+            case get(logged_get_total_memory) of
+                undefined ->
+                    rabbit_log:warning("Failed to get total system memory: ~n~p~n~p~n",
+                                      [Error, erlang:get_stacktrace()]),
+                    put(logged_get_total_memory, true);
+                _ -> ok
+            end,
+            unknown
+    end.
 
 get_vm_limit() -> get_vm_limit(os:type()).
 
