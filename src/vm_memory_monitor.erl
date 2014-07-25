@@ -309,7 +309,9 @@ parse_line_mach(Line) ->
             {list_to_atom(Name), list_to_integer(Value)}
     end.
 
-extract_name_and_value_linux(Line) ->
+%% A line looks like "MemTotal:         502968 kB"
+%% or (with broken OS/modules) "Readahead      123456 kB"
+parse_line_linux(Line) ->
     {Name, Value, UnitRest} =
         case string:tokens(Line, ":") of
             %% no colon in the line
@@ -325,13 +327,7 @@ extract_name_and_value_linux(Line) ->
         []     -> list_to_integer(Value); %% no units
         ["kB"] -> list_to_integer(Value) * 1024
     end,
-    {Name, Value1}.
-
-%% A line looks like "MemTotal:         502968 kB"
-%% or (with broken OS/modules) "Readahead      123456 kB"
-parse_line_linux(Line) ->
-    {Name, Val} = extract_name_and_value_linux(Line),
-    {list_to_atom(Name), Val}.
+    {list_to_atom(Name), Value1}.
 
 %% A line looks like "Memory size: 1024 Megabytes"
 parse_line_sunos(Line) ->
