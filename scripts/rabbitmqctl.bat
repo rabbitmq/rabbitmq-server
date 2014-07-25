@@ -23,12 +23,24 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
+if "!RABBITMQ_BASE!"=="" (
+    set RABBITMQ_BASE=!APPDATA!\RabbitMQ
+)
+
 if "!COMPUTERNAME!"=="" (
     set COMPUTERNAME=localhost
 )
 
 if "!RABBITMQ_NODENAME!"=="" (
     set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
+)
+
+if "!RABBITMQ_MNESIA_BASE!"=="" (
+    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!/db
+)
+
+if "!RABBITMQ_MNESIA_DIR!"=="" (
+    set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia
 )
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
@@ -43,7 +55,20 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B
 )
 
-"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden !RABBITMQ_CTL_ERL_ARGS! -sname rabbitmqctl!RANDOM!!TIME:~9! -s rabbit_control_main -nodename !RABBITMQ_NODENAME! -extra !STAR!
+rem rabbitmqctl starts distribution itself, so we need to make sure epmd
+rem is running.
+"!ERLANG_HOME!\bin\erl.exe" -sname rabbitmqctl-prelaunch-!RANDOM!!TIME:~9! -noinput -eval "erlang:halt()."
+
+"!ERLANG_HOME!\bin\erl.exe" ^
+-pa "!TDP0!..\ebin" ^
+-noinput ^
+-hidden ^
+!RABBITMQ_CTL_ERL_ARGS! ^
+-sasl errlog_type error ^
+-mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
+-s rabbit_control_main ^
+-nodename !RABBITMQ_NODENAME! ^
+-extra !STAR!
 
 endlocal
 endlocal

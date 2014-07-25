@@ -54,6 +54,7 @@
          change_cluster_node_type,
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
+         force_boot,
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
          {cancel_sync_queue, [?VHOST_DEF]},
@@ -131,6 +132,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    start_distribution(),
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
         case parse_arguments(init:get_plain_arguments(), NodeStr) of
@@ -302,8 +304,19 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     RemoveWhenOffline = proplists:get_bool(?OFFLINE_OPT, Opts),
     Inform("Removing node ~p from cluster", [ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, forget_cluster_node,
-             [ClusterNode, RemoveWhenOffline]);
+    case RemoveWhenOffline of
+        true  -> become(Node),
+                 rabbit_mnesia:forget_cluster_node(ClusterNode, true);
+        false -> rpc_call(Node, rabbit_mnesia, forget_cluster_node,
+                          [ClusterNode, false])
+    end;
+
+action(force_boot, Node, [], _Opts, Inform) ->
+    Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
+    case rabbit:is_running(Node) of
+        false -> rabbit_mnesia:force_load_next_boot();
+        true  -> {error, rabbit_running}
+    end;
 
 action(sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -648,6 +661,22 @@ exit_loop(Port) ->
     receive
         {Port, {exit_status, Rc}} -> Rc;
         {Port, _}                 -> exit_loop(Port)
+    end.
+
+start_distribution() ->
+    CtlNodeName = rabbit_misc:format("rabbitmqctl-~s", [os:getpid()]),
+    {ok, _} = net_kernel:start([list_to_atom(CtlNodeName), shortnames]).
+
+become(BecomeNode) ->
+    case net_adm:ping(BecomeNode) of
+        pong -> exit({node_running, BecomeNode});
+        pang -> io:format("  * Impersonating node: ~s...", [BecomeNode]),
+                error_logger:tty(false),
+                ok = net_kernel:stop(),
+                {ok, _} = net_kernel:start([BecomeNode, shortnames]),
+                io:format(" done~n", []),
+                Dir = mnesia:system_info(directory),
+                io:format("  * Mnesia directory  : ~s~n", [Dir])
     end.
 
 %%----------------------------------------------------------------------------
