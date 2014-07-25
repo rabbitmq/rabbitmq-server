@@ -899,6 +899,9 @@ ntoab(IP) ->
         _ -> "[" ++ Str ++ "]"
     end.
 
+%% We try to avoid reconnecting to down nodes here; this is used in a
+%% loop in rabbit_amqqueue:on_node_down/1 and any delays we incur
+%% would be bad news.
 is_process_alive(Pid) ->
     Node = node(Pid),
     lists:member(Node, [node() | nodes()]) andalso
