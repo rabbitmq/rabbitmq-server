@@ -118,7 +118,8 @@
 -define(COMMANDS_NOT_REQUIRING_APP,
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
-         forget_cluster_node, cluster_status, status, environment, eval]).
+         forget_cluster_node, cluster_status, status, environment, eval,
+         force_boot]).
 
 %%----------------------------------------------------------------------------
 
