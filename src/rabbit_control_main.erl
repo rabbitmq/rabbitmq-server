@@ -145,19 +145,6 @@ start() ->
         end,
     Quiet = proplists:get_bool(?QUIET_OPT, Opts),
     Node = proplists:get_value(?NODE_OPT, Opts),
-    case lists:member(Command, ?COMMANDS_NOT_REQUIRING_APP) of
-        false ->
-            ensure_app_running(Node);
-        true ->
-            ok;
-        {badrpc, {'EXIT', Err}} ->
-            print_error("~p", [Err]),
-            rabbit_misc:quit(2);
-        {badrpc, Err} ->
-            print_error("unable to connect to node ~w: ~w", [Node, Err]),
-            print_badrpc_diagnostics([Node]),
-            rabbit_misc:quit(2)
-    end,
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -172,7 +159,7 @@ start() ->
 
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
-    case catch action(Command, Node, Args, Opts, Inform) of
+    case catch do_action(Command, Node, Args, Opts, Inform) of
         ok ->
             case Quiet of
                 true  -> ok;
@@ -266,6 +253,15 @@ parse_arguments(CmdLine, NodeStr) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+do_action(Command, Node, Args, Opts, Inform) ->
+    case lists:member(Command, ?COMMANDS_NOT_REQUIRING_APP) of
+        false -> case ensure_app_running(Node) of
+                     ok -> action(Command, Node, Args, Opts, Inform);
+                     E  -> E
+                 end;
+        true  -> action(Command, Node, Args, Opts, Inform)
+    end.
 
 action(stop, Node, Args, _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
