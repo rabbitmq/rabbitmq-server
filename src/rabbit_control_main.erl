@@ -115,6 +115,11 @@
          {"Policies",   rabbit_policy,             list_formatted, info_keys},
          {"Parameters", rabbit_runtime_parameters, list_formatted, info_keys}]).
 
+-define(COMMANDS_NOT_REQUIRING_APP,
+        [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
+         join_cluster, change_cluster_node_type, update_cluster_nodes,
+         forget_cluster_node, cluster_status, status, environment, eval]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -156,7 +161,7 @@ start() ->
 
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
-    case catch action(Command, Node, Args, Opts, Inform) of
+    case catch do_action(Command, Node, Args, Opts, Inform) of
         ok ->
             case Quiet of
                 true  -> ok;
@@ -250,6 +255,15 @@ parse_arguments(CmdLine, NodeStr) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+do_action(Command, Node, Args, Opts, Inform) ->
+    case lists:member(Command, ?COMMANDS_NOT_REQUIRING_APP) of
+        false -> case ensure_app_running(Node) of
+                     ok -> action(Command, Node, Args, Opts, Inform);
+                     E  -> E
+                 end;
+        true  -> action(Command, Node, Args, Opts, Inform)
+    end.
 
 action(stop, Node, Args, _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
@@ -742,6 +756,17 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
     case rpc_call(Node, Mod, Fun, Args) of
         {badrpc, _} = Res -> throw(Res);
         Normal            -> Normal
+    end.
+
+ensure_app_running(Node) ->
+    case call(Node, {rabbit, is_running, []}) of
+        true  -> ok;
+        false -> {error_string,
+                  rabbit_misc:format(
+                    "rabbit application is not running on node ~s.~n"
+                    " * Suggestion: start it with \"rabbitmqctl start_app\" "
+                    "and try again", [Node])};
+        Other -> Other
     end.
 
 call(Node, {Mod, Fun, Args}) ->
