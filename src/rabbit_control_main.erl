@@ -146,8 +146,17 @@ start() ->
     Quiet = proplists:get_bool(?QUIET_OPT, Opts),
     Node = proplists:get_value(?NODE_OPT, Opts),
     case lists:member(Command, ?COMMANDS_NOT_REQUIRING_APP) of
-        false -> ensure_app_running(Node);
-        true  -> ok
+        false ->
+            ensure_app_running(Node);
+        true ->
+            ok;
+        {badrpc, {'EXIT', Err}} ->
+            print_error("~p", [Err]),
+            rabbit_misc:quit(2);
+        {badrpc, Err} ->
+            print_error("unable to connect to node ~w: ~w", [Node, Err]),
+            print_badrpc_diagnostics([Node]),
+            rabbit_misc:quit(2)
     end,
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
@@ -725,13 +734,14 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
     end.
 
 ensure_app_running(Node) ->
-    case rabbit:is_running(Node) of
+    case call(Node, {rabbit, is_running, []}) of
         true  -> ok;
         false -> fmt_stderr("rabbit app is not running on node ~s, "
                             "please start it with rabbitmqctl start_app "
                             "and try again",
                             [Node]),
-                 rabbit_misc:quit(2)
+                 rabbit_misc:quit(2);
+        Other -> Other
     end.
 
 call(Node, {Mod, Fun, Args}) ->
