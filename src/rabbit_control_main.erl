@@ -732,11 +732,11 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
 ensure_app_running(Node) ->
     case call(Node, {rabbit, is_running, []}) of
         true  -> ok;
-        false -> fmt_stderr("rabbit app is not running on node ~s, "
-                            "please start it with rabbitmqctl start_app "
-                            "and try again",
-                            [Node]),
-                 rabbit_misc:quit(2);
+        false -> {error_string,
+                  rabbit_misc:format(
+                    "rabbit application is not running on node ~s.~n"
+                    " * Suggestion: start it with \"rabbitmqctl start_app\" "
+                    "and try again", [Node])};
         Other -> Other
     end.
 
