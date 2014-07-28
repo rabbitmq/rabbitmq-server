@@ -471,11 +471,14 @@ recover_segment(ContainsCheckFun, CleanShutdown,
     {SegEntries1, UnackedCountDelta} =
         segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
-      fun (RelSeq, {{MsgId, MsgProps, _IsPersistent}, Del, no_ack},
+      fun (RelSeq, {{MsgId, MsgProps, IsPersistent}, Del, no_ack},
            {SegmentAndDirtyCount, Bytes}) ->
               {recover_message(ContainsCheckFun(MsgId), CleanShutdown,
                                Del, RelSeq, SegmentAndDirtyCount),
-               Bytes + MsgProps#message_properties.size}
+               Bytes + case IsPersistent of
+                           true  -> MsgProps#message_properties.size;
+                           false -> 0
+                       end}
       end,
       {{Segment #segment { unacked = UnackedCount + UnackedCountDelta }, 0}, 0},
       SegEntries1).
