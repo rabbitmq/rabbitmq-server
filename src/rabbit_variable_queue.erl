@@ -1788,7 +1788,7 @@ push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
                         maybe_write_to_disk(true, false, MsgStatus, State),
                      MsgStatus2 = m(trim_msg_status(MsgStatus1)),
                      State2 = Consumer(MsgStatus2, Qa,
-                                       upd_ram_counts(1, MsgStatus2, State1)),
+                                       upd_ram_counts(-1, MsgStatus2, State1)),
                      push_alphas_to_betas(Generator, Consumer, Quota - 1,
                                           Qa, State2)
                      end
