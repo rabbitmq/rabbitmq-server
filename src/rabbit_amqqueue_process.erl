@@ -103,7 +103,8 @@
 
 start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
-info_keys() -> ?INFO_KEYS.
+info_keys()       -> ?INFO_KEYS       ++ rabbit_backing_queue:info_keys().
+statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 
 %%----------------------------------------------------------------------------
 
@@ -824,17 +825,15 @@ i(down_slave_nodes, #q{q = #amqqueue{name    = Name,
     end;
 i(state, #q{status = running}) -> credit_flow:state();
 i(state, #q{status = State})   -> State;
-i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
-    BQ:status(BQS);
-i(Item, _) ->
-    throw({bad_argument, Item}).
+i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
+    BQ:info(Item, BQS).
 
 emit_stats(State) ->
     emit_stats(State, []).
 
 emit_stats(State, Extra) ->
     ExtraKs = [K || {K, _} <- Extra],
-    Infos = [{K, V} || {K, V} <- infos(?STATISTICS_KEYS, State),
+    Infos = [{K, V} || {K, V} <- infos(statistics_keys(), State),
                        not lists:member(K, ExtraKs)],
     rabbit_event:notify(queue_stats, Extra ++ Infos).
 
@@ -934,7 +933,7 @@ handle_call({init, Recover}, From,
     end;
 
 handle_call(info, _From, State) ->
-    reply(infos(?INFO_KEYS, State), State);
+    reply(infos(info_keys(), State), State);
 
 handle_call({info, Items}, _From, State) ->
     try

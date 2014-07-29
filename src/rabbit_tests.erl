@@ -76,6 +76,7 @@ all_tests() ->
                   passed
           end),
     passed = test_configurable_server_properties(),
+    passed = vm_memory_monitor_tests:all_tests(),
     passed.
 
 
