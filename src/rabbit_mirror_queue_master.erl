@@ -22,7 +22,7 @@
          len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, resume/1,
-         msg_rates/1, status/1, invoke/3, is_duplicate/2]).
+         msg_rates/1, info/2, invoke/3, is_duplicate/2]).
 
 -export([start/1, stop/0]).
 
@@ -374,10 +374,13 @@ resume(State = #state { backing_queue       = BQ,
 msg_rates(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:msg_rates(BQS).
 
-status(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
-    BQ:status(BQS) ++
+info(backing_queue_status,
+     State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:info(backing_queue_status, BQS) ++
         [ {mirror_seen,    dict:size(State #state.seen_status)},
-          {mirror_senders, sets:size(State #state.known_senders)} ].
+          {mirror_senders, sets:size(State #state.known_senders)} ];
+info(Item, #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:info(Item, BQS).
 
 invoke(?MODULE, Fun, State) ->
     Fun(?MODULE, State);
