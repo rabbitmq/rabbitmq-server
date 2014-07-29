@@ -84,8 +84,9 @@ get_total_memory() ->
     try
         get_total_memory(os:type())
     catch _:Error ->
-            rabbit_log:warning("Failed to get total system memory: ~n~p~n~p~n",
-                               [Error, erlang:get_stacktrace()]),
+            rabbit_log:warning(
+              "Failed to get total system memory: ~n~p~n~p~n",
+              [Error, erlang:get_stacktrace()]),
             unknown
     end.
 
