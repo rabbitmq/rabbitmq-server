@@ -846,7 +846,7 @@ info(messages_ram, State) ->
 info(messages_persistent, #vqstate{persistent_count = PersistentCount}) ->
     PersistentCount;
 info(message_bytes, #vqstate{bytes = Bytes}) ->
-    Bytes;
+    Bytes; %% TODO this is really message_bytes_ready
 info(message_bytes_ram, #vqstate{ram_msg_bytes = RamMsgBytes}) ->
     RamMsgBytes; %% TODO this is really message_bytes_ready_ram!
 info(message_bytes_persistent, #vqstate{persistent_bytes = PersistentBytes}) ->
