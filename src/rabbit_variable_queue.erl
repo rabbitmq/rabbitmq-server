@@ -853,6 +853,7 @@ info(message_bytes_persistent, #vqstate{persistent_bytes = PersistentBytes}) ->
     PersistentBytes;
 info(backing_queue_status, #vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+          len              = Len,
           target_ram_count = TargetRamCount,
           next_seq_id      = NextSeqId,
           rates            = #rates { in      = AvgIngressRate,
@@ -865,6 +866,7 @@ info(backing_queue_status, #vqstate {
       {delta               , Delta},
       {q3                  , ?QUEUE:len(Q3)},
       {q4                  , ?QUEUE:len(Q4)},
+      {len                 , Len},
       {target_ram_count    , TargetRamCount},
       {next_seq_id         , NextSeqId},
       {avg_ingress_rate    , AvgIngressRate},
