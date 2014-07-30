@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_diagnostic).
+-module(rabbit_diagnostics).
 
 -export([maybe_stuck_processes/1]).
 
