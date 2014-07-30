@@ -1261,7 +1261,7 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     rabbit_event:if_enabled(
       State, #q.stats_timer,
       fun () -> emit_stats(State, [{idle_since,           now()},
-                                   {consumer_utilisation, null}]) end),
+                                   {consumer_utilisation, ''}]) end),
     State1 = rabbit_event:stop_stats_timer(State#q{backing_queue_state = BQS3},
                                            #q.stats_timer),
     {hibernate, stop_rate_timer(State1)}.
