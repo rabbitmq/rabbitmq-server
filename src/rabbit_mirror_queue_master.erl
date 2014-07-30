@@ -170,10 +170,24 @@ terminate({shutdown, dropped} = Reason,
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)};
 
 terminate(Reason,
-          State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+          State = #state { name                = QName,
+                           backing_queue       = BQ,
+                           backing_queue_state = BQS }) ->
     %% Backing queue termination. The queue is going down but
     %% shouldn't be deleted. Most likely safe shutdown of this
-    %% node. Thus just let some other slave take over.
+    %% node.
+    {ok, Q = #amqqueue{sync_slave_pids = SSPids}} =
+        rabbit_amqqueue:lookup(QName),
+    case SSPids =:= [] andalso
+        rabbit_policy:get(<<"ha-promote-on-shutdown">>, Q) =/= <<"always">> of
+        true  -> %% Remove the whole queue to avoid data loss
+                 rabbit_mirror_queue_misc:log_warning(
+                   QName, "Stopping all nodes on master shutdown since no "
+                   "synchronised slave is available~n", []),
+                 stop_all_slaves(Reason, State);
+        false -> %% Just let some other slave take over.
+                 ok
+    end,
     State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
 
 delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
@@ -181,7 +195,7 @@ delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
     stop_all_slaves(Reason, State),
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
-stop_all_slaves(Reason, #state{name = QName, gm   = GM}) ->
+stop_all_slaves(Reason, #state{name = QName, gm = GM}) ->
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
     MRefs = [erlang:monitor(process, Pid) || Pid <- [GM | SPids]],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
