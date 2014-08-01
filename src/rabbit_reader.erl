@@ -611,13 +611,10 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
     State1 = close_connection(terminate_channels(State)),
     ok = send_on_channel0(State1#v1.sock, CloseMethod, Protocol),
     State1;
-handle_exception(State = #v1{connection_state = tuning,
-                             connection = #connection{name = S}}, Channel, Reason) ->
+handle_exception(State = #v1{connection_state = tuning}, Channel, Reason) ->
     %% We don't trust the client at this point - force them to wait
     %% for a bit so they can't DOS us with repeated failed logins etc.
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-    log(error, "AMQP connection ~p (~s) handshake error:~n~p~n",
-       [self(), S, Reason]),
     throw({handshake_error, State#v1.connection_state, Channel, Reason}).
 
 %% we've "lost sync" with the client and hence must not accept any
