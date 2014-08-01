@@ -971,7 +971,8 @@ validate_negotiated_integer_value(Field, Min, ClientValue) ->
     ServerValue = get_env(Field),
     if ClientValue /= 0 andalso ClientValue < Min ->
             fail_negotiation(Field, min, ServerValue, ClientValue);
-       ServerValue /= 0 andalso ClientValue > ServerValue ->
+       ServerValue /= 0 andalso (ClientValue =:= 0 orelse
+                                 ClientValue > ServerValue) ->
             fail_negotiation(Field, max, ServerValue, ClientValue);
        true ->
             ok
