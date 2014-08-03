@@ -186,7 +186,7 @@
               queues = orddict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
 
-%% mode is one of: manual/drain/auto
+%% mode is of type credit_mode()
 -record(credit, {credit = 0, mode}).
 
 %%----------------------------------------------------------------------------
