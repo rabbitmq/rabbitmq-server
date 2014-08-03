@@ -201,13 +201,13 @@ terminate(_Reason, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-deliver(Msg, State) ->
-    deliver(Msg, undefined, State).
-deliver(Msg, Message, State) ->
-    Combined = if Message =:= undefined -> Msg;
-                  true                  -> {Msg, Message}
+deliver(BasicDeliver, State) ->
+    deliver(BasicDeliver, undefined, State).
+deliver(BasicDeliver, Message, State) ->
+    Combined = if Message =:= undefined -> BasicDeliver;
+                  true                  -> {BasicDeliver, Message}
                end,
-    case resolve_consumer(tag(Msg), State) of
+    case resolve_consumer(tag(BasicDeliver), State) of
         {consumer, Pid} -> Pid ! Combined;
         {default, Pid}  -> Pid ! Combined;
         error           -> exit(unexpected_delivery_and_no_default_consumer)
