@@ -374,13 +374,13 @@ handle_call({call, Method, AmqpMsg, Sender}, From, State) ->
 %% Handles the delivery of messages from a direct channel
 %% @private
 handle_call({send_command_sync, Method, Content}, From, State) ->
-    Ret = handle_method_from_server(Method, Content, State),
+    Ret = handle_method_from_server(Method, Content, none, State),
     gen_server:reply(From, ok),
     Ret;
 %% Handles the delivery of messages from a direct channel
 %% @private
 handle_call({send_command_sync, Method}, From, State) ->
-    Ret = handle_method_from_server(Method, none, State),
+    Ret = handle_method_from_server(Method, none, none, State),
     gen_server:reply(From, ok),
     Ret;
 %% @private
@@ -437,7 +437,7 @@ handle_cast(unregister_flow_handler,
 %% Received from channels manager
 %% @private
 handle_cast({method, Method, Content, noflow}, State) ->
-    handle_method_from_server(Method, Content, State);
+    handle_method_from_server(Method, Content, none, State);
 %% Handles the situation when the connection closes without closing the channel
 %% beforehand. The channel must block all further RPCs,
 %% flush the RPC queue (optional), and terminate
@@ -451,15 +451,16 @@ handle_cast({shutdown, Shutdown}, State) ->
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command, Method}, State) ->
-    handle_method_from_server(Method, none, State);
+    handle_method_from_server(Method, none, none, State);
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command, Method, Content}, State) ->
-    handle_method_from_server(Method, Content, State);
+    handle_method_from_server(Method, Content, none, State);
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command_and_notify, QPid, ChPid, Method, Content}, State) ->
-    handle_method_from_server(Method, Content, State),
+    Ref = make_ref(),
+    handle_method_from_server(Method, Content, Ref, State),
     rabbit_amqqueue:notify_sent(QPid, ChPid),
     {noreply, State};
 %% This comes from the writer or rabbit_channel
@@ -633,7 +634,7 @@ pre_do(_, _, _, State) ->
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
-handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
+handle_method_from_server(Method, Content, Ref, State = #state{closing = Closing}) ->
     case is_connection_method(Method) of
         true -> server_misbehaved(
                     #amqp_error{name        = command_invalid,
@@ -652,7 +653,7 @@ handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
                                       [self(), {Method, Content}]),
                             {noreply, State};
                     true -> handle_method_from_server1(Method,
-                                                       amqp_msg(Content), State)
+                                                       amqp_msg(Content, Ref), State)
                  end
     end.
 
@@ -815,6 +816,11 @@ amqp_msg(none) ->
 amqp_msg(Content) ->
     {Props, Payload} = rabbit_basic:from_content(Content),
     #amqp_msg{props = Props, payload = Payload}.
+amqp_msg(Content, none) ->
+    amqp_msg(Content);
+amqp_msg(Content, Ref) ->
+    {Props, Payload} = rabbit_basic:from_content(Content),
+    #amqp_msg{props = Props, payload = Payload, ref = Ref}.
 
 build_content(none) ->
     none;
