@@ -81,9 +81,23 @@
 
 -define(TIMEOUT_FLUSH, 60000).
 
+-record(subscriber_info, {
+          pid,
+          %% Part of internal flow control used by the direct client.
+          %% if true, the consumer will use rabbit_amqqueue:notify_sent/2
+          %% to notify the queue process that it's processed the message.
+          %% This prevents queue processes from overwhelming consumers
+          %% with messages in automatic acknowledgement mode.
+          will_notify_flow_manually = false
+         }).
 -record(state, {number,
                 connection,
                 consumer,
+                %% subscriber pid => #subscriber_info
+                pid_to_si          = gb_trees:empty(),
+                %% consumer_tag   => #subscriber_info
+                ctag_to_si         = gb_trees:empty(),
+                %% network | direct
                 driver,
                 rpc_requests       = queue:new(),
                 closing            = false, %% false |
@@ -97,7 +111,10 @@
                 flow_handler       = none,
                 unconfirmed_set    = gb_sets:new(),
                 waiting_set        = gb_trees:empty(),
-                only_acks_received = true
+                only_acks_received = true,
+                %% queue-to-consumer flow control notifications.
+                %% See subscriber_info.will_notify_flow_manually.
+                q_notifications    = gb_trees:empty()
                }).
 
 %%---------------------------------------------------------------------------
@@ -328,7 +345,13 @@ call_consumer(Channel, Msg) ->
 %% @doc Subscribe the given pid to a queue using the specified
 %% basic.consume method.
 subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber) ->
-    gen_server:call(Channel, {subscribe, BasicConsume, Subscriber}, infinity).
+    subscribe(Channel, BasicConsume, Subscriber, false).
+
+subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber,
+          WillNotifyFlowManually) ->
+    SI = #subscriber_info{pid = Subscriber,
+                          will_notify_flow_manually = WillNotifyFlowManually},
+    gen_server:call(Channel, {subscribe, BasicConsume, SI}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Internal interface
@@ -394,9 +417,12 @@ handle_call({call_consumer, Msg}, _From,
             State = #state{consumer = Consumer}) ->
     {reply, amqp_gen_consumer:call_consumer(Consumer, Msg), State};
 %% @private
-handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
-    handle_method_to_server(BasicConsume, none, From, Subscriber, noflow,
-                            State).
+handle_call({subscribe, BasicConsume,
+             SubscriberInfo = #subscriber_info{pid = Pid}},
+            From, State) ->
+    State1 = record_subscriber_info(SubscriberInfo, State),
+    handle_method_to_server(BasicConsume, none, From,
+                            Pid, noflow, State1).
 
 %% @private
 handle_cast({set_writer, Writer}, State) ->
@@ -462,7 +488,7 @@ handle_info({send_command_and_notify, QPid, ChPid, Method, Content}, State) ->
     Ref = make_ref(),
     handle_method_from_server(Method, Content, Ref, State),
     rabbit_amqqueue:notify_sent(QPid, ChPid),
-    {noreply, State};
+    {noreply, insert_queue_notification(Ref, {QPid, ChPid}, State)};
 %% This comes from the writer or rabbit_channel
 %% @private
 handle_info({channel_exit, _ChNumber, Reason}, State) ->
@@ -618,6 +644,10 @@ pending_rpc_method(#state{rpc_requests = Q}) ->
     {value, {_From, _Sender, Method, _Content, _Flow}} = queue:peek(Q),
     Method.
 
+pending_rpc_method_and_sender(#state{rpc_requests = Q}) ->
+    {value, {_From, Sender, Method, _Content, _Flow}} = queue:peek(Q),
+    {Method, Sender}.
+
 pre_do(#'channel.close'{reply_code = Code, reply_text = Text}, none,
        _Sender, State) ->
     State#state{closing = {just_channel, {app_initiated_close, Code, Text}}};
@@ -626,7 +656,7 @@ pre_do(#'basic.consume'{} = Method, none, Sender, State) ->
     State;
 pre_do(#'basic.cancel'{} = Method, none, Sender, State) ->
     ok = call_to_consumer(Method, Sender, State),
-    State;
+    State#state{pid_to_si = maybe_clean_up_subscriber(Sender, State)};
 pre_do(_, _, _, State) ->
     State.
 
@@ -688,7 +718,8 @@ handle_method_from_server1(#'channel.close_ok'{}, none,
             handle_shutdown({connection_closing, Reason}, State)
     end;
 handle_method_from_server1(#'basic.consume_ok'{} = ConsumeOk, none, State) ->
-    Consume = #'basic.consume'{} = pending_rpc_method(State),
+    {Consume = #'basic.consume'{},
+     Pid} = pending_rpc_method_and_sender(State),
     ok = call_to_consumer(ConsumeOk, Consume, State),
     {noreply, rpc_bottom_half(ConsumeOk, State)};
 handle_method_from_server1(#'basic.cancel_ok'{} = CancelOk, none, State) ->
@@ -944,3 +975,23 @@ call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
 
 safe_cancel_timer(undefined) -> ok;
 safe_cancel_timer(TRef)      -> erlang:cancel_timer(TRef).
+
+insert_queue_notification(Ref, Pair = {_QPid, _ChPid},
+                          State = #state{q_notifications = Xs}) ->
+    State#state{q_notifications = gb_trees:insert(Ref, Pair, Xs)}.
+
+record_subscriber_info(SI = #subscriber_info{pid = Pid},
+                       State = #state{pid_to_si = Xs}) ->
+    State#state{pid_to_si = gb_trees:insert(Pid, SI, Xs)}.
+
+delete_subscriber_info(#subscriber_info{pid = Pid},
+                       State = #state{pid_to_si = Xs}) ->
+    State#state{pid_to_si = gb_trees:delete(Pid, Xs)}.
+
+maybe_clean_up_subscriber(Pid, #state{pid_to_si = Xs}) ->
+    case gb_trees:lookup(Pid, Xs) of
+        {value, SI} ->
+            delete_subscriber_info(SI, Xs);
+        none ->
+            Xs
+    end.
