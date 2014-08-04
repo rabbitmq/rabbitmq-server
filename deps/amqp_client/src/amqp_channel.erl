@@ -458,9 +458,9 @@ handle_info({send_command, Method, Content}, State) ->
     handle_method_from_server(Method, Content, State);
 %% Received from rabbit_channel in the direct case
 %% @private
-handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
+handle_info({send_command_and_notify, QPid, ChPid, Method, Content}, State) ->
     handle_method_from_server(Method, Content, State),
-    rabbit_amqqueue:notify_sent(Q, ChPid),
+    rabbit_amqqueue:notify_sent(QPid, ChPid),
     {noreply, State};
 %% This comes from the writer or rabbit_channel
 %% @private
