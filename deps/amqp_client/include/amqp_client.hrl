@@ -20,7 +20,15 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--record(amqp_msg, {props = #'P_basic'{}, payload = <<>>, ref = make_ref()}).
+%% ref and channel_pid are relevant in the context
+%% of direct client
+-record(amqp_msg, {props = #'P_basic'{},
+                   payload = <<>>,
+                   %% helps identify the message
+                   ref = make_ref(),
+                   %% pid of the amqp_channel this message
+                   %% was delivered on
+                   channel_pid}).
 
 -record(amqp_params_network, {username           = <<"guest">>,
                               password           = <<"guest">>,
