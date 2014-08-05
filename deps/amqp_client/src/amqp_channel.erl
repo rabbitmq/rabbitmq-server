@@ -474,7 +474,7 @@ handle_info({send_command, Method, Content}, State) ->
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command_and_notify, QPid, ChPid,
-             #'basic.deliver'{}, Content}, State) ->
+             Method = #'basic.deliver'{}, Content}, State) ->
     handle_method_from_server(Method, Content, State),
     maybe_notify_sent(QPid, ChPid, State),
     {noreply, State};
