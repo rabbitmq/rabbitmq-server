@@ -486,20 +486,11 @@ handle_info({send_command, Method, Content}, State) ->
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command_and_notify, QPid, ChPid,
-             Method = #'basic.deliver'{consumer_tag = ConsumerTag},
-             Content}, State) ->
+             Method = #'basic.deliver'{}, Content}, State) ->
     Ref = make_ref(),
     handle_method_from_server(Method, Content, Ref, State),
-    SI  = find_subscriber_info_by_ctag(ConsumerTag, State),
-    State1 =
-        case SI#subscriber_info.will_notify_flow_manually of
-            true ->
-                insert_queue_notification(Ref, {QPid, ChPid}, State);
-            false ->
-                rabbit_amqqueue:notify_sent(QPid, ChPid),
-                State
-        end,
-    {noreply, State1};
+    rabbit_amqqueue:notify_sent(QPid, ChPid),
+    {noreply, insert_queue_notification(Ref, {QPid, ChPid}, State)};
 %% This comes from the writer or rabbit_channel
 %% @private
 handle_info({channel_exit, _ChNumber, Reason}, State) ->
@@ -739,7 +730,7 @@ handle_method_from_server1(#'basic.consume_ok'{
                            none, State) ->
     {Consume = #'basic.consume'{},
      Pid}  = pending_rpc_method_and_sender(State),
-    SI     = find_subscriber_info_by_pid(Pid, State),
+    SI     = find_subscriber_info(Pid, State),
     State1 = record_subscriber_info_by_ctag(ConsumerTag, SI, State),
     ok     = call_to_consumer(ConsumeOk, Consume, State1),
     {noreply, rpc_bottom_half(ConsumeOk, State1)};
@@ -1015,12 +1006,8 @@ record_subscriber_info_by_ctag(ConsumerTag,
     State#state{ctag_to_si =
                     gb_trees:enter(ConsumerTag, SI, Xs)}.
 
-find_subscriber_info_by_pid(Pid, #state{pid_to_si = Xs}) when is_pid(Pid) ->
+find_subscriber_info(Pid, #state{pid_to_si = Xs}) when is_pid(Pid) ->
     gb_trees:get(Pid, Xs).
-
-find_subscriber_info_by_ctag(ConsumerTag, #state{ctag_to_si = Xs})
-  when is_binary(ConsumerTag) ->
-    gb_trees:get(ConsumerTag, Xs).
 
 maybe_record_subscriber_info_by_ctag(#'basic.consume'{
                                         consumer_tag = ConsumerTag},
