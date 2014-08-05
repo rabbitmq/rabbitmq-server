@@ -349,9 +349,10 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber) ->
 
 subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber,
           WillNotifyFlowManually) ->
-    SI = #subscriber_info{pid = Subscriber,
-                          will_notify_flow_manually = WillNotifyFlowManually},
-    gen_server:call(Channel, {subscribe, BasicConsume, SI}, infinity).
+    gen_server:call(Channel, {subscribe, BasicConsume,
+                              subscriber_info(Subscriber,
+                                              WillNotifyFlowManually)},
+                    infinity).
 
 %%---------------------------------------------------------------------------
 %% Internal interface
@@ -420,7 +421,7 @@ handle_call({call_consumer, Msg}, _From,
 handle_call({subscribe, BasicConsume,
              SubscriberInfo = #subscriber_info{pid = Pid}},
             From, State) ->
-    State1 = record_subscriber_info(SubscriberInfo, State),
+    State1 = record_subscriber_info_by_pid(SubscriberInfo, State),
     handle_method_to_server(BasicConsume, none, From,
                             Pid, noflow, State1).
 
@@ -640,10 +641,6 @@ do_rpc(State = #state{rpc_requests = Q,
             State#state{rpc_requests = NewQ}
     end.
 
-pending_rpc_method(#state{rpc_requests = Q}) ->
-    {value, {_From, _Sender, Method, _Content, _Flow}} = queue:peek(Q),
-    Method.
-
 pending_rpc_method_and_sender(#state{rpc_requests = Q}) ->
     {value, {_From, Sender, Method, _Content, _Flow}} = queue:peek(Q),
     {Method, Sender}.
@@ -652,11 +649,21 @@ pre_do(#'channel.close'{reply_code = Code, reply_text = Text}, none,
        _Sender, State) ->
     State#state{closing = {just_channel, {app_initiated_close, Code, Text}}};
 pre_do(#'basic.consume'{} = Method, none, Sender, State) ->
+    SI     = subscriber_info(Sender),
+    State1 = maybe_record_subscriber_info_by_ctag(Method, SI, State),
+    State2 = record_subscriber_info_by_pid(SI, State1),
+    ok     = call_to_consumer(Method, Sender, State2),
+    %% record pre-emptively to cover the case when nowait = true.
+    %% basic.consume-ok will do the same but it's reasonable as
+    %% basic.consume is not supposed to be used on the hot path
+    State2;
+pre_do(#'basic.cancel'{consumer_tag = ConsumerTag} = Method,
+       none, Sender, State) ->
     ok = call_to_consumer(Method, Sender, State),
-    State;
-pre_do(#'basic.cancel'{} = Method, none, Sender, State) ->
-    ok = call_to_consumer(Method, Sender, State),
-    State#state{pid_to_si = maybe_clean_up_subscriber(Sender, State)};
+    %% record pre-emptively to cover the case when nowait = true,
+    %% the reasoning is the same as for basic.consume
+    delete_subscriber_info(subscriber_by_ctag(ConsumerTag, State),
+                           ConsumerTag, State);
 pre_do(_, _, _, State) ->
     State.
 
@@ -717,15 +724,22 @@ handle_method_from_server1(#'channel.close_ok'{}, none,
         {connection, Reason} ->
             handle_shutdown({connection_closing, Reason}, State)
     end;
-handle_method_from_server1(#'basic.consume_ok'{} = ConsumeOk, none, State) ->
+handle_method_from_server1(#'basic.consume_ok'{
+                              consumer_tag = ConsumerTag} = ConsumeOk,
+                           none, State) ->
     {Consume = #'basic.consume'{},
-     Pid} = pending_rpc_method_and_sender(State),
-    ok = call_to_consumer(ConsumeOk, Consume, State),
-    {noreply, rpc_bottom_half(ConsumeOk, State)};
-handle_method_from_server1(#'basic.cancel_ok'{} = CancelOk, none, State) ->
-    Cancel = #'basic.cancel'{} = pending_rpc_method(State),
-    ok = call_to_consumer(CancelOk, Cancel, State),
-    {noreply, rpc_bottom_half(CancelOk, State)};
+     Pid}  = pending_rpc_method_and_sender(State),
+    SI     = find_subscriber_info(Pid, State),
+    State1 = record_subscriber_info_by_ctag(ConsumerTag, SI, State),
+    ok     = call_to_consumer(ConsumeOk, Consume, State1),
+    {noreply, rpc_bottom_half(ConsumeOk, State1)};
+handle_method_from_server1(#'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk,
+                           none, State) ->
+    {Cancel = #'basic.cancel'{},
+     Pid}  = pending_rpc_method_and_sender(State),
+    ok     = call_to_consumer(CancelOk, Cancel, State),
+    State1 = delete_subscriber_info(Pid, ConsumerTag, State),
+    {noreply, rpc_bottom_half(CancelOk, State1)};
 handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
     ok = call_to_consumer(Cancel, none, State),
     {noreply, State};
@@ -980,18 +994,57 @@ insert_queue_notification(Ref, Pair = {_QPid, _ChPid},
                           State = #state{q_notifications = Xs}) ->
     State#state{q_notifications = gb_trees:insert(Ref, Pair, Xs)}.
 
-record_subscriber_info(SI = #subscriber_info{pid = Pid},
+record_subscriber_info_by_pid(SI = #subscriber_info{pid = Pid},
                        State = #state{pid_to_si = Xs}) ->
-    State#state{pid_to_si = gb_trees:insert(Pid, SI, Xs)}.
+    State#state{pid_to_si = gb_trees:enter(Pid, SI, Xs)}.
 
-delete_subscriber_info(#subscriber_info{pid = Pid},
-                       State = #state{pid_to_si = Xs}) ->
-    State#state{pid_to_si = gb_trees:delete(Pid, Xs)}.
+record_subscriber_info_by_ctag(ConsumerTag,
+                               SI = #subscriber_info{},
+                               State = #state{ctag_to_si = Xs})
+  when is_binary(ConsumerTag) ->
+    State#state{ctag_to_si =
+                    gb_trees:enter(ConsumerTag, SI, Xs)}.
 
-maybe_clean_up_subscriber(Pid, #state{pid_to_si = Xs}) ->
-    case gb_trees:lookup(Pid, Xs) of
-        {value, SI} ->
-            delete_subscriber_info(SI, Xs);
+find_subscriber_info(Pid, #state{pid_to_si = Xs}) when is_pid(Pid) ->
+    gb_trees:get(Pid, Xs).
+
+maybe_record_subscriber_info_by_ctag(#'basic.consume'{
+                                        consumer_tag = ConsumerTag},
+                                     SI = #subscriber_info{},
+                                     State = #state{}) ->
+    case ConsumerTag of
+        <<"">> ->
+            State;
+        Bin when is_binary(Bin) ->
+            record_subscriber_info_by_ctag(Bin, SI, State);
+        _ ->
+            State
+        end.
+
+delete_subscriber_info_by_pid(Pid,
+                              State = #state{pid_to_si = Xs}) ->
+    State#state{pid_to_si = gb_trees:delete_any(Pid, Xs)}.
+
+delete_subscriber_info_by_ctag(ConsumerTag,
+                               State = #state{ctag_to_si = Xs})
+  when is_binary(ConsumerTag) ->
+    State#state{ctag_to_si = gb_trees:delete_any(ConsumerTag, Xs)}.
+
+delete_subscriber_info(Pid, ConsumerTag, State = #state{}) ->
+    State1 = delete_subscriber_info_by_pid(Pid, State),
+    delete_subscriber_info_by_ctag(ConsumerTag, State1).
+
+subscriber_info(Subscriber) when is_pid(Subscriber) ->
+    subscriber_info(Subscriber, false).
+subscriber_info(Subscriber, ManualNotifications) when is_pid(Subscriber) ->
+    #subscriber_info{pid = Subscriber,
+                     will_notify_flow_manually = ManualNotifications}.
+
+subscriber_by_ctag(ConsumerTag, #state{ctag_to_si = Xs})
+  when is_binary(ConsumerTag) ->
+    case gb_trees:lookup(ConsumerTag, Xs) of
+        {value, #subscriber_info{pid = Pid}} ->
+            Pid;
         none ->
-            Xs
+            none
     end.
