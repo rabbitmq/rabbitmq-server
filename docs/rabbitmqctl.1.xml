@@ -1190,6 +1190,22 @@
                   (queue depth).</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>messages_ready_ram</term>
+                <listitem><para>Number of messages from messages_ready which are resident in ram.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_unacknowledged_ram</term>
+                <listitem><para>Number of messages from messages_unacknowledged which are resident in ram.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_ram</term>
+                <listitem><para>Total number of messages which are resident in ram.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_persistent</term>
+                <listitem><para>Total number of persistent messages in the queue (will always be 0 for transient queues).</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>consumers</term>
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
