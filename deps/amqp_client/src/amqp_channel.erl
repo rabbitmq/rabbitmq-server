@@ -97,7 +97,16 @@
                 flow_handler       = none,
                 unconfirmed_set    = gb_sets:new(),
                 waiting_set        = gb_trees:empty(),
-                only_acks_received = true
+                only_acks_received = true,
+
+                %% true | false, only relevant in the direct
+                %% client case.
+                %% when true, consumers will manually notify
+                %% queue pids using rabbit_amqqueue:notify_sent/2
+                %% to prevent the queue from overwhelming slow
+                %% consumers that use automatic acknowledgement
+                %% mode.
+                manual_flow_control = false
                }).
 
 %%---------------------------------------------------------------------------
@@ -342,6 +351,9 @@ start_link(Driver, Connection, ChannelNumber, Consumer, Identity) ->
 set_writer(Pid, Writer) ->
     gen_server:cast(Pid, {set_writer, Writer}).
 
+set_manual_flow_control(Pid, Value) ->
+    gen_server:cast(Pid, {set_manual_flow_control, Value}).
+
 %% @private
 connection_closing(Pid, ChannelCloseType, Reason) ->
     gen_server:cast(Pid, {connection_closing, ChannelCloseType, Reason}).
@@ -401,6 +413,9 @@ handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
 %% @private
 handle_cast({set_writer, Writer}, State) ->
     {noreply, State#state{writer = Writer}};
+%% @private
+handle_cast({set_manual_flow_control, Value}, State) ->
+    {noreply, State#state{manual_flow_control = Value}};
 %% @private
 handle_cast({cast, Method, AmqpMsg, Sender, noflow}, State) ->
     handle_method_to_server(Method, AmqpMsg, none, Sender, noflow, State);
