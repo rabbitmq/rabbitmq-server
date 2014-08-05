@@ -458,8 +458,7 @@ handle_info({send_command, Method, Content}, State) ->
     handle_method_from_server(Method, Content, none, State);
 %% Received from rabbit_channel in the direct case
 %% @private
-handle_info({send_command_and_notify, QPid, ChPid,
-             Method = #'basic.deliver'{}, Content}, State) ->
+handle_info({send_command_and_notify, QPid, ChPid, Method, Content}, State) ->
     Ref = make_ref(),
     handle_method_from_server(Method, Content, Ref, State),
     rabbit_amqqueue:notify_sent(QPid, ChPid),
