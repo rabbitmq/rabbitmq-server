@@ -20,7 +20,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--record(amqp_msg, {props = #'P_basic'{}, payload = <<>>, ref = make_ref()}).
+-record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
 -record(amqp_params_network, {username           = <<"guest">>,
                               password           = <<"guest">>,
