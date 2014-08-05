@@ -71,6 +71,9 @@ call_consumer(Pid, Msg) ->
 call_consumer(Pid, Method, Args) ->
     gen_server2:call(Pid, {consumer_call, Method, Args}, infinity).
 
+call_consumer(Pid, Method, Args, true) ->
+    gen_server2:call(Pid, {consumer_call, Method, Args, true}, infinity).
+
 %%---------------------------------------------------------------------------
 %% Behaviour
 %%---------------------------------------------------------------------------
@@ -240,6 +243,22 @@ handle_call({consumer_call, Method, Args}, _From,
             #'basic.deliver'{} ->
                 ConsumerModule:handle_deliver(Method, Args, MState)
         end,
+    case Return of
+        {ok, NewMState} ->
+            {reply, ok, State#state{module_state = NewMState}};
+        {error, Reason, NewMState} ->
+            {stop, {error, Reason}, {error, Reason},
+             State#state{module_state = NewMState}}
+    end;
+
+%% only supposed to be used with basic.deliver
+handle_call({consumer_call, Method = #'basic.deliver'{}, Args, false}, From,
+            State) ->
+    handle_call({consumer_call, Method, Args}, From, State);
+handle_call({consumer_call, Method = #'basic.deliver'{}, Args, true}, _From,
+            State = #state{module       = ConsumerModule,
+                           module_state = MState}) ->
+    Return = ConsumerModule:handle_deliver(Method, Args, MState),
     case Return of
         {ok, NewMState} ->
             {reply, ok, State#state{module_state = NewMState}};
