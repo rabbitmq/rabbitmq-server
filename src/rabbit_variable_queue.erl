@@ -1161,7 +1161,7 @@ upd_bytes(Sign, MsgStatus = #msg_status{msg = _}, State) ->
 
 upd_bytes0(Sign, MsgStatus = #msg_status{is_persistent = IsPersistent},
            State = #vqstate{bytes            = Bytes,
-                           persistent_bytes = PBytes}) ->
+                            persistent_bytes = PBytes}) ->
     Diff = Sign * msg_size(MsgStatus),
     State#vqstate{bytes             = Bytes  + Diff,
                   persistent_bytes  = PBytes + one_if(IsPersistent) * Diff}.
