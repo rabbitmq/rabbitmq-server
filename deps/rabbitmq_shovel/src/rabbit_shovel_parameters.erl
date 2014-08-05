@@ -165,8 +165,12 @@ parse({VHost, Name}, Def) ->
               end,
     {X, Key, Table2}
         = case DestQ of
-              none -> {DestX, DestXKey, [{<<"dest-exchange">>,     DestX},
-                                         {<<"dest-exchange-key">>, DestXKey}]};
+              none -> {DestX, DestXKey,
+                       case DestXKey of
+                           none -> [{<<"dest-exchange">>,     DestX}];
+                           _    -> [{<<"dest-exchange">>,     DestX},
+                                    {<<"dest-exchange-key">>, DestXKey}]
+                       end};
               _    -> {<<>>,  DestQ,    [{<<"dest-queue">>,        DestQ}]}
           end,
     PubFun = fun (_SrcURI, _DestURI, P0) ->
