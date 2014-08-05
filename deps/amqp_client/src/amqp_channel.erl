@@ -475,7 +475,7 @@ handle_info({send_command, Method, Content}, State) ->
 %% @private
 handle_info({send_command_and_notify, QPid, ChPid, Method, Content}, State) ->
     handle_method_from_server(Method, Content, State),
-    rabbit_amqqueue:notify_sent(QPid, ChPid),
+    maybe_notify_sent(QPid, ChPid, State),
     {noreply, State};
 %% This comes from the writer or rabbit_channel
 %% @private
@@ -937,3 +937,9 @@ call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
 
 safe_cancel_timer(undefined) -> ok;
 safe_cancel_timer(TRef)      -> erlang:cancel_timer(TRef).
+
+maybe_notify_sent(QPid, ChPid, #state{manual_flow_control = false}) ->
+    rabbit_amqqueue:notify_sent(QPid, ChPid),
+    ok;
+maybe_notify_sent(_QPid, _ChPid, #state{manual_flow_control = true}) ->
+    ok.
