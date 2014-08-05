@@ -21,7 +21,7 @@
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
 
--export([add_queue_ttl/0, avoid_zeroes/0]).
+-export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -171,8 +171,9 @@
 
 %%----------------------------------------------------------------------------
 
--rabbit_upgrade({add_queue_ttl, local, []}).
--rabbit_upgrade({avoid_zeroes,  local, [add_queue_ttl]}).
+-rabbit_upgrade({add_queue_ttl,  local, []}).
+-rabbit_upgrade({avoid_zeroes,   local, [add_queue_ttl]}).
+-rabbit_upgrade({store_msg_size, local, [avoid_zeroes]}).
 
 -ifdef(use_specs).
 
@@ -1077,6 +1078,42 @@ avoid_zeroes_segment(<<0:?REL_SEQ_ONLY_PREFIX_BITS,
      Rest};
 avoid_zeroes_segment(_) ->
     stop.
+
+%% At upgrade time we just define every message's size as 0 - that
+%% will save us a load of faff with the message store, and means we
+%% can actually use the clean recovery terms in VQ. It does mean we
+%% don't count message bodies from before the migration, but we can
+%% live with that.
+store_msg_size() ->
+    foreach_queue_index({fun store_msg_size_journal/1,
+                         fun store_msg_size_segment/1}).
+
+store_msg_size_journal(<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                        Rest/binary>>) ->
+    {<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
+store_msg_size_journal(<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                        Rest/binary>>) ->
+    {<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
+store_msg_size_journal(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                         MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
+                         Rest/binary>>) ->
+    {<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS, MsgId:?MSG_ID_BITS,
+       Expiry:?EXPIRY_BITS, 0:?SIZE_BITS>>, Rest};
+store_msg_size_journal(_) ->
+    stop.
+
+store_msg_size_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1,
+                         RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BITS,
+                         Expiry:?EXPIRY_BITS, Rest/binary>>) ->
+    {<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
+       MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS, 0:?SIZE_BITS>>, Rest};
+store_msg_size_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
+                        RelSeq:?REL_SEQ_BITS, Rest/binary>>) ->
+    {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
+     Rest};
+store_msg_size_segment(_) ->
+    stop.
+
 
 %%----------------------------------------------------------------------------
 
