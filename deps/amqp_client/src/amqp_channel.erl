@@ -635,8 +635,7 @@ pre_do(_, _, _, State) ->
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
-handle_method_from_server(Method, Content, Ref,
-                          State = #state{closing = Closing}) ->
+handle_method_from_server(Method, Content, Ref, State = #state{closing = Closing}) ->
     case is_connection_method(Method) of
         true -> server_misbehaved(
                     #amqp_error{name        = command_invalid,
@@ -654,10 +653,8 @@ handle_method_from_server(Method, Content, Ref,
                                       "server because channel is closing~n",
                                       [self(), {Method, Content}]),
                             {noreply, State};
-                    true ->
-                         Msg = amqp_msg(Content, Ref, self()),
-                         handle_method_from_server1(Method,
-                                                    Msg, State)
+                    true -> handle_method_from_server1(Method,
+                                                       amqp_msg(Content, Ref), State)
                  end
     end.
 
@@ -815,29 +812,16 @@ flush_writer(#state{driver = network, writer = Writer}) ->
     end;
 flush_writer(#state{driver = direct}) ->
     ok.
-
 amqp_msg(none) ->
     none;
 amqp_msg(Content) ->
-    amqp_msg(Content, none).
-
-amqp_msg(none, _) ->
-    none;
+    {Props, Payload} = rabbit_basic:from_content(Content),
+    #amqp_msg{props = Props, payload = Payload}.
 amqp_msg(Content, none) ->
+    amqp_msg(Content);
+amqp_msg(Content, Ref) ->
     {Props, Payload} = rabbit_basic:from_content(Content),
-    #amqp_msg{props = Props, payload = Payload};
-amqp_msg(Content, ChPid) when is_pid(ChPid) ->
-    {Props, Payload} = rabbit_basic:from_content(Content),
-    #amqp_msg{props = Props, payload = Payload,
-              channel_pid = ChPid}.
-amqp_msg(none, _, _) ->
-    none;
-amqp_msg(Content, none, ChPid) when is_pid(ChPid) ->
-    amqp_msg(Content, ChPid);
-amqp_msg(Content, Ref, ChPid) when is_pid(ChPid) ->
-    {Props, Payload} = rabbit_basic:from_content(Content),
-    #amqp_msg{props = Props, payload = Payload,
-              ref = Ref, channel_pid = ChPid}.
+    #amqp_msg{props = Props, payload = Payload, ref = Ref}.
 
 build_content(none) ->
     none;
