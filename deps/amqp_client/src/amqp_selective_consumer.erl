@@ -45,7 +45,8 @@
 
 -export([register_default_consumer/2]).
 -export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,
-         handle_cancel/2, handle_server_cancel/2, handle_deliver/3,
+         handle_cancel/2, handle_server_cancel/2,
+         handle_deliver/3, handle_deliver/5,
          handle_info/2, handle_call/3, terminate/2]).
 
 -record(state, {consumers             = dict:new(), %% Tag -> ConsumerPid
@@ -159,6 +160,15 @@ handle_deliver(Deliver, Message, State) ->
     {ok, State}.
 
 %% @private
+handle_deliver(Deliver, Message, false, _ChPid, State) ->
+    deliver(Deliver, Message, State),
+    {ok, State};
+%% @private
+handle_deliver(Deliver, Message, true, ChPid, State) ->
+    deliver(Deliver, Message, ChPid, State),
+    {ok, State}.
+
+%% @private
 handle_info({'DOWN', _MRef, process, Pid, _Info},
             State = #state{monitors         = Monitors,
                            consumers        = Consumers,
@@ -201,17 +211,25 @@ terminate(_Reason, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
+deliver_to_consumer_or_die(BasicDeliver, Msg, State) ->
+    case resolve_consumer(tag(BasicDeliver), State) of
+        {consumer, Pid} -> Pid ! Msg;
+        {default, Pid}  -> Pid ! Msg;
+        error           -> exit(unexpected_delivery_and_no_default_consumer)
+    end.
+
 deliver(BasicDeliver, State) ->
     deliver(BasicDeliver, undefined, State).
 deliver(BasicDeliver, Message, State) ->
     Combined = if Message =:= undefined -> BasicDeliver;
                   true                  -> {BasicDeliver, Message}
                end,
-    case resolve_consumer(tag(BasicDeliver), State) of
-        {consumer, Pid} -> Pid ! Combined;
-        {default, Pid}  -> Pid ! Combined;
-        error           -> exit(unexpected_delivery_and_no_default_consumer)
-    end.
+    deliver_to_consumer_or_die(BasicDeliver, Combined, State).
+deliver(BasicDeliver, Message, ChPid, State) ->
+    Combined = if Message =:= undefined -> BasicDeliver;
+                  true                  -> {BasicDeliver, Message, ChPid}
+               end,
+    deliver_to_consumer_or_die(BasicDeliver, Combined, State).
 
 do_cancel(Cancel, State = #state{consumers = Consumers,
                                  monitors  = Monitors}) ->

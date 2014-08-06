@@ -71,8 +71,10 @@ call_consumer(Pid, Msg) ->
 call_consumer(Pid, Method, Args) ->
     gen_server2:call(Pid, {consumer_call, Method, Args}, infinity).
 
-call_consumer(Pid, Method, Args, true) ->
-    gen_server2:call(Pid, {consumer_call, Method, Args, true}, infinity).
+call_consumer(Pid, Method, Args, false, _ChPid) ->
+    gen_server2:call(Pid, {consumer_call, Method, Args}, infinity);
+call_consumer(Pid, Method, Args, true, ChPid) ->
+    gen_server2:call(Pid, {consumer_call, Method, Args, true, ChPid}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Behaviour
@@ -151,6 +153,20 @@ behaviour_info(callbacks) ->
      %% This callback is invoked by the channel every time a basic.deliver
      %% is received from the server.
      {handle_deliver, 3},
+
+     %% handle_deliver(Deliver, Message, ManualFlowControl,
+     %%                ChannelPid, State) -> ok_error()
+     %% where
+     %%      Deliver = #'basic.deliver'{}
+     %%      Message = #amqp_msg{}
+     %%      ManualFlowControl = boolean()
+     %%      ChannelPid = pid()
+     %%      State = state()
+     %%
+     %% This callback is invoked by the channel every time a basic.deliver
+     %% is received from the server. Only relevant for channels that use
+     %% direct client connection and manual flow control.
+     {handle_deliver, 5},
 
      %% handle_info(Info, State) -> ok_error()
      %% where
@@ -252,13 +268,13 @@ handle_call({consumer_call, Method, Args}, _From,
     end;
 
 %% only supposed to be used with basic.deliver
-handle_call({consumer_call, Method = #'basic.deliver'{}, Args, false}, From,
+handle_call({consumer_call, Method = #'basic.deliver'{}, Args, false, _ChPid}, From,
             State) ->
     handle_call({consumer_call, Method, Args}, From, State);
-handle_call({consumer_call, Method = #'basic.deliver'{}, Args, true}, _From,
+handle_call({consumer_call, Method = #'basic.deliver'{}, Args, true, ChPid}, _From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
-    Return = ConsumerModule:handle_deliver(Method, Args, MState),
+    Return = ConsumerModule:handle_deliver(Method, Args, true, ChPid, MState),
     case Return of
         {ok, NewMState} ->
             {reply, ok, State#state{module_state = NewMState}};
