@@ -22,7 +22,7 @@
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         status/1, invoke/3, is_duplicate/2, multiple_routing_keys/0]).
+         info/2, invoke/3, is_duplicate/2, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
@@ -821,15 +821,19 @@ msg_rates(#vqstate { rates = #rates { in  = AvgIngressRate,
                                       out = AvgEgressRate } }) ->
     {AvgIngressRate, AvgEgressRate}.
 
-status(#vqstate {
+info(messages_ready_ram, #vqstate{ram_msg_count = RamMsgCount}) ->
+    RamMsgCount;
+info(messages_unacknowledged_ram, #vqstate{ram_pending_ack = RPA}) ->
+    gb_trees:size(RPA);
+info(messages_ram, State) ->
+    info(messages_ready_ram, State) + info(messages_unacknowledged_ram, State);
+info(messages_persistent, #vqstate{persistent_count = PersistentCount}) ->
+    PersistentCount;
+info(backing_queue_status, #vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
           len              = Len,
-          ram_pending_ack  = RPA,
-          disk_pending_ack = DPA,
           target_ram_count = TargetRamCount,
-          ram_msg_count    = RamMsgCount,
           next_seq_id      = NextSeqId,
-          persistent_count = PersistentCount,
           rates            = #rates { in      = AvgIngressRate,
                                       out     = AvgEgressRate,
                                       ack_in  = AvgAckIngressRate,
@@ -841,16 +845,14 @@ status(#vqstate {
       {q3                  , ?QUEUE:len(Q3)},
       {q4                  , ?QUEUE:len(Q4)},
       {len                 , Len},
-      {pending_acks        , gb_trees:size(RPA) + gb_trees:size(DPA)},
       {target_ram_count    , TargetRamCount},
-      {ram_msg_count       , RamMsgCount},
-      {ram_ack_count       , gb_trees:size(RPA)},
       {next_seq_id         , NextSeqId},
-      {persistent_count    , PersistentCount},
       {avg_ingress_rate    , AvgIngressRate},
       {avg_egress_rate     , AvgEgressRate},
       {avg_ack_ingress_rate, AvgAckIngressRate},
-      {avg_ack_egress_rate , AvgAckEgressRate} ].
+      {avg_ack_egress_rate , AvgAckEgressRate} ];
+info(Item, _) ->
+    throw({bad_argument, Item}).
 
 invoke(?MODULE, Fun, State) -> Fun(?MODULE, State);
 invoke(      _,   _, State) -> State.
