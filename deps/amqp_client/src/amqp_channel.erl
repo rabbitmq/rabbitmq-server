@@ -74,7 +74,8 @@
 -export([call_consumer/2, subscribe/3]).
 -export([next_publish_seqno/1, wait_for_confirms/1, wait_for_confirms/2,
          wait_for_confirms_or_die/1, wait_for_confirms_or_die/2]).
--export([start_link/5, set_writer/2, connection_closing/3, open/1]).
+-export([start_link/5, set_writer/2, connection_closing/3, open/1,
+         set_manual_flow_control/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
