@@ -75,7 +75,7 @@
 -export([next_publish_seqno/1, wait_for_confirms/1, wait_for_confirms/2,
          wait_for_confirms_or_die/1, wait_for_confirms_or_die/2]).
 -export([start_link/5, set_writer/2, connection_closing/3, open/1,
-         set_manual_flow_control/2]).
+         set_manual_flow_control/2, notify_sent/3]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -355,6 +355,9 @@ set_writer(Pid, Writer) ->
 set_manual_flow_control(Pid, Value) ->
     gen_server:cast(Pid, {set_manual_flow_control, Value}).
 
+notify_sent(Pid, QPid, ServerChPid) ->
+    gen_server:cast(Pid, {send_notify, {QPid, ServerChPid}}).
+
 %% @private
 connection_closing(Pid, ChannelCloseType, Reason) ->
     gen_server:cast(Pid, {connection_closing, ChannelCloseType, Reason}).
@@ -417,6 +420,10 @@ handle_cast({set_writer, Writer}, State) ->
 %% @private
 handle_cast({set_manual_flow_control, Value}, State) ->
     {noreply, State#state{manual_flow_control = Value}};
+%% @private
+handle_cast({send_notify, {QPid, ChPid}}, State) ->
+    rabbit_amqqueue:notify_sent(QPid, ChPid),
+    {noreply, State};
 %% @private
 handle_cast({cast, Method, AmqpMsg, Sender, noflow}, State) ->
     handle_method_to_server(Method, AmqpMsg, none, Sender, noflow, State);
@@ -483,7 +490,7 @@ handle_info({send_command_and_notify, QPid, ChPid,
             rabbit_amqqueue:notify_sent(QPid, ChPid);
         true  ->
             handle_method_from_server(Method, Content,
-                                      {QPid, ChPid}, State)
+                                      {self(), QPid, ChPid}, State)
     end,
     {noreply, State};
 %% This comes from the writer or rabbit_channel
