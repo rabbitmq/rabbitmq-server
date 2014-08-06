@@ -19,20 +19,21 @@
 # Non-empty defaults should be set in rabbitmq-env
 . `dirname $0`/rabbitmq-env
 
-##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
+# rabbitmqctl starts distribution itself, so we need to make sure epmd
+# is running.
+${ERL_DIR}erl -sname rabbitmqctl-prelaunch-$$ -noinput -eval 'erlang:halt().'
 
-[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
-[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
-
-##--- End of overridden <var_name> variables
-
+# We specify Mnesia dir and sasl error logger since some actions
+# (e.g. forget_cluster_node --offline) require us to impersonate the
+# real node.
 exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \
-    -sname rabbitmqctl$$ \
     -boot "${CLEAN_BOOT_FILE}" \
+    -sasl errlog_type error \
+    -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
     -s rabbit_control_main \
     -nodename $RABBITMQ_NODENAME \
     -extra "$@"

@@ -16,6 +16,12 @@
 
 -module(rabbit_backing_queue).
 
+-export([info_keys/0]).
+
+-define(INFO_KEYS, [messages_ram, messages_ready_ram,
+                    messages_unacknowledged_ram, messages_persistent,
+                    backing_queue_status]).
+
 -ifdef(use_specs).
 
 %% We can't specify a per-queue ack/state with callback signatures
@@ -36,6 +42,8 @@
 
 -type(msg_fun(A) :: fun ((rabbit_types:basic_message(), ack(), A) -> A)).
 -type(msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean())).
+
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 
 %% Called on startup with a list of durable queue names. The queues
 %% aren't being started at this point, but this call allows the
@@ -216,9 +224,7 @@
 %% inbound messages and outbound messages at the moment.
 -callback msg_rates(state()) -> {float(), float()}.
 
-%% Exists for debugging purposes, to be able to expose state via
-%% rabbitmqctl list_queues backing_queue_status
--callback status(state()) -> [{atom(), any()}].
+-callback info(atom(), state()) -> any().
 
 %% Passed a function to be invoked with the relevant backing queue's
 %% state. Useful for when the backing queue or other components need
@@ -243,9 +249,11 @@ behaviour_info(callbacks) ->
      {fetch, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
-     {handle_pre_hibernate, 1}, {resume, 1}, {msg_rates, 1}, {status, 1},
-     {invoke, 3}, {is_duplicate, 2}] ;
+     {handle_pre_hibernate, 1}, {resume, 1}, {msg_rates, 1}, {info_keys, 0},
+     {infos, 2}, {invoke, 3}, {is_duplicate, 2}] ;
 behaviour_info(_Other) ->
     undefined.
 
 -endif.
+
+info_keys() -> ?INFO_KEYS.

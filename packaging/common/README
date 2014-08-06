@@ -17,4 +17,4 @@ run as the superuser.
 An example configuration file is provided in the same directory as
 this README. Copy it to /etc/rabbitmq/rabbitmq.config to use it. The
 RabbitMQ server must be restarted after changing the configuration
-file or enabling or disabling plugins.
+file.
