@@ -23,15 +23,14 @@
 -include("rabbit_shovel.hrl").
 
 -define(IGNORE_FIELDS, [delete_after]).
+-define(EXTRA_KEYS, [add_forward_headers]).
 
 parse(ShovelName, Config) ->
     {ok, Defaults} = application:get_env(defaults),
     try
-        {ok, run_state_monad(
-               [fun enrich_shovel_config/1,
-                fun parse_shovel_config_proplist/1,
-                fun parse_shovel_config_dict/1],
-               {Config, Defaults})}
+        {ok, parse_shovel_config_dict(
+               ShovelName, parse_shovel_config_proplist(
+                             enrich_shovel_config(Config, Defaults)))}
     catch throw:{error, Reason} ->
             {error, {invalid_shovel_configuration, ShovelName, Reason}}
     end.
@@ -44,7 +43,7 @@ ensure_defaults(ShovelConfig, ParsedShovel) ->
                    {reconnect_delay,
                     ParsedShovel#shovel.reconnect_delay}).
 
-enrich_shovel_config({Config, Defaults}) ->
+enrich_shovel_config(Config, Defaults) ->
     Config1 = proplists:unfold(Config),
     case [E || E <- Config1, not (is_tuple(E) andalso tuple_size(E) == 2)] of
         []      -> case duplicate_keys(Config1) of
@@ -57,7 +56,7 @@ enrich_shovel_config({Config, Defaults}) ->
 parse_shovel_config_proplist(Config) ->
     Dict = dict:from_list(Config),
     Fields = record_info(fields, shovel) -- ?IGNORE_FIELDS,
-    Keys = dict:fetch_keys(Dict),
+    Keys = dict:fetch_keys(Dict) -- ?EXTRA_KEYS,
     case {Keys -- Fields, Fields -- Keys} of
         {[], []}      -> {_Pos, Dict1} =
                              lists:foldl(
@@ -72,24 +71,29 @@ parse_shovel_config_proplist(Config) ->
         {Unknown, _}  -> fail({unrecognised_parameters, Unknown})
     end.
 
-parse_shovel_config_dict(Dict) ->
-    run_state_monad(
-      [fun (Shovel) -> {ok, Value} = dict:find(Key, Dict),
-                       try {ParsedValue, Pos} = Fun(Value),
-                           return(setelement(Pos, Shovel, ParsedValue))
-                       catch throw:{error, Reason} ->
-                               fail({invalid_parameter_value, Key, Reason})
-                       end
-       end || {Fun, Key} <-
-                  [{fun parse_endpoint/1,             sources},
-                   {fun parse_endpoint/1,             destinations},
-                   {fun parse_non_negative_integer/1, prefetch_count},
-                   {fun parse_ack_mode/1,             ack_mode},
-                   {fun parse_binary/1,               queue},
-                   make_parse_publish(publish_fields),
-                   make_parse_publish(publish_properties),
-                   {fun parse_non_negative_number/1,  reconnect_delay}]],
-      #shovel{}).
+parse_shovel_config_dict(Name, Dict) ->
+    Cfg = run_state_monad(
+            [fun (Shovel) ->
+                     {ok, Value} = dict:find(Key, Dict),
+                     try {ParsedValue, Pos} = Fun(Value),
+                          return(setelement(Pos, Shovel, ParsedValue))
+                     catch throw:{error, Reason} ->
+                             fail({invalid_parameter_value, Key, Reason})
+                     end
+             end || {Fun, Key} <-
+                        [{fun parse_endpoint/1,             sources},
+                         {fun parse_endpoint/1,             destinations},
+                         {fun parse_non_negative_integer/1, prefetch_count},
+                         {fun parse_ack_mode/1,             ack_mode},
+                         {fun parse_binary/1,               queue},
+                         make_parse_publish(publish_fields),
+                         make_parse_publish(publish_properties),
+                         {fun parse_non_negative_number/1,  reconnect_delay}]],
+            #shovel{}),
+    case dict:find(add_forward_headers, Dict) of
+        {ok, true} -> add_forward_headers_fun(Name, Cfg);
+        _          -> Cfg
+    end.
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
@@ -240,3 +244,14 @@ duplicate_keys(PropList) ->
     proplists:get_keys(
       lists:foldl(fun (K, L) -> lists:keydelete(K, 1, L) end, PropList,
                   proplists:get_keys(PropList))).
+
+add_forward_headers_fun(Name, #shovel{publish_properties = PubProps} = Cfg) ->
+    PubProps2 =
+        fun(SrcUri, DestUri, Props) ->
+                rabbit_shovel_util:update_headers(
+                  [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
+                   {<<"shovel-type">>,  <<"static">>},
+                   {<<"shovel-name">>,  list_to_binary(atom_to_list(Name))}],
+                  [], SrcUri, DestUri, PubProps(SrcUri, DestUri, Props))
+        end,
+    Cfg#shovel{publish_properties = PubProps2}.

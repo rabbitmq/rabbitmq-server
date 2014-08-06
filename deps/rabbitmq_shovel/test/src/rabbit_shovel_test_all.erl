@@ -24,7 +24,7 @@ all_tests() ->
 
 tests(Module, Timeout) ->
     {foreach, fun() -> ok end,
-     [{timeout, Timeout, fun Module:F/0} || F <- funs(Module, "_test")] ++
+     [{timeout, Timeout, fun () -> Module:F() end} || F <- funs(Module, "_test")] ++
          [{timeout, Timeout, Fun} || Gen <- funs(Module, "_test_"),
                                      Fun <- Module:Gen()]}.
 
