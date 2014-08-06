@@ -147,9 +147,11 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
     {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload},
-             {QPid, ChPid}}, State) ->
-    {noreply, send_delivery(Delivery, Props, Payload,
-                            {QPid, ChPid}, State), hibernate};
+             {ClientChPid, QPid, ServerChPid}}, State) ->
+    State1 = send_delivery(Delivery, Props, Payload, State),
+    amqp_channel:notify_sent(ClientChPid, QPid,
+                             ServerChPid),
+    {noreply, State1, hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     process_request(
       fun(StateN) -> server_cancel_consumer(Ctag, StateN) end, State);
@@ -677,13 +679,12 @@ negotiate_version(Frame) ->
 
 
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
-              Properties, Body, {QPid, ChPid},
+              Properties, Body,
               State = #state{session_id    = SessionId,
                              subscriptions = Subs,
                              version       = Version}) ->
     case dict:find(ConsumerTag, Subs) of
         {ok, #subscription{ack_mode = AckMode}} ->
-            rabbit_amqqueue:notify_sent(QPid, ChPid),
             send_frame(
               "MESSAGE",
               rabbit_stomp_util:headers(SessionId, Delivery, Properties,
