@@ -226,6 +226,15 @@ init([ConsumerModule, ExtraParams, Identity]) ->
 prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _Len, _State) -> 1;
 prioritise_info(_, _Len, _State)                                     -> 0.
 
+consumer_call_reply(Return, State) ->
+    case Return of
+        {ok, NewMState} ->
+            {reply, ok, State#state{module_state = NewMState}};
+        {error, Reason, NewMState} ->
+            {stop, {error, Reason}, {error, Reason},
+             State#state{module_state = NewMState}}
+    end.
+
 handle_call({consumer_call, Msg}, From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
@@ -259,13 +268,7 @@ handle_call({consumer_call, Method, Args}, _From,
             #'basic.deliver'{} ->
                 ConsumerModule:handle_deliver(Method, Args, MState)
         end,
-    case Return of
-        {ok, NewMState} ->
-            {reply, ok, State#state{module_state = NewMState}};
-        {error, Reason, NewMState} ->
-            {stop, {error, Reason}, {error, Reason},
-             State#state{module_state = NewMState}}
-    end;
+    consumer_call_reply(Return, State);
 
 %% only supposed to be used with basic.deliver
 handle_call({consumer_call, Method = #'basic.deliver'{}, Args, false, _ChPid}, From,
@@ -275,13 +278,7 @@ handle_call({consumer_call, Method = #'basic.deliver'{}, Args, true, ChPid}, _Fr
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
     Return = ConsumerModule:handle_deliver(Method, Args, true, ChPid, MState),
-    case Return of
-        {ok, NewMState} ->
-            {reply, ok, State#state{module_state = NewMState}};
-        {error, Reason, NewMState} ->
-            {stop, {error, Reason}, {error, Reason},
-             State#state{module_state = NewMState}}
-    end.
+    consumer_call_reply(Return, State).
 
 handle_cast(_What, State) ->
     {noreply, State}.
