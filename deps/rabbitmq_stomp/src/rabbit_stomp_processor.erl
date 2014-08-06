@@ -146,8 +146,10 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
     {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
-             #amqp_msg{props = Props, payload = Payload}}, State) ->
-    {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
+             #amqp_msg{props = Props, payload = Payload},
+             {QPid, ChPid}}, State) ->
+    {noreply, send_delivery(Delivery, Props, Payload,
+                            {QPid, ChPid}, State), hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     process_request(
       fun(StateN) -> server_cancel_consumer(Ctag, StateN) end, State);
@@ -508,6 +510,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
         {ok, Connection} ->
             link(Connection),
             {ok, Channel} = amqp_connection:open_channel(Connection),
+            amqp_channel:set_manual_flow_control(Channel, true),
             SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
             {{SendTimeout, ReceiveTimeout}, State1} =
                 ensure_heartbeats(Heartbeat, State),
@@ -674,12 +677,13 @@ negotiate_version(Frame) ->
 
 
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
-              Properties, Body,
+              Properties, Body, {QPid, ChPid},
               State = #state{session_id    = SessionId,
                              subscriptions = Subs,
                              version       = Version}) ->
     case dict:find(ConsumerTag, Subs) of
         {ok, #subscription{ack_mode = AckMode}} ->
+            rabbit_amqqueue:notify_sent(QPid, ChPid),
             send_frame(
               "MESSAGE",
               rabbit_stomp_util:headers(SessionId, Delivery, Properties,
@@ -692,6 +696,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
                        [ConsumerTag],
                        State)
     end.
+
 
 send_method(Method, Channel, State) ->
     amqp_channel:call(Channel, Method),
