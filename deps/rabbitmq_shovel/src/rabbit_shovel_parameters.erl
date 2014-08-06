@@ -163,16 +163,14 @@ parse({VHost, Name}, Def) ->
                           _    -> ensure_queue(Conn, DestQ)
                       end
               end,
-    {X, Key, Table2}
-        = case DestQ of
-              none -> {DestX, DestXKey,
-                       case DestXKey of
-                           none -> [{<<"dest-exchange">>,     DestX}];
-                           _    -> [{<<"dest-exchange">>,     DestX},
-                                    {<<"dest-exchange-key">>, DestXKey}]
-                       end};
-              _    -> {<<>>,  DestQ,    [{<<"dest-queue">>,        DestQ}]}
-          end,
+    {X, Key} = case DestQ of
+                   none -> {DestX, DestXKey};
+                   _    -> {<<>>,  DestQ}
+               end,
+    Table2 = [{K, V} || {K, V} <- [{<<"dest-exchange">>,     DestX},
+                                   {<<"dest-exchange-key">>, DestXKey},
+                                   {<<"dest-queue">>,        DestQ}],
+                        V =/= none],
     PubFun = fun (_SrcURI, _DestURI, P0) ->
                      P1 = case X of
                               none -> P0;
