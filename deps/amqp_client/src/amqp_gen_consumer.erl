@@ -31,7 +31,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/3, call_consumer/2, call_consumer/3]).
+-export([start_link/3, call_consumer/2, call_consumer/3, call_consumer/5]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_info/3]).
@@ -73,8 +73,8 @@ call_consumer(Pid, Method, Args) ->
 
 call_consumer(Pid, Method, Args, false, _ChPid) ->
     gen_server2:call(Pid, {consumer_call, Method, Args}, infinity);
-call_consumer(Pid, Method, Args, true, ChPid) ->
-    gen_server2:call(Pid, {consumer_call, Method, Args, true, ChPid}, infinity).
+call_consumer(Pid, Method, Args, true, Extras) ->
+    gen_server2:call(Pid, {consumer_call, Method, Args, true, Extras}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Behaviour
@@ -160,7 +160,7 @@ behaviour_info(callbacks) ->
      %%      Deliver = #'basic.deliver'{}
      %%      Message = #amqp_msg{}
      %%      ManualFlowControl = boolean()
-     %%      ChannelPid = pid()
+     %%      Extras = {pid(), pid()}
      %%      State = state()
      %%
      %% This callback is invoked by the channel every time a basic.deliver
@@ -271,13 +271,13 @@ handle_call({consumer_call, Method, Args}, _From,
     consumer_call_reply(Return, State);
 
 %% only supposed to be used with basic.deliver
-handle_call({consumer_call, Method = #'basic.deliver'{}, Args, false, _ChPid}, From,
+handle_call({consumer_call, Method = #'basic.deliver'{}, Args, false, _Extras}, From,
             State) ->
     handle_call({consumer_call, Method, Args}, From, State);
-handle_call({consumer_call, Method = #'basic.deliver'{}, Args, true, ChPid}, _From,
+handle_call({consumer_call, Method = #'basic.deliver'{}, Args, true, Extras}, _From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
-    Return = ConsumerModule:handle_deliver(Method, Args, true, ChPid, MState),
+    Return = ConsumerModule:handle_deliver(Method, Args, true, Extras, MState),
     consumer_call_reply(Return, State).
 
 handle_cast(_What, State) ->

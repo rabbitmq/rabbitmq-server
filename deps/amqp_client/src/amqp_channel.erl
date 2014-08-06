@@ -475,9 +475,16 @@ handle_info({send_command, Method, Content}, State) ->
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command_and_notify, QPid, ChPid,
-             Method = #'basic.deliver'{}, Content}, State) ->
-    handle_method_from_server(Method, Content, State),
-    maybe_notify_sent(QPid, ChPid, State),
+             Method = #'basic.deliver'{}, Content},
+            State = #state{manual_flow_control = MFC}) ->
+    case MFC of
+        false ->
+            handle_method_from_server(Method, Content, State),
+            rabbit_amqqueue:notify_sent(QPid, ChPid);
+        true  ->
+            handle_method_from_server(Method, Content,
+                                      {QPid, ChPid}, State)
+    end,
     {noreply, State};
 %% This comes from the writer or rabbit_channel
 %% @private
@@ -650,7 +657,9 @@ pre_do(_, _, _, State) ->
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
-handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
+safely_handle_method_from_server(Method, Content,
+                                 Continuation,
+                                 State = #state{closing = Closing}) ->
     case is_connection_method(Method) of
         true -> server_misbehaved(
                     #amqp_error{name        = command_invalid,
@@ -668,10 +677,27 @@ handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
                                       "server because channel is closing~n",
                                       [self(), {Method, Content}]),
                             {noreply, State};
-                    true -> handle_method_from_server1(Method,
-                                                       amqp_msg(Content), State)
+                    true ->
+                         Continuation()
                  end
     end.
+
+handle_method_from_server(Method, Content, State) ->
+    Fun = fun () ->
+                  handle_method_from_server1(Method,
+                                             amqp_msg(Content), State)
+          end,
+    safely_handle_method_from_server(Method, Content, Fun, State).
+
+handle_method_from_server(Method = #'basic.deliver'{},
+                          Content, Extras, State) ->
+    Fun = fun () ->
+                  handle_method_from_server1(Method,
+                                             amqp_msg(Content),
+                                             Extras,
+                                             State)
+          end,
+    safely_handle_method_from_server(Method, Content, Fun, State).
 
 handle_method_from_server1(#'channel.open_ok'{}, none, State) ->
     {noreply, rpc_bottom_half(ok, State)};
@@ -761,6 +787,12 @@ handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
 handle_method_from_server1(Method, Content, State) ->
     {noreply, rpc_bottom_half({Method, Content}, State)}.
+
+%% only used with manual consumer-to-queue flow control
+handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg,
+                           Extras, State) ->
+    call_to_consumer(Deliver, AmqpMsg, true, Extras, State),
+    {noreply, State}.
 
 %%---------------------------------------------------------------------------
 %% Other handle_* functions
@@ -943,15 +975,9 @@ handle_wait_for_confirms(From, Timeout,
 call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
     amqp_gen_consumer:call_consumer(Consumer, Method, Args).
 
-call_to_consumer(Method, Args, ManualFlow, ChPid,
+call_to_consumer(Method, Args, ManualFlow, Extras,
                  #state{consumer = Consumer}) ->
-    amqp_gen_consumer:call_consumer(Consumer, Method, Args, ManualFlow, ChPid).
+    amqp_gen_consumer:call_consumer(Consumer, Method, Args, ManualFlow, Extras).
 
 safe_cancel_timer(undefined) -> ok;
 safe_cancel_timer(TRef)      -> erlang:cancel_timer(TRef).
-
-maybe_notify_sent(QPid, ChPid, #state{manual_flow_control = false}) ->
-    rabbit_amqqueue:notify_sent(QPid, ChPid),
-    ok;
-maybe_notify_sent(_QPid, _ChPid, #state{manual_flow_control = true}) ->
-    ok.

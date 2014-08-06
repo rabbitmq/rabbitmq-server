@@ -87,11 +87,11 @@ handle_server_cancel(M, C) ->
 handle_deliver(M, A, C) ->
     C ! {M, A},
     {ok, C}.
-handle_deliver(M, A, false, _ChPid, C) ->
+handle_deliver(M, A, false, _Extras, C) ->
     C ! {M, A},
     {ok, C};
-handle_deliver(M, A, true, ChPid, C) ->
-    C ! {M, A, ChPid},
+handle_deliver(M, A, true, Extras, C) ->
+    C ! {M, A, Extras},
     {ok, C}.
 
 
