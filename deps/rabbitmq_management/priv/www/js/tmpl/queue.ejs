@@ -44,9 +44,6 @@
         <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
         <td><%= fmt_percent(queue.consumer_utilisation) %></td>
       </tr>
-    </table>
-
-    <table class="facts facts-l">
 <% if (vhosts_interesting) { %>
       <tr>
         <th>Virtual host</th>
@@ -107,14 +104,23 @@
 
     <table class="facts">
       <tr>
+        <td></td>
+        <th class="horizontal">Total</th>
+        <th class="horizontal">In RAM</th>
+        <th class="horizontal">Persistent</th>
+      </tr>
+      <tr>
         <th>
           Messages
           <span class="help" id="queue-messages"></span>
-          <sub>total | in RAM | persistent</sub>
         </th>
-        <td>
-          <%= fmt_num_thousands(queue.messages) %><span class="deemphasise"> | </span>
-          <%= fmt_num_thousands(queue.messages_ram) %><span class="deemphasise"> | </span>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ram) %>
+        </td>
+        <td class="r">
           <%= fmt_num_thousands(queue.messages_persistent) %>
         </td>
       </tr>
@@ -122,11 +128,14 @@
         <th>
           Message body bytes
           <span class="help" id="queue-message-body-bytes"></span>
-          <sub>total | in RAM | persistent</sub>
         </th>
-        <td>
-          <%= fmt_bytes(queue.message_bytes) %><span class="deemphasise"> | </span>
-          <%= fmt_bytes(queue.message_bytes_ram) %><span class="deemphasise"> | </span>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_ram) %>
+        </td>
+        <td class="r">
           <%= fmt_bytes(queue.message_bytes_persistent) %>
         </td>
       </tr>
@@ -135,7 +144,7 @@
           Process memory
           <span class="help" id="queue-process-memory"></span>
         </th>
-        <td><%= fmt_bytes(queue.memory) %></td>
+        <td class="r"><%= fmt_bytes(queue.memory) %></td>
       </tr>
     </table>
     </div>
