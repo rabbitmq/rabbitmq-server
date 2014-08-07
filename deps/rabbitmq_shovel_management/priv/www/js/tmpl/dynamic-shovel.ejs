@@ -1,13 +1,9 @@
-<h1>Dynamic Shovel: <b><%= fmt_string(shovel.name) %></b></h1>
+<h1>Dynamic Shovel: <b><%= fmt_string(shovel.name) %></b><%= fmt_maybe_vhost(shovel.vhost) %></h1>
 
 <div class="section">
   <h2>Overview</h2>
   <div class="hider">
     <table class="facts">
-      <tr>
-        <th>Virtual host</th>
-        <td><%= fmt_string(shovel.vhost) %></td>
-      </tr>
       <tr>
         <th>Source</th>
         <td><%= fmt_string(shovel.value['src-uri']) %></td>
