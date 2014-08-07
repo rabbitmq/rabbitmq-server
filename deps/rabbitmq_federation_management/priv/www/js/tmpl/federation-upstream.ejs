@@ -1,13 +1,9 @@
-<h1>Federation Upstream: <b><%= fmt_string(upstream.name) %></b></h1>
+<h1>Federation Upstream: <b><%= fmt_string(upstream.name) %></b><%= fmt_maybe_vhost(upstream.vhost) %></h1>
 
 <div class="section">
   <h2>Overview</h2>
   <div class="hider">
     <table class="facts">
-      <tr>
-        <th>Virtual Host</th>
-        <td><%= fmt_string(upstream.vhost) %></td>
-      </tr>
       <tr>
         <th>URI</th>
         <td><%= fmt_string(upstream.value.uri) %></td>
