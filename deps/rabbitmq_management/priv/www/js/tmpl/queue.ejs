@@ -44,61 +44,9 @@
         <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
         <td><%= fmt_percent(queue.consumer_utilisation) %></td>
       </tr>
-      <tr>
-        <th>Memory</th>
-        <td><%= fmt_bytes(queue.memory) %></td>
-      </tr>
     </table>
 
-    <table class="facts">
-      <tr>
-        <th>
-          Paging <span class="help" id="queue-memory-resident"></span>
-        </th>
-        <td>
-          <% if (queue.messages_ram == queue.messages) { %>
-            No paging
-          <% } else { %>
-            <%= fmt_num_thousands(queue.messages_ram) %> /
-            <%= fmt_num_thousands(queue.messages) %> msg (in RAM / total)
-          <% } %>
-        </td>
-      </tr>
-      <tr>
-        <th>
-          Persistent <span class="help" id="queue-persistent"></span>
-        </th>
-        <td>
-          <%= fmt_num_thousands(queue.messages_persistent) %> msg
-        </td>
-      </tr>
-      <tr>
-        <th>
-          Bytes length (total)
-        </th>
-        <td>
-          <%= fmt_bytes(queue.message_bytes) %>
-        </td>
-      </tr>
-      <tr>
-        <th>
-          Bytes length (in RAM)
-        </th>
-        <td>
-          <%= fmt_bytes(queue.message_bytes_ram) %>
-        </td>
-      </tr>
-      <tr>
-        <th>
-          Bytes length (persistent)
-        </th>
-        <td>
-          <%= fmt_bytes(queue.message_bytes_persistent) %>
-        </td>
-      </tr>
-    </table>
-
-    <table class="facts">
+    <table class="facts facts-l">
 <% if (vhosts_interesting) { %>
       <tr>
         <th>Virtual host</th>
@@ -155,6 +103,40 @@
         </td>
       </tr>
 <% } %>
+    </table>
+
+    <table class="facts">
+      <tr>
+        <th>
+          Messages
+          <span class="help" id="queue-messages"></span>
+          <sub>total | in RAM | persistent</sub>
+        </th>
+        <td>
+          <%= fmt_num_thousands(queue.messages) %><span class="deemphasise"> | </span>
+          <%= fmt_num_thousands(queue.messages_ram) %><span class="deemphasise"> | </span>
+          <%= fmt_num_thousands(queue.messages_persistent) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Message body bytes
+          <span class="help" id="queue-message-body-bytes"></span>
+          <sub>total | in RAM | persistent</sub>
+        </th>
+        <td>
+          <%= fmt_bytes(queue.message_bytes) %><span class="deemphasise"> | </span>
+          <%= fmt_bytes(queue.message_bytes_ram) %><span class="deemphasise"> | </span>
+          <%= fmt_bytes(queue.message_bytes_persistent) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Process memory
+          <span class="help" id="queue-process-memory"></span>
+        </th>
+        <td><%= fmt_bytes(queue.memory) %></td>
+      </tr>
     </table>
     </div>
   </div>

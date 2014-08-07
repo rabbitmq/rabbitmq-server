@@ -110,6 +110,7 @@ small { font-size: 0.8em; color: #888; }
 #main sub a { color: #888; }
 #main sub a:hover { color: #444; }
 .unknown { color: #888; }
+.deemphasise { color: #aaa; }
 
 table.facts { float: left; }
 table.facts th, table.legend th { color: black; text-align: right; border-right: 1px solid #ccc; }
