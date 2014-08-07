@@ -321,6 +321,12 @@ function is_col_empty(objects, name, accessor) {
     return true;
 }
 
+function fmt_maybe_vhost(name) {
+    return vhosts_interesting ?
+        ' in virtual host <b>' + fmt_escape_html(name) + '</b>'
+        : '';
+}
+
 function fmt_exchange(name) {
     return fmt_escape_html(fmt_exchange0(name));
 }
