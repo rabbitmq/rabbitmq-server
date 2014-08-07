@@ -254,13 +254,16 @@
           durable,
           transient_threshold,
 
-          len,
-          persistent_count,
+          len,                %% w/o unacked
+          bytes,              %% w   unacked
+          persistent_count,   %% w   unacked
+          persistent_bytes,   %% w   unacked
 
           target_ram_count,
-          ram_msg_count,
+          ram_msg_count,      %% w/o unacked
           ram_msg_count_prev,
           ram_ack_count_prev,
+          ram_bytes,          %% w   unacked
           out_counter,
           in_counter,
           rates,
@@ -343,7 +346,9 @@
              transient_threshold   :: non_neg_integer(),
 
              len                   :: non_neg_integer(),
+             bytes                 :: non_neg_integer(),
              persistent_count      :: non_neg_integer(),
+             persistent_bytes      :: non_neg_integer(),
 
              target_ram_count      :: non_neg_integer() | 'infinity',
              ram_msg_count         :: non_neg_integer(),
@@ -425,7 +430,7 @@ init(Queue, Recover, AsyncCallback) ->
 init(#amqqueue { name = QueueName, durable = IsDurable }, new,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
-    init(IsDurable, IndexState, 0, [],
+    init(IsDurable, IndexState, 0, 0, [],
          case IsDurable of
              true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
                                             MsgOnDiskFun, AsyncCallback);
@@ -440,7 +445,7 @@ init(#amqqueue { name = QueueName, durable = true }, Terms,
                                              MsgOnDiskFun, AsyncCallback),
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
                                              undefined, AsyncCallback),
-    {DeltaCount, IndexState} =
+    {DeltaCount, DeltaBytes, IndexState} =
         rabbit_queue_index:recover(
           QueueName, RecoveryTerms,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
@@ -448,7 +453,7 @@ init(#amqqueue { name = QueueName, durable = true }, Terms,
                   rabbit_msg_store:contains(MsgId, PersistentClient)
           end,
           MsgIdxOnDiskFun),
-    init(true, IndexState, DeltaCount, RecoveryTerms,
+    init(true, IndexState, DeltaCount, DeltaBytes, RecoveryTerms,
          PersistentClient, TransientClient).
 
 process_recovery_terms(Terms=non_clean_shutdown) ->
@@ -461,6 +466,7 @@ process_recovery_terms(Terms) ->
 
 terminate(_Reason, State) ->
     State1 = #vqstate { persistent_count  = PCount,
+                        persistent_bytes  = PBytes,
                         index_state       = IndexState,
                         msg_store_clients = {MSCStateP, MSCStateT} } =
         purge_pending_ack(true, State),
@@ -470,7 +476,9 @@ terminate(_Reason, State) ->
                             rabbit_msg_store:client_ref(MSCStateP)
            end,
     ok = rabbit_msg_store:client_delete_and_terminate(MSCStateT),
-    Terms = [{persistent_ref, PRef}, {persistent_count, PCount}],
+    Terms = [{persistent_ref,   PRef},
+             {persistent_count, PCount},
+             {persistent_bytes, PBytes}],
     a(State1 #vqstate { index_state       = rabbit_queue_index:terminate(
                                               Terms, IndexState),
                         msg_store_clients = undefined }).
@@ -498,28 +506,35 @@ purge(State = #vqstate { q4                = Q4,
                          index_state       = IndexState,
                          msg_store_clients = MSCState,
                          len               = Len,
-                         persistent_count  = PCount }) ->
+                         bytes             = Bytes,
+                         ram_bytes         = RamBytes,
+                         persistent_count  = PCount,
+                         persistent_bytes  = PBytes }) ->
     %% TODO: when there are no pending acks, which is a common case,
     %% we could simply wipe the qi instead of issuing delivers and
     %% acks for all the messages.
-    {LensByStore, IndexState1} = remove_queue_entries(
-                                   fun ?QUEUE:foldl/3, Q4,
-                                   orddict:new(), IndexState, MSCState),
-    {LensByStore1, State1 = #vqstate { q1                = Q1,
-                                       index_state       = IndexState2,
-                                       msg_store_clients = MSCState1 }} =
-        purge_betas_and_deltas(LensByStore,
-                               State #vqstate { q4          = ?QUEUE:new(),
-                                                index_state = IndexState1 }),
-    {LensByStore2, IndexState3} = remove_queue_entries(
-                                    fun ?QUEUE:foldl/3, Q1,
-                                    LensByStore1, IndexState2, MSCState1),
-    PCount1 = PCount - find_persistent_count(LensByStore2),
+    Stats = {Bytes, RamBytes, PCount, PBytes},
+    {Stats1, IndexState1} =
+        remove_queue_entries(Q4, Stats, IndexState, MSCState),
+
+    {Stats2, State1 = #vqstate { q1                = Q1,
+                                 index_state       = IndexState2,
+                                 msg_store_clients = MSCState1 }} =
+        purge_betas_and_deltas(
+          Stats1, State #vqstate { q4          = ?QUEUE:new(),
+                                   index_state = IndexState1 }),
+
+    {{Bytes3, RamBytes3, PCount3, PBytes3}, IndexState3} =
+        remove_queue_entries(Q1, Stats2, IndexState2, MSCState1),
+
     {Len, a(State1 #vqstate { q1                = ?QUEUE:new(),
                               index_state       = IndexState3,
                               len               = 0,
+                              bytes             = Bytes3,
                               ram_msg_count     = 0,
-                              persistent_count  = PCount1 })}.
+                              ram_bytes         = RamBytes3,
+                              persistent_count  = PCount3,
+                              persistent_bytes  = PBytes3 })}.
 
 purge_acks(State) -> a(purge_pending_ack(false, State)).
 
@@ -542,11 +557,13 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
     InCount1 = InCount + 1,
     PCount1  = PCount  + one_if(IsPersistent1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State3 = inc_ram_msg_count(State2 #vqstate { next_seq_id      = SeqId + 1,
-                                                 len              = Len   + 1,
-                                                 in_counter       = InCount1,
-                                                 persistent_count = PCount1,
-                                                 unconfirmed      = UC1 }),
+    State3 = upd_bytes(
+               1, MsgStatus1,
+               inc_ram_msg_count(State2 #vqstate { next_seq_id      = SeqId + 1,
+                                                   len              = Len   + 1,
+                                                   in_counter       = InCount1,
+                                                   persistent_count = PCount1,
+                                                   unconfirmed      = UC1 })),
     a(reduce_memory_use(maybe_update_rates(State3))).
 
 publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
@@ -565,11 +582,12 @@ publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State3 = State2 #vqstate { next_seq_id      = SeqId    + 1,
-                               out_counter      = OutCount + 1,
-                               in_counter       = InCount  + 1,
-                               persistent_count = PCount1,
-                               unconfirmed      = UC1 },
+    State3 = upd_bytes(1, MsgStatus,
+                       State2 #vqstate { next_seq_id      = SeqId    + 1,
+                                         out_counter      = OutCount + 1,
+                                         in_counter       = InCount  + 1,
+                                         persistent_count = PCount1,
+                                         unconfirmed      = UC1 }),
     {SeqId, a(reduce_memory_use(maybe_update_rates(State3)))}.
 
 discard(_MsgId, _ChPid, State) -> State.
@@ -638,7 +656,6 @@ ack([SeqId], State) ->
                    index_on_disk = IndexOnDisk },
      State1 = #vqstate { index_state       = IndexState,
                          msg_store_clients = MSCState,
-                         persistent_count  = PCount,
                          ack_out_counter   = AckOutCount }} =
         remove_pending_ack(SeqId, State),
     IndexState1 = case IndexOnDisk of
@@ -649,16 +666,13 @@ ack([SeqId], State) ->
         true  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]);
         false -> ok
     end,
-    PCount1 = PCount - one_if(IsPersistent),
     {[MsgId],
      a(State1 #vqstate { index_state      = IndexState1,
-                         persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + 1 })};
 ack(AckTags, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,
                          msg_store_clients = MSCState,
-                         persistent_count  = PCount,
                          ack_out_counter   = AckOutCount }} =
         lists:foldl(
           fun (SeqId, {Acc, State2}) ->
@@ -668,11 +682,8 @@ ack(AckTags, State) ->
     IndexState1 = rabbit_queue_index:ack(IndexOnDiskSeqIds, IndexState),
     [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
      || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)],
-    PCount1 = PCount - find_persistent_count(sum_msg_ids_by_store_to_len(
-                                               orddict:new(), MsgIdsByStore)),
     {lists:reverse(AllMsgIds),
      a(State1 #vqstate { index_state      = IndexState1,
-                         persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
 requeue(AckTags, #vqstate { delta      = Delta,
@@ -829,6 +840,12 @@ info(messages_ram, State) ->
     info(messages_ready_ram, State) + info(messages_unacknowledged_ram, State);
 info(messages_persistent, #vqstate{persistent_count = PersistentCount}) ->
     PersistentCount;
+info(message_bytes, #vqstate{bytes = Bytes}) ->
+    Bytes;
+info(message_bytes_ram, #vqstate{ram_bytes = RamBytes}) ->
+    RamBytes;
+info(message_bytes_persistent, #vqstate{persistent_bytes = PersistentBytes}) ->
+    PersistentBytes;
 info(backing_queue_status, #vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
           len              = Len,
@@ -865,8 +882,10 @@ is_duplicate(_Msg, State) -> {false, State}.
 
 a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
                      len              = Len,
+                     bytes            = Bytes,
                      persistent_count = PersistentCount,
-                     ram_msg_count    = RamMsgCount }) ->
+                     ram_msg_count    = RamMsgCount,
+                     ram_bytes        = RamBytes}) ->
     E1 = ?QUEUE:is_empty(Q1),
     E2 = ?QUEUE:is_empty(Q2),
     ED = Delta#delta.count == 0,
@@ -880,9 +899,12 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     true = LZ == (E3 and E4),
 
     true = Len             >= 0,
+    true = Bytes           >= 0,
     true = PersistentCount >= 0,
     true = RamMsgCount     >= 0,
     true = RamMsgCount     =< Len,
+    true = RamBytes        >= 0,
+    true = RamBytes        =< Bytes,
 
     State.
 
@@ -1030,15 +1052,17 @@ expand_delta(_SeqId, #delta { count       = Count } = Delta) ->
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-init(IsDurable, IndexState, DeltaCount, Terms,
+init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
      PersistentClient, TransientClient) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
-    DeltaCount1 =
+    {DeltaCount1, DeltaBytes1} =
         case Terms of
-            non_clean_shutdown -> DeltaCount;
-            _                  -> proplists:get_value(persistent_count,
-                                                      Terms, DeltaCount)
+            non_clean_shutdown -> {DeltaCount, DeltaBytes};
+            _                  -> {proplists:get_value(persistent_count,
+                                                       Terms, DeltaCount),
+                                   proplists:get_value(persistent_bytes,
+                                                       Terms, DeltaBytes)}
         end,
     Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
                 true  -> ?BLANK_DELTA;
@@ -1063,11 +1087,14 @@ init(IsDurable, IndexState, DeltaCount, Terms,
 
       len                 = DeltaCount1,
       persistent_count    = DeltaCount1,
+      bytes               = DeltaBytes1,
+      persistent_bytes    = DeltaBytes1,
 
       target_ram_count    = infinity,
       ram_msg_count       = 0,
       ram_msg_count_prev  = 0,
       ram_ack_count_prev  = 0,
+      ram_bytes           = 0,
       out_counter         = 0,
       in_counter          = 0,
       rates               = blank_rates(Now),
@@ -1092,9 +1119,11 @@ in_r(MsgStatus = #msg_status { msg = undefined },
         true  -> State #vqstate { q3 = ?QUEUE:in_r(MsgStatus, Q3) };
         false -> {Msg, State1 = #vqstate { q4 = Q4a }} =
                      read_msg(MsgStatus, State),
-                 inc_ram_msg_count(
-                   State1 #vqstate { q4 = ?QUEUE:in_r(MsgStatus#msg_status {
-                                                        msg = Msg }, Q4a) })
+                 upd_ram_bytes(
+                   1, MsgStatus,
+                   inc_ram_msg_count(
+                     State1 #vqstate { q4 = ?QUEUE:in_r(MsgStatus#msg_status {
+                                                          msg = Msg }, Q4a) }))
     end;
 in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
     State #vqstate { q4 = ?QUEUE:in_r(MsgStatus, Q4) }.
@@ -1124,6 +1153,23 @@ read_msg(MsgId, IsPersistent, State = #vqstate{msg_store_clients = MSCState}) ->
 
 inc_ram_msg_count(State = #vqstate{ram_msg_count = RamMsgCount}) ->
     State#vqstate{ram_msg_count = RamMsgCount + 1}.
+
+upd_bytes(Sign, MsgStatus = #msg_status{msg = undefined}, State) ->
+    upd_bytes0(Sign, MsgStatus, State);
+upd_bytes(Sign, MsgStatus = #msg_status{msg = _}, State) ->
+    upd_ram_bytes(Sign, MsgStatus, upd_bytes0(Sign, MsgStatus, State)).
+
+upd_bytes0(Sign, MsgStatus = #msg_status{is_persistent = IsPersistent},
+           State = #vqstate{bytes            = Bytes,
+                            persistent_bytes = PBytes}) ->
+    Diff = Sign * msg_size(MsgStatus),
+    State#vqstate{bytes             = Bytes  + Diff,
+                  persistent_bytes  = PBytes + one_if(IsPersistent) * Diff}.
+
+upd_ram_bytes(Sign, MsgStatus, State = #vqstate{ram_bytes = RamBytes}) ->
+    State#vqstate{ram_bytes = RamBytes + Sign * msg_size(MsgStatus)}.
+
+msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
 
 remove(AckRequired, MsgStatus = #msg_status {
                       seq_id        = SeqId,
@@ -1166,57 +1212,65 @@ remove(AckRequired, MsgStatus = #msg_status {
 
     PCount1      = PCount      - one_if(IsPersistent andalso not AckRequired),
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
-
+    State2       = case AckRequired of
+                       false -> upd_bytes(-1, MsgStatus, State1);
+                       true  -> State1
+                   end,
     {AckTag, maybe_update_rates(
-               State1 #vqstate {ram_msg_count    = RamMsgCount1,
+               State2 #vqstate {ram_msg_count    = RamMsgCount1,
                                 out_counter      = OutCount + 1,
                                 index_state      = IndexState2,
                                 len              = Len - 1,
                                 persistent_count = PCount1})}.
 
-purge_betas_and_deltas(LensByStore,
+purge_betas_and_deltas(Stats,
                        State = #vqstate { q3                = Q3,
                                           index_state       = IndexState,
                                           msg_store_clients = MSCState }) ->
     case ?QUEUE:is_empty(Q3) of
-        true  -> {LensByStore, State};
-        false -> {LensByStore1, IndexState1} =
-                     remove_queue_entries(fun ?QUEUE:foldl/3, Q3,
-                                          LensByStore, IndexState, MSCState),
-                 purge_betas_and_deltas(LensByStore1,
+        true  -> {Stats, State};
+        false -> {Stats1, IndexState1} = remove_queue_entries(
+                                           Q3, Stats, IndexState, MSCState),
+                 purge_betas_and_deltas(Stats1,
                                         maybe_deltas_to_betas(
                                           State #vqstate {
                                             q3          = ?QUEUE:new(),
                                             index_state = IndexState1 }))
     end.
 
-remove_queue_entries(Fold, Q, LensByStore, IndexState, MSCState) ->
-    {MsgIdsByStore, Delivers, Acks} =
-        Fold(fun remove_queue_entries1/2, {orddict:new(), [], []}, Q),
+remove_queue_entries(Q, {Bytes, RamBytes, PCount, PBytes},
+                     IndexState, MSCState) ->
+    {MsgIdsByStore, Bytes1, RamBytes1, PBytes1, Delivers, Acks} =
+        ?QUEUE:foldl(fun remove_queue_entries1/2,
+                     {orddict:new(), Bytes, RamBytes, PBytes, [], []}, Q),
     ok = orddict:fold(fun (IsPersistent, MsgIds, ok) ->
                               msg_store_remove(MSCState, IsPersistent, MsgIds)
                       end, ok, MsgIdsByStore),
-    {sum_msg_ids_by_store_to_len(LensByStore, MsgIdsByStore),
+    {{Bytes1,
+      RamBytes1,
+      PCount - case orddict:find(true, MsgIdsByStore) of
+                   error     -> 0;
+                   {ok, Ids} -> length(Ids)
+               end,
+      PBytes1},
      rabbit_queue_index:ack(Acks,
                             rabbit_queue_index:deliver(Delivers, IndexState))}.
 
 remove_queue_entries1(
-  #msg_status { msg_id = MsgId, seq_id = SeqId,
+  #msg_status { msg_id = MsgId, seq_id = SeqId, msg = Msg,
                 is_delivered = IsDelivered, msg_on_disk = MsgOnDisk,
-                index_on_disk = IndexOnDisk, is_persistent = IsPersistent },
-  {MsgIdsByStore, Delivers, Acks}) ->
+                index_on_disk = IndexOnDisk, is_persistent = IsPersistent,
+                msg_props = #message_properties { size = Size } },
+  {MsgIdsByStore, Bytes, RamBytes, PBytes, Delivers, Acks}) ->
     {case MsgOnDisk of
          true  -> rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore);
          false -> MsgIdsByStore
      end,
+     Bytes    - Size,
+     RamBytes - Size * one_if(Msg =/= undefined),
+     PBytes   - Size * one_if(IsPersistent),
      cons_if(IndexOnDisk andalso not IsDelivered, SeqId, Delivers),
      cons_if(IndexOnDisk, SeqId, Acks)}.
-
-sum_msg_ids_by_store_to_len(LensByStore, MsgIdsByStore) ->
-    orddict:fold(
-      fun (IsPersistent, MsgIds, LensByStore1) ->
-              orddict:update_counter(IsPersistent, length(MsgIds), LensByStore1)
-      end, LensByStore, MsgIdsByStore).
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
@@ -1289,8 +1343,15 @@ lookup_pending_ack(SeqId, #vqstate { ram_pending_ack  = RPA,
         none       -> gb_trees:get(SeqId, DPA)
     end.
 
-remove_pending_ack(SeqId, State = #vqstate { ram_pending_ack  = RPA,
-                                             disk_pending_ack = DPA }) ->
+remove_pending_ack(SeqId, State) ->
+    {MsgStatus, State1 = #vqstate { persistent_count = PCount }} =
+        remove_pending_ack0(SeqId, State),
+    PCount1 = PCount - one_if(MsgStatus#msg_status.is_persistent),
+    {MsgStatus, upd_bytes(-1, MsgStatus,
+                          State1 # vqstate{ persistent_count = PCount1 })}.
+
+remove_pending_ack0(SeqId, State = #vqstate { ram_pending_ack  = RPA,
+                                              disk_pending_ack = DPA }) ->
     case gb_trees:lookup(SeqId, RPA) of
         {value, V} -> RPA1 = gb_trees:delete(SeqId, RPA),
                       {V, State #vqstate { ram_pending_ack = RPA1 }};
@@ -1340,12 +1401,6 @@ accumulate_ack(#msg_status { seq_id        = SeqId,
      end,
      [MsgId | AllMsgIds]}.
 
-find_persistent_count(LensByStore) ->
-    case orddict:find(true, LensByStore) of
-        error     -> 0;
-        {ok, Len} -> Len
-    end.
-
 %%----------------------------------------------------------------------------
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
@@ -1393,9 +1448,13 @@ msg_indices_written_to_disk(Callback, MsgIdSet) ->
 
 publish_alpha(#msg_status { msg = undefined } = MsgStatus, State) ->
     {Msg, State1} = read_msg(MsgStatus, State),
-    {MsgStatus#msg_status { msg = Msg }, inc_ram_msg_count(State1)};
+    {MsgStatus#msg_status { msg = Msg },
+     upd_ram_bytes(1, MsgStatus, inc_ram_msg_count(State1))}; %% [1]
 publish_alpha(MsgStatus, State) ->
     {MsgStatus, inc_ram_msg_count(State)}.
+%% [1] We increase the ram_bytes here because we paged the message in
+%% to requeue it, not purely because we requeued it. Hence in the
+%% second head it's already accounted for as already in memory.
 
 publish_beta(MsgStatus, State) ->
     {MsgStatus1, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
@@ -1441,7 +1500,7 @@ delta_merge(SeqIds, Delta, MsgIds, State) ->
 %% Mostly opposite of record_pending_ack/2
 msg_from_pending_ack(SeqId, State) ->
     {#msg_status { msg_props = MsgProps } = MsgStatus, State1} =
-        remove_pending_ack(SeqId, State),
+        remove_pending_ack0(SeqId, State),
     {MsgStatus #msg_status {
        msg_props = MsgProps #message_properties { needs_confirming = false } },
      State1}.
@@ -1593,8 +1652,10 @@ limit_ram_acks(Quota, State = #vqstate { ram_pending_ack  = RPA,
                 maybe_write_to_disk(true, false, MsgStatus, State),
             DPA1 = gb_trees:insert(SeqId, m(trim_msg_status(MsgStatus1)), DPA),
             limit_ram_acks(Quota - 1,
-                           State1 #vqstate { ram_pending_ack  = RPA1,
-                                             disk_pending_ack = DPA1 })
+                           upd_ram_bytes(
+                             -1, MsgStatus1,
+                             State1 #vqstate { ram_pending_ack  = RPA1,
+                                               disk_pending_ack = DPA1 }))
     end.
 
 permitted_beta_count(#vqstate { len = 0 }) ->
@@ -1730,9 +1791,12 @@ push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
                           State1 = #vqstate { ram_msg_count = RamMsgCount }} =
                              maybe_write_to_disk(true, false, MsgStatus, State),
                          MsgStatus2 = m(trim_msg_status(MsgStatus1)),
-                         State2 = Consumer(MsgStatus2, Qa,
-                                           State1 #vqstate {
-                                             ram_msg_count = RamMsgCount - 1 }),
+                         State2 = Consumer(
+                                    MsgStatus2, Qa,
+                                    upd_ram_bytes(
+                                      -1, MsgStatus2,
+                                      State1 #vqstate {
+                                        ram_msg_count = RamMsgCount - 1})),
                          push_alphas_to_betas(Generator, Consumer, Quota - 1,
                                               Qa, State2)
                  end
