@@ -1206,6 +1206,18 @@
                 <listitem><para>Total number of persistent messages in the queue (will always be 0 for transient queues).</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>message_bytes</term>
+                <listitem><para>Sum of the size of all message bodies in the queue. This does not include the message properties (including headers) or any overhead.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>message_bytes_ram</term>
+                <listitem><para>Like <command>message_bytes</command> but counting only those messages which are in RAM.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>message_bytes_persistent</term>
+                <listitem><para>Like <command>message_bytes</command> but counting only those messages which are persistent.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>consumers</term>
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
