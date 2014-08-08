@@ -17,7 +17,7 @@
 -module(rabbit_shovel_dyn_worker_sup_sup).
 -behaviour(mirrored_supervisor).
 
--export([start_link/0, init/1, adjust_or_start_child/2, stop_child/1]).
+-export([start_link/0, init/1, adjust/2, stop_child/1]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -29,21 +29,25 @@ start_link() ->
                   {local, ?SUPERVISOR}, ?SUPERVISOR,
                   fun rabbit_misc:execute_mnesia_transaction/1, ?MODULE, []),
     Shovels = rabbit_runtime_parameters:list_component(<<"shovel">>),
-    [adjust_or_start_child({pget(vhost, Shovel), pget(name, Shovel)},
-                           pget(value, Shovel)) || Shovel <- Shovels],
+    [start_child({pget(vhost, Shovel), pget(name, Shovel)},
+                 pget(value, Shovel)) || Shovel <- Shovels],
     {ok, Pid}.
 
-adjust_or_start_child(Name, Def) ->
+adjust(Name, Def) ->
     case child_exists(Name) of
         true  -> stop_child(Name);
         false -> ok
     end,
-    {ok, _Pid} =
-        mirrored_supervisor:start_child(
-          ?SUPERVISOR,
-          {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, Def]},
-           transient, ?MAX_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}),
-    ok.
+    start_child(Name, Def).
+
+start_child(Name, Def) ->
+    case mirrored_supervisor:start_child(
+           ?SUPERVISOR,
+           {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, Def]},
+            transient, ?MAX_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}) of
+        {ok,                      _Pid}  -> ok;
+        {error, {already_started, _Pid}} -> ok
+    end.
 
 child_exists(Name) ->
     lists:any(fun ({N, _, _, _}) -> N =:= Name end,
