@@ -37,7 +37,7 @@ all_tests() ->
     ok = supervisor2_tests:test_all(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
-    application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
+    application:set_env(rabbit, file_handles_high_watermark, 10),
     ok = file_handle_cache:set_limit(10),
     passed = test_version_equivalance(),
     passed = test_file_handle_cache(),
@@ -1870,22 +1870,20 @@ test_backing_queue() ->
         {ok, rabbit_variable_queue} ->
             {ok, FileSizeLimit} =
                 application:get_env(rabbit, msg_store_file_size_limit),
-            application:set_env(rabbit, msg_store_file_size_limit, 512,
-                                infinity),
+            application:set_env(rabbit, msg_store_file_size_limit, 512),
             {ok, MaxJournal} =
                 application:get_env(rabbit, queue_index_max_journal_entries),
-            application:set_env(rabbit, queue_index_max_journal_entries, 128,
-                                infinity),
+            application:set_env(rabbit, queue_index_max_journal_entries, 128),
             passed = test_msg_store(),
             application:set_env(rabbit, msg_store_file_size_limit,
-                                FileSizeLimit, infinity),
+                                FileSizeLimit),
             passed = test_queue_index(),
             passed = test_queue_index_props(),
             passed = test_variable_queue(),
             passed = test_variable_queue_delete_msg_store_files_callback(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
-                                MaxJournal, infinity),
+                                MaxJournal),
             %% We will have restarted the message store, and thus changed
             %% the order of the children of rabbit_sup. This will cause
             %% problems if there are subsequent failures - see bug 24262.
