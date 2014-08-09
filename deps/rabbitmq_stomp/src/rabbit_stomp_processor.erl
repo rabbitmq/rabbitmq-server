@@ -511,7 +511,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
         {ok, Connection} ->
             link(Connection),
             {ok, Channel} = amqp_connection:open_channel(Connection),
-            amqp_channel:set_manual_flow_control(Channel, true),
+            amqp_channel:enable_delivery_flow_control(Channel),
             SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
             {{SendTimeout, ReceiveTimeout}, State1} =
                 ensure_heartbeats(Heartbeat, State),
