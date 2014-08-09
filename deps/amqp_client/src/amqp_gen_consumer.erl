@@ -31,7 +31,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/3, call_consumer/2, call_consumer/3, call_consumer/5]).
+-export([start_link/3, call_consumer/2, call_consumer/3, call_consumer/4]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_info/3]).
@@ -71,10 +71,8 @@ call_consumer(Pid, Msg) ->
 call_consumer(Pid, Method, Args) ->
     gen_server2:call(Pid, {consumer_call, Method, Args}, infinity).
 
-call_consumer(Pid, Method, Args, false, _ChPid) ->
-    gen_server2:call(Pid, {consumer_call, Method, Args}, infinity);
-call_consumer(Pid, Method, Args, true, Extras) ->
-    gen_server2:call(Pid, {consumer_call, Method, Args, true, Extras}, infinity).
+call_consumer(Pid, Method, Args, DeliveryCtx) ->
+    gen_server2:call(Pid, {consumer_call, Method, Args, DeliveryCtx}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Behaviour
@@ -154,19 +152,18 @@ behaviour_info(callbacks) ->
      %% is received from the server.
      {handle_deliver, 3},
 
-     %% handle_deliver(Deliver, Message, ManualFlowControl,
-     %%                ChannelPid, State) -> ok_error()
+     %% handle_deliver(Deliver, Message,
+     %%                DeliveryCtx, State) -> ok_error()
      %% where
      %%      Deliver = #'basic.deliver'{}
      %%      Message = #amqp_msg{}
-     %%      ManualFlowControl = boolean()
-     %%      Extras = {pid(), pid()}
+     %%      DeliveryCtx = {pid(), pid(), pid()}
      %%      State = state()
      %%
      %% This callback is invoked by the channel every time a basic.deliver
      %% is received from the server. Only relevant for channels that use
      %% direct client connection and manual flow control.
-     {handle_deliver, 5},
+     {handle_deliver, 4},
 
      %% handle_info(Info, State) -> ok_error()
      %% where
@@ -271,13 +268,10 @@ handle_call({consumer_call, Method, Args}, _From,
     consumer_call_reply(Return, State);
 
 %% only supposed to be used with basic.deliver
-handle_call({consumer_call, Method = #'basic.deliver'{}, Args, false, _Extras}, From,
-            State) ->
-    handle_call({consumer_call, Method, Args}, From, State);
-handle_call({consumer_call, Method = #'basic.deliver'{}, Args, true, Extras}, _From,
+handle_call({consumer_call, Method = #'basic.deliver'{}, Args, DeliveryCtx}, _From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
-    Return = ConsumerModule:handle_deliver(Method, Args, true, Extras, MState),
+    Return = ConsumerModule:handle_deliver(Method, Args, DeliveryCtx, MState),
     consumer_call_reply(Return, State).
 
 handle_cast(_What, State) ->

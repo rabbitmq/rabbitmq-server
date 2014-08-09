@@ -46,7 +46,7 @@
 
 -export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,
          handle_cancel/2, handle_server_cancel/2,
-         handle_deliver/3, handle_deliver/5,
+         handle_deliver/3, handle_deliver/4,
          handle_info/2, handle_call/3, terminate/2]).
 
 %%---------------------------------------------------------------------------
@@ -87,11 +87,8 @@ handle_server_cancel(M, C) ->
 handle_deliver(M, A, C) ->
     C ! {M, A},
     {ok, C}.
-handle_deliver(M, A, false, _Extras, C) ->
-    C ! {M, A},
-    {ok, C};
-handle_deliver(M, A, true, Extras, C) ->
-    C ! {M, A, Extras},
+handle_deliver(M, A, DeliveryCtx, C) ->
+    C ! {M, A, DeliveryCtx},
     {ok, C}.
 
 

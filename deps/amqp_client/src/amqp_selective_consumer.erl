@@ -46,7 +46,7 @@
 -export([register_default_consumer/2]).
 -export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,
          handle_cancel/2, handle_server_cancel/2,
-         handle_deliver/3, handle_deliver/5,
+         handle_deliver/3, handle_deliver/4,
          handle_info/2, handle_call/3, terminate/2]).
 
 -record(state, {consumers             = dict:new(), %% Tag -> ConsumerPid
@@ -160,12 +160,8 @@ handle_deliver(Deliver, Message, State) ->
     {ok, State}.
 
 %% @private
-handle_deliver(Deliver, Message, false, _ChPid, State) ->
-    deliver(Deliver, Message, State),
-    {ok, State};
-%% @private
-handle_deliver(Deliver, Message, true, ChPid, State) ->
-    deliver(Deliver, Message, ChPid, State),
+handle_deliver(Deliver, Message, DeliveryCtx, State) ->
+    deliver(Deliver, Message, DeliveryCtx, State),
     {ok, State}.
 
 %% @private

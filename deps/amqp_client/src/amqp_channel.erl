@@ -697,11 +697,11 @@ handle_method_from_server(Method, Content, State) ->
     safely_handle_method_from_server(Method, Content, Fun, State).
 
 handle_method_from_server(Method = #'basic.deliver'{},
-                          Content, Extras, State) ->
+                          Content, DeliveryCtx, State) ->
     Fun = fun () ->
                   handle_method_from_server1(Method,
                                              amqp_msg(Content),
-                                             Extras,
+                                             DeliveryCtx,
                                              State)
           end,
     safely_handle_method_from_server(Method, Content, Fun, State).
@@ -744,14 +744,8 @@ handle_method_from_server1(#'basic.cancel_ok'{} = CancelOk, none, State) ->
 handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
     ok = call_to_consumer(Cancel, none, State),
     {noreply, State};
-handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg,
-                           State = #state{delivery_flow_control = MFC}) ->
-    ok = case MFC of
-             false ->
-                 call_to_consumer(Deliver, AmqpMsg, State);
-             true ->
-                 call_to_consumer(Deliver, AmqpMsg, true, self(), State)
-         end,
+handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg, State) ->
+    ok = call_to_consumer(Deliver, AmqpMsg, State),
     {noreply, State};
 handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
                            State = #state{flow_handler = FlowHandler}) ->
@@ -797,8 +791,8 @@ handle_method_from_server1(Method, Content, State) ->
 
 %% only used with manual consumer-to-queue flow control
 handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg,
-                           Extras, State) ->
-    call_to_consumer(Deliver, AmqpMsg, true, Extras, State),
+                           DeliveryCtx, State) ->
+    ok = call_to_consumer(Deliver, AmqpMsg, DeliveryCtx, State),
     {noreply, State}.
 
 %%---------------------------------------------------------------------------
@@ -982,9 +976,9 @@ handle_wait_for_confirms(From, Timeout,
 call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
     amqp_gen_consumer:call_consumer(Consumer, Method, Args).
 
-call_to_consumer(Method, Args, ManualFlow, Extras,
+call_to_consumer(Method, Args, DeliveryCtx,
                  #state{consumer = Consumer}) ->
-    amqp_gen_consumer:call_consumer(Consumer, Method, Args, ManualFlow, Extras).
+    amqp_gen_consumer:call_consumer(Consumer, Method, Args, DeliveryCtx).
 
 safe_cancel_timer(undefined) -> ok;
 safe_cancel_timer(TRef)      -> erlang:cancel_timer(TRef).
