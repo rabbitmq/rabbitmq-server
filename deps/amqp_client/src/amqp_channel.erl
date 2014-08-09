@@ -75,7 +75,7 @@
 -export([next_publish_seqno/1, wait_for_confirms/1, wait_for_confirms/2,
          wait_for_confirms_or_die/1, wait_for_confirms_or_die/2]).
 -export([start_link/5, set_writer/2, connection_closing/3, open/1,
-         set_manual_flow_control/2, notify_sent/1]).
+         set_manual_flow_control/2, notify_received/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -355,7 +355,7 @@ set_writer(Pid, Writer) ->
 set_manual_flow_control(Pid, Value) ->
     gen_server:cast(Pid, {set_manual_flow_control, Value}).
 
-notify_sent({Pid, QPid, ServerChPid}) ->
+notify_received({Pid, QPid, ServerChPid}) ->
     gen_server:cast(Pid, {send_notify, {QPid, ServerChPid}}).
 
 %% @private
