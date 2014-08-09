@@ -149,7 +149,7 @@ handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload},
              Extras}, State) ->
     State1 = send_delivery(Delivery, Props, Payload, State),
-    amqp_channel:notify_sent(Extras),
+    amqp_channel:notify_received(Extras),
     {noreply, State1, hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     process_request(
