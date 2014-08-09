@@ -147,10 +147,9 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
     {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload},
-             {ClientChPid, QPid, ServerChPid}}, State) ->
+             Extras}, State) ->
     State1 = send_delivery(Delivery, Props, Payload, State),
-    amqp_channel:notify_sent(ClientChPid, QPid,
-                             ServerChPid),
+    amqp_channel:notify_sent(Extras),
     {noreply, State1, hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     process_request(
