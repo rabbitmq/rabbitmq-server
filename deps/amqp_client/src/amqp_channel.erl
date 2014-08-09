@@ -75,7 +75,7 @@
 -export([next_publish_seqno/1, wait_for_confirms/1, wait_for_confirms/2,
          wait_for_confirms_or_die/1, wait_for_confirms_or_die/2]).
 -export([start_link/5, set_writer/2, connection_closing/3, open/1,
-         set_manual_flow_control/2, notify_received/1]).
+         enable_delivery_flow_control/1, notify_received/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -107,7 +107,7 @@
                 %% to prevent the queue from overwhelming slow
                 %% consumers that use automatic acknowledgement
                 %% mode.
-                manual_flow_control = false
+                delivery_flow_control = false
                }).
 
 %%---------------------------------------------------------------------------
@@ -352,8 +352,8 @@ start_link(Driver, Connection, ChannelNumber, Consumer, Identity) ->
 set_writer(Pid, Writer) ->
     gen_server:cast(Pid, {set_writer, Writer}).
 
-set_manual_flow_control(Pid, Value) ->
-    gen_server:cast(Pid, {set_manual_flow_control, Value}).
+enable_delivery_flow_control(Pid) ->
+    gen_server:cast(Pid, enable_delivery_flow_control).
 
 notify_received({Pid, QPid, ServerChPid}) ->
     gen_server:cast(Pid, {send_notify, {QPid, ServerChPid}}).
@@ -418,8 +418,8 @@ handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
 handle_cast({set_writer, Writer}, State) ->
     {noreply, State#state{writer = Writer}};
 %% @private
-handle_cast({set_manual_flow_control, Value}, State) ->
-    {noreply, State#state{manual_flow_control = Value}};
+handle_cast(enable_delivery_flow_control, State) ->
+    {noreply, State#state{delivery_flow_control = true}};
 %% @private
 handle_cast({send_notify, {QPid, ChPid}}, State) ->
     rabbit_amqqueue:notify_sent(QPid, ChPid),
@@ -483,7 +483,7 @@ handle_info({send_command, Method, Content}, State) ->
 %% @private
 handle_info({send_command_and_notify, QPid, ChPid,
              Method = #'basic.deliver'{}, Content},
-            State = #state{manual_flow_control = MFC}) ->
+            State = #state{delivery_flow_control = MFC}) ->
     case MFC of
         false ->
             handle_method_from_server(Method, Content, State),
@@ -745,7 +745,7 @@ handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
     ok = call_to_consumer(Cancel, none, State),
     {noreply, State};
 handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg,
-                           State = #state{manual_flow_control = MFC}) ->
+                           State = #state{delivery_flow_control = MFC}) ->
     ok = case MFC of
              false ->
                  call_to_consumer(Deliver, AmqpMsg, State);
