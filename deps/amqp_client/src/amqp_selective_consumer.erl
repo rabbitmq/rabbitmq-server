@@ -155,13 +155,13 @@ handle_server_cancel(Cancel = #'basic.cancel'{nowait = true}, State) ->
     {ok, State1}.
 
 %% @private
-handle_deliver(Deliver, Message, State) ->
-    deliver(Deliver, Message, State),
+handle_deliver(Method, Message, State) ->
+    deliver(Method, Message, State),
     {ok, State}.
 
 %% @private
-handle_deliver(Deliver, Message, DeliveryCtx, State) ->
-    deliver(Deliver, Message, DeliveryCtx, State),
+handle_deliver(Method, Message, DeliveryCtx, State) ->
+    deliver(Method, Message, DeliveryCtx, State),
     {ok, State}.
 
 %% @private
@@ -207,25 +207,25 @@ terminate(_Reason, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-deliver_to_consumer_or_die(BasicDeliver, Msg, State) ->
-    case resolve_consumer(tag(BasicDeliver), State) of
+deliver_to_consumer_or_die(Method, Msg, State) ->
+    case resolve_consumer(tag(Method), State) of
         {consumer, Pid} -> Pid ! Msg;
         {default, Pid}  -> Pid ! Msg;
         error           -> exit(unexpected_delivery_and_no_default_consumer)
     end.
 
-deliver(BasicDeliver, State) ->
-    deliver(BasicDeliver, undefined, State).
-deliver(BasicDeliver, Message, State) ->
-    Combined = if Message =:= undefined -> BasicDeliver;
-                  true                  -> {BasicDeliver, Message}
+deliver(Method, State) ->
+    deliver(Method, undefined, State).
+deliver(Method, Message, State) ->
+    Combined = if Message =:= undefined -> Method;
+                  true                  -> {Method, Message}
                end,
-    deliver_to_consumer_or_die(BasicDeliver, Combined, State).
-deliver(BasicDeliver, Message, ChPid, State) ->
-    Combined = if Message =:= undefined -> BasicDeliver;
-                  true                  -> {BasicDeliver, Message, ChPid}
+    deliver_to_consumer_or_die(Method, Combined, State).
+deliver(Method, Message, ChPid, State) ->
+    Combined = if Message =:= undefined -> Method;
+                  true                  -> {Method, Message, ChPid}
                end,
-    deliver_to_consumer_or_die(BasicDeliver, Combined, State).
+    deliver_to_consumer_or_die(Method, Combined, State).
 
 do_cancel(Cancel, State = #state{consumers = Consumers,
                                  monitors  = Monitors}) ->
