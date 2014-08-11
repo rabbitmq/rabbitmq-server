@@ -415,9 +415,8 @@ init_clean(RecoveredCounts, State) ->
         lists:foldl(
           fun ({Seg, UnackedCount}, SegmentsN) ->
                   Segment = segment_find_or_new(Seg, Dir, SegmentsN),
-                  segment_store(
-                    Segment #segment { unacked = UnackedCount },
-                    SegmentsN)
+                  segment_store(Segment #segment { unacked = UnackedCount },
+                                SegmentsN)
           end, Segments, RecoveredCounts),
     %% the counts above include transient messages, which would be the
     %% wrong thing to return
@@ -562,7 +561,7 @@ scan_segments(Fun, Acc, State) ->
 %%----------------------------------------------------------------------------
 
 create_pub_record_body(MsgId, #message_properties { expiry = Expiry,
-                                                    size   = Size}) ->
+                                                    size   = Size }) ->
     [MsgId, expiry_to_binary(Expiry), <<Size:?SIZE_BITS>>].
 
 expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;

@@ -353,6 +353,8 @@
              target_ram_count      :: non_neg_integer() | 'infinity',
              ram_msg_count         :: non_neg_integer(),
              ram_msg_count_prev    :: non_neg_integer(),
+             ram_ack_count_prev    :: non_neg_integer(),
+             ram_bytes             :: non_neg_integer(),
              out_counter           :: non_neg_integer(),
              in_counter            :: non_neg_integer(),
              rates                 :: rates(),
@@ -884,6 +886,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
                      len              = Len,
                      bytes            = Bytes,
                      persistent_count = PersistentCount,
+                     persistent_bytes = PersistentBytes,
                      ram_msg_count    = RamMsgCount,
                      ram_bytes        = RamBytes}) ->
     E1 = ?QUEUE:is_empty(Q1),
@@ -901,6 +904,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     true = Len             >= 0,
     true = Bytes           >= 0,
     true = PersistentCount >= 0,
+    true = PersistentBytes >= 0,
     true = RamMsgCount     >= 0,
     true = RamMsgCount     =< Len,
     true = RamBytes        >= 0,
@@ -1454,7 +1458,9 @@ publish_alpha(MsgStatus, State) ->
     {MsgStatus, inc_ram_msg_count(State)}.
 %% [1] We increase the ram_bytes here because we paged the message in
 %% to requeue it, not purely because we requeued it. Hence in the
-%% second head it's already accounted for as already in memory.
+%% second head it's already accounted for as already in memory. OTOH
+%% ram_msg_count does not include unacked messages, so it needs
+%% incrementing in both heads.
 
 publish_beta(MsgStatus, State) ->
     {MsgStatus1, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
