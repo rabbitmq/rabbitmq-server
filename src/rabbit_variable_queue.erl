@@ -1354,8 +1354,7 @@ remove_pending_ack(true, SeqId, State) ->
         remove_pending_ack(false, SeqId, State),
     PCount1 = PCount - one_if(MsgStatus#msg_status.is_persistent),
     {MsgStatus, upd_bytes(-1, MsgStatus,
-                          State1 # vqstate{ persistent_count = PCount1 })}.
-
+                          State1 # vqstate{ persistent_count = PCount1 })};
 remove_pending_ack(false, SeqId, State = #vqstate { ram_pending_ack  = RPA,
                                                     disk_pending_ack = DPA }) ->
     case gb_trees:lookup(SeqId, RPA) of
