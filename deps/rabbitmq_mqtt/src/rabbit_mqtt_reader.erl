@@ -90,9 +90,10 @@ handle_cast(duplicate_id,
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 
-handle_info({#'basic.deliver'{}, #amqp_msg{}} = Delivery,
+handle_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
             State = #state{ proc_state = ProcState }) ->
-    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Delivery, ProcState));
+    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Delivery,
+                                                              ProcState));
 
 handle_info(#'basic.ack'{} = Ack, State = #state{ proc_state = ProcState }) ->
     callback_reply(State, rabbit_mqtt_processor:amqp_callback(Ack, ProcState));
