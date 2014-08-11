@@ -127,17 +127,21 @@ init_from_config() ->
             {ok, Config} ->
                 Config
         end,
+    case TryNodes of
+        [] -> init_db_and_upgrade([node()], disc, false);
+        _  -> auto_cluster(TryNodes, NodeType)
+    end.
+
+auto_cluster(TryNodes, NodeType) ->
     case find_good_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
-            rabbit_log:info("Node '~p' selected for clustering from "
-                            "configuration~n", [Node]),
+            rabbit_log:info("Node '~p' selected for auto-clustering~n", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
-            rabbit_log:warning("Could not find any suitable node amongst the "
-                               "ones provided in the configuration: ~p~n",
-                               [TryNodes]),
+            rabbit_log:warning("Could not find any node for auto-clustering "
+                               "from: ~p~n", [TryNodes]),
             init_db_and_upgrade([node()], disc, false)
     end.
 
