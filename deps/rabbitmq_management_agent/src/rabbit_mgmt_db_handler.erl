@@ -55,7 +55,7 @@ ensure_statistics_enabled() ->
     case application:get_env(rabbitmq_management_agent,
                              force_fine_statistics) of
         {ok, X} ->
-            error_logger:warning_msg(
+            rabbit_log:warning(
               "force_fine_statistics set to ~p; ignored.~n"
               "Replaced by {rates_mode, none} in the rabbitmq_management "
               "application.~n", [X]);
