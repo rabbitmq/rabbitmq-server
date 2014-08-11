@@ -2208,13 +2208,13 @@ restart_test_queue(Qi) ->
 empty_test_queue() ->
     ok = rabbit_variable_queue:stop(),
     {ok, _} = rabbit_variable_queue:start([]),
-    {0, Qi} = init_test_queue(),
+    {0, 0, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
 
 with_empty_test_queue(Fun) ->
     ok = empty_test_queue(),
-    {0, Qi} = init_test_queue(),
+    {0, 0, Qi} = init_test_queue(),
     rabbit_queue_index:delete_and_terminate(Fun(Qi)).
 
 restart_app() ->
@@ -2233,7 +2233,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
           fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
                   MsgId = rabbit_guid:gen(),
                   QiM = rabbit_queue_index:publish(
-                          MsgId, SeqId, #message_properties{}, Persistent, QiN),
+                          MsgId, SeqId, #message_properties{size = 10},
+                          Persistent, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
@@ -2255,7 +2256,7 @@ test_queue_index_props() ->
     with_empty_test_queue(
       fun(Qi0) ->
               MsgId = rabbit_guid:gen(),
-              Props = #message_properties{expiry=12345},
+              Props = #message_properties{expiry=12345, size = 10},
               Qi1 = rabbit_queue_index:publish(MsgId, 1, Props, true, Qi0),
               {[{MsgId, 1, Props, _, _}], Qi2} =
                   rabbit_queue_index:read(1, 2, Qi1),
@@ -2285,7 +2286,7 @@ test_queue_index() ->
               ok = verify_read_with_published(false, false, ReadA,
                                               lists:reverse(SeqIdsMsgIdsA)),
               %% should get length back as 0, as all the msgs were transient
-              {0, Qi6} = restart_test_queue(Qi4),
+              {0, 0, Qi6} = restart_test_queue(Qi4),
               {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
               {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
               {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
@@ -2294,7 +2295,8 @@ test_queue_index() ->
                                               lists:reverse(SeqIdsMsgIdsB)),
               %% should get length back as MostOfASegment
               LenB = length(SeqIdsB),
-              {LenB, Qi12} = restart_test_queue(Qi10),
+              BytesB = LenB * 10,
+              {LenB, BytesB, Qi12} = restart_test_queue(Qi10),
               {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
               Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
               {ReadC, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
@@ -2306,7 +2308,7 @@ test_queue_index() ->
               {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
               %% should get length back as 0 because all persistent
               %% msgs have been acked
-              {0, Qi19} = restart_test_queue(Qi18),
+              {0, 0, Qi19} = restart_test_queue(Qi18),
               Qi19
       end),
 
@@ -2378,11 +2380,11 @@ test_queue_index() ->
                                                          true, Qi0),
               Qi2 = rabbit_queue_index:deliver([0,1,4], Qi1),
               Qi3 = rabbit_queue_index:ack([0], Qi2),
-              {5, Qi4} = restart_test_queue(Qi3),
+              {5, 50, Qi4} = restart_test_queue(Qi3),
               {Qi5, _SeqIdsMsgIdsF} = queue_index_publish([3,6,8], true, Qi4),
               Qi6 = rabbit_queue_index:deliver([2,3,5,6], Qi5),
               Qi7 = rabbit_queue_index:ack([1,2,3], Qi6),
-              {5, Qi8} = restart_test_queue(Qi7),
+              {5, 50, Qi8} = restart_test_queue(Qi7),
               Qi8
       end),
 
@@ -2417,7 +2419,8 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
                                                          false -> 1
                                                      end},
                     PayloadFun(N)),
-                  PropFun(N, #message_properties{}), false, self(), VQN)
+                  PropFun(N, #message_properties{size = 10}),
+                  false, self(), VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
