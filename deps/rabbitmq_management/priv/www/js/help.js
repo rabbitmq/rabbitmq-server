@@ -26,11 +26,14 @@ HELP = {
     'queue-dead-letter-routing-key':
       'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/dlx.html">x-dead-letter-routing-key</a>" argument.)',
 
-    'queue-memory-resident':
-      '<p>Number of messages in the queue which are held in memory. These messages may also be on disc (if they are persistent).</p><p>There may be a limit imposed in order to manage total memory use. If the number of memory-resident messages in the queue exceeds the limit some messages will be paged out.</p>',
+    'queue-messages':
+      '<p>The number of messages, messages in memory, and persistent messages.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p>',
 
-    'queue-persistent':
-      'Number of messages in the queue which are persistent. These messages will be on disc but may also be available in memory. Note that if a message is published as persistent but routed to a transient queue it is not considered persistent by that queue, so transient queues will always report 0 persistent messages.',
+    'queue-message-body-bytes':
+      '<p>The sum total of the sizes of the message bodies in this queue, for all messages, messages in memory, and persistent messages. This only counts message bodies; it does not include message properties (including headers) or metadata used by the queue.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p><p>If a message is routed to multiple queues on publication, its body will be stored only once (in memory and on disk) and shared between queues. The value shown here does not take account of this effect.</p>',
+
+    'queue-process-memory':
+      'Total memory used by this queue process. This does not include in-memory message bodies (which may be shared between queues and will appear in the global "binaries" memory) but does include everything else.',
 
     'queue-consumer-utilisation':
       'Fraction of the time that the queue is able to immediately deliver messages to consumers. If this number is less than 100% you may be able to deliver messages faster if: \

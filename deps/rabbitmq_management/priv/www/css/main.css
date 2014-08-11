@@ -114,6 +114,7 @@ small { font-size: 0.8em; color: #888; }
 table.facts { float: left; }
 table.facts th, table.legend th { color: black; text-align: right; border-right: 1px solid #ccc; }
 table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px; }
+table.facts th.horizontal { border-right: none; padding: 0 10px 5px 10px; }
 
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
