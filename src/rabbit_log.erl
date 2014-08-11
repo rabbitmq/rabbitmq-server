@@ -16,16 +16,7 @@
 
 -module(rabbit_log).
 
--behaviour(gen_server).
-
--export([start_link/0]).
-
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
-
 -export([log/3, log/4, info/1, info/2, warning/1, warning/2, error/1, error/2]).
-
--define(SERVER, ?MODULE).
 
 %%----------------------------------------------------------------------------
 
@@ -35,8 +26,6 @@
 
 -type(category() :: atom()).
 -type(level() :: 'info' | 'warning' | 'error').
-
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 
 -spec(log/3 :: (category(), level(), string()) -> 'ok').
 -spec(log/4 :: (category(), level(), string(), [any()]) -> 'ok').
@@ -51,33 +40,11 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
 log(Category, Level, Fmt, Args) when is_list(Args) ->
-    gen_server:cast(?SERVER, {log, Category, Level, Fmt, Args}).
-
-info(Fmt)          -> log(default, info,    Fmt).
-info(Fmt, Args)    -> log(default, info,    Fmt, Args).
-warning(Fmt)       -> log(default, warning, Fmt).
-warning(Fmt, Args) -> log(default, warning, Fmt, Args).
-error(Fmt)         -> log(default, error,   Fmt).
-error(Fmt, Args)   -> log(default, error,   Fmt, Args).
-
-%%--------------------------------------------------------------------
-
-init([]) ->
-    {ok, CatLevelList} = application:get_env(log_levels),
-    CatLevels = [{Cat, level(Level)} || {Cat, Level} <- CatLevelList],
-    {ok, orddict:from_list(CatLevels)}.
-
-handle_call(_Request, _From, State) ->
-    {noreply, State}.
-
-handle_cast({log, Category, Level, Fmt, Args}, CatLevels) ->
-    CatLevel = case orddict:find(Category, CatLevels) of
+    CatLevel = case orddict:find(Category, catlevels()) of
                    {ok, L} -> L;
                    error   -> level(info)
                end,
@@ -88,19 +55,18 @@ handle_cast({log, Category, Level, Fmt, Args}, CatLevels) ->
                       warning -> fun error_logger:warning_msg/2;
                       error   -> fun error_logger:error_msg/2
                   end)(Fmt, Args)
-    end,
-    {noreply, CatLevels};
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+    end.
 
-handle_info(_Info, State) ->
-    {noreply, State}.
+info(Fmt)          -> log(default, info,    Fmt).
+info(Fmt, Args)    -> log(default, info,    Fmt, Args).
+warning(Fmt)       -> log(default, warning, Fmt).
+warning(Fmt, Args) -> log(default, warning, Fmt, Args).
+error(Fmt)         -> log(default, error,   Fmt).
+error(Fmt, Args)   -> log(default, error,   Fmt, Args).
 
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+catlevels() ->
+    {ok, CatLevelList} = application:get_env(rabbit, log_levels),
+    orddict:from_list([{Cat, level(Level)} || {Cat, Level} <- CatLevelList]).
 
 %%--------------------------------------------------------------------
 

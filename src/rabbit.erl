@@ -74,13 +74,6 @@
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
--rabbit_boot_step({rabbit_log,
-                   [{description, "logging server"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
-                                   [rabbit_log]}},
-                    {requires,    external_infrastructure},
-                    {enables,     kernel_ready}]}).
-
 -rabbit_boot_step({rabbit_event,
                    [{description, "statistics event manager"},
                     {mfa,         {rabbit_sup, start_restartable_child,
