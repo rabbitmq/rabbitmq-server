@@ -639,7 +639,7 @@ ack([SeqId], State) ->
      State1 = #vqstate { index_state       = IndexState,
                          msg_store_clients = MSCState,
                          ack_out_counter   = AckOutCount }} =
-        remove_pending_ack(SeqId, State),
+        remove_pending_ack(true, SeqId, State),
     IndexState1 = case IndexOnDisk of
                       true  -> rabbit_queue_index:ack([SeqId], IndexState);
                       false -> IndexState
@@ -658,7 +658,7 @@ ack(AckTags, State) ->
                          ack_out_counter   = AckOutCount }} =
         lists:foldl(
           fun (SeqId, {Acc, State2}) ->
-                  {MsgStatus, State3} = remove_pending_ack(SeqId, State2),
+                  {MsgStatus, State3} = remove_pending_ack(true, SeqId, State2),
                   {accumulate_ack(MsgStatus, Acc), State3}
           end, {accumulate_ack_init(), State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(IndexOnDiskSeqIds, IndexState),
@@ -1278,14 +1278,14 @@ lookup_pending_ack(SeqId, #vqstate { ram_pending_ack  = RPA,
         none       -> gb_trees:get(SeqId, DPA)
     end.
 
-remove_pending_ack(SeqId, State) ->
+%% First parameter = UpdatePersistentCount
+remove_pending_ack(true, SeqId, State) ->
     {MsgStatus, State1 = #vqstate { persistent_count = PCount }} =
-        remove_pending_ack0(SeqId, State),
+        remove_pending_ack(false, SeqId, State),
     PCount1 = PCount - one_if(MsgStatus#msg_status.is_persistent),
-    {MsgStatus, State1 # vqstate{ persistent_count = PCount1 }}.
-
-remove_pending_ack0(SeqId, State = #vqstate { ram_pending_ack  = RPA,
-                                              disk_pending_ack = DPA }) ->
+    {MsgStatus, State1 # vqstate{ persistent_count = PCount1 }};
+remove_pending_ack(false, SeqId, State = #vqstate { ram_pending_ack  = RPA,
+                                                    disk_pending_ack = DPA }) ->
     case gb_trees:lookup(SeqId, RPA) of
         {value, V} -> RPA1 = gb_trees:delete(SeqId, RPA),
                       {V, State #vqstate { ram_pending_ack = RPA1 }};
@@ -1430,7 +1430,7 @@ delta_merge(SeqIds, Delta, MsgIds, State) ->
 %% Mostly opposite of record_pending_ack/2
 msg_from_pending_ack(SeqId, State) ->
     {#msg_status { msg_props = MsgProps } = MsgStatus, State1} =
-        remove_pending_ack0(SeqId, State),
+        remove_pending_ack(false, SeqId, State),
     {MsgStatus #msg_status {
        msg_props = MsgProps #message_properties { needs_confirming = false } },
      State1}.
