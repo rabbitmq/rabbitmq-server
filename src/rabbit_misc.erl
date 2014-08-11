@@ -92,9 +92,9 @@
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
 -type(graph_vertex_fun() ::
-        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
+        fun (({atom(), [term()]}) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
-        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
+        fun (({atom(), [term()]}) -> [{digraph:vertex(), digraph:vertex()}])).
 -type(tref() :: {'erlang', reference()} | {timer, timer:tref()}).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
