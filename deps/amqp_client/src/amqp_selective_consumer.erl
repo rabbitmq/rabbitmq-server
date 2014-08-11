@@ -221,9 +221,9 @@ deliver(Method, Message, State) ->
                   true                  -> {Method, Message}
                end,
     deliver_to_consumer_or_die(Method, Combined, State).
-deliver(Method, Message, ChPid, State) ->
+deliver(Method, Message, DeliveryCtx, State) ->
     Combined = if Message =:= undefined -> Method;
-                  true                  -> {Method, Message, ChPid}
+                  true                  -> {Method, Message, DeliveryCtx}
                end,
     deliver_to_consumer_or_die(Method, Combined, State).
 
