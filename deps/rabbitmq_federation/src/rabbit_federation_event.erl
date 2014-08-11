@@ -19,7 +19,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([add_handler/0]).
+-export([add_handler/0, remove_handler/0]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -30,6 +30,9 @@
 
 add_handler() ->
     gen_event:add_handler(rabbit_event, ?MODULE, []).
+
+remove_handler() ->
+    gen_event:delete_handler(rabbit_event, ?MODULE, []).
 
 init([]) ->
     {ok, []}.
