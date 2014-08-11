@@ -596,7 +596,12 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
     State1 = close_connection(terminate_channels(State)),
     ok = send_on_channel0(State1#v1.sock, CloseMethod, Protocol),
     State1;
+handle_exception(State = #v1{connection_state = starting}, Channel, Reason) ->
+    fail_handshake_after_delay(State, Channel, Reason);
 handle_exception(State = #v1{connection_state = tuning}, Channel, Reason) ->
+    fail_handshake_after_delay(State, Channel, Reason).
+
+fail_handshake_after_delay(State, Channel, Reason) ->
     %% We don't trust the client at this point - force them to wait
     %% for a bit so they can't DOS us with repeated failed logins etc.
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
