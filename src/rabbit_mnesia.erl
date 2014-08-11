@@ -116,7 +116,7 @@ init_from_config() ->
                                                  true  -> disc;
                                                  false -> ram
                                              end},
-                error_logger:warning_msg(
+                rabbit_log:warning(
                   "Converting legacy 'cluster_nodes' configuration~n    ~w~n"
                   "to~n    ~w.~n~n"
                   "Please update the configuration to the new format "
@@ -619,10 +619,10 @@ schema_ok_or_move() ->
         {error, Reason} ->
             %% NB: we cannot use rabbit_log here since it may not have been
             %% started yet
-            error_logger:warning_msg("schema integrity check failed: ~p~n"
-                                     "moving database to backup location "
-                                     "and recreating schema from scratch~n",
-                                     [Reason]),
+            rabbit_log:warning("schema integrity check failed: ~p~n"
+                               "moving database to backup location "
+                               "and recreating schema from scratch~n",
+                               [Reason]),
             ok = move_db(),
             ok = create_schema()
     end.
@@ -648,8 +648,8 @@ move_db() ->
         ok ->
             %% NB: we cannot use rabbit_log here since it may not have
             %% been started yet
-            error_logger:warning_msg("moved database from ~s to ~s~n",
-                                     [MnesiaDir, BackupDir]),
+            rabbit_log:warning("moved database from ~s to ~s~n",
+                               [MnesiaDir, BackupDir]),
             ok;
         {error, Reason} -> throw({error, {cannot_backup_mnesia,
                                           MnesiaDir, BackupDir, Reason}})
@@ -695,7 +695,7 @@ leave_cluster(Node) ->
     end.
 
 wait_for(Condition) ->
-    error_logger:info_msg("Waiting for ~p...~n", [Condition]),
+    rabbit_log:info("Waiting for ~p...~n", [Condition]),
     timer:sleep(1000).
 
 start_mnesia(CheckConsistency) ->

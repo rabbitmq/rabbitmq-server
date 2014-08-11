@@ -190,7 +190,7 @@ die(Msg, Args) ->
     %% We don't throw or exit here since that gets thrown
     %% straight out into do_boot, generating an erl_crash.dump
     %% and displaying any error message in a confusing way.
-    error_logger:error_msg(Msg, Args),
+    rabbit_log:error(Msg, Args),
     Str = rabbit_misc:format(
             "~n~n****~n~n" ++ Msg ++ "~n~n****~n~n~n", Args),
     io:format(Str),
@@ -281,6 +281,4 @@ node_type_legacy() ->
         false -> ram
     end.
 
-%% NB: we cannot use rabbit_log here since it may not have been
-%% started yet
-info(Msg, Args) -> error_logger:info_msg(Msg, Args).
+info(Msg, Args) -> rabbit_log:info(Msg, Args).
