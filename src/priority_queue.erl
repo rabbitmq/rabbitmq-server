@@ -139,7 +139,7 @@ out({queue, [V], [], 1}) ->
     {{value, V}, {queue, [], [], 0}};
 out({queue, [Y|In], [], Len}) ->
     [V|Out] = lists:reverse(In, []),
-    {{value, V}, {queue, [Y], Out}, Len - 1};
+    {{value, V}, {queue, [Y], Out, Len - 1}};
 out({queue, In, [V], Len}) when is_list(In) ->
     {{value,V}, r2f(In, Len - 1)};
 out({queue, In,[V|Out], Len}) when is_list(In) ->
