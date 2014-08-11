@@ -8,3 +8,4 @@
 ^tags$
 ^test/test_client
 ^test/src.*\.class$
+^debug/
