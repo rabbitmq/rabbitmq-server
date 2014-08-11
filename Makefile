@@ -127,7 +127,7 @@ plugins:
 # Not building plugins
 
 check-xref:
-	$(info xref checks are disabled)
+	$(info xref checks are disabled as there is no plugins-src directory)
 
 endif
 
