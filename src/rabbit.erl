@@ -74,13 +74,6 @@
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
--rabbit_boot_step({rabbit_log,
-                   [{description, "logging server"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
-                                   [rabbit_log]}},
-                    {requires,    external_infrastructure},
-                    {enables,     kernel_ready}]}).
-
 -rabbit_boot_step({rabbit_event,
                    [{description, "statistics event manager"},
                     {mfa,         {rabbit_sup, start_restartable_child,
@@ -266,7 +259,7 @@ maybe_hipe_compile() ->
 warn_if_hipe_compilation_failed(true) ->
     ok;
 warn_if_hipe_compilation_failed(false) ->
-    error_logger:warning_msg(
+    rabbit_log:warning(
       "Not HiPE compiling: HiPE not found in this Erlang installation.~n").
 
 %% HiPE compilation happens before we have log handlers and can take a
@@ -502,9 +495,9 @@ start(normal, []) ->
     case erts_version_check() of
         ok ->
             {ok, Vsn} = application:get_key(rabbit, vsn),
-            error_logger:info_msg("Starting RabbitMQ ~s on Erlang ~s~n~s~n~s~n",
-                                  [Vsn, erlang:system_info(otp_release),
-                                   ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
+            rabbit_log:info("Starting RabbitMQ ~s on Erlang ~s~n~s~n~s~n",
+                            [Vsn, erlang:system_info(otp_release),
+                             ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
             print_banner(),
@@ -773,7 +766,7 @@ log_broker_started(Plugins) ->
       fun() ->
               PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
                                              || P <- Plugins]),
-              error_logger:info_msg(
+              rabbit_log:info(
                 "Server startup complete; ~b plugins started.~n~s",
                 [length(Plugins), PluginList]),
               io:format(" completed with ~p plugins.~n", [length(Plugins)])
@@ -822,18 +815,18 @@ log_banner() ->
                     {K, V} ->
                         Format(K, V)
                 end || S <- Settings]),
-    error_logger:info_msg("~s", [Banner]).
+    rabbit_log:info("~s", [Banner]).
 
 warn_if_kernel_config_dubious() ->
     case erlang:system_info(kernel_poll) of
         true  -> ok;
-        false -> error_logger:warning_msg(
+        false -> rabbit_log:warning(
                    "Kernel poll (epoll, kqueue, etc) is disabled. Throughput "
                    "and CPU utilization may worsen.~n")
     end,
     AsyncThreads = erlang:system_info(thread_pool_size),
     case AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD of
-        true  -> error_logger:warning_msg(
+        true  -> rabbit_log:warning(
                    "Erlang VM is running with ~b I/O threads, "
                    "file I/O performance may worsen~n", [AsyncThreads]);
         false -> ok
@@ -843,9 +836,8 @@ warn_if_kernel_config_dubious() ->
                   {ok, Val} -> Val
               end,
     case proplists:get_value(nodelay, IDCOpts, false) of
-        false -> error_logger:warning_msg(
-                   "Nagle's algorithm is enabled for sockets, "
-                   "network I/O latency will be higher~n");
+        false -> rabbit_log:warning("Nagle's algorithm is enabled for sockets, "
+                                    "network I/O latency will be higher~n");
         true  -> ok
     end.
 
