@@ -582,7 +582,7 @@ over_max_length(#q{max_length          = MaxLen,
                    max_bytes           = MaxBytes,
                    backing_queue       = BQ,
                    backing_queue_state = BQS}) ->
-    BQ:len(BQS) > MaxLen orelse BQ:info(message_bytes, BQS) > MaxBytes.
+    BQ:len(BQS) > MaxLen orelse BQ:info(message_bytes_ready, BQS) > MaxBytes.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
                                     backing_queue_state = BQS}) ->
