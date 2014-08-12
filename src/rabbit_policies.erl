@@ -35,7 +35,7 @@ register() ->
                           {policy_validator, <<"message-ttl">>},
                           {policy_validator, <<"expires">>},
                           {policy_validator, <<"max-length">>},
-                          {policy_validator, <<"max-bytes">>}]],
+                          {policy_validator, <<"max-length-bytes">>}]],
     ok.
 
 validate_policy(Terms) ->
@@ -79,9 +79,8 @@ validate_policy0(<<"max-length">>, Value)
 validate_policy0(<<"max-length">>, Value) ->
     {error, "~p is not a valid maximum length", [Value]};
 
-validate_policy0(<<"max-bytes">>, Value)
+validate_policy0(<<"max-length-bytes">>, Value)
   when is_integer(Value), Value >= 0 ->
     ok;
-validate_policy0(<<"max-bytes">>, Value) ->
-    {error, "~p is not a valid maximum number of bytes", [Value]}.
-
+validate_policy0(<<"max-length-bytes">>, Value) ->
+    {error, "~p is not a valid maximum length in bytes", [Value]}.
