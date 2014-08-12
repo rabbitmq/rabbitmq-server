@@ -44,11 +44,7 @@
 log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
 log(Category, Level, Fmt, Args) when is_list(Args) ->
-    CatLevel = case orddict:find(Category, catlevels()) of
-                   {ok, L} -> L;
-                   error   -> level(info)
-               end,
-    case level(Level) =< CatLevel of
+    case level(Level) =< catlevel(Category) of
         false -> ok;
         true  -> (case Level of
                       info    -> fun error_logger:info_msg/2;
@@ -64,9 +60,9 @@ warning(Fmt, Args) -> log(default, warning, Fmt, Args).
 error(Fmt)         -> log(default, error,   Fmt).
 error(Fmt, Args)   -> log(default, error,   Fmt, Args).
 
-catlevels() ->
+catlevel(Category) ->
     {ok, CatLevelList} = application:get_env(rabbit, log_levels),
-    orddict:from_list([{Cat, level(Level)} || {Cat, Level} <- CatLevelList]).
+    level(proplists:get_value(Category, CatLevelList, info)).
 
 %%--------------------------------------------------------------------
 
