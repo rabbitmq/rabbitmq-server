@@ -191,9 +191,7 @@ HELP = {
         <dd>Number of messages for which the server is waiting for acknowledgement.</dd>\
         <dt>Total</dt>\
         <dd>The total of these two numbers.</dd>\
-      </dl>\
-    Note that the rate of change of total queued messages does \
-    <b>not</b> include messages removed due to queue deletion.',
+      </dl>',
 
     'message-rates':
     'Only rates for which some activity is taking place will be shown.\
