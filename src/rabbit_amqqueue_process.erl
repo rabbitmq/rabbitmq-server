@@ -84,6 +84,7 @@
          memory,
          slave_pids,
          synchronised_slave_pids,
+         down_slave_nodes,
          backing_queue_status,
          state
         ]).
@@ -102,7 +103,8 @@
 
 start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
 
-info_keys() -> ?INFO_KEYS.
+info_keys()       -> ?INFO_KEYS       ++ rabbit_backing_queue:info_keys().
+statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 
 %%----------------------------------------------------------------------------
 
@@ -385,15 +387,13 @@ ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref       = undefined,
                  V when V > 0 -> V + 999; %% always fire later
                  _            -> 0
              end) div 1000,
-    TRef = erlang:send_after(After, self(), {drop_expired, Version}),
+    TRef = rabbit_misc:send_after(After, self(), {drop_expired, Version}),
     State#q{ttl_timer_ref = TRef, ttl_timer_expiry = Expiry};
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
                                     ttl_timer_expiry = TExpiry})
   when Expiry + 1000 < TExpiry ->
-    case erlang:cancel_timer(TRef) of
-        false -> State;
-        _     -> ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined})
-    end;
+    rabbit_misc:cancel_timer(TRef),
+    ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined});
 ensure_ttl_timer(_Expiry, State) ->
     State.
 
@@ -664,9 +664,12 @@ subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
                                    run_message_queue(true, Fun(State1))
     end.
 
-message_properties(Message, Confirm, #q{ttl = TTL}) ->
+message_properties(Message = #basic_message{content = Content},
+                   Confirm, #q{ttl = TTL}) ->
+    #content{payload_fragments_rev = PFR} = Content,
     #message_properties{expiry           = calculate_msg_expiry(Message, TTL),
-                        needs_confirming = Confirm == eventually}.
+                        needs_confirming = Confirm == eventually,
+                        size             = iolist_size(PFR)}.
 
 calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
     #content{properties = Props} =
@@ -810,19 +813,25 @@ i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
         false -> '';
         true  -> SSPids
     end;
+i(down_slave_nodes, #q{q = #amqqueue{name    = Name,
+                                     durable = Durable}}) ->
+    {ok, Q = #amqqueue{down_slave_nodes = Nodes}} =
+        rabbit_amqqueue:lookup(Name),
+    case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false -> '';
+        true  -> Nodes
+    end;
 i(state, #q{status = running}) -> credit_flow:state();
 i(state, #q{status = State})   -> State;
-i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
-    BQ:status(BQS);
-i(Item, _) ->
-    throw({bad_argument, Item}).
+i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
+    BQ:info(Item, BQS).
 
 emit_stats(State) ->
     emit_stats(State, []).
 
 emit_stats(State, Extra) ->
     ExtraKs = [K || {K, _} <- Extra],
-    Infos = [{K, V} || {K, V} <- infos(?STATISTICS_KEYS, State),
+    Infos = [{K, V} || {K, V} <- infos(statistics_keys(), State),
                        not lists:member(K, ExtraKs)],
     rabbit_event:notify(queue_stats, Extra ++ Infos).
 
@@ -922,7 +931,7 @@ handle_call({init, Recover}, From,
     end;
 
 handle_call(info, _From, State) ->
-    reply(infos(?INFO_KEYS, State), State);
+    reply(infos(info_keys(), State), State);
 
 handle_call({info, Items}, _From, State) ->
     try
@@ -1165,7 +1174,7 @@ handle_cast({force_event_refresh, Ref},
                       emit_consumer_created(
                         Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref)
     end,
-    noreply(State);
+    noreply(rabbit_event:init_stats_timer(State, #q.stats_timer));
 
 handle_cast(notify_decorators, State) ->
     notify_decorators(State),

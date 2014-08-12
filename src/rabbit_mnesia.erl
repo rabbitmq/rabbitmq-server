@@ -23,6 +23,7 @@
          update_cluster_nodes/1,
          change_cluster_node_type/1,
          forget_cluster_node/2,
+         force_load_next_boot/0,
 
          status/0,
          is_clustered/0,
@@ -63,6 +64,7 @@
 -spec(update_cluster_nodes/1 :: (node()) -> 'ok').
 -spec(change_cluster_node_type/1 :: (node_type()) -> 'ok').
 -spec(forget_cluster_node/2 :: (node(), boolean()) -> 'ok').
+-spec(force_load_next_boot/0 :: () -> 'ok').
 
 %% Various queries to get the status of the db
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
@@ -302,7 +304,6 @@ remove_node_offline_node(Node) ->
         {_, _} ->
             e(removing_node_from_offline_node)
     end.
-
 
 %%----------------------------------------------------------------------------
 %% Queries
