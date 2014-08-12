@@ -18,6 +18,7 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-message-ttl':             {'short': 'TTL', 'type': 'int'},
                   'x-expires':                 {'short': 'Exp', 'type': 'int'},
                   'x-max-length':              {'short': 'Lim', 'type': 'int'},
+                  'x-max-length-bytes':        {'short': 'Lim B', 'type': 'int'},
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
                   'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'}};
 
