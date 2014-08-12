@@ -461,7 +461,8 @@ declare_args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
-     {<<"x-max-length">>,              fun check_non_neg_int_arg/2}].
+     {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
+     {<<"x-max-bytes">>,               fun check_non_neg_int_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].

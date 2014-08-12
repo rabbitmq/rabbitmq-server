@@ -34,7 +34,8 @@ register() ->
                           {policy_validator, <<"dead-letter-routing-key">>},
                           {policy_validator, <<"message-ttl">>},
                           {policy_validator, <<"expires">>},
-                          {policy_validator, <<"max-length">>}]],
+                          {policy_validator, <<"max-length">>},
+                          {policy_validator, <<"max-bytes">>}]],
     ok.
 
 validate_policy(Terms) ->
@@ -76,6 +77,11 @@ validate_policy0(<<"max-length">>, Value)
   when is_integer(Value), Value >= 0 ->
     ok;
 validate_policy0(<<"max-length">>, Value) ->
-    {error, "~p is not a valid maximum length", [Value]}.
+    {error, "~p is not a valid maximum length", [Value]};
 
+validate_policy0(<<"max-bytes">>, Value)
+  when is_integer(Value), Value >= 0 ->
+    ok;
+validate_policy0(<<"max-bytes">>, Value) ->
+    {error, "~p is not a valid maximum number of bytes", [Value]}.
 
