@@ -1211,11 +1211,11 @@
               </varlistentry>
               <varlistentry>
                 <term>message_bytes_ready</term>
-                <listitem><para>Sum of the size of all message bodies in the queue ready to be delivered to clients.</para></listitem>
+                <listitem><para>Like <command>message_bytes</command> but counting only those messages ready to be delivered to clients.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>message_bytes_unacknowledged</term>
-                <listitem><para>Sum of the size of all message bodies in the queue delivered to clients but not yet acknowledged.</para></listitem>
+                <listitem><para>Like <command>message_bytes</command> but counting only those messages delivered to clients but not yet acknowledged.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>message_bytes_ram</term>
