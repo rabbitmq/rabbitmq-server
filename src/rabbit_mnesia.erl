@@ -796,25 +796,21 @@ is_virgin_node() ->
 find_auto_cluster_node([]) ->
     none;
 find_auto_cluster_node([Node | Nodes]) ->
+    Fail = fun (Fmt, Args) ->
+                   rabbit_log:warning(
+                     "Could not auto-cluster with ~s: " ++ Fmt, [Node | Args]),
+                   find_auto_cluster_node(Nodes)
+           end,
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
-        {badrpc, _} = Reason ->
-            rabbit_log:warning("Could not auto-cluster with ~s: ~p~n~s~n",
-                               [Node, Reason,rabbit_nodes:diagnostics([Node])]),
-            find_auto_cluster_node(Nodes);
+        {badrpc, _} = Reason     -> Diag = rabbit_nodes:diagnostics([Node]),
+                                    Fail("~p~n~s~n", [Reason, Diag]);
         %% old delegate hash check
-        {_OTP, Rabbit, _Hash, _} ->
-            rabbit_log:warning(
-              "Could not auto-cluster with ~s version ~s~n",
-              [Node, Rabbit]),
-            find_auto_cluster_node(Nodes);
-        {OTP, Rabbit, _} ->
-            case check_consistency(OTP, Rabbit) of
-                {error, _} -> rabbit_log:warning(
-                                "Could not auto-cluster with ~s versions ~p~n",
-                                [Node, {OTP, Rabbit}]),
-                              find_auto_cluster_node(Nodes);
-                ok         -> {ok, Node}
-            end
+        {_OTP, Rabbit, _Hash, _} -> Fail("version ~s~n", [Rabbit]);
+        {OTP, Rabbit, _}         -> case check_consistency(OTP, Rabbit) of
+                                        {error, _} -> Fail("versions ~p~n",
+                                                           [{OTP, Rabbit}]);
+                                        ok         -> {ok, Node}
+                                    end
     end.
 
 is_only_clustered_disc_node() ->
