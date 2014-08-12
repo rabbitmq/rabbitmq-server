@@ -360,7 +360,7 @@ stop() ->
         undefined -> ok;
         _         -> await_startup(true)
     end,
-    rabbit_log:info("Stopping RabbitMQ~n"),
+    rabbit_misc:local_info_msg("Stopping RabbitMQ~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
     stop_apps(app_utils:app_dependency_order(Apps, true)).
 
