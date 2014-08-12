@@ -133,15 +133,16 @@ init_from_config() ->
     end.
 
 auto_cluster(TryNodes, NodeType) ->
-    case find_good_node(nodes_excl_me(TryNodes)) of
+    case find_auto_cluster_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
             rabbit_log:info("Node '~p' selected for auto-clustering~n", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
-            rabbit_log:warning("Could not find any node for auto-clustering "
-                               "from: ~p~n", [TryNodes]),
+            rabbit_log:warning(
+              "Could not find any node for auto-clustering from: ~p~n"
+              "Starting blank node...~n", [TryNodes]),
             init_db_and_upgrade([node()], disc, false)
     end.
 
@@ -792,17 +793,28 @@ is_virgin_node() ->
             false
     end.
 
-find_good_node([]) ->
+find_auto_cluster_node([]) ->
     none;
-find_good_node([Node | Nodes]) ->
+find_auto_cluster_node([Node | Nodes]) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
-        {badrpc, _Reason}         -> find_good_node(Nodes);
+        {badrpc, _} = Reason ->
+            rabbit_log:warning("Could not auto-cluster with ~s: ~p~n~s~n",
+                               [Node, Reason,rabbit_nodes:diagnostics([Node])]),
+            find_auto_cluster_node(Nodes);
         %% old delegate hash check
-        {_OTP, _Rabbit, _Hash, _} -> find_good_node(Nodes);
-        {OTP, Rabbit, _}          -> case check_consistency(OTP, Rabbit) of
-                                         {error, _} -> find_good_node(Nodes);
-                                         ok         -> {ok, Node}
-                                     end
+        {_OTP, Rabbit, _Hash, _} ->
+            rabbit_log:warning(
+              "Could not auto-cluster with ~s version ~s~n",
+              [Node, Rabbit]),
+            find_auto_cluster_node(Nodes);
+        {OTP, Rabbit, _} ->
+            case check_consistency(OTP, Rabbit) of
+                {error, _} -> rabbit_log:warning(
+                                "Could not auto-cluster with ~s versions ~p~n",
+                                [Node, {OTP, Rabbit}]),
+                              find_auto_cluster_node(Nodes);
+                ok         -> {ok, Node}
+            end
     end.
 
 is_only_clustered_disc_node() ->
