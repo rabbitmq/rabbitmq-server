@@ -20,8 +20,9 @@
 
 -define(INFO_KEYS, [messages_ram, messages_ready_ram,
                     messages_unacknowledged_ram, messages_persistent,
-                    message_bytes, message_bytes_ram, message_bytes_persistent,
-                    backing_queue_status]).
+                    message_bytes, message_bytes_ready,
+                    message_bytes_unacknowledged, message_bytes_ram,
+                    message_bytes_persistent, backing_queue_status]).
 
 -ifdef(use_specs).
 
