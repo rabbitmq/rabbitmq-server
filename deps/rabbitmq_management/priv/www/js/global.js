@@ -29,8 +29,8 @@ var IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
 
 // Both the above
 var ALL_ARGS = {};
-for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
 for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
+for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
 
 var NAVIGATION = {'Overview':    ['#/',            "management"],
                   'Connections': ['#/connections', "management"],

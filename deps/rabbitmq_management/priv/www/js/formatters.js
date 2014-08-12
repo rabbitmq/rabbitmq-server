@@ -82,23 +82,32 @@ function fmt_millis(millis) {
     return Math.round(millis / 1000) + "s";
 }
 
-function fmt_parameters(obj) {
-    return fmt_table_short(args_to_params(obj));
+function fmt_features(obj) {
+    return fmt_table_short(args_to_features(obj));
 }
 
-function fmt_parameters_short(obj) {
+function fmt_policy_short(obj) {
+    if (obj.policy != undefined && obj.policy != '') {
+        return '<acronym class="policy" title="Policy: ' + obj.policy +
+            '">' + obj.policy + '</acronym> ';
+    } else {
+        return '';
+    }
+}
+
+function fmt_features_short(obj) {
     var res = '';
-    var params = args_to_params(obj);
+    var features = args_to_features(obj);
 
     for (var k in ALL_ARGS) {
-        if (params[k] != undefined) {
-            res += '<acronym title="' + k + ': ' + fmt_string(params[k]) +
+        if (features[k] != undefined) {
+            res += '<acronym title="' + k + ': ' + fmt_string(features[k]) +
                 '">' + ALL_ARGS[k].short + '</acronym> ';
         }
     }
 
-    if (params.arguments) {
-        res += '<acronym title="' + fmt_table_flat(params.arguments) +
+    if (features.arguments) {
+        res += '<acronym title="' + fmt_table_flat(features.arguments) +
         '">Args</acronym>';
     }
     return res;
@@ -116,7 +125,7 @@ function short_chan(name) {
     return (match != null && match.length == 3) ? match[1] + match[2] : name;
 }
 
-function args_to_params(obj) {
+function args_to_features(obj) {
     var res = {};
     for (var k in obj.arguments) {
         if (k in KNOWN_ARGS) {
@@ -505,7 +514,7 @@ function fmt_node(node_host) {
     var both = node_host.split('@');
     var node = both.slice(0, 1);
     var host = both.slice(1);
-    return '<small>' + node + '@</small>' + host;
+    return node == 'rabbit' ? host : ('<small>' + node + '@</small>' + host);
 }
 
 function fmt_object_state(obj) {

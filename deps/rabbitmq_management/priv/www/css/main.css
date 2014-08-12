@@ -244,6 +244,9 @@ h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px
 
 acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -moz-border-radius: 2px; border: none; cursor: default; }
 
+acronym.policy { background: none; border: 2px solid #add; padding: 0 2px; }
+table.list td acronym a { display: inline; width: auto; }
+
 acronym.warning { background: #daa; }
 
 .status-red acronym, .status-yellow acronym, .status-green acronym, .status-grey acronym, small acronym, acronym.normal { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }

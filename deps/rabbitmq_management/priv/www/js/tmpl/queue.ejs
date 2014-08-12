@@ -12,43 +12,25 @@
     <h3>Details</h3>
     <table class="facts facts-l">
       <tr>
-        <th>Parameters</th>
-        <td><%= fmt_parameters(queue) %></td>
+        <th>Features</th>
+        <td><%= fmt_features(queue) %></td>
       </tr>
       <tr>
         <th>Policy</th>
         <td><%= fmt_string(queue.policy, '') %></td>
       </tr>
+      <% if (queue.owner_pid_details != undefined) { %>
       <tr>
         <th>Exclusive owner</th>
-        <td>
-          <% if (queue.owner_pid_details == undefined) { %>
-            None
-          <% } else { %>
-            <%= link_conn(queue.owner_pid_details.name) %>
-          <% } %>
-        </td>
+        <td><%= link_conn(queue.owner_pid_details.name) %></td>
       </tr>
-    </table>
-
-    <table class="facts facts-l">
-      <tr>
-        <th>State</th>
-        <td><%= fmt_object_state(queue) %></td>
-      </tr>
-      <tr>
-        <th>Consumers</th>
-        <td><%= fmt_string(queue.consumers) %></td>
-      </tr>
-      <tr>
-        <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
-        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
-      </tr>
+<% } %>
 <% if (nodes_interesting) { %>
       <tr>
         <th>Node</th>
         <td><%= fmt_node(queue.node) %></td>
       </tr>
+  <% if (queue.owner_pid_details == undefined) { %>
       <tr>
         <th>Slaves</th>
         <td>
@@ -93,7 +75,23 @@
           <% } %>
         </td>
       </tr>
+  <% } %>
 <% } %>
+    </table>
+
+    <table class="facts facts-l">
+      <tr>
+        <th>State</th>
+        <td><%= fmt_object_state(queue) %></td>
+      </tr>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumers) %></td>
+      </tr>
+      <tr>
+        <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
+        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
+      </tr>
     </table>
 
     <table class="facts">
