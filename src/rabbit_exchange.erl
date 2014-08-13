@@ -347,10 +347,18 @@ route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
     case {RName, rabbit_exchange_decorator:select(route, Decorators)} of
         {<<"">>, []} ->
             %% Optimisation
-            [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
+            %% TODO what if there are decorators? Is that even a sane case?
+            RKsSorted = lists:usort(RKs),
+            [rabbit_channel:deliver_fast_reply(RK, Delivery) ||
+                RK <- RKsSorted, fast_reply(RK)],
+            [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted,
+                                                not fast_reply(RK)];
         {_, SelectedDecorators} ->
             lists:usort(route1(Delivery, SelectedDecorators, {[X], XName, []}))
     end.
+
+fast_reply(<<"amq.consumer.", _/binary>>) -> true;
+fast_reply(_)                             -> false.
 
 route1(_, _, {[], _, QNames}) ->
     QNames;
