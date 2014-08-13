@@ -61,7 +61,7 @@ read(DirBaseName) ->
     end.
 
 clear() ->
-    dets:delete_all_objects(?MODULE),
+    ok = dets:delete_all_objects(?MODULE),
     flush().
 
 start_link() -> gen_server:start_link(?MODULE, [], []).
@@ -131,9 +131,8 @@ open_table() ->
                                        {ram_file,  true},
                                        {auto_save, infinity}]).
 
-flush() -> dets:sync(?MODULE).
+flush() -> ok = dets:sync(?MODULE).
 
 close_table() ->
     ok = flush(),
     ok = dets:close(?MODULE).
-
