@@ -485,12 +485,10 @@ handle_info({send_command_and_notify, QPid, ChPid,
              Method = #'basic.deliver'{}, Content},
             State = #state{delivery_flow_control = MFC}) ->
     case MFC of
-        false ->
-            handle_method_from_server(Method, Content, State),
-            rabbit_amqqueue:notify_sent(QPid, ChPid);
-        true  ->
-            handle_method_from_server(Method, Content,
-                                      {self(), QPid, ChPid}, State)
+        false -> handle_method_from_server(Method, Content, State),
+                 rabbit_amqqueue:notify_sent(QPid, ChPid);
+        true  -> handle_method_from_server(Method, Content,
+                                           {self(), QPid, ChPid}, State)
     end,
     {noreply, State};
 %% This comes from the writer or rabbit_channel
@@ -976,8 +974,7 @@ handle_wait_for_confirms(From, Timeout,
 call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
     amqp_gen_consumer:call_consumer(Consumer, Method, Args).
 
-call_to_consumer(Method, Args, DeliveryCtx,
-                 #state{consumer = Consumer}) ->
+call_to_consumer(Method, Args, DeliveryCtx, #state{consumer = Consumer}) ->
     amqp_gen_consumer:call_consumer(Consumer, Method, Args, DeliveryCtx).
 
 safe_cancel_timer(undefined) -> ok;
