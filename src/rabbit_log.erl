@@ -61,7 +61,12 @@ error(Fmt)         -> log(default, error,   Fmt).
 error(Fmt, Args)   -> log(default, error,   Fmt, Args).
 
 catlevel(Category) ->
-    {ok, CatLevelList} = application:get_env(rabbit, log_levels),
+    %% We can get here as part of rabbitmqctl when it is impersonating
+    %% a node; in which case the env will not be defined.
+    CatLevelList = case application:get_env(rabbit, log_levels) of
+                       {ok, L}   -> L;
+                       undefined -> []
+                   end,
     level(proplists:get_value(Category, CatLevelList, info)).
 
 %%--------------------------------------------------------------------
