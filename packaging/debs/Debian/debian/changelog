@@ -1,3 +1,10 @@
+rabbitmq-server (3.3.5-1) unstable; urgency=low
+
+  * New Upstream Release
+  * Changed Uploaders from Emile Joubert to Blair Hester
+
+ -- Simon MacMullen <simon@rabbitmq.com>  Mon, 11 Aug 2014 12:23:31 +0100
+
 rabbitmq-server (3.3.4-1) unstable; urgency=low
 
   * New Upstream Release

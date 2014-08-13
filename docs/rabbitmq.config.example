@@ -49,6 +49,14 @@
    %% ==============
    %%
 
+   %% The default "guest" user is only permitted to access the server
+   %% via a loopback interface (e.g. localhost).
+   %% {loopback_users, [<<"guest">>]},
+   %%
+   %% Uncomment the following line if you want to allow access to the
+   %% guest user from anywhere on the network.
+   %% {loopback_users, []},
+
    %% Configuring SSL.
    %% See http://www.rabbitmq.com/ssl.html for full documentation.
    %%

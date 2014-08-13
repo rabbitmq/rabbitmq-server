@@ -16,29 +16,37 @@
 
 -module(rabbit_diagnostics).
 
--export([maybe_stuck_processes/1]).
+-define(PROCESS_INFO,
+        [current_stacktrace, initial_call, dictionary, message_queue_len,
+         links, monitors, monitored_by, heap_size]).
 
-maybe_stuck_processes(Timeout) ->
+-export([maybe_stuck/0, maybe_stuck/1]).
+
+maybe_stuck() -> maybe_stuck(5000).
+
+maybe_stuck(Timeout) ->
     Pids = processes(),
     io:format("There are ~p processes.~n", [length(Pids)]),
-    maybe_stuck_processes(Pids, Timeout).
+    maybe_stuck(Pids, Timeout).
 
-maybe_stuck_processes(Pids, Timeout) when Timeout =< 0 ->
+maybe_stuck(Pids, Timeout) when Timeout =< 0 ->
     io:format("Found ~p suspicious processes.~n", [length(Pids)]),
-    [io:format("~p~n", [{Pid, erlang:process_info(Pid),
-                         erlang:process_info(Pid, current_stacktrace)}])
-     || Pid <- Pids],
+    [io:format("~p~n", [info(Pid)]) || Pid <- Pids],
     ok;
-maybe_stuck_processes(Pids, Timeout) ->
+maybe_stuck(Pids, Timeout) ->
     Pids2 = [P || P  <- Pids, looks_stuck(P)],
     io:format("Investigated ~p processes this round, ~pms to go.~n",
               [length(Pids2), Timeout]),
-    timer:sleep(100),
-    maybe_stuck_processes(Pids2, Timeout - 100).
+    timer:sleep(500),
+    maybe_stuck(Pids2, Timeout - 500).
 
 looks_stuck(Pid) ->
     case process_info(Pid, status) of
         {status, waiting} ->
+            %% It's tempting to just check for message_queue_len > 0
+            %% here rather than mess around with stack traces and
+            %% heuristics. But really, sometimes freshly stuck
+            %% processes can have 0 messages...
             case erlang:process_info(Pid, current_stacktrace) of
                 {current_stacktrace, [H|_]} ->
                     maybe_stuck_stacktrace(H);
@@ -66,3 +74,6 @@ maybe_stuck_stacktrace({_M, F, _A}) ->
         0 -> true;
         _ -> false
     end.
+
+info(Pid) ->
+    [{pid, Pid} | process_info(Pid, ?PROCESS_INFO)].

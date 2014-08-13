@@ -271,8 +271,8 @@ handle_cast({sync_start, Ref, Syncer},
            DD, Ref, TRef, Syncer, BQ, BQS,
            fun (BQN, BQSN) ->
                    BQSN1 = update_ram_duration(BQN, BQSN),
-                   TRefN = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
-                                             self(), update_ram_duration),
+                   TRefN = rabbit_misc:send_after(?RAM_DURATION_UPDATE_INTERVAL,
+                                                  self(), update_ram_duration),
                    {TRefN, BQSN1}
            end) of
         denied              -> noreply(State1);

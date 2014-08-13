@@ -208,7 +208,7 @@ tcp_listener_addresses({Host, Port, Family0})
     [{IPAddress, Port, Family} ||
         {IPAddress, Family} <- getaddr(Host, Family0)];
 tcp_listener_addresses({_Host, Port, _Family0}) ->
-    error_logger:error_msg("invalid port ~p - not 0..65535~n", [Port]),
+    rabbit_log:error("invalid port ~p - not 0..65535~n", [Port]),
     throw({error, {invalid_port, Port}}).
 
 tcp_listener_addresses_auto(Port) ->
@@ -395,7 +395,7 @@ gethostaddr(Host, Family) ->
     end.
 
 host_lookup_error(Host, Reason) ->
-    error_logger:error_msg("invalid host ~p - ~p~n", [Host, Reason]),
+    rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).
 
 resolve_family({_,_,_,_},         auto) -> inet;

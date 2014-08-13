@@ -92,9 +92,9 @@
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
 -type(graph_vertex_fun() ::
-        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
+        fun (({atom(), [term()]}) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
-        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
+        fun (({atom(), [term()]}) -> [{digraph:vertex(), digraph:vertex()}])).
 -type(tref() :: {'erlang', reference()} | {timer, timer:tref()}).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
@@ -656,10 +656,10 @@ with_local_io(Fun) ->
     end.
 
 %% Log an info message on the local node using the standard logger.
-%% Use this if rabbit isn't running and the call didn't originate on
-%% the local node (e.g. rabbitmqctl calls).
+%% Use this if the call didn't originate on the local node (e.g.
+%% rabbitmqctl calls).
 local_info_msg(Format, Args) ->
-    with_local_io(fun () -> error_logger:info_msg(Format, Args) end).
+    with_local_io(fun () -> rabbit_log:info(Format, Args) end).
 
 unfold(Fun, Init) ->
     unfold(Fun, [], Init).

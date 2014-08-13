@@ -97,7 +97,7 @@ list(PluginsDir) ->
                     [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
     case Problems of
         [] -> ok;
-        _  -> error_logger:warning_msg(
+        _  -> rabbit_log:warning(
                 "Problem reading some plugins: ~p~n", [Problems])
     end,
     ensure_dependencies(Plugins).

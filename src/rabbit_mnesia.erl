@@ -116,7 +116,7 @@ init_from_config() ->
                                                  true  -> disc;
                                                  false -> ram
                                              end},
-                error_logger:warning_msg(
+                rabbit_log:warning(
                   "Converting legacy 'cluster_nodes' configuration~n    ~w~n"
                   "to~n    ~w.~n~n"
                   "Please update the configuration to the new format "
@@ -127,17 +127,22 @@ init_from_config() ->
             {ok, Config} ->
                 Config
         end,
-    case find_good_node(nodes_excl_me(TryNodes)) of
+    case TryNodes of
+        [] -> init_db_and_upgrade([node()], disc, false);
+        _  -> auto_cluster(TryNodes, NodeType)
+    end.
+
+auto_cluster(TryNodes, NodeType) ->
+    case find_auto_cluster_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
-            rabbit_log:info("Node '~p' selected for clustering from "
-                            "configuration~n", [Node]),
+            rabbit_log:info("Node '~p' selected for auto-clustering~n", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
-            rabbit_log:warning("Could not find any suitable node amongst the "
-                               "ones provided in the configuration: ~p~n",
-                               [TryNodes]),
+            rabbit_log:warning(
+              "Could not find any node for auto-clustering from: ~p~n"
+              "Starting blank node...~n", [TryNodes]),
             init_db_and_upgrade([node()], disc, false)
     end.
 
@@ -619,10 +624,10 @@ schema_ok_or_move() ->
         {error, Reason} ->
             %% NB: we cannot use rabbit_log here since it may not have been
             %% started yet
-            error_logger:warning_msg("schema integrity check failed: ~p~n"
-                                     "moving database to backup location "
-                                     "and recreating schema from scratch~n",
-                                     [Reason]),
+            rabbit_log:warning("schema integrity check failed: ~p~n"
+                               "moving database to backup location "
+                               "and recreating schema from scratch~n",
+                               [Reason]),
             ok = move_db(),
             ok = create_schema()
     end.
@@ -648,8 +653,8 @@ move_db() ->
         ok ->
             %% NB: we cannot use rabbit_log here since it may not have
             %% been started yet
-            error_logger:warning_msg("moved database from ~s to ~s~n",
-                                     [MnesiaDir, BackupDir]),
+            rabbit_log:warning("moved database from ~s to ~s~n",
+                               [MnesiaDir, BackupDir]),
             ok;
         {error, Reason} -> throw({error, {cannot_backup_mnesia,
                                           MnesiaDir, BackupDir, Reason}})
@@ -695,7 +700,7 @@ leave_cluster(Node) ->
     end.
 
 wait_for(Condition) ->
-    error_logger:info_msg("Waiting for ~p...~n", [Condition]),
+    rabbit_log:info("Waiting for ~p...~n", [Condition]),
     timer:sleep(1000).
 
 start_mnesia(CheckConsistency) ->
@@ -788,17 +793,24 @@ is_virgin_node() ->
             false
     end.
 
-find_good_node([]) ->
+find_auto_cluster_node([]) ->
     none;
-find_good_node([Node | Nodes]) ->
+find_auto_cluster_node([Node | Nodes]) ->
+    Fail = fun (Fmt, Args) ->
+                   rabbit_log:warning(
+                     "Could not auto-cluster with ~s: " ++ Fmt, [Node | Args]),
+                   find_auto_cluster_node(Nodes)
+           end,
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
-        {badrpc, _Reason}         -> find_good_node(Nodes);
+        {badrpc, _} = Reason     -> Diag = rabbit_nodes:diagnostics([Node]),
+                                    Fail("~p~n~s~n", [Reason, Diag]);
         %% old delegate hash check
-        {_OTP, _Rabbit, _Hash, _} -> find_good_node(Nodes);
-        {OTP, Rabbit, _}          -> case check_consistency(OTP, Rabbit) of
-                                         {error, _} -> find_good_node(Nodes);
-                                         ok         -> {ok, Node}
-                                     end
+        {_OTP, Rabbit, _Hash, _} -> Fail("version ~s~n", [Rabbit]);
+        {OTP, Rabbit, _}         -> case check_consistency(OTP, Rabbit) of
+                                        {error, _} -> Fail("versions ~p~n",
+                                                           [{OTP, Rabbit}]);
+                                        ok         -> {ok, Node}
+                                    end
     end.
 
 is_only_clustered_disc_node() ->

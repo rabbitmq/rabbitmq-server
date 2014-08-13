@@ -23,11 +23,14 @@
 
 -export([start/0, stop/0, store/2, read/1, clear/0]).
 
--export([upgrade_recovery_terms/0, start_link/0]).
+-export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-export([upgrade_recovery_terms/0, persistent_bytes/0]).
+
 -rabbit_upgrade({upgrade_recovery_terms, local, []}).
+-rabbit_upgrade({persistent_bytes, local, [upgrade_recovery_terms]}).
 
 %%----------------------------------------------------------------------------
 
@@ -58,8 +61,10 @@ read(DirBaseName) ->
     end.
 
 clear() ->
-    dets:delete_all_objects(?MODULE),
+    ok = dets:delete_all_objects(?MODULE),
     flush().
+
+start_link() -> gen_server:start_link(?MODULE, [], []).
 
 %%----------------------------------------------------------------------------
 
@@ -84,7 +89,20 @@ upgrade_recovery_terms() ->
         close_table()
     end.
 
-start_link() -> gen_server:start_link(?MODULE, [], []).
+persistent_bytes()      -> dets_upgrade(fun persistent_bytes/1).
+persistent_bytes(Props) -> Props ++ [{persistent_bytes, 0}].
+
+dets_upgrade(Fun)->
+    open_table(),
+    try
+        ok = dets:foldl(fun ({DirBaseName, Terms}, Acc) ->
+                                store(DirBaseName, Fun(Terms)),
+                                Acc
+                        end, ok, ?MODULE),
+        ok
+    after
+        close_table()
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -113,9 +131,8 @@ open_table() ->
                                        {ram_file,  true},
                                        {auto_save, infinity}]).
 
-flush() -> dets:sync(?MODULE).
+flush() -> ok = dets:sync(?MODULE).
 
 close_table() ->
     ok = flush(),
     ok = dets:close(?MODULE).
-
