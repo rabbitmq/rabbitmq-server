@@ -22,7 +22,7 @@
          len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, resume/1,
-         msg_rates/1, status/1, invoke/3, is_duplicate/2]).
+         msg_rates/1, info/2, invoke/3, is_duplicate/2]).
 
 -export([start/1, stop/0]).
 
@@ -170,10 +170,24 @@ terminate({shutdown, dropped} = Reason,
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)};
 
 terminate(Reason,
-          State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+          State = #state { name                = QName,
+                           backing_queue       = BQ,
+                           backing_queue_state = BQS }) ->
     %% Backing queue termination. The queue is going down but
     %% shouldn't be deleted. Most likely safe shutdown of this
-    %% node. Thus just let some other slave take over.
+    %% node.
+    {ok, Q = #amqqueue{sync_slave_pids = SSPids}} =
+        rabbit_amqqueue:lookup(QName),
+    case SSPids =:= [] andalso
+        rabbit_policy:get(<<"ha-promote-on-shutdown">>, Q) =/= <<"always">> of
+        true  -> %% Remove the whole queue to avoid data loss
+                 rabbit_mirror_queue_misc:log_warning(
+                   QName, "Stopping all nodes on master shutdown since no "
+                   "synchronised slave is available~n", []),
+                 stop_all_slaves(Reason, State);
+        false -> %% Just let some other slave take over.
+                 ok
+    end,
     State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
 
 delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
@@ -181,7 +195,7 @@ delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
     stop_all_slaves(Reason, State),
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
-stop_all_slaves(Reason, #state{name = QName, gm   = GM}) ->
+stop_all_slaves(Reason, #state{name = QName, gm = GM}) ->
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
     MRefs = [erlang:monitor(process, Pid) || Pid <- [GM | SPids]],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
@@ -360,10 +374,13 @@ resume(State = #state { backing_queue       = BQ,
 msg_rates(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:msg_rates(BQS).
 
-status(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
-    BQ:status(BQS) ++
+info(backing_queue_status,
+     State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:info(backing_queue_status, BQS) ++
         [ {mirror_seen,    dict:size(State #state.seen_status)},
-          {mirror_senders, sets:size(State #state.known_senders)} ].
+          {mirror_senders, sets:size(State #state.known_senders)} ];
+info(Item, #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:info(Item, BQS).
 
 invoke(?MODULE, Fun, State) ->
     Fun(?MODULE, State);

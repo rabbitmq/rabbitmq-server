@@ -16,7 +16,7 @@
 
 -module(rabbit_trace).
 
--export([init/1, enabled/1, tap_in/2, tap_out/2, start/1, stop/1]).
+-export([init/1, enabled/1, tap_in/5, tap_out/5, start/1, stop/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -32,8 +32,12 @@
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
 -spec(enabled/1 :: (rabbit_types:vhost()) -> boolean()).
--spec(tap_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
--spec(tap_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
+-spec(tap_in/5 :: (rabbit_types:basic_message(), binary(),
+                   rabbit_channel:channel_number(),
+                   rabbit_types:username(), state()) -> 'ok').
+-spec(tap_out/5 :: (rabbit_amqqueue:qmsg(), binary(),
+                    rabbit_channel:channel_number(),
+                    rabbit_types:username(), state()) -> 'ok').
 
 -spec(start/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(stop/1 :: (rabbit_types:vhost()) -> 'ok').
@@ -54,15 +58,27 @@ enabled(VHost) ->
     {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
     lists:member(VHost, VHosts).
 
-tap_in(_Msg, none) -> ok;
-tap_in(Msg = #basic_message{exchange_name = #resource{name = XName}}, TraceX) ->
-    trace(TraceX, Msg, <<"publish">>, XName, []).
+tap_in(_Msg, _ConnName, _ChannelNum, _Username, none) -> ok;
+tap_in(Msg = #basic_message{exchange_name = #resource{name         = XName,
+                                                      virtual_host = VHost}},
+       ConnName, ChannelNum, Username, TraceX) ->
+    trace(TraceX, Msg, <<"publish">>, XName,
+          [{<<"vhost">>,      longstr,   VHost},
+           {<<"connection">>, longstr,   ConnName},
+           {<<"channel">>,    signedint, ChannelNum},
+           {<<"user">>,       longstr,   Username}]).
 
-tap_out(_Msg, none) -> ok;
-tap_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg}, TraceX) ->
+tap_out(_Msg, _ConnName, _ChannelNum, _Username, none) -> ok;
+tap_out({#resource{name = QName, virtual_host = VHost},
+         _QPid, _QMsgId, Redelivered, Msg},
+        ConnName, ChannelNum, Username, TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
     trace(TraceX, Msg, <<"deliver">>, QName,
-          [{<<"redelivered">>, signedint, RedeliveredNum}]).
+          [{<<"redelivered">>, signedint, RedeliveredNum},
+           {<<"vhost">>,       longstr,   VHost},
+           {<<"connection">>,  longstr,   ConnName},
+           {<<"channel">>,     signedint, ChannelNum},
+           {<<"user">>,        longstr,   Username}]).
 
 %%----------------------------------------------------------------------------
 

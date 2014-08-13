@@ -54,6 +54,7 @@
          change_cluster_node_type,
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
+         force_boot,
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
          {cancel_sync_queue, [?VHOST_DEF]},
@@ -114,6 +115,12 @@
          {"Policies",   rabbit_policy,             list_formatted, info_keys},
          {"Parameters", rabbit_runtime_parameters, list_formatted, info_keys}]).
 
+-define(COMMANDS_NOT_REQUIRING_APP,
+        [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
+         join_cluster, change_cluster_node_type, update_cluster_nodes,
+         forget_cluster_node, cluster_status, status, environment, eval,
+         force_boot]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -131,6 +138,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    start_distribution(),
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
         case parse_arguments(init:get_plain_arguments(), NodeStr) of
@@ -154,7 +162,7 @@ start() ->
 
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
-    case catch action(Command, Node, Args, Opts, Inform) of
+    case catch do_action(Command, Node, Args, Opts, Inform) of
         ok ->
             case Quiet of
                 true  -> ok;
@@ -249,6 +257,15 @@ parse_arguments(CmdLine, NodeStr) ->
 
 %%----------------------------------------------------------------------------
 
+do_action(Command, Node, Args, Opts, Inform) ->
+    case lists:member(Command, ?COMMANDS_NOT_REQUIRING_APP) of
+        false -> case ensure_app_running(Node) of
+                     ok -> action(Command, Node, Args, Opts, Inform);
+                     E  -> E
+                 end;
+        true  -> action(Command, Node, Args, Opts, Inform)
+    end.
+
 action(stop, Node, Args, _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
     Res = call(Node, {rabbit, stop_and_halt, []}),
@@ -302,8 +319,19 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     RemoveWhenOffline = proplists:get_bool(?OFFLINE_OPT, Opts),
     Inform("Removing node ~p from cluster", [ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, forget_cluster_node,
-             [ClusterNode, RemoveWhenOffline]);
+    case RemoveWhenOffline of
+        true  -> become(Node),
+                 rabbit_mnesia:forget_cluster_node(ClusterNode, true);
+        false -> rpc_call(Node, rabbit_mnesia, forget_cluster_node,
+                          [ClusterNode, false])
+    end;
+
+action(force_boot, Node, [], _Opts, Inform) ->
+    Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
+    case rabbit:is_running(Node) of
+        false -> rabbit_mnesia:force_load_next_boot();
+        true  -> {error, rabbit_running}
+    end;
 
 action(sync_queue, Node, [Q], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -650,6 +678,22 @@ exit_loop(Port) ->
         {Port, _}                 -> exit_loop(Port)
     end.
 
+start_distribution() ->
+    CtlNodeName = rabbit_misc:format("rabbitmqctl-~s", [os:getpid()]),
+    {ok, _} = net_kernel:start([list_to_atom(CtlNodeName), shortnames]).
+
+become(BecomeNode) ->
+    case net_adm:ping(BecomeNode) of
+        pong -> exit({node_running, BecomeNode});
+        pang -> io:format("  * Impersonating node: ~s...", [BecomeNode]),
+                error_logger:tty(false),
+                ok = net_kernel:stop(),
+                {ok, _} = net_kernel:start([BecomeNode, shortnames]),
+                io:format(" done~n", []),
+                Dir = mnesia:system_info(directory),
+                io:format("  * Mnesia directory  : ~s~n", [Dir])
+    end.
+
 %%----------------------------------------------------------------------------
 
 default_if_empty(List, Default) when is_list(List) ->
@@ -713,6 +757,17 @@ unsafe_rpc(Node, Mod, Fun, Args) ->
     case rpc_call(Node, Mod, Fun, Args) of
         {badrpc, _} = Res -> throw(Res);
         Normal            -> Normal
+    end.
+
+ensure_app_running(Node) ->
+    case call(Node, {rabbit, is_running, []}) of
+        true  -> ok;
+        false -> {error_string,
+                  rabbit_misc:format(
+                    "rabbit application is not running on node ~s.~n"
+                    " * Suggestion: start it with \"rabbitmqctl start_app\" "
+                    "and try again", [Node])};
+        Other -> Other
     end.
 
 call(Node, {Mod, Fun, Args}) ->
