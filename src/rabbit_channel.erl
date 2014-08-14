@@ -143,6 +143,7 @@ send_command(Pid, Msg) ->
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
+%% TODO mandatory needs handling
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
     [PidEnc, Key] = binary:split(Rest, <<".">>),
     Pid = binary_to_term(base64:decode(PidEnc)),
@@ -337,7 +338,6 @@ handle_cast({deliver_reply, _K, _Del}, State = #ch{state = closing}) ->
     noreply(State);
 handle_cast({deliver_reply, _K, _Del}, State = #ch{reply_consumer = none}) ->
     noreply(State);
-%% TODO mandatory and confirm need handling here
 handle_cast({deliver_reply, Key, #delivery{message =
                     #basic_message{exchange_name = ExchangeName,
                                    routing_keys  = [RoutingKey | _CcRoutes],
@@ -646,7 +646,8 @@ maybe_set_fast_reply_to(
   #ch{reply_consumer = ReplyConsumer}) ->
     case ReplyConsumer of
         none   -> rabbit_misc:protocol_error(
-                    not_allowed, "fast reply consumer does not exist", []);
+                    precondition_failed,
+                    "fast reply consumer does not exist", []);
         {_, K} -> Self = base64:encode(term_to_binary(self())),
                   ReplyTo = <<"amq.rabbitmq.reply-to.", Self/binary, ".",
                               K/binary>>,
@@ -833,10 +834,11 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                     end;
                 {_, false} ->
                     rabbit_misc:protocol_error(
-                      not_allowed, "reply consumer cannot acknowledge", []);
+                      precondition_failed,
+                      "reply consumer cannot acknowledge", []);
                 _ ->
                     rabbit_misc:protocol_error(
-                      not_allowed, "reply consumer already set", [])
+                      precondition_failed, "reply consumer already set", [])
             end;
         {ok, _} ->
             %% Attempted reuse of consumer tag.
