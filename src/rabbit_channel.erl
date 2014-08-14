@@ -809,7 +809,6 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
             {reply, #'basic.get_empty'{}, State}
     end;
 
-%% TODO we should support cancel!
 handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                consumer_tag = CTag0,
                                no_ack       = NoAck,
@@ -843,6 +842,15 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
             %% Attempted reuse of consumer tag.
             rabbit_misc:protocol_error(
               not_allowed, "attempt to reuse consumer tag '~s'", [CTag0])
+    end;
+
+handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
+              _, State = #ch{reply_consumer = {ConsumerTag, _}}) ->
+    State1 = State#ch{reply_consumer = none},
+    case NoWait of
+        true  -> {noreply, State1};
+        false -> Rep = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
+                 {reply, Rep, State1}
     end;
 
 handle_method(#'basic.consume'{queue        = QueueNameBin,
