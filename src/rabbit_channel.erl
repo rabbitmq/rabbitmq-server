@@ -354,7 +354,7 @@ handle_cast({deliver_reply, Key, #delivery{message =
                             routing_key  = RoutingKey},
            Content),
     noreply(State);
-handle_cast({deliver_reply, _K1, _Del}, State = #ch{reply_consumer = {_,K2}}) ->
+handle_cast({deliver_reply, _K1, _}, State = #ch{reply_consumer = {_, _K2}}) ->
     noreply(State);
 
 handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
