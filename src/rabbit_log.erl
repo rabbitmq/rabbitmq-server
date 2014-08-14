@@ -17,6 +17,7 @@
 -module(rabbit_log).
 
 -export([log/3, log/4, info/1, info/2, warning/1, warning/2, error/1, error/2]).
+-export([with_local_io/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -37,6 +38,8 @@
 -spec(error/1   :: (string()) -> 'ok').
 -spec(error/2   :: (string(), [any()]) -> 'ok').
 
+-spec(with_local_io/1 :: (fun (() -> A)) -> A).
+
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -46,11 +49,12 @@ log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 log(Category, Level, Fmt, Args) when is_list(Args) ->
     case level(Level) =< catlevel(Category) of
         false -> ok;
-        true  -> (case Level of
-                      info    -> fun error_logger:info_msg/2;
-                      warning -> fun error_logger:warning_msg/2;
-                      error   -> fun error_logger:error_msg/2
-                  end)(Fmt, Args)
+        true  -> F = case Level of
+                         info    -> fun error_logger:info_msg/2;
+                         warning -> fun error_logger:warning_msg/2;
+                         error   -> fun error_logger:error_msg/2
+                     end,
+                 with_local_io(fun () -> F(Fmt, Args) end)
     end.
 
 info(Fmt)          -> log(default, info,    Fmt).
@@ -75,3 +79,19 @@ level(info)    -> 3;
 level(warning) -> 2;
 level(error)   -> 1;
 level(none)    -> 0.
+
+%% Execute Fun using the IO system of the local node (i.e. the node on
+%% which the code is executing). Since this is invoked for every log
+%% message, we try to avoid unnecessarily churning group_leader/1.
+with_local_io(Fun) ->
+    GL = group_leader(),
+    Node = node(),
+    case node(GL) of
+        Node -> Fun();
+        _    -> group_leader(whereis(user), self()),
+                try
+                    Fun()
+                after
+                    group_leader(GL, self())
+                end
+    end.
