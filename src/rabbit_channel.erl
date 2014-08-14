@@ -21,7 +21,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, deliver_fast_reply/2,
+-export([send_command/2, deliver/4, deliver_reply/2,
          send_credit_reply/2, send_drained/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -143,9 +143,10 @@ send_command(Pid, Msg) ->
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
-deliver_fast_reply(<<"amq.rabbitmq.reply-to.", Enc/binary>>, Delivery) ->
-    Pid = binary_to_term(base64:decode(Enc)),
-    gen_server2:cast(Pid, {deliver_fast_reply, Delivery}).
+deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
+    [PidEnc, Key] = binary:split(Rest, <<".">>),
+    Pid = binary_to_term(base64:decode(PidEnc)),
+    gen_server2:cast(Pid, {deliver_reply, Key, Delivery}).
 
 send_credit_reply(Pid, Len) ->
     gen_server2:cast(Pid, {send_credit_reply, Len}).
@@ -332,18 +333,18 @@ handle_cast({deliver, ConsumerTag, AckRequired,
            Content),
     noreply(record_sent(ConsumerTag, AckRequired, Msg, State));
 
-handle_cast({deliver_fast_reply, _Del}, State = #ch{state = closing}) ->
+handle_cast({deliver_reply, _K, _Del}, State = #ch{state = closing}) ->
     noreply(State);
-handle_cast({deliver_fast_reply, _Del}, State = #ch{reply_consumer = none}) ->
+handle_cast({deliver_reply, _K, _Del}, State = #ch{reply_consumer = none}) ->
     noreply(State);
 %% TODO mandatory and confirm need handling here
-handle_cast({deliver_fast_reply, #delivery{message =
+handle_cast({deliver_reply, Key, #delivery{message =
                     #basic_message{exchange_name = ExchangeName,
                                    routing_keys  = [RoutingKey | _CcRoutes],
                                    content       = Content}}},
             State = #ch{writer_pid     = WriterPid,
                         next_tag       = DeliveryTag,
-                        reply_consumer = ConsumerTag}) ->
+                        reply_consumer = {ConsumerTag, Key}}) ->
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -352,6 +353,8 @@ handle_cast({deliver_fast_reply, #delivery{message =
                             exchange     = ExchangeName#resource.name,
                             routing_key  = RoutingKey},
            Content),
+    noreply(State);
+handle_cast({deliver_reply, _K1, _Del}, State = #ch{reply_consumer = {_,K2}}) ->
     noreply(State);
 
 handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
@@ -637,18 +640,18 @@ check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
 check_name(_Kind, NameBin) ->
     NameBin.
 
-%% TODO this constitutes a security hole!
 maybe_set_fast_reply_to(
   C = #content{properties = P = #'P_basic'{reply_to =
                                                <<"amq.rabbitmq.reply-to">>}},
   #ch{reply_consumer = ReplyConsumer}) ->
     case ReplyConsumer of
-        none -> rabbit_misc:protocol_error(
-                   not_allowed, "fast reply consumer does not exist", []);
-        _    -> Self = base64:encode(term_to_binary(self())),
-                ReplyTo = <<"amq.rabbitmq.reply-to.", Self/binary>>,
-                rabbit_binary_generator:clear_encoded_content(
-                  C#content{properties = P#'P_basic'{reply_to = ReplyTo}})
+        none   -> rabbit_misc:protocol_error(
+                    not_allowed, "fast reply consumer does not exist", []);
+        {_, K} -> Self = base64:encode(term_to_binary(self())),
+                  ReplyTo = <<"amq.rabbitmq.reply-to.", Self/binary, ".",
+                              K/binary>>,
+                  rabbit_binary_generator:clear_encoded_content(
+                    C#content{properties = P#'P_basic'{reply_to = ReplyTo}})
     end;
 maybe_set_fast_reply_to(C, _State) ->
     C.
@@ -822,7 +825,8 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                           rabbit_guid:gen_secure(), "amq.ctag");
                                Other -> Other
                            end,
-                    State1 = State#ch{reply_consumer = CTag},
+                    Key = base64:encode(rabbit_guid:gen_secure()),
+                    State1 = State#ch{reply_consumer = {CTag, Key}},
                     case NoWait of
                         true  -> {noreply, State1};
                         false -> Rep = #'basic.consume_ok'{consumer_tag = CTag},

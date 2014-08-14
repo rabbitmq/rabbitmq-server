@@ -349,16 +349,16 @@ route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
             %% Optimisation
             %% TODO what if there are decorators? Is that even a sane case?
             RKsSorted = lists:usort(RKs),
-            [rabbit_channel:deliver_fast_reply(RK, Delivery) ||
-                RK <- RKsSorted, fast_reply(RK)],
+            [rabbit_channel:deliver_reply(RK, Delivery) ||
+                RK <- RKsSorted, virtual_reply_queue(RK)],
             [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted,
-                                                not fast_reply(RK)];
+                                                not virtual_reply_queue(RK)];
         {_, SelectedDecorators} ->
             lists:usort(route1(Delivery, SelectedDecorators, {[X], XName, []}))
     end.
 
-fast_reply(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
-fast_reply(_)                                      -> false.
+virtual_reply_queue(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
+virtual_reply_queue(_)                                      -> false.
 
 route1(_, _, {[], _, QNames}) ->
     QNames;
