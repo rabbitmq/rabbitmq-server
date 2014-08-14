@@ -143,7 +143,7 @@ send_command(Pid, Msg) ->
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
-deliver_fast_reply(<<"amq.consumer.", Enc/binary>>, Delivery) ->
+deliver_fast_reply(<<"amq.rabbitmq.reply-to.", Enc/binary>>, Delivery) ->
     Pid = binary_to_term(base64:decode(Enc)),
     gen_server2:cast(Pid, {deliver_fast_reply, Delivery}).
 
@@ -639,13 +639,14 @@ check_name(_Kind, NameBin) ->
 
 %% TODO this constitutes a security hole!
 maybe_set_fast_reply_to(
-  C = #content{properties = P = #'P_basic'{reply_to = <<"amq.reply-consumer">>}},
+  C = #content{properties = P = #'P_basic'{reply_to =
+                                               <<"amq.rabbitmq.reply-to">>}},
   #ch{reply_consumer = ReplyConsumer}) ->
     case ReplyConsumer of
         none -> rabbit_misc:protocol_error(
                    not_allowed, "fast reply consumer does not exist", []);
         _    -> Self = base64:encode(term_to_binary(self())),
-                ReplyTo = <<"amq.consumer.", Self/binary>>,
+                ReplyTo = <<"amq.rabbitmq.reply-to.", Self/binary>>,
                 rabbit_binary_generator:clear_encoded_content(
                   C#content{properties = P#'P_basic'{reply_to = ReplyTo}})
     end;
@@ -806,7 +807,7 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
     end;
 
 %% TODO we should support cancel!
-handle_method(#'basic.consume'{queue        = <<"amq.reply-to">>,
+handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                consumer_tag = CTag0,
                                no_ack       = NoAck,
                                nowait       = NoWait},

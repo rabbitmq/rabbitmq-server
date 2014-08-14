@@ -357,8 +357,8 @@ route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
             lists:usort(route1(Delivery, SelectedDecorators, {[X], XName, []}))
     end.
 
-fast_reply(<<"amq.consumer.", _/binary>>) -> true;
-fast_reply(_)                             -> false.
+fast_reply(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
+fast_reply(_)                                      -> false.
 
 route1(_, _, {[], _, QNames}) ->
     QNames;
