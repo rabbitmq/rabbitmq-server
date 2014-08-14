@@ -344,17 +344,16 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                 decorators = Decorators} = X,
       #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
-    case {RName, rabbit_exchange_decorator:select(route, Decorators)} of
-        {<<"">>, []} ->
-            %% Optimisation
-            %% TODO what if there are decorators? Is that even a sane case?
+    case RName of
+        <<>> ->
             RKsSorted = lists:usort(RKs),
             [rabbit_channel:deliver_reply(RK, Delivery) ||
                 RK <- RKsSorted, virtual_reply_queue(RK)],
             [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted,
                                                 not virtual_reply_queue(RK)];
-        {_, SelectedDecorators} ->
-            lists:usort(route1(Delivery, SelectedDecorators, {[X], XName, []}))
+        _ ->
+            Decs = rabbit_exchange_decorator:select(route, Decorators),
+            lists:usort(route1(Delivery, Decs, {[X], XName, []}))
     end.
 
 virtual_reply_queue(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
