@@ -360,7 +360,7 @@ stop() ->
         undefined -> ok;
         _         -> await_startup(true)
     end,
-    rabbit_misc:local_info_msg("Stopping RabbitMQ~n", []),
+    rabbit_log:info("Stopping RabbitMQ~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
     stop_apps(app_utils:app_dependency_order(Apps, true)).
 
@@ -368,7 +368,7 @@ stop_and_halt() ->
     try
         stop()
     after
-        rabbit_misc:local_info_msg("Halting Erlang VM~n", []),
+        rabbit_log:info("Halting Erlang VM~n", []),
         init:stop()
     end,
     ok.
@@ -481,7 +481,7 @@ environment() ->
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
-    rabbit_misc:local_info_msg("Rotating logs with suffix '~s'~n", [Suffix]),
+    rabbit_log:info("Rotating logs with suffix '~s'~n", [Suffix]),
     log_rotation_result(rotate_logs(log_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
@@ -638,7 +638,7 @@ boot_error(Reason, Fmt, Args, Stacktrace) ->
 
 basic_boot_error(Reason, Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
-    rabbit_misc:local_info_msg(Format, Args),
+    rabbit_log:info(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot, Reason}).
 
@@ -762,7 +762,7 @@ force_event_refresh(Ref) ->
 %% misc
 
 log_broker_started(Plugins) ->
-    rabbit_misc:with_local_io(
+    rabbit_log:with_local_io(
       fun() ->
               PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
                                              || P <- Plugins]),

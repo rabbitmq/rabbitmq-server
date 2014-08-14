@@ -177,14 +177,13 @@ join_cluster(DiscoveryNode, NodeType) ->
             reset_gracefully(),
 
             %% Join the cluster
-            rabbit_misc:local_info_msg("Clustering with ~p as ~p node~n",
-                                       [ClusterNodes, NodeType]),
+            rabbit_log:info("Clustering with ~p as ~p node~n",
+                            [ClusterNodes, NodeType]),
             ok = init_db_with_mnesia(ClusterNodes, NodeType, true, true),
             rabbit_node_monitor:notify_joined_cluster(),
             ok;
         true ->
-            rabbit_misc:local_info_msg("Already member of cluster: ~p~n",
-                                       [ClusterNodes]),
+            rabbit_log:info("Already member of cluster: ~p~n", [ClusterNodes]),
             {ok, already_member}
     end.
 
@@ -193,12 +192,12 @@ join_cluster(DiscoveryNode, NodeType) ->
 %% persisted messages
 reset() ->
     ensure_mnesia_not_running(),
-    rabbit_misc:local_info_msg("Resetting Rabbit~n", []),
+    rabbit_log:info("Resetting Rabbit~n", []),
     reset_gracefully().
 
 force_reset() ->
     ensure_mnesia_not_running(),
-    rabbit_misc:local_info_msg("Resetting Rabbit forcefully~n", []),
+    rabbit_log:info("Resetting Rabbit forcefully~n", []),
     wipe().
 
 reset_gracefully() ->
@@ -254,8 +253,8 @@ update_cluster_nodes(DiscoveryNode) ->
             %% nodes
             mnesia:delete_schema([node()]),
             rabbit_node_monitor:write_cluster_status(Status),
-            rabbit_misc:local_info_msg("Updating cluster nodes from ~p~n",
-                                       [DiscoveryNode]),
+            rabbit_log:info("Updating cluster nodes from ~p~n",
+                            [DiscoveryNode]),
             init_db_with_mnesia(AllNodes, node_type(), true, true);
         false ->
             e(inconsistent_cluster)
@@ -278,7 +277,7 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         {true,  false} -> remove_node_offline_node(Node);
         {true,   true} -> e(online_node_offline_flag);
         {false, false} -> e(offline_node_no_offline_flag);
-        {false,  true} -> rabbit_misc:local_info_msg(
+        {false,  true} -> rabbit_log:info(
                             "Removing node ~p from cluster~n", [Node]),
                           case remove_node_if_mnesia_running(Node) of
                               ok               -> ok;

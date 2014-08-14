@@ -42,7 +42,6 @@
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([format/2, format_many/1, format_stderr/2]).
--export([with_local_io/1, local_info_msg/2]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1, node_to_fake_pid/1]).
@@ -185,8 +184,6 @@
 -spec(format/2 :: (string(), [any()]) -> string()).
 -spec(format_many/1 :: ([{string(), [any()]}]) -> string()).
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
--spec(with_local_io/1 :: (fun (() -> A)) -> A).
--spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> integer()).
 -spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
@@ -643,23 +640,6 @@ format_stderr(Fmt, Args) ->
             io:format(Fmt, Args)
     end,
     ok.
-
-%% Execute Fun using the IO system of the local node (i.e. the node on
-%% which the code is executing).
-with_local_io(Fun) ->
-    GL = group_leader(),
-    group_leader(whereis(user), self()),
-    try
-        Fun()
-    after
-        group_leader(GL, self())
-    end.
-
-%% Log an info message on the local node using the standard logger.
-%% Use this if the call didn't originate on the local node (e.g.
-%% rabbitmqctl calls).
-local_info_msg(Format, Args) ->
-    with_local_io(fun () -> rabbit_log:info(Format, Args) end).
 
 unfold(Fun, Init) ->
     unfold(Fun, [], Init).
