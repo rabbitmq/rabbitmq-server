@@ -171,6 +171,15 @@
            MaxT            :: non_neg_integer()},
            [ChildSpec :: child_spec()]}}
     | ignore.
+-else.
+
+-export([behaviour_info/1]).
+
+behaviour_info(callbacks) ->
+    [{init,1}];
+behaviour_info(_Other) ->
+    undefined.
+
 -endif.
 -define(restarting(_Pid_), {restarting,_Pid_}).
 
