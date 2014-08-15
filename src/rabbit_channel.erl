@@ -344,7 +344,7 @@ handle_cast({deliver_reply, Key, #delivery{message =
                                    content       = Content}}},
             State = #ch{writer_pid     = WriterPid,
                         next_tag       = DeliveryTag,
-                        reply_consumer = {ConsumerTag, Key}}) ->
+                        reply_consumer = {ConsumerTag, _Suffix, Key}}) ->
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -354,7 +354,7 @@ handle_cast({deliver_reply, Key, #delivery{message =
                             routing_key  = RoutingKey},
            Content),
     noreply(State);
-handle_cast({deliver_reply, _K1, _}, State = #ch{reply_consumer = {_, _K2}}) ->
+handle_cast({deliver_reply, _K1, _}, State=#ch{reply_consumer = {_, _, _K2}}) ->
     noreply(State);
 
 handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
@@ -645,14 +645,12 @@ maybe_set_fast_reply_to(
                                                <<"amq.rabbitmq.reply-to">>}},
   #ch{reply_consumer = ReplyConsumer}) ->
     case ReplyConsumer of
-        none   -> rabbit_misc:protocol_error(
-                    precondition_failed,
-                    "fast reply consumer does not exist", []);
-        {_, K} -> Self = base64:encode(term_to_binary(self())),
-                  ReplyTo = <<"amq.rabbitmq.reply-to.", Self/binary, ".",
-                              K/binary>>,
-                  rabbit_binary_generator:clear_encoded_content(
-                    C#content{properties = P#'P_basic'{reply_to = ReplyTo}})
+        none         -> rabbit_misc:protocol_error(
+                          precondition_failed,
+                          "fast reply consumer does not exist", []);
+        {_, Suf, _K} -> Rep = <<"amq.rabbitmq.reply-to.", Suf/binary>>,
+                        rabbit_binary_generator:clear_encoded_content(
+                          C#content{properties = P#'P_basic'{reply_to = Rep}})
     end;
 maybe_set_fast_reply_to(C, _State) ->
     C.
@@ -825,8 +823,12 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                           rabbit_guid:gen_secure(), "amq.ctag");
                                Other -> Other
                            end,
+                    %% Precalculate both suffix and key; base64 encoding is
+                    %% expensive
                     Key = base64:encode(rabbit_guid:gen_secure()),
-                    State1 = State#ch{reply_consumer = {CTag, Key}},
+                    PidEnc = base64:encode(term_to_binary(self())),
+                    Suffix = <<PidEnc/binary, ".", Key/binary>>,
+                    State1 = State#ch{reply_consumer = {CTag, Suffix, Key}},
                     case NoWait of
                         true  -> {noreply, State1};
                         false -> Rep = #'basic.consume_ok'{consumer_tag = CTag},
@@ -847,7 +849,7 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
     end;
 
 handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
-              _, State = #ch{reply_consumer = {ConsumerTag, _}}) ->
+              _, State = #ch{reply_consumer = {ConsumerTag, _, _}}) ->
     State1 = State#ch{reply_consumer = none},
     case NoWait of
         true  -> {noreply, State1};
