@@ -31,7 +31,7 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 %% Internal
--export([list_local/0]).
+-export([list_local/0, deliver_reply_local/3]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
              conn_name, limiter, tx, next_tag, unacked_message_q, user,
@@ -97,6 +97,9 @@
 -spec(deliver/4 ::
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
+-spec(deliver_reply/2 :: (binary(), rabbit_types:delivery()) -> 'ok').
+-spec(deliver_reply_local/3 ::
+        (pid(), binary(), rabbit_types:delivery()) -> 'ok').
 -spec(send_credit_reply/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(send_drained/2 :: (pid(), [{rabbit_types:ctag(), non_neg_integer()}])
                         -> 'ok').
@@ -146,7 +149,16 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
     [PidEnc, Key] = binary:split(Rest, <<".">>),
     Pid = binary_to_term(base64:decode(PidEnc)),
-    gen_server2:cast(Pid, {deliver_reply, Key, Delivery}).
+    delegate:invoke_no_result(
+      Pid, {?MODULE, deliver_reply_local, [Key, Delivery]}).
+
+%% We want to ensure people can't use this mechanism to send a message
+%% to an arbitrary process and kill it!
+deliver_reply_local(Pid, Key, Delivery) ->
+    case pg_local:in_group(rabbit_channels, Pid) of
+        true  -> gen_server2:cast(Pid, {deliver_reply, Key, Delivery});
+        false -> ok
+    end.
 
 send_credit_reply(Pid, Len) ->
     gen_server2:cast(Pid, {send_credit_reply, Len}).
