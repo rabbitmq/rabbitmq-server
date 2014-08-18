@@ -116,7 +116,8 @@ qc_publish(#state{bqstate = BQ}) ->
      [qc_message(),
       #message_properties{needs_confirming = frequency([{1,  true},
                                                         {20, false}]),
-                          expiry = oneof([undefined | lists:seq(1, 10)])},
+                          expiry = oneof([undefined | lists:seq(1, 10)]),
+                          size   = 10},
       false, self(), BQ]}.
 
 qc_publish_multiple(#state{}) ->
@@ -124,7 +125,7 @@ qc_publish_multiple(#state{}) ->
 
 qc_publish_delivered(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish_delivered,
-     [qc_message(), #message_properties{}, self(), BQ]}.
+     [qc_message(), #message_properties{size = 10}, self(), BQ]}.
 
 qc_fetch(#state{bqstate = BQ}) ->
     {call, ?BQMOD, fetch, [boolean(), BQ]}.

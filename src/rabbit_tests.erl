@@ -37,7 +37,7 @@ all_tests() ->
     ok = supervisor2_tests:test_all(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
-    application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
+    application:set_env(rabbit, file_handles_high_watermark, 10),
     ok = file_handle_cache:set_limit(10),
     passed = test_version_equivalance(),
     passed = test_file_handle_cache(),
@@ -1870,22 +1870,20 @@ test_backing_queue() ->
         {ok, rabbit_variable_queue} ->
             {ok, FileSizeLimit} =
                 application:get_env(rabbit, msg_store_file_size_limit),
-            application:set_env(rabbit, msg_store_file_size_limit, 512,
-                                infinity),
+            application:set_env(rabbit, msg_store_file_size_limit, 512),
             {ok, MaxJournal} =
                 application:get_env(rabbit, queue_index_max_journal_entries),
-            application:set_env(rabbit, queue_index_max_journal_entries, 128,
-                                infinity),
+            application:set_env(rabbit, queue_index_max_journal_entries, 128),
             passed = test_msg_store(),
             application:set_env(rabbit, msg_store_file_size_limit,
-                                FileSizeLimit, infinity),
+                                FileSizeLimit),
             passed = test_queue_index(),
             passed = test_queue_index_props(),
             passed = test_variable_queue(),
             passed = test_variable_queue_delete_msg_store_files_callback(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
-                                MaxJournal, infinity),
+                                MaxJournal),
             %% We will have restarted the message store, and thus changed
             %% the order of the children of rabbit_sup. This will cause
             %% problems if there are subsequent failures - see bug 24262.
@@ -2210,13 +2208,13 @@ restart_test_queue(Qi) ->
 empty_test_queue() ->
     ok = rabbit_variable_queue:stop(),
     {ok, _} = rabbit_variable_queue:start([]),
-    {0, Qi} = init_test_queue(),
+    {0, 0, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
 
 with_empty_test_queue(Fun) ->
     ok = empty_test_queue(),
-    {0, Qi} = init_test_queue(),
+    {0, 0, Qi} = init_test_queue(),
     rabbit_queue_index:delete_and_terminate(Fun(Qi)).
 
 restart_app() ->
@@ -2235,7 +2233,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
           fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
                   MsgId = rabbit_guid:gen(),
                   QiM = rabbit_queue_index:publish(
-                          MsgId, SeqId, #message_properties{}, Persistent, QiN),
+                          MsgId, SeqId, #message_properties{size = 10},
+                          Persistent, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
@@ -2257,7 +2256,7 @@ test_queue_index_props() ->
     with_empty_test_queue(
       fun(Qi0) ->
               MsgId = rabbit_guid:gen(),
-              Props = #message_properties{expiry=12345},
+              Props = #message_properties{expiry=12345, size = 10},
               Qi1 = rabbit_queue_index:publish(MsgId, 1, Props, true, Qi0),
               {[{MsgId, 1, Props, _, _}], Qi2} =
                   rabbit_queue_index:read(1, 2, Qi1),
@@ -2287,7 +2286,7 @@ test_queue_index() ->
               ok = verify_read_with_published(false, false, ReadA,
                                               lists:reverse(SeqIdsMsgIdsA)),
               %% should get length back as 0, as all the msgs were transient
-              {0, Qi6} = restart_test_queue(Qi4),
+              {0, 0, Qi6} = restart_test_queue(Qi4),
               {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
               {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
               {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
@@ -2296,7 +2295,8 @@ test_queue_index() ->
                                               lists:reverse(SeqIdsMsgIdsB)),
               %% should get length back as MostOfASegment
               LenB = length(SeqIdsB),
-              {LenB, Qi12} = restart_test_queue(Qi10),
+              BytesB = LenB * 10,
+              {LenB, BytesB, Qi12} = restart_test_queue(Qi10),
               {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
               Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
               {ReadC, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
@@ -2308,7 +2308,7 @@ test_queue_index() ->
               {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
               %% should get length back as 0 because all persistent
               %% msgs have been acked
-              {0, Qi19} = restart_test_queue(Qi18),
+              {0, 0, Qi19} = restart_test_queue(Qi18),
               Qi19
       end),
 
@@ -2380,11 +2380,11 @@ test_queue_index() ->
                                                          true, Qi0),
               Qi2 = rabbit_queue_index:deliver([0,1,4], Qi1),
               Qi3 = rabbit_queue_index:ack([0], Qi2),
-              {5, Qi4} = restart_test_queue(Qi3),
+              {5, 50, Qi4} = restart_test_queue(Qi3),
               {Qi5, _SeqIdsMsgIdsF} = queue_index_publish([3,6,8], true, Qi4),
               Qi6 = rabbit_queue_index:deliver([2,3,5,6], Qi5),
               Qi7 = rabbit_queue_index:ack([1,2,3], Qi6),
-              {5, Qi8} = restart_test_queue(Qi7),
+              {5, 50, Qi8} = restart_test_queue(Qi7),
               Qi8
       end),
 
@@ -2419,7 +2419,8 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
                                                          false -> 1
                                                      end},
                     PayloadFun(N)),
-                  PropFun(N, #message_properties{}), false, self(), VQN)
+                  PropFun(N, #message_properties{size = 10}),
+                  false, self(), VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -2454,7 +2455,7 @@ with_fresh_variable_queue(Fun) ->
     spawn_link(fun() ->
                        ok = empty_test_queue(),
                        VQ = variable_queue_init(test_amqqueue(true), false),
-                       S0 = rabbit_variable_queue:status(VQ),
+                       S0 = variable_queue_status(VQ),
                        assert_props(S0, [{q1, 0}, {q2, 0},
                                          {delta,
                                           {delta, undefined, 0, undefined}},
@@ -2579,7 +2580,7 @@ variable_queue_with_holes(VQ0) ->
                  {delta, _, 0, _} -> true;
                  0                -> true;
                  _                -> false
-             end || {K, V} <- rabbit_variable_queue:status(VQ8),
+             end || {K, V} <- variable_queue_status(VQ8),
                     lists:member(K, [q1, delta, q3])],
     Depth = Count + Interval,
     Depth = rabbit_variable_queue:depth(VQ8),
@@ -2649,17 +2650,20 @@ test_variable_queue_ack_limiting(VQ0) ->
     %% fetch half the messages
     {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
 
-    VQ5 = check_variable_queue_status(VQ4, [{len          , Len div 2},
-                                            {ram_ack_count, Len div 2},
-                                            {ram_msg_count, Len div 2}]),
+    VQ5 = check_variable_queue_status(
+            VQ4, [{len,                         Len div 2},
+                  {messages_unacknowledged_ram, Len div 2},
+                  {messages_ready_ram,          Len div 2},
+                  {messages_ram,                Len}]),
 
     %% ensure all acks go to disk on 0 duration target
     VQ6 = check_variable_queue_status(
             variable_queue_set_ram_duration_target(0, VQ5),
-            [{len, Len div 2},
-             {target_ram_count, 0},
-             {ram_msg_count, 0},
-             {ram_ack_count, 0}]),
+            [{len,                         Len div 2},
+             {target_ram_count,            0},
+             {messages_unacknowledged_ram, 0},
+             {messages_ready_ram,          0},
+             {messages_ram,                0}]),
 
     VQ6.
 
@@ -2760,7 +2764,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
             fun (Duration1, VQ4) ->
                     {_Duration, VQ5} = rabbit_variable_queue:ram_duration(VQ4),
                     io:format("~p:~n~p~n",
-                              [Duration1, rabbit_variable_queue:status(VQ5)]),
+                              [Duration1, variable_queue_status(VQ5)]),
                     VQ6 = variable_queue_set_ram_duration_target(
                             Duration1, VQ5),
                     publish_fetch_and_ack(Churn, Len, VQ6)
@@ -2820,10 +2824,15 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
 
 check_variable_queue_status(VQ0, Props) ->
     VQ1 = variable_queue_wait_for_shuffling_end(VQ0),
-    S = rabbit_variable_queue:status(VQ1),
+    S = variable_queue_status(VQ1),
     io:format("~p~n", [S]),
     assert_props(S, Props),
     VQ1.
+
+variable_queue_status(VQ) ->
+    Keys = rabbit_backing_queue:info_keys() -- [backing_queue_status],
+    [{K, rabbit_variable_queue:info(K, VQ)} || K <- Keys] ++
+        rabbit_variable_queue:info(backing_queue_status, VQ).
 
 variable_queue_wait_for_shuffling_end(VQ) ->
     case credit_flow:blocked() of

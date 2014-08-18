@@ -37,8 +37,6 @@
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
 
--define(SSL_TIMEOUT, 5). %% seconds
-
 -define(FIRST_TEST_BIND_PORT, 10000).
 
 %%----------------------------------------------------------------------------
@@ -168,9 +166,14 @@ ensure_ssl() ->
             end
     end.
 
+ssl_timeout() ->
+    {ok, Val} = application:get_env(rabbit, ssl_handshake_timeout),
+    Val.
+
 ssl_transform_fun(SslOpts) ->
     fun (Sock) ->
-            case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
+            Timeout = ssl_timeout(),
+            case catch ssl:ssl_accept(Sock, SslOpts, Timeout) of
                 {ok, SslSock} ->
                     {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
                 {error, timeout} ->
@@ -185,7 +188,7 @@ ssl_transform_fun(SslOpts) ->
                     %% form, according to the TLS spec). So we give
                     %% the ssl_connection a little bit of time to send
                     %% such alerts.
-                    timer:sleep(?SSL_TIMEOUT * 1000),
+                    timer:sleep(Timeout),
                     {error, {ssl_upgrade_error, Reason}};
                 {'EXIT', Reason} ->
                     {error, {ssl_upgrade_failure, Reason}}
@@ -205,7 +208,7 @@ tcp_listener_addresses({Host, Port, Family0})
     [{IPAddress, Port, Family} ||
         {IPAddress, Family} <- getaddr(Host, Family0)];
 tcp_listener_addresses({_Host, Port, _Family0}) ->
-    error_logger:error_msg("invalid port ~p - not 0..65535~n", [Port]),
+    rabbit_log:error("invalid port ~p - not 0..65535~n", [Port]),
     throw({error, {invalid_port, Port}}).
 
 tcp_listener_addresses_auto(Port) ->
@@ -392,7 +395,7 @@ gethostaddr(Host, Family) ->
     end.
 
 host_lookup_error(Host, Reason) ->
-    error_logger:error_msg("invalid host ~p - ~p~n", [Host, Reason]),
+    rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).
 
 resolve_family({_,_,_,_},         auto) -> inet;
