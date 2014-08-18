@@ -1109,14 +1109,15 @@ handle_method(#'exchange.unbind'{destination = DestinationNameBin,
                    SourceNameBin, exchange, DestinationNameBin, RoutingKey,
                    Arguments, #'exchange.unbind_ok'{}, NoWait, State);
 
-%% Note that all declares to these are effectively passive
+%% Note that all declares to these are effectively passive. If it
+%% exists it by definition has one consumer.
 handle_method(#'queue.declare'{queue   = <<"amq.rabbitmq.reply-to",
                                            _/binary>> = QueueNameBin,
                                nowait  = NoWait}, _,
               State = #ch{virtual_host = VHost}) ->
     QueueName = rabbit_misc:r(VHost, queue, QueueNameBin),
     case declare_fast_reply_to(QueueNameBin) of
-        exists    -> return_queue_declare_ok(QueueName, NoWait, 0, 0, State);
+        exists    -> return_queue_declare_ok(QueueName, NoWait, 0, 1, State);
         not_found -> rabbit_misc:not_found(QueueName)
     end;
 
