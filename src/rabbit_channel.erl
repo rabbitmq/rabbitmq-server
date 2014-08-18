@@ -147,8 +147,7 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
-    [PidEnc, Key] = binary:split(Rest, <<".">>),
-    Pid = binary_to_term(base64:decode(PidEnc)),
+    {ok, Pid, Key} = decode_fast_reply_to(Rest),
     delegate:invoke_no_result(
       Pid, {?MODULE, deliver_reply_local, [Key, Delivery]}).
 
@@ -158,6 +157,27 @@ deliver_reply_local(Pid, Key, Delivery) ->
     case pg_local:in_group(rabbit_channels, Pid) of
         true  -> gen_server2:cast(Pid, {deliver_reply, Key, Delivery});
         false -> ok
+    end.
+
+declare_fast_reply_to(<<"amq.rabbitmq.reply-to">>) ->
+    exists;
+declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
+    case decode_fast_reply_to(Rest) of
+        {ok, Pid, Key} ->
+            rabbit_misc:with_exit_handler(
+              rabbit_misc:const(not_found),
+              fun() -> gen_server2:call(Pid, {declare_fast_reply_to, Key}) end);
+        error ->
+            not_found
+    end;
+declare_fast_reply_to(_) ->
+    not_found.
+
+decode_fast_reply_to(Suffix) ->
+    case binary:split(Suffix, <<".">>) of
+        [PidEnc, Key] -> Pid = binary_to_term(base64:decode(PidEnc)),
+                         {ok, Pid, Key};
+        _             -> error
     end.
 
 send_credit_reply(Pid, Len) ->
@@ -280,6 +300,13 @@ handle_call({info, Items}, _From, State) ->
 
 handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
     reply(ok, State#ch{trace_state = rabbit_trace:init(VHost)});
+
+handle_call({declare_fast_reply_to, Key}, _From,
+            State = #ch{reply_consumer = Consumer}) ->
+    reply(case Consumer of
+              {_, _, Key} -> exists;
+              _           -> not_found
+          end, State);
 
 handle_call(_Request, _From, State) ->
     noreply(State).
@@ -1081,6 +1108,17 @@ handle_method(#'exchange.unbind'{destination = DestinationNameBin,
     binding_action(fun rabbit_binding:remove/2,
                    SourceNameBin, exchange, DestinationNameBin, RoutingKey,
                    Arguments, #'exchange.unbind_ok'{}, NoWait, State);
+
+%% Note that all declares to these are effectively passive
+handle_method(#'queue.declare'{queue   = <<"amq.rabbitmq.reply-to",
+                                           _/binary>> = QueueNameBin,
+                               nowait  = NoWait}, _,
+              State = #ch{virtual_host = VHost}) ->
+    QueueName = rabbit_misc:r(VHost, queue, QueueNameBin),
+    case declare_fast_reply_to(QueueNameBin) of
+        exists    -> return_queue_declare_ok(QueueName, NoWait, 0, 0, State);
+        not_found -> rabbit_misc:not_found(QueueName)
+    end;
 
 handle_method(#'queue.declare'{queue       = QueueNameBin,
                                passive     = false,
