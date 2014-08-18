@@ -143,7 +143,6 @@ send_command(Pid, Msg) ->
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
-%% TODO mandatory needs handling
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
     [PidEnc, Key] = binary:split(Rest, <<".">>),
     Pid = binary_to_term(base64:decode(PidEnc)),
