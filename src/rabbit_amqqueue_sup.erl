@@ -18,7 +18,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, start_queue_process/2]).
+-export([start_link/0, start_queue_process/3]).
 
 -export([init/1]).
 
@@ -31,7 +31,8 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(start_queue_process/2 :: (node(), rabbit_types:amqqueue()) -> pid()).
+-spec(start_queue_process/3 :: (node(), rabbit_types:amqqueue(),
+                               'declare' | 'recovery' | 'slave') -> pid()).
 
 -endif.
 
@@ -40,8 +41,8 @@
 start_link() ->
     supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_queue_process(Node, Q) ->
-    {ok, Pid} = supervisor2:start_child({?SERVER, Node}, [Q]),
+start_queue_process(Node, Q, Hint) ->
+    {ok, Pid} = supervisor2:start_child({?SERVER, Node}, [Q, Hint]),
     Pid.
 
 init([]) ->

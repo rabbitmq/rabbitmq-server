@@ -22,7 +22,7 @@
 %% new queue, or whether we are in recovery. Thus a crashing queue
 %% process can restart from here and always do the right thing.
 
--export([start_link/1]).
+-export([start_link/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -31,25 +31,36 @@
 
 -include("rabbit.hrl").
 
-start_link(Q) ->
-    gen_server2:start_link(?MODULE, Q, []).
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+%%-spec(start_link/2 :: () -> rabbit_types:ok_pid_or_error()).
+
+-endif.
 
 %%----------------------------------------------------------------------------
 
-init(Q) ->
+start_link(Q, Hint) ->
+    gen_server2:start_link(?MODULE, {Q, Hint}, []).
+
+%%----------------------------------------------------------------------------
+
+init({Q, Hint}) ->
     %% Hand back to supervisor ASAP
     gen_server2:cast(self(), init),
-    {ok, Q#amqqueue{pid = self()}, hibernate,
+    {ok, {Q#amqqueue{pid = self()}, Hint}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
       ?DESIRED_HIBERNATE}}.
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, {unexpected_call, Msg}, State}.
 
-handle_cast(init, Q) ->
+handle_cast(init, {Q, Hint}) ->
     case whereis(rabbit_recovery) of
-        undefined -> init_non_recovery(Q);
-        _Pid      -> init_recovery(Q)
+        undefined -> init_non_recovery(Q, Hint);
+        _Pid      -> recovery = Hint, %% assertion
+                     init_recovery(Q)
     end;
 
 handle_cast(Msg, State) ->
@@ -66,14 +77,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-init_non_recovery(Q = #amqqueue{name = QueueName}) ->
+init_non_recovery(Q = #amqqueue{name = QueueName}, Hint) ->
     Result = rabbit_misc:execute_mnesia_transaction(
                fun () ->
                        case mnesia:wread({rabbit_queue, QueueName}) of
-                           [] ->
-                               {declared, rabbit_amqqueue:internal_declare(Q)};
-                           [ExistingQ] ->
-                               init_existing(ExistingQ)
+                           []          -> init_missing(Q, Hint);
+                           [ExistingQ] -> init_existing(ExistingQ)
                        end
                end),
     case Result of
@@ -96,8 +105,23 @@ init_non_recovery(Q = #amqqueue{name = QueueName}) ->
             exit(todo);
         sleep_retry ->
             timer:sleep(25),
-            init_non_recovery(Q)
+            init_non_recovery(Q, Hint);
+        master_in_recovery ->
+            {stop, normal, Q}
     end.
+
+%% The Hint is how we were originally started. Of course, if we
+%% crashed it might no longer be true - but we can only get here if
+%% there is no Mnesia record, which should mean we can't be here if we
+%% crashed.
+init_missing(Q, Hint) ->
+    case Hint of
+        declare -> {declared, rabbit_amqqueue:internal_declare(Q)};
+        slave   -> master_in_recovery %% [1]
+    end.
+%% [1] This is the same concept as the master_in_recovery case in the
+%%     slave startup code. Unfortunately since we start slaves with two
+%%     transactions we need to check twice.
 
 init_existing(Q = #amqqueue{pid = QPid, slave_pids = SPids}) ->
     Alive = fun rabbit_misc:is_process_alive/1,

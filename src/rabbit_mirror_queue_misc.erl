@@ -220,7 +220,8 @@ start_child(Name, MirrorNode, Q, SyncMode) ->
     rabbit_misc:with_exit_handler(
       rabbit_misc:const(ok),
       fun () ->
-              SPid = rabbit_amqqueue_sup:start_queue_process(MirrorNode, Q),
+              SPid = rabbit_amqqueue_sup:start_queue_process(
+                       MirrorNode, Q, slave),
               log_info(Name, "Adding mirror on node ~p: ~p~n",
                        [MirrorNode, SPid]),
               case SyncMode of

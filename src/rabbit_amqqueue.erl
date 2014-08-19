@@ -246,9 +246,9 @@ find_durable_queues() ->
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
     {Results, Failures} =
-        gen_server2:mcall([{rabbit_amqqueue_sup:start_queue_process(node(), Q),
-                            {init, {self(), Terms}}} ||
-                              {Q, Terms} <- QueuesAndRecoveryTerms]),
+        gen_server2:mcall(
+          [{rabbit_amqqueue_sup:start_queue_process(node(), Q, recovery),
+            {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
     [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
                       [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
@@ -274,8 +274,8 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
                                       down_slave_nodes = [],
                                       gm_pids          = []})),
     Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
-    gen_server2:call(
-      rabbit_amqqueue_sup:start_queue_process(Node, Q), {init, new}, infinity).
+    gen_server2:call(rabbit_amqqueue_sup:start_queue_process(Node, Q, declare),
+                     {init, new}, infinity).
 
 internal_declare(Q = #amqqueue{name = QueueName}) ->
     case not_found_or_absent(QueueName) of
