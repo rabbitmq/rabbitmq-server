@@ -61,8 +61,6 @@
 
 -ifdef(use_specs).
 
-%% -spec(start_link/1 ::
-%%         (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(init_with_backing_queue_state/7 ::
         (rabbit_types:amqqueue(), atom(), tuple(), any(),

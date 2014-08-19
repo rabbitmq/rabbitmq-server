@@ -44,7 +44,7 @@ init(Q) ->
       ?DESIRED_HIBERNATE}}.
 
 handle_call(Msg, _From, State) ->
-    {stop, {unexpected_call, Msg}, State}.
+    {stop, {unexpected_call, Msg}, {unexpected_call, Msg}, State}.
 
 handle_cast(init, Q) ->
     case whereis(rabbit_recovery) of

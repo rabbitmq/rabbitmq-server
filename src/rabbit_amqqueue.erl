@@ -59,8 +59,6 @@
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(queue_or_absent() :: rabbit_types:amqqueue() |
-                           {'absent', rabbit_types:amqqueue()}).
 -type(not_found_or_absent() :: 'not_found' |
                                {'absent', rabbit_types:amqqueue()}).
 -spec(recover/0 :: () -> [rabbit_types:amqqueue()]).
@@ -76,9 +74,10 @@
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()), node())
         -> {'new' | 'existing' | 'absent' | 'owner_died',
             rabbit_types:amqqueue()} | rabbit_types:channel_exit()).
-%% -spec(internal_declare/2 ::
-%%         (rabbit_types:amqqueue(), boolean())
-%%         -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).
+-spec(internal_declare/1 ::
+        (rabbit_types:amqqueue())
+        -> {'new', rabbit_misc:thunk(rabbit_types:amqqueue())} |
+           {'absent', rabbit_types:amqqueue()}).
 -spec(update/2 ::
         (name(),
          fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue()))
@@ -281,7 +280,6 @@ internal_declare(Q = #amqqueue{name = QueueName}) ->
     case not_found_or_absent(QueueName) of
         not_found        -> ok = store_queue(Q),
                             B = add_default_binding(Q),
-                            %% TODO can we simplify return here?
                             {new, fun () -> B(), Q end};
         {absent, _Q} = R -> R
     end.
