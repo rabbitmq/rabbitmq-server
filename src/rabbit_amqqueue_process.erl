@@ -136,15 +136,15 @@ init_declared(Recover, From, Q = #amqqueue{name            = QName,
 finish_init(Recover, From, State = #q{q                   = Q,
                                       backing_queue       = undefined,
                                       backing_queue_state = undefined}) ->
-    {Recovery, TermsOrNew} = recovery_status(Recover),
-    gen_server2:reply(From, {new, Q}),
+    send_reply(From, Q),
+    {RecoveryPid, TermsOrNew} = recovery_status(Recover),
     ok = file_handle_cache:register_callback(
            rabbit_amqqueue, set_maximum_since_use, [self()]),
     ok = rabbit_memory_monitor:register(
            self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     BQ = backing_queue_module(Q),
     BQS = bq_init(BQ, Q, TermsOrNew),
-    recovery_barrier(Recovery),
+    recovery_barrier(RecoveryPid),
     State1 = process_args_policy(State#q{backing_queue       = BQ,
                                          backing_queue_state = BQS}),
     notify_decorators(startup, State1),
@@ -153,8 +153,20 @@ finish_init(Recover, From, State = #q{q                   = Q,
                             fun() -> emit_stats(State1) end),
     {become, ?MODULE, State1, hibernate}.
 
-recovery_status(new)              -> {new,     new};
-recovery_status({Recover, Terms}) -> {Recover, Terms}.
+recovery_status(new)              -> {no_barrier, new};
+recovery_status({Recover, Terms}) -> {Recover,    Terms}.
+
+recovery_barrier(no_barrier) ->
+    ok;
+recovery_barrier(BarrierPid) ->
+    MRef = erlang:monitor(process, BarrierPid),
+    receive
+        {BarrierPid, go}              -> erlang:demonitor(MRef, [flush]);
+        {'DOWN', MRef, process, _, _} -> ok
+    end.
+
+send_reply(none, _Q) -> ok;
+send_reply(From, Q)  -> gen_server2:reply(From, {new, Q}).
 
 %% We have been promoted
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
@@ -194,8 +206,10 @@ terminate({shutdown, missing_owner} = Reason, State) ->
     terminate_shutdown(terminate_delete(false, Reason, State), State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate(Reason,            State) ->
-    terminate_shutdown(terminate_delete(true, Reason, State), State).
+terminate(normal,            State) -> %% auto-delete case
+    terminate_shutdown(terminate_delete(true, normal, State), State);
+terminate(_Reason,           State) ->
+    terminate_crash(State).
 
 terminate_delete(EmitStats, Reason,
                  State = #q{q = #amqqueue{name          = QName},
@@ -210,6 +224,30 @@ terminate_delete(EmitStats, Reason,
         rabbit_amqqueue:internal_delete(QName),
         BQS1
     end.
+
+terminate_shutdown(Fun, State) ->
+    State1 = #q{backing_queue_state = BQS, consumers = Consumers} =
+        lists:foldl(fun (F, S) -> F(S) end, State,
+                    [fun stop_sync_timer/1,
+                     fun stop_rate_timer/1,
+                     fun stop_expiry_timer/1,
+                     fun stop_ttl_timer/1]),
+    case BQS of
+        undefined -> State1;
+        _         -> ok = rabbit_memory_monitor:deregister(self()),
+                     QName = qname(State),
+                     notify_decorators(shutdown, State),
+                     [emit_consumer_deleted(Ch, CTag, QName) ||
+                         {Ch, CTag, _, _, _} <-
+                             rabbit_queue_consumers:all(Consumers)],
+                     State1#q{backing_queue_state = Fun(BQS)}
+    end.
+
+terminate_crash(State = #q{consumers = Consumers}) ->
+    QName = qname(State),
+    [emit_consumer_deleted(Ch, CTag, QName) ||
+        {Ch, CTag, _, _, _} <- rabbit_queue_consumers:all(Consumers)],
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -243,15 +281,6 @@ bq_init(BQ, Q, Recover) ->
             fun (Mod, Fun) ->
                     rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
-
-recovery_barrier(new) ->
-    ok;
-recovery_barrier(BarrierPid) ->
-    MRef = erlang:monitor(process, BarrierPid),
-    receive
-        {BarrierPid, go}              -> erlang:demonitor(MRef, [flush]);
-        {'DOWN', MRef, process, _, _} -> ok
-    end.
 
 process_args_policy(State = #q{q                   = Q,
                                args_policy_version = N}) ->
@@ -303,24 +332,6 @@ init_max_length(MaxLen, State) ->
 init_max_bytes(MaxBytes, State) ->
     {_Dropped, State1} = maybe_drop_head(State#q{max_bytes = MaxBytes}),
     State1.
-
-terminate_shutdown(Fun, State) ->
-    State1 = #q{backing_queue_state = BQS, consumers = Consumers} =
-        lists:foldl(fun (F, S) -> F(S) end, State,
-                    [fun stop_sync_timer/1,
-                     fun stop_rate_timer/1,
-                     fun stop_expiry_timer/1,
-                     fun stop_ttl_timer/1]),
-    case BQS of
-        undefined -> State1;
-        _         -> ok = rabbit_memory_monitor:deregister(self()),
-                     QName = qname(State),
-                     notify_decorators(shutdown, State),
-                     [emit_consumer_deleted(Ch, CTag, QName) ||
-                         {Ch, CTag, _, _, _} <-
-                             rabbit_queue_consumers:all(Consumers)],
-                     State1#q{backing_queue_state = Fun(BQS)}
-    end.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),

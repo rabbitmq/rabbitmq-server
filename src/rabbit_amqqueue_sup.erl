@@ -48,5 +48,5 @@ start_queue_process(Node, Q, Hint) ->
 init([]) ->
     {ok, {{simple_one_for_one, 10, 10},
           [{rabbit_amqqueue, {rabbit_prequeue, start_link, []},
-            temporary, ?MAX_WAIT, worker, [rabbit_amqqueue_process,
+            transient, ?MAX_WAIT, worker, [rabbit_amqqueue_process,
                                            rabbit_mirror_queue_slave]}]}}.

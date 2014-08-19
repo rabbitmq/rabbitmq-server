@@ -102,7 +102,8 @@ init_non_recovery(Q = #amqqueue{name = QueueName}, Hint) ->
         new_slave ->
             rabbit_mirror_queue_slave:init_slave(Q);
         crash_restart ->
-            exit(todo);
+            rabbit_amqqueue_process:init_declared(
+              {no_barrier, non_clean_shutdown}, none, Q);
         sleep_retry ->
             timer:sleep(25),
             init_non_recovery(Q, Hint);
