@@ -101,9 +101,17 @@ init_non_recovery(Q = #amqqueue{name = QueueName}, Hint) ->
             end;
         new_slave ->
             rabbit_mirror_queue_slave:init_slave(Q);
-        crash_restart ->
+        {crash_restart, Q1} ->
+            rabbit_log:error(
+              "Recovering persistent messages from crashed ~s.~n",
+              [rabbit_misc:rs(QueueName)]),
+            Self = self(),
+            rabbit_misc:execute_mnesia_transaction(
+              fun () ->
+                      ok = rabbit_amqqueue:store_queue(Q1#amqqueue{pid = Self})
+              end),
             rabbit_amqqueue_process:init_declared(
-              {no_barrier, non_clean_shutdown}, none, Q);
+              {no_barrier, non_clean_shutdown}, none, Q1);
         sleep_retry ->
             timer:sleep(25),
             init_non_recovery(Q, Hint);
@@ -127,11 +135,11 @@ init_missing(Q, Hint) ->
 init_existing(Q = #amqqueue{pid = QPid, slave_pids = SPids}) ->
     Alive = fun rabbit_misc:is_process_alive/1,
     case {Alive(QPid), node(QPid) =:= node()} of
-        {true,  true}  -> {declared, {existing, Q}};  %% [1]
-        {true,  false} -> new_slave;                  %% [2]
+        {true,  true}  -> {declared, {existing, Q}};     %% [1]
+        {true,  false} -> new_slave;                     %% [2]
         {false, _}     -> case [SPid || SPid <- SPids, Alive(SPid)] of
-                              [] -> crash_restart;    %% [3]
-                              _  -> sleep_retry       %% [4]
+                              [] -> {crash_restart, Q};  %% [3]
+                              _  -> sleep_retry          %% [4]
                           end
     end.
 %% [1] Lost a race to declare a queue - just return the winner.
