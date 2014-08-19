@@ -24,9 +24,9 @@
 -define(RAM_DURATION_UPDATE_INTERVAL, 5000).
 -define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
--export([start_link/1, info_keys/0]).
+-export([info_keys/0]).
 
--export([init_with_backing_queue_state/7]).
+-export([init_declared/3, init_with_backing_queue_state/7]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
@@ -61,8 +61,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 ::
-        (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
+%% -spec(start_link/1 ::
+%%         (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(init_with_backing_queue_state/7 ::
         (rabbit_types:amqqueue(), atom(), tuple(), any(),
@@ -102,19 +102,64 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
-
 info_keys()       -> ?INFO_KEYS       ++ rabbit_backing_queue:info_keys().
 statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 
 %%----------------------------------------------------------------------------
 
-init(Q) ->
-    process_flag(trap_exit, true),
-    ?store_proc_name(Q#amqqueue.name),
-    {ok, init_state(Q#amqqueue{pid = self()}), hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+init(_) ->
+    exit(cannot_be_called_directly).
 
+%% We have just been declared or recovered
+init_declared(Recover, From, Q = #amqqueue{name            = QName,
+                                           exclusive_owner = Owner}) ->
+    process_flag(trap_exit, true),
+    ?store_proc_name(QName),
+    State = init_state(Q),
+    case Owner of
+        none -> finish_init(Recover, From, State);
+        _    -> case rabbit_misc:is_process_alive(Owner) of %% [1]
+                    true  -> erlang:monitor(process, Owner),
+                             finish_init(Recover, From, State);
+                    false -> gen_server2:reply(From, {owner_died, Q}),
+                             BQ = backing_queue_module(Q),
+                             {_, Terms} = recovery_status(Recover),
+                             BQS = bq_init(BQ, Q, Terms),
+                             %% Rely on terminate to delete the queue.
+                             {stop, {shutdown, missing_owner},
+                              State#q{backing_queue = BQ,
+                                      backing_queue_state = BQS}}
+                end
+    end.
+%% [1] You used to be able to declare an exclusive durable
+%% queue. Sadly we need to still tidy up after that case, there could
+%% be the remnants of one left over from an upgrade. So that's why we
+%% don't enforce Recover = new here.
+
+finish_init(Recover, From, State = #q{q                   = Q,
+                                      backing_queue       = undefined,
+                                      backing_queue_state = undefined}) ->
+    {Recovery, TermsOrNew} = recovery_status(Recover),
+    gen_server2:reply(From, {new, Q}),
+    ok = file_handle_cache:register_callback(
+           rabbit_amqqueue, set_maximum_since_use, [self()]),
+    ok = rabbit_memory_monitor:register(
+           self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
+    BQ = backing_queue_module(Q),
+    BQS = bq_init(BQ, Q, TermsOrNew),
+    recovery_barrier(Recovery),
+    State1 = process_args_policy(State#q{backing_queue       = BQ,
+                                         backing_queue_state = BQS}),
+    notify_decorators(startup, State1),
+    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State1)),
+    rabbit_event:if_enabled(State1, #q.stats_timer,
+                            fun() -> emit_stats(State1) end),
+    {become, ?MODULE, State1, hibernate}.
+
+recovery_status(new)              -> {new,     new};
+recovery_status({Recover, Terms}) -> {Recover, Terms}.
+
+%% We have been promoted
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                               RateTRef, Deliveries, Senders, MTC) ->
     case Owner of
@@ -173,54 +218,6 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
-
-declare(Recover, From, State = #q{q                   = Q,
-                                  backing_queue       = undefined,
-                                  backing_queue_state = undefined}) ->
-    {Recovery, TermsOrNew} = recovery_status(Recover),
-    case rabbit_amqqueue:internal_declare(Q, Recovery /= new) of
-        #amqqueue{} = Q1 ->
-            case matches(Recovery, Q, Q1) of
-                true ->
-                    gen_server2:reply(From, {new, Q}),
-                    ok = file_handle_cache:register_callback(
-                           rabbit_amqqueue, set_maximum_since_use, [self()]),
-                    ok = rabbit_memory_monitor:register(
-                           self(), {rabbit_amqqueue,
-                                    set_ram_duration_target, [self()]}),
-                    BQ = backing_queue_module(Q1),
-                    BQS = bq_init(BQ, Q, TermsOrNew),
-                    recovery_barrier(Recovery),
-                    State1 = process_args_policy(
-                               State#q{backing_queue       = BQ,
-                                       backing_queue_state = BQS}),
-                    notify_decorators(startup, State),
-                    rabbit_event:notify(queue_created,
-                                        infos(?CREATION_EVENT_KEYS, State1)),
-                    rabbit_event:if_enabled(State1, #q.stats_timer,
-                                            fun() -> emit_stats(State1) end),
-                    noreply(State1);
-                false ->
-                    {stop, normal, {existing, Q1}, State}
-            end;
-        Err ->
-            {stop, normal, Err, State}
-    end.
-
-recovery_status(new)              -> {new,     new};
-recovery_status({Recover, Terms}) -> {Recover, Terms}.
-
-matches(new, Q1, Q2) ->
-    %% i.e. not policy
-    Q1#amqqueue.name            =:= Q2#amqqueue.name            andalso
-    Q1#amqqueue.durable         =:= Q2#amqqueue.durable         andalso
-    Q1#amqqueue.auto_delete     =:= Q2#amqqueue.auto_delete     andalso
-    Q1#amqqueue.exclusive_owner =:= Q2#amqqueue.exclusive_owner andalso
-    Q1#amqqueue.arguments       =:= Q2#amqqueue.arguments       andalso
-    Q1#amqqueue.pid             =:= Q2#amqqueue.pid             andalso
-    Q1#amqqueue.slave_pids      =:= Q2#amqqueue.slave_pids;
-matches(_,  Q,   Q) -> true;
-matches(_, _Q, _Q1) -> false.
 
 maybe_notify_decorators(false, State) -> State;
 maybe_notify_decorators(true,  State) -> notify_decorators(State), State.
@@ -914,31 +911,6 @@ prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
         sync_timeout                         -> 6;
         _                                    -> 0
     end.
-
-handle_call({init, Recover}, From,
-            State = #q{q = #amqqueue{exclusive_owner = none}}) ->
-    declare(Recover, From, State);
-
-%% You used to be able to declare an exclusive durable queue. Sadly we
-%% need to still tidy up after that case, there could be the remnants
-%% of one left over from an upgrade. So that's why we don't enforce
-%% Recover = new here.
-handle_call({init, Recover}, From,
-            State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
-    case rabbit_misc:is_process_alive(Owner) of
-        true  -> erlang:monitor(process, Owner),
-                 declare(Recover, From, State);
-        false -> #q{backing_queue       = undefined,
-                    backing_queue_state = undefined,
-                    q                   = Q} = State,
-                 gen_server2:reply(From, {owner_died, Q}),
-                 BQ = backing_queue_module(Q),
-                 {_, Terms} = recovery_status(Recover),
-                 BQS = bq_init(BQ, Q, Terms),
-                 %% Rely on terminate to delete the queue.
-                 {stop, {shutdown, missing_owner},
-                  State#q{backing_queue = BQ, backing_queue_state = BQS}}
-    end;
 
 handle_call(info, _From, State) ->
     reply(infos(info_keys(), State), State);

@@ -35,7 +35,7 @@
          cancel_sync_mirrors/1]).
 
 %% internal
--export([internal_declare/2, internal_delete/1, run_backing_queue/3,
+-export([internal_declare/1, internal_delete/1, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
@@ -76,9 +76,9 @@
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()), node())
         -> {'new' | 'existing' | 'absent' | 'owner_died',
             rabbit_types:amqqueue()} | rabbit_types:channel_exit()).
--spec(internal_declare/2 ::
-        (rabbit_types:amqqueue(), boolean())
-        -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).
+%% -spec(internal_declare/2 ::
+%%         (rabbit_types:amqqueue(), boolean())
+%%         -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).
 -spec(update/2 ::
         (name(),
          fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue()))
@@ -196,6 +196,8 @@
          arguments]).
 
 recover() ->
+    Marker = spawn_link(fun() -> receive stop -> ok end end),
+    register(rabbit_recovery, Marker),
     %% Clear out remnants of old incarnation, in case we restarted
     %% faster than other nodes handled DOWN messages from us.
     on_node_down(node()),
@@ -212,7 +214,11 @@ recover() ->
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
-    recover_durable_queues(lists:zip(DurableQueues, OrderedRecoveryTerms)).
+    Recovered = recover_durable_queues(
+                  lists:zip(DurableQueues, OrderedRecoveryTerms)),
+    unlink(Marker),
+    Marker ! stop,
+    Recovered.
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
@@ -271,29 +277,14 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
     Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
     gen_server2:call(start_queue_process(Node, Q), {init, new}, infinity).
 
-internal_declare(Q, true) ->
-    rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () -> ok = store_queue(Q), rabbit_misc:const(Q) end);
-internal_declare(Q = #amqqueue{name = QueueName}, false) ->
-    rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () ->
-              case mnesia:wread({rabbit_queue, QueueName}) of
-                  [] ->
-                      case not_found_or_absent(QueueName) of
-                          not_found        -> Q1 = rabbit_policy:set(Q),
-                                              ok = store_queue(Q1),
-                                              B = add_default_binding(Q1),
-                                              fun () -> B(), Q1 end;
-                          {absent, _Q} = R -> rabbit_misc:const(R)
-                      end;
-                  [ExistingQ = #amqqueue{pid = QPid}] ->
-                      case rabbit_misc:is_process_alive(QPid) of
-                          true  -> rabbit_misc:const(ExistingQ);
-                          false -> TailFun = internal_delete(QueueName),
-                                   fun () -> TailFun(), ExistingQ end
-                      end
-              end
-      end).
+internal_declare(Q = #amqqueue{name = QueueName}) ->
+    case not_found_or_absent(QueueName) of
+        not_found        -> ok = store_queue(Q),
+                            B = add_default_binding(Q),
+                            %% TODO can we simplify return here?
+                            {new, fun () -> B(), Q end};
+        {absent, _Q} = R -> R
+    end.
 
 update(Name, Fun) ->
     case mnesia:wread({rabbit_queue, Name}) of

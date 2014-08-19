@@ -48,5 +48,5 @@ start_child(Node, Args) ->
 
 init([]) ->
     {ok, {{simple_one_for_one, 10, 10},
-          [{rabbit_amqqueue, {rabbit_amqqueue_process, start_link, []},
+          [{rabbit_amqqueue, {rabbit_prequeue, start_link, []},
             temporary, ?MAX_WAIT, worker, [rabbit_amqqueue_process]}]}}.
