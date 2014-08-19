@@ -105,8 +105,7 @@ statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 
 %%----------------------------------------------------------------------------
 
-init(_) ->
-    exit(cannot_be_called_directly).
+init(_) -> exit(cannot_be_called_directly).
 
 %% We have just been declared or recovered
 init_declared(Recover, From, Q = #amqqueue{name            = QName,

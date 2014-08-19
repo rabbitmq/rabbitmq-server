@@ -71,16 +71,13 @@ init_non_recovery(Q = #amqqueue{name = QueueName}) ->
                fun () ->
                        case mnesia:wread({rabbit_queue, QueueName}) of
                            [] ->
-                               {decl, rabbit_amqqueue:internal_declare(Q)};
-                           [ExistingQ = #amqqueue{pid = QPid}] ->
-                               case rabbit_misc:is_process_alive(QPid) of
-                                   true  -> {decl, {existing, ExistingQ}};
-                                   false -> exit(todo)
-                               end
+                               {declared, rabbit_amqqueue:internal_declare(Q)};
+                           [ExistingQ] ->
+                               init_existing(ExistingQ)
                        end
                end),
     case Result of
-        {decl, DeclResult} ->
+        {declared, DeclResult} ->
             %% We have just been declared. Block waiting for an init
             %% call so that we don't respond to any other message first
             receive {'$gen_call', From, {init, new}} ->
@@ -92,8 +89,37 @@ init_non_recovery(Q = #amqqueue{name = QueueName}) ->
                             gen_server2:reply(From, DeclResult),
                             {stop, normal, Q}
                     end
-            end
+            end;
+        new_slave ->
+            rabbit_mirror_queue_slave:init_slave(Q);
+        crash_restart ->
+            exit(todo);
+        sleep_retry ->
+            timer:sleep(25),
+            init_non_recovery(Q)
     end.
+
+init_existing(Q = #amqqueue{pid = QPid, slave_pids = SPids}) ->
+    Alive = fun rabbit_misc:is_process_alive/1,
+    case {Alive(QPid), node(QPid) =:= node()} of
+        {true,  true}  -> {declared, {existing, Q}};  %% [1]
+        {true,  false} -> new_slave;                  %% [2]
+        {false, _}     -> case [SPid || SPid <- SPids, Alive(SPid)] of
+                              [] -> crash_restart;    %% [3]
+                              _  -> sleep_retry       %% [4]
+                          end
+    end.
+%% [1] Lost a race to declare a queue - just return the winner.
+%%
+%% [2] There is a master on another node. Regardless of whether we
+%%     just crashed (as a master or slave) and restarted or were asked to
+%%     start as a slave, we are now a new slave.
+%%
+%% [3] Nothing is alive. We must have just died. Try to restart as a master.
+%%
+%% [4] The current master is dead but there are alive slaves. This is
+%%     not a stable situation. Sleep and wait for somebody else to make a
+%%     move - those slaves should either promote one of their own or die.
 
 init_recovery(Q) ->
     rabbit_misc:execute_mnesia_transaction(

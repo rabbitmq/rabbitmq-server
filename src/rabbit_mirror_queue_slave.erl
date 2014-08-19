@@ -24,7 +24,7 @@
 %% All instructions from the GM group must be processed in the order
 %% in which they're received.
 
--export([start_link/1, set_maximum_since_use/2, info/1, go/2]).
+-export([set_maximum_since_use/2, info/1, init_slave/1, await/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/4,
@@ -71,23 +71,17 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
-
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
 
 info(QPid) -> gen_server2:call(QPid, info, infinity).
 
-init(Q) ->
-    ?store_proc_name(Q#amqqueue.name),
-    {ok, {not_started, Q}, hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
-      ?DESIRED_HIBERNATE}}.
+await(SPid) -> gen_server2:call(SPid, await, infinity).
 
-go(SPid, sync)  -> gen_server2:call(SPid, go, infinity);
-go(SPid, async) -> gen_server2:cast(SPid, go).
+init(_) -> exit(cannot_be_called_directly).
 
-handle_go(Q = #amqqueue{name = QName}) ->
+init_slave(Q = #amqqueue{name = QName}) ->
+    ?store_proc_name(QName),
     %% We join the GM group before we add ourselves to the amqqueue
     %% record. As a result:
     %% 1. We can receive msgs from GM that correspond to messages we will
@@ -141,25 +135,26 @@ handle_go(Q = #amqqueue{name = QName}) ->
             ok = gm:broadcast(GM, request_depth),
             ok = gm:validate_members(GM, [GM | [G || {G, _} <- GMPids]]),
             rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
-            {ok, State};
+            {become, ?MODULE, State, hibernate};
         {stale, StalePid} ->
             rabbit_mirror_queue_misc:log_warning(
               QName, "Detected stale HA master: ~p~n", [StalePid]),
             gm:leave(GM),
-            {error, {stale_master_pid, StalePid}};
+            {stop, {stale_master_pid, StalePid}, Q};
         duplicate_live_master ->
             gm:leave(GM),
-            {error, {duplicate_live_master, Node}};
+            {stop, {duplicate_live_master, Node}, Q};
         existing ->
             gm:leave(GM),
-            {error, normal};
+            {stop, normal, Q};
+        %% TODO what about this case?
         master_in_recovery ->
             gm:leave(GM),
             %% The queue record vanished - we must have a master starting
             %% concurrently with us. In that case we can safely decide to do
             %% nothing here, and the master will start us in
             %% master:init_with_existing_bq/3
-            {error, normal}
+            {stop, normal, Q}
     end.
 
 init_it(Self, GM, Node, QName) ->
@@ -193,11 +188,8 @@ add_slave(Q = #amqqueue { slave_pids = SPids, gm_pids = GMPids }, New, GM) ->
     rabbit_mirror_queue_misc:store_updated_slaves(
       Q#amqqueue{slave_pids = SPids ++ [New], gm_pids = [{GM, New} | GMPids]}).
 
-handle_call(go, _From, {not_started, Q} = NotStarted) ->
-    case handle_go(Q) of
-        {ok, State}    -> {reply, ok, State};
-        {error, Error} -> {stop, Error, NotStarted}
-    end;
+handle_call(await, _From, State) ->
+    {reply, ok, State};
 
 handle_call({gm_deaths, DeadGMPids}, From,
             State = #state { gm = GM, q = Q = #amqqueue {
@@ -234,12 +226,6 @@ handle_call({gm_deaths, DeadGMPids}, From,
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State).
-
-handle_cast(go, {not_started, Q} = NotStarted) ->
-    case handle_go(Q) of
-        {ok, State}    -> {noreply, State};
-        {error, Error} -> {stop, Error, NotStarted}
-    end;
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
@@ -321,8 +307,6 @@ handle_info({bump_credit, Msg}, State) ->
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-terminate(_Reason, {not_started, _Q}) ->
-    ok;
 terminate(_Reason, #state { backing_queue_state = undefined }) ->
     %% We've received a delete_and_terminate from gm, thus nothing to
     %% do here.
@@ -360,9 +344,6 @@ terminate_common(State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-handle_pre_hibernate({not_started, _Q} = State) ->
-    {hibernate, State};
 
 handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS }) ->

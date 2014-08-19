@@ -18,7 +18,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, start_child/2]).
+-export([start_link/0, start_queue_process/2]).
 
 -export([init/1]).
 
@@ -31,10 +31,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(start_child/2 ::
-        (node(), [any()]) -> rabbit_types:ok(pid() | undefined) |
-                             rabbit_types:ok({pid(), any()}) |
-                             rabbit_types:error(any())).
+-spec(start_queue_process/2 :: (node(), rabbit_types:amqqueue()) -> pid()).
 
 -endif.
 
@@ -43,10 +40,12 @@
 start_link() ->
     supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_child(Node, Args) ->
-    supervisor2:start_child({?SERVER, Node}, Args).
+start_queue_process(Node, Q) ->
+    {ok, Pid} = supervisor2:start_child({?SERVER, Node}, [Q]),
+    Pid.
 
 init([]) ->
     {ok, {{simple_one_for_one, 10, 10},
           [{rabbit_amqqueue, {rabbit_prequeue, start_link, []},
-            temporary, ?MAX_WAIT, worker, [rabbit_amqqueue_process]}]}}.
+            temporary, ?MAX_WAIT, worker, [rabbit_amqqueue_process,
+                                           rabbit_mirror_queue_slave]}]}}.
