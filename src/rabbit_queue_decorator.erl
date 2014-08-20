@@ -2,7 +2,7 @@
 
 -include("rabbit.hrl").
 
--export([select/1, set/1]).
+-export([select/1, set/1, register/2, unregister/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -41,3 +41,24 @@ select(Modules) ->
 set(Q) -> Q#amqqueue{decorators = [D || D <- list(), D:active_for(Q)]}.
 
 list() -> [M || {_, M} <- rabbit_registry:lookup_all(queue_decorator)].
+
+register(TypeName, ModuleName) ->
+    rabbit_registry:register(queue_decorator, TypeName, ModuleName),
+    [maybe_recover(Q) || Q <- rabbit_amqqueue:list()],
+    ok.
+
+unregister(TypeName) ->
+    rabbit_registry:unregister(queue_decorator, TypeName),
+    [maybe_recover(Q) || Q <- rabbit_amqqueue:list()],
+    ok.
+
+maybe_recover(Q = #amqqueue{name       = Name,
+                            decorators = Decs}) ->
+    #amqqueue{decorators = Decs1} = set(Q),
+    Old = lists:sort(select(Decs)),
+    New = lists:sort(select(Decs1)),
+    case New of
+        Old -> ok;
+        _   -> [M:startup(Q) || M <- New -- Old],
+               rabbit_amqqueue:update_decorators(Name)
+    end.

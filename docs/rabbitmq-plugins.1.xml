@@ -40,6 +40,7 @@
   <refsynopsisdiv>
     <cmdsynopsis>
       <command>rabbitmq-plugins</command>
+      <arg choice="opt">-n <replaceable>node</replaceable></arg>
       <arg choice="req"><replaceable>command</replaceable></arg>
       <arg choice="opt" rep="repeat"><replaceable>command options</replaceable></arg>
     </cmdsynopsis>
@@ -61,6 +62,16 @@
       explicitly enabled; dependent plugins are marked as implicitly
       enabled. Implicitly enabled plugins are automatically disabled again
       when they are no longer required.
+    </para>
+
+    <para>
+      The <command>enable</command>, <command>disable</command> and
+      <command>set</command> commands will update the plugins file and
+      then attempt to connect to the broker and ensure it is running
+      all enabled plugins. By default if it is not possible to connect
+      to the running broker (for example if it is stopped) then a
+      warning is displayed. Specify <command>--online</command> or
+      <command>--offline</command> to change this behaviour.
     </para>
   </refsect1>
 
@@ -97,12 +108,14 @@
           </variablelist>
           <para>
             Lists all plugins, their versions, dependencies and
-            descriptions. Each plugin is prefixed with a status
-            indicator - [ ] to indicate that the plugin is not
-            enabled, [E] to indicate that it is explicitly enabled,
-            [e] to indicate that it is implicitly enabled, and [!] to
-            indicate that it is enabled but missing and thus not
-            operational.
+            descriptions. Each plugin is prefixed with two status
+            indicator characters inside [ ]. The first indicator can
+            be " " to indicate that the plugin is not enabled, "E" to
+            indicate that it is explicitly enabled, "e" to indicate
+            that it is implicitly enabled, or "!" to indicate that it
+            is enabled but missing and thus not operational. The
+            second indicator can be " " to show that the plugin is not
+            running, or "*" to show that it is.
           </para>
           <para>
             If the optional pattern is given, only plugins whose
@@ -130,17 +143,24 @@
       </varlistentry>
 
       <varlistentry>
-        <term><cmdsynopsis><command>enable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>enable</command> <arg choice="opt">--offline</arg> <arg choice="opt">--online</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
+            <varlistentry>
+              <term>--offline</term>
+              <listitem><para>Just modify the enabled plugins file.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>--online</term>
+              <listitem><para>Treat failure to connect to the running broker as fatal.</para></listitem>
+            </varlistentry>
             <varlistentry>
               <term>plugin</term>
               <listitem><para>One or more plugins to enable.</para></listitem>
             </varlistentry>
           </variablelist>
           <para>
-            Enables the specified plugins and all their
-            dependencies.
+            Enables the specified plugins and all their dependencies.
           </para>
 
           <para role="example-prefix">For example:</para>
@@ -154,17 +174,24 @@
       </varlistentry>
 
       <varlistentry>
-        <term><cmdsynopsis><command>disable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>disable</command> <arg choice="opt">--offline</arg> <arg choice="opt">--online</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
+            <varlistentry>
+              <term>--offline</term>
+              <listitem><para>Just modify the enabled plugins file.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>--online</term>
+              <listitem><para>Treat failure to connect to the running broker as fatal.</para></listitem>
+            </varlistentry>
             <varlistentry>
               <term>plugin</term>
               <listitem><para>One or more plugins to disable.</para></listitem>
             </varlistentry>
           </variablelist>
           <para>
-            Disables the specified plugins and all plugins that
-            depend on them.
+            Disables the specified plugins and all their dependencies.
           </para>
 
           <para role="example-prefix">For example:</para>
@@ -175,6 +202,42 @@
           </para>
         </listitem>
       </varlistentry>
+
+      <varlistentry>
+        <term><cmdsynopsis><command>set</command> <arg choice="opt">--offline</arg> <arg choice="opt">--online</arg> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <listitem>
+          <variablelist>
+            <varlistentry>
+              <term>--offline</term>
+              <listitem><para>Just modify the enabled plugins file.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>--online</term>
+              <listitem><para>Treat failure to connect to the running broker as fatal.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>plugin</term>
+              <listitem><para>Zero or more plugins to enable.</para></listitem>
+            </varlistentry>
+          </variablelist>
+          <para>
+            Enables the specified plugins and all their
+            dependencies. Unlike <command>rabbitmq-plugins
+            enable</command> this command ignores and overwrites any
+            existing enabled plugins. <command>rabbitmq-plugins
+            set</command> with no plugin arguments is a legal command
+            meaning "disable all plugins".
+          </para>
+
+          <para role="example-prefix">For example:</para>
+          <screen role="example">rabbitmq-plugins set rabbitmq_management</screen>
+          <para role="example">
+            This command enables the <command>management</command>
+            plugin and its dependencies and disables everything else.
+          </para>
+        </listitem>
+      </varlistentry>
+
     </variablelist>
 
   </refsect1>
