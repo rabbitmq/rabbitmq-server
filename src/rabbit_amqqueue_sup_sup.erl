@@ -41,8 +41,9 @@
 start_link() ->
     supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_queue_process(Node, Q, Hint) ->
-    {ok, _SupPid, QPid} = supervisor2:start_child({?SERVER, Node}, [Q, Hint]),
+start_queue_process(Node, Q, StartMode) ->
+    {ok, _SupPid, QPid} = supervisor2:start_child(
+                            {?SERVER, Node}, [Q, StartMode]),
     QPid.
 
 init([]) ->

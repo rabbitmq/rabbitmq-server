@@ -195,8 +195,6 @@
          arguments]).
 
 recover() ->
-    Marker = spawn_link(fun() -> receive stop -> ok end end),
-    register(rabbit_recovery, Marker),
     %% Clear out remnants of old incarnation, in case we restarted
     %% faster than other nodes handled DOWN messages from us.
     on_node_down(node()),
@@ -213,11 +211,7 @@ recover() ->
                {rabbit_amqqueue_sup_sup,
                 {rabbit_amqqueue_sup_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup_sup]}),
-    Recovered = recover_durable_queues(
-                  lists:zip(DurableQueues, OrderedRecoveryTerms)),
-    unlink(Marker),
-    Marker ! stop,
-    Recovered.
+    recover_durable_queues(lists:zip(DurableQueues, OrderedRecoveryTerms)).
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup_sup),
