@@ -1666,16 +1666,12 @@ test_declare_on_dead_queue(SecondaryNode) ->
                             rabbit_amqqueue:declare(QueueName, false, false, [],
                                                     none),
                         exit(QPid, kill),
-                        Self ! {self(), killed, QPid}
+                        Self ! {self(), killed}
                 end),
     receive
-        {Pid, killed, QPid} ->
-            {existing, #amqqueue{name = QueueName,
-                                 pid = QPid}} =
-                rabbit_amqqueue:declare(QueueName, false, false, [], none),
-            false = rabbit_misc:is_process_alive(QPid),
-            {new, Q} = rabbit_amqqueue:declare(QueueName, false, false, [],
-                                               none),
+        {Pid, killed} ->
+            {existing, Q} = rabbit_amqqueue:declare(QueueName, false, false, [],
+                                                    none),
             true = rabbit_misc:is_process_alive(Q#amqqueue.pid),
             {ok, 0} = rabbit_amqqueue:delete(Q, false, false),
             passed
