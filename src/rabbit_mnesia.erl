@@ -801,8 +801,7 @@ find_auto_cluster_node([Node | Nodes]) ->
                    find_auto_cluster_node(Nodes)
            end,
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
-        {badrpc, _} = Reason     -> Diag = rabbit_nodes:diagnostics([Node]),
-                                    Fail("~p~n~s~n", [Reason, Diag]);
+        {badrpc, _} = Reason     -> Fail("~p~n", [Reason]);
         %% old delegate hash check
         {_OTP, Rabbit, _Hash, _} -> Fail("version ~s~n", [Rabbit]);
         {OTP, Rabbit, _}         -> case check_consistency(OTP, Rabbit) of
