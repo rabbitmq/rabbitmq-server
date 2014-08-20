@@ -103,8 +103,7 @@ init_non_recovery(Q = #amqqueue{name = QueueName}, Hint) ->
             rabbit_mirror_queue_slave:init_slave(Q);
         {crash_restart, Q1} ->
             rabbit_log:error(
-              "Recovering persistent messages from crashed ~s.~n",
-              [rabbit_misc:rs(QueueName)]),
+              "Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
             Self = self(),
             rabbit_misc:execute_mnesia_transaction(
               fun () ->
