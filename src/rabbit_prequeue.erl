@@ -136,8 +136,7 @@ init_restart(#amqqueue{name = QueueName}) ->
 %%     move.
 
 crash_restart(Q = #amqqueue{name = QueueName}) ->
-    rabbit_log:error(
-      "Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
+    rabbit_log:error("Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
     Self = self(),
     rabbit_misc:execute_mnesia_transaction(
       fun () -> ok = rabbit_amqqueue:store_queue(Q#amqqueue{pid = Self}) end),
