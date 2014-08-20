@@ -411,7 +411,7 @@ handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
       connection_created,
       [{type, network} | infos(?CREATION_EVENT_KEYS, State)], Ref),
     State;
-handle_other({'$gen_cast', force_event_refresh}, State) ->
+handle_other({'$gen_cast', {force_event_refresh, _Ref}}, State) ->
     %% Ignore, we will emit a created event once we start running.
     State;
 handle_other(ensure_stats, State) ->
