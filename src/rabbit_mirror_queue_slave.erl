@@ -147,7 +147,6 @@ init_slave(Q = #amqqueue{name = QName}) ->
         existing ->
             gm:leave(GM),
             {stop, normal, Q};
-        %% TODO what about this case?
         master_in_recovery ->
             gm:leave(GM),
             %% The queue record vanished - we must have a master starting
