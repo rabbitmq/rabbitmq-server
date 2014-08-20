@@ -25,7 +25,7 @@
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          route/2, delete/2, validate_binding/2]).
 %% these must be run inside a mnesia tx
--export([maybe_auto_delete/1, serial/1, peek_serial/1, update/2]).
+-export([maybe_auto_delete/2, serial/1, peek_serial/1, update/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -90,8 +90,8 @@
 -spec(validate_binding/2 ::
         (rabbit_types:exchange(), rabbit_types:binding())
         -> rabbit_types:ok_or_error({'binding_invalid', string(), [any()]})).
--spec(maybe_auto_delete/1::
-        (rabbit_types:exchange())
+-spec(maybe_auto_delete/2::
+        (rabbit_types:exchange(), boolean())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
 -spec(serial/1 :: (rabbit_types:exchange()) ->
                        fun((boolean()) -> 'none' | pos_integer())).
@@ -418,13 +418,13 @@ call_with_exchange(XName, Fun) ->
 
 delete(XName, IfUnused) ->
     Fun = case IfUnused of
-              true  -> fun conditional_delete/1;
-              false -> fun unconditional_delete/1
+              true  -> fun conditional_delete/2;
+              false -> fun unconditional_delete/2
           end,
     call_with_exchange(
       XName,
       fun (X) ->
-              case Fun(X) of
+              case Fun(X, false) of
                   {deleted, X, Bs, Deletions} ->
                       rabbit_binding:process_deletions(
                         rabbit_binding:add_deletion(
@@ -438,21 +438,21 @@ validate_binding(X = #exchange{type = XType}, Binding) ->
     Module = type_to_module(XType),
     Module:validate_binding(X, Binding).
 
-maybe_auto_delete(#exchange{auto_delete = false}) ->
+maybe_auto_delete(#exchange{auto_delete = false}, _OnlyDurable) ->
     not_deleted;
-maybe_auto_delete(#exchange{auto_delete = true} = X) ->
-    case conditional_delete(X) of
+maybe_auto_delete(#exchange{auto_delete = true} = X, OnlyDurable) ->
+    case conditional_delete(X, OnlyDurable) of
         {error, in_use}             -> not_deleted;
         {deleted, X, [], Deletions} -> {deleted, Deletions}
     end.
 
-conditional_delete(X = #exchange{name = XName}) ->
+conditional_delete(X = #exchange{name = XName}, OnlyDurable) ->
     case rabbit_binding:has_for_source(XName) of
-        false  -> unconditional_delete(X);
+        false  -> unconditional_delete(X, OnlyDurable);
         true   -> {error, in_use}
     end.
 
-unconditional_delete(X = #exchange{name = XName}) ->
+unconditional_delete(X = #exchange{name = XName}, OnlyDurable) ->
     %% this 'guarded' delete prevents unnecessary writes to the mnesia
     %% disk log
     case mnesia:wread({rabbit_durable_exchange, XName}) of
@@ -462,7 +462,8 @@ unconditional_delete(X = #exchange{name = XName}) ->
     ok = mnesia:delete({rabbit_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange_serial, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
-    {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
+    {deleted, X, Bindings, rabbit_binding:remove_for_destination(
+                             XName, OnlyDurable)}.
 
 next_serial(XName) ->
     Serial = peek_serial(XName, write),

@@ -630,7 +630,7 @@ notify_sent_queue_down(QPid) ->
 
 resume(QPid, ChPid) -> delegate:cast(QPid, {resume, ChPid}).
 
-internal_delete1(QueueName) ->
+internal_delete1(QueueName, OnlyDurable) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
     %% this 'guarded' delete prevents unnecessary writes to the mnesia
     %% disk log
@@ -640,7 +640,7 @@ internal_delete1(QueueName) ->
     end,
     %% we want to execute some things, as decided by rabbit_exchange,
     %% after the transaction.
-    rabbit_binding:remove_for_destination(QueueName).
+    rabbit_binding:remove_for_destination(QueueName, OnlyDurable).
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
@@ -650,7 +650,7 @@ internal_delete(QueueName) ->
                   {[], []} ->
                       rabbit_misc:const({error, not_found});
                   _ ->
-                      Deletions = internal_delete1(QueueName),
+                      Deletions = internal_delete1(QueueName, false),
                       T = rabbit_binding:process_deletions(Deletions),
                       fun() ->
                               ok = T(),
@@ -677,7 +677,7 @@ forget_all_durable(Node) ->
 forget_node_for_queue(#amqqueue{name             = Name,
                                 down_slave_nodes = []}) ->
     %% No slaves to recover from, queue is gone
-    rabbit_binding:process_deletions(internal_delete1(Name));
+    rabbit_binding:process_deletions(internal_delete1(Name, true));
 
 forget_node_for_queue(Q = #amqqueue{down_slave_nodes = [H|T]}) ->
     %% Promote a slave while down - it'll happily recover as a master
