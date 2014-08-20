@@ -164,9 +164,10 @@ declare_fast_reply_to(<<"amq.rabbitmq.reply-to">>) ->
 declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
     case decode_fast_reply_to(Rest) of
         {ok, Pid, Key} ->
+            Msg = {declare_fast_reply_to, Key},
             rabbit_misc:with_exit_handler(
               rabbit_misc:const(not_found),
-              fun() -> gen_server2:call(Pid, {declare_fast_reply_to, Key}) end);
+              fun() -> gen_server2:call(Pid, Msg, infinity) end);
         error ->
             not_found
     end;
