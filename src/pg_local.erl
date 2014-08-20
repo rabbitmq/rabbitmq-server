@@ -84,7 +84,13 @@ get_members(Name) ->
 
 in_group(Name, Pid) ->
     ensure_started(),
-    member_present(Name, Pid).
+    %% The join message is a cast and thus can race, but we want to
+    %% keep it that way to be fast in the common case.
+    case member_present(Name, Pid) of
+        true  -> true;
+        false -> sync(),
+                 member_present(Name, Pid)
+    end.
 
 sync() ->
     ensure_started(),
