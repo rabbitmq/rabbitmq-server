@@ -210,9 +210,9 @@ recover() ->
         BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
-               {rabbit_amqqueue_sup,
-                {rabbit_amqqueue_sup, start_link, []},
-                transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
+               {rabbit_amqqueue_sup_sup,
+                {rabbit_amqqueue_sup_sup, start_link, []},
+                transient, infinity, supervisor, [rabbit_amqqueue_sup_sup]}),
     Recovered = recover_durable_queues(
                   lists:zip(DurableQueues, OrderedRecoveryTerms)),
     unlink(Marker),
@@ -220,8 +220,8 @@ recover() ->
     Recovered.
 
 stop() ->
-    ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
-    ok = supervisor:delete_child(rabbit_sup, rabbit_amqqueue_sup),
+    ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup_sup),
+    ok = supervisor:delete_child(rabbit_sup, rabbit_amqqueue_sup_sup),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     ok = BQ:stop().
 
@@ -247,7 +247,7 @@ find_durable_queues() ->
 recover_durable_queues(QueuesAndRecoveryTerms) ->
     {Results, Failures} =
         gen_server2:mcall(
-          [{rabbit_amqqueue_sup:start_queue_process(node(), Q, recovery),
+          [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q, recovery),
             {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
     [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
                       [Pid, Error]) || {Pid, Error} <- Failures],
@@ -274,8 +274,9 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
                                       down_slave_nodes = [],
                                       gm_pids          = []})),
     Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
-    gen_server2:call(rabbit_amqqueue_sup:start_queue_process(Node, Q, declare),
-                     {init, new}, infinity).
+    gen_server2:call(
+      rabbit_amqqueue_sup_sup:start_queue_process(Node, Q, declare),
+      {init, new}, infinity).
 
 internal_declare(Q = #amqqueue{name = QueueName}) ->
     case not_found_or_absent(QueueName) of
