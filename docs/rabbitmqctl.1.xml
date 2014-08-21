@@ -406,11 +406,15 @@
               online, except when using the <command>--offline</command> flag.
             </para>
             <para>
-              When using the <command>--offline</command> flag the node you
-              connect to will become the canonical source for cluster metadata
-              (e.g. which queues exist), even if it was not before. Therefore
-              you should use this command on the latest node to shut down if
-              at all possible.
+              When using the <command>--offline</command> flag
+              rabbitmqctl will not attempt to connect to a node as
+              normal; instead it will temporarily become the node in
+              order to make the change. This is useful if the node
+              cannot be started normally. In this case the node will
+              become the canonical source for cluster metadata
+              (e.g. which queues exist), even if it was not
+              before. Therefore you should use this command on the
+              latest node to shut down if at all possible.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl -n hare@mcnulty forget_cluster_node rabbit@stringer</screen>
@@ -450,6 +454,44 @@
               contact B, but this will fail since B is not in the cluster
               anymore. <command>update_cluster_nodes -n A C</command> will solve
               this situation.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>force_boot</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Ensure that the node will start next time, even if it
+              was not the last to shut down.
+            </para>
+            <para>
+              Normally when you shut down a RabbitMQ cluster
+              altogether, the first node you restart should be the
+              last one to go down, since it may have seen things
+              happen that other nodes did not. But sometimes
+              that's not possible: for instance if the entire cluster
+              loses power then all nodes may think they were not the
+              last to shut down.
+            </para>
+            <para>
+              In such a case you can invoke <command>rabbitmqctl
+              force_boot</command> while the node is down. This will
+              tell the node to unconditionally start next time you ask
+              it to. If any changes happened to the cluster after this
+              node shut down, they will be lost.
+            </para>
+            <para>
+              If the last node to go down is permanently lost then you
+              should use <command>rabbitmqctl forget_cluster_node
+              --offline</command> in preference to this command, as it
+              will ensure that mirrored queues which were mastered on
+              the lost node get promoted.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl force_boot</screen>
+            <para role="example">
+              This will force the node not to wait for other nodes
+              next time it is started.
             </para>
           </listitem>
         </varlistentry>
@@ -1148,6 +1190,42 @@
                   (queue depth).</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>messages_ready_ram</term>
+                <listitem><para>Number of messages from messages_ready which are resident in ram.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_unacknowledged_ram</term>
+                <listitem><para>Number of messages from messages_unacknowledged which are resident in ram.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_ram</term>
+                <listitem><para>Total number of messages which are resident in ram.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_persistent</term>
+                <listitem><para>Total number of persistent messages in the queue (will always be 0 for transient queues).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>message_bytes</term>
+                <listitem><para>Sum of the size of all message bodies in the queue. This does not include the message properties (including headers) or any overhead.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>message_bytes_ready</term>
+                <listitem><para>Like <command>message_bytes</command> but counting only those messages ready to be delivered to clients.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>message_bytes_unacknowledged</term>
+                <listitem><para>Like <command>message_bytes</command> but counting only those messages delivered to clients but not yet acknowledged.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>message_bytes_ram</term>
+                <listitem><para>Like <command>message_bytes</command> but counting only those messages which are in RAM.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>message_bytes_persistent</term>
+                <listitem><para>Like <command>message_bytes</command> but counting only those messages which are persistent.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>consumers</term>
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
@@ -1474,6 +1552,10 @@
               <varlistentry>
                 <term>send_pend</term>
                 <listitem><para>Send queue size.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>connected_at</term>
+                <listitem><para>Date and time this connection was established, as timestamp.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>

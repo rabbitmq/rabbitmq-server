@@ -183,12 +183,13 @@
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
+              %% 'Notify' is a boolean that indicates whether a queue should be
+              %% notified of a change in the limit or volume that may allow it to
+              %% deliver more messages via the limiter's channel.
               queues = orddict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
-%% 'Notify' is a boolean that indicates whether a queue should be
-%% notified of a change in the limit or volume that may allow it to
-%% deliver more messages via the limiter's channel.
 
+%% mode is of type credit_mode()
 -record(credit, {credit = 0, mode}).
 
 %%----------------------------------------------------------------------------
