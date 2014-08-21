@@ -42,7 +42,7 @@
 
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(submit/1 :: (fun (() -> A) | mfargs()) -> A).
--spec(submit/2 :: (fun (() -> A) | mfargs(), boolean()) -> A).
+-spec(submit/2 :: (fun (() -> A) | mfargs(), 'reuse' | 'single') -> A).
 -spec(submit_async/1 :: (fun (() -> any()) | mfargs()) -> 'ok').
 -spec(ready/1 :: (pid()) -> 'ok').
 -spec(idle/1 :: (pid()) -> 'ok').
@@ -63,14 +63,14 @@ start_link() -> gen_server2:start_link({local, ?SERVER}, ?MODULE, [],
                                        [{timeout, infinity}]).
 
 submit(Fun) ->
-    submit(Fun, false).
+    submit(Fun, reuse).
 
-%% OneOffProcess =:= true is for working around the mnesia_locker bug.
-submit(Fun, OneOffProcess) ->
+%% ProcessModel =:= single is for working around the mnesia_locker bug.
+submit(Fun, ProcessModel) ->
     case get(worker_pool_worker) of
         true -> worker_pool_worker:run(Fun);
         _    -> Pid = gen_server2:call(?SERVER, {next_free, self()}, infinity),
-                worker_pool_worker:submit(Pid, Fun, OneOffProcess)
+                worker_pool_worker:submit(Pid, Fun, ProcessModel)
     end.
 
 submit_async(Fun) -> gen_server2:cast(?SERVER, {run_async, Fun}).

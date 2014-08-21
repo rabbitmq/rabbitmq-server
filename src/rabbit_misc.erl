@@ -504,7 +504,7 @@ execute_mnesia_transaction(TxFun) ->
                                 end;
                        true  -> mnesia:sync_transaction(TxFun)
                    end
-           end, true) of
+           end, single) of
         {sync, {atomic,  Result}} -> mnesia_sync:sync(), Result;
         {sync, {aborted, Reason}} -> throw({error, Reason});
         {atomic,  Result}         -> Result;
