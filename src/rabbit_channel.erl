@@ -174,12 +174,13 @@ declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
 declare_fast_reply_to(_) ->
     not_found.
 
-decode_fast_reply_to(Suffix) ->
-    case binary:split(Suffix, <<".">>) of
-        [PidEnc, Key] -> Pid = binary_to_term(base64:decode(PidEnc)),
-                         {ok, Pid, Key};
-        _             -> error
-    end.
+%% It's inelegant to depend on the encoded lengths here, but
+%% binary:split/2 does not exist in R13B03.
+decode_fast_reply_to(<<PidEnc:40/binary, ".", Key:24/binary>>) ->
+    Pid = binary_to_term(base64:decode(PidEnc)),
+    {ok, Pid, Key};
+decode_fast_reply_to(_) ->
+    error.
 
 send_credit_reply(Pid, Len) ->
     gen_server2:cast(Pid, {send_credit_reply, Len}).
