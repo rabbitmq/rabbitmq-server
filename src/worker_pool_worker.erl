@@ -18,7 +18,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0, next_job_from/2, submit/2, submit_async/2, run/1]).
+-export([start_link/0, next_job_from/2, submit/3, submit_async/2, run/1]).
 
 -export([set_maximum_since_use/2]).
 
@@ -33,7 +33,7 @@
 
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(next_job_from/2 :: (pid(), pid()) -> 'ok').
--spec(submit/2 :: (pid(), fun (() -> A) | mfargs()) -> A).
+-spec(submit/3 :: (pid(), fun (() -> A) | mfargs(), 'reuse' | 'single') -> A).
 -spec(submit_async/2 :: (pid(), fun (() -> any()) | mfargs()) -> 'ok').
 -spec(run/1 :: (fun (() -> A)) -> A; (mfargs()) -> any()).
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
@@ -53,8 +53,8 @@ start_link() ->
 next_job_from(Pid, CPid) ->
     gen_server2:cast(Pid, {next_job_from, CPid}).
 
-submit(Pid, Fun) ->
-    gen_server2:call(Pid, {submit, Fun, self()}, infinity).
+submit(Pid, Fun, ProcessModel) ->
+    gen_server2:call(Pid, {submit, Fun, self(), ProcessModel}, infinity).
 
 submit_async(Pid, Fun) ->
     gen_server2:cast(Pid, {submit_async, Fun}).
@@ -62,10 +62,22 @@ submit_async(Pid, Fun) ->
 set_maximum_since_use(Pid, Age) ->
     gen_server2:cast(Pid, {set_maximum_since_use, Age}).
 
-run({M, F, A}) ->
-    apply(M, F, A);
-run(Fun) ->
-    Fun().
+run({M, F, A}) -> apply(M, F, A);
+run(Fun)       -> Fun().
+
+run(Fun, reuse) ->
+    run(Fun);
+run(Fun, single) ->
+    Self = self(),
+    Ref = make_ref(),
+    spawn_link(fun () ->
+                       put(worker_pool_worker, true),
+                       Self ! {Ref, run(Fun)},
+                       unlink(Self)
+               end),
+    receive
+        {Ref, Res} -> Res
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -81,12 +93,12 @@ prioritise_cast({set_maximum_since_use, _Age}, _Len, _State) -> 8;
 prioritise_cast({next_job_from, _CPid},        _Len, _State) -> 7;
 prioritise_cast(_Msg,                          _Len, _State) -> 0.
 
-handle_call({submit, Fun, CPid}, From, undefined) ->
-    {noreply, {job, CPid, From, Fun}, hibernate};
+handle_call({submit, Fun, CPid, ProcessModel}, From, undefined) ->
+    {noreply, {job, CPid, From, Fun, ProcessModel}, hibernate};
 
-handle_call({submit, Fun, CPid}, From, {from, CPid, MRef}) ->
+handle_call({submit, Fun, CPid, ProcessModel}, From, {from, CPid, MRef}) ->
     erlang:demonitor(MRef),
-    gen_server2:reply(From, run(Fun)),
+    gen_server2:reply(From, run(Fun, ProcessModel)),
     ok = worker_pool:idle(self()),
     {noreply, undefined, hibernate};
 
@@ -97,8 +109,8 @@ handle_cast({next_job_from, CPid}, undefined) ->
     MRef = erlang:monitor(process, CPid),
     {noreply, {from, CPid, MRef}, hibernate};
 
-handle_cast({next_job_from, CPid}, {job, CPid, From, Fun}) ->
-    gen_server2:reply(From, run(Fun)),
+handle_cast({next_job_from, CPid}, {job, CPid, From, Fun, ProcessModel}) ->
+    gen_server2:reply(From, run(Fun, ProcessModel)),
     ok = worker_pool:idle(self()),
     {noreply, undefined, hibernate};
 
