@@ -206,7 +206,7 @@ terminate({shutdown, missing_owner} = Reason, State) ->
     terminate_shutdown(terminate_delete(false, Reason, State), State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate(normal,            State) -> %% auto-delete case
+terminate(normal,            State) -> %% delete case
     terminate_shutdown(terminate_delete(true, normal, State), State);
 terminate(_Reason,           State) ->
     terminate_crash(State).
