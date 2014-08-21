@@ -460,9 +460,9 @@ fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
 floor(TS, #state{interval = Interval}) ->
-    rabbit_mgmt_util:floor(rabbit_mgmt_format:timestamp_ms(TS), Interval).
+    rabbit_mgmt_util:floor(rabbit_mgmt_format:now_to_ms(TS), Interval).
 ceil(TS, #state{interval = Interval}) ->
-    rabbit_mgmt_util:ceil (rabbit_mgmt_format:timestamp_ms(TS), Interval).
+    rabbit_mgmt_util:ceil (rabbit_mgmt_format:now_to_ms(TS), Interval).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
@@ -474,7 +474,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
-                  {fun rabbit_mgmt_format:timestamp/1, [idle_since]},
+                  {fun rabbit_mgmt_format:now_to_str/1, [idle_since]},
                   {fun rabbit_mgmt_format:queue_state/1, [state]}],
                  ?COARSE_QUEUE_STATS, State);
 
@@ -535,7 +535,7 @@ handle_event(#event{type = channel_created, props = Stats}, State) ->
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State = #state{old_stats = OldTable}) ->
     handle_stats(channel_stats, Stats, Timestamp,
-                 [{fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
+                 [{fun rabbit_mgmt_format:now_to_str/1, [idle_since]}],
                  [], State),
     ChPid = id(channel_stats, Stats),
     AllStats = [old_fine_stats(Type, Stats, State)
