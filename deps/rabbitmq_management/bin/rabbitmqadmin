@@ -119,8 +119,10 @@ PURGABLE = {
 EXTRA_VERBS = {
     'publish': {'mandatory': ['routing_key'],
                 'optional':  {'payload': None,
+                              'properties': {},
                               'exchange': 'amq.default',
                               'payload_encoding': 'string'},
+                'json':      ['properties'],
                 'uri':       '/exchanges/{vhost}/{exchange}/publish'},
     'get':     {'mandatory': ['queue'],
                 'optional':  {'count': '1', 'requeue': 'true',
@@ -478,7 +480,6 @@ class Management:
 
     def invoke_publish(self):
         (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
-        upload['properties'] = {} # TODO do we care here?
         if not 'payload' in upload:
             data = sys.stdin.read()
             upload['payload'] = base64.b64encode(data)
