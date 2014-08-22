@@ -591,7 +591,7 @@ class Management:
         uri_template = obj['uri']
         upload = {}
         for k in optional.keys():
-            if optional[k]:
+            if optional[k] is not None:
                 upload[k] = optional[k]
         for arg in args:
             assert_usage("=" in arg,
