@@ -66,8 +66,7 @@ Display usage information.
             <para>
 Install the service. The service will not be started.
 Subsequent invocations will update the service parameters if
-relevant environment variables were modified or if the active
-plugins were changed.
+relevant environment variables were modified.
             </para>
           </listitem>
         </varlistentry>
