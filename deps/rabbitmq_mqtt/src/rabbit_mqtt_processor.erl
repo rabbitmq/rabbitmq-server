@@ -493,7 +493,14 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
 
 adapter_info(Sock, ProtoVer) ->
     amqp_connection:socket_adapter_info(
-             Sock, {'MQTT', integer_to_list(ProtoVer)}).
+             Sock, {'MQTT', human_readable_mqtt_version(ProtoVer)}).
+
+human_readable_mqtt_version(3) ->
+    "3.1.0";
+human_readable_mqtt_version(4) ->
+    "3.1.1";
+human_readable_mqtt_version(_) ->
+    "N/A".
 
 send_client(Frame, #proc_state{ socket = Sock }) ->
     %rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),
