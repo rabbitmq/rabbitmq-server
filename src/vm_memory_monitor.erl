@@ -82,10 +82,7 @@
 
 get_total_memory() ->
     try
-        case get_total_memory_from_configuration() of
-            undefined -> get_total_memory(os:type());
-            N         -> N
-        end
+        application:get_env(rabbit, total_memory, get_total_memory(os:type()))
     catch _:Error ->
             rabbit_log:warning(
               "Failed to get total system memory: ~n~p~n~p~n",
@@ -110,12 +107,6 @@ set_vm_memory_high_watermark(Fraction) ->
 
 get_memory_limit() ->
     gen_server:call(?MODULE, get_memory_limit, infinity).
-
-get_total_memory_from_configuration() ->
-    case application:get_env(total_memory) of
-        undefined -> undefined;
-        {ok, V}   -> V
-    end.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
