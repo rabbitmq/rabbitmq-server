@@ -44,6 +44,7 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
 -define(ONE_MB, 1048576).
+-define(APP, rabbit).
 
 %% For an unknown OS, we assume that we have 1GB of memory. It'll be
 %% wrong. Scale by vm_memory_high_watermark in configuration to get a
@@ -112,7 +113,7 @@ get_memory_limit() ->
     gen_server:call(?MODULE, get_memory_limit, infinity).
 
 get_total_memory_from_configuration() ->
-    case application:get_env(total_memory) of
+    case application:get_env(?APP, total_memory) of
         undefined -> undefined;
         {ok, V}   -> V
     end.
