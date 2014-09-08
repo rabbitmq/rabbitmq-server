@@ -147,9 +147,13 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
-    {ok, Pid, Key} = decode_fast_reply_to(Rest),
-    delegate:invoke_no_result(
-      Pid, {?MODULE, deliver_reply_local, [Key, Delivery]}).
+    case decode_fast_reply_to(Rest) of
+        {ok, Pid, Key} ->
+            delegate:invoke_no_result(
+              Pid, {?MODULE, deliver_reply_local, [Key, Delivery]});
+        error ->
+            ok
+    end.
 
 %% We want to ensure people can't use this mechanism to send a message
 %% to an arbitrary process and kill it!
@@ -174,8 +178,8 @@ declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
 declare_fast_reply_to(_) ->
     not_found.
 
-decode_fast_reply_to(Suffix) ->
-    case binary:split(Suffix, <<".">>) of
+decode_fast_reply_to(Rest) ->
+    case string:tokens(binary_to_list(Rest), ".") of
         [PidEnc, Key] -> Pid = binary_to_term(base64:decode(PidEnc)),
                          {ok, Pid, Key};
         _             -> error
@@ -867,7 +871,8 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                     Key = base64:encode(rabbit_guid:gen_secure()),
                     PidEnc = base64:encode(term_to_binary(self())),
                     Suffix = <<PidEnc/binary, ".", Key/binary>>,
-                    State1 = State#ch{reply_consumer = {CTag, Suffix, Key}},
+                    Consumer = {CTag, Suffix, binary_to_list(Key)},
+                    State1 = State#ch{reply_consumer = Consumer},
                     case NoWait of
                         true  -> {noreply, State1};
                         false -> Rep = #'basic.consume_ok'{consumer_tag = CTag},
