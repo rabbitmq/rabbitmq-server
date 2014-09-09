@@ -293,7 +293,7 @@ protocol_error(#amqp_error{} = Error) ->
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
-absent(#amqqueue{name = QueueName, pid = QPid, durable = true}, down) ->
+absent(#amqqueue{name = QueueName, pid = QPid, durable = true}, nodedown) ->
     %% The assertion of durability is mainly there because we mention
     %% durability in the error message. That way we will hopefully
     %% notice if at some future point our logic changes s.t. we get
