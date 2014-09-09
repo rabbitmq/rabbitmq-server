@@ -65,8 +65,8 @@ init({Q, StartMode0, Marker}) ->
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, {unexpected_call, Msg}, State}.
 
-handle_cast(init, {Q, declare})  -> init_declared(Q);
-handle_cast(init, {Q, recovery}) -> init_recovery(Q);
+handle_cast(init, {Q, declare})  -> init_master(Q);
+handle_cast(init, {Q, recovery}) -> init_master(Q);
 handle_cast(init, {Q, slave})    -> init_slave(Q);
 handle_cast(init, {Q, restart})  -> init_restart(Q);
 
@@ -84,42 +84,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-init_declared(Q = #amqqueue{name = QueueName}) ->
-    Decl = rabbit_misc:execute_mnesia_transaction(
-             fun () ->
-                     case mnesia:wread({rabbit_queue, QueueName}) of
-                         []          -> rabbit_amqqueue:internal_declare(Q);
-                         [ExistingQ] -> {existing, ExistingQ}
-                     end
-             end),
-    %% We have just been declared. Block waiting for an init call so
-    %% that we can let the declarer know whether we actually started
-    %% something.
-    receive {'$gen_call', From, {init, new}} ->
-            case Decl of
-                {new, Fun} ->
-                    Q1 = Fun(),
-                    rabbit_amqqueue_process:become(new, From, Q1);
-                {absent, _, _} ->
-                    gen_server2:reply(From, Decl),
-                    {stop, normal, Q};
-                {existing, _} ->
-                    gen_server2:reply(From, Decl),
-                    {stop, normal, Q}
-            end
-    end.
-
-init_recovery(Q) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> ok = rabbit_amqqueue:store_queue(Q) end),
-    %% This time we have an init call to ensure the recovery terms do
-    %% not sit in the supervisor forever.
-    receive {'$gen_call', From, {init, Terms}} ->
-            rabbit_amqqueue_process:become(Terms, From, Q)
-    end.
-
-init_slave(Q) ->
-    rabbit_mirror_queue_slave:become(Q).
+init_master(Q) -> rabbit_amqqueue_process:become(Q).
+init_slave(Q)  -> rabbit_mirror_queue_slave:become(Q).
 
 init_restart(#amqqueue{name = QueueName}) ->
     {ok, Q = #amqqueue{pid        = QPid,
@@ -147,8 +113,5 @@ init_restart(#amqqueue{name = QueueName}) ->
 
 crash_restart(Q = #amqqueue{name = QueueName}) ->
     rabbit_log:error("Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
-    Self = self(),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> ok = rabbit_amqqueue:store_queue(Q#amqqueue{pid = Self}) end),
-    rabbit_amqqueue_process:become(
-      {no_barrier, non_clean_shutdown}, none, Q).
+    gen_server2:cast(self(), init),
+    rabbit_amqqueue_process:become(Q#amqqueue{pid = self()}).

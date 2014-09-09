@@ -36,7 +36,7 @@
          cancel_sync_mirrors/1]).
 
 %% internal
--export([internal_declare/1, internal_delete/1, run_backing_queue/3,
+-export([internal_declare/2, internal_delete/1, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
@@ -77,8 +77,9 @@
         -> {'new' | 'existing' | 'owner_died', rabbit_types:amqqueue()} |
            {'absent', rabbit_types:amqqueue(), absent_reason()} |
            rabbit_types:channel_exit()).
--spec(internal_declare/1 ::
-        (rabbit_types:amqqueue())
+%% TODO nonsense
+-spec(internal_declare/2 ::
+        (rabbit_types:amqqueue(), boolean())
         -> {'new', rabbit_misc:thunk(rabbit_types:amqqueue())} |
            {'absent', rabbit_types:amqqueue()}).
 -spec(update/2 ::
@@ -277,13 +278,25 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
       rabbit_amqqueue_sup_sup:start_queue_process(Node, Q, declare),
       {init, new}, infinity).
 
-internal_declare(Q = #amqqueue{name = QueueName}) ->
-    case not_found_or_absent(QueueName) of
-        not_found                 -> ok = store_queue(Q),
-                                     B = add_default_binding(Q),
-                                     {new, fun () -> B(), Q end};
-        {absent, _Q, _Reason} = R -> R
-    end.
+internal_declare(Q, true) ->
+    rabbit_misc:execute_mnesia_tx_with_tail(
+      fun () -> ok = store_queue(Q), rabbit_misc:const(Q) end);
+internal_declare(Q = #amqqueue{name = QueueName}, false) ->
+    rabbit_misc:execute_mnesia_tx_with_tail(
+      fun () ->
+              case mnesia:wread({rabbit_queue, QueueName}) of
+                  [] ->
+                      case not_found_or_absent(QueueName) of
+                          not_found           -> Q1 = rabbit_policy:set(Q),
+                                                 ok = store_queue(Q1),
+                                                 B = add_default_binding(Q1),
+                                                 fun () -> B(), Q1 end;
+                          {absent, _Q, _} = R -> rabbit_misc:const(R)
+                      end;
+                  [ExistingQ] ->
+                      rabbit_misc:const(ExistingQ)
+              end
+      end).
 
 update(Name, Fun) ->
     case mnesia:wread({rabbit_queue, Name}) of
