@@ -99,7 +99,10 @@ init_declared(Q = #amqqueue{name = QueueName}) ->
                 {new, Fun} ->
                     Q1 = Fun(),
                     rabbit_amqqueue_process:init_declared(new,From, Q1);
-                {F, _} when F =:= absent; F =:= existing ->
+                {absent, _, _} ->
+                    gen_server2:reply(From, Decl),
+                    {stop, normal, Q};
+                {existing, _} ->
                     gen_server2:reply(From, Decl),
                     {stop, normal, Q}
             end

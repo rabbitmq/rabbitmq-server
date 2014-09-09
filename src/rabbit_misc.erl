@@ -21,7 +21,7 @@
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4, quit/1,
          protocol_error/3, protocol_error/4, protocol_error/1]).
--export([not_found/1, absent/1]).
+-export([not_found/1, absent/2]).
 -export([type_class/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
 -export([table_lookup/2, set_table_value/4]).
@@ -119,7 +119,8 @@
 -spec(protocol_error/1 ::
         (rabbit_types:amqp_error()) -> channel_or_connection_exit()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> rabbit_types:channel_exit()).
--spec(absent/1 :: (rabbit_types:amqqueue()) -> rabbit_types:channel_exit()).
+-spec(absent/2 :: (rabbit_types:amqqueue(), rabbit_amqqueue:absent_reason())
+                  -> rabbit_types:channel_exit()).
 -spec(type_class/1 :: (rabbit_framing:amqp_field_type()) -> atom()).
 -spec(assert_args_equivalence/4 :: (rabbit_framing:amqp_table(),
                                     rabbit_framing:amqp_table(),
@@ -292,14 +293,18 @@ protocol_error(#amqp_error{} = Error) ->
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
-absent(#amqqueue{name = QueueName, pid = QPid, durable = true}) ->
+absent(#amqqueue{name = QueueName, pid = QPid, durable = true}, down) ->
     %% The assertion of durability is mainly there because we mention
     %% durability in the error message. That way we will hopefully
     %% notice if at some future point our logic changes s.t. we get
     %% here with non-durable queues.
     protocol_error(not_found,
                    "home node '~s' of durable ~s is down or inaccessible",
-                   [node(QPid), rs(QueueName)]).
+                   [node(QPid), rs(QueueName)]);
+
+absent(#amqqueue{name = QueueName}, crashed) ->
+    protocol_error(not_found,
+                   "~s has crashed and failed to restart", [rs(QueueName)]).
 
 type_class(byte)      -> int;
 type_class(short)     -> int;

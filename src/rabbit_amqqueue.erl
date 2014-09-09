@@ -17,7 +17,9 @@
 -module(rabbit_amqqueue).
 
 -export([recover/0, stop/0, start/1, declare/5, declare/6,
-         delete_immediately/1, delete/3, purge/1, forget_all_durable/1]).
+         delete_immediately/1, delete/3,
+         delete_crashed/1, delete_crashed_internal/1,
+         purge/1, forget_all_durable/1]).
 -export([pseudo_queue/2, immutable/1]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
@@ -49,7 +51,7 @@
 
 -ifdef(use_specs).
 
--export_type([name/0, qmsg/0]).
+-export_type([name/0, qmsg/0, absent_reason/0]).
 
 -type(name() :: rabbit_types:r('queue')).
 -type(qpids() :: [pid()]).
@@ -59,8 +61,9 @@
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
--type(not_found_or_absent() :: 'not_found' |
-                               {'absent', rabbit_types:amqqueue()}).
+-type(absent_reason() :: 'nodedown' | 'crashed').
+-type(not_found_or_absent() ::
+        'not_found' | {'absent', rabbit_types:amqqueue(), absent_reason()}).
 -spec(recover/0 :: () -> [rabbit_types:amqqueue()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(start/1 :: ([rabbit_types:amqqueue()]) -> 'ok').
@@ -72,8 +75,9 @@
 -spec(declare/6 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()), node())
-        -> {'new' | 'existing' | 'absent' | 'owner_died',
-            rabbit_types:amqqueue()} | rabbit_types:channel_exit()).
+        -> {'new' | 'existing' | 'owner_died', rabbit_types:amqqueue()} |
+           {'absent', rabbit_types:amqqueue(), absent_reason()} |
+           rabbit_types:channel_exit()).
 -spec(internal_declare/1 ::
         (rabbit_types:amqqueue())
         -> {'new', rabbit_misc:thunk(rabbit_types:amqqueue())} |
@@ -137,6 +141,8 @@
         -> qlen() |
            rabbit_types:error('in_use') |
            rabbit_types:error('not_empty')).
+-spec(delete_crashed/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(delete_crashed_internal/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(purge/1 :: (rabbit_types:amqqueue()) -> qlen()).
 -spec(forget_all_durable/1 :: (node()) -> 'ok').
 -spec(deliver/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
@@ -274,10 +280,10 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
 
 internal_declare(Q = #amqqueue{name = QueueName}) ->
     case not_found_or_absent(QueueName) of
-        not_found        -> ok = store_queue(Q),
-                            B = add_default_binding(Q),
-                            {new, fun () -> B(), Q end};
-        {absent, _Q} = R -> R
+        not_found                -> ok = store_queue(Q),
+                                    B = add_default_binding(Q),
+                                    {new, fun () -> B(), Q end};
+        {absent, Q, _Reason} = R -> R
     end.
 
 update(Name, Fun) ->
@@ -349,7 +355,7 @@ not_found_or_absent(Name) ->
     %% rabbit_queue and not found anything
     case mnesia:read({rabbit_durable_queue, Name}) of
         []  -> not_found;
-        [Q] -> {absent, Q} %% Q exists on stopped node
+        [Q] -> {absent, Q, nodedown} %% Q exists on stopped node
     end.
 
 not_found_or_absent_dirty(Name) ->
@@ -358,7 +364,7 @@ not_found_or_absent_dirty(Name) ->
     %% and only affect the error kind.
     case rabbit_misc:dirty_read({rabbit_durable_queue, Name}) of
         {error, not_found} -> not_found;
-        {ok, Q}            -> {absent, Q}
+        {ok, Q}            -> {absent, Q, nodedown}
     end.
 
 with(Name, F, E) ->
@@ -372,8 +378,11 @@ with(Name, F, E) ->
             %% the retry loop.
             rabbit_misc:with_exit_handler(
               fun () -> false = rabbit_misc:is_process_alive(QPid),
-                        timer:sleep(25),
-                        with(Name, F, E)
+                        case crashed_or_recovering(Q) of
+                            crashed    -> E({absent, Q, crashed});
+                            recovering -> timer:sleep(25),
+                                          with(Name, F, E)
+                        end
               end, fun () -> F(Q) end);
         {error, not_found} ->
             E(not_found_or_absent_dirty(Name))
@@ -382,9 +391,21 @@ with(Name, F, E) ->
 with(Name, F) -> with(Name, F, fun (E) -> {error, E} end).
 
 with_or_die(Name, F) ->
-    with(Name, F, fun (not_found)   -> rabbit_misc:not_found(Name);
-                      ({absent, Q}) -> rabbit_misc:absent(Q)
+    with(Name, F, fun (not_found)           -> rabbit_misc:not_found(Name);
+                      ({absent, Q, Reason}) -> rabbit_misc:absent(Q, Reason)
                   end).
+
+%% TODO we could still be wrong here if we happen to call in the
+%% middle of a crash-failover. We could try to figure out whether
+%% that's happening by looking for the supervisor - but we'd need some
+%% additional book keeping to know what it is...
+crashed_or_recovering(#amqqueue{pid = QPid, slave_pids = []}) ->
+    case lists:member(node(QPid), [node() | nodes()]) of
+        true  -> crashed;
+        false -> recovering
+    end;
+crashed_or_recovering(_Q) ->
+    recovering.
 
 assert_equivalence(#amqqueue{durable     = Durable,
                              auto_delete = AutoDelete} = Q,
@@ -545,6 +566,14 @@ delete_immediately(QPids) ->
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate:call(QPid, {delete, IfUnused, IfEmpty}).
+
+delete_crashed(#amqqueue{ pid = QPid } = Q) ->
+    rpc:call(node(QPid), ?MODULE, delete_crashed_internal, [Q]).
+
+delete_crashed_internal(#amqqueue{ name = QName }) ->
+    {ok, BQ} = application:get_env(backing_queue_module),
+    BQ:delete_crashed(QName),
+    ok = internal_delete(QName).
 
 purge(#amqqueue{ pid = QPid }) -> delegate:call(QPid, purge).
 

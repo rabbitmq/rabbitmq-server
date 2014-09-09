@@ -16,7 +16,8 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/2, delete_and_terminate/2, purge/1, purge_acks/1,
+-export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
+         purge/1, purge_acks/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
@@ -509,6 +510,9 @@ delete_and_terminate(_Reason, State) ->
     rabbit_msg_store:client_delete_and_terminate(MSCStateT),
     a(State2 #vqstate { index_state       = IndexState1,
                         msg_store_clients = undefined }).
+
+delete_crashed(QName) ->
+    ok = rabbit_queue_index:erase(QName).
 
 purge(State = #vqstate { q4                = Q4,
                          index_state       = IndexState,
