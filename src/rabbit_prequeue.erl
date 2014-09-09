@@ -119,7 +119,7 @@ init_recovery(Q) ->
     end.
 
 init_slave(Q) ->
-    rabbit_mirror_queue_slave:init_slave(Q).
+    rabbit_mirror_queue_slave:become(Q).
 
 init_restart(#amqqueue{name = QueueName}) ->
     {ok, Q = #amqqueue{pid        = QPid,
