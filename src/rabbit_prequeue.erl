@@ -35,6 +35,8 @@
 
 -ifdef(use_specs).
 
+-export_type([start_mode/0]).
+
 -type(start_mode() :: 'declare' | 'recovery' | 'slave').
 
 -spec(start_link/3 :: (rabbit_types:amqqueue(), start_mode(), pid())
