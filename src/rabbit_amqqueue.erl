@@ -17,7 +17,7 @@
 -module(rabbit_amqqueue).
 
 -export([recover/0, stop/0, start/1, declare/5, declare/6,
-         delete_immediately/1, delete/3, purge/1, forget_all_durable/1
+         delete_immediately/1, delete/3, purge/1, forget_all_durable/1,
          delete_crashed/1, delete_crashed_internal/1]).
 -export([pseudo_queue/2, immutable/1]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
