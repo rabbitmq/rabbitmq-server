@@ -17,9 +17,8 @@
 -module(rabbit_amqqueue).
 
 -export([recover/0, stop/0, start/1, declare/5, declare/6,
-         delete_immediately/1, delete/3,
-         delete_crashed/1, delete_crashed_internal/1,
-         purge/1, forget_all_durable/1]).
+         delete_immediately/1, delete/3, purge/1, forget_all_durable/1
+         delete_crashed/1, delete_crashed_internal/1]).
 -export([pseudo_queue/2, immutable/1]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
@@ -280,10 +279,10 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
 
 internal_declare(Q = #amqqueue{name = QueueName}) ->
     case not_found_or_absent(QueueName) of
-        not_found                -> ok = store_queue(Q),
-                                    B = add_default_binding(Q),
-                                    {new, fun () -> B(), Q end};
-        {absent, Q, _Reason} = R -> R
+        not_found                 -> ok = store_queue(Q),
+                                     B = add_default_binding(Q),
+                                     {new, fun () -> B(), Q end};
+        {absent, _Q, _Reason} = R -> R
     end.
 
 update(Name, Fun) ->
