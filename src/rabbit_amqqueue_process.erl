@@ -208,8 +208,9 @@ terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(normal,            State) -> %% delete case
     terminate_shutdown(terminate_delete(true, normal, State), State);
+%% If we crashed don't try to clean up the BQS, probably best to leave it.
 terminate(_Reason,           State) ->
-    terminate_crash(State).
+    terminate_shutdown(fun (BQS) -> BQS end, State).
 
 terminate_delete(EmitStats, Reason,
                  State = #q{q = #amqqueue{name          = QName},
@@ -242,12 +243,6 @@ terminate_shutdown(Fun, State) ->
                              rabbit_queue_consumers:all(Consumers)],
                      State1#q{backing_queue_state = Fun(BQS)}
     end.
-
-terminate_crash(State = #q{consumers = Consumers}) ->
-    QName = qname(State),
-    [emit_consumer_deleted(Ch, CTag, QName) ||
-        {Ch, CTag, _, _, _} <- rabbit_queue_consumers:all(Consumers)],
-    ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
