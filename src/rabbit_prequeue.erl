@@ -92,13 +92,14 @@ init_declared(Q = #amqqueue{name = QueueName}) ->
                          [ExistingQ] -> {existing, ExistingQ}
                      end
              end),
-    %% We have just been declared. Block waiting for an init
-    %% call so that we don't respond to any other message first
+    %% We have just been declared. Block waiting for an init call so
+    %% that we can let the declarer know whether we actually started
+    %% something.
     receive {'$gen_call', From, {init, new}} ->
             case Decl of
                 {new, Fun} ->
                     Q1 = Fun(),
-                    rabbit_amqqueue_process:init_declared(new,From, Q1);
+                    rabbit_amqqueue_process:become(new, From, Q1);
                 {absent, _, _} ->
                     gen_server2:reply(From, Decl),
                     {stop, normal, Q};
@@ -111,9 +112,10 @@ init_declared(Q = #amqqueue{name = QueueName}) ->
 init_recovery(Q) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () -> ok = rabbit_amqqueue:store_queue(Q) end),
-    %% Again block waiting for an init call.
+    %% This time we have an init call to ensure the recovery terms do
+    %% not sit in the supervisor forever.
     receive {'$gen_call', From, {init, Terms}} ->
-            rabbit_amqqueue_process:init_declared(Terms, From, Q)
+            rabbit_amqqueue_process:become(Terms, From, Q)
     end.
 
 init_slave(Q) ->
@@ -126,11 +128,11 @@ init_restart(#amqqueue{name = QueueName}) ->
     Slaves = [SPid || SPid <- SPids, rabbit_misc:is_process_alive(SPid)],
     case rabbit_misc:is_process_alive(QPid) of
         true  -> false = Local, %% assertion
-                 rabbit_mirror_queue_slave:init_slave(Q); %% [1]
+                 rabbit_mirror_queue_slave:become(Q); %% [1]
         false -> case Local andalso Slaves =:= [] of
-                     true  -> crash_restart(Q);           %% [2]
+                     true  -> crash_restart(Q);       %% [2]
                      false -> timer:sleep(25),
-                              init_restart(Q)             %% [3]
+                              init_restart(Q)         %% [3]
                  end
     end.
 %% [1] There is a master on another node. Regardless of whether we
@@ -148,5 +150,5 @@ crash_restart(Q = #amqqueue{name = QueueName}) ->
     Self = self(),
     rabbit_misc:execute_mnesia_transaction(
       fun () -> ok = rabbit_amqqueue:store_queue(Q#amqqueue{pid = Self}) end),
-    rabbit_amqqueue_process:init_declared(
+    rabbit_amqqueue_process:become(
       {no_barrier, non_clean_shutdown}, none, Q).

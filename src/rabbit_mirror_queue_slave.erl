@@ -24,7 +24,7 @@
 %% All instructions from the GM group must be processed in the order
 %% in which they're received.
 
--export([set_maximum_since_use/2, info/1, init_slave/1, await/1]).
+-export([set_maximum_since_use/2, info/1, become/1, await/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/4,
@@ -80,7 +80,7 @@ await(SPid) -> gen_server2:call(SPid, await, infinity).
 
 init(_) -> exit(cannot_be_called_directly).
 
-init_slave(Q = #amqqueue{name = QName}) ->
+become(Q = #amqqueue{name = QName}) ->
     ?store_proc_name(QName),
     %% We join the GM group before we add ourselves to the amqqueue
     %% record. As a result:

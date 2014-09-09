@@ -26,7 +26,7 @@
 
 -export([info_keys/0]).
 
--export([init_declared/3, init_with_backing_queue_state/7]).
+-export([become/3, init_with_backing_queue_state/7]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
@@ -108,8 +108,8 @@ statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 init(_) -> exit(cannot_be_called_directly).
 
 %% We have just been declared or recovered
-init_declared(Recover, From, Q = #amqqueue{name            = QName,
-                                           exclusive_owner = Owner}) ->
+become(Recover, From, Q = #amqqueue{name            = QName,
+                                    exclusive_owner = Owner}) ->
     process_flag(trap_exit, true),
     ?store_proc_name(QName),
     State = init_state(Q),
