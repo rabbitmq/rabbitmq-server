@@ -22,7 +22,7 @@
 -export([die/1, frame_error/2, amqp_error/4, quit/1,
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, absent/1]).
--export([type_class/1, assert_args_equivalence/4]).
+-export([type_class/1, assert_args_equivalence/4, assert_field_equivalence/4]).
 -export([dirty_read/1]).
 -export([table_lookup/2, set_table_value/4]).
 -export([r/3, r/2, r_arg/4, rs/1]).
@@ -125,6 +125,9 @@
                                     rabbit_framing:amqp_table(),
                                     rabbit_types:r(any()), [binary()]) ->
                                         'ok' | rabbit_types:connection_exit()).
+-spec(assert_field_equivalence/4 ::
+        (any(), any(), rabbit_types:r(any()), atom()) ->
+                                         'ok' | rabbit_types:connection_exit()).
 -spec(dirty_read/1 ::
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(table_lookup/2 ::
@@ -316,11 +319,6 @@ assert_args_equivalence(Orig, New, Name, Keys) ->
 
 assert_args_equivalence1(Orig, New, Name, Key) ->
     {Orig1, New1} = {table_lookup(Orig, Key), table_lookup(New, Key)},
-    FailureFun = fun () ->
-                     protocol_error(precondition_failed, "inequivalent arg '~s'"
-                                    "for ~s: received ~s but current is ~s",
-                                    [Key, rs(Name), val(New1), val(Orig1)])
-                 end,
     case {Orig1, New1} of
         {Same, Same} ->
             ok;
@@ -328,11 +326,21 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
             case type_class(OrigType) == type_class(NewType) andalso
                  OrigVal == NewVal of
                  true  -> ok;
-                 false -> FailureFun()
+                 false -> assert_field_equivalence(OrigVal, NewVal, Name, Key)
             end;
         {_, _} ->
-            FailureFun()
+            assert_field_equivalence(Orig, New, Name, Key)
     end.
+
+assert_field_equivalence(_Orig, _Orig, _Name, _Key) ->
+    ok;
+assert_field_equivalence(Orig, New, Name, Key) ->
+    equivalence_fail(Orig, New, Name, Key).
+
+equivalence_fail(Orig, New, Name, Key) ->
+    protocol_error(precondition_failed, "inequivalent arg '~s' "
+                   "for ~s: received ~s but current is ~s",
+                   [Key, rs(Name), val(New), val(Orig)]).
 
 val(undefined) ->
     "none";
@@ -341,7 +349,13 @@ val({Type, Value}) ->
                  true  -> "~s";
                  false -> "~w"
              end,
-    format("the value '" ++ ValFmt ++ "' of type '~s'", [Value, Type]).
+    format("the value '" ++ ValFmt ++ "' of type '~s'", [Value, Type]);
+val(Value) ->
+    ValFmt = case is_binary(Value) of
+                 true  -> "~s";
+                 false -> "~w"
+             end,
+    format(ValFmt, [Value]).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
 %% expensive due to general mnesia overheads (figuring out table types
