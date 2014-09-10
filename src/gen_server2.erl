@@ -69,7 +69,9 @@
 %% which will be passed into any of the callback functions in the new
 %% module. Note there is no form also encompassing a reply, thus if
 %% you wish to reply in handle_call/3 and change the callback module,
-%% you need to use gen_server2:reply/2 to issue the reply manually.
+%% you need to use gen_server2:reply/2 to issue the reply
+%% manually. The init function can similarly return a 5th argument,
+%% Module, in order to dynamically decide the callback module on init.
 %%
 %% 8) The callback module can optionally implement
 %% format_message_queue/2 which is the equivalent of format_status/2
@@ -125,6 +127,7 @@
 %%%     ==> {ok, State}
 %%%         {ok, State, Timeout}
 %%%         {ok, State, Timeout, Backoff}
+%%%         {ok, State, Timeout, Backoff, Module}
 %%%         ignore
 %%%         {stop, Reason}
 %%%
@@ -242,6 +245,8 @@
     {ok, State :: term(), timeout() | hibernate} |
     {ok, State :: term(), timeout() | hibernate,
      {backoff, millis(), millis(), millis()}} |
+    {ok, State :: term(), timeout() | hibernate,
+     {backoff, millis(), millis(), millis()}, atom()} |
     ignore |
     {stop, Reason :: term()}.
 -callback handle_call(Request :: term(), From :: {pid(), Tag :: term()},
@@ -566,6 +571,13 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
             Backoff1 = extend_backoff(Backoff),
             proc_lib:init_ack(Starter, {ok, self()}),
             loop(GS2State #gs2_state { state         = State,
+                                       time          = Timeout,
+                                       timeout_state = Backoff1 });
+        {ok, State, Timeout, Backoff = {backoff, _, _, _}, Mod1} ->
+            Backoff1 = extend_backoff(Backoff),
+            proc_lib:init_ack(Starter, {ok, self()}),
+            loop(GS2State #gs2_state { mod           = Mod1,
+                                       state         = State,
                                        time          = Timeout,
                                        timeout_state = Backoff1 });
         {stop, Reason} ->

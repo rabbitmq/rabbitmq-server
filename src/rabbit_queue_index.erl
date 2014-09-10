@@ -16,7 +16,7 @@
 
 -module(rabbit_queue_index).
 
--export([init/2, recover/5,
+-export([erase/1, init/2, recover/5,
          terminate/2, delete_and_terminate/1,
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
@@ -200,6 +200,7 @@
                                {rabbit_types:msg_id(), non_neg_integer(), A})).
 -type(shutdown_terms() :: [term()] | 'non_clean_shutdown').
 
+-spec(erase/1 :: (rabbit_amqqueue:name()) -> 'ok').
 -spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
 -spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate(), on_sync_fun()) ->
@@ -232,6 +233,13 @@
 %%----------------------------------------------------------------------------
 %% public API
 %%----------------------------------------------------------------------------
+
+erase(Name) ->
+    #qistate { dir = Dir } = blank_state(Name),
+    case rabbit_file:is_dir(Dir) of
+        true  -> rabbit_file:recursive_delete([Dir]);
+        false -> ok
+    end.
 
 init(Name, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),

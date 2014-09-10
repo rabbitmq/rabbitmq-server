@@ -1189,16 +1189,16 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     %% must have been created between the stat and the
                     %% declare. Loop around again.
                     handle_method(Declare, none, State);
-                {absent, Q} ->
-                    rabbit_misc:absent(Q);
+                {absent, Q, Reason} ->
+                    rabbit_misc:absent(Q, Reason);
                 {owner_died, _Q} ->
                     %% Presumably our own days are numbered since the
                     %% connection has died. Pretend the queue exists though,
                     %% just so nothing fails.
                     return_queue_declare_ok(QueueName, NoWait, 0, 0, State)
             end;
-        {error, {absent, Q}} ->
-            rabbit_misc:absent(Q)
+        {error, {absent, Q, Reason}} ->
+            rabbit_misc:absent(Q, Reason)
     end;
 
 handle_method(#'queue.declare'{queue   = QueueNameBin,
@@ -1227,8 +1227,10 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
                    rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
                    rabbit_amqqueue:delete(Q, IfUnused, IfEmpty)
            end,
-           fun (not_found)   -> {ok, 0};
-               ({absent, Q}) -> rabbit_misc:absent(Q)
+           fun (not_found)            -> {ok, 0};
+               ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q),
+                                         {ok, 0};
+               ({absent, Q, Reason})  -> rabbit_misc:absent(Q, Reason)
            end) of
         {error, in_use} ->
             precondition_failed("~s in use", [rabbit_misc:rs(QueueName)]);
@@ -1477,8 +1479,8 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
              end) of
         {error, {resources_missing, [{not_found, Name} | _]}} ->
             rabbit_misc:not_found(Name);
-        {error, {resources_missing, [{absent, Q} | _]}} ->
-            rabbit_misc:absent(Q);
+        {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
+            rabbit_misc:absent(Q, Reason);
         {error, binding_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no binding ~s between ~s and ~s",

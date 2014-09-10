@@ -363,7 +363,7 @@ not_found_or_absent_errs(Names) ->
 
 absent_errs_only(Names) ->
     Errs = [E || Name <- Names,
-                 {absent, _Q} = E <- [not_found_or_absent(Name)]],
+                 {absent, _Q, _Reason} = E <- [not_found_or_absent(Name)]],
     rabbit_misc:const(case Errs of
                           [] -> ok;
                           _  -> {error, {resources_missing, Errs}}
@@ -376,8 +376,8 @@ not_found_or_absent(#resource{kind = exchange} = Name) ->
     {not_found, Name};
 not_found_or_absent(#resource{kind = queue}    = Name) ->
     case rabbit_amqqueue:not_found_or_absent(Name) of
-        not_found        -> {not_found, Name};
-        {absent, _Q} = R -> R
+        not_found                 -> {not_found, Name};
+        {absent, _Q, _Reason} = R -> R
     end.
 
 contains(Table, MatchHead) ->

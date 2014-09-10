@@ -134,17 +134,10 @@
                     {requires,    core_initialized},
                     {enables,     routing_ready}]}).
 
--rabbit_boot_step({mirror_queue_slave_sup,
-                   [{description, "mirror queue slave sup"},
-                    {mfa,         {rabbit_sup, start_supervisor_child,
-                                   [rabbit_mirror_queue_slave_sup]}},
-                    {requires,    recovery},
-                    {enables,     routing_ready}]}).
-
 -rabbit_boot_step({mirrored_queues,
                    [{description, "adding mirrors to queues"},
                     {mfa,         {rabbit_mirror_queue_misc, on_node_up, []}},
-                    {requires,    mirror_queue_slave_sup},
+                    {requires,    recovery},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({routing_ready,

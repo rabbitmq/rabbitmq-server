@@ -24,7 +24,7 @@
 -define(RAM_DURATION_UPDATE_INTERVAL, 5000).
 -define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
--export([start_link/1, info_keys/0]).
+-export([info_keys/0]).
 
 -export([init_with_backing_queue_state/7]).
 
@@ -61,8 +61,6 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 ::
-        (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(init_with_backing_queue_state/7 ::
         (rabbit_types:amqqueue(), atom(), tuple(), any(),
@@ -102,8 +100,6 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
-
 info_keys()       -> ?INFO_KEYS       ++ rabbit_backing_queue:info_keys().
 statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 
@@ -113,7 +109,8 @@ init(Q) ->
     process_flag(trap_exit, true),
     ?store_proc_name(Q#amqqueue.name),
     {ok, init_state(Q#amqqueue{pid = self()}), hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE},
+    ?MODULE}.
 
 init_state(Q) ->
     State = #q{q                   = Q,
@@ -140,7 +137,7 @@ init_it(Recover, From, State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
         false -> #q{backing_queue       = undefined,
                     backing_queue_state = undefined,
                     q                   = Q} = State,
-                 gen_server2:reply(From, {owner_died, Q}),
+                 send_reply(From, {owner_died, Q}),
                  BQ = backing_queue_module(Q),
                  {_, Terms} = recovery_status(Recover),
                  BQS = bq_init(BQ, Q, Terms),
@@ -152,12 +149,12 @@ init_it(Recover, From, State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
 init_it2(Recover, From, State = #q{q                   = Q,
                                    backing_queue       = undefined,
                                    backing_queue_state = undefined}) ->
-    {Recovery, TermsOrNew} = recovery_status(Recover),
-    case rabbit_amqqueue:internal_declare(Q, Recovery /= new) of
+    {Barrier, TermsOrNew} = recovery_status(Recover),
+    case rabbit_amqqueue:internal_declare(Q, Recover /= new) of
         #amqqueue{} = Q1 ->
-            case matches(Recovery, Q, Q1) of
+            case matches(Recover, Q, Q1) of
                 true ->
-                    gen_server2:reply(From, {new, Q}),
+                    send_reply(From, {new, Q}),
                     ok = file_handle_cache:register_callback(
                            rabbit_amqqueue, set_maximum_since_use, [self()]),
                     ok = rabbit_memory_monitor:register(
@@ -165,7 +162,7 @@ init_it2(Recover, From, State = #q{q                   = Q,
                                     set_ram_duration_target, [self()]}),
                     BQ = backing_queue_module(Q1),
                     BQS = bq_init(BQ, Q, TermsOrNew),
-                    recovery_barrier(Recovery),
+                    recovery_barrier(Barrier),
                     State1 = process_args_policy(
                                State#q{backing_queue       = BQ,
                                        backing_queue_state = BQS}),
@@ -182,8 +179,11 @@ init_it2(Recover, From, State = #q{q                   = Q,
             {stop, normal, Err, State}
     end.
 
-recovery_status(new)              -> {new,     new};
-recovery_status({Recover, Terms}) -> {Recover, Terms}.
+recovery_status(new)              -> {no_barrier, new};
+recovery_status({Recover, Terms}) -> {Recover,    Terms}.
+
+send_reply(none, _Q) -> ok;
+send_reply(From, Q)  -> gen_server2:reply(From, Q).
 
 matches(new, Q1, Q2) ->
     %% i.e. not policy
@@ -197,7 +197,7 @@ matches(new, Q1, Q2) ->
 matches(_,  Q,   Q) -> true;
 matches(_, _Q, _Q1) -> false.
 
-recovery_barrier(new) ->
+recovery_barrier(no_barrier) ->
     ok;
 recovery_barrier(BarrierPid) ->
     MRef = erlang:monitor(process, BarrierPid),
@@ -206,6 +206,7 @@ recovery_barrier(BarrierPid) ->
         {'DOWN', MRef, process, _, _} -> ok
     end.
 
+%% We have been promoted
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                               RateTRef, Deliveries, Senders, MTC) ->
     case Owner of
@@ -232,8 +233,11 @@ terminate({shutdown, missing_owner} = Reason, State) ->
     terminate_shutdown(terminate_delete(false, Reason, State), State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate(Reason,            State) ->
-    terminate_shutdown(terminate_delete(true, Reason, State), State).
+terminate(normal,            State) -> %% delete case
+    terminate_shutdown(terminate_delete(true, normal, State), State);
+%% If we crashed don't try to clean up the BQS, probably best to leave it.
+terminate(_Reason,           State) ->
+    terminate_shutdown(fun (BQS) -> BQS end, State).
 
 terminate_delete(EmitStats, Reason,
                  State = #q{q = #amqqueue{name          = QName},
@@ -1083,6 +1087,9 @@ handle_call(sync_mirrors, _From, State) ->
 %% By definition if we get this message here we do not have to do anything.
 handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State).
+
+handle_cast(init, State) ->
+    init_it({no_barrier, non_clean_shutdown}, none, State);
 
 handle_cast({run_backing_queue, Mod, Fun},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
