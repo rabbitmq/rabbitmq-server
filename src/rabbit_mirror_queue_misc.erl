@@ -210,10 +210,7 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                                MirrorNode, Q, slave),
                       log_info(QName, "Adding mirror on node ~p: ~p~n",
                                [MirrorNode, SPid]),
-                      case SyncMode of
-                          sync  -> rabbit_mirror_queue_slave:await(SPid);
-                          async -> ok
-                      end
+                      rabbit_mirror_queue_slave:go(SPid, SyncMode)
               end);
         {error, not_found} = E ->
             E

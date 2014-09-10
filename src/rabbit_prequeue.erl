@@ -51,54 +51,29 @@ start_link(Q, StartMode, Marker) ->
 
 %%----------------------------------------------------------------------------
 
-init({Q, StartMode0, Marker}) ->
-    %% Hand back to supervisor ASAP
-    gen_server2:cast(self(), init),
-    StartMode = case is_process_alive(Marker) of
-                    true  -> StartMode0;
-                    false -> restart
-                end,
-    {ok, {Q#amqqueue{pid = self()}, StartMode}, hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
-      ?DESIRED_HIBERNATE}}.
+init({Q, StartMode, Marker}) ->
+    init(Q, case {is_process_alive(Marker), StartMode} of
+                {true,  slave} -> slave;
+                {true,  _}     -> master;
+                {false, _}     -> restart
+            end).
 
-handle_call(Msg, _From, State) ->
-    {stop, {unexpected_call, Msg}, {unexpected_call, Msg}, State}.
+init(Q, master) -> rabbit_amqqueue_process:init(Q);
+init(Q, slave)  -> rabbit_mirror_queue_slave:init(Q);
 
-handle_cast(init, {Q, declare})  -> init_master(Q);
-handle_cast(init, {Q, recovery}) -> init_master(Q);
-handle_cast(init, {Q, slave})    -> init_slave(Q);
-handle_cast(init, {Q, restart})  -> init_restart(Q);
-
-handle_cast(Msg, State) ->
-    {stop, {unexpected_cast, Msg}, State}.
-
-handle_info(Msg, State) ->
-    {stop, {unexpected_info, Msg}, State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-%%----------------------------------------------------------------------------
-
-init_master(Q) -> rabbit_amqqueue_process:become(Q).
-init_slave(Q)  -> rabbit_mirror_queue_slave:become(Q).
-
-init_restart(#amqqueue{name = QueueName}) ->
+init(#amqqueue{name = QueueName}, restart) ->
     {ok, Q = #amqqueue{pid        = QPid,
                        slave_pids = SPids}} = rabbit_amqqueue:lookup(QueueName),
     Local = node(QPid) =:= node(),
     Slaves = [SPid || SPid <- SPids, rabbit_misc:is_process_alive(SPid)],
     case rabbit_misc:is_process_alive(QPid) of
         true  -> false = Local, %% assertion
-                 rabbit_mirror_queue_slave:become(Q); %% [1]
+                 rabbit_mirror_queue_slave:go(self(), async),
+                 rabbit_mirror_queue_slave:init(Q); %% [1]
         false -> case Local andalso Slaves =:= [] of
-                     true  -> crash_restart(Q);       %% [2]
+                     true  -> crash_restart(Q);     %% [2]
                      false -> timer:sleep(25),
-                              init_restart(Q)         %% [3]
+                              init(Q, restart)      %% [3]
                  end
     end.
 %% [1] There is a master on another node. Regardless of whether we
@@ -114,4 +89,15 @@ init_restart(#amqqueue{name = QueueName}) ->
 crash_restart(Q = #amqqueue{name = QueueName}) ->
     rabbit_log:error("Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
     gen_server2:cast(self(), init),
-    rabbit_amqqueue_process:become(Q#amqqueue{pid = self()}).
+    rabbit_amqqueue_process:init(Q#amqqueue{pid = self()}).
+
+%%----------------------------------------------------------------------------
+
+%% This gen_server2 always hands over to some other module at the end
+%% of init/1.
+handle_call(_Msg, _From, _State)     -> exit(unreachable).
+handle_cast(_Msg, _State)            -> exit(unreachable).
+handle_info(_Msg, _State)            -> exit(unreachable).
+terminate(_Reason, _State)           -> exit(unreachable).
+code_change(_OldVsn, _State, _Extra) -> exit(unreachable).
+

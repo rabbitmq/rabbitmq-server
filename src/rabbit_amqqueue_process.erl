@@ -26,7 +26,7 @@
 
 -export([info_keys/0]).
 
--export([become/1, init_with_backing_queue_state/7]).
+-export([init_with_backing_queue_state/7]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
@@ -105,12 +105,12 @@ statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 
 %%----------------------------------------------------------------------------
 
-init(_) -> exit(cannot_be_called_directly).
-
-become(Q = #amqqueue{name = QName}) ->
+init(Q) ->
     process_flag(trap_exit, true),
-    ?store_proc_name(QName),
-    {become, ?MODULE, init_state(Q), hibernate}.
+    ?store_proc_name(Q#amqqueue.name),
+    {ok, init_state(Q#amqqueue{pid = self()}), hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE},
+    ?MODULE}.
 
 finish_init(Recover, From, State = #q{q                   = Q,
                                       backing_queue       = undefined,
