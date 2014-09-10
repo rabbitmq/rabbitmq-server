@@ -351,11 +351,10 @@ val({Type, Value}) ->
              end,
     format("the value '" ++ ValFmt ++ "' of type '~s'", [Value, Type]);
 val(Value) ->
-    ValFmt = case is_binary(Value) of
-                 true  -> "~s";
-                 false -> "~w"
-             end,
-    format(ValFmt, [Value]).
+    format(case is_binary(Value) of
+               true  -> "'~s'";
+               false -> "'~w'"
+           end, [Value]).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
 %% expensive due to general mnesia overheads (figuring out table types
