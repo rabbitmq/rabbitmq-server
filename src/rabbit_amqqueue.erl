@@ -61,6 +61,8 @@
 -type(ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 -type(absent_reason() :: 'nodedown' | 'crashed').
+-type(queue_or_absent() :: rabbit_types:amqqueue() |
+                           {'absent', rabbit_types:amqqueue(),absent_reason()}).
 -type(not_found_or_absent() ::
         'not_found' | {'absent', rabbit_types:amqqueue(), absent_reason()}).
 -spec(recover/0 :: () -> [rabbit_types:amqqueue()]).
@@ -77,11 +79,9 @@
         -> {'new' | 'existing' | 'owner_died', rabbit_types:amqqueue()} |
            {'absent', rabbit_types:amqqueue(), absent_reason()} |
            rabbit_types:channel_exit()).
-%% TODO nonsense
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> {'new', rabbit_misc:thunk(rabbit_types:amqqueue())} |
-           {'absent', rabbit_types:amqqueue()}).
+        -> queue_or_absent() | rabbit_misc:thunk(queue_or_absent())).
 -spec(update/2 ::
         (name(),
          fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue()))
