@@ -18,7 +18,8 @@
 
 -export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([parameter/1, now_to_str/1, now_to_str_ms/1, now_to_ms/1, strip_pids/1]).
--export([node_from_pid/1, protocol/1, resource/1, queue/1, queue_state/1]).
+-export([node_from_pid/1, protocol/1, resource/1, queue/1, queue/2,
+         queue_state/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
@@ -227,19 +228,21 @@ exchange(X) ->
 %% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
 %% the latter wakes up each queue. Therefore we have a record rather than a
 %% proplist to deal with.
+queue(Q) -> queue(Q, []).
+
 queue(#amqqueue{name            = Name,
                 durable         = Durable,
                 auto_delete     = AutoDelete,
                 exclusive_owner = ExclusiveOwner,
                 arguments       = Arguments,
-                pid             = Pid}) ->
+                pid             = Pid}, Extra) ->
     format(
       [{name,        Name},
        {durable,     Durable},
        {auto_delete, AutoDelete},
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
-       {pid,         Pid}],
+       {pid,         Pid} | Extra],
       [{fun resource/1,   [name]},
        {fun amqp_table/1, [arguments]},
        {fun policy/1,     [policy]}]).

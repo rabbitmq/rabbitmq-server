@@ -542,6 +542,11 @@ function fmt_object_state(obj) {
         colour = 'yellow';
         explanation = 'Publishing rate recently restricted by server.';
     }
+    else if (obj.state == 'down') {
+        colour = 'red';
+        explanation = 'The queue is located on a cluster node or nodes that ' +
+            'are down.';
+    }
 
     return fmt_state(colour, text, explanation);
 }
