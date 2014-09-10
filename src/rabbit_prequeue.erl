@@ -18,9 +18,9 @@
 
 %% This is the initial gen_server that all queue processes start off
 %% as. It handles the decision as to whether we need to start a new
-%% slave, a new master/unmirrored, whether we lost a race to declare a
-%% new queue, or whether we are in recovery. Thus a crashing queue
-%% process can restart from here and always do the right thing.
+%% slave, a new master/unmirrored, or whether we are restarting (and
+%% if so, as what). Thus a crashing queue process can restart from here
+%% and always do the right thing.
 
 -export([start_link/3]).
 
