@@ -514,7 +514,7 @@ function fmt_node(node_host) {
     var both = node_host.split('@');
     var node = both.slice(0, 1);
     var host = both.slice(1);
-    return node == 'rabbit' ? host : ('<small>' + node + '@</small>' + host);
+    return node == 'rabbit' ? host : (node + '@' + host);
 }
 
 function fmt_object_state(obj) {
