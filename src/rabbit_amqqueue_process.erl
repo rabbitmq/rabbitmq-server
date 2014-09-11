@@ -234,9 +234,19 @@ terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(normal,            State) -> %% delete case
     terminate_shutdown(terminate_delete(true, normal, State), State);
-%% If we crashed don't try to clean up the BQS, probably best to leave it.
-terminate(_Reason,           State) ->
-    terminate_shutdown(fun (BQS) -> BQS end, State).
+terminate(_Reason,           State = #q{q = #amqqueue{name = Name}}) ->
+    terminate_shutdown(
+      fun (BQS) ->
+              rabbit_event:if_enabled(
+                State, #q.stats_timer,
+                fun () ->
+                        rabbit_event:notify(queue_stats, [{name, Name},
+                                                          {state, crashed}])
+                end),
+              %% If we crashed don't try to clean up the BQS, probably
+              %% best to leave it.
+              BQS
+      end, State).
 
 terminate_delete(EmitStats, Reason,
                  State = #q{q = #amqqueue{name          = QName},
