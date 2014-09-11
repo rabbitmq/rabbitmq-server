@@ -97,10 +97,9 @@ delete(VHostPath) ->
 assert_benign(ok)                 -> ok;
 assert_benign({ok, _})            -> ok;
 assert_benign({error, not_found}) -> ok;
-assert_benign({error, {absent, Q, nodedown}}) ->
-    %% We have a durable queue on a down node. Removing the mnesia
-    %% entries here is safe. If/when the down node restarts, it will
-    %% clear out the on-disk storage of the queue.
+assert_benign({error, {absent, Q, _}}) ->
+    %% Removing the mnesia entries here is safe. If/when the down node
+    %% restarts, it will clear out the on-disk storage of the queue.
     case rabbit_amqqueue:internal_delete(Q#amqqueue.name) of
         ok                 -> ok;
         {error, not_found} -> ok
