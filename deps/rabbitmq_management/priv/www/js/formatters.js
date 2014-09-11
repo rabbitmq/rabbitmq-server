@@ -547,6 +547,11 @@ function fmt_object_state(obj) {
         explanation = 'The queue is located on a cluster node or nodes that ' +
             'are down.';
     }
+    else if (obj.state == 'crashed') {
+        colour = 'red';
+        explanation = 'The queue has crashed repeatedly and been unable to ' +
+            'restart.';
+    }
 
     return fmt_state(colour, text, explanation);
 }
