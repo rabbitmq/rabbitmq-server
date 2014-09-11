@@ -225,51 +225,19 @@ HELP = {
 
     'memory-use' : '<p>Note that the memory details shown here are only updated on request - they could be too expensive to calculate every few seconds on a busy server.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
 
-    'policy-definitions' : '<dl>\
-<dt><code>ha-mode</code></dt>\
-  <dd>\
-    One of <code>all</code>, <code>exactly</code>\
-    or <code>nodes</code>.\
-  </dd>\
-  <dt><code>ha-params</code></dt>\
-  <dd>\
-    Absent if <code>ha-mode</code> is <code>all</code>, a number\
+    'policy-ha-mode' : 'One of <code>all</code> (mirror to all nodes in the cluster), <code>exactly</code> (mirror to a set number of nodes) or <code>nodes</code> (mirror to an explicit list of nodes). If you choose one of the latter two, you must also set <code>ha-params</code>.',
+
+    'policy-ha-params' : 'Absent if <code>ha-mode</code> is <code>all</code>, a number\
     if <code>ha-mode</code> is <code>exactly</code>, or a list\
-    of strings if <code>ha-mode</code> is <code>nodes</code>.\
-  </dd>\
-  <dt><code>ha-sync-mode</code></dt>\
-  <dd>\
-    One of <code>manual</code> or <code>automatic</code>.\
-  </dd>\
-  <dt><code>alternate-exchange</code></dt>\
-  <dd>\
-    The name of an alternate exchange.\
-  </dd>\
-  <dt><code>dead-letter-exchange</code></dt>\
-  <dd>\
-    The name of a dead letter exchange.\
-  </dd>\
-  <dt><code>dead-letter-routing-key</code></dt>\
-  <dd>\
-    Key to use when dead-lettering.\
-  </dd>\
-  <dt><code>message-ttl</code></dt>\
-  <dd>\
-    Per-queue message TTL, in milliseconds.\
-  </dd>\
-  <dt><code>expires</code></dt>\
-  <dd>\
-    Queue TTL, in milliseconds.\
-  </dd>\
-  <dt><code>max-length</code></dt>\
-  <dd>\
-    Maximum queue length, in messages.\
-  </dd>\
-  <dt><code>federation-upstream-set</code></dt>\
-  <dd>\
-    A string; only if the federation plugin is enabled.\
-  </dd>\
-</dl>',
+    of strings if <code>ha-mode</code> is <code>nodes</code>.',
+
+    'policy-ha-sync-mode' : 'One of <code>manual</code> or <code>automatic</code>.',
+
+    'policy-federation-upstream-set' :
+    'A string; only if the federation plugin is enabled. Chooses the name of a set of upstreams to use with federation, or "all" to use all upstreams. Incompatible with <code>federation-upstream</code>.',
+
+    'policy-federation-upstream' :
+    'A string; only if the federation plugin is enabled. Chooses a specific upstream set to use for federation. Incompatible with <code>federation-upstream-set</code>.',
 
     'handle-exe' : 'In order to monitor the number of file descriptors in use on Windows, RabbitMQ needs the <a href="http://technet.microsoft.com/en-us/sysinternals/bb896655" target="_blank">handle.exe command line tool from Microsoft</a>. Download it and place it in the path (e.g. in C:\Windows).',
 

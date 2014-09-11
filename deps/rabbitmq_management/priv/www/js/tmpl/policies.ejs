@@ -81,13 +81,49 @@
           </td>
         </tr>
         <tr>
-          <th><label>Definition: <span class="help" id="policy-definitions"></span></label></th>
-          <td><div class="multifield" id="definition"></div></td>
-          <td class="t"><span class="mand">*</span></td>
-        </tr>
-        <tr>
           <th><label>Priority:</label></th>
           <td><input type="text" name="priority"/></td>
+        </tr>
+        <tr>
+          <th><label>Definition:</label></th>
+          <td>
+            <div class="multifield" id="definition"></div>
+            <table class="argument-links">
+              <tr>
+                <td>HA</td>
+                <td>
+                  <span class="argument-link" field="definition" key="ha-mode" type="string">HA mode</span> <span class="help" id="policy-ha-mode"></span> |
+                  <span class="argument-link" field="definition" key="ha-params" type="number">HA params</span> <span class="help" id="policy-ha-params"></span> |
+                  <span class="argument-link" field="definition" key="ha-sync-mode" type="string">HA sync mode</span> <span class="help" id="policy-ha-sync-mode"></span>
+                </td>
+              </tr>
+              <tr>
+                <td>Federation</td>
+                <td>
+                  <span class="argument-link" field="definition" key="federation-upstream-set" type="string">Federation upstream set</span> <span class="help" id="policy-federation-upstream-set"></span> |
+                  <span class="argument-link" field="definition" key="federation-upstream" type="string">Federation upstream</span> <span class="help" id="policy-federation-upstream"></span>
+                </td>
+              </tr>
+              <tr>
+                <td>Queues</td>
+                <td>
+                  <span class="argument-link" field="definition" key="message-ttl" type="number">Message TTL</span> |
+                  <span class="argument-link" field="definition" key="expires" type="number">Auto expire</span> |
+                  <span class="argument-link" field="definition" key="max-length" type="number">Max length</span> |
+                  <span class="argument-link" field="definition" key="max-length-bytes" type="number">Max length bytes</span><br/>
+                  <span class="argument-link" field="definition" key="dead-letter-exchange" type="string">Dead letter exchange</span> |
+                  <span class="argument-link" field="definition" key="dead-letter-routing-key" type="string">Dead letter routing key</span>
+                </td>
+              </tr>
+              <tr>
+                <td>Exchanges</td>
+                <td>
+                  <span class="argument-link" field="definition" key="alternate-exchange" type="string">Alternate exchange</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td class="t"><span class="mand">*</span></td>
         </tr>
       </table>
       <input type="submit" value="Add policy"/>
