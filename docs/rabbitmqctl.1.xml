@@ -1253,10 +1253,14 @@
                 message loss.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>status</term>
-                <listitem><para>The status of the queue. Normally
-                'running', but may be "{syncing, MsgCount}" if the queue is
-                synchronising.</para></listitem>
+                <term>state</term>
+                <listitem><para>The state of the queue. Normally
+                'running', but may be "{syncing, MsgCount}" if the
+                queue is synchronising. Queues which are located on
+                cluster nodes that are currently down will be shown
+                with a status of 'down' (and most other
+                <command>queueinfoitem</command>s will be
+                unavailable).</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
