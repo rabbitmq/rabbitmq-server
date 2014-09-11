@@ -54,8 +54,8 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 table.legend th { padding: 4px 10px 4px 0; width: 80px; }
 table.legend td { padding: 4px 0 4px 10px; width: 130px; }
 
-.tag-link { color: #444; cursor: pointer; }
-.tag-link:hover { color: #888; }
+.tag-link, .argument-link { color: #444; cursor: pointer; }
+.tag-link:hover, .argument-link:hover { color: #888; }
 
 .filter { overflow: auto; width: 100%; margin-bottom: 10px; }
 .filter table { float: left; }
@@ -109,6 +109,8 @@ sub { display: block; font-size: 0.8em; color: #888; }
 small { font-size: 0.8em; color: #888; }
 #main sub a { color: #888; }
 #main sub a:hover { color: #444; }
+table.argument-links { color: #888; }
+table.argument-links td { font-size: 0.64em; vertical-align: top; }
 .unknown { color: #888; }
 
 table.facts { float: left; }

@@ -535,6 +535,15 @@ function postprocess() {
     $('.tag-link').click(function() {
         $('#tags').val($(this).attr('tag'));
     });
+    $('.argument-link').click(function() {
+        var field = $(this).attr('field');
+        var row = $('#' + field).find('.mf').last();
+        var key = row.find('input').first();
+        var type = row.find('select').last();
+        key.val($(this).attr('key'));
+        type.val($(this).attr('type'));
+        update_multifields();
+    });
     $('form.auto-submit select, form.auto-submit input').live('click', function(){
         $(this).parents('form').submit();
     });
@@ -579,7 +588,8 @@ function update_multifield(multifield, dict) {
     var largest_id = 0;
     var empty_found = false;
     var name = multifield.attr('id');
-    $('#' + name + ' *[name$="_mftype"]').each(function(index) {
+    var type_inputs = $('#' + name + ' *[name$="_mftype"]');
+    type_inputs.each(function(index) {
         var re = new RegExp(name + '_([0-9]*)_mftype');
         var match = $(this).attr('name').match(re);
         if (!match) return;
@@ -600,10 +610,12 @@ function update_multifield(multifield, dict) {
                 var key = dict ? $('#' + prefix + '_mfkey').val() : '';
                 var value = input.val();
                 if (key == '' && value == '') {
-                    if (empty_found) {
-                        $(this).parent().remove();
+                    if (index == type_inputs.length - 1) {
+                        empty_found = true;
                     }
-                    empty_found = true;
+                    else {
+                        $(this).parents('.mf').first().remove();
+                    }
                 }
             }
             else {
@@ -619,13 +631,13 @@ function update_multifield(multifield, dict) {
             multifield_input(prefix, 'type', t);
 
         if (dict) {
-            multifield.append('<table><tr><td>' +
+            multifield.append('<table class="mf"><tr><td>' +
                               multifield_input(prefix, 'key', 'text') +
                               '</td><td class="equals"> = </td><td>' +
                               val_type + '</td></tr></table>');
         }
         else {
-            multifield.append('<div>' + val_type + '</div>');
+            multifield.append('<div class="mf">' + val_type + '</div>');
         }
     }
 }
@@ -975,10 +987,7 @@ function fill_path_template(template, params) {
 }
 
 function params_magic(params) {
-    return check_password(
-             add_known_arguments(
-               maybe_remove_fields(
-                 collapse_multifields(params))));
+    return check_password(maybe_remove_fields(collapse_multifields(params)));
 }
 
 function collapse_multifields(params0) {
@@ -1049,25 +1058,6 @@ function collapse_multifields(params0) {
             }
         }
     }
-    return params;
-}
-
-function add_known_arguments(params) {
-    for (var k in KNOWN_ARGS) {
-        var v = params[k];
-        if (v != undefined && v != '') {
-            var type = KNOWN_ARGS[k].type;
-            if (type == 'int') {
-                v = parseInt(v);
-                if (isNaN(v)) {
-                    throw(k + " must be an integer.");
-                }
-            }
-            params.arguments[k] = v;
-        }
-        delete params[k];
-    }
-
     return params;
 }
 

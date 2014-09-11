@@ -144,32 +144,23 @@
           </td>
         </tr>
         <tr>
-          <th><label>Message TTL: <span class="help" id="queue-message-ttl"></span></label></th>
-          <td><input type="text" name="x-message-ttl"/> ms</td>
-        </tr>
-        <tr>
-          <th><label>Auto expire: <span class="help" id="queue-expires"></span></label></th>
-          <td><input type="text" name="x-expires"/> ms</td>
-        </tr>
-        <tr>
-          <th><label>Max length: <span class="help" id="queue-max-length"></span></label></th>
-          <td><input type="text" name="x-max-length"/></td>
-        </tr>
-        <tr>
-          <th><label>Max length bytes: <span class="help" id="queue-max-length-bytes"></span></label></th>
-          <td><input type="text" name="x-max-length-bytes"/></td>
-        </tr>
-        <tr>
-          <th><label>Dead letter exchange: <span class="help" id="queue-dead-letter-exchange"></span></label></th>
-          <td><input type="text" name="x-dead-letter-exchange"/></td>
-        </tr>
-        <tr>
-          <th><label>Dead letter routing key: <span class="help" id="queue-dead-letter-routing-key"></span></label></th>
-          <td><input type="text" name="x-dead-letter-routing-key"/></td>
-        </tr>
-        <tr>
           <th><label>Arguments:</label></th>
-          <td><div class="multifield" id="arguments"></div></td>
+          <td>
+            <div class="multifield" id="arguments"></div>
+            <table class="argument-links">
+              <tr>
+                <td>Add</td>
+                <td>
+                  <span class="argument-link" field="arguments" key="x-message-ttl" type="number">Message TTL</span> <span class="help" id="queue-message-ttl"></span> |
+                  <span class="argument-link" field="arguments" key="x-expires" type="number">Auto expire</span> <span class="help" id="queue-expires"></span> |
+                  <span class="argument-link" field="arguments" key="x-max-length" type="number">Max length</span> <span class="help" id="queue-max-length"></span> |
+                  <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span><br/>
+                  <span class="argument-link" field="arguments" key="x-dead-letter-exchange" type="string">Dead letter exchange</span> <span class="help" id="queue-dead-letter-exchange"></span> |
+                  <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span>
+                </td>
+              </tr>
+            </table>
+          </td>
         </tr>
       </table>
       <input type="submit" value="Add queue"/>
