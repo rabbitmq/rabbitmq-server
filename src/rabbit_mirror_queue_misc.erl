@@ -202,30 +202,19 @@ add_mirrors(QName, Nodes, SyncMode) ->
 
 add_mirror(QName, MirrorNode, SyncMode) ->
     case rabbit_amqqueue:lookup(QName) of
-        {ok, #amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q} ->
-            case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
-                [] ->
-                    start_child(Name, MirrorNode, Q, SyncMode);
-                [SPid] ->
-                    case rabbit_misc:is_process_alive(SPid) of
-                        true  -> {ok, already_mirrored};
-                        false -> start_child(Name, MirrorNode, Q, SyncMode)
-                    end
-            end;
+        {ok, Q} ->
+            rabbit_misc:with_exit_handler(
+              rabbit_misc:const(ok),
+              fun () ->
+                      SPid = rabbit_amqqueue_sup_sup:start_queue_process(
+                               MirrorNode, Q, slave),
+                      log_info(QName, "Adding mirror on node ~p: ~p~n",
+                               [MirrorNode, SPid]),
+                      rabbit_mirror_queue_slave:go(SPid, SyncMode)
+              end);
         {error, not_found} = E ->
             E
     end.
-
-start_child(Name, MirrorNode, Q, SyncMode) ->
-    rabbit_misc:with_exit_handler(
-      rabbit_misc:const(ok),
-      fun () ->
-              {ok, SPid} = rabbit_mirror_queue_slave_sup:start_child(
-                             MirrorNode, [Q]),
-              log_info(Name, "Adding mirror on node ~p: ~p~n",
-                       [MirrorNode, SPid]),
-              rabbit_mirror_queue_slave:go(SPid, SyncMode)
-      end).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;

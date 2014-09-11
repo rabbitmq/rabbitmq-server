@@ -1669,17 +1669,20 @@ test_declare_on_dead_queue(SecondaryNode) ->
                         Self ! {self(), killed, QPid}
                 end),
     receive
-        {Pid, killed, QPid} ->
-            {existing, #amqqueue{name = QueueName,
-                                 pid = QPid}} =
-                rabbit_amqqueue:declare(QueueName, false, false, [], none),
-            false = rabbit_misc:is_process_alive(QPid),
-            {new, Q} = rabbit_amqqueue:declare(QueueName, false, false, [],
-                                               none),
-            true = rabbit_misc:is_process_alive(Q#amqqueue.pid),
+        {Pid, killed, OldPid} ->
+            Q = dead_queue_loop(QueueName, OldPid),
             {ok, 0} = rabbit_amqqueue:delete(Q, false, false),
             passed
     after ?TIMEOUT -> throw(failed_to_create_and_kill_queue)
+    end.
+
+dead_queue_loop(QueueName, OldPid) ->
+    {existing, Q} = rabbit_amqqueue:declare(QueueName, false, false, [], none),
+    case Q#amqqueue.pid of
+        OldPid -> timer:sleep(25),
+                  dead_queue_loop(QueueName, OldPid);
+        _      -> true = rabbit_misc:is_process_alive(Q#amqqueue.pid),
+                  Q
     end.
 
 %%---------------------------------------------------------------------

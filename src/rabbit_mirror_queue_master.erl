@@ -24,7 +24,7 @@
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, resume/1,
          msg_rates/1, info/2, invoke/3, is_duplicate/2]).
 
--export([start/1, stop/0]).
+-export([start/1, stop/0, delete_crashed/1]).
 
 -export([promote_backing_queue_state/8, sender_death_fun/0, depth_fun/0]).
 
@@ -88,6 +88,9 @@ start(_DurableQueues) ->
 
 stop() ->
     %% Same as start/1.
+    exit({not_valid_for_generic_backing_queue, ?MODULE}).
+
+delete_crashed(_QName) ->
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
 init(Q, Recover, AsyncCallback) ->
