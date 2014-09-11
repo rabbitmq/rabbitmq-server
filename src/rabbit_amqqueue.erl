@@ -407,10 +407,12 @@ with_or_die(Name, F) ->
                       ({absent, Q, Reason}) -> rabbit_misc:absent(Q, Reason)
                   end).
 
-%% TODO we could still be wrong here if we happen to call in the
-%% middle of a crash-failover. We could try to figure out whether
-%% that's happening by looking for the supervisor - but we'd need some
-%% additional book keeping to know what it is...
+%% TODO we could say we are crashed when we mean recovering if we
+%% happen to call in the middle of a crash-failover. We could try to
+%% figure out whether that's happening by looking for the supervisor -
+%% but we'd need some additional book keeping to know what it is. And
+%% it will just mean a temporary glitch while crashing, which is
+%% fairly tolerable.
 crashed_or_recovering(#amqqueue{pid = QPid, slave_pids = []}) ->
     case lists:member(node(QPid), [node() | nodes()]) of
         true  -> crashed;

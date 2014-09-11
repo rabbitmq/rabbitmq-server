@@ -206,7 +206,6 @@ recovery_barrier(BarrierPid) ->
         {'DOWN', MRef, process, _, _} -> ok
     end.
 
-%% We have been promoted
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                               RateTRef, Deliveries, Senders, MTC) ->
     case Owner of
