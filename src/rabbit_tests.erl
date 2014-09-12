@@ -2892,6 +2892,8 @@ test_queue_recover() ->
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     publish_and_confirm(Q, <<>>, Count),
 
+    [{_, SupPid, _, _}] = supervisor:which_children(rabbit_amqqueue_sup_sup),
+    exit(SupPid, kill),
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
     receive {'DOWN', MRef, process, QPid, _Info} -> ok
