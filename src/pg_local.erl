@@ -34,7 +34,7 @@
 %%
 -module(pg_local).
 
--export([join/2, leave/2, get_members/1]).
+-export([join/2, leave/2, get_members/1, in_group/2]).
 -export([sync/0]). %% intended for testing only; not part of official API
 -export([start/0, start_link/0, init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2]).
@@ -50,6 +50,7 @@
 -spec(join/2 :: (name(), pid()) -> 'ok').
 -spec(leave/2 :: (name(), pid()) -> 'ok').
 -spec(get_members/1 :: (name()) -> [pid()]).
+-spec(in_group/2 :: (name(), pid()) -> boolean()).
 
 -spec(sync/0 :: () -> 'ok').
 
@@ -80,6 +81,16 @@ leave(Name, Pid) when is_pid(Pid) ->
 get_members(Name) ->
     ensure_started(),
     group_members(Name).
+
+in_group(Name, Pid) ->
+    ensure_started(),
+    %% The join message is a cast and thus can race, but we want to
+    %% keep it that way to be fast in the common case.
+    case member_present(Name, Pid) of
+        true  -> true;
+        false -> sync(),
+                 member_present(Name, Pid)
+    end.
 
 sync() ->
     ensure_started(),
@@ -198,6 +209,12 @@ group_members(Name) ->
 member_in_group(Pid, Name) ->
     [{{member, Name, Pid}, N}] = ets:lookup(pg_local_table, {member, Name, Pid}),
     lists:duplicate(N, Pid).
+
+member_present(Name, Pid) ->
+    case ets:lookup(pg_local_table, {member, Name, Pid}) of
+        [_] -> true;
+        []  -> false
+    end.
 
 member_groups(Pid) ->
     [Name || [Name] <- ets:match(pg_local_table, {{pid, Pid, '$1'}})].

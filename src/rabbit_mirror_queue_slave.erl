@@ -24,7 +24,7 @@
 %% All instructions from the GM group must be processed in the order
 %% in which they're received.
 
--export([start_link/1, set_maximum_since_use/2, info/1, go/2]).
+-export([set_maximum_since_use/2, info/1, go/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/4,
@@ -71,8 +71,6 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
-
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
 
@@ -82,7 +80,7 @@ init(Q) ->
     ?store_proc_name(Q#amqqueue.name),
     {ok, {not_started, Q}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
-      ?DESIRED_HIBERNATE}}.
+      ?DESIRED_HIBERNATE}, ?MODULE}.
 
 go(SPid, sync)  -> gen_server2:call(SPid, go, infinity);
 go(SPid, async) -> gen_server2:cast(SPid, go).
@@ -122,6 +120,7 @@ handle_go(Q = #amqqueue{name = QName}) ->
                    Self, {rabbit_amqqueue, set_ram_duration_target, [Self]}),
             {ok, BQ} = application:get_env(backing_queue_module),
             Q1 = Q #amqqueue { pid = QPid },
+            ok = rabbit_queue_index:erase(QName), %% For crash recovery
             BQS = bq_init(BQ, Q1, new),
             State = #state { q                   = Q1,
                              gm                  = GM,
@@ -271,8 +270,8 @@ handle_cast({sync_start, Ref, Syncer},
            DD, Ref, TRef, Syncer, BQ, BQS,
            fun (BQN, BQSN) ->
                    BQSN1 = update_ram_duration(BQN, BQSN),
-                   TRefN = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
-                                             self(), update_ram_duration),
+                   TRefN = rabbit_misc:send_after(?RAM_DURATION_UPDATE_INTERVAL,
+                                                  self(), update_ram_duration),
                    {TRefN, BQSN1}
            end) of
         denied              -> noreply(State1);
@@ -653,8 +652,9 @@ next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
         timed -> {ensure_sync_timer(State1), 0             }
     end.
 
-backing_queue_timeout(State = #state { backing_queue = BQ }) ->
-    run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
+backing_queue_timeout(State = #state { backing_queue       = BQ,
+                                       backing_queue_state = BQS }) ->
+    State#state{backing_queue_state = BQ:timeout(BQS)}.
 
 ensure_sync_timer(State) ->
     rabbit_misc:ensure_timer(State, #state.sync_timer_ref,

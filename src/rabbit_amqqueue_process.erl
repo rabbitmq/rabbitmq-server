@@ -24,7 +24,7 @@
 -define(RAM_DURATION_UPDATE_INTERVAL, 5000).
 -define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
--export([start_link/1, info_keys/0]).
+-export([info_keys/0]).
 
 -export([init_with_backing_queue_state/7]).
 
@@ -52,6 +52,7 @@
             dlx,
             dlx_routing_key,
             max_length,
+            max_bytes,
             args_policy_version,
             status
            }).
@@ -60,8 +61,6 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 ::
-        (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(init_with_backing_queue_state/7 ::
         (rabbit_types:amqqueue(), atom(), tuple(), any(),
@@ -84,6 +83,7 @@
          memory,
          slave_pids,
          synchronised_slave_pids,
+         down_slave_nodes,
          backing_queue_status,
          state
         ]).
@@ -100,9 +100,8 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
-
-info_keys() -> ?INFO_KEYS.
+info_keys()       -> ?INFO_KEYS       ++ rabbit_backing_queue:info_keys().
+statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 
 %%----------------------------------------------------------------------------
 
@@ -110,7 +109,102 @@ init(Q) ->
     process_flag(trap_exit, true),
     ?store_proc_name(Q#amqqueue.name),
     {ok, init_state(Q#amqqueue{pid = self()}), hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE},
+    ?MODULE}.
+
+init_state(Q) ->
+    State = #q{q                   = Q,
+               exclusive_consumer  = none,
+               has_had_consumers   = false,
+               consumers           = rabbit_queue_consumers:new(),
+               senders             = pmon:new(delegate),
+               msg_id_to_channel   = gb_trees:empty(),
+               status              = running,
+               args_policy_version = 0},
+    rabbit_event:init_stats_timer(State, #q.stats_timer).
+
+init_it(Recover, From, State = #q{q = #amqqueue{exclusive_owner = none}}) ->
+    init_it2(Recover, From, State);
+
+%% You used to be able to declare an exclusive durable queue. Sadly we
+%% need to still tidy up after that case, there could be the remnants
+%% of one left over from an upgrade. So that's why we don't enforce
+%% Recover = new here.
+init_it(Recover, From, State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
+    case rabbit_misc:is_process_alive(Owner) of
+        true  -> erlang:monitor(process, Owner),
+                 init_it2(Recover, From, State);
+        false -> #q{backing_queue       = undefined,
+                    backing_queue_state = undefined,
+                    q                   = Q} = State,
+                 send_reply(From, {owner_died, Q}),
+                 BQ = backing_queue_module(Q),
+                 {_, Terms} = recovery_status(Recover),
+                 BQS = bq_init(BQ, Q, Terms),
+                 %% Rely on terminate to delete the queue.
+                 {stop, {shutdown, missing_owner},
+                  State#q{backing_queue = BQ, backing_queue_state = BQS}}
+    end.
+
+init_it2(Recover, From, State = #q{q                   = Q,
+                                   backing_queue       = undefined,
+                                   backing_queue_state = undefined}) ->
+    {Barrier, TermsOrNew} = recovery_status(Recover),
+    case rabbit_amqqueue:internal_declare(Q, Recover /= new) of
+        #amqqueue{} = Q1 ->
+            case matches(Recover, Q, Q1) of
+                true ->
+                    send_reply(From, {new, Q}),
+                    ok = file_handle_cache:register_callback(
+                           rabbit_amqqueue, set_maximum_since_use, [self()]),
+                    ok = rabbit_memory_monitor:register(
+                           self(), {rabbit_amqqueue,
+                                    set_ram_duration_target, [self()]}),
+                    BQ = backing_queue_module(Q1),
+                    BQS = bq_init(BQ, Q, TermsOrNew),
+                    recovery_barrier(Barrier),
+                    State1 = process_args_policy(
+                               State#q{backing_queue       = BQ,
+                                       backing_queue_state = BQS}),
+                    notify_decorators(startup, State),
+                    rabbit_event:notify(queue_created,
+                                        infos(?CREATION_EVENT_KEYS, State1)),
+                    rabbit_event:if_enabled(State1, #q.stats_timer,
+                                            fun() -> emit_stats(State1) end),
+                    noreply(State1);
+                false ->
+                    {stop, normal, {existing, Q1}, State}
+            end;
+        Err ->
+            {stop, normal, Err, State}
+    end.
+
+recovery_status(new)              -> {no_barrier, new};
+recovery_status({Recover, Terms}) -> {Recover,    Terms}.
+
+send_reply(none, _Q) -> ok;
+send_reply(From, Q)  -> gen_server2:reply(From, Q).
+
+matches(new, Q1, Q2) ->
+    %% i.e. not policy
+    Q1#amqqueue.name            =:= Q2#amqqueue.name            andalso
+    Q1#amqqueue.durable         =:= Q2#amqqueue.durable         andalso
+    Q1#amqqueue.auto_delete     =:= Q2#amqqueue.auto_delete     andalso
+    Q1#amqqueue.exclusive_owner =:= Q2#amqqueue.exclusive_owner andalso
+    Q1#amqqueue.arguments       =:= Q2#amqqueue.arguments       andalso
+    Q1#amqqueue.pid             =:= Q2#amqqueue.pid             andalso
+    Q1#amqqueue.slave_pids      =:= Q2#amqqueue.slave_pids;
+matches(_,  Q,   Q) -> true;
+matches(_, _Q, _Q1) -> false.
+
+recovery_barrier(no_barrier) ->
+    ok;
+recovery_barrier(BarrierPid) ->
+    MRef = erlang:monitor(process, BarrierPid),
+    receive
+        {BarrierPid, go}              -> erlang:demonitor(MRef, [flush]);
+        {'DOWN', MRef, process, _, _} -> ok
+    end.
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                               RateTRef, Deliveries, Senders, MTC) ->
@@ -131,17 +225,6 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
     notify_decorators(startup, State3),
     State3.
 
-init_state(Q) ->
-    State = #q{q                   = Q,
-               exclusive_consumer  = none,
-               has_had_consumers   = false,
-               consumers           = rabbit_queue_consumers:new(),
-               senders             = pmon:new(delegate),
-               msg_id_to_channel   = gb_trees:empty(),
-               status              = running,
-               args_policy_version = 0},
-    rabbit_event:init_stats_timer(State, #q.stats_timer).
-
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate({shutdown, missing_owner} = Reason, State) ->
@@ -149,8 +232,11 @@ terminate({shutdown, missing_owner} = Reason, State) ->
     terminate_shutdown(terminate_delete(false, Reason, State), State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate(Reason,            State) ->
-    terminate_shutdown(terminate_delete(true, Reason, State), State).
+terminate(normal,            State) -> %% delete case
+    terminate_shutdown(terminate_delete(true, normal, State), State);
+%% If we crashed don't try to clean up the BQS, probably best to leave it.
+terminate(_Reason,           State) ->
+    terminate_shutdown(fun (BQS) -> BQS end, State).
 
 terminate_delete(EmitStats, Reason,
                  State = #q{q = #amqqueue{name          = QName},
@@ -166,58 +252,28 @@ terminate_delete(EmitStats, Reason,
         BQS1
     end.
 
+terminate_shutdown(Fun, State) ->
+    State1 = #q{backing_queue_state = BQS, consumers = Consumers} =
+        lists:foldl(fun (F, S) -> F(S) end, State,
+                    [fun stop_sync_timer/1,
+                     fun stop_rate_timer/1,
+                     fun stop_expiry_timer/1,
+                     fun stop_ttl_timer/1]),
+    case BQS of
+        undefined -> State1;
+        _         -> ok = rabbit_memory_monitor:deregister(self()),
+                     QName = qname(State),
+                     notify_decorators(shutdown, State),
+                     [emit_consumer_deleted(Ch, CTag, QName) ||
+                         {Ch, CTag, _, _, _} <-
+                             rabbit_queue_consumers:all(Consumers)],
+                     State1#q{backing_queue_state = Fun(BQS)}
+    end.
+
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
-
-declare(Recover, From, State = #q{q                   = Q,
-                                  backing_queue       = undefined,
-                                  backing_queue_state = undefined}) ->
-    {Recovery, TermsOrNew} = recovery_status(Recover),
-    case rabbit_amqqueue:internal_declare(Q, Recovery /= new) of
-        #amqqueue{} = Q1 ->
-            case matches(Recovery, Q, Q1) of
-                true ->
-                    gen_server2:reply(From, {new, Q}),
-                    ok = file_handle_cache:register_callback(
-                           rabbit_amqqueue, set_maximum_since_use, [self()]),
-                    ok = rabbit_memory_monitor:register(
-                           self(), {rabbit_amqqueue,
-                                    set_ram_duration_target, [self()]}),
-                    BQ = backing_queue_module(Q1),
-                    BQS = bq_init(BQ, Q, TermsOrNew),
-                    recovery_barrier(Recovery),
-                    State1 = process_args_policy(
-                               State#q{backing_queue       = BQ,
-                                       backing_queue_state = BQS}),
-                    notify_decorators(startup, State),
-                    rabbit_event:notify(queue_created,
-                                        infos(?CREATION_EVENT_KEYS, State1)),
-                    rabbit_event:if_enabled(State1, #q.stats_timer,
-                                            fun() -> emit_stats(State1) end),
-                    noreply(State1);
-                false ->
-                    {stop, normal, {existing, Q1}, State}
-            end;
-        Err ->
-            {stop, normal, Err, State}
-    end.
-
-recovery_status(new)              -> {new,     new};
-recovery_status({Recover, Terms}) -> {Recover, Terms}.
-
-matches(new, Q1, Q2) ->
-    %% i.e. not policy
-    Q1#amqqueue.name            =:= Q2#amqqueue.name            andalso
-    Q1#amqqueue.durable         =:= Q2#amqqueue.durable         andalso
-    Q1#amqqueue.auto_delete     =:= Q2#amqqueue.auto_delete     andalso
-    Q1#amqqueue.exclusive_owner =:= Q2#amqqueue.exclusive_owner andalso
-    Q1#amqqueue.arguments       =:= Q2#amqqueue.arguments       andalso
-    Q1#amqqueue.pid             =:= Q2#amqqueue.pid             andalso
-    Q1#amqqueue.slave_pids      =:= Q2#amqqueue.slave_pids;
-matches(_,  Q,   Q) -> true;
-matches(_, _Q, _Q1) -> false.
 
 maybe_notify_decorators(false, State) -> State;
 maybe_notify_decorators(true,  State) -> notify_decorators(State), State.
@@ -247,15 +303,6 @@ bq_init(BQ, Q, Recover) ->
                     rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
 
-recovery_barrier(new) ->
-    ok;
-recovery_barrier(BarrierPid) ->
-    MRef = erlang:monitor(process, BarrierPid),
-    receive
-        {BarrierPid, go}              -> erlang:demonitor(MRef, [flush]);
-        {'DOWN', MRef, process, _, _} -> ok
-    end.
-
 process_args_policy(State = #q{q                   = Q,
                                args_policy_version = N}) ->
       ArgsTable =
@@ -263,7 +310,8 @@ process_args_policy(State = #q{q                   = Q,
          {<<"dead-letter-exchange">>,    fun res_arg/2, fun init_dlx/2},
          {<<"dead-letter-routing-key">>, fun res_arg/2, fun init_dlx_rkey/2},
          {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
-         {<<"max-length">>,              fun res_min/2, fun init_max_length/2}],
+         {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
+         {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(args_policy_lookup(Name, Resolve, Q), StateN)
@@ -302,23 +350,9 @@ init_max_length(MaxLen, State) ->
     {_Dropped, State1} = maybe_drop_head(State#q{max_length = MaxLen}),
     State1.
 
-terminate_shutdown(Fun, State) ->
-    State1 = #q{backing_queue_state = BQS, consumers = Consumers} =
-        lists:foldl(fun (F, S) -> F(S) end, State,
-                    [fun stop_sync_timer/1,
-                     fun stop_rate_timer/1,
-                     fun stop_expiry_timer/1,
-                     fun stop_ttl_timer/1]),
-    case BQS of
-        undefined -> State1;
-        _         -> ok = rabbit_memory_monitor:deregister(self()),
-                     QName = qname(State),
-                     notify_decorators(shutdown, State),
-                     [emit_consumer_deleted(Ch, CTag, QName) ||
-                         {Ch, CTag, _, _, _} <-
-                             rabbit_queue_consumers:all(Consumers)],
-                     State1#q{backing_queue_state = Fun(BQS)}
-    end.
+init_max_bytes(MaxBytes, State) ->
+    {_Dropped, State1} = maybe_drop_head(State#q{max_bytes = MaxBytes}),
+    State1.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),
@@ -385,15 +419,13 @@ ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref       = undefined,
                  V when V > 0 -> V + 999; %% always fire later
                  _            -> 0
              end) div 1000,
-    TRef = erlang:send_after(After, self(), {drop_expired, Version}),
+    TRef = rabbit_misc:send_after(After, self(), {drop_expired, Version}),
     State#q{ttl_timer_ref = TRef, ttl_timer_expiry = Expiry};
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
                                     ttl_timer_expiry = TExpiry})
   when Expiry + 1000 < TExpiry ->
-    case erlang:cancel_timer(TRef) of
-        false -> State;
-        _     -> ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined})
-    end;
+    rabbit_misc:cancel_timer(TRef),
+    ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined});
 ensure_ttl_timer(_Expiry, State) ->
     State.
 
@@ -543,33 +575,40 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
             %% remains unchanged, or if the newly published message
             %% has no expiry and becomes the head of the queue then
             %% the call is unnecessary.
-            case {Dropped > 0, QLen =:= 1, Props#message_properties.expiry} of
+            case {Dropped, QLen =:= 1, Props#message_properties.expiry} of
                 {false, false,         _} -> State4;
                 {true,  true,  undefined} -> State4;
                 {_,     _,             _} -> drop_expired_msgs(State4)
             end
     end.
 
-maybe_drop_head(State = #q{max_length = undefined}) ->
-    {0, State};
-maybe_drop_head(State = #q{max_length          = MaxLen,
-                           backing_queue       = BQ,
-                           backing_queue_state = BQS}) ->
-    case BQ:len(BQS) - MaxLen of
-        Excess when Excess > 0 ->
-            {Excess,
-             with_dlx(
-               State#q.dlx,
-               fun (X) -> dead_letter_maxlen_msgs(X, Excess, State) end,
-               fun () ->
-                       {_, BQS1} = lists:foldl(fun (_, {_, BQS0}) ->
-                                                       BQ:drop(false, BQS0)
-                                               end, {ok, BQS},
-                                               lists:seq(1, Excess)),
-                       State#q{backing_queue_state = BQS1}
-               end)};
-        _ -> {0, State}
+maybe_drop_head(State = #q{max_length = undefined,
+                           max_bytes  = undefined}) ->
+    {false, State};
+maybe_drop_head(State) ->
+    maybe_drop_head(false, State).
+
+maybe_drop_head(AlreadyDropped, State = #q{backing_queue       = BQ,
+                                           backing_queue_state = BQS}) ->
+    case over_max_length(State) of
+        true ->
+            maybe_drop_head(true,
+                            with_dlx(
+                              State#q.dlx,
+                              fun (X) -> dead_letter_maxlen_msg(X, State) end,
+                              fun () ->
+                                      {_, BQS1} = BQ:drop(false, BQS),
+                                      State#q{backing_queue_state = BQS1}
+                              end));
+        false ->
+            {AlreadyDropped, State}
     end.
+
+over_max_length(#q{max_length          = MaxLen,
+                   max_bytes           = MaxBytes,
+                   backing_queue       = BQ,
+                   backing_queue_state = BQS}) ->
+    BQ:len(BQS) > MaxLen orelse BQ:info(message_bytes_ready, BQS) > MaxBytes.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
                                     backing_queue_state = BQS}) ->
@@ -664,9 +703,12 @@ subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
                                    run_message_queue(true, Fun(State1))
     end.
 
-message_properties(Message, Confirm, #q{ttl = TTL}) ->
+message_properties(Message = #basic_message{content = Content},
+                   Confirm, #q{ttl = TTL}) ->
+    #content{payload_fragments_rev = PFR} = Content,
     #message_properties{expiry           = calculate_msg_expiry(Message, TTL),
-                        needs_confirming = Confirm == eventually}.
+                        needs_confirming = Confirm == eventually,
+                        size             = iolist_size(PFR)}.
 
 calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
     #content{properties = Props} =
@@ -723,15 +765,12 @@ dead_letter_rejected_msgs(AckTags, X,  State = #q{backing_queue = BQ}) ->
           end, rejected, X, State),
     State1.
 
-dead_letter_maxlen_msgs(X, Excess, State = #q{backing_queue = BQ}) ->
+dead_letter_maxlen_msg(X, State = #q{backing_queue = BQ}) ->
     {ok, State1} =
         dead_letter_msgs(
           fun (DLFun, Acc, BQS) ->
-                  lists:foldl(fun (_, {ok, Acc0, BQS0}) ->
-                                      {{Msg, _, AckTag}, BQS1} =
-                                        BQ:fetch(true, BQS0),
-                                      {ok, DLFun(Msg, AckTag, Acc0), BQS1}
-                              end, {ok, Acc, BQS}, lists:seq(1, Excess))
+                  {{Msg, _, AckTag}, BQS1} = BQ:fetch(true, BQS),
+                  {ok, DLFun(Msg, AckTag, Acc), BQS1}
           end, maxlen, X, State),
     State1.
 
@@ -810,19 +849,25 @@ i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
         false -> '';
         true  -> SSPids
     end;
+i(down_slave_nodes, #q{q = #amqqueue{name    = Name,
+                                     durable = Durable}}) ->
+    {ok, Q = #amqqueue{down_slave_nodes = Nodes}} =
+        rabbit_amqqueue:lookup(Name),
+    case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false -> '';
+        true  -> Nodes
+    end;
 i(state, #q{status = running}) -> credit_flow:state();
 i(state, #q{status = State})   -> State;
-i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
-    BQ:status(BQS);
-i(Item, _) ->
-    throw({bad_argument, Item}).
+i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
+    BQ:info(Item, BQS).
 
 emit_stats(State) ->
     emit_stats(State, []).
 
 emit_stats(State, Extra) ->
     ExtraKs = [K || {K, _} <- Extra],
-    Infos = [{K, V} || {K, V} <- infos(?STATISTICS_KEYS, State),
+    Infos = [{K, V} || {K, V} <- infos(statistics_keys(), State),
                        not lists:member(K, ExtraKs)],
     rabbit_event:notify(queue_stats, Extra ++ Infos).
 
@@ -896,33 +941,11 @@ prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
         _                                    -> 0
     end.
 
-handle_call({init, Recover}, From,
-            State = #q{q = #amqqueue{exclusive_owner = none}}) ->
-    declare(Recover, From, State);
-
-%% You used to be able to declare an exclusive durable queue. Sadly we
-%% need to still tidy up after that case, there could be the remnants
-%% of one left over from an upgrade. So that's why we don't enforce
-%% Recover = new here.
-handle_call({init, Recover}, From,
-            State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
-    case rabbit_misc:is_process_alive(Owner) of
-        true  -> erlang:monitor(process, Owner),
-                 declare(Recover, From, State);
-        false -> #q{backing_queue       = undefined,
-                    backing_queue_state = undefined,
-                    q                   = Q} = State,
-                 gen_server2:reply(From, {owner_died, Q}),
-                 BQ = backing_queue_module(Q),
-                 {_, Terms} = recovery_status(Recover),
-                 BQS = bq_init(BQ, Q, Terms),
-                 %% Rely on terminate to delete the queue.
-                 {stop, {shutdown, missing_owner},
-                  State#q{backing_queue = BQ, backing_queue_state = BQS}}
-    end;
+handle_call({init, Recover}, From, State) ->
+    init_it(Recover, From, State);
 
 handle_call(info, _From, State) ->
-    reply(infos(?INFO_KEYS, State), State);
+    reply(infos(info_keys(), State), State);
 
 handle_call({info, Items}, _From, State) ->
     try
@@ -1064,6 +1087,9 @@ handle_call(sync_mirrors, _From, State) ->
 handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State).
 
+handle_cast(init, State) ->
+    init_it({no_barrier, non_clean_shutdown}, none, State);
+
 handle_cast({run_backing_queue, Mod, Fun},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     noreply(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)});
@@ -1165,7 +1191,7 @@ handle_cast({force_event_refresh, Ref},
                       emit_consumer_created(
                         Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref)
     end,
-    noreply(State);
+    noreply(rabbit_event:init_stats_timer(State, #q.stats_timer));
 
 handle_cast(notify_decorators, State) ->
     notify_decorators(State),

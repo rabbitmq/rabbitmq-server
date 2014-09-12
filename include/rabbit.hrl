@@ -39,13 +39,25 @@
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, auto_delete, internal, arguments,
-                   scratches, policy, decorators}).
--record(exchange_serial, {name, next}).
+%% fields described as 'transient' here are cleared when writing to
+%% rabbit_durable_<thing>
+-record(exchange, {
+          name, type, durable, auto_delete, internal, arguments, %% immutable
+          scratches,    %% durable, explicitly updated via update_scratch/3
+          policy,       %% durable, implicitly updated when policy changes
+          decorators}). %% transient, recalculated in store/1 (i.e. recovery)
 
--record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
-                   arguments, pid, slave_pids, sync_slave_pids, policy,
-                   gm_pids, decorators}).
+-record(amqqueue, {
+          name, durable, auto_delete, exclusive_owner = none, %% immutable
+          arguments,                   %% immutable
+          pid,                         %% durable (just so we know home node)
+          slave_pids, sync_slave_pids, %% transient
+          down_slave_nodes,            %% durable
+          policy,                      %% durable, implicit update as above
+          gm_pids,                     %% transient
+          decorators}).                %% transient, recalculated as above
+
+-record(exchange_serial, {name, next}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).
@@ -75,7 +87,7 @@
 
 -record(event, {type, props, reference = undefined, timestamp}).
 
--record(message_properties, {expiry, needs_confirming = false}).
+-record(message_properties, {expiry, needs_confirming = false, size}).
 
 -record(plugin, {name,          %% atom()
                  version,       %% string()
@@ -104,9 +116,6 @@
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
 -define(CREDIT_DISC_BOUND,   {2000, 500}).
-
-%% This is dictated by `erlang:send_after' on which we depend to implement TTL.
--define(MAX_EXPIRY_TIMER, 4294967295).
 
 -define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
