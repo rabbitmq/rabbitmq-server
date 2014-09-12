@@ -32,7 +32,8 @@
          code_change/3]).
 
  %% Utils
--export([all_rabbit_nodes_up/0, run_outside_applications/1, ping_all/0]).
+-export([all_rabbit_nodes_up/0, run_outside_applications/1, ping_all/0,
+         alive_rabbit_nodes/1]).
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
@@ -66,6 +67,7 @@
 -spec(all_rabbit_nodes_up/0 :: () -> boolean()).
 -spec(run_outside_applications/1 :: (fun (() -> any())) -> pid()).
 -spec(ping_all/0 :: () -> 'ok').
+-spec(alive_rabbit_nodes/1 :: ([node()]) -> [node()]).
 
 -endif.
 
