@@ -29,7 +29,7 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
--define(TIMEOUT, 5000).
+-define(TIMEOUT, 30000).
 
 all_tests() ->
     try
