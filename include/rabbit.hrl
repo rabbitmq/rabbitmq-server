@@ -55,7 +55,8 @@
           down_slave_nodes,            %% durable
           policy,                      %% durable, implicit update as above
           gm_pids,                     %% transient
-          decorators}).                %% transient, recalculated as above
+          decorators,                  %% transient, recalculated as above
+          state}).                     %% durable (have we crashed?)
 
 -record(exchange_serial, {name, next}).
 

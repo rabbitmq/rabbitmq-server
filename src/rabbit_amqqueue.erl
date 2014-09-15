@@ -272,7 +272,8 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
                                       slave_pids       = [],
                                       sync_slave_pids  = [],
                                       down_slave_nodes = [],
-                                      gm_pids          = []})),
+                                      gm_pids          = [],
+                                      state            = live})),
     Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
     gen_server2:call(
       rabbit_amqqueue_sup_sup:start_queue_process(Node, Q, declare),
@@ -280,7 +281,10 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
 
 internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () -> ok = store_queue(Q), rabbit_misc:const(Q) end);
+      fun () ->
+              ok = store_queue(Q#amqqueue{state = live}),
+              rabbit_misc:const(Q)
+      end);
 internal_declare(Q = #amqqueue{name = QueueName}, false) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
@@ -288,7 +292,8 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                   [] ->
                       case not_found_or_absent(QueueName) of
                           not_found           -> Q1 = rabbit_policy:set(Q),
-                                                 ok = store_queue(Q1),
+                                                 Q2 = Q#amqqueue{state = live},
+                                                 ok = store_queue(Q2),
                                                  B = add_default_binding(Q1),
                                                  fun () -> B(), Q1 end;
                           {absent, _Q, _} = R -> rabbit_misc:const(R)
@@ -381,6 +386,8 @@ not_found_or_absent_dirty(Name) ->
 
 with(Name, F, E) ->
     case lookup(Name) of
+        {ok, Q = #amqqueue{state = crashed}} ->
+            E({absent, Q, crashed});
         {ok, Q = #amqqueue{pid = QPid}} ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
@@ -390,11 +397,8 @@ with(Name, F, E) ->
             %% the retry loop.
             rabbit_misc:with_exit_handler(
               fun () -> false = rabbit_misc:is_process_alive(QPid),
-                        case crashed_or_recovering(Q) of
-                            crashed    -> E({absent, Q, crashed});
-                            recovering -> timer:sleep(25),
-                                          with(Name, F, E)
-                        end
+                        timer:sleep(25),
+                        with(Name, F, E)
               end, fun () -> F(Q) end);
         {error, not_found} ->
             E(not_found_or_absent_dirty(Name))
@@ -406,20 +410,6 @@ with_or_die(Name, F) ->
     with(Name, F, fun (not_found)           -> rabbit_misc:not_found(Name);
                       ({absent, Q, Reason}) -> rabbit_misc:absent(Q, Reason)
                   end).
-
-%% TODO we could say we are crashed when we mean recovering if we
-%% happen to call in the middle of a crash-failover. We could try to
-%% figure out whether that's happening by looking for the supervisor -
-%% but we'd need some additional book keeping to know what it is. And
-%% it will just mean a temporary glitch while crashing, which is
-%% fairly tolerable.
-crashed_or_recovering(#amqqueue{pid = QPid, slave_pids = []}) ->
-    case lists:member(node(QPid), [node() | nodes()]) of
-        true  -> crashed;
-        false -> recovering
-    end;
-crashed_or_recovering(_Q) ->
-    recovering.
 
 assert_equivalence(#amqqueue{durable     = Durable,
                              auto_delete = AutoDelete} = Q,
@@ -779,7 +769,8 @@ immutable(Q) -> Q#amqqueue{pid              = none,
                            down_slave_nodes = none,
                            gm_pids          = none,
                            policy           = none,
-                           decorators       = none}.
+                           decorators       = none,
+                           state            = none}.
 
 deliver([], _Delivery, _Flow) ->
     %% /dev/null optimisation
