@@ -582,10 +582,10 @@ delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate:call(QPid, {delete, IfUnused, IfEmpty}).
 
 delete_crashed(#amqqueue{ pid = QPid } = Q) ->
-    rpc:call(node(QPid), ?MODULE, delete_crashed_internal, [Q]).
+    ok = rpc:call(node(QPid), ?MODULE, delete_crashed_internal, [Q]).
 
 delete_crashed_internal(#amqqueue{ name = QName }) ->
-    {ok, BQ} = application:get_env(backing_queue_module),
+    {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     BQ:delete_crashed(QName),
     ok = internal_delete(QName).
 
