@@ -292,7 +292,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                   [] ->
                       case not_found_or_absent(QueueName) of
                           not_found           -> Q1 = rabbit_policy:set(Q),
-                                                 Q2 = Q#amqqueue{state = live},
+                                                 Q2 = Q1#amqqueue{state = live},
                                                  ok = store_queue(Q2),
                                                  B = add_default_binding(Q1),
                                                  fun () -> B(), Q1 end;
