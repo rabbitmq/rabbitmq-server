@@ -52,7 +52,7 @@ augmented(ReqData, Context) ->
 
 basic(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
-        [rabbit_mgmt_format:queue(Q, [{state, down}]) ||
+        [rabbit_mgmt_format:queue(Q#amqqueue{state = down}) ||
             Q <- down_queues(ReqData)].
 
 queues0(ReqData) ->
