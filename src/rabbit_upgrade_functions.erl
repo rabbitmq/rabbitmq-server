@@ -49,6 +49,7 @@
 -rabbit_upgrade({internal_system_x,     mnesia, [exchange_decorators]}).
 -rabbit_upgrade({cluster_name,          mnesia, [runtime_parameters]}).
 -rabbit_upgrade({down_slave_nodes,      mnesia, [queue_decorators]}).
+-rabbit_upgrade({queue_state,           mnesia, [down_slave_nodes]}).
 
 %% -------------------------------------------------------------------
 
@@ -80,6 +81,7 @@
 -spec(internal_system_x/0     :: () -> 'ok').
 -spec(cluster_name/0          :: () -> 'ok').
 -spec(down_slave_nodes/0      :: () -> 'ok').
+-spec(queue_state/0           :: () -> 'ok').
 
 -endif.
 
@@ -399,6 +401,22 @@ down_slave_nodes(Table) ->
       end,
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, down_slave_nodes, policy, gm_pids, decorators]).
+
+queue_state() ->
+    ok = queue_state(rabbit_queue),
+    ok = queue_state(rabbit_durable_queue).
+
+queue_state(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, GmPids, Decorators}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, GmPids, Decorators,
+               live}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, down_slave_nodes, policy, gm_pids, decorators, state]).
 
 %%--------------------------------------------------------------------
 

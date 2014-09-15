@@ -110,7 +110,8 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
                    [Q1 = #amqqueue{gm_pids = GMPids}]
                        = mnesia:read({rabbit_queue, QName}),
                    ok = rabbit_amqqueue:store_queue(
-                          Q1#amqqueue{gm_pids = [{GM, Self} | GMPids]})
+                          Q1#amqqueue{gm_pids = [{GM, Self} | GMPids],
+                                      state   = live})
            end),
     {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
     %% We need synchronous add here (i.e. do not return until the
