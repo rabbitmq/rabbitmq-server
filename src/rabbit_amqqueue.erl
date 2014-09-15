@@ -421,16 +421,14 @@ crashed_or_recovering(#amqqueue{pid = QPid, slave_pids = []}) ->
 crashed_or_recovering(_Q) ->
     recovering.
 
-assert_equivalence(#amqqueue{durable     = Durable,
-                             auto_delete = AutoDelete} = Q,
-                   Durable, AutoDelete, RequiredArgs, Owner) ->
-    assert_args_equivalence(Q, RequiredArgs),
-    check_exclusive_access(Q, Owner, strict);
-assert_equivalence(#amqqueue{name = QueueName},
-                   _Durable, _AutoDelete, _RequiredArgs, _Owner) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "parameters for ~s not equivalent",
-      [rabbit_misc:rs(QueueName)]).
+assert_equivalence(#amqqueue{name        = QName,
+                             durable     = Durable,
+                             auto_delete = AD} = Q,
+                   Durable1, AD1, Args1, Owner) ->
+    rabbit_misc:assert_field_equivalence(Durable, Durable1, QName, durable),
+    rabbit_misc:assert_field_equivalence(AD, AD1, QName, auto_delete),
+    assert_args_equivalence(Q, Args1),
+    check_exclusive_access(Q, Owner, strict).
 
 check_exclusive_access(Q, Owner) -> check_exclusive_access(Q, Owner, lax).
 
