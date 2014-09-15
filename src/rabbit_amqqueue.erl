@@ -539,8 +539,11 @@ info_keys() -> rabbit_amqqueue_process:info_keys().
 
 map(Qs, F) -> rabbit_misc:filter_exit_map(F, Qs).
 
+info(Q = #amqqueue{ state = crashed }) -> info_down(Q, crashed);
 info(#amqqueue{ pid = QPid }) -> delegate:call(QPid, info).
 
+info(Q = #amqqueue{ state = crashed }, Items) ->
+    info_down(Q, Items, crashed);
 info(#amqqueue{ pid = QPid }, Items) ->
     case delegate:call(QPid, {info, Items}) of
         {ok, Res}      -> Res;
@@ -567,41 +570,12 @@ i_down(K, _Q, _DownReason) ->
     end.
 
 info_all(VHostPath) ->
-    map_with_crashed(fun (Q) -> info(Q) end,
-                     fun (Q) -> info_down(Q, crashed) end,
-                     list(VHostPath)) ++
-        [info_down(Q, down) || Q <- list_down(VHostPath)].
+    map(list(VHostPath), fun (Q) -> info(Q) end) ++
+        map(list_down(VHostPath), fun (Q) -> info_down(Q, down) end).
 
 info_all(VHostPath, Items) ->
-    map_with_crashed(fun (Q) -> info(Q, Items) end,
-                     fun (Q) -> info_down(Q, Items, crashed) end,
-                     list(VHostPath)) ++
-        [info_down(Q, Items, down) || Q <- list_down(VHostPath)].
-
-map_with_crashed(F, FCrashed, Qs) ->
-    {Bad, Good} = lists:partition(
-                    fun ({failed, _, _}) -> true;
-                        (_)              -> false
-                    end,
-                    [rabbit_misc:with_exit_handler(
-                     fun () -> {failed, QPid, Name} end,
-                     fun () -> F(Q) end) ||
-                      Q = #amqqueue{pid = QPid, name = Name} <- Qs]),
-    Qs2 = lookup([N || {failed, _, N} <- Bad]),
-    Good ++ [FCrashed(Q) || Q <- filter_crashed(Bad, Qs2, [])].
-
-filter_crashed([], [], Acc) -> Acc;
-%% The queue is still there with same pid -> crashed
-filter_crashed([{failed, QPid, Name} | Rest],
-               [Q = #amqqueue{pid = QPid, name = Name} | Qs], Acc) ->
-    filter_crashed(Rest, Qs, [Q | Acc]);
-%% The queue is still there with different pid -> recovered
-filter_crashed([{failed, _QPid, Name} | Rest],
-               [#amqqueue{name = Name} | Qs], Acc) ->
-    filter_crashed(Rest, Qs, Acc);
-%% The queue is not there -> deleted
-filter_crashed([{failed, _QPid, _Name} | Rest], Qs, Acc) ->
-    filter_crashed(Rest, Qs, Acc).
+    map(list(VHostPath), fun (Q) -> info(Q, Items) end) ++
+        map(list_down(VHostPath), fun (Q) -> info_down(Q, Items, down) end).
 
 force_event_refresh(Ref) ->
     [gen_server2:cast(Q#amqqueue.pid,
