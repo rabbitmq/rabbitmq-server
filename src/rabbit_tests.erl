@@ -29,9 +29,19 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
--define(TIMEOUT, 5000).
+-define(TIMEOUT, 30000).
 
 all_tests() ->
+    try
+        all_tests0()
+    catch
+        Type:Error ->
+            rabbit_misc:format(
+              "Tests failed~nError: {~p, ~p}~nStack trace:~n~p~n",
+              [Type, Error, erlang:get_stacktrace()])
+    end.
+
+all_tests0() ->
     ok = setup_cluster(),
     ok = truncate:test(),
     ok = supervisor2_tests:test_all(),
@@ -2892,6 +2902,8 @@ test_queue_recover() ->
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     publish_and_confirm(Q, <<>>, Count),
 
+    [{_, SupPid, _, _}] = supervisor:which_children(rabbit_amqqueue_sup_sup),
+    exit(SupPid, kill),
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
     receive {'DOWN', MRef, process, QPid, _Info} -> ok

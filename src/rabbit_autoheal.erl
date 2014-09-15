@@ -54,6 +54,10 @@
 %%   - we are the winner and are waiting for all losing nodes to stop
 %%   before telling them they can restart
 %%
+%% {leader_waiting, OutstandingStops}
+%%   - we are the leader, and have already assigned the winner and losers.
+%%     We are neither but need to ignore further requests to autoheal.
+%%
 %% restarting
 %%   - we are restarting. Of course the node monitor immediately dies
 %%   then so this state does not last long. We therefore send the
@@ -83,8 +87,7 @@ enabled() ->
 %% stopped - all nodes can now start again
 rabbit_down(Node, {winner_waiting, [Node], Notify}) ->
     rabbit_log:info("Autoheal: final node has stopped, starting...~n",[]),
-    notify_safe(Notify),
-    not_healing;
+    winner_finish(Notify);
 
 rabbit_down(Node, {winner_waiting, WaitFor, Notify}) ->
     {winner_waiting, WaitFor -- [Node], Notify};
@@ -106,8 +109,7 @@ node_down(Node, {winner_waiting, _, Notify}) ->
     rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
     %% Make sure any nodes waiting for us start - it won't necessarily
     %% heal the partition but at least they won't get stuck.
-    notify_safe(Notify),
-    not_healing;
+    winner_finish(Notify);
 
 node_down(Node, _State) ->
     rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
@@ -154,14 +156,14 @@ handle_msg({become_winner, Losers},
            not_healing, _Partitions) ->
     rabbit_log:info("Autoheal: I am the winner, waiting for ~p to stop~n",
                     [Losers]),
-    {winner_waiting, Losers, Losers};
+    filter_already_down_losers(Losers, Losers);
 
 handle_msg({become_winner, Losers},
            {winner_waiting, WaitFor, Notify}, _Partitions) ->
     rabbit_log:info("Autoheal: I am the winner, waiting additionally for "
                     "~p to stop~n", [Losers]),
-    {winner_waiting, lists:usort(Losers ++ WaitFor),
-     lists:usort(Losers ++ Notify)};
+    filter_already_down_losers(lists:usort(Losers ++ WaitFor),
+                               lists:usort(Losers ++ Notify));
 
 handle_msg({winner_is, Winner},
            not_healing, _Partitions) ->
@@ -188,8 +190,9 @@ handle_msg(_, restarting, _Partitions) ->
 
 send(Node, Msg) -> {?SERVER, Node} ! {autoheal_msg, Msg}.
 
-notify_safe(Notify) ->
-    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify].
+winner_finish(Notify) ->
+    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
+    not_healing.
 
 make_decision(AllPartitions) ->
     Sorted = lists:sort([{partition_value(P), P} || P <- AllPartitions]),
@@ -225,3 +228,19 @@ all_partitions([{Node, CantSee} | Rest], Partitions) ->
                       _        -> [A, B | Others]
                   end,
     all_partitions(Rest, Partitions1).
+
+%% We could have received and ignored DOWN messages from some losers
+%% before becoming the winner - check for already down nodes.
+filter_already_down_losers(WaitFor, Notify) ->
+    WaitFor2 = rabbit_node_monitor:alive_rabbit_nodes(WaitFor),
+    case WaitFor of
+        WaitFor2 -> ok;
+        _        -> rabbit_log:info("Autoheal: ~p already down~n",
+                                    [WaitFor -- WaitFor2])
+    end,
+    case WaitFor2 of
+        [] -> rabbit_log:info(
+                "Autoheal: final node has stopped, starting...~n",[]),
+              winner_finish(Notify);
+        _  -> {winner_waiting, WaitFor2, Notify}
+    end.
