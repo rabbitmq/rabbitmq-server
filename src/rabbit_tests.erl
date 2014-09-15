@@ -32,6 +32,16 @@
 -define(TIMEOUT, 5000).
 
 all_tests() ->
+    try
+        all_tests0()
+    catch
+        Type:Error ->
+            rabbit_misc:format(
+              "Tests failed~nError: {~p, ~p}~nStack trace:~n~p~n",
+              [Type, Error, erlang:get_stacktrace()])
+    end.
+
+all_tests0() ->
     ok = setup_cluster(),
     ok = truncate:test(),
     ok = supervisor2_tests:test_all(),
