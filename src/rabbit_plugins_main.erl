@@ -16,27 +16,10 @@
 
 -module(rabbit_plugins_main).
 -include("rabbit.hrl").
+-include("rabbit_cli.hrl").
 
 -export([start/0, stop/0]).
 -export([action/6]).
-
--define(NODE_OPT, "-n").
--define(VERBOSE_OPT, "-v").
--define(MINIMAL_OPT, "-m").
--define(ENABLED_OPT, "-E").
--define(ENABLED_ALL_OPT, "-e").
--define(OFFLINE_OPT, "--offline").
--define(ONLINE_OPT, "--online").
-
--define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
--define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
--define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
--define(ENABLED_DEF, {?ENABLED_OPT, flag}).
--define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
--define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
--define(ONLINE_DEF, {?ONLINE_OPT, flag}).
-
--define(RPC_TIMEOUT, infinity).
 
 -define(GLOBAL_DEFS(Node), [?NODE_DEF(Node)]).
 
@@ -53,61 +36,21 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
--spec(usage/0 :: () -> no_return()).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
 start() ->
-    {ok, [[PluginsFile|_]|_]} =
-        init:get_argument(enabled_plugins_file),
-    {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
-    {Command, Opts, Args} =
-        case parse_arguments(init:get_plain_arguments(), NodeStr) of
-            {ok, Res}  -> Res;
-            no_command -> print_error("could not recognise command", []),
-                          usage()
-        end,
-
-    PrintInvalidCommandError =
-        fun () ->
-                print_error("invalid command '~s'",
-                            [string:join([atom_to_list(Command) | Args], " ")])
-        end,
-
-    Node = proplists:get_value(?NODE_OPT, Opts),
-    case catch action(Command, Node, Args, Opts, PluginsFile, PluginsDir) of
-        ok ->
-            rabbit_misc:quit(0);
-        {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            PrintInvalidCommandError(),
-            usage();
-        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} ->
-            PrintInvalidCommandError(),
-            usage();
-        {error, {missing_dependencies, Missing, Blame}} ->
-            print_error("dependent plugins ~p not found; used by ~p.",
-                        [Missing, Blame]),
-            rabbit_misc:quit(2);
-        {error, Reason} ->
-            print_error("~p", [Reason]),
-            rabbit_misc:quit(2);
-        {error_string, Reason} ->
-            print_error("~s", [Reason]),
-            rabbit_misc:quit(2);
-        {badrpc, {'EXIT', Reason}} ->
-            print_error("~p", [Reason]),
-            rabbit_misc:quit(2);
-        {badrpc, Reason} ->
-            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
-            print_badrpc_diagnostics([Node]),
-            rabbit_misc:quit(2);
-        Other ->
-            print_error("~p", [Other]),
-            rabbit_misc:quit(2)
-    end.
+    {ok, [[PluginsFile|_]|_]} = init:get_argument(enabled_plugins_file),
+    {ok, [[PluginsDir |_]|_]} = init:get_argument(plugins_dist_dir),
+    rabbit_cli:main(
+      fun (Args, NodeStr) ->
+              parse_arguments(Args, NodeStr)
+      end,
+      fun (Command, Node, Args, Opts) ->
+              action(Command, Node, Args, Opts, PluginsFile, PluginsDir)
+      end, rabbit_plugins_usage).
 
 stop() ->
     ok.
@@ -115,17 +58,8 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 parse_arguments(CmdLine, NodeStr) ->
-    case rabbit_misc:parse_arguments(
-           ?COMMANDS, ?GLOBAL_DEFS(NodeStr), CmdLine) of
-        {ok, {Cmd, Opts0, Args}} ->
-            Opts = [case K of
-                        ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
-                        _         -> {K, V}
-                    end || {K, V} <- Opts0],
-            {ok, {Cmd, Opts, Args}};
-        E ->
-            E
-    end.
+    rabbit_cli:parse_arguments(
+      ?COMMANDS, ?GLOBAL_DEFS(NodeStr), ?NODE_OPT, CmdLine).
 
 action(list, Node, [], Opts, PluginsFile, PluginsDir) ->
     action(list, Node, [".*"], Opts, PluginsFile, PluginsDir);
@@ -211,17 +145,6 @@ action(sync, Node, [], _Opts, PluginsFile, _PluginsDir) ->
     sync(Node, true, PluginsFile).
 
 %%----------------------------------------------------------------------------
-
-fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
-
-print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
-
-print_badrpc_diagnostics(Nodes) ->
-    fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
-
-usage() ->
-    io:format("~s", [rabbit_plugins_usage:usage()]),
-    rabbit_misc:quit(1).
 
 %% Pretty print a list of plugins.
 format_plugins(Node, Pattern, Opts, PluginsFile, PluginsDir) ->
