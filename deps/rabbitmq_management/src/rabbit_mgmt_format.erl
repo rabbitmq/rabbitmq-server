@@ -232,14 +232,16 @@ queue(#amqqueue{name            = Name,
                 auto_delete     = AutoDelete,
                 exclusive_owner = ExclusiveOwner,
                 arguments       = Arguments,
-                pid             = Pid}) ->
+                pid             = Pid,
+                state           = State}) ->
     format(
       [{name,        Name},
        {durable,     Durable},
        {auto_delete, AutoDelete},
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
-       {pid,         Pid}],
+       {pid,         Pid},
+       {state,       State}],
       [{fun resource/1,   [name]},
        {fun amqp_table/1, [arguments]},
        {fun policy/1,     [policy]}]).

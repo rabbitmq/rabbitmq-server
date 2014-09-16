@@ -890,8 +890,15 @@ node_stats(Ranges, Objs, State) ->
                        simple_stats_fun(Ranges, node_stats, State)]).
 
 merge_stats(Objs, Funs) ->
-    [lists:foldl(fun (Fun, Props) -> Fun(Props) ++ Props end, Obj, Funs)
+    [lists:foldl(fun (Fun, Props) -> combine(Fun(Props), Props) end, Obj, Funs)
      || Obj <- Objs].
+
+combine(New, Old) ->
+    case pget(state, Old) of
+        undefined -> New ++ Old;
+        live      -> New ++ proplists:delete(state, Old);
+        _         -> proplists:delete(state, New) ++ Old
+    end.
 
 %% i.e. the non-calculated stats
 basic_stats_fun(Type, #state{tables = Tables}) ->

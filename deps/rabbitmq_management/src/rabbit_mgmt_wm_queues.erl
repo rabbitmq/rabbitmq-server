@@ -51,7 +51,12 @@ augmented(ReqData, Context) ->
         rabbit_mgmt_util:range_ceil(ReqData), basic)).
 
 basic(ReqData) ->
-    [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)].
+    [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
+        [rabbit_mgmt_format:queue(Q#amqqueue{state = down}) ||
+            Q <- down_queues(ReqData)].
 
 queues0(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list/1).
+
+down_queues(ReqData) ->
+    rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list_down/1).
