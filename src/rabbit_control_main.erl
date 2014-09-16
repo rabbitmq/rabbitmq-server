@@ -16,28 +16,12 @@
 
 -module(rabbit_control_main).
 -include("rabbit.hrl").
+-include("rabbit_cli.hrl").
 
 -export([start/0, stop/0, parse_arguments/2, action/5,
          sync_queue/1, cancel_sync_queue/1]).
 
--define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
-
--define(QUIET_OPT, "-q").
--define(NODE_OPT, "-n").
--define(VHOST_OPT, "-p").
--define(PRIORITY_OPT, "--priority").
--define(APPLY_TO_OPT, "--apply-to").
--define(RAM_OPT, "--ram").
--define(OFFLINE_OPT, "--offline").
-
--define(QUIET_DEF, {?QUIET_OPT, flag}).
--define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
--define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
--define(PRIORITY_DEF, {?PRIORITY_OPT, {option, "0"}}).
--define(APPLY_TO_DEF, {?APPLY_TO_OPT, {option, "all"}}).
--define(RAM_DEF, {?RAM_OPT, flag}).
--define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
 
@@ -131,7 +115,6 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
--spec(usage/0 :: () -> no_return()).
 
 -endif.
 
@@ -139,79 +122,24 @@
 
 start() ->
     start_distribution(),
-    {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    {Command, Opts, Args} =
-        case parse_arguments(init:get_plain_arguments(), NodeStr) of
-            {ok, Res}  -> Res;
-            no_command -> print_error("could not recognise command", []),
-                          usage()
-        end,
-    Quiet = proplists:get_bool(?QUIET_OPT, Opts),
-    Node = proplists:get_value(?NODE_OPT, Opts),
-    Inform = case Quiet of
-                 true  -> fun (_Format, _Args1) -> ok end;
-                 false -> fun (Format, Args1) ->
-                                  io:format(Format ++ " ...~n", Args1)
-                          end
-             end,
-    PrintInvalidCommandError =
-        fun () ->
-                print_error("invalid command '~s'",
-                            [string:join([atom_to_list(Command) | Args], " ")])
-        end,
+    rabbit_cli:main(
+      fun (Args, NodeStr) ->
+              parse_arguments(Args, NodeStr)
+      end,
+      fun (Command, Node, Args, Opts) ->
+              Quiet = proplists:get_bool(?QUIET_OPT, Opts),
+              Inform = case Quiet of
+                           true  -> fun (_Format, _Args1) -> ok end;
+                           false -> fun (Format, Args1) ->
+                                            io:format(Format ++ " ...~n", Args1)
+                                    end
+                       end,
+              do_action(Command, Node, Args, Opts, Inform)
+      end, rabbit_ctl_usage).
 
-    %% The reason we don't use a try/catch here is that rpc:call turns
-    %% thrown errors into normal return values
-    case catch do_action(Command, Node, Args, Opts, Inform) of
-        ok ->
-            case Quiet of
-                true  -> ok;
-                false -> io:format("...done.~n")
-            end,
-            rabbit_misc:quit(0);
-        {ok, Info} ->
-            case Quiet of
-                true  -> ok;
-                false -> io:format("...done (~p).~n", [Info])
-            end,
-            rabbit_misc:quit(0);
-        {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
-            PrintInvalidCommandError(),
-            usage();
-        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} -> %% >= R15
-            PrintInvalidCommandError(),
-            usage();
-        {'EXIT', {badarg, _}} ->
-            print_error("invalid parameter: ~p", [Args]),
-            usage();
-        {error, {Problem, Reason}} when is_atom(Problem), is_binary(Reason) ->
-            %% We handle this common case specially to avoid ~p since
-            %% that has i18n issues
-            print_error("~s: ~s", [Problem, Reason]),
-            rabbit_misc:quit(2);
-        {error, Reason} ->
-            print_error("~p", [Reason]),
-            rabbit_misc:quit(2);
-        {error_string, Reason} ->
-            print_error("~s", [Reason]),
-            rabbit_misc:quit(2);
-        {badrpc, {'EXIT', Reason}} ->
-            print_error("~p", [Reason]),
-            rabbit_misc:quit(2);
-        {badrpc, Reason} ->
-            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
-            print_badrpc_diagnostics([Node]),
-            rabbit_misc:quit(2);
-        {badrpc_multi, Reason, Nodes} ->
-            print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
-            print_badrpc_diagnostics(Nodes),
-            rabbit_misc:quit(2);
-        Other ->
-            print_error("~p", [Other]),
-            rabbit_misc:quit(2)
-    end.
-
-fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
+parse_arguments(CmdLine, NodeStr) ->
+    rabbit_cli:parse_arguments(
+      ?COMMANDS, ?GLOBAL_DEFS(NodeStr), ?NODE_OPT, CmdLine).
 
 print_report(Node, {Descr, Module, InfoFun, KeysFun}) ->
     io:format("~s:~n", [Descr]),
@@ -230,30 +158,8 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
-print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
-
-print_badrpc_diagnostics(Nodes) ->
-    fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
-
 stop() ->
     ok.
-
-usage() ->
-    io:format("~s", [rabbit_ctl_usage:usage()]),
-    rabbit_misc:quit(1).
-
-parse_arguments(CmdLine, NodeStr) ->
-    case rabbit_misc:parse_arguments(
-           ?COMMANDS, ?GLOBAL_DEFS(NodeStr), CmdLine) of
-        {ok, {Cmd, Opts0, Args}} ->
-            Opts = [case K of
-                        ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
-                        _         -> {K, V}
-                    end || {K, V} <- Opts0],
-            {ok, {Cmd, Opts, Args}};
-        E ->
-            E
-    end.
 
 %%----------------------------------------------------------------------------
 
