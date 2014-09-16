@@ -858,7 +858,7 @@ test_arguments_parser() ->
 
     GetOptions =
         fun (Args) ->
-                rabbit_misc:parse_arguments(Commands1, GlobalOpts1, Args)
+                rabbit_cli:parse_arguments(Commands1, GlobalOpts1, "-n", Args)
         end,
 
     check_parse_arguments(no_command, GetOptions, []),
