@@ -214,19 +214,18 @@ check_type(TypeBin) ->
             end
     end.
 
-assert_equivalence(X = #exchange{ durable     = Durable,
+assert_equivalence(X = #exchange{ name        = XName,
+                                  durable     = Durable,
                                   auto_delete = AutoDelete,
                                   internal    = Internal,
                                   type        = Type},
-                   Type, Durable, AutoDelete, Internal, RequiredArgs) ->
-    (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
-assert_equivalence(#exchange{ name = Name },
-                   _Type, _Durable, _Internal, _AutoDelete, _Args) ->
-    rabbit_misc:protocol_error(
-      precondition_failed,
-      "cannot redeclare ~s with different type, durable, "
-      "internal or autodelete value",
-      [rabbit_misc:rs(Name)]).
+                   ReqType, ReqDurable, ReqAutoDelete, ReqInternal, ReqArgs) ->
+    AFE = fun rabbit_misc:assert_field_equivalence/4,
+    AFE(Type,       ReqType,       XName, type),
+    AFE(Durable,    ReqDurable,    XName, durable),
+    AFE(AutoDelete, ReqAutoDelete, XName, auto_delete),
+    AFE(Internal,   ReqInternal,   XName, internal),
+    (type_to_module(Type)):assert_args_equivalence(X, ReqArgs).
 
 assert_args_equivalence(#exchange{ name = Name, arguments = Args },
                         RequiredArgs) ->
