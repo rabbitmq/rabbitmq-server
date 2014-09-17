@@ -52,7 +52,9 @@
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
 
--opaque(deletions() :: dict:dict()).
+%% TODO this should really be opaque but that seems to confuse 17.1's
+%% dialyzer into objecting to everything that uses it.
+-type(deletions() :: dict:dict()).
 
 -spec(recover/2 :: ([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
                         'ok').
