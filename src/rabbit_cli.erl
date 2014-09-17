@@ -24,14 +24,17 @@
 -ifdef(use_specs).
 
 -type(optdef() :: flag | {option, string()}).
+-type(parse_result() :: {'ok', {atom(), [{string(), string()}], [string()]}} |
+                        'no_command').
 
+
+-spec(main/3 :: (fun (([string()], string()) -> parse_result()),
+                     fun ((atom(), atom(), [any()], [any()]) -> any()),
+                         atom()) -> no_return()).
+-spec(usage/1 :: (atom()) -> no_return()).
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
-         [{string(), optdef()}],
-         string(),
-         [string()])
-        -> {'ok', {atom(), [{string(), string()}], [string()]}} |
-           'no_command').
+         [{string(), optdef()}], string(), [string()]) -> parse_result()).
 
 -endif.
 

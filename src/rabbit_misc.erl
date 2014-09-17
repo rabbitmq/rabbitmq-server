@@ -125,8 +125,11 @@
                                     rabbit_types:r(any()), [binary()]) ->
                                         'ok' | rabbit_types:connection_exit()).
 -spec(assert_field_equivalence/4 ::
-        (any(), any(), rabbit_types:r(any()), atom()) ->
+        (any(), any(), rabbit_types:r(any()), atom() | binary()) ->
                                          'ok' | rabbit_types:connection_exit()).
+-spec(equivalence_fail/4 ::
+        (any(), any(), rabbit_types:r(any()), atom() | binary()) ->
+                                 rabbit_types:connection_exit()).
 -spec(dirty_read/1 ::
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(table_lookup/2 ::
