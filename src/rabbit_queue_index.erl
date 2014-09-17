@@ -181,19 +181,19 @@
 -type(segment() :: ('undefined' |
                     #segment { num             :: non_neg_integer(),
                                path            :: file:filename(),
-                               journal_entries :: array(),
+                               journal_entries :: array:array(),
                                unacked         :: non_neg_integer()
                              })).
 -type(seq_id() :: integer()).
--type(seg_dict() :: {dict(), [segment()]}).
--type(on_sync_fun() :: fun ((gb_set()) -> ok)).
+-type(seg_dict() :: {dict:dict(), [segment()]}).
+-type(on_sync_fun() :: fun ((gb_sets:set()) -> ok)).
 -type(qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_dict(),
                               journal_handle      :: hdl(),
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
-                              unconfirmed         :: gb_set()
+                              unconfirmed         :: gb_sets:set()
                             }).
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
