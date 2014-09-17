@@ -895,9 +895,9 @@ merge_stats(Objs, Funs) ->
 
 combine(New, Old) ->
     case pget(state, Old) of
-        undefined -> New ++ Old;
-        live      -> New ++ proplists:delete(state, Old);
-        _         -> proplists:delete(state, New) ++ Old
+        unknown -> New ++ Old;
+        live    -> New ++ proplists:delete(state, Old);
+        _       -> proplists:delete(state, New) ++ Old
     end.
 
 %% i.e. the non-calculated stats
