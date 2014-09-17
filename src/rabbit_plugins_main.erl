@@ -68,7 +68,7 @@ action(Command, Node, Args, Opts, PluginsFile, PluginsDir) ->
     Enabled = rabbit_plugins:read_enabled(PluginsFile),
     case Enabled -- plugin_names(All) of
         []      -> ok;
-        Missing -> io:format("~nWARNING - plugins currently enabled but "
+        Missing -> io:format("WARNING - plugins currently enabled but "
                              "missing: ~p~n~n", [Missing])
     end,
     Implicit = rabbit_plugins:dependencies(false, Enabled, All),
