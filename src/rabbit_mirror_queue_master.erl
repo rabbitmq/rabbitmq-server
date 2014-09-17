@@ -56,14 +56,14 @@
                                  coordinator         :: pid(),
                                  backing_queue       :: atom(),
                                  backing_queue_state :: any(),
-                                 seen_status         :: dict(),
+                                 seen_status         :: dict:dict(),
                                  confirmed           :: [rabbit_guid:guid()],
-                                 known_senders       :: set()
+                                 known_senders       :: sets:set()
                                }).
 
 -spec(promote_backing_queue_state/8 ::
-        (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()], dict(),
-         [pid()]) -> master_state()).
+        (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()],
+         dict:dict(), [pid()]) -> master_state()).
 -spec(sender_death_fun/0 :: () -> death_fun()).
 -spec(depth_fun/0 :: () -> depth_fun()).
 -spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->

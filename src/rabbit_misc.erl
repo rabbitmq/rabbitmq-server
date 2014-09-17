@@ -191,7 +191,7 @@
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> integer()).
--spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
+-spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue:queue()) -> B).
 -spec(sort_field_table/1 ::
         (rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
@@ -202,17 +202,18 @@
         (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
         -> boolean()).
 -spec(version_minor_equivalent/2 :: (string(), string()) -> boolean()).
--spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
+-spec(dict_cons/3 :: (any(), any(), dict:dict()) -> dict:dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
--spec(gb_trees_cons/3 :: (any(), any(), gb_tree()) -> gb_tree()).
--spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
+-spec(gb_trees_cons/3 :: (any(), any(), gb_trees:tree()) -> gb_trees:tree()).
+-spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_trees:tree())
+ -> A).
 -spec(gb_trees_foreach/2 ::
-        (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
+        (fun ((any(), any()) -> any()), gb_trees:tree()) -> 'ok').
 -spec(all_module_attributes/1 ::
         (atom()) -> [{atom(), atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
         (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
-        -> rabbit_types:ok_or_error2(digraph(),
+        -> rabbit_types:ok_or_error2(digraph:digraph(),
                                      {'vertex', 'duplicate', digraph:vertex()} |
                                      {'edge', ({bad_vertex, digraph:vertex()} |
                                                {bad_edge, [digraph:vertex()]}),
@@ -229,7 +230,7 @@
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 -spec(os_cmd/1 :: (string()) -> string()).
--spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
+-spec(gb_sets_difference/2 :: (gb_sets:set(), gb_sets:set()) -> gb_sets:set()).
 -spec(version/0 :: () -> string()).
 -spec(which_applications/0 :: () -> [{atom(), string(), string()}]).
 -spec(sequence_error/1 :: ([({'error', any()} | any())])
