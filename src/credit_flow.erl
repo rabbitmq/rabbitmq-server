@@ -37,6 +37,8 @@
 
 -ifdef(use_specs).
 
+-export_type([bump_msg/0]).
+
 -opaque(bump_msg() :: {pid(), non_neg_integer()}).
 -type(credit_spec() :: {non_neg_integer(), non_neg_integer()}).
 
