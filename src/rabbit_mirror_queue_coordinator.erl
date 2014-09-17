@@ -21,7 +21,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([joined/2, members_changed/3, handle_msg/3]).
+-export([joined/2, members_changed/3, handle_msg/3, handle_terminate/2]).
 
 -behaviour(gen_server2).
 -behaviour(gm).
@@ -384,10 +384,6 @@ handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
 terminate(_Reason, #state{}) ->
-    %% gen_server case
-    ok;
-terminate([_CPid], _Reason) ->
-    %% gm case
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -414,6 +410,9 @@ handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, Msg),
     {stop, {shutdown, ring_shutdown}};
 handle_msg([_CPid], _From, _Msg) ->
+    ok.
+
+handle_terminate([_CPid], _Reason) ->
     ok.
 
 %% ---------------------------------------------------------------------------

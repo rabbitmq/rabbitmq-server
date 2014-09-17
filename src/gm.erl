@@ -62,7 +62,7 @@
 %%
 %% leave/1
 %% Provide the Pid. Removes the Pid from the group. The callback
-%% terminate/2 function will be called.
+%% handle_terminate/2 function will be called.
 %%
 %% broadcast/2
 %% Provide the Pid and a Message. The message will be sent to all
@@ -493,13 +493,13 @@
 
 %% Called on gm member termination as per rules in gen_server, with
 %% the Args provided in start_link plus the termination Reason.
--callback terminate(Args :: term(), Reason :: term()) ->
+-callback handle_terminate(Args :: term(), Reason :: term()) ->
     ok | term().
 
 -else.
 
 behaviour_info(callbacks) ->
-    [{joined, 2}, {members_changed, 3}, {handle_msg, 3}, {terminate, 2}];
+    [{joined, 2}, {members_changed, 3}, {handle_msg, 3}, {handle_terminate, 2}];
 behaviour_info(_Other) ->
     undefined.
 
@@ -737,7 +737,7 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
 terminate(Reason, State = #state { module        = Module,
                                    callback_args = Args }) ->
     flush_broadcast_buffer(State),
-    Module:terminate(Args, Reason).
+    Module:handle_terminate(Args, Reason).
 
 
 code_change(_OldVsn, State, _Extra) ->
