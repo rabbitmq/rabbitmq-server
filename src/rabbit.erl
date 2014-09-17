@@ -650,8 +650,8 @@ recover() ->
     rabbit_amqqueue:start(Qs).
 
 maybe_insert_default_data() ->
-    case rabbit_table:is_empty() of
-        true -> insert_default_data();
+    case rabbit_table:needs_default_data() of
+        true  -> insert_default_data();
         false -> ok
     end.
 
