@@ -511,7 +511,7 @@ delete_and_terminate(_Reason, State) ->
     a(State2 #vqstate { index_state       = IndexState1,
                         msg_store_clients = undefined }).
 
-delete_crashed(QName) ->
+delete_crashed(#amqqueue{name = QName}) ->
     ok = rabbit_queue_index:erase(QName).
 
 purge(State = #vqstate { q4                = Q4,

@@ -87,7 +87,7 @@
 
 %% Called to clean up after a crashed queue. In this case we don't
 %% have a process and thus a state(), we are just removing on-disk data.
--callback delete_crashed(rabbit_amqqueue:name()) -> 'ok'.
+-callback delete_crashed(rabbit_types:amqqueue()) -> 'ok'.
 
 %% Remove all 'fetchable' messages from the queue, i.e. all messages
 %% except those that have been fetched already and are pending acks.
