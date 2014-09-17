@@ -41,10 +41,8 @@ ensure(FileJustChanged) ->
     {ok, OurFile} = application:get_env(rabbit, enabled_plugins_file),
     case OurFile of
         FileJustChanged ->
-            {ok, Dir} = application:get_env(rabbit, plugins_dir),
             Enabled = read_enabled(OurFile),
-            Wanted = dependencies(false, Enabled, list(Dir)),
-            prepare_plugins(Enabled),
+            Wanted = prepare_plugins(Enabled),
             Current = active(),
             Start = Wanted -- Current,
             Stop = Current -- Wanted,
