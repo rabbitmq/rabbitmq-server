@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 -include("rabbit_cli.hrl").
 
--export([start/0, stop/0]).
+-export([start/0, stop/0, action/6]).
 
 -define(GLOBAL_DEFS(Node), [?NODE_DEF(Node)]).
 
@@ -51,15 +51,7 @@ start() ->
               parse_arguments(Args, NodeStr)
       end,
       fun (Command, Node, Args, Opts) ->
-              All = rabbit_plugins:list(PluginsDir),
-              Enabled = rabbit_plugins:read_enabled(PluginsFile),
-              Implicit = rabbit_plugins:dependencies(false, Enabled, All),
-              State = #cli{file     = PluginsFile,
-                           dir      = PluginsDir,
-                           all      = All,
-                           enabled  = Enabled,
-                           implicit = Implicit},
-              action(Command, Node, Args, Opts, State)
+              action(Command, Node, Args, Opts, PluginsFile, PluginsDir)
       end, rabbit_plugins_usage).
 
 stop() ->
@@ -70,6 +62,17 @@ stop() ->
 parse_arguments(CmdLine, NodeStr) ->
     rabbit_cli:parse_arguments(
       ?COMMANDS, ?GLOBAL_DEFS(NodeStr), ?NODE_OPT, CmdLine).
+
+action(Command, Node, Args, Opts, PluginsFile, PluginsDir) ->
+    All = rabbit_plugins:list(PluginsDir),
+    Enabled = rabbit_plugins:read_enabled(PluginsFile),
+    Implicit = rabbit_plugins:dependencies(false, Enabled, All),
+    State = #cli{file     = PluginsFile,
+                 dir      = PluginsDir,
+                 all      = All,
+                 enabled  = Enabled,
+                 implicit = Implicit},
+    action(Command, Node, Args, Opts, State).
 
 action(list, Node, [], Opts, State) ->
     action(list, Node, [".*"], Opts, State);
