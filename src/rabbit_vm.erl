@@ -16,7 +16,7 @@
 
 -module(rabbit_vm).
 
--export([memory/0]).
+-export([memory/0, binary/0]).
 
 -define(MAGIC_PLUGINS, ["mochiweb", "webmachine", "cowboy", "sockjs",
                         "rfc4627_jsonrpc"]).
@@ -26,6 +26,7 @@
 -ifdef(use_specs).
 
 -spec(memory/0 :: () -> rabbit_types:infos()).
+-spec(binary/0 :: () -> rabbit_types:infos()).
 
 -endif.
 
@@ -33,14 +34,7 @@
 
 %% Like erlang:memory(), but with awareness of rabbit-y things
 memory() ->
-    ConnProcs     = [rabbit_tcp_client_sup, ssl_connection_sup, amqp_sup],
-    QProcs        = [rabbit_amqqueue_sup_sup],
-    MsgIndexProcs = [msg_store_transient, msg_store_persistent],
-    MgmtDbProcs   = [rabbit_mgmt_sup_sup],
-    PluginProcs   = plugin_sups(),
-
-    All = [ConnProcs, QProcs, MsgIndexProcs, MgmtDbProcs, PluginProcs],
-
+    All = interesting_sups(),
     {Sums, _Other} = sum_processes(lists:append(All), [memory]),
 
     [Conns, Qs, MsgIndexProc, MgmtDbProc, Plugins] =
@@ -80,6 +74,18 @@ memory() ->
 %% claims about negative memory. See
 %% http://erlang.org/pipermail/erlang-questions/2012-September/069320.html
 
+binary() ->
+    All = interesting_sups(),
+    {Sums, Rest} =
+        sum_processes(
+          lists:append(All),
+          fun (binary, Info, Acc) ->
+                  lists:foldl(fun ({Ptr, Sz, _RefCnt}, Acc0) ->
+                                      sets:add_element({Ptr, Sz}, Acc0)
+                              end, Acc, Info)
+          end, [{binary, sets:new()}]),
+    [{K, aggregate_binary(V)} || {K, V} <- Sums ++ [{unknown, Rest}]].
+
 %%----------------------------------------------------------------------------
 
 mnesia_memory() ->
@@ -95,6 +101,14 @@ ets_memory(Name) ->
                                              N =:= Name]).
 
 bytes(Words) ->  Words * erlang:system_info(wordsize).
+
+interesting_sups() ->
+    ConnProcs     = [rabbit_tcp_client_sup, ssl_connection_sup, amqp_sup],
+    QProcs        = [rabbit_amqqueue_sup_sup],
+    MsgIndexProcs = [msg_store_transient, msg_store_persistent],
+    MgmtDbProcs   = [rabbit_mgmt_sup_sup],
+    PluginProcs   = plugin_sups(),
+    [ConnProcs, QProcs, MsgIndexProcs, MgmtDbProcs, PluginProcs].
 
 plugin_sups() ->
     lists:append([plugin_sup(App) ||
@@ -127,6 +141,9 @@ extract_memory(Name, Sums) ->
     {value, {_, Accs}} = lists:keysearch(Name, 1, Sums),
     {value, {memory, V}} = lists:keysearch(memory, 1, Accs),
     V.
+
+aggregate_binary([{binary, Set}]) ->
+    sets:fold(fun({_Ptr, Sz}, Acc) -> Acc + Sz end, 0, Set).
 
 %%----------------------------------------------------------------------------
 
