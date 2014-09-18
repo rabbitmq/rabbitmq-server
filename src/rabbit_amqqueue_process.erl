@@ -64,7 +64,7 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(init_with_backing_queue_state/7 ::
         (rabbit_types:amqqueue(), atom(), tuple(), any(),
-         [rabbit_types:delivery()], pmon:pmon(), dict()) -> #q{}).
+         [rabbit_types:delivery()], pmon:pmon(), dict:dict()) -> #q{}).
 
 -endif.
 

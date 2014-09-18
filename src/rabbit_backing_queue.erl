@@ -255,8 +255,8 @@ behaviour_info(callbacks) ->
      {fetch, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
-     {handle_pre_hibernate, 1}, {resume, 1}, {msg_rates, 1}, {info_keys, 0},
-     {infos, 2}, {invoke, 3}, {is_duplicate, 2}] ;
+     {handle_pre_hibernate, 1}, {resume, 1}, {msg_rates, 1},
+     {info, 2}, {invoke, 3}, {is_duplicate, 2}] ;
 behaviour_info(_Other) ->
     undefined.
 

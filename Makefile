@@ -40,9 +40,9 @@ BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
-# our type specs rely on callback specs, which are available in R15B
+# our type specs rely on dict:dict/0 etc, which are only available in 17.0
 # upwards.
-USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,9]), halt().')
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,11]), halt().')
 endif
 
 ifndef USE_PROPER_QC
