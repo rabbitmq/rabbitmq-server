@@ -8,13 +8,18 @@ RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
 DEPS_FILE=deps.mk
 SOURCE_DIR=src
+TEST_DIR=test/src
 EBIN_DIR=ebin
+TEST_EBIN_DIR=test/ebin
 INCLUDE_DIR=include
 DOCS_DIR=docs
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
+TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
+TEST_BEAM_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_EBIN_DIR)/%.beam, $(TEST_SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS) plugins
+TEST_TARGETS=$(TEST_BEAM_TARGETS)
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
@@ -52,7 +57,7 @@ USE_PROPER_QC:=$(shell erl -noshell -eval 'io:format({module, proper} =:= code:e
 endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
+ERLC_OPTS=-I $(INCLUDE_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
 ifdef INSTRUMENT_FOR_QC
 ERLC_OPTS += -DINSTR_MOD=gm_qc
@@ -107,6 +112,7 @@ ifneq "$(DEFAULT_GOAL_MAKE)" "$(firstword $(sort $(DEFAULT_GOAL_MAKE) $(MAKE_VER
 endif
 
 all: $(TARGETS)
+test-all: $(TEST_TARGETS)
 
 .PHONY: plugins check-xref
 ifneq "$(PLUGINS_SRC_DIR)" ""
@@ -139,7 +145,13 @@ $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(SOURCES) generate_app
 	escript generate_app $< $@ $(SOURCE_DIR)
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl | $(DEPS_FILE)
-	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
+	erlc -o $(EBIN_DIR) $(ERLC_OPTS) -pa $(EBIN_DIR) $<
+
+$(TEST_EBIN_DIR)/%.beam: $(TEST_DIR)/%.erl | $(TEST_EBIN_DIR)
+	erlc -o $(TEST_EBIN_DIR) $(ERLC_OPTS) -pa $(EBIN_DIR) -pa $(TEST_EBIN_DIR) $<
+
+$(TEST_EBIN_DIR):
+	mkdir -p $(TEST_EBIN_DIR)
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8)
 	$(PYTHON) codegen.py --ignore-conflicts header $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8) $@
@@ -173,6 +185,7 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
+	rm -rf $(TEST_EBIN_DIR)
 	rm -f $(PLUGINS_DIR)/*.ez
 	[ -d "$(PLUGINS_SRC_DIR)" ] && PLUGINS_SRC_DIR="" PRESERVE_CLONE_DIR=1 make -C $(PLUGINS_SRC_DIR) clean || true
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing_amqp_*.erl codegen.pyc
@@ -216,7 +229,9 @@ run-background-node: all
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
-run-tests: all
+run-tests: all test-all
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) -n hare || true
 	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
