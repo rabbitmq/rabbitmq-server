@@ -163,8 +163,8 @@ prepare_plugins(Enabled) ->
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
 
     AllPlugins = list(PluginsDistDir),
-    ToUnpack = dependencies(false, Enabled, AllPlugins),
-    ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
+    Wanted = dependencies(false, Enabled, AllPlugins),
+    WantedPlugins = lookup_plugins(Wanted, AllPlugins),
 
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
@@ -172,10 +172,11 @@ prepare_plugins(Enabled) ->
                                       [ExpandDir, E2]}})
     end,
 
-    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ToUnpackPlugins],
+    [prepare_plugin(Plugin, ExpandDir) || Plugin <- WantedPlugins],
 
     [prepare_dir_plugin(PluginAppDescPath) ||
-        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
+        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")],
+    Wanted.
 
 clean_plugins(Plugins) ->
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
