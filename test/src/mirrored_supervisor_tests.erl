@@ -16,15 +16,14 @@
 
 -module(mirrored_supervisor_tests).
 
--compile([export_all]).
+-export([all_tests/0]).
 
--export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3,
-         handle_cast/2]).
+-export([init/1]).
 
--behaviour(gen_server).
 -behaviour(mirrored_supervisor).
 
--define(MS,  mirrored_supervisor).
+-define(MS,     mirrored_supervisor).
+-define(SERVER, mirrored_supervisor_tests_gs).
 
 %% ---------------------------------------------------------------------------
 %% Functional tests
@@ -176,14 +175,14 @@ test_start_idempotence() ->
 test_unsupported() ->
     try
         ?MS:start_link({global, foo}, get_group(group), fun tx_fun/1, ?MODULE,
-                       {sup, one_for_one, []}),
+                       {one_for_one, []}),
         exit(no_global)
     catch error:badarg ->
             ok
     end,
     try
         ?MS:start_link({local, foo}, get_group(group), fun tx_fun/1, ?MODULE,
-                       {sup, simple_one_for_one, []}),
+                       {simple_one_for_one, []}),
         exit(no_sofo)
     catch error:badarg ->
             ok
@@ -193,7 +192,7 @@ test_unsupported() ->
 %% Just test we don't blow up
 test_ignore() ->
     ?MS:start_link({local, foo}, get_group(group), fun tx_fun/1, ?MODULE,
-                   {sup, fake_strategy_for_ignore, []}),
+                   {fake_strategy_for_ignore, []}),
     passed.
 
 test_startup_failure() ->
@@ -203,7 +202,7 @@ test_startup_failure() ->
 test_startup_failure(Fail) ->
     process_flag(trap_exit, true),
     ?MS:start_link(get_group(group), fun tx_fun/1, ?MODULE,
-                   {sup, one_for_one, [childspec(Fail)]}),
+                   {one_for_one, [childspec(Fail)]}),
     receive
         {'EXIT', _, shutdown} ->
             ok
@@ -237,23 +236,14 @@ start_sup(Name, Group) ->
 
 start_sup0(anon, Group, ChildSpecs) ->
     ?MS:start_link(Group, fun tx_fun/1, ?MODULE,
-                   {sup, one_for_one, ChildSpecs});
+                   {one_for_one, ChildSpecs});
 
 start_sup0(Name, Group, ChildSpecs) ->
     ?MS:start_link({local, Name}, Group, fun tx_fun/1, ?MODULE,
-                   {sup, one_for_one, ChildSpecs}).
+                   {one_for_one, ChildSpecs}).
 
 childspec(Id) ->
-    {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
-
-start_gs(want_error) ->
-    {error, foo};
-
-start_gs(want_exit) ->
-    exit(foo);
-
-start_gs(Id) ->
-    gen_server:start_link({local, Id}, ?MODULE, server, []).
+    {Id,{?SERVER, start_link, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
 
 pid_of(Id) ->
     {received, Pid, ping} = call(Id, ping),
@@ -309,38 +299,9 @@ kill_wait(Pid) ->
     end.
 
 %% ---------------------------------------------------------------------------
-%% Dumb gen_server we can supervise
-%% ---------------------------------------------------------------------------
 
-init({sup, fake_strategy_for_ignore, _ChildSpecs}) ->
+init({fake_strategy_for_ignore, _ChildSpecs}) ->
     ignore;
 
-init({sup, Strategy, ChildSpecs}) ->
-    {ok, {{Strategy, 0, 1}, ChildSpecs}};
-
-init(server) ->
-    {ok, state}.
-
-handle_call(Msg, _From, State) ->
-    die_if_my_supervisor_is_evil(),
-    {reply, {received, self(), Msg}, State}.
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-die_if_my_supervisor_is_evil() ->
-    try lists:keysearch(self(), 2, ?MS:which_children(evil)) of
-        false -> ok;
-        _     -> exit(doooom)
-    catch
-        exit:{noproc, _} -> ok
-    end.
+init({Strategy, ChildSpecs}) ->
+    {ok, {{Strategy, 0, 1}, ChildSpecs}}.

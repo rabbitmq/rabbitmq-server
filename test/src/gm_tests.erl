@@ -22,7 +22,7 @@
          test_member_death/0,
          test_receive_in_order/0,
          all_tests/0]).
--export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
+-export([joined/2, members_changed/3, handle_msg/3, handle_terminate/2]).
 
 -behaviour(gm).
 
@@ -48,7 +48,7 @@ handle_msg(Pid, From, Msg) ->
     Pid ! {msg, self(), From, Msg},
     ok.
 
-terminate(Pid, Reason) ->
+handle_terminate(Pid, Reason) ->
     Pid ! {termination, self(), Reason},
     ok.
 

@@ -17,7 +17,7 @@
 -module(gm_soak_test).
 
 -export([test/0]).
--export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
+-export([joined/2, members_changed/3, handle_msg/3, handle_terminate/2]).
 
 -behaviour(gm).
 
@@ -94,7 +94,7 @@ handle_msg([], From, {test_msg, Num}) ->
       end),
     ok.
 
-terminate([], Reason) ->
+handle_terminate([], Reason) ->
     io:format("Left ~p (~p)~n", [self(), Reason]),
     ok.
 

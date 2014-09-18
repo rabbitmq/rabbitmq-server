@@ -30,7 +30,7 @@
          code_change/3, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 
--export([joined/2, members_changed/3, handle_msg/3]).
+-export([joined/2, members_changed/3, handle_msg/3, handle_terminate/2]).
 
 -behaviour(gen_server2).
 -behaviour(gm).
@@ -338,10 +338,7 @@ terminate({shutdown, _} = R, State) ->
 terminate(Reason, State = #state{backing_queue       = BQ,
                                  backing_queue_state = BQS}) ->
     terminate_common(State),
-    BQ:delete_and_terminate(Reason, BQS);
-terminate([_SPid], _Reason) ->
-    %% gm case
-    ok.
+    BQ:delete_and_terminate(Reason, BQS).
 
 %% If the Reason is shutdown, or {shutdown, _}, it is not the queue
 %% being deleted: it's just the node going down. Even though we're a
@@ -437,6 +434,9 @@ handle_msg([SPid], _From, {sync_start, Ref, Syncer, SPids}) ->
     end;
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
+
+handle_terminate([_SPid], _Reason) ->
+    ok.
 
 %% ---------------------------------------------------------------------------
 %% Others

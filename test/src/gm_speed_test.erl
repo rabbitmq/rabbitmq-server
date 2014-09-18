@@ -17,7 +17,7 @@
 -module(gm_speed_test).
 
 -export([test/3]).
--export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
+-export([joined/2, members_changed/3, handle_msg/3, handle_terminate/2]).
 -export([wile_e_coyote/2]).
 
 -behaviour(gm).
@@ -37,7 +37,7 @@ handle_msg(Owner, _From, ping) ->
     Owner ! ping,
     ok.
 
-terminate(Owner, _Reason) ->
+handle_terminate(Owner, _Reason) ->
     Owner ! terminated,
     ok.
 
