@@ -204,14 +204,6 @@ function fmt_color(r, thresholds) {
     return 'green';
 }
 
-function fmt_deliver_rate(obj, show_redeliver) {
-    var res = fmt_rate(obj, 'deliver_get');
-    if (show_redeliver) {
-        res += '<sub>' + fmt_rate(obj, 'redeliver') + '</sub>';
-    }
-    return res;
-}
-
 function fmt_rate_num(num) {
     if (num == undefined) return UNKNOWN_REPR;
     else if (num < 1)     return num.toFixed(2);

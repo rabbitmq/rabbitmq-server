@@ -69,7 +69,22 @@ var COLUMNS =
       'Message rates': [['rate-incoming',  'incoming',      true],
                         ['rate-deliver',   'deliver / get', true],
                         ['rate-redeliver', 'redelivered',   false],
-                        ['rate-ack',       'ack',           true]]}};
+                        ['rate-ack',       'ack',           true]]},
+     'channels' :
+     {'Overview': [['user',  'User name', true],
+                   ['mode',  'Mode',      true],
+                   ['state', 'State',     true]],
+      'Details': [['msgs-unconfirmed', 'Unconfirmed', true],
+                  ['prefetch',         'Prefetch',    true],
+                  ['msgs-unacked',     'Unacked',     true]],
+      'Transactions': [['msgs-uncommitted', 'Msgs uncommitted', false],
+                       ['acks-uncommitted', 'Acks uncommitted', false]],
+      'Message rates': [['rate-publish',   'publish',            true],
+                        ['rate-confirm',   'confirm',            true],
+                        ['rate-return',    'return (mandatory)', false],
+                        ['rate-deliver',   'deliver / get',      true],
+                        ['rate-redeliver', 'redelivered',        false],
+                        ['rate-ack',       'ack',                true]]}};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
