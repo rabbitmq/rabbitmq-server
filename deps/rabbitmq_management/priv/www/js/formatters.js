@@ -774,6 +774,26 @@ function fmt_sort(display, sort) {
     return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
 }
 
+function group_heading(mode, group, bools) {
+    var count = 0;
+    for (var i = 0; i < bools.length; i++) {
+        if (bools[i]) count++;
+    }
+
+    var options = COLUMNS[mode][group];
+    for (var i = 0; i < options.length; i++) {
+        var column = options[i][0];
+        if (show_column(mode, column)) count++;
+    }
+
+    if (count == 0) {
+        return '';
+    }
+    else {
+        return '<th colspan="' + count + '">' + group + '</th>';
+    }
+}
+
 function fmt_permissions(obj, permissions, lookup, show, warning) {
     var res = [];
     for (var i in permissions) {

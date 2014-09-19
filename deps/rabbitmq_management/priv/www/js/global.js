@@ -50,16 +50,26 @@ var CHART_PERIODS = {'60|5':       'Last minute',
                      '28800|600':  'Last eight hours',
                      '86400|1800': 'Last day'};
 
-var COLUMNS = {'queues' :
-               {'Overview': [['features', 'Features', true],
-                             ['state',    'State',    true]],
-                'Messages': [['msgs-ready',   'Ready',          true],
-                             ['msgs-unacked', 'Unacknowledged', true],
-                             ['msgs-total',   'Total',          true]],
-                'Message rates': [['rate-incoming',  'incoming',      true],
-                                  ['rate-deliver',   'deliver / get', true],
-                                  ['rate-redeliver', 'redelivered',   false],
-                                  ['rate-ack',       'ack',           true]]}};
+var COLUMNS =
+    {'queues' :
+     {'Overview': [['features',             'Features',             true],
+                   ['consumers',            'Consumers',            false],
+                   ['consumer_utilisation', 'Consumer utilisation', false],
+                   ['state',                'State',                true]],
+      'Messages': [['msgs-ready',      'Ready',          true],
+                   ['msgs-unacked',    'Unacknowledged', true],
+                   ['msgs-ram',        'In memory',      false],
+                   ['msgs-persistent', 'Persistent',     false],
+                   ['msgs-total',      'Total',          true]],
+      'Message bytes': [['msg-bytes-ready',      'Ready',          false],
+                        ['msg-bytes-unacked',    'Unacknowledged', false],
+                        ['msg-bytes-ram',        'In memory',      false],
+                        ['msg-bytes-persistent', 'Persistent',     false],
+                        ['msg-bytes-total',      'Total',          false]],
+      'Message rates': [['rate-incoming',  'incoming',      true],
+                        ['rate-deliver',   'deliver / get', true],
+                        ['rate-redeliver', 'redelivered',   false],
+                        ['rate-ack',       'ack',           true]]}};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //

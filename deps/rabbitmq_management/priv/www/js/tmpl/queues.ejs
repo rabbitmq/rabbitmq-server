@@ -8,10 +8,11 @@
 <table class="list">
  <thead>
   <tr>
-    <th colspan="<%= group_column_count('queues', 'Overview', [vhosts_interesting, nodes_interesting]) + 1 %>">Overview</th>
-    <th colspan="<%= group_column_count('queues', 'Messages', []) %>">Messages</th>
+    <%= group_heading('queues', 'Overview', [vhosts_interesting, nodes_interesting, true]) %>
+    <%= group_heading('queues', 'Messages', []) %>
+    <%= group_heading('queues', 'Message bytes', []) %>
 <% if (rates_mode != 'none') { %>
-    <th colspan="<%= group_column_count('queues', 'Message rates', []) %>">Message rates</th>
+    <%= group_heading('queues', 'Message rates', []) %>
 <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="queues">+/-</span></th>
   </tr>
@@ -26,6 +27,12 @@
 <% if (show_column('queues', 'features')) { %>
     <th>Features</th>
 <% } %>
+<% if (show_column('queues', 'consumers')) { %>
+    <th><%= fmt_sort('Consumers',    'consumers') %></th>
+<% } %>
+<% if (show_column('queues', 'consumer_utilisation')) { %>
+    <th><%= fmt_sort('Consumer utilisation', 'consumer_utilisation') %></th>
+<% } %>
 <% if (show_column('queues', 'state')) { %>
     <th><%= fmt_sort('State',        'state') %></th>
 <% } %>
@@ -35,8 +42,29 @@
 <% if (show_column('queues', 'msgs-unacked')) { %>
     <th><%= fmt_sort('Unacked',      'messages_unacknowledged') %></th>
 <% } %>
+<% if (show_column('queues', 'msgs-ram')) { %>
+    <th><%= fmt_sort('In Memory',    'messages_ram') %></th>
+<% } %>
+<% if (show_column('queues', 'msgs-persistent')) { %>
+    <th><%= fmt_sort('Persistent',   'messages_persistent') %></th>
+<% } %>
 <% if (show_column('queues', 'msgs-total')) { %>
     <th><%= fmt_sort('Total',        'messages') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-ready')) { %>
+    <th><%= fmt_sort('Ready',        'message_bytes_ready') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-unacked')) { %>
+    <th><%= fmt_sort('Unacked',      'message_bytes_unacknowledged') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-ram')) { %>
+    <th><%= fmt_sort('In Memory',    'message_bytes_ram') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-persistent')) { %>
+    <th><%= fmt_sort('Persistent',   'message_bytes_persistent') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-total')) { %>
+    <th><%= fmt_sort('Total',        'message_bytes') %></th>
 <% } %>
 <% if (rates_mode != 'none') { %>
   <% if (show_column('queues', 'rate-incoming')) { %>
@@ -82,6 +110,12 @@
      <%= fmt_policy_short(queue) %>
    </td>
 <% } %>
+<% if (show_column('queues', 'consumers')) { %>
+   <td class="c"><%= fmt_string(queue.consumers) %></td>
+<% } %>
+<% if (show_column('queues', 'consumer_utilisation')) { %>
+   <td class="c"><%= fmt_percent(queue.consumer_utilisation) %></td>
+<% } %>
 <% if (show_column('queues', 'state')) { %>
    <td class="c"><%= fmt_object_state(queue) %></td>
 <% } %>
@@ -91,8 +125,29 @@
 <% if (show_column('queues', 'msgs-unacked')) { %>
    <td class="r"><%= fmt_num_thousands(queue.messages_unacknowledged) %></td>
 <% } %>
+<% if (show_column('queues', 'msgs-ram')) { %>
+   <td class="r"><%= fmt_num_thousands(queue.messages_ram) %></td>
+<% } %>
+<% if (show_column('queues', 'msgs-persistent')) { %>
+   <td class="r"><%= fmt_num_thousands(queue.messages_persistent) %></td>
+<% } %>
 <% if (show_column('queues', 'msgs-total')) { %>
    <td class="r"><%= fmt_num_thousands(queue.messages) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-ready')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes_ready) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-unacked')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes_unacknowledged) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-ram')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes_ram) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-persistent')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes_persistent) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-total')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes) %></td>
 <% } %>
 <% if (rates_mode != 'none') { %>
   <% if (show_column('queues', 'rate-incoming')) { %>

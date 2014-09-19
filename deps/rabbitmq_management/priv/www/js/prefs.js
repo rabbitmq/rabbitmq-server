@@ -25,21 +25,6 @@ function show_column(mode, column) {
     return get_pref('column-' + mode + '-' + column) == 'true';
 }
 
-function group_column_count(mode, group, bools) {
-    var count = 0;
-    for (var i = 0; i < bools.length; i++) {
-        if (bools[i]) count++;
-    }
-
-    var options = COLUMNS[mode][group];
-    for (var i = 0; i < options.length; i++) {
-        var column = options[i][0];
-        if (show_column(mode, column)) count++;
-    }
-
-    return count;
-}
-
 // ---------------------------------------------------------------------------
 
 function default_pref(k) {
