@@ -508,18 +508,19 @@ function postprocess() {
     $('.help').die().live('click', function() {
         help($(this).attr('id'))
     });
-    $('.rate-options').die().live('click', function() {
+    $('.popup-options-link').die().live('click', function() {
         var remove = $('.popup-owner').length == 1 &&
                      $('.popup-owner').get(0) == $(this).get(0);
         $('.popup-owner').removeClass('popup-owner');
         if (remove) {
-            $('.form-popup-rate-options').fadeOut(200, function() {
+            $('.form-popup-options').fadeOut(200, function() {
                 $(this).remove();
             });
         }
         else {
             $(this).addClass('popup-owner');
-            show_popup('rate-options', format('rate-options', {span: $(this)}),
+            var template = $(this).attr('type') + '-options';
+            show_popup('options', format(template, {span: $(this)}),
                        'fade');
         }
     });
@@ -1136,6 +1137,20 @@ function put_policy(sammy, mandatory_keys, num_keys, bool_keys) {
         }
     }
     if (sync_put(sammy, '/policies/:vhost/:name')) update();
+}
+
+function update_column_options(sammy) {
+    var mode = sammy.params['mode'];
+    for (var group in COLUMNS[mode]) {
+        var options = COLUMNS[mode][group];
+        for (var i = 0; i < options.length; i++) {
+            var key = options[i][0];
+            var value = sammy.params[mode + '-' + key] != undefined;
+            store_pref('column-' + mode + '-' + key, value);
+        }
+    }
+
+    partial_update();
 }
 
 function debug(str) {

@@ -225,4 +225,7 @@ dispatcher_add(function(sammy) {
     sammy.put('#/rate-options', function() {
             update_rate_options(this);
         });
+    sammy.put('#/column-options', function() {
+            update_column_options(this);
+        });
 });

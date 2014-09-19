@@ -50,6 +50,17 @@ var CHART_PERIODS = {'60|5':       'Last minute',
                      '28800|600':  'Last eight hours',
                      '86400|1800': 'Last day'};
 
+var COLUMNS = {'queues' :
+               {'Overview': [['features', 'Features', true],
+                             ['state',    'State',    true]],
+                'Messages': [['msgs-ready',   'Ready',          true],
+                             ['msgs-unacked', 'Unacknowledged', true],
+                             ['msgs-total',   'Total',          true]],
+                'Message rates': [['rate-incoming',  'incoming',      true],
+                                  ['rate-deliver',   'deliver / get', true],
+                                  ['rate-redeliver', 'redelivered',   false],
+                                  ['rate-ack',       'ack',           true]]}};
+
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
 // Mostly constant, typically get set once at startup (or rarely anyway) //

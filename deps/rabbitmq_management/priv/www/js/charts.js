@@ -54,9 +54,9 @@ function chart_h3(id, heading, heading_help) {
     var mode = get_pref('rate-mode-' + id);
     var range = get_pref('chart-range-' + id);
     return '<h3>' + heading +
-        ' <span class="rate-options updatable" title="Click to change" for="'
-        + id + '">(' + prefix_title(mode, range) + ')</span>' +
-        (heading_help == undefined ? '' :
+        ' <span class="popup-options-link updatable" title="Click to change" ' +
+        'type="rate" for="' + id + '">(' + prefix_title(mode, range) +
+        ')</span>' + (heading_help == undefined ? '' :
          ' <span class="help" id="' + heading_help + '"></span>') +
         '</h3>';
 }

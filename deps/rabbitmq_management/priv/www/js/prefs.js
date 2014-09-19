@@ -21,6 +21,25 @@ function section_pref(template, name) {
     return 'visible|' + template + '|' + name;
 }
 
+function show_column(mode, column) {
+    return get_pref('column-' + mode + '-' + column) == 'true';
+}
+
+function group_column_count(mode, group, bools) {
+    var count = 0;
+    for (var i = 0; i < bools.length; i++) {
+        if (bools[i]) count++;
+    }
+
+    var options = COLUMNS[mode][group];
+    for (var i = 0; i < options.length; i++) {
+        var column = options[i][0];
+        if (show_column(mode, column)) count++;
+    }
+
+    return count;
+}
+
 // ---------------------------------------------------------------------------
 
 function default_pref(k) {
@@ -29,7 +48,24 @@ function default_pref(k) {
     if (k.substring(0, 10) == 'rate-mode-')   return 'chart';
     if (k.substring(0, 11) == 'chart-line-')  return 'true';
     if (k == 'truncate')                      return '100';
+    if (k.substring(0,  7) == 'column-')
+        return default_column_pref(k.substring(7));
     return null;
+}
+
+function default_column_pref(key0) {
+    var ix = key0.indexOf('-');
+    var mode = key0.substring(0, ix);
+    var key = key0.substring(ix + 1);
+    for (var group in COLUMNS[mode]) {
+        var options = COLUMNS[mode][group];
+        for (var i = 0; i < options.length; i++) {
+            if (options[i][0] == key) {
+                return '' + options[i][2];
+            }
+        }
+    }
+    return 'false';
 }
 
 // ---------------------------------------------------------------------------

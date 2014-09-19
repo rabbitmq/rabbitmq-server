@@ -790,10 +790,16 @@ var radio_id = 0;
 function fmt_radio(name, text, value, current) {
     radio_id++;
     return '<label class="radio" for="radio-' + radio_id + '">' +
-        '<input type="radio" id="radio-' + radio_id + '" name="' + name + 
+        '<input type="radio" id="radio-' + radio_id + '" name="' + name +
         '" value="' + value + '"' +
         ((value == current) ? ' checked="checked"' : '') +
         '>' + text + '</label>';
+}
+
+function fmt_checkbox(name, text, current) {
+    return '<label class="checkbox" for="checkbox-' + name + '">' +
+        '<input type="checkbox" id="checkbox-' + name + '" name="' + name +
+        '"' + (current ? ' checked="checked"' : '') + '>' + text + '</label>';
 }
 
 function properties_size(obj) {

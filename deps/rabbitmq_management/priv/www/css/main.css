@@ -40,8 +40,8 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .right { float: right; }
 .clear { clear: both; }
 
-.help, .rate-options { color: #888; cursor: pointer; }
-.help:hover, .rate-options:hover { color: #444; }
+.help, .popup-options-link { color: #888; cursor: pointer; }
+.help:hover, .popup-options-link:hover { color: #444; }
 
 .rate-visibility-option { cursor: pointer; padding: 4px; background: #fafafa; border: 1px solid f0f0f0; border-radius: 3px; display:block; }
 .rate-visibility-option:hover { background: #ddf;
@@ -76,6 +76,7 @@ table.list th, table.list td { vertical-align: top; min-width: 5em; width: auto;
 table.list { border-width: 1px; border-bottom: 1px solid #ccc; margin-bottom: 1em; }
 table.list th, table.list td { border-left: 1px solid #ccc; border-right: 1px solid #ccc; }
 table.list th { text-align: center; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
+table.list th.plus-minus { border: none; min-width: 2em; }
 table.list td a { display: block; width: 100%; }
 table.list th a.sort { display: block; width: 100%; cursor: pointer; }
 table.list th a.sort .arrow { color: #888; }
@@ -158,9 +159,9 @@ p.warning, div.form-popup-warn { background: #ff8; }
 div.form-popup-info { background: #8f8; }
 div.form-popup-help { text-align: left !important; background: #f8f8f8; border: 1px solid #ccc; }
 div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; z-index: 1; display: none; position: fixed; min-width: 500px; }
-div.form-popup-warn span, div.form-popup-info span, div.form-popup-help span, div.form-popup-rate-options span { color: black; font-weight: bold; cursor: pointer; }
+div.form-popup-warn span, div.form-popup-info span, div.form-popup-help span, div.form-popup-options span { color: black; font-weight: bold; cursor: pointer; }
 
-div.form-popup-rate-options {
+div.form-popup-options {
     z-index: 1; position: absolute; right: 35px; padding: 15px; background: white; border-left: 1px solid #ccc; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; border-radius: 10px 0 0 10px; -moz-border-radius: 10px 0 0 10px;
 }
 
@@ -219,7 +220,7 @@ table.form table.subform th, table.form table.subform td { padding: 0; }
 
 .multifield-sub { border: 1px solid #ddd; background: #f8f8f8; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; float: left; margin-bottom: 10px; }
 
-label.radio { padding: 5px; border: 1px solid #eee; cursor: pointer; border-radius: 5px; -moz-border-radius: 5px; }
+label.radio, label.checkbox { padding: 5px; border: 1px solid #eee; cursor: pointer; border-radius: 5px; -moz-border-radius: 5px; }
 
 table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }
