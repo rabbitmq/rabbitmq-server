@@ -303,25 +303,6 @@ function fmt_rate_bytes_axis(num, max) {
     return fmt_bytes_axis(num, max) + '/s';
 }
 
-function is_stat_empty(obj, name) {
-    if (obj == undefined
-        || obj[name] == undefined
-        || obj[name + '_details'] == undefined
-        || obj[name + '_details'].rate < 0.00001) return true;
-    return false;
-}
-
-function is_col_empty(objects, name, accessor) {
-    if (accessor == undefined) accessor = function(o) {return o.message_stats;};
-    for (var i = 0; i < objects.length; i++) {
-        var object = objects[i];
-        if (!is_stat_empty(accessor(object), name)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 function fmt_maybe_vhost(name) {
     return vhosts_interesting ?
         ' in virtual host <b>' + fmt_escape_html(name) + '</b>'
