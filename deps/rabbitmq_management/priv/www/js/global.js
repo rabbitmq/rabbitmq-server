@@ -98,8 +98,16 @@ var COLUMNS =
       'Network': [['from_client',  'From client',  true],
                   ['to_client',    'To client',    true],
                   ['heartbeat',    'Heartbeat',    false],
-                  ['connected_at', 'Connected at', false]]
-     }};
+                  ['connected_at', 'Connected at', false]]},
+
+     'vhosts':
+     {'Messages': [['msgs-ready',      'Ready',          true],
+                   ['msgs-unacked',    'Unacknowledged', true],
+                   ['msgs-total',      'Total',          true]],
+      'Network': [['from_client',  'From client',  true],
+                  ['to_client',    'To client',    true]],
+      'Message rates': [['rate-publish', 'publish',       true],
+                        ['rate-deliver', 'deliver / get', true]]}};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
