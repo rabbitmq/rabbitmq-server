@@ -84,7 +84,22 @@ var COLUMNS =
                         ['rate-return',    'return (mandatory)', false],
                         ['rate-deliver',   'deliver / get',      true],
                         ['rate-redeliver', 'redelivered',        false],
-                        ['rate-ack',       'ack',                true]]}};
+                        ['rate-ack',       'ack',                true]]},
+     'connections':
+     {'Overview': [['user',   'User name', true],
+                   ['state',  'State',     true]],
+      'Details': [['ssl',      'SSL / TLS', true],
+                  ['protocol',       'Protocol',       true],
+                  ['channels',       'Channels',       true],
+                  ['channel_max',    'Channel max',    false],
+                  ['frame_max',      'Frame max',      false],
+                  ['auth_mechanism', 'Auth mechanism', false],
+                  ['client',         'Client',         false]],
+      'Network': [['from_client',  'From client',  true],
+                  ['to_client',    'To client',    true],
+                  ['heartbeat',    'Heartbeat',    false],
+                  ['connected_at', 'Connected at', false]]
+     }};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
