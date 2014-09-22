@@ -73,7 +73,7 @@
     <td><%= fmt_node(connection.node) %></td>
 <% } %>
 <% if (show_column('connections', 'user')) { %>
-    <td><%= fmt_string(connection.user) %></td>
+    <td class="c"><%= fmt_string(connection.user) %></td>
 <% } %>
 <% if (show_column('connections', 'state')) { %>
     <td><%= fmt_object_state(connection) %></td>
@@ -82,7 +82,7 @@
     <td class="c"><%= fmt_boolean(connection.ssl) %></td>
 <% } %>
 <% if (show_column('connections', 'protocol')) { %>
-    <td><%= connection.protocol %></td>
+    <td class="c"><%= connection.protocol %></td>
 <% } %>
 <% if (show_column('connections', 'channels')) { %>
     <td class="r"><%= fmt_string(connection.channels) %></td>
@@ -94,7 +94,7 @@
     <td class="r"><%= fmt_string(connection.frame_max) %></td>
 <% } %>
 <% if (show_column('connections', 'auth_mechanism')) { %>
-    <td class="l"><%= fmt_string(connection.auth_mechanism) %></td>
+    <td class="c"><%= fmt_string(connection.auth_mechanism) %></td>
 <% } %>
 <% if (show_column('connections', 'client')) { %>
     <td><%= fmt_client_name(connection.client_properties) %></td>
