@@ -1,19 +1,45 @@
-// TODO It would be nice to use DOM storage. When that's available.
+// TODO strip out all this cookie nonsense when we drop support for MSIE 7.
+
+function local_storage_available() {
+    try {
+        return 'localStorage' in window && window['localStorage'] !== null;
+    } catch (e) {
+        return false;
+    }
+}
 
 function store_pref(k, v) {
-    var d = parse_cookie();
-    d[short_key(k)] = v;
-    store_cookie(d);
+    if (local_storage_available()) {
+        window.localStorage['rabbitmq.' + k] = v;
+    }
+    else {
+        var d = parse_cookie();
+        d[short_key(k)] = v;
+        store_cookie(d);
+    }
 }
 
 function clear_pref(k) {
-    var d = parse_cookie();
-    delete d[short_key(k)];
-    store_cookie(d);
+    if (local_storage_available()) {
+        window.localStorage.removeItem('rabbitmq.' + k);
+    }
+    else {
+        var d = parse_cookie();
+        delete d[short_key(k)];
+        store_cookie(d);
+    }
+
 }
 
 function get_pref(k) {
-    var r = parse_cookie()[short_key(k)];
+    var r;
+    if (local_storage_available()) {
+        r = window.localStorage['rabbitmq.' + k];
+    }
+    else {
+        r = parse_cookie()[short_key(k)];
+
+    }
     return r == undefined ? default_pref(k) : r;
 }
 
