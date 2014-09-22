@@ -119,6 +119,7 @@
 -define(SUPERVISOR, supervisor2).
 -define(GEN_SERVER, gen_server2).
 -define(PG2,        pg2_fixed).
+-define(SUP_MODULE, mirrored_supervisor_sups).
 
 -define(TABLE, mirrored_sup_childspec).
 -define(TABLE_DEF,
@@ -134,7 +135,6 @@
          which_children/1, count_children/1, check_childspecs/1]).
 
 -behaviour(?GEN_SERVER).
--behaviour(?SUPERVISOR).
 
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3,
          handle_cast/2]).
@@ -221,7 +221,7 @@ start_link({global, _SupName}, _Group, _TxFun, _Mod, _Args) ->
 
 start_link0(Prefix, Group, TxFun, Init) ->
     case apply(?SUPERVISOR, start_link,
-               Prefix ++ [?MODULE, {overall, Group, TxFun, Init}]) of
+               Prefix ++ [?SUP_MODULE, {overall, Group, TxFun, Init}]) of
         {ok, Pid} -> case catch call(Pid, {init, Pid}) of
                          ok -> {ok, Pid};
                          E  -> E
@@ -280,29 +280,12 @@ mirroring(Sup) -> child(Sup, mirroring).
 %%----------------------------------------------------------------------------
 
 start_internal(Group, TxFun, ChildSpecs) ->
-    ?GEN_SERVER:start_link(?MODULE, {mirroring, Group, TxFun, ChildSpecs},
+    ?GEN_SERVER:start_link(?MODULE, {Group, TxFun, ChildSpecs},
                            [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
-init({overall, _Group, _TxFun, ignore}) -> ignore;
-init({overall,  Group,  TxFun, {ok, {Restart, ChildSpecs}}}) ->
-    %% Important: Delegate MUST start before Mirroring so that when we
-    %% shut down from above it shuts down last, so Mirroring does not
-    %% see it die.
-    %%
-    %% See comment in handle_info('DOWN', ...) below
-    {ok, {{one_for_all, 0, 1},
-          [{delegate, {?SUPERVISOR, start_link, [?MODULE, {delegate, Restart}]},
-            temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
-           {mirroring, {?MODULE, start_internal, [Group, TxFun, ChildSpecs]},
-            permanent, 16#ffffffff, worker, [?MODULE]}]}};
-
-
-init({delegate, Restart}) ->
-    {ok, {Restart, []}};
-
-init({mirroring, Group, TxFun, ChildSpecs}) ->
+init({Group, TxFun, ChildSpecs}) ->
     {ok, #state{group              = Group,
                 tx_fun             = TxFun,
                 initial_childspecs = ChildSpecs}}.
