@@ -111,8 +111,7 @@ ifneq "$(DEFAULT_GOAL_MAKE)" "$(firstword $(sort $(DEFAULT_GOAL_MAKE) $(MAKE_VER
 .DEFAULT_GOAL=all
 endif
 
-all: $(TARGETS)
-test-all: $(TEST_TARGETS)
+all: $(TARGETS) $(TEST_TARGETS)
 
 .PHONY: plugins check-xref
 ifneq "$(PLUGINS_SRC_DIR)" ""
@@ -229,7 +228,7 @@ run-background-node: all
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
-run-tests: all test-all
+run-tests: all
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) -n hare || true
 	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
