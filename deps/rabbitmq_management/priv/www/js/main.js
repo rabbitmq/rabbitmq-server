@@ -16,16 +16,16 @@ function dispatcher() {
     }
 }
 
-function set_auth_cookie(userinfo) {
+function set_auth_pref(userinfo) {
     var b64 = b64_encode_utf8(userinfo);
-    document.cookie = 'auth=' + encodeURIComponent(b64);
+    store_pref('auth', encodeURIComponent(b64));
 }
 
 function login_route () {
     var userpass = '' + this.params['username'] + ':' + this.params['password'],
         location = window.location.href,
         hash = window.location.hash;
-    set_auth_cookie(decodeURIComponent(userpass));
+    set_auth_pref(decodeURIComponent(userpass));
     location = location.substr(0, location.length - hash.length);
     window.location.replace(location);
     // because we change url, we don't need to hit check_login as
@@ -38,13 +38,13 @@ function start_app_login() {
         this.put('#/login', function() {
             username = this.params['username'];
             password = this.params['password'];
-            set_auth_cookie(username + ':' + password);
+            set_auth_pref(username + ':' + password);
             check_login();
         });
         this.get('#/login/:username/:password', login_route)
     });
     app.run();
-    if (get_cookie('auth') != '') {
+    if (get_pref('auth') != null) {
         check_login();
     }
 }
@@ -52,7 +52,7 @@ function start_app_login() {
 function check_login() {
     user = JSON.parse(sync_get('/whoami'));
     if (user == false) {
-        document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        clear_pref('auth');
         replace_content('login-status', '<p>Login failed</p>');
     }
     else {
@@ -476,7 +476,7 @@ function postprocess() {
     $('#download-definitions').click(function() {
             var path = 'api/definitions?download=' +
                 esc($('#download-filename').val()) +
-                '&auth=' + get_cookie('auth');
+                '&auth=' + get_pref('auth');
             window.location = path;
             setTimeout('app.run()');
             return false;
@@ -857,7 +857,7 @@ function update_status(status) {
 }
 
 function auth_header() {
-    return "Basic " + decodeURIComponent(get_cookie('auth'));
+    return "Basic " + decodeURIComponent(get_pref('auth'));
 }
 
 function with_req(method, path, body, fun) {
