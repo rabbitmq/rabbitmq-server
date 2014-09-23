@@ -6,6 +6,13 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_recent_history.hrl").
 
+-define(RABBIT, {"rabbit-test",  5672}).
+-define(HARE,   {"rabbit-hare", 5673}).
+
+-import(rabbit_exchange_type_recent_history_test_util,
+        [start_other_node/1, cluster_other_node/2,
+         stop_other_node/1]).
+
 test() ->
     ok = eunit:test(tests(?MODULE, 60), [verbose]).
 
@@ -102,6 +109,59 @@ e2e_test() ->
     amqp_channel:call(Chan, #'queue.delete' { queue = Q }),
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
+    ok.
+
+multinode_test() ->
+    start_other_node(?HARE),
+    cluster_other_node(?HARE, ?RABBIT),
+
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{port=5673}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Chan,
+                          #'exchange.declare' {
+                            exchange = <<"e1">>,
+                            type = <<"x-recent-history">>,
+                            auto_delete = false
+                           }),
+
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Chan, #'queue.declare' {
+                                   queue     = <<"q">>
+                                  }),
+
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind' {
+                                   queue = Q,
+                                   exchange = <<"e1">>,
+                                   routing_key = <<"">>
+                                  }),
+
+    amqp_channel:call(Chan, #'queue.delete' { queue = Q }),
+    amqp_channel:close(Chan),
+    amqp_connection:close(Conn),
+    stop_other_node(?HARE),
+
+    {ok, Conn2} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan2} = amqp_connection:open_channel(Conn2),
+
+    #'queue.declare_ok'{queue = Q2} =
+        amqp_channel:call(Chan2, #'queue.declare' {
+                                   queue     = <<"q2">>
+                                  }),
+
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan2, #'queue.bind' {
+                                   queue = Q2,
+                                   exchange = <<"e1">>,
+                                   routing_key = <<"">>
+                                  }),
+
+    amqp_channel:call(Chan2, #'exchange.delete' { exchange = <<"e2">> }),
+    amqp_channel:call(Chan2, #'queue.delete' { queue = Q2 }),
+    amqp_channel:close(Chan2),
+    amqp_connection:close(Conn2),
     ok.
 
 test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
