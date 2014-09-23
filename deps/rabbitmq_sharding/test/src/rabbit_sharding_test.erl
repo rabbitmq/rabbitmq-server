@@ -5,7 +5,7 @@
 
 %% Used everywhere
 -define(RABBIT, {"rabbit-test",  5672}).
--define(HARE,   {"arabbit-hare", 5673}).
+-define(HARE,   {"rabbit-hare", 5673}).
 -define(TEST_X, <<"sharding.test">>).
 
 -import(rabbit_sharding_test_util,
