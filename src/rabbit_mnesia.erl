@@ -391,7 +391,7 @@ cluster_status(WhichNodes) ->
     end.
 
 node_info() ->
-    {erlang:system_info(otp_release), rabbit_misc:version(),
+    {rabbit_misc:otp_release(), rabbit_misc:version(),
      cluster_status_from_mnesia()}.
 
 node_type() ->
@@ -764,7 +764,7 @@ version_error(Name, This, Remote) ->
                                 "remote node ~s", [Name, This, Remote])}}.
 
 check_otp_consistency(Remote) ->
-    check_version_consistency(erlang:system_info(otp_release), Remote, "OTP").
+    check_version_consistency(rabbit_misc:otp_release(), Remote, "OTP").
 
 check_rabbit_consistency(Remote) ->
     check_version_consistency(

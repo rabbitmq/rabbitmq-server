@@ -59,7 +59,7 @@
 -export([append_rpc_all_nodes/4]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
--export([version/0, which_applications/0]).
+-export([version/0, otp_release/0, which_applications/0]).
 -export([sequence_error/1]).
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
 -export([check_expiry/1]).
@@ -232,6 +232,7 @@
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_sets:set(), gb_sets:set()) -> gb_sets:set()).
 -spec(version/0 :: () -> string()).
+-spec(otp_release/0 :: () -> string()).
 -spec(which_applications/0 :: () -> [{atom(), string(), string()}]).
 -spec(sequence_error/1 :: ([({'error', any()} | any())])
                        -> {'error', any()} | any()).
@@ -916,6 +917,20 @@ gb_sets_difference(S1, S2) ->
 version() ->
     {ok, VSN} = application:get_key(rabbit, vsn),
     VSN.
+
+%% See http://www.erlang.org/doc/system_principles/versions.html
+otp_release() ->
+    File = filename:join([code:root_dir(), "releases",
+                          erlang:system_info(otp_release), "OTP_VERSION"]),
+    case file:read_file(File) of
+        {ok, VerBin} ->
+            %% 17.0 or later, we need the file for the minor version
+            string:strip(binary_to_list(VerBin), both, $\n);
+        {error, _} ->
+            %% R16B03 or earlier (no file, otp_release is correct)
+            %% or we couldn't read the file (so this is best we can do)
+            erlang:system_info(otp_release)
+    end.
 
 %% application:which_applications(infinity) is dangerous, since it can
 %% cause deadlocks on shutdown. So we have to use a timeout variant,

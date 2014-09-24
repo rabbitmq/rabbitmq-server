@@ -487,9 +487,8 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
-            {ok, Vsn} = application:get_key(rabbit, vsn),
             rabbit_log:info("Starting RabbitMQ ~s on Erlang ~s~n~s~n~s~n",
-                            [Vsn, erlang:system_info(otp_release),
+                            [rabbit_misc:version(), rabbit_misc:otp_release(),
                              ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
