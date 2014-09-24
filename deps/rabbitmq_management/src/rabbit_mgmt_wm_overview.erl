@@ -41,8 +41,8 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {exchange_types,      ExchangeTypes},
                  {rabbitmq_version,    version(rabbit)},
                  {cluster_name,        rabbit_nodes:cluster_name()},
-                 {erlang_version,      erl_version(otp_release)},
-                 {erlang_full_version, erl_version(system_version)}],
+                 {erlang_version,      erlang_version()},
+                 {erlang_full_version, erlang_full_version()}],
     Range = rabbit_mgmt_util:range(ReqData),
     Overview =
         case rabbit_mgmt_util:is_monitor(Tags) of
@@ -93,5 +93,7 @@ web_contexts(ReqData) ->
 fmt_contexts(N) ->
     [[{node, pget(name, N)} | C] || C <- pget(contexts, N, [])].
 
-erl_version(K) ->
-    list_to_binary(string:strip(erlang:system_info(K), both, $\n)).
+erlang_version() -> list_to_binary(rabbit_misc:otp_release()).
+
+erlang_full_version() ->
+    list_to_binary(string:strip(erlang:system_info(system_version), both, $\n)).
