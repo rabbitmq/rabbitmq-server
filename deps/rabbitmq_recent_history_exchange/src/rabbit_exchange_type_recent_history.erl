@@ -114,13 +114,13 @@ assert_args_equivalence(X, Args) ->
 %%----------------------------------------------------------------------------
 
 setup_schema() ->
-    case mnesia:create_table(?RH_TABLE,
+    mnesia:create_table(?RH_TABLE,
                              [{attributes, record_info(fields, cached)},
                               {record_name, cached},
-                              {type, set}]) of
-        {atomic, ok} -> ok;
-        {aborted, {already_exists, ?RH_TABLE}} -> ok
-    end.
+                              {type, set}]),
+    mnesia:add_table_copy(?RH_TABLE, node(), ram_copies),
+    mnesia:wait_for_tables([?RH_TABLE], 30000),
+    ok.
 
 disable_plugin() ->
     rabbit_registry:unregister(exchange, <<"x-recent-history">>),
