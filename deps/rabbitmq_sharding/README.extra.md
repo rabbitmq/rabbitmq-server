@@ -59,7 +59,7 @@ called `my_shard` doesn't make much sense when there's actually a
 sharded queue by that name. In this case the plugin will return a
 channel error to the user.
 
-These are the AMPQ methods intercepted by the plugin, and the
+These are the AMQP methods intercepted by the plugin, and the
 respective behaviour:
 
 - `'basic.consume', QueueName`: The plugin will pick the sharded queue
