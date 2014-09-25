@@ -53,7 +53,14 @@ intercept(#'queue.delete'{queue = QName} = Method, VHost) ->
 intercept(#'queue.declare'{queue = QName} = Method, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't declare sharded queue: ~p", [QName]);
+            %% Since as an interceptor we can't modify what the channel
+            %% will return, we then modify the queue name so the channel
+            %% can at least return a queue.declare_ok for that particular
+            %% queue. Picking the first queue over the others is totally
+            %% arbitrary.
+            QName2 = rabbit_sharding_util:make_queue_name(
+                                      QName, a2b(node()), 0),
+            Method#'queue.declare'{queue = QName2};
         _    ->
             Method
     end;

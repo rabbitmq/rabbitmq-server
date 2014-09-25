@@ -152,6 +152,25 @@ shard_auto_scale_cluster_test() ->
                        ["three"])
       end).
 
+queue_declare_test() ->
+    with_ch(
+      fun (Ch) ->
+              exchange_op(Ch, x_declare(?TEST_X)),
+              set_pol("declare", "^sharding\\.", policy(3, "1234")),
+
+              Declare = #'queue.declare'{queue = <<"sharding.test">>,
+                                         auto_delete = false},
+
+              #'queue.declare_ok'{queue = Q} =
+                  amqp_channel:call(Ch, Declare),
+
+              ?assertEqual(Q, shard_q(xr(?TEST_X), 0)),
+
+              teardown(Ch,
+                       [{?TEST_X, 3}],
+                       ["declare"])
+      end).
+
 start_consumer(Ch, Shard) ->
     amqp_channel:call(Ch, #'basic.consume'{queue = Shard}).
 
