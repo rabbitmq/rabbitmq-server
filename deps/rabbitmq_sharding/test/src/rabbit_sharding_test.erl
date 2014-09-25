@@ -159,7 +159,8 @@ queue_declare_test() ->
               set_pol("declare", "^sharding\\.", policy(3, "1234")),
 
               Declare = #'queue.declare'{queue = <<"sharding.test">>,
-                                         auto_delete = false},
+                                         auto_delete = false,
+                                         durable = true},
 
               #'queue.declare_ok'{queue = Q} =
                   amqp_channel:call(Ch, Declare),

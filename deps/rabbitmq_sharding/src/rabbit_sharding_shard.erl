@@ -76,7 +76,7 @@ bind_queues(#exchange{name = XName} = X) ->
 declare_queue(XName, N, Node) ->
     QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
-    try rabbit_amqqueue:declare(QueueName, false, false, [], none, Node) of
+    try rabbit_amqqueue:declare(QueueName, true, false, [], none, Node) of
         {_Reply, _Q} ->
             ok
     catch
