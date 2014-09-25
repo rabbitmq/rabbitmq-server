@@ -66,9 +66,9 @@ respective behaviour:
   with the least amount of consumers from the `QueueName` shard.
 - `'basic.get', QueueName`: The plugin will pick the sharded queue
   with the least amount of consumers from the `QueueName` shard.
-- `'queue.declare', QueueName`: The plugin forbids declaring queues
-  with the same name of an existing shard, since `basic.consume`
-  behaviour would be undefined.
+- `'queue.declare', QueueName`: The plugin rewrites `QueueName` to be
+  the first queue in the shard, so `queue.declare_ok` returns the stats
+  for that queue.
 - `'queue.bind', QueueName`: since there isn't an actual `QueueName`
   queue, this method returns a channel error.
 - `'queue.unbind', QueueName`: since there isn't an actual `QueueName`
