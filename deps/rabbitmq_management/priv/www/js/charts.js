@@ -30,7 +30,7 @@ function data_rates(id, stats) {
 function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, chart_rates,
                              heading, heading_help) {
     var mode = get_pref('rate-mode-' + id);
-    var range = get_pref('chart-range-' + id);
+    var range = get_pref('chart-range');
     var prefix = chart_h3(id, heading, heading_help);
     var res;
 
@@ -52,7 +52,7 @@ function rates_chart_or_text(id, stats, items, chart_fmt, text_fmt, axis_fmt, ch
 
 function chart_h3(id, heading, heading_help) {
     var mode = get_pref('rate-mode-' + id);
-    var range = get_pref('chart-range-' + id);
+    var range = get_pref('chart-range');
     return '<h3>' + heading +
         ' <span class="popup-options-link updatable" title="Click to change" ' +
         'type="rate" for="' + id + '">(' + prefix_title(mode, range) +
@@ -298,6 +298,6 @@ function update_rate_options(sammy) {
     var id = sammy.params['id'];
     store_pref('rate-mode-' + id, sammy.params['mode']);
     store_pref('chart-size-' + id, sammy.params['size']);
-    store_pref('chart-range-' + id, sammy.params['range']);
+    store_pref('chart-range', sammy.params['range']);
     partial_update();
 }

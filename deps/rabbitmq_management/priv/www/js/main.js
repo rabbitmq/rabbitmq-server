@@ -400,7 +400,7 @@ function apply_state(reqs) {
         if (options['ranges'] != undefined) {
             for (i in options['ranges']) {
                 var type = options['ranges'][i];
-                var range = get_pref('chart-range-' + type).split('|');
+                var range = get_pref('chart-range').split('|');
                 var prefix;
                 if (type.substring(0, 8) == 'lengths-') {
                     prefix = 'lengths';

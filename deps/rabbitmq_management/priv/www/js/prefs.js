@@ -54,11 +54,11 @@ function show_column(mode, column) {
 // ---------------------------------------------------------------------------
 
 function default_pref(k) {
-    if (k.substring(0, 12) == 'chart-range-') return '60|5';
     if (k.substring(0, 11) == 'chart-size-')  return 'small';
     if (k.substring(0, 10) == 'rate-mode-')   return 'chart';
     if (k.substring(0, 11) == 'chart-line-')  return 'true';
     if (k == 'truncate')                      return '100';
+    if (k == 'chart-range')                   return '60|5';
     if (k.substring(0,  7) == 'column-')
         return default_column_pref(k.substring(7));
     return null;
