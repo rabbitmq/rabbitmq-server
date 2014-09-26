@@ -11,10 +11,10 @@ port 15674, for example a valid SockJS endpoint url may look like:
 Once the server is started you should be able to establish a SockJS
 connection to this url. You will be able to communicate using the
 usual STOMP protocol over it. For example, a page using Jeff Mesnil's
-"stomp-websocket" project may look like this:
+"stomp-websocket" project and SockJS may look like this:
 
 
-    <script src="http://cdn.sockjs.org/sockjs-0.3.min.js"></script>
+    <script src="sockjs-0.3.min.js"></script>
     <script src="stomp.js"></script>
     <script>
         Stomp.WebSocketClass = SockJS;
