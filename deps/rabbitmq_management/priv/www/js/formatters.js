@@ -747,7 +747,7 @@ function fmt_sort(display, sort) {
     return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
 }
 
-function group_heading(mode, group, bools) {
+function group_count(mode, group, bools) {
     var count = 0;
     for (var i = 0; i < bools.length; i++) {
         if (bools[i]) count++;
@@ -758,7 +758,11 @@ function group_heading(mode, group, bools) {
         var column = options[i][0];
         if (show_column(mode, column)) count++;
     }
+    return count;
+}
 
+function group_heading(mode, group, bools) {
+    var count = group_count(mode, group, bools);
     if (count == 0) {
         return '';
     }

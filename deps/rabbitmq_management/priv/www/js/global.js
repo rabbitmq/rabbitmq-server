@@ -107,7 +107,16 @@ var COLUMNS =
       'Network': [['from_client',  'From client',  true],
                   ['to_client',    'To client',    true]],
       'Message rates': [['rate-publish', 'publish',       true],
-                        ['rate-deliver', 'deliver / get', true]]}};
+                        ['rate-deliver', 'deliver / get', true]]},
+     'overview':
+     {'Statistics': [['file_descriptors',   'File descriptors',   true],
+                     ['socket_descriptors', 'Socket descriptors', true],
+                     ['erlang_processes',   'Erlang processes',   true],
+                     ['memory',             'Memory',             true],
+                     ['disk_space',         'Disk space',         true]],
+      'General': [['uptime',     'Uptime',     false],
+                  ['rates_mode', 'Rates mode', false],
+                  ['info',       'Info',       true]]}};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
