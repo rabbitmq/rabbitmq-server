@@ -56,10 +56,10 @@ unbind_queues(OldSPN, #exchange{name = XName} = X) ->
                           || N <- lists:seq(0, OldSPN-1)]
                  end).
 
-add_queues(#exchange{name = XName} = X) ->
+add_queues(#exchange{name = XName, durable = Durable} = X) ->
     SPN = shards_per_node(X),
     foreach_node(fun(Node) ->
-                         [declare_queue(XName, N, Node)
+                         [declare_queue(XName, Durable, N, Node)
                           || N <- lists:seq(0, SPN-1)]
                  end).
 
@@ -73,10 +73,10 @@ bind_queues(#exchange{name = XName} = X) ->
 
 %%----------------------------------------------------------------------------
 
-declare_queue(XName, N, Node) ->
+declare_queue(XName, Durable, N, Node) ->
     QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
-    try rabbit_amqqueue:declare(QueueName, true, false, [], none, Node) of
+    try rabbit_amqqueue:declare(QueueName, Durable, false, [], none, Node) of
         {_Reply, _Q} ->
             ok
     catch
