@@ -357,6 +357,8 @@ handle_cast({gm_deaths, DeadGMPids},
             rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName,
                                                    DeadPids),
             noreply(State);
+        {ok, MPid2, DeadPids} ->
+            {stop, normal, State};
         {error, not_found} ->
             {stop, normal, State}
     end;
