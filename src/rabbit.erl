@@ -102,7 +102,8 @@
                    [{description, "guid generator"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_guid]}},
-                    {requires,    kernel_ready},
+                    {requires,    rabbit_alarm}, %% transitive to node monitor
+                                                 %% TODO ugly
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({delegate_sup,
@@ -115,7 +116,7 @@
                    [{description, "node monitor"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_node_monitor]}},
-                    {requires,    rabbit_alarm},
+                    {requires,    guid_generator},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,

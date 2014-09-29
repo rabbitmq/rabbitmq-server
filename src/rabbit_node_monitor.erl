@@ -40,7 +40,7 @@
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
 
 -record(state, {monitors, partitions, subscribers, down_ping_timer,
-                keepalive_timer, autoheal}).
+                keepalive_timer, autoheal, guid, node_guids}).
 
 %%----------------------------------------------------------------------------
 
@@ -161,16 +161,7 @@ reset_cluster_status() ->
 %%----------------------------------------------------------------------------
 
 notify_node_up() ->
-    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
-    gen_server:abcast(Nodes, ?SERVER,
-                      {node_up, node(), rabbit_mnesia:node_type()}),
-    %% register other active rabbits with this rabbit
-    DiskNodes = rabbit_mnesia:cluster_nodes(disc),
-    [gen_server:cast(?SERVER, {node_up, N, case lists:member(N, DiskNodes) of
-                                               true  -> disc;
-                                               false -> ram
-                                           end}) || N <- Nodes],
-    ok.
+    gen_server:cast(?SERVER, notify_node_up).
 
 notify_joined_cluster() ->
     Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
@@ -253,6 +244,8 @@ init([]) ->
     {ok, ensure_keepalive_timer(#state{monitors    = pmon:new(),
                                        subscribers = pmon:new(),
                                        partitions  = [],
+                                       guid        = rabbit_guid:gen(),
+                                       node_guids  = orddict:new(),
                                        autoheal    = rabbit_autoheal:init()})}.
 
 handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
@@ -260,6 +253,54 @@ handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
+
+handle_cast(notify_node_up, State = #state{guid = GUID}) ->
+    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    gen_server:abcast(Nodes, ?SERVER,
+                      {node_up, node(), rabbit_mnesia:node_type(), GUID}),
+    %% register other active rabbits with this rabbit
+    DiskNodes = rabbit_mnesia:cluster_nodes(disc),
+    [gen_server:cast(?SERVER, {node_up, N, case lists:member(N, DiskNodes) of
+                                               true  -> disc;
+                                               false -> ram
+                                           end}) || N <- Nodes],
+    {noreply, State};
+
+handle_cast({node_up, Node, NodeType, GUID},
+            State = #state{guid       = MyGUID,
+                           node_guids = GUIDs}) ->
+    cast(Node, {announce_guid, node(), MyGUID}),
+    GUIDs1 = orddict:store(Node, GUID, GUIDs),
+    handle_cast({node_up, Node, NodeType}, State#state{node_guids = GUIDs1});
+
+handle_cast({announce_guid, Node, GUID}, State = #state{node_guids = GUIDs}) ->
+    {noreply, State#state{node_guids = orddict:store(Node, GUID, GUIDs)}};
+
+handle_cast({check_partial_partition, Node, NodeGUID, Reporter, MyGUID},
+            State = #state{guid = MyGUID}) ->
+    case lists:member(Node, alive_nodes()) of
+        true  -> cast(Node, {partial_partition, NodeGUID, Reporter, node()});
+        false -> ok
+    end,
+    {noreply, State};
+
+handle_cast({check_partial_partition, _Node, _NodeGUID, _Reporter, _GUID},
+            State) ->
+    {noreply, State};
+
+handle_cast({partial_partition, GUID, Reporter, Proxy},
+            State = #state{guid = GUID}) ->
+    rabbit_log:error(
+      "Partial partition detected:~n"
+      " * This node was reported DOWN by ~s~n"
+      " * We can still see ~s via ~s~n~n"
+      "We will therefore intentionally disconnect from ~s~n",
+      [Reporter, Reporter, Proxy, Proxy]),
+    erlang:disconnect_node(Proxy),
+    {noreply, State};
+
+handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
+    {noreply, State};
 
 %% Note: when updating the status file, we can't simply write the
 %% mnesia information since the message can (and will) overtake the
@@ -320,9 +361,21 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
-handle_info({nodedown, Node, Info}, State) ->
+handle_info({nodedown, Node, Info}, State = #state{node_guids = GUIDs}) ->
     rabbit_log:info("node ~p down: ~p~n",
                     [Node, proplists:get_value(nodedown_reason, Info)]),
+    Check = fun (N, CheckGUID, DownGUID) ->
+                    cast(N, {check_partial_partition,
+                             Node, DownGUID, node(), CheckGUID})
+            end,
+    case orddict:find(Node, GUIDs) of
+        {ok, DownGUID} -> Alive = alive_nodes() -- [node(), Node],
+                          [case orddict:find(N, GUIDs) of
+                               {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
+                               error           -> ok
+                           end || N <- Alive];
+        error          -> ok
+    end,
     {noreply, handle_dead_node(Node, State)};
 
 handle_info({mnesia_system_event,
@@ -373,8 +426,7 @@ handle_info(ping_down_nodes_again, State) ->
 handle_info(ping_up_nodes, State) ->
     %% In this case we need to ensure that we ping "quickly" -
     %% i.e. only nodes that we know to be up.
-    Nodes = alive_nodes(rabbit_mnesia:cluster_nodes(all)) -- [node()],
-    [gen_server:cast({?MODULE, N}, keepalive) || N <- Nodes],
+    [cast(N, keepalive) || N <- alive_nodes() -- [node()]],
     {noreply, ensure_keepalive_timer(State#state{keepalive_timer = undefined})};
 
 handle_info(_Info, State) ->
@@ -512,6 +564,8 @@ add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 
 del_node(Node, Nodes) -> Nodes -- [Node].
 
+cast(Node, Msg) -> gen_server:cast({?SERVER, Node}, Msg).
+
 %%--------------------------------------------------------------------
 
 %% mnesia:system_info(db_nodes) (and hence
@@ -537,6 +591,7 @@ all_rabbit_nodes_up() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
 
+alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
 alive_nodes(Nodes) -> [N || N <- Nodes, lists:member(N, [node()|nodes()])].
 
 alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_mnesia:cluster_nodes(all)).
