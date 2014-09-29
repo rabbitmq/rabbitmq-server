@@ -373,7 +373,7 @@ handle_info(ping_down_nodes_again, State) ->
 handle_info(ping_up_nodes, State) ->
     %% In this case we need to ensure that we ping "quickly" -
     %% i.e. only nodes that we know to be up.
-    Nodes = alive_nodes(rabbit_mnesia:cluster_nodes(all)) -- [node()],
+    Nodes = alive_nodes() -- [node()],
     [gen_server2:cast({?MODULE, N}, keepalive) || N <- Nodes],
     {noreply, ensure_keepalive_timer(State#state{keepalive_timer = undefined})};
 
@@ -526,16 +526,15 @@ del_node(Node, Nodes) -> Nodes -- [Node].
 %% connect to nodes which are currently disconnected.
 
 majority() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
+    length(alive_nodes()) / length(Nodes) > 0.5.
 
 all_nodes_up() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_nodes(Nodes)) =:= length(Nodes).
+    length(alive_nodes()) =:= length(Nodes).
 
 all_rabbit_nodes_up() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
+    length(alive_rabbit_nodes()) =:= length(Nodes).
+
+alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
 
 alive_nodes(Nodes) -> [N || N <- Nodes, lists:member(N, [node()|nodes()])].
 
