@@ -224,15 +224,15 @@ safe_call(Term, Default) -> safe_call(Term, Default, 1).
 
 %% See rabbit_mgmt_sup_sup for a discussion of the retry logic.
 safe_call(Term, Default, Retries) ->
-    try
-        gen_server2:call({global, ?MODULE}, Term, infinity)
-    catch exit:{noproc, _} ->
-            case Retries of
-                0 -> Default;
-                _ -> rabbit_mgmt_sup_sup:start_child(),
-                     safe_call(Term, Default, Retries - 1)
-            end
-    end.
+    rabbit_misc:with_exit_handler(
+      fun () ->
+              case Retries of
+                  0 -> Default;
+                  _ -> rabbit_mgmt_sup_sup:start_child(),
+                       safe_call(Term, Default, Retries - 1)
+              end
+      end,
+      fun () -> gen_server2:call({global, ?MODULE}, Term, infinity) end).
 
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks
