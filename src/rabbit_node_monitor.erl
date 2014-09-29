@@ -374,7 +374,7 @@ handle_info(ping_up_nodes, State) ->
     %% In this case we need to ensure that we ping "quickly" -
     %% i.e. only nodes that we know to be up.
     Nodes = alive_nodes(rabbit_mnesia:cluster_nodes(all)) -- [node()],
-    [gen_server2:cast({?MODULE, N}, keepalive) || N <- Nodes],
+    [gen_server:cast({?MODULE, N}, keepalive) || N <- Nodes],
     {noreply, ensure_keepalive_timer(State#state{keepalive_timer = undefined})};
 
 handle_info(_Info, State) ->
