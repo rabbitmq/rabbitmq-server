@@ -50,6 +50,7 @@
          {handshake_timeout, 10000},
          {reverse_dns_lookups, false},
          {cluster_partition_handling, ignore},
+         {cluster_keepalive_interval, 10000},
          {tcp_listen_options, [binary,
                                {packet,        raw},
                                {reuseaddr,     true},
