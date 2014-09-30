@@ -355,7 +355,8 @@ stop() ->
     end,
     rabbit_log:info("Stopping RabbitMQ~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
-    stop_apps(app_utils:app_dependency_order(Apps, true)).
+    stop_apps(app_utils:app_dependency_order(Apps, true)),
+    rabbit_log:info("Stopped RabbitMQ application~n", []).
 
 stop_and_halt() ->
     try
