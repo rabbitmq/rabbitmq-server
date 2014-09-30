@@ -290,14 +290,25 @@ handle_cast({check_partial_partition, _Node, _NodeGUID, _Reporter, _GUID},
 
 handle_cast({partial_partition, GUID, Reporter, Proxy},
             State = #state{guid = GUID}) ->
-    rabbit_log:error(
-      "Partial partition detected:~n"
-      " * This node was reported DOWN by ~s~n"
-      " * We can still see ~s via ~s~n~n"
-      "We will therefore intentionally disconnect from ~s~n",
-      [Reporter, Reporter, Proxy, Proxy]),
-    erlang:disconnect_node(Proxy),
-    {noreply, State};
+    FmtBase = "Partial partition detected:~n"
+        " * This node was reported DOWN by ~s~n"
+        " * We can still see ~s which can see ~s~n",
+    ArgsBase = [Reporter, Proxy, Reporter],
+    case application:get_env(rabbit, cluster_partition_handling) of
+        {ok, pause_minority} ->
+            rabbit_log:error(
+              FmtBase ++ " * pause_minority mode enabled~n"
+              "We will therefore pause until the *entire* cluster recovers~n",
+              ArgsBase),
+            await_cluster_recovery(fun all_nodes_up/0),
+            {noreply, State};
+        {ok, _} ->
+            rabbit_log:error(
+              FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
+              ArgsBase ++ [Proxy]),
+            erlang:disconnect_node(Proxy),
+            {noreply, State}
+    end;
 
 handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
     {noreply, State};
@@ -457,7 +468,7 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
         {ok, pause_minority} ->
             case majority() of
                 true  -> ok;
-                false -> await_cluster_recovery()
+                false -> await_cluster_recovery(fun majority/0)
             end,
             State;
         {ok, ignore} ->
@@ -470,12 +481,12 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
             State
     end.
 
-await_cluster_recovery() ->
+await_cluster_recovery(Condition) ->
     rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
                        []),
     run_outside_applications(fun () ->
                                      rabbit:stop(),
-                                     wait_for_cluster_recovery()
+                                     wait_for_cluster_recovery(Condition)
                              end),
     ok.
 
@@ -492,12 +503,12 @@ run_outside_applications(Fun) ->
                   end
           end).
 
-wait_for_cluster_recovery() ->
+wait_for_cluster_recovery(Condition) ->
     ping_all(),
-    case majority() of
+    case Condition() of
         true  -> rabbit:start();
         false -> timer:sleep(?RABBIT_DOWN_PING_INTERVAL),
-                 wait_for_cluster_recovery()
+                 wait_for_cluster_recovery(Condition)
     end.
 
 handle_dead_rabbit(Node, State = #state{partitions = Partitions,
