@@ -13,7 +13,7 @@ Source4: rabbitmq-server.ocf
 Source5: README
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= R13B-03, python-simplejson, xmlto, libxslt
+BuildRequires: erlang >= R13B-03, python-simplejson, xmlto, libxslt, gzip, sed, zip
 Requires: erlang >= R13B-03, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
