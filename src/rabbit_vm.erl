@@ -55,7 +55,8 @@ memory() ->
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
 
-    OtherProc = Processes - Conns - Qs - MsgIndexProc - Plugins - MgmtDbProc,
+    OtherProc = Processes - Conns - Qs - QsSlave
+        - MsgIndexProc - Plugins - MgmtDbProc,
 
     [{total,             Total},
      {connection_procs,  Conns},
