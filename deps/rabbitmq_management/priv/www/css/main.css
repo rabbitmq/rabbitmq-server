@@ -93,8 +93,9 @@ div.colour-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 div.memory-info { float: left; padding: 10px 10px 0 0; }
 button.memory-button { margin-top: 10px; }
 
-div.memory_connection_procs { background: #955300; }
-div.memory_queue_procs      { background: #da7900; }
+div.memory_queue_procs      { background: #950053; }
+div.memory_queue_slave_procs{ background: #da0079; }
+div.memory_connection_procs { background: #da7900; }
 div.memory_plugins          { background: #ffc884; }
 div.memory_other_proc       { background: #fff4e7; }
 div.memory_mnesia           { background: #005395; }
