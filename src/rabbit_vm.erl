@@ -221,8 +221,8 @@ sum_processes(Names, Distinguishers, Items) ->
 %% these must match whatever is contained in the '$ancestor' process
 %% dictionary entry. Generally that means for all registered processes
 %% the name should be used.
-sum_processes(Names, Fun, Distinguishers, Specs) ->
-    Items = [Item || {Item, _Blank0} <- Specs],
+sum_processes(Names, Fun, Distinguishers, Acc0) ->
+    Items = [Item || {Item, _Blank0} <- Acc0],
     {NameAccs, OtherAcc} =
         lists:foldl(
           fun (Pid, Acc) ->
@@ -244,9 +244,9 @@ sum_processes(Names, Fun, Distinguishers, Specs) ->
                                      false            -> Name0
                                  end,
                           accumulate(
-                            Name, Fun, orddict:from_list(Vals), Acc, Specs)
+                            Name, Fun, orddict:from_list(Vals), Acc, Acc0)
                   end
-          end, {orddict:new(), orddict:new()}, processes()),
+          end, {orddict:new(), Acc0}, processes()),
     %% these conversions aren't strictly necessary; we do them simply
     %% for the sake of encapsulating the representation.
     {[{Name, orddict:to_list(Accs)} ||
@@ -264,26 +264,14 @@ find_ancestor(Extra, D, Names) ->
         {_, [Name | _]} -> Name
     end.
 
-accumulate(undefined, Fun, ValsDict, {NameAccs, OtherAcc}, Specs) ->
-    {NameAccs, merge(Fun, ValsDict, OtherAcc, Specs)};
-accumulate(Name,      Fun, ValsDict, {NameAccs, OtherAcc}, Specs) ->
-    F = fun (NameAcc) -> merge(Fun, ValsDict, NameAcc, Specs) end,
+accumulate(undefined, Fun, ValsDict, {NameAccs, OtherAcc}, _Acc0) ->
+    {NameAccs, orddict:merge(Fun, ValsDict, OtherAcc)};
+accumulate(Name,      Fun, ValsDict, {NameAccs, OtherAcc}, Acc0) ->
+    F = fun (NameAcc) -> orddict:merge(Fun, ValsDict, NameAcc) end,
     {case orddict:is_key(Name, NameAccs) of
-         true  -> orddict:update(Name, F, NameAccs);
-         false -> orddict:store( Name, F(orddict:new()), NameAccs)
+         true  -> orddict:update(Name, F,       NameAccs);
+         false -> orddict:store( Name, F(Acc0), NameAccs)
      end, OtherAcc}.
-
-merge(Fun, New, Old, Specs) ->
-    orddict:fold(fun (K, V, Acc) ->
-                         orddict:store(
-                           K, Fun(K, V, case orddict:find(K, Acc) of
-                                            {ok, V0} -> V0;
-                                            error    -> new_from_spec(K, Specs)
-                                        end), Acc)
-                 end, Old, New).
-
-new_from_spec({K, _}, Specs) -> keyfetch(K, Specs);
-new_from_spec(K,      Specs) -> keyfetch(K, Specs).
 
 keyfetch(K, L) -> {value, {_, V}} = lists:keysearch(K, 1, L),
                   V.
