@@ -39,7 +39,7 @@ memory() ->
                        lists:append(All), distinguishers(), [memory]),
 
     [Qs, QsSlave, Conns, MsgIndexProc, MgmtDbProc, Plugins] =
-        [aggregate_memory(Names, Sums)
+        [aggregate(Names, Sums, memory, fun (X) -> X end)
          || Names <- distinguished_interesting_sups()],
 
     Mnesia       = mnesia_memory(),
@@ -66,7 +66,7 @@ memory() ->
      {other_proc,        lists:max([0, OtherProc])}, %% [1]
      {mnesia,            Mnesia},
      {mgmt_db,           MgmtDbETS + MgmtDbProc},
-     {msg_index,          MsgIndexETS + MsgIndexProc},
+     {msg_index,         MsgIndexETS + MsgIndexProc},
      {other_ets,         ETS - Mnesia - MsgIndexETS - MgmtDbETS},
      {binary,            Bin},
      {code,              Code},
@@ -88,7 +88,16 @@ binary() ->
                                       sets:add_element({Ptr, Sz}, Acc0)
                               end, Acc, Info)
           end, distinguishers(), [{binary, sets:new()}]),
-    [{K, aggregate_binary(V)} || {K, V} <- Sums ++ [{unknown, Rest}]].
+    [Other, Qs, QsSlave, Conns, MsgIndexProc, MgmtDbProc, Plugins] =
+        [aggregate(Names, [{other, Rest} | Sums], binary, fun sum_binary/1)
+         || Names <- [[other] | distinguished_interesting_sups()]],
+    [{connection_procs,  Conns},
+     {queue_procs,       Qs},
+     {queue_slave_procs, QsSlave},
+     {plugins,           Plugins},
+     {mgmt_db,           MgmtDbProc},
+     {msg_index,         MsgIndexProc},
+     {other,             Other}].
 
 %%----------------------------------------------------------------------------
 
@@ -148,17 +157,17 @@ process_name(Pid) ->
 is_plugin("rabbitmq_" ++ _) -> true;
 is_plugin(App)              -> lists:member(App, ?MAGIC_PLUGINS).
 
-aggregate_memory(Names, Sums) ->
-    lists:sum([extract_memory(Name, Sums) || Name <- Names]).
+aggregate(Names, Sums, Key, Fun) ->
+    lists:sum([extract(Name, Sums, Key, Fun) || Name <- Names]).
 
-extract_memory(Name, Sums) ->
+extract(Name, Sum, Key, Fun) ->
     case keyfind(Name, Sums) of
-        {value, Accs} -> keyfetch(memory, Accs);
+        {value, Accs} -> Fun(keyfetch(Key, Accs));
         false         -> 0
     end.
 
-aggregate_binary([{binary, Set}]) ->
-    sets:fold(fun({_Ptr, Sz}, Acc) -> Acc + Sz end, 0, Set).
+sum_binary(Set) ->
+    sets:fold(fun({_Pt, Sz}, Acc) -> Acc + Sz end, 0, Set).
 
 queue_type(PDict) ->
     case keyfind(process_name, PDict) of
