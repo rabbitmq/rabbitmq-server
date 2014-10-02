@@ -146,6 +146,18 @@
 </div>
 
 <div class="section-hidden">
+<h2>Binary references</h2>
+<div class="hider">
+  <p>
+    <b>Warning:</b> Calculating binary memory use can be expensive if
+    there are many small binaries in the system.
+  </p>
+  <div id="binary-details"></div>
+  <button class="update-manual memory-button" for="binary-details" query="binary">Update</button>
+</div>
+</div>
+
+<div class="section-hidden">
 <h2>Advanced</h2>
 <div class="hider updatable">
 <% if (!node.running) { %>
