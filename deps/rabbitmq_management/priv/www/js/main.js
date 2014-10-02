@@ -189,9 +189,9 @@ function reset_timer() {
 function update_manual(div, query) {
     var path;
     var template;
-    if (query == 'memory') {
-        path = current_reqs['node']['path'] + '?memory=true';
-        template = 'memory';
+    if (query == 'memory' || query == 'binary') {
+        path = current_reqs['node']['path'] + '?' + query + '=true';
+        template = query;
     }
     var data = JSON.parse(sync_get(path));
 

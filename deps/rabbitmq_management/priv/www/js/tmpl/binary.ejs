@@ -1,0 +1,71 @@
+<%
+  var width = 800;
+  if (binary == "not_available") {
+%>
+<p class="warning">
+  Binary statistics not available.
+</p>
+<% } else { %>
+<div class="memory-bar">
+<%
+  var sections = {'queue_procs'      : 'Queues',
+                  'queue_slave_procs': 'Queues (slaves)',
+                  'connection_procs' : 'Connections',
+                  'plugins'          : 'Plugins',
+                  'msg_index'        : 'Message store index',
+                  'other'            : 'Other binary references'};
+  var pseudoTotal = 0
+  for (var section in sections) {
+    pseudoTotal += binary[section];
+  }
+  for (var section in sections) {
+    var section_width = Math.round(width * binary[section] / pseudoTotal);
+%>
+  <div class="memory-section memory_<%= section %>"
+       style="width: <%= section_width %>px;"
+       title="<%= sections[section] %> <%= fmt_bytes(binary[section]) %>">
+  </div>
+<% } %>
+</div>
+<span class="clear">&nbsp;</span>
+<div class="box">
+<table class="facts">
+  <tr>
+    <th>Queues</th>
+    <td>
+      <div class="box"><%= fmt_memory(binary, 'queue_procs') %></div>
+      <div class="box"><%= fmt_memory(binary, 'queue_slave_procs') %> (slaves)</div>
+    </td>
+  </tr>
+  <tr>
+    <th>Connections</th>
+    <td><%= fmt_memory(binary, 'connection_procs') %></td>
+  </tr>
+  <tr>
+    <th>Plugins</th>
+    <td><%= fmt_memory(binary, 'plugins') %></td>
+  </tr>
+</table>
+<table class="facts">
+  <tr>
+    <th>Message store index</th>
+    <td><%= fmt_memory(binary, 'msg_index') %></td>
+  </tr>
+  <tr>
+    <th>Management database</th>
+    <td><%= fmt_memory(binary, 'mgmt_db') %></td>
+  </tr>
+  <tr>
+    <th>Other binary references</th>
+    <td><%= fmt_memory(binary, 'other') %></td>
+  </tr>
+</table>
+</div>
+
+<div class="memory-info">
+  Last updated: <b><%= fmt_date(new Date()) %></b>.<br/>
+  Total referenced binaries at last update: <b><%= fmt_bytes(pseudoTotal) %></b>
+  <span class="help" id="binary-use"></span>
+</div>
+
+<% } %>

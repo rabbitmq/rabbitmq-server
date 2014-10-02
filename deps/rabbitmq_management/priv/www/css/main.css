@@ -106,6 +106,7 @@ div.memory_binary           { background: #666; }
 div.memory_code             { background: #999; }
 div.memory_atom             { background: #bbb; }
 div.memory_other_system     { background: #ddd; }
+div.memory_other            { background: #666; }
 
 sub { display: block; font-size: 0.8em; color: #888; }
 small { font-size: 0.8em; color: #888; }
