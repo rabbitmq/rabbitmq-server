@@ -718,6 +718,11 @@ function setup_visibility() {
         }
         if (show) {
             $(this).addClass('section-visible');
+            // Workaround for... something. Although div.hider is
+            // display:block anyway, not explicitly setting this
+            // prevents the first slideToggle() from animating
+            // successfully; instead the element just vanishes.
+            $(this).find('.hider').attr('style', 'display:block;');
         }
         else {
             $(this).addClass('section-invisible');
