@@ -160,7 +160,7 @@ is_plugin(App)              -> lists:member(App, ?MAGIC_PLUGINS).
 aggregate(Names, Sums, Key, Fun) ->
     lists:sum([extract(Name, Sums, Key, Fun) || Name <- Names]).
 
-extract(Name, Sum, Key, Fun) ->
+extract(Name, Sums, Key, Fun) ->
     case keyfind(Name, Sums) of
         {value, Accs} -> Fun(keyfetch(Key, Accs));
         false         -> 0
