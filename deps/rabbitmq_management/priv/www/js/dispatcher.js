@@ -26,9 +26,10 @@ dispatcher_add(function(sammy) {
 
     sammy.get('#/nodes/:name', function() {
             var name = esc(this.params['name']);
-            render({'node': '/nodes/' + name},
+            render({'node': {path:    '/nodes/' + name,
+                             options: {ranges: ['node-stats']}}},
                    'node', '');
-        });
+            });
 
     path('#/connections',
          {'connections': {path: '/connections', options: {sort:true}}},
@@ -223,5 +224,8 @@ dispatcher_add(function(sammy) {
         });
     sammy.put('#/rate-options', function() {
             update_rate_options(this);
+        });
+    sammy.put('#/column-options', function() {
+            update_column_options(this);
         });
 });

@@ -1,9 +1,9 @@
-<h1>Exchange: <b><%= fmt_exchange(exchange.name) %></b></h1>
+<h1>Exchange: <b><%= fmt_exchange(exchange.name) %></b><%= fmt_maybe_vhost(exchange.vhost) %></h1>
 
 <div class="section">
   <h2>Overview</h2>
   <div class="hider">
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-x', exchange.message_stats) %>
 <% } %>
 
@@ -15,25 +15,19 @@
         <td class="l"><%= fmt_exchange_type(exchange.type) %></td>
       </tr>
       <tr>
-        <th>Parameters</th>
-        <td><%= fmt_parameters(exchange) %></td>
+        <th>Features</th>
+        <td><%= fmt_features(exchange) %></td>
       </tr>
       <tr>
         <th>Policy</th>
         <td><%= fmt_string(exchange.policy, '') %></td>
       </tr>
-<% if (vhosts_interesting) { %>
-      <tr>
-        <th>Virtual host</th>
-        <td><%= fmt_string(exchange.vhost) %></td>
-      </tr>
-<% } %>
     </table>
     </div>
   </div>
 </div>
 
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode == 'detailed') { %>
 <div class="section-hidden">
 <h2>Message rates breakdown</h2>
 <div class="hider updatable">

@@ -1,13 +1,9 @@
-<h1>Policy: <b><%= fmt_string(policy.name) %></b></h1>
+<h1>Policy: <b><%= fmt_string(policy.name) %></b><%= fmt_maybe_vhost(policy.vhost) %></h1>
 
 <div class="section">
   <h2>Overview</h2>
   <div class="hider">
     <table class="facts">
-      <tr>
-        <th>Virtual Host</th>
-        <td><%= fmt_string(policy.vhost) %></td>
-      </tr>
       <tr>
         <th>Pattern</th>
         <td><%= fmt_string(policy.pattern) %></td>

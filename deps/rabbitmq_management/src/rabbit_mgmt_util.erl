@@ -536,14 +536,15 @@ b64decode_or_throw(B64) ->
             throw({error, {not_base64, B64}})
     end.
 
-no_range() -> {no_range, no_range, no_range}.
+no_range() -> {no_range, no_range, no_range, no_range}.
 
 %% Take floor on queries so we make sure we only return samples
 %% for which we've finished receiving events. Fixes the "drop at
 %% the end" problem.
 range(ReqData) -> {range("lengths",    fun floor/2, ReqData),
                    range("msg_rates",  fun floor/2, ReqData),
-                   range("data_rates", fun floor/2, ReqData)}.
+                   range("data_rates", fun floor/2, ReqData),
+                   range("node_stats", fun floor/2, ReqData)}.
 
 %% ...but if we know only one event could have contributed towards
 %% what we are interested in, then let's take the ceiling instead and
@@ -554,7 +555,8 @@ range(ReqData) -> {range("lengths",    fun floor/2, ReqData),
 %% aggregated even though the lengths and data rates aren't.
 range_ceil(ReqData) -> {range("lengths",    fun ceil/2,  ReqData),
                         range("msg_rates",  fun floor/2, ReqData),
-                        range("data_rates", fun ceil/2,  ReqData)}.
+                        range("data_rates", fun ceil/2,  ReqData),
+                        range("node_stats", fun ceil/2,  ReqData)}.
 
 range(Prefix, Round, ReqData) ->
     Age0 = int(Prefix ++ "_age", ReqData),
@@ -563,7 +565,7 @@ range(Prefix, Round, ReqData) ->
         is_integer(Age0) andalso is_integer(Incr0) ->
             Age = Age0 * 1000,
             Incr = Incr0 * 1000,
-            Now = rabbit_mgmt_format:timestamp_ms(os:timestamp()),
+            Now = rabbit_mgmt_format:now_to_ms(os:timestamp()),
             Last = Round(Now, Incr),
             #range{first = (Last - Age),
                    last  = Last,

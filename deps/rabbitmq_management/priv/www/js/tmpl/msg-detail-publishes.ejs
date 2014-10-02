@@ -1,7 +1,6 @@
 <h3><%= label %></h3>
 <% if (object && object.length > 0) { %>
 <%
-     var col_return_unroutable = !is_col_empty(object, 'return_unroutable', function(o) {return o.stats;});
      var col_confirm = mode != 'exchange-outgoing';
 %>
 <table class="list">
@@ -18,9 +17,6 @@
     <th>publish</th>
 <% if (col_confirm) { %>
     <th>confirm</th>
-<% } %>
-<% if (col_return_unroutable) { %>
-    <th>return (mandatory)</th>
 <% } %>
   </tr>
 <%
@@ -41,9 +37,6 @@
       <td class="r"><%= fmt_rate(pub.stats, 'publish') %></td>
 <% if (col_confirm) { %>
       <td class="r"><%= fmt_rate(pub.stats, 'confirm') %></td>
-<% } %>
-<% if (col_return_unroutable) { %>
-      <td class="r"><%= fmt_rate(pub.stats, 'return_unroutable') %></td>
 <% } %>
     </tr>
 <% } %>

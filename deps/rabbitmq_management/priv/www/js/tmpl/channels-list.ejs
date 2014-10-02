@@ -1,22 +1,18 @@
 <% if (channels.length > 0) { %>
-<%
-     var col_return_unroutable = !is_col_empty(channels, 'return_unroutable');
-     var col_redeliver = !is_col_empty(channels, 'redeliver');
-     var ratesWidth = col_return_unroutable ? 5 : 4;
-%>
 <table class="list">
  <thead>
   <tr>
 <% if (mode == 'standalone') { %>
-   <th colspan="<% if (nodes_interesting) { %>2<% } else { %>1<% } %>"></th>
-   <th colspan="<% if (vhosts_interesting) { %>7<% } else { %>6<% } %>">Details</th>
+    <%= group_heading('channels', 'Overview', [true, vhosts_interesting, nodes_interesting]) %>
 <% } else { %>
-   <th></th>
-   <th colspan="5">Details</th>
+    <%= group_heading('channels', 'Overview', [true]) %>
 <% } %>
-<% if (statistics_level == 'fine') { %>
-   <th colspan="<%= ratesWidth %>">Message rates</th>
+    <%= group_heading('channels', 'Details', []) %>
+    <%= group_heading('channels', 'Transactions', []) %>
+<% if (rates_mode != 'none') { %>
+    <%= group_heading('channels', 'Message rates', []) %>
 <% } %>
+    <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="channels">+/-</span></th>
   </tr>
   <tr>
 <% if (mode == 'standalone') { %>
@@ -27,47 +23,96 @@
 <% if (vhosts_interesting) { %>
     <th><%= fmt_sort('Virtual host',    'vhost') %></th>
 <% } %>
+<% if (show_column('channels', 'user')) { %>
     <th><%= fmt_sort('User name',       'user') %></th>
+<% } %>
+<% if (show_column('channels', 'mode')) { %>
     <th>Mode <span class="help" id="channel-mode"></span></th>
-    <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
-    <th><%= fmt_sort('Unacked',         'messages_unacknowledged') %></th>
-    <th><%= fmt_sort('Unconfirmed',     'messages_unconfirmed') %></th>
+<% } %>
+<% if (show_column('channels', 'state')) { %>
     <th><%= fmt_sort('State',           'state') %></th>
-<% if (statistics_level == 'fine') { %>
+<% } %>
+<% if (show_column('channels', 'msgs-unconfirmed')) { %>
+    <th><%= fmt_sort('Unconfirmed',     'messages_unconfirmed') %></th>
+<% } %>
+<% if (show_column('channels', 'prefetch')) { %>
+    <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
+<% } %>
+<% if (show_column('channels', 'msgs-unacked')) { %>
+    <th><%= fmt_sort('Unacked',         'messages_unacknowledged') %></th>
+<% } %>
+<% if (show_column('channels', 'msgs-uncommitted')) { %>
+    <th><%= fmt_sort('Uncommitted msgs', 'messages_uncommitted') %></th>
+<% } %>
+<% if (show_column('channels', 'acks-uncommitted')) { %>
+    <th><%= fmt_sort('Uncommitted acks', 'acks_uncommitted') %></th>
+<% } %>
+<% if (rates_mode != 'none') { %>
+<% if (show_column('channels', 'rate-publish')) { %>
     <th><%= fmt_sort('publish', 'message_stats.publish_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-confirm')) { %>
     <th><%= fmt_sort('confirm', 'message_stats.confirm_details.rate') %></th>
-    <th>
-      <%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %>
-      <% if (col_redeliver) { %>
-        <sub><%= fmt_sort('of which redelivered', 'message_stats.redeliver_details.rate') %></sub>
-      <% } %>
-    </th>
+<% } %>
+<% if (show_column('channels', 'rate-return')) { %>
+    <th><%= fmt_sort('return (mandatory)', 'message_stats.return_unroutable_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-deliver')) { %>
+    <th><%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-redeliver')) { %>
+    <th><%= fmt_sort('redelivered', 'message_stats.redeliver_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-ack')) { %>
     <th><%= fmt_sort('ack', 'message_stats.ack_details.rate') %></th>
-    <% if (col_return_unroutable) { %>
-        <th><%= fmt_sort('return (mandatory)', 'message_stats.return_unroutable_details.rate') %></th>
-    <% } %>
+<% } %>
 <% } %>
 <% } else { %>
 <!-- TODO make sortable after bug 23401 -->
     <th>Channel</th>
+<% if (show_column('channels', 'user')) { %>
+    <th>User name</th>
+<% } %>
+<% if (show_column('channels', 'mode')) { %>
     <th>Mode <span class="help" id="channel-mode"></span></th>
-    <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
-    <th>Unacked</th>
-    <th>Unconfirmed</th>
+<% } %>
+<% if (show_column('channels', 'state')) { %>
     <th>State</th>
-<% if (statistics_level == 'fine') { %>
+<% } %>
+<% if (show_column('channels', 'msgs-unconfirmed')) { %>
+    <th>Unconfirmed</th>
+<% } %>
+<% if (show_column('channels', 'prefetch')) { %>
+    <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
+<% } %>
+<% if (show_column('channels', 'msgs-unacked')) { %>
+    <th>Unacked</th>
+<% } %>
+<% if (show_column('channels', 'msgs-uncommitted')) { %>
+    <th>Uncommitted msgs</th>
+<% } %>
+<% if (show_column('channels', 'acks-uncommitted')) { %>
+    <th>Uncommitted acks</th>
+<% } %>
+<% if (rates_mode != 'none') { %>
+<% if (show_column('channels', 'rate-publish')) { %>
     <th>publish</th>
+<% } %>
+<% if (show_column('channels', 'rate-confirm')) { %>
     <th>confirm</th>
-    <th>
-      deliver / get
-      <% if (col_redeliver) { %>
-        <sub>of which redelivered</sub>
-        <% } %>
-    </th>
+<% } %>
+<% if (show_column('channels', 'rate-return')) { %>
+    <th>return (mandatory)</th>
+<% } %>
+<% if (show_column('channels', 'rate-deliver')) { %>
+    <th>deliver / get</th>
+<% } %>
+<% if (show_column('channels', 'rate-redeliver')) { %>
+    <th>redelivered</th>
+<% } %>
+<% if (show_column('channels', 'rate-ack')) { %>
     <th>ack</th>
-    <% if (col_return_unroutable) { %>
-        <th>return (mandatory)</th>
-    <% } %>
+<% } %>
 <% } %>
 <% } %>
   </tr>
@@ -84,18 +129,24 @@
 <% if (mode == 'standalone' && nodes_interesting) { %>
     <td><%= fmt_node(channel.node) %></td>
 <% } %>
-<% if (mode == 'standalone') { %>
-<% if (vhosts_interesting) { %>
+<% if (mode == 'standalone' && vhosts_interesting) { %>
     <td class="c"><%= fmt_string(channel.vhost) %></td>
 <% } %>
+<% if (show_column('channels', 'user')) { %>
     <td class="c"><%= fmt_string(channel.user) %></td>
 <% } %>
-    <td class="l">
+<% if (show_column('channels', 'mode')) { %>
+    <td class="c">
       <%= fmt_channel_mode(channel) %>
-      <% if (channel.transactional) { %>
-      <small><acronym title="<%= channel.messages_uncommitted %> uncommitted messages"><%= channel.messages_uncommitted %>m</acronym>/<acronym title="<%= channel.acks_uncommitted %> uncommitted acks"><%= channel.acks_uncommitted %>a</acronym></small>
-      <% } %>
     </td>
+<% } %>
+<% if (show_column('channels', 'state')) { %>
+    <td class="c"><%= fmt_object_state(channel) %></td>
+<% } %>
+<% if (show_column('channels', 'msgs-unconfirmed')) { %>
+    <td class="c"><%= channel.messages_unconfirmed %></td>
+<% } %>
+<% if (show_column('channels', 'prefetch')) { %>
     <td class="c">
       <% if (channel.prefetch_count != 0) { %>
         <%= channel.prefetch_count %><br/>
@@ -104,17 +155,35 @@
         <%= channel.global_prefetch_count %> (global)
       <% } %>
     </td>
+<% } %>
+<% if (show_column('channels', 'msgs-unacked')) { %>
     <td class="c"><%= channel.messages_unacknowledged %></td>
-    <td class="c"><%= channel.messages_unconfirmed %></td>
-    <td class="c"><%= fmt_object_state(channel) %></td>
-<% if (statistics_level == 'fine') { %>
+<% } %>
+<% if (show_column('channels', 'msgs-uncommitted')) { %>
+    <td class="c"><%= channel.messages_uncommitted %></td>
+<% } %>
+<% if (show_column('channels', 'acks-uncommitted')) { %>
+    <td class="c"><%= channel.acks_uncommitted %></td>
+<% } %>
+<% if (rates_mode != 'none') { %>
+<% if (show_column('channels', 'rate-publish')) { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'publish') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-confirm')) { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'confirm') %></td>
-    <td class="r"><%= fmt_deliver_rate(channel.message_stats, col_redeliver) %></td>
-    <td class="r"><%= fmt_rate(channel.message_stats, 'ack') %></td>
-    <% if (col_return_unroutable) { %>
+<% } %>
+<% if (show_column('channels', 'rate-return')) { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'return_unroutable') %></td>
-    <% } %>
+<% } %>
+<% if (show_column('channels', 'rate-deliver')) { %>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'deliver_get') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-redeliver')) { %>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'redeliver') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-ack')) { %>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'ack') %></td>
+<% } %>
 <% } %>
   </tr>
   <% } %>

@@ -1,4 +1,4 @@
-<h1>Connection <b><%= fmt_string(connection.name) %></b></h1>
+<h1>Connection <b><%= fmt_string(connection.name) %></b><%= fmt_maybe_vhost(connection.vhost) %></h1>
 
 <div class="section">
 <h2>Overview</h2>
@@ -7,17 +7,11 @@
 
 <div class="updatable">
 <h3>Details</h3>
-<table class="facts">
+<table class="facts facts-l">
 <% if (nodes_interesting) { %>
 <tr>
   <th>Node</th>
   <td><%= fmt_node(connection.node) %></td>
-</tr>
-<% } %>
-<% if (vhosts_interesting) { %>
-<tr>
- <th>Virtual host</th>
- <td><%= fmt_string(connection.vhost) %></td>
 </tr>
 <% } %>
 <tr>
@@ -27,6 +21,10 @@
 <tr>
  <th>Protocol</th>
  <td><%= connection.protocol %></td>
+</tr>
+<tr>
+  <th>Connected at</th>
+  <td><%= fmt_timestamp(connection.connected_at) %></td>
 </tr>
 
 <% if (connection.ssl) { %>
@@ -51,7 +49,7 @@
  <td><%= fmt_object_state(connection) %></td>
 </tr>
 <tr>
- <th>Timeout</th>
+ <th>Heartbeat</th>
  <td><%= fmt_time(connection.timeout, 's') %></td>
 </tr>
 <tr>

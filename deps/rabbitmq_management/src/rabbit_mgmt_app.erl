@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_app).
 
 -behaviour(application).
--export([start/2, stop/1]).
+-export([start/2, stop/1, reset_dispatcher/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -28,7 +28,7 @@
 start(_Type, _StartArgs) ->
     {ok, Listener} = application:get_env(rabbitmq_management, listener),
     setup_wm_logging(),
-    register_context(Listener),
+    register_context(Listener, []),
     log_startup(Listener),
     rabbit_mgmt_sup_sup:start_link().
 
@@ -36,18 +36,28 @@ stop(_State) ->
     unregister_context(),
     ok.
 
-register_context(Listener) ->
+%% At the point at which this is invoked we have both newly enabled
+%% apps and about-to-disable apps running (so that
+%% rabbit_mgmt_reset_handler can look at all of them to find
+%% extensions). Therefore we have to explicitly exclude
+%% about-to-disable apps from our new dispatcher.
+reset_dispatcher(IgnoreApps) ->
+    unregister_context(),
+    {ok, Listener} = application:get_env(rabbitmq_management, listener),
+    register_context(Listener, IgnoreApps).
+
+register_context(Listener, IgnoreApps) ->
     rabbit_web_dispatch:register_context_handler(
-      ?CONTEXT, Listener, "", make_loop(), "RabbitMQ Management").
+      ?CONTEXT, Listener, "", make_loop(IgnoreApps), "RabbitMQ Management").
 
 unregister_context() ->
     rabbit_web_dispatch:unregister_context(?CONTEXT).
 
-make_loop() ->
-    Dispatch = rabbit_mgmt_dispatcher:build_dispatcher(),
+make_loop(IgnoreApps) ->
+    Dispatch = rabbit_mgmt_dispatcher:build_dispatcher(IgnoreApps),
     WMLoop = rabbit_webmachine:makeloop(Dispatch),
     LocalPaths = [filename:join(module_path(M), ?STATIC_PATH) ||
-                     M <- rabbit_mgmt_dispatcher:modules()],
+                     M <- rabbit_mgmt_dispatcher:modules(IgnoreApps)],
     fun(Req) -> respond(Req, LocalPaths, WMLoop) end.
 
 module_path(Module) ->

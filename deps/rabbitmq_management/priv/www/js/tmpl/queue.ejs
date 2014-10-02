@@ -1,92 +1,28 @@
-<h1>Queue <b><%= fmt_string(queue.name) %></b></h1>
+<h1>Queue <b><%= fmt_string(queue.name) %></b><%= fmt_maybe_vhost(queue.vhost) %></h1>
 
 <div class="section">
   <h2>Overview</h2>
   <div class="hider">
     <%= queue_lengths('lengths-q', queue) %>
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-q', queue.message_stats) %>
 <% } %>
 
     <div class="updatable">
     <h3>Details</h3>
-    <table class="facts">
+    <table class="facts facts-l">
       <tr>
-        <th>Parameters</th>
-        <td><%= fmt_parameters(queue) %></td>
+        <th>Features</th>
+        <td><%= fmt_features(queue) %></td>
       </tr>
       <tr>
         <th>Policy</th>
         <td><%= fmt_string(queue.policy, '') %></td>
       </tr>
+      <% if (queue.owner_pid_details != undefined) { %>
       <tr>
         <th>Exclusive owner</th>
-        <td>
-          <% if (queue.owner_pid_details == undefined) { %>
-            None
-          <% } else { %>
-            <%= link_conn(queue.owner_pid_details.name) %>
-          <% } %>
-        </td>
-      </tr>
-    </table>
-
-    <table class="facts">
-      <tr>
-        <th>State</th>
-        <td><%= fmt_object_state(queue) %></td>
-      </tr>
-      <tr>
-        <th>Consumers</th>
-        <td><%= fmt_string(queue.consumers) %></td>
-      </tr>
-      <tr>
-        <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
-        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
-      </tr>
-      <tr>
-        <th>Memory</th>
-        <td><%= fmt_bytes(queue.memory) %></td>
-      </tr>
-    </table>
-
-    <table class="facts">
-      <tr>
-        <th>
-          Paging <span class="help" id="queue-memory-resident"></span>
-        </th>
-        <td>
-          <% var messages_ram = queue.backing_queue_status.ram_msg_count + queue.backing_queue_status.ram_ack_count; %>
-          <% if (messages_ram == queue.messages) { %>
-            No paging
-          <% } else { %>
-            <%= fmt_num_thousands(messages_ram) %> /
-            <%= fmt_num_thousands(queue.messages) %> msg (in RAM / total)
-          <% } %>
-          <sub>
-            <% if (queue.backing_queue_status.target_ram_count == 'infinity') { %>
-              No limit
-            <% } else { %>
-              RAM target: <%= fmt_num_thousands(queue.backing_queue_status.target_ram_count) %> msg
-            <% } %>
-          </sub>
-        </td>
-      </tr>
-      <tr>
-        <th>
-          Persistent <span class="help" id="queue-persistent"></span>
-        </th>
-        <td>
-          <%= fmt_num_thousands(queue.backing_queue_status.persistent_count) %> msg
-        </td>
-      </tr>
-    </table>
-
-    <table class="facts">
-<% if (vhosts_interesting) { %>
-      <tr>
-        <th>Virtual host</th>
-        <td><%= fmt_string(queue.vhost) %></td>
+        <td><%= link_conn(queue.owner_pid_details.name) %></td>
       </tr>
 <% } %>
 <% if (nodes_interesting) { %>
@@ -94,6 +30,7 @@
         <th>Node</th>
         <td><%= fmt_node(queue.node) %></td>
       </tr>
+  <% if (queue.owner_pid_details == undefined) { %>
       <tr>
         <th>Slaves</th>
         <td>
@@ -138,13 +75,89 @@
           <% } %>
         </td>
       </tr>
+  <% } %>
 <% } %>
+    </table>
+
+    <table class="facts facts-l">
+      <tr>
+        <th>State</th>
+        <td><%= fmt_object_state(queue) %></td>
+      </tr>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumers) %></td>
+      </tr>
+      <tr>
+        <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
+        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
+      </tr>
+    </table>
+
+    <table class="facts">
+      <tr>
+        <td></td>
+        <th class="horizontal">Total</th>
+        <th class="horizontal">Ready</th>
+        <th class="horizontal">Unacked</th>
+        <th class="horizontal">In memory</th>
+        <th class="horizontal">Persistent</th>
+      </tr>
+      <tr>
+        <th>
+          Messages
+          <span class="help" id="queue-messages"></span>
+        </th>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_unacknowledged) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ram) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_persistent) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Message body bytes
+          <span class="help" id="queue-message-body-bytes"></span>
+        </th>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_ready) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_ram) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_persistent) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Process memory
+          <span class="help" id="queue-process-memory"></span>
+        </th>
+        <td class="r"><%= fmt_bytes(queue.memory) %></td>
+      </tr>
     </table>
     </div>
   </div>
 </div>
 
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode == 'detailed') { %>
 <div class="section-hidden">
 <h2>Message rates breakdown</h2>
 <div class="hider updatable">

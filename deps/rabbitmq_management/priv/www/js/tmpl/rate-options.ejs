@@ -2,7 +2,7 @@
    var id = span.attr('for');
    var mode = get_pref('rate-mode-' + id);
    var size = get_pref('chart-size-' + id);
-   var range = get_pref('chart-range-' + id);
+   var range = get_pref('chart-range');
 %>
 
 <form action="#/rate-options" method="put" class="auto-submit">
@@ -18,7 +18,9 @@
       <td>
         <%= fmt_radio('mode', 'Chart',         'chart', mode) %>
         <%= fmt_radio('mode', 'Current value',  'curr', mode) %>
-        <%= fmt_radio('mode', 'Moving average',  'avg', mode) %>
+        <% if (id != 'node-stats') { %>
+             <%= fmt_radio('mode', 'Moving average',  'avg', mode) %>
+        <% } %>
       </td>
     </tr>
     <tr>
@@ -27,6 +29,11 @@
         <%= fmt_radio('size', 'Small',   'small', size) %>
         <%= fmt_radio('size', 'Medium', 'medium', size) %>
         <%= fmt_radio('size', 'Large',   'large', size) %>
+      </td>
+    </tr>
+    <tr>
+      <td colspan="2">
+        <h3>All time series</h3>
       </td>
     </tr>
     <tr>

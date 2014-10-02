@@ -17,6 +17,9 @@ HELP = {
     'queue-max-length':
       'How many (ready) messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/maxlength.html">x-max-length</a>" argument.)',
 
+    'queue-max-length-bytes':
+      'Total body size for ready messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/maxlength.html">x-max-length-bytes</a>" argument.)',
+
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
@@ -26,11 +29,14 @@ HELP = {
     'queue-dead-letter-routing-key':
       'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/dlx.html">x-dead-letter-routing-key</a>" argument.)',
 
-    'queue-memory-resident':
-      '<p>Number of messages in the queue which are held in memory. These messages may also be on disc (if they are persistent).</p><p>There may be a limit imposed in order to manage total memory use. If the number of memory-resident messages in the queue exceeds the limit some messages will be paged out.</p>',
+    'queue-messages':
+      '<p>Message counts.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p>',
 
-    'queue-persistent':
-      'Number of messages in the queue which are persistent. These messages will be on disc but may also be available in memory. Note that if a message is published as persistent but routed to a transient queue it is not considered persistent by that queue, so transient queues will always report 0 persistent messages.',
+    'queue-message-body-bytes':
+      '<p>The sum total of the sizes of the message bodies in this queue. This only counts message bodies; it does not include message properties (including headers) or metadata used by the queue.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p><p>If a message is routed to multiple queues on publication, its body will be stored only once (in memory and on disk) and shared between queues. The value shown here does not take account of this effect.</p>',
+
+    'queue-process-memory':
+      'Total memory used by this queue process. This does not include in-memory message bodies (which may be shared between queues and will appear in the global "binaries" memory) but does include everything else.',
 
     'queue-consumer-utilisation':
       'Fraction of the time that the queue is able to immediately deliver messages to consumers. If this number is less than 100% you may be able to deliver messages faster if: \
@@ -219,51 +225,21 @@ HELP = {
 
     'memory-use' : '<p>Note that the memory details shown here are only updated on request - they could be too expensive to calculate every few seconds on a busy server.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
 
-    'policy-definitions' : '<dl>\
-<dt><code>ha-mode</code></dt>\
-  <dd>\
-    One of <code>all</code>, <code>exactly</code>\
-    or <code>nodes</code>.\
-  </dd>\
-  <dt><code>ha-params</code></dt>\
-  <dd>\
-    Absent if <code>ha-mode</code> is <code>all</code>, a number\
+    'binary-use' : '<p>Binary accounting is not exact; binaries are shared between processes (and thus the same binary might be counted in more than one section), and the VM does not allow us to track binaries that are not associated with processes (so some binary use might not appear at all).</p>',
+
+    'policy-ha-mode' : 'One of <code>all</code> (mirror to all nodes in the cluster), <code>exactly</code> (mirror to a set number of nodes) or <code>nodes</code> (mirror to an explicit list of nodes). If you choose one of the latter two, you must also set <code>ha-params</code>.',
+
+    'policy-ha-params' : 'Absent if <code>ha-mode</code> is <code>all</code>, a number\
     if <code>ha-mode</code> is <code>exactly</code>, or a list\
-    of strings if <code>ha-mode</code> is <code>nodes</code>.\
-  </dd>\
-  <dt><code>ha-sync-mode</code></dt>\
-  <dd>\
-    One of <code>manual</code> or <code>automatic</code>.\
-  </dd>\
-  <dt><code>alternate-exchange</code></dt>\
-  <dd>\
-    The name of an alternate exchange.\
-  </dd>\
-  <dt><code>dead-letter-exchange</code></dt>\
-  <dd>\
-    The name of a dead letter exchange.\
-  </dd>\
-  <dt><code>dead-letter-routing-key</code></dt>\
-  <dd>\
-    Key to use when dead-lettering.\
-  </dd>\
-  <dt><code>message-ttl</code></dt>\
-  <dd>\
-    Per-queue message TTL, in milliseconds.\
-  </dd>\
-  <dt><code>expires</code></dt>\
-  <dd>\
-    Queue TTL, in milliseconds.\
-  </dd>\
-  <dt><code>max-length</code></dt>\
-  <dd>\
-    Maximum queue length, in messages.\
-  </dd>\
-  <dt><code>federation-upstream-set</code></dt>\
-  <dd>\
-    A string; only if the federation plugin is enabled.\
-  </dd>\
-</dl>',
+    of strings if <code>ha-mode</code> is <code>nodes</code>.',
+
+    'policy-ha-sync-mode' : 'One of <code>manual</code> or <code>automatic</code>.',
+
+    'policy-federation-upstream-set' :
+    'A string; only if the federation plugin is enabled. Chooses the name of a set of upstreams to use with federation, or "all" to use all upstreams. Incompatible with <code>federation-upstream</code>.',
+
+    'policy-federation-upstream' :
+    'A string; only if the federation plugin is enabled. Chooses a specific upstream set to use for federation. Incompatible with <code>federation-upstream-set</code>.',
 
     'handle-exe' : 'In order to monitor the number of file descriptors in use on Windows, RabbitMQ needs the <a href="http://technet.microsoft.com/en-us/sysinternals/bb896655" target="_blank">handle.exe command line tool from Microsoft</a>. Download it and place it in the path (e.g. in C:\Windows).',
 
@@ -271,6 +247,9 @@ HELP = {
     'Whether to enable regular expression matching. Both string literals \
     and regular expressions are matched in a case-insensitive manner.<br/></br/> \
     (<a href="https://developer.mozilla.org/en/docs/Web/JavaScript/Guide/Regular_Expressions" target="_blank">Regular expression reference</a>)',
+
+    'plugins' :
+    'Note that only plugins which are both explicitly enabled and running are shown here.',
 
     'foo': 'foo' // No comma.
 };

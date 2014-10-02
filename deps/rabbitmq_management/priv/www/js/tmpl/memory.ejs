@@ -8,8 +8,9 @@
 <% } else { %>
 <div class="memory-bar">
 <%
-  var sections = {'connection_procs' : 'Connections',
-                  'queue_procs'      : 'Queues',
+  var sections = {'queue_procs'      : 'Queues',
+                  'queue_slave_procs': 'Queues (slaves)',
+                  'connection_procs' : 'Connections',
                   'plugins'          : 'Plugins',
                   'other_proc'       : 'Other process memory',
                   'mnesia'           : 'Mnesia',
@@ -33,12 +34,15 @@
 <div class="box">
 <table class="facts">
   <tr>
-    <th>Connections</th>
-    <td><%= fmt_memory(memory, 'connection_procs') %></td>
+    <th>Queues</th>
+    <td>
+      <div class="box"><%= fmt_memory(memory, 'queue_procs') %></div>
+      <div class="box"><%= fmt_memory(memory, 'queue_slave_procs') %> (slaves)</div>
+    </td>
   </tr>
   <tr>
-    <th>Queues</th>
-    <td><%= fmt_memory(memory, 'queue_procs') %></td>
+    <th>Connections</th>
+    <td><%= fmt_memory(memory, 'connection_procs') %></td>
   </tr>
   <tr>
     <th>Plugins</th>

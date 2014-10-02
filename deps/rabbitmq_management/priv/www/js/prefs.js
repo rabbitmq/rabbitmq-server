@@ -1,19 +1,45 @@
-// TODO It would be nice to use DOM storage. When that's available.
+// TODO strip out all this cookie nonsense when we drop support for MSIE 7.
+
+function local_storage_available() {
+    try {
+        return 'localStorage' in window && window['localStorage'] !== null;
+    } catch (e) {
+        return false;
+    }
+}
 
 function store_pref(k, v) {
-    var d = parse_cookie();
-    d[short_key(k)] = v;
-    store_cookie(d);
+    if (local_storage_available()) {
+        window.localStorage['rabbitmq.' + k] = v;
+    }
+    else {
+        var d = parse_cookie();
+        d[short_key(k)] = v;
+        store_cookie(d);
+    }
 }
 
 function clear_pref(k) {
-    var d = parse_cookie();
-    delete d[short_key(k)];
-    store_cookie(d);
+    if (local_storage_available()) {
+        window.localStorage.removeItem('rabbitmq.' + k);
+    }
+    else {
+        var d = parse_cookie();
+        delete d[short_key(k)];
+        store_cookie(d);
+    }
+
 }
 
 function get_pref(k) {
-    var r = parse_cookie()[short_key(k)];
+    var r;
+    if (local_storage_available()) {
+        r = window.localStorage['rabbitmq.' + k];
+    }
+    else {
+        r = parse_cookie()[short_key(k)];
+
+    }
     return r == undefined ? default_pref(k) : r;
 }
 
@@ -21,14 +47,36 @@ function section_pref(template, name) {
     return 'visible|' + template + '|' + name;
 }
 
+function show_column(mode, column) {
+    return get_pref('column-' + mode + '-' + column) == 'true';
+}
+
 // ---------------------------------------------------------------------------
 
 function default_pref(k) {
-    if (k.substring(0, 12) == 'chart-range-') return '60|5';
     if (k.substring(0, 11) == 'chart-size-')  return 'small';
     if (k.substring(0, 10) == 'rate-mode-')   return 'chart';
+    if (k.substring(0, 11) == 'chart-line-')  return 'true';
     if (k == 'truncate')                      return '100';
+    if (k == 'chart-range')                   return '60|5';
+    if (k.substring(0,  7) == 'column-')
+        return default_column_pref(k.substring(7));
     return null;
+}
+
+function default_column_pref(key0) {
+    var ix = key0.indexOf('-');
+    var mode = key0.substring(0, ix);
+    var key = key0.substring(ix + 1);
+    for (var group in COLUMNS[mode]) {
+        var options = COLUMNS[mode][group];
+        for (var i = 0; i < options.length; i++) {
+            if (options[i][0] == key) {
+                return '' + options[i][2];
+            }
+        }
+    }
+    return 'false';
 }
 
 // ---------------------------------------------------------------------------

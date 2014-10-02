@@ -32,21 +32,24 @@ import socket
 
 VERSION = '%%VSN%%'
 
-LISTABLE = {'connections': {'vhost': False},
-            'channels':    {'vhost': False},
-            'exchanges':   {'vhost': True},
-            'queues':      {'vhost': True},
-            'bindings':    {'vhost': True},
+LISTABLE = {'connections': {'vhost': False, 'cols': ['name','user','channels']},
+            'channels':    {'vhost': False, 'cols': ['name', 'user']},
+            'consumers':   {'vhost': True},
+            'exchanges':   {'vhost': True,  'cols': ['name', 'type']},
+            'queues':      {'vhost': True,  'cols': ['name', 'messages']},
+            'bindings':    {'vhost': True,  'cols': ['source', 'destination',
+                                                     'routing_key']},
             'users':       {'vhost': False},
-            'vhosts':      {'vhost': False},
+            'vhosts':      {'vhost': False, 'cols': ['name', 'messages']},
             'permissions': {'vhost': False},
-            'nodes':       {'vhost': False},
-            'parameters':  {'vhost': False,
-                            'json':  ['value']},
-            'policies':    {'vhost': False,
-                            'json':  ['definition']}}
+            'nodes':       {'vhost': False, 'cols': ['name','type','mem_used']},
+            'parameters':  {'vhost': False, 'json': ['value']},
+            'policies':    {'vhost': False, 'json': ['definition']}}
 
-SHOWABLE = {'overview': {'vhost': False}}
+SHOWABLE = {'overview': {'vhost': False, 'cols': ['rabbitmq_version',
+                                                  'cluster_name',
+                                                  'queue_totals.messages',
+                                                  'object_totals.queues']}}
 
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
@@ -118,8 +121,10 @@ PURGABLE = {
 EXTRA_VERBS = {
     'publish': {'mandatory': ['routing_key'],
                 'optional':  {'payload': None,
+                              'properties': {},
                               'exchange': 'amq.default',
                               'payload_encoding': 'string'},
+                'json':      ['properties'],
                 'uri':       '/exchanges/{vhost}/{exchange}/publish'},
     'get':     {'mandatory': ['queue'],
                 'optional':  {'count': '1', 'requeue': 'true',
@@ -241,7 +246,7 @@ default_options = { "hostname"        : "localhost",
                     "ssl"             : False,
                     "verbose"         : True,
                     "format"          : "table",
-                    "depth"           : 1,
+                    "depth"           : 0,
                     "bash_completion" : False }
 
 
@@ -477,7 +482,6 @@ class Management:
 
     def invoke_publish(self):
         (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
-        upload['properties'] = {} # TODO do we care here?
         if not 'payload' in upload:
             data = sys.stdin.read()
             upload['payload'] = base64.b64encode(data)
@@ -521,16 +525,14 @@ class Management:
                      % (self.options.hostname, path))
 
     def invoke_list(self):
-        cols = self.args[1:]
-        (uri, obj_info) = self.list_show_uri(LISTABLE, 'list', cols)
+        (uri, obj_info, cols) = self.list_show_uri(LISTABLE, 'list')
         format_list(self.get(uri), cols, obj_info, self.options)
 
     def invoke_show(self):
-        cols = self.args[1:]
-        (uri, obj_info) = self.list_show_uri(SHOWABLE, 'show', cols)
+        (uri, obj_info, cols) = self.list_show_uri(SHOWABLE, 'show')
         format_list('[{0}]'.format(self.get(uri)), cols, obj_info, self.options)
 
-    def list_show_uri(self, obj_types, verb, cols):
+    def list_show_uri(self, obj_types, verb):
         obj_type = self.args[0]
         assert_usage(obj_type in obj_types,
                      "Don't know how to {0} {1}".format(verb, obj_type))
@@ -539,6 +541,9 @@ class Management:
         query = []
         if obj_info['vhost'] and self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
+        cols = self.args[1:]
+        if cols == [] and 'cols' in obj_info and self.options.depth == 0:
+            cols = obj_info['cols']
         if cols != []:
             query.append("columns=" + ",".join(cols))
         sort = self.options.sort
@@ -549,7 +554,7 @@ class Management:
         query = "&".join(query)
         if query != "":
             uri += "?" + query
-        return (uri, obj_info)
+        return (uri, obj_info, cols)
 
     def invoke_declare(self):
         (obj_type, uri, upload) = self.declare_delete_parse(DECLARABLE)
@@ -589,7 +594,7 @@ class Management:
         uri_template = obj['uri']
         upload = {}
         for k in optional.keys():
-            if optional[k]:
+            if optional[k] is not None:
                 upload[k] = optional[k]
         for arg in args:
             assert_usage("=" in arg,
@@ -649,6 +654,8 @@ class Lister:
         depth = sys.maxint
         if len(self.columns) == 0:
             depth = int(self.options.depth)
+            if depth == 0:
+                depth = 1
         (columns, table) = self.list_to_table(json.loads(json_list), depth)
         if len(table) > 0:
             self.display_list(columns, table)

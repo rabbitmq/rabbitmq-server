@@ -40,11 +40,22 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .right { float: right; }
 .clear { clear: both; }
 
-.help, .rate-options { color: #888; cursor: pointer; }
-.help:hover, .rate-options:hover { color: #444; }
+.help, .popup-options-link { color: #888; cursor: pointer; }
+.help:hover, .popup-options-link:hover { color: #444; }
 
-.tag-link { color: #444; cursor: pointer; }
-.tag-link:hover { color: #888; }
+.rate-visibility-option { cursor: pointer; padding: 4px; background: #fafafa; border: 1px solid f0f0f0; border-radius: 3px; display:block; }
+.rate-visibility-option:hover { background: #ddf;
+                                background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #ddf),color-stop(1, #bbf));
+                                border: 1px solid #88d;
+                                border-radius: 3px; }
+
+.rate-visibility-option-hidden { text-decoration: line-through; color: #888; }
+
+table.legend th { padding: 4px 10px 4px 0; width: 80px; }
+table.legend td { padding: 4px 0 4px 10px; width: 130px; }
+
+.tag-link, .argument-link { color: #444; cursor: pointer; }
+.tag-link:hover, .argument-link:hover { color: #888; }
 
 .filter { overflow: auto; width: 100%; margin-bottom: 10px; }
 .filter table { float: left; }
@@ -65,6 +76,7 @@ table.list th, table.list td { vertical-align: top; min-width: 5em; width: auto;
 table.list { border-width: 1px; border-bottom: 1px solid #ccc; margin-bottom: 1em; }
 table.list th, table.list td { border-left: 1px solid #ccc; border-right: 1px solid #ccc; }
 table.list th { text-align: center; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
+table.list th.plus-minus { border: none; min-width: 2em; }
 table.list td a { display: block; width: 100%; }
 table.list th a.sort { display: block; width: 100%; cursor: pointer; }
 table.list th a.sort .arrow { color: #888; }
@@ -81,8 +93,9 @@ div.colour-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 div.memory-info { float: left; padding: 10px 10px 0 0; }
 button.memory-button { margin-top: 10px; }
 
-div.memory_connection_procs { background: #955300; }
-div.memory_queue_procs      { background: #da7900; }
+div.memory_queue_procs      { background: #950053; }
+div.memory_queue_slave_procs{ background: #da0079; }
+div.memory_connection_procs { background: #da7900; }
 div.memory_plugins          { background: #ffc884; }
 div.memory_other_proc       { background: #fff4e7; }
 div.memory_mnesia           { background: #005395; }
@@ -93,21 +106,25 @@ div.memory_binary           { background: #666; }
 div.memory_code             { background: #999; }
 div.memory_atom             { background: #bbb; }
 div.memory_other_system     { background: #ddd; }
+div.memory_other            { background: #666; }
 
 sub { display: block; font-size: 0.8em; color: #888; }
 small { font-size: 0.8em; color: #888; }
 #main sub a { color: #888; }
 #main sub a:hover { color: #444; }
+table.argument-links { color: #888; }
+table.argument-links td { font-size: 0.64em; vertical-align: top; }
 .unknown { color: #888; }
 
-table.facts { float: left; margin-right: 50px; }
-table.facts th { color: black; text-align: right; border-right: 1px solid #ccc; }
+table.facts { float: left; }
+table.facts th, table.legend th { color: black; text-align: right; border-right: 1px solid #ccc; }
 table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px; }
+table.facts th.horizontal { border-right: none; padding: 0 10px 5px 10px; }
 
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
-table.facts-fixed-width th, table.facts-fixed-width td { width: 130px; }
+table.facts-l { margin-right: 50px; }
 
 table.mini th { border: none; padding: 0 2px 2px 2px; text-align: right; }
 table.mini td { border: none; padding: 0 2px 2px 2px; }
@@ -144,9 +161,9 @@ p.warning, div.form-popup-warn { background: #ff8; }
 div.form-popup-info { background: #8f8; }
 div.form-popup-help { text-align: left !important; background: #f8f8f8; border: 1px solid #ccc; }
 div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; z-index: 1; display: none; position: fixed; min-width: 500px; }
-div.form-popup-warn span, div.form-popup-info span, div.form-popup-help span, div.form-popup-rate-options span { color: black; font-weight: bold; cursor: pointer; }
+div.form-popup-warn span, div.form-popup-info span, div.form-popup-help span, div.form-popup-options span { color: black; font-weight: bold; cursor: pointer; }
 
-div.form-popup-rate-options {
+div.form-popup-options {
     z-index: 1; position: absolute; right: 35px; padding: 15px; background: white; border-left: 1px solid #ccc; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; border-radius: 10px 0 0 10px; -moz-border-radius: 10px 0 0 10px;
 }
 
@@ -205,7 +222,7 @@ table.form table.subform th, table.form table.subform td { padding: 0; }
 
 .multifield-sub { border: 1px solid #ddd; background: #f8f8f8; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; float: left; margin-bottom: 10px; }
 
-label.radio { padding: 5px; border: 1px solid #eee; cursor: pointer; border-radius: 5px; -moz-border-radius: 5px; }
+label.radio, label.checkbox { padding: 5px; border: 1px solid #eee; cursor: pointer; border-radius: 5px; -moz-border-radius: 5px; }
 
 table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }
@@ -231,6 +248,9 @@ input[type=submit][disabled]:hover, button[disabled]:hover { background: #aac; }
 h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; font-weight: normal; }
 
 acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -moz-border-radius: 2px; border: none; cursor: default; }
+
+acronym.policy { background: none; border: 2px solid #add; padding: 0 2px; }
+table.list td acronym a { display: inline; width: auto; }
 
 acronym.warning { background: #daa; }
 

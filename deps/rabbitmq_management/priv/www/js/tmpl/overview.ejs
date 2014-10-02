@@ -7,7 +7,7 @@
 <div class="hider">
 <% if (overview.statistics_db_node != 'not_running') { %>
   <%= queue_lengths('lengths-over', overview.queue_totals) %>
-<% if (statistics_level == 'fine') { %>
+<% if (rates_mode != 'none') { %>
   <%= message_rates('msg-rates-over', overview.message_stats) %>
 <% } %>
 <% } else { %>
@@ -15,6 +15,7 @@
 <% } %>
 
 <div class="updatable">
+<% if (overview.object_totals) { %>
   <h3>Global counts <span class="help" id="resource-counts"></span></h3>
 
   <div class="box">
@@ -44,6 +45,7 @@
     </div>
 <% } %>
   </div>
+<% } %>
  </div>
 
 </div>
@@ -51,102 +53,143 @@
 
 <% if (user_monitor) { %>
 <div class="section">
+<% if (nodes.length == 1) { %>
+<h2>Node</h2>
+<% } else { %>
 <h2>Nodes</h2>
+<% } %>
+
 <div class="hider updatable">
+<% if (nodes.length == 1) { %>
+    <p>Node: <%= nodes[0].name %> <a href="#/nodes/<%= esc(nodes[0].name) %>">(More about this node)</a></p>
+<% } %>
+
 <table class="list">
   <tr>
+<% if (nodes.length > 1) { %>
     <th>Name</th>
-    <th>
-      File descriptors <span class="help" id="file-descriptors"></span>
-    </th>
-    <th>
-      Socket descriptors <span class="help" id="socket-descriptors"></span>
-    </th>
-    <th>
-      Erlang processes
-    </th>
-    <th>
-      Memory
-    </th>
-    <th>
-      Disk space
-    </th>
+<% } %>
+
+  <% if (show_column('overview', 'file_descriptors')) { %>
+    <th>File descriptors <span class="help" id="file-descriptors"></span></th>
+  <% } %>
+  <% if (show_column('overview', 'socket_descriptors')) { %>
+    <th>Socket descriptors <span class="help" id="socket-descriptors"></span></th>
+  <% } %>
+  <% if (show_column('overview', 'erlang_processes')) { %>
+    <th>Erlang processes</th>
+  <% } %>
+  <% if (show_column('overview', 'memory')) { %>
+    <th>Memory</th>
+  <% } %>
+  <% if (show_column('overview', 'disk_space')) { %>
+    <th>Disk space</th>
+  <% } %>
+  <% if (show_column('overview', 'uptime')) { %>
     <th>Uptime</th>
-    <th>Type</th>
+  <% } %>
+  <% if (show_column('overview', 'rates_mode')) { %>
+    <th>Rates mode</th>
+  <% } %>
+  <% if (show_column('overview', 'info')) { %>
+    <th>Info</th>
+  <% } %>
+    <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="overview">+/-</span></th>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
      var node = nodes[i];
+     var colspan = group_count('overview', 'Statistics', []) +
+                   group_count('overview', 'General', []);
 %>
    <tr<%= alt_rows(i)%>>
+<% if (nodes.length > 1) { %>
      <td>
        <%= link_node(node.name) %>
        <% if (rabbit_versions_interesting) { %>
          <sub>RabbitMQ <%= fmt_rabbit_version(node.applications) %></sub>
        <% } %>
      </td>
+<% } %>
 <% if (!node.running) { %>
-     <td colspan="6">
+     <td colspan="<%= colspan %>">
        <div class="status-red">
          Node not running
        </div>
      </td>
 <% } else if (node.os_pid == undefined) { %>
-     <td colspan="6">
+     <td colspan="<%= colspan %>">
        <div class="status-yellow">
          <acronym title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
            Node statistics not available</acronym>
        </div>
      </td>
 <% } else { %>
+  <% if (show_column('overview', 'file_descriptors')) { %>
      <td>
-<%= fmt_resource_bar_count(fmt_fd_used(node.fd_used, node.fd_total), node.fd_total, FD_THRESHOLDS) %>
+    <% if (node.fd_used != 'install_handle_from_sysinternals') { %>
+        <%= node_stat_count_bar('fd_used', 'fd_total', node, FD_THRESHOLDS) %>
+    <% } else { %>
+        <p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub><%= node.fd_total %> available</sub></p>
+
+    <% } %>
      </td>
+  <% } %>
+  <% if (show_column('overview', 'socket_descriptors')) { %>
      <td>
-<%= fmt_resource_bar_count(node.sockets_used, node.sockets_total, FD_THRESHOLDS) %>
+        <%= node_stat_count_bar('sockets_used', 'sockets_total', node, FD_THRESHOLDS) %>
      </td>
+  <% } %>
+  <% if (show_column('overview', 'erlang_processes')) { %>
      <td>
-<%= fmt_resource_bar_count(node.proc_used, node.proc_total, PROCESS_THRESHOLDS) %>
+
+        <%= node_stat_count_bar('proc_used', 'proc_total', node, PROCESS_THRESHOLDS) %>
      </td>
+  <% } %>
+  <% if (show_column('overview', 'memory')) { %>
      <td>
-<% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <%= fmt_resource_bar(fmt_bytes(node.mem_used),
-                        fmt_bytes(node.mem_limit) + ' high watermark',
-                        node.mem_used / node.mem_limit,
-                        node.mem_alarm ? 'red' : 'green',
-                        node.mem_alarm ? 'memory-alarm' : null) %>
-<% } else { %>
+
+    <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
+        <%= node_stat_bar('mem_used', 'mem_limit', 'high watermark', node, fmt_bytes_axis,
+                          node.mem_alarm ? 'red' : 'green',
+                          node.mem_alarm ? 'memory-alarm' : null) %>
+    <% } else { %>
        <%= fmt_bytes(node.mem_used) %>
-<% } %>
+    <% } %>
      </td>
+  <% } %>
+  <% if (show_column('overview', 'disk_space')) { %>
      <td>
-<% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
-   <%= fmt_resource_bar(fmt_bytes(node.disk_free),
-                        fmt_bytes(node.disk_free_limit) + ' low watermark',
-                        node.disk_free_limit / node.disk_free,
-                        node.disk_free_alarm ? 'red' : 'green',
-                        node.disk_free_alarm ? 'disk-free-alarm' : null) %>
-<% } else { %>
+
+    <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
+        <%= node_stat_bar('disk_free', 'disk_free_limit', 'low watermark', node, fmt_bytes_axis,
+                          node.disk_free_alarm ? 'red' : 'green',
+                          node.disk_free_alarm ? 'disk_free-alarm' : null, true) %>
+    <% } else { %>
          (not available)
-<% } %>
+    <% } %>
      </td>
-     <td class="r">
-       <%= fmt_uptime(node.uptime) %>
-     </td>
-<% } %>
+  <% } %>
+  <% if (show_column('overview', 'uptime')) { %>
+     <td class="r"><%= fmt_uptime(node.uptime) %></td>
+  <% } %>
+  <% if (show_column('overview', 'rates_mode')) { %>
+     <td class="c"><%= fmt_string(node.rates_mode) %></td>
+  <% } %>
+  <% if (show_column('overview', 'info')) { %>
      <td class="c">
        <% if (node.type == 'disc') { %>
          <acronym title="Broker definitions are held on disc.">Disc</acronym>
        <% } else { %>
          <acronym title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
        <% } %>
+       <%= fmt_plugins_small(node) %>
        <% if (overview.statistics_db_node == node.name) { %>
          <acronym title="This node contains the management statistics database">Stats</acronym>
        <% } %>
-       <% if (overview.node == node.name) { %>
-         <acronym title="You are accessing the management UI from this node.">*</acronym>
-       <% } %>
      </td>
+  <% } %>
+<% } %>
    </tr>
 <% } %>
 </table>
@@ -154,10 +197,16 @@
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
 <% } %>
+
+<% if (nodes.length == 1 && nodes[0].os_pid != undefined) { %>
+    <h3>Paths</h3>
+    <%= format('paths', {node: nodes[0]}) %>
+<% } %>
+
 </div>
 </div>
 
-<div class="section">
+<div class="section-hidden">
 <h2>Ports and contexts</h2>
 <div class="hider updatable">
 <h3>Listening ports</h3>
@@ -256,21 +305,18 @@
 </div>
 </div>
 
-<% if (overview.statistics_level != 'fine') { %>
+<% if (overview.rates_mode == 'none') { %>
 <div class="section-hidden">
 <h2>Message Rates Disabled</h2>
 <div class="hider">
 <p>
-  The statistics level in this RabbitMQ server is currently set to
-  <code><%= overview.statistics_level %></code>. Message rates are therefore
-  disabled.
+  Message rates are currently disabled.
 </p>
 <p>
-  To re-enable message rates, edit your configuration file and either
-  set <code>collect_statistics</code> to <code>fine</code> in
-  the <code>rabbit</code> application, or
-  set <code>force_fine_statistics</code> to <code>true</code> in
-  the <code>rabbitmq_management_agent</code> application
+  To re-enable message rates, edit your configuration file and
+  set <code>rates_mode</code> to <code>basic</code>
+  or <code>detailed</code> in the <code>rabbitmq_management</code>
+  application
 </p>
 </div>
 </div>

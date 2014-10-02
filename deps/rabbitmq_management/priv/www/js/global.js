@@ -18,6 +18,7 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-message-ttl':             {'short': 'TTL', 'type': 'int'},
                   'x-expires':                 {'short': 'Exp', 'type': 'int'},
                   'x-max-length':              {'short': 'Lim', 'type': 'int'},
+                  'x-max-length-bytes':        {'short': 'Lim B', 'type': 'int'},
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
                   'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'}};
 
@@ -28,8 +29,8 @@ var IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
 
 // Both the above
 var ALL_ARGS = {};
-for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
 for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
+for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
 
 var NAVIGATION = {'Overview':    ['#/',            "management"],
                   'Connections': ['#/connections', "management"],
@@ -49,6 +50,74 @@ var CHART_PERIODS = {'60|5':       'Last minute',
                      '28800|600':  'Last eight hours',
                      '86400|1800': 'Last day'};
 
+var COLUMNS =
+    {'queues' :
+     {'Overview': [['features',             'Features',             true],
+                   ['consumers',            'Consumers',            false],
+                   ['consumer_utilisation', 'Consumer utilisation', false],
+                   ['state',                'State',                true]],
+      'Messages': [['msgs-ready',      'Ready',          true],
+                   ['msgs-unacked',    'Unacknowledged', true],
+                   ['msgs-ram',        'In memory',      false],
+                   ['msgs-persistent', 'Persistent',     false],
+                   ['msgs-total',      'Total',          true]],
+      'Message bytes': [['msg-bytes-ready',      'Ready',          false],
+                        ['msg-bytes-unacked',    'Unacknowledged', false],
+                        ['msg-bytes-ram',        'In memory',      false],
+                        ['msg-bytes-persistent', 'Persistent',     false],
+                        ['msg-bytes-total',      'Total',          false]],
+      'Message rates': [['rate-incoming',  'incoming',      true],
+                        ['rate-deliver',   'deliver / get', true],
+                        ['rate-redeliver', 'redelivered',   false],
+                        ['rate-ack',       'ack',           true]]},
+     'channels' :
+     {'Overview': [['user',  'User name', true],
+                   ['mode',  'Mode',      true],
+                   ['state', 'State',     true]],
+      'Details': [['msgs-unconfirmed', 'Unconfirmed', true],
+                  ['prefetch',         'Prefetch',    true],
+                  ['msgs-unacked',     'Unacked',     true]],
+      'Transactions': [['msgs-uncommitted', 'Msgs uncommitted', false],
+                       ['acks-uncommitted', 'Acks uncommitted', false]],
+      'Message rates': [['rate-publish',   'publish',            true],
+                        ['rate-confirm',   'confirm',            true],
+                        ['rate-return',    'return (mandatory)', false],
+                        ['rate-deliver',   'deliver / get',      true],
+                        ['rate-redeliver', 'redelivered',        false],
+                        ['rate-ack',       'ack',                true]]},
+     'connections':
+     {'Overview': [['user',   'User name', true],
+                   ['state',  'State',     true]],
+      'Details': [['ssl',      'SSL / TLS', true],
+                  ['protocol',       'Protocol',       true],
+                  ['channels',       'Channels',       true],
+                  ['channel_max',    'Channel max',    false],
+                  ['frame_max',      'Frame max',      false],
+                  ['auth_mechanism', 'Auth mechanism', false],
+                  ['client',         'Client',         false]],
+      'Network': [['from_client',  'From client',  true],
+                  ['to_client',    'To client',    true],
+                  ['heartbeat',    'Heartbeat',    false],
+                  ['connected_at', 'Connected at', false]]},
+
+     'vhosts':
+     {'Messages': [['msgs-ready',      'Ready',          true],
+                   ['msgs-unacked',    'Unacknowledged', true],
+                   ['msgs-total',      'Total',          true]],
+      'Network': [['from_client',  'From client',  true],
+                  ['to_client',    'To client',    true]],
+      'Message rates': [['rate-publish', 'publish',       true],
+                        ['rate-deliver', 'deliver / get', true]]},
+     'overview':
+     {'Statistics': [['file_descriptors',   'File descriptors',   true],
+                     ['socket_descriptors', 'Socket descriptors', true],
+                     ['erlang_processes',   'Erlang processes',   true],
+                     ['memory',             'Memory',             true],
+                     ['disk_space',         'Disk space',         true]],
+      'General': [['uptime',     'Uptime',     false],
+                  ['rates_mode', 'Rates mode', false],
+                  ['info',       'Info',       true]]}};
+
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
 // Mostly constant, typically get set once at startup (or rarely anyway) //
@@ -56,7 +125,7 @@ var CHART_PERIODS = {'60|5':       'Last minute',
 ///////////////////////////////////////////////////////////////////////////
 
 // All these are to do with hiding UI elements if
-var statistics_level;            // ...there are no fine stats
+var rates_mode;                  // ...there are no fine stats
 var user_administrator;          // ...user is not an admin
 var user_monitor;                // ...user cannot monitor
 var nodes_interesting;           // ...we are not in a cluster
@@ -82,7 +151,7 @@ var user;
 // Set up the above vars
 function setup_global_vars() {
     var overview = JSON.parse(sync_get('/overview'));
-    statistics_level = overview.statistics_level;
+    rates_mode = overview.rates_mode;
     user_tags = expand_user_tags(user.tags.split(","));
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     user_monitor = jQuery.inArray("monitoring", user_tags) != -1;

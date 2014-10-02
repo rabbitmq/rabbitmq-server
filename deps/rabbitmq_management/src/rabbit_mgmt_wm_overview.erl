@@ -32,17 +32,17 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
+    {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
     Overview0 = [{management_version,  version(rabbitmq_management)},
-                 {statistics_level,    StatsLevel},
+                 {rates_mode,          RatesMode},
                  {exchange_types,      ExchangeTypes},
                  {rabbitmq_version,    version(rabbit)},
                  {cluster_name,        rabbit_nodes:cluster_name()},
-                 {erlang_version,      erl_version(otp_release)},
-                 {erlang_full_version, erl_version(system_version)}],
+                 {erlang_version,      erlang_version()},
+                 {erlang_full_version, erlang_full_version()}],
     Range = rabbit_mgmt_util:range(ReqData),
     Overview =
         case rabbit_mgmt_util:is_monitor(Tags) of
@@ -53,7 +53,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          listeners()},
-                     {contexts,           rabbit_web_dispatch_contexts()}];
+                     {contexts,           web_contexts(ReqData)}];
             _ ->
                 Overview0 ++
                     [{K, {struct, V}} ||
@@ -84,14 +84,16 @@ listeners() ->
 
 %%--------------------------------------------------------------------
 
-rabbit_web_dispatch_contexts() ->
+web_contexts(ReqData) ->
     rabbit_mgmt_util:sort_list(
       lists:append(
-        [rabbit_web_dispatch_contexts(N) || N <- rabbit_mgmt_wm_nodes:all_nodes()]),
+        [fmt_contexts(N) || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData)]),
       ["description", "port", "node"]).
 
-rabbit_web_dispatch_contexts(N) ->
+fmt_contexts(N) ->
     [[{node, pget(name, N)} | C] || C <- pget(contexts, N, [])].
 
-erl_version(K) ->
-    list_to_binary(string:strip(erlang:system_info(K), both, $\n)).
+erlang_version() -> list_to_binary(rabbit_misc:otp_release()).
+
+erlang_full_version() ->
+    list_to_binary(string:strip(erlang:system_info(system_version), both, $\n)).
