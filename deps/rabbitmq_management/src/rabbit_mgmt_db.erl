@@ -1059,7 +1059,7 @@ gc_batch(Rows, Policies, State = #state{aggregated_stats = ETS,
           end,
     Key1 = case Key of
                '$end_of_table' -> undefined;
-               _               -> Now = floor(erlang:now(), State),
+               _               -> Now = floor(os:timestamp(), State),
                                   Stats = ets:lookup_element(ETS, Key, 2),
                                   gc(Key, Stats, Policies, Now, ETS),
                                   Key

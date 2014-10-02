@@ -563,7 +563,7 @@ range(Prefix, Round, ReqData) ->
         is_integer(Age0) andalso is_integer(Incr0) ->
             Age = Age0 * 1000,
             Incr = Incr0 * 1000,
-            Now = rabbit_mgmt_format:timestamp_ms(erlang:now()),
+            Now = rabbit_mgmt_format:timestamp_ms(os:timestamp()),
             Last = Round(Now, Incr),
             #range{first = (Last - Age),
                    last  = Last,
