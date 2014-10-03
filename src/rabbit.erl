@@ -102,8 +102,7 @@
                    [{description, "guid generator"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_guid]}},
-                    {requires,    rabbit_alarm}, %% transitive to node monitor
-                                                 %% TODO ugly
+                    {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({delegate_sup,
@@ -116,7 +115,7 @@
                    [{description, "node monitor"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_node_monitor]}},
-                    {requires,    guid_generator},
+                    {requires,    [rabbit_alarm, guid_generator]},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({core_initialized,
@@ -547,11 +546,15 @@ vertices({AppName, _Module, Steps}) ->
     [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
 
 edges({_AppName, _Module, Steps}) ->
+    EnsureList = fun (L) when is_list(L) -> L;
+                     (T)                 -> [T]
+                 end,
     [case Key of
          requires -> {StepName, OtherStep};
          enables  -> {OtherStep, StepName}
      end || {StepName, Atts} <- Steps,
-            {Key, OtherStep} <- Atts,
+            {Key, OtherStepOrSteps} <- Atts,
+            OtherStep <- EnsureList(OtherStepOrSteps),
             Key =:= requires orelse Key =:= enables].
 
 sort_boot_steps(UnsortedSteps) ->
