@@ -106,10 +106,7 @@ node_down(_Node, not_healing) ->
     not_healing;
 
 node_down(Node, {winner_waiting, _, Notify}) ->
-    rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
-    %% Make sure any nodes waiting for us start - it won't necessarily
-    %% heal the partition but at least they won't get stuck.
-    winner_finish(Notify);
+    abort([Node], Notify);
 
 node_down(Node, _State) ->
     rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
@@ -190,6 +187,12 @@ handle_msg(_, restarting, _Partitions) ->
 
 send(Node, Msg) -> {?SERVER, Node} ! {autoheal_msg, Msg}.
 
+abort(Down, Notify) ->
+    rabbit_log:info("Autoheal: aborting - ~p down~n", [Down]),
+    %% Make sure any nodes waiting for us start - it won't necessarily
+    %% heal the partition but at least they won't get stuck.
+    winner_finish(Notify).
+
 winner_finish(Notify) ->
     [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
     not_healing.
@@ -231,16 +234,23 @@ all_partitions([{Node, CantSee} | Rest], Partitions) ->
 
 %% We could have received and ignored DOWN messages from some losers
 %% before becoming the winner - check for already down nodes.
-filter_already_down_losers(WaitFor, Notify) ->
-    WaitFor2 = rabbit_node_monitor:alive_rabbit_nodes(WaitFor),
-    case WaitFor of
-        WaitFor2 -> ok;
-        _        -> rabbit_log:info("Autoheal: ~p already down~n",
-                                    [WaitFor -- WaitFor2])
-    end,
-    case WaitFor2 of
-        [] -> rabbit_log:info(
-                "Autoheal: final node has stopped, starting...~n",[]),
-              winner_finish(Notify);
-        _  -> {winner_waiting, WaitFor2, Notify}
+filter_already_down_losers(WantStopped, Notify) ->
+    Down = WantStopped -- rabbit_node_monitor:alive_nodes(WantStopped),
+    case Down of
+        [] ->
+            Running = rabbit_node_monitor:alive_rabbit_nodes(WantStopped),
+            AlreadyStopped = WantStopped -- Running,
+            case AlreadyStopped of
+                [] -> ok;
+                _  -> rabbit_log:info(
+                        "Autoheal: ~p already down~n", [AlreadyStopped])
+            end,
+            case Running of
+                [] -> rabbit_log:info(
+                        "Autoheal: final node has stopped, starting...~n",[]),
+                      winner_finish(Notify);
+                _  -> {winner_waiting, Running, Notify}
+            end;
+        _ ->
+            abort(Down, Notify)
     end.
