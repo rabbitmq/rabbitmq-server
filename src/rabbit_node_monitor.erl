@@ -330,8 +330,8 @@ handle_cast({node_up, Node, NodeType},
                                        end,
                                        add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
-                 {noreply, State#state{
-                             monitors = pmon:monitor({rabbit, Node}, Monitors)}}
+                 Monitors1 = pmon:monitor({rabbit, Node}, Monitors),
+                 {noreply, maybe_autoheal(State#state{monitors = Monitors1})}
     end;
 
 handle_cast({joined_cluster, Node, NodeType}, State) ->
@@ -393,8 +393,7 @@ handle_info({nodedown, Node, Info}, State = #state{node_guids = GUIDs}) ->
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
             State = #state{partitions = Partitions,
-                           monitors   = Monitors,
-                           autoheal   = AState}) ->
+                           monitors   = Monitors}) ->
     %% We will not get a node_up from this node - yet we should treat it as
     %% up (mostly).
     State1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
@@ -405,8 +404,7 @@ handle_info({mnesia_system_event,
     ok = handle_live_rabbit(Node),
     Partitions1 = ordsets:to_list(
                     ordsets:add_element(Node, ordsets:from_list(Partitions))),
-    {noreply, State1#state{partitions = Partitions1,
-                           autoheal   = rabbit_autoheal:maybe_start(AState)}};
+    {noreply, maybe_autoheal(State1#state{partitions = Partitions1})};
 
 handle_info({autoheal_msg, Msg}, State = #state{autoheal   = AState,
                                                 partitions = Partitions}) ->
@@ -548,6 +546,15 @@ handle_live_rabbit(Node) ->
     ok = rabbit_amqqueue:on_node_up(Node),
     ok = rabbit_alarm:on_node_up(Node),
     ok = rabbit_mnesia:on_node_up(Node).
+
+maybe_autoheal(State = #state{partitions = []}) ->
+    State;
+
+maybe_autoheal(State = #state{autoheal = AState}) ->
+    case all_nodes_up() of
+        true  -> State#state{autoheal = rabbit_autoheal:maybe_start(AState)};
+        false -> State
+    end.
 
 %%--------------------------------------------------------------------
 %% Internal utils
