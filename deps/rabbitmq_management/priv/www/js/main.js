@@ -830,7 +830,7 @@ function replace_content(id, html) {
 var ejs_cached = {};
 
 function format(template, json) {
-    // try {
+    try {
         var cache = true;
         if (!(template in ejs_cached)) {
             ejs_cached[template] = true;
@@ -838,10 +838,10 @@ function format(template, json) {
         }
         var tmpl = new EJS({url: 'js/tmpl/' + template + '.ejs', cache: cache});
         return tmpl.render(json);
-    // } catch (err) {
-    //     clearInterval(timer);
-    //     debug(err['name'] + ": " + err['message']);
-    // }
+    } catch (err) {
+        clearInterval(timer);
+        debug(err['name'] + ": " + err['message']);
+    }
 }
 
 function update_status(status) {
