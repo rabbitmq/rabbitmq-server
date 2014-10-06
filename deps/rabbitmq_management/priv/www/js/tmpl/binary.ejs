@@ -1,12 +1,10 @@
 <%
-  var width = 800;
   if (binary == "not_available") {
 %>
 <p class="warning">
   Binary statistics not available.
 </p>
 <% } else { %>
-<div class="memory-bar">
 <%
   var sections = {'queue_procs'         : ['queue',  'Queues'],
                   'queue_slave_procs'   : ['queue',  'Queues (slaves)'],
@@ -18,83 +16,37 @@
                   'mgmt_db'             : ['table',  'Management database'],
                   'plugins'             : ['proc',   'Plugins'],
                   'other'               : ['system', 'Other binary references']};
-  var pseudoTotal = 0
-  for (var section in sections) {
-    pseudoTotal += binary[section];
-  }
-  for (var section in sections) {
-    if (binary[section] > 0) {
-      var section_width = Math.round(width * binary[section] / pseudoTotal);
+   var total_out = [];
 %>
-  <div class="memory-section memory_<%= sections[section][0] %>"
-       style="width: <%= section_width %>px;"
-       title="<%= sections[section][1] %> <%= fmt_bytes(binary[section]) %>">
-  </div>
-<%
-     }
-   }
-%>
-</div>
+<%= format('memory-bar', {sections: sections, memory: binary, total_out: total_out}) %>
 <span class="clear">&nbsp;</span>
 <div class="box">
-<table class="facts">
-  <tr>
-    <th><div class="colour-key memory_queue"></div>Queues</th>
-    <td>
-      <table class="mini">
-        <tr><td class="r"><%= fmt_bytes(binary['queue_procs']) %></td><td>queues</td></tr>
-        <tr><td class="r"><%= fmt_bytes(binary['queue_slave_procs']) %><td>slaves</td></tr>
-      </table>
-    </td>
-  </tr>
-</table>
-<table class="facts">
-  <tr>
-    <th><div class="colour-key memory_conn"></div>Connections</th>
-    <td>
-      <table class="mini">
-        <tr><td class="r"><%= fmt_bytes(binary['connection_readers']) %></td><td>readers</td></tr>
-        <tr><td class="r"><%= fmt_bytes(binary['connection_writers']) %></td><td>writers</td></tr>
-        <tr><td class="r"><%= fmt_bytes(binary['connection_channels']) %></td><td>channels</td></tr>
-        <tr><td class="r"><%= fmt_bytes(binary['connection_other']) %></td><td>other</td></tr>
-      </table>
-    </td>
-  </tr>
-</table>
-<table class="facts">
-  <tr>
-    <th><div class="colour-key memory_table"></div>Tables</th>
-    <td>
-      <table class="mini">
-        <tr><td class="r"><%= fmt_bytes(binary['msg_index']) %></td><td>message store index</td></tr>
-        <tr><td class="r"><%= fmt_bytes(binary['mgmt_db']) %></td><td>management database</td></tr>
-      </table>
-    </td>
-  </tr>
-</table>
-<table class="facts">
-  <tr>
-    <th><div class="colour-key memory_proc"></div>Processes</th>
-    <td>
-      <table class="mini">
-        <tr><td class="r"><%= fmt_bytes(binary['plugins']) %></td><td>plugins</td></tr>
-      </table>
-    </td>
-  </tr>
-  <tr>
-    <th><div class="colour-key memory_system"></div>System</th>
-    <td>
-      <table class="mini">
-        <tr><td class="r"><%= fmt_bytes(binary['other']) %></td><td>other</td></tr>
-      </table>
-    </td>
-  </tr>
-</table>
+<%
+var key = [[{name: 'Queues', colour: 'queue',
+             keys: [['queue_procs',         'queues'],
+                    ['queue_slave_procs',   'slaves']]}],
+
+           [{name: 'Connections', colour: 'conn',
+             keys: [['connection_readers',  'readers'],
+                    ['connection_writers',  'writers'],
+                    ['connection_channels', 'channels'],
+                    ['connection_other',    'other']]}],
+
+           [{name: 'Tables', colour: 'table',
+             keys: [['msg_index',           'message store index'],
+                    ['mgmt_db',             'management database']]}],
+
+           [{name: 'Processes', colour: 'proc',
+             keys: [['plugins',             'plugins']]},
+            {name: 'System', colour: 'system',
+             keys: [['other',               'other']]}]];
+%>
+<%= format('memory-table', {key: key, memory: binary}) %>
 </div>
 
 <div class="memory-info">
   Last updated: <b><%= fmt_date(new Date()) %></b>.<br/>
-  Total referenced binaries at last update: <b><%= fmt_bytes(pseudoTotal) %></b>
+  Total referenced binaries at last update: <b><%= fmt_bytes(total_out[0]) %></b>
   <span class="help" id="binary-use"></span>
 </div>
 

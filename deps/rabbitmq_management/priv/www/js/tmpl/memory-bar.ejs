@@ -1,0 +1,24 @@
+<div class="memory-bar">
+<%
+  var width = 800;
+
+  var pseudo_total = 0
+  for (var section in sections) {
+    pseudo_total += memory[section];
+  }
+
+  total_out[0] = pseudo_total;
+
+  for (var section in sections) {
+    if (memory[section] > 0) {
+    var section_width = Math.round(width * memory[section] / pseudo_total);
+%>
+  <div class="memory-section memory_<%= sections[section][0] %>"
+       style="width: <%= section_width %>px;"
+       title="<%= sections[section][1] %> <%= fmt_bytes(memory[section]) %>">
+  </div>
+<%
+     }
+   }
+%>
+</div>
