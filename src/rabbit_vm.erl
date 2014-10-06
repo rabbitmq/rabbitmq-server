@@ -38,7 +38,8 @@ memory() ->
     {Sums, _Other} = sum_processes(
                        lists:append(All), distinguishers(), [memory]),
 
-    [Qs, QsSlave, Conns, MsgIndexProc, MgmtDbProc, Plugins] =
+    [Qs, QsSlave, ConnsReader, ConnsWriter, ConnsChannel, ConnsOther,
+     MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate(Names, Sums, memory, fun (X) -> X end)
          || Names <- distinguished_interesting_sups()],
 
@@ -55,23 +56,27 @@ memory() ->
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
 
-    OtherProc = Processes - Conns - Qs - QsSlave
-        - MsgIndexProc - Plugins - MgmtDbProc,
+    OtherProc = Processes
+        - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
+        - Qs - QsSlave - MsgIndexProc - Plugins - MgmtDbProc,
 
-    [{total,             Total},
-     {connection_procs,  Conns},
-     {queue_procs,       Qs},
-     {queue_slave_procs, QsSlave},
-     {plugins,           Plugins},
-     {other_proc,        lists:max([0, OtherProc])}, %% [1]
-     {mnesia,            Mnesia},
-     {mgmt_db,           MgmtDbETS + MgmtDbProc},
-     {msg_index,         MsgIndexETS + MsgIndexProc},
-     {other_ets,         ETS - Mnesia - MsgIndexETS - MgmtDbETS},
-     {binary,            Bin},
-     {code,              Code},
-     {atom,              Atom},
-     {other_system,      System - ETS - Atom - Bin - Code}].
+    [{total,              Total},
+     {connection_readers,  ConnsReader},
+     {connection_writers,  ConnsWriter},
+     {connection_channels, ConnsChannel},
+     {connection_other,    ConnsOther},
+     {queue_procs,         Qs},
+     {queue_slave_procs,   QsSlave},
+     {plugins,             Plugins},
+     {other_proc,          lists:max([0, OtherProc])}, %% [1]
+     {mnesia,              Mnesia},
+     {mgmt_db,             MgmtDbETS + MgmtDbProc},
+     {msg_index,           MsgIndexETS + MsgIndexProc},
+     {other_ets,           ETS - Mnesia - MsgIndexETS - MgmtDbETS},
+     {binary,              Bin},
+     {code,                Code},
+     {atom,                Atom},
+     {other_system,        System - ETS - Atom - Bin - Code}].
 
 %% [1] - erlang:memory(processes) can be less than the sum of its
 %% parts. Rather than display something nonsensical, just silence any
@@ -88,16 +93,20 @@ binary() ->
                                       sets:add_element({Ptr, Sz}, Acc0)
                               end, Acc, Info)
           end, distinguishers(), [{binary, sets:new()}]),
-    [Other, Qs, QsSlave, Conns, MsgIndexProc, MgmtDbProc, Plugins] =
+    [Other, Qs, QsSlave, ConnsReader, ConnsWriter, ConnsChannel, ConnsOther,
+     MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate(Names, [{other, Rest} | Sums], binary, fun sum_binary/1)
          || Names <- [[other] | distinguished_interesting_sups()]],
-    [{connection_procs,  Conns},
-     {queue_procs,       Qs},
-     {queue_slave_procs, QsSlave},
-     {plugins,           Plugins},
-     {mgmt_db,           MgmtDbProc},
-     {msg_index,         MsgIndexProc},
-     {other,             Other}].
+    [{connection_readers,  ConnsReader},
+     {connection_writers,  ConnsWriter},
+     {connection_channels, ConnsChannel},
+     {connection_other,    ConnsOther},
+     {queue_procs,         Qs},
+     {queue_slave_procs,   QsSlave},
+     {plugins,             Plugins},
+     {mgmt_db,             MgmtDbProc},
+     {msg_index,           MsgIndexProc},
+     {other,               Other}].
 
 %%----------------------------------------------------------------------------
 
@@ -116,22 +125,28 @@ ets_memory(Name) ->
 bytes(Words) ->  Words * erlang:system_info(wordsize).
 
 interesting_sups() ->
-    QProcs = [rabbit_amqqueue_sup_sup],
-    [QProcs | interesting_sups0()].
+    [[rabbit_amqqueue_sup_sup], conn_sups() | interesting_sups0()].
 
 interesting_sups0() ->
-    ConnProcs     = [rabbit_tcp_client_sup, ssl_connection_sup, amqp_sup],
     MsgIndexProcs = [msg_store_transient, msg_store_persistent],
     MgmtDbProcs   = [rabbit_mgmt_sup_sup],
     PluginProcs   = plugin_sups(),
-    [ConnProcs, MsgIndexProcs, MgmtDbProcs, PluginProcs].
+    [MsgIndexProcs, MgmtDbProcs, PluginProcs].
 
-distinguishers() -> [{rabbit_amqqueue_sup_sup, fun queue_type/1}].
+conn_sups()     -> [rabbit_tcp_client_sup, ssl_connection_sup, amqp_sup].
+conn_sups(With) -> [{Sup, With} || Sup <- conn_sups()].
+
+distinguishers() -> [{rabbit_amqqueue_sup_sup, fun queue_type/1} |
+                     conn_sups(fun conn_type/1)].
 
 distinguished_interesting_sups() ->
-    QProcs = [[{rabbit_amqqueue_sup_sup, master}],
-              [{rabbit_amqqueue_sup_sup, slave}]],
-    QProcs ++ interesting_sups0().
+    [[{rabbit_amqqueue_sup_sup, master}],
+     [{rabbit_amqqueue_sup_sup, slave}],
+     conn_sups(reader),
+     conn_sups(writer),
+     conn_sups(channel),
+     conn_sups(other)]
+        ++ interesting_sups0().
 
 plugin_sups() ->
     lists:append([plugin_sup(App) ||
@@ -173,6 +188,14 @@ queue_type(PDict) ->
     case keyfind(process_name, PDict) of
         {value, {rabbit_mirror_queue_slave, _}} -> slave;
         _                                       -> master
+    end.
+
+conn_type(PDict) ->
+    case keyfind(process_name, PDict) of
+        {value, {rabbit_reader,  _}} -> reader;
+        {value, {rabbit_writer,  _}} -> writer;
+        {value, {rabbit_channel, _}} -> channel;
+        _                            -> other
     end.
 
 %%----------------------------------------------------------------------------
