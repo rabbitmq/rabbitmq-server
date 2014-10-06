@@ -607,7 +607,7 @@ check_internal_exchange(_) ->
     ok.
 
 check_msg_size(Content) ->
-    Size = rabbit_basic:msg_size(Content),
+    Size = rabbit_basic:msg_size_and_gc(Content),
     case Size > ?MAX_MSG_SIZE of
         true  -> precondition_failed("message size ~B larger than max size ~B",
                                      [Size, ?MAX_MSG_SIZE]);
