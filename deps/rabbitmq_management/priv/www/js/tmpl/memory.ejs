@@ -8,85 +8,97 @@
 <% } else { %>
 <div class="memory-bar">
 <%
-  var sections = {'queue_procs'      : 'Queues',
-                  'queue_slave_procs': 'Queues (slaves)',
-                  'connection_procs' : 'Connections',
-                  'plugins'          : 'Plugins',
-                  'other_proc'       : 'Other process memory',
-                  'mnesia'           : 'Mnesia',
-                  'msg_index'        : 'Message store index',
-                  'mgmt_db'          : 'Management database',
-                  'other_ets'        : 'Other ETS tables',
-                  'binary'           : 'Binaries',
-                  'code'             : 'Code',
-                  'atom'             : 'Atoms',
-                  'other_system'     : 'Other system'};
+  var sections = {'queue_procs'         : ['queue',  'Queues'],
+                  'queue_slave_procs'   : ['queue',  'Queues (slaves)'],
+                  'binary'              : ['binary', 'Binaries'],
+                  'connection_readers'  : ['conn',   'Connection readers'],
+                  'connection_writers'  : ['conn',   'Connection writers'],
+                  'connection_channels' : ['conn',   'Connection channels'],
+                  'connection_other'    : ['conn',   'Connections (other)'],
+                  'mnesia'              : ['table',  'Mnesia'],
+                  'msg_index'           : ['table',  'Message store index'],
+                  'mgmt_db'             : ['table',  'Management database'],
+                  'other_ets'           : ['table',  'Other ETS tables'],
+                  'plugins'             : ['proc',   'Plugins'],
+                  'other_proc'          : ['proc',   'Other process memory'],
+                  'code'                : ['system', 'Code'],
+                  'atom'                : ['system', 'Atoms'],
+                  'other_system'        : ['system', 'Other system']};
   for (var section in sections) {
+    if (memory[section] > 0) {
     var section_width = Math.round(width * memory[section] / memory.total);
 %>
-  <div class="memory-section memory_<%= section %>"
+  <div class="memory-section memory_<%= sections[section][0] %>"
        style="width: <%= section_width %>px;"
-       title="<%= sections[section] %> <%= fmt_bytes(memory[section]) %>">
+       title="<%= sections[section][1] %> <%= fmt_bytes(memory[section]) %>">
   </div>
-<% } %>
+<%
+     }
+   }
+%>
 </div>
 <span class="clear">&nbsp;</span>
 <div class="box">
 <table class="facts">
   <tr>
-    <th>Queues</th>
+    <th><div class="colour-key memory_queue"></div>Queues</th>
     <td>
-      <div class="box"><%= fmt_memory(memory, 'queue_procs') %></div>
-      <div class="box"><%= fmt_memory(memory, 'queue_slave_procs') %> (slaves)</div>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(memory['queue_procs']) %></td><td>queues</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['queue_slave_procs']) %><td>slaves</td></tr>
+      </table>
     </td>
   </tr>
   <tr>
-    <th>Connections</th>
-    <td><%= fmt_memory(memory, 'connection_procs') %></td>
-  </tr>
-  <tr>
-    <th>Plugins</th>
-    <td><%= fmt_memory(memory, 'plugins') %></td>
-  </tr>
-  <tr>
-    <th>Other process memory</th>
-    <td><%= fmt_memory(memory, 'other_proc') %></td>
+    <th><div class="colour-key memory_binary"></div>Binaries</th>
+    <td><%= fmt_bytes(memory['binary']) %></td>
   </tr>
 </table>
 <table class="facts">
   <tr>
-    <th>Mnesia</th>
-    <td><%= fmt_memory(memory, 'mnesia') %></td>
-  </tr>
-  <tr>
-    <th>Message store index</th>
-    <td><%= fmt_memory(memory, 'msg_index') %></td>
-  </tr>
-  <tr>
-    <th>Management database</th>
-    <td><%= fmt_memory(memory, 'mgmt_db') %></td>
-  </tr>
-  <tr>
-    <th>Other ETS tables</th>
-    <td><%= fmt_memory(memory, 'other_ets') %></td>
+    <th><div class="colour-key memory_conn"></div>Connections</th>
+    <td>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(memory['connection_readers']) %></td><td>readers</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['connection_writers']) %></td><td>writers</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['connection_channels']) %></td><td>channels</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['connection_other']) %></td><td>other</td></tr>
+      </table>
+    </td>
   </tr>
 </table>
 <table class="facts">
   <tr>
-    <th>Binaries</th>
-    <td><%= fmt_memory(memory, 'binary') %></td>
+    <th><div class="colour-key memory_table"></div>Tables</th>
+    <td>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(memory['mnesia']) %></td><td>mnesia</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['msg_index']) %></td><td>message store index</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['mgmt_db']) %></td><td>management database</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['other_ets']) %></td><td>other</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
+<table class="facts">
+  <tr>
+    <th><div class="colour-key memory_proc"></div>Processes</th>
+    <td>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(memory['plugins']) %></td><td>plugins</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['other_proc']) %></td><td>other</td></tr>
+      </table>
+    </td>
   </tr>
   <tr>
-    <th>Code</th>
-    <td><%= fmt_memory(memory, 'code') %></td>
-  </tr>
-  <tr>
-    <th>Atoms</th>
-    <td><%= fmt_memory(memory, 'atom') %></td>
-  </tr>
-  <tr>
-    <th>Other system</th>
-    <td><%= fmt_memory(memory, 'other_system') %></td>
+    <th><div class="colour-key memory_system"></div>System</th>
+    <td>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(memory['code']) %></td><td>code</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['atom']) %></td><td>atoms</td></tr>
+        <tr><td class="r"><%= fmt_bytes(memory['other_system']) %></td><td>other</td></tr>
+      </table>
+    </td>
   </tr>
 </table>
 </div>

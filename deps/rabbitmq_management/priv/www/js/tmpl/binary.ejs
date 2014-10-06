@@ -8,56 +8,86 @@
 <% } else { %>
 <div class="memory-bar">
 <%
-  var sections = {'queue_procs'      : 'Queues',
-                  'queue_slave_procs': 'Queues (slaves)',
-                  'connection_procs' : 'Connections',
-                  'plugins'          : 'Plugins',
-                  'msg_index'        : 'Message store index',
-                  'other'            : 'Other binary references'};
+  var sections = {'queue_procs'         : ['queue',  'Queues'],
+                  'queue_slave_procs'   : ['queue',  'Queues (slaves)'],
+                  'connection_readers'  : ['conn',   'Connection readers'],
+                  'connection_writers'  : ['conn',   'Connection writers'],
+                  'connection_channels' : ['conn',   'Connection channels'],
+                  'connection_other'    : ['conn',   'Connections (other)'],
+                  'msg_index'           : ['table',  'Message store index'],
+                  'mgmt_db'             : ['table',  'Management database'],
+                  'plugins'             : ['proc',   'Plugins'],
+                  'other'               : ['system', 'Other binary references']};
   var pseudoTotal = 0
   for (var section in sections) {
     pseudoTotal += binary[section];
   }
   for (var section in sections) {
-    var section_width = Math.round(width * binary[section] / pseudoTotal);
+    if (binary[section] > 0) {
+      var section_width = Math.round(width * binary[section] / pseudoTotal);
 %>
-  <div class="memory-section memory_<%= section %>"
+  <div class="memory-section memory_<%= sections[section][0] %>"
        style="width: <%= section_width %>px;"
-       title="<%= sections[section] %> <%= fmt_bytes(binary[section]) %>">
+       title="<%= sections[section][1] %> <%= fmt_bytes(binary[section]) %>">
   </div>
-<% } %>
+<%
+     }
+   }
+%>
 </div>
 <span class="clear">&nbsp;</span>
 <div class="box">
 <table class="facts">
   <tr>
-    <th>Queues</th>
+    <th><div class="colour-key memory_queue"></div>Queues</th>
     <td>
-      <div class="box"><%= fmt_memory(binary, 'queue_procs') %></div>
-      <div class="box"><%= fmt_memory(binary, 'queue_slave_procs') %> (slaves)</div>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(binary['queue_procs']) %></td><td>queues</td></tr>
+        <tr><td class="r"><%= fmt_bytes(binary['queue_slave_procs']) %><td>slaves</td></tr>
+      </table>
     </td>
-  </tr>
-  <tr>
-    <th>Connections</th>
-    <td><%= fmt_memory(binary, 'connection_procs') %></td>
-  </tr>
-  <tr>
-    <th>Plugins</th>
-    <td><%= fmt_memory(binary, 'plugins') %></td>
   </tr>
 </table>
 <table class="facts">
   <tr>
-    <th>Message store index</th>
-    <td><%= fmt_memory(binary, 'msg_index') %></td>
+    <th><div class="colour-key memory_conn"></div>Connections</th>
+    <td>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(binary['connection_readers']) %></td><td>readers</td></tr>
+        <tr><td class="r"><%= fmt_bytes(binary['connection_writers']) %></td><td>writers</td></tr>
+        <tr><td class="r"><%= fmt_bytes(binary['connection_channels']) %></td><td>channels</td></tr>
+        <tr><td class="r"><%= fmt_bytes(binary['connection_other']) %></td><td>other</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
+<table class="facts">
+  <tr>
+    <th><div class="colour-key memory_table"></div>Tables</th>
+    <td>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(binary['msg_index']) %></td><td>message store index</td></tr>
+        <tr><td class="r"><%= fmt_bytes(binary['mgmt_db']) %></td><td>management database</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
+<table class="facts">
+  <tr>
+    <th><div class="colour-key memory_proc"></div>Processes</th>
+    <td>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(binary['plugins']) %></td><td>plugins</td></tr>
+      </table>
+    </td>
   </tr>
   <tr>
-    <th>Management database</th>
-    <td><%= fmt_memory(binary, 'mgmt_db') %></td>
-  </tr>
-  <tr>
-    <th>Other binary references</th>
-    <td><%= fmt_memory(binary, 'other') %></td>
+    <th><div class="colour-key memory_system"></div>System</th>
+    <td>
+      <table class="mini">
+        <tr><td class="r"><%= fmt_bytes(binary['other']) %></td><td>other</td></tr>
+      </table>
+    </td>
   </tr>
 </table>
 </div>

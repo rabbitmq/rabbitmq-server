@@ -34,11 +34,6 @@ function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
             num.toFixed(0)) + powers[power];
 }
 
-function fmt_memory(memory, key) {
-    return '<div class="colour-key memory_' + key + '"></div>' +
-        fmt_bytes(memory[key]);
-}
-
 function fmt_boolean(b) {
     if (b == undefined) return UNKNOWN_REPR;
 
