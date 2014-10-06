@@ -44,8 +44,8 @@ memory() ->
          || Names <- distinguished_interesting_sups()],
 
     Mnesia       = mnesia_memory(),
-    MsgIndexETS  = ets_memory(rabbit_msg_store_ets_index),
-    MgmtDbETS    = ets_memory(rabbit_mgmt_db),
+    MsgIndexETS  = ets_memory([msg_store_persistent, msg_store_transient]),
+    MgmtDbETS    = ets_memory([rabbit_mgmt_db]),
 
     [{total,     Total},
      {processes, Processes},
@@ -117,10 +117,11 @@ mnesia_memory() ->
         _   -> 0
     end.
 
-ets_memory(Name) ->
+ets_memory(OwnerNames) ->
+    Owners = [whereis(N) || N <- OwnerNames],
     lists:sum([bytes(ets:info(T, memory)) || T <- ets:all(),
-                                             N <- [ets:info(T, name)],
-                                             N =:= Name]).
+                                             O <- [ets:info(T, owner)],
+                                             lists:member(O, Owners)]).
 
 bytes(Words) ->  Words * erlang:system_info(wordsize).
 
