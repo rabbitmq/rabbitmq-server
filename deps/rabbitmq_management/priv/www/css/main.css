@@ -96,14 +96,14 @@ button.memory-button { margin-top: 10px; }
 div.memory_queue  { background: #bd4688; }
 div.memory_binary { background: url(../img/bg-binary.png); }
 div.memory_conn   { background: #dada66; }
-div.memory_proc   { background: #79da66; }
+div.memory_proc   { background: #6abf59; }
 div.memory_table  { background: #6679da; }
 div.memory_system { background: #999; }
 
 div.memory-bar div.memory_queue  { border-right: solid 1px #eb50a6; }
 div.memory-bar div.memory_binary { border-right: solid 1px #eb50a6; }
 div.memory-bar div.memory_conn   { border-right: solid 1px #ebeb8d; }
-div.memory-bar div.memory_proc   { border-right: solid 1px #9ceb8d; }
+div.memory-bar div.memory_proc   { border-right: solid 1px #79da66; }
 div.memory-bar div.memory_table  { border-right: solid 1px #8d9ceb; }
 div.memory-bar div.memory_system { border-right: solid 1px #bbb; }
 
