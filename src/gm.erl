@@ -975,7 +975,12 @@ store_view_member(VMember = #view_member { id = Id }, {Ver, View}) ->
 with_view_member(Fun, View, Id) ->
     store_view_member(Fun(fetch_view_member(Id, View)), View).
 
-fetch_view_member(Id, {_Ver, View}) -> ?DICT:fetch(Id, View).
+fetch_view_member(Id, {_Ver, View}) ->
+    case ?DICT:find(Id, View) of
+        {ok, M} -> M;
+        error   -> timer:sleep(1000),
+                   exit(normal)
+    end.
 
 find_view_member(Id, {_Ver, View}) -> ?DICT:find(Id, View).
 
