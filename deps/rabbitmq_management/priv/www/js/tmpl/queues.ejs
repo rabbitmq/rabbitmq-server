@@ -27,6 +27,12 @@
 <% if (show_column('queues', 'features')) { %>
     <th>Features</th>
 <% } %>
+<% if (show_column('queues', 'features_no_policy')) { %>
+    <th>Features</th>
+<% } %>
+<% if (show_column('queues', 'policy')) { %>
+    <th><%= fmt_sort('Policy','policy') %></th>
+<% } %>
 <% if (show_column('queues', 'consumers')) { %>
     <th><%= fmt_sort('Consumers',    'consumers') %></th>
 <% } %>
@@ -103,12 +109,15 @@
 <% } %>
 <% if (show_column('queues', 'features')) { %>
    <td class="c">
-     <% if (queue.owner_pid_details != undefined) { %>
-     <acronym title="Exclusive queue: click for owning connection"><%= link_conn(queue.owner_pid_details.name, "Excl") %></acronym>
-     <% } %>
      <%= fmt_features_short(queue) %>
      <%= fmt_policy_short(queue) %>
    </td>
+<% } %>
+<% if (show_column('queues', 'features_no_policy')) { %>
+   <td class="c"><%= fmt_features_short(queue) %></td>
+<% } %>
+<% if (show_column('queues', 'policy')) { %>
+   <td class="c"><%= fmt_string(queue.policy) %></td>
 <% } %>
 <% if (show_column('queues', 'consumers')) { %>
    <td class="c"><%= fmt_string(queue.consumers) %></td>

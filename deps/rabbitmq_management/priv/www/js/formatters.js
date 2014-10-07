@@ -94,6 +94,11 @@ function fmt_features_short(obj) {
     var res = '';
     var features = args_to_features(obj);
 
+    if (obj.owner_pid_details != undefined) {
+        res += '<acronym title="Exclusive queue: click for owning connection">'
+            + link_conn(queue.owner_pid_details.name, "Excl") + '</acronym>';
+    }
+
     for (var k in ALL_ARGS) {
         if (features[k] != undefined) {
             res += '<acronym title="' + k + ': ' + fmt_string(features[k]) +
