@@ -470,8 +470,13 @@ is_running() -> is_running(node()).
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
 
 environment() ->
-    lists:keysort(1, [P || P = {K, _} <- application:get_all_env(rabbit),
-                           K =/= default_pass]).
+    [{A, environment(A)} ||
+        {A, _, _} <- lists:keysort(1, application:which_applications())].
+
+environment(App) ->
+    Ignore = [default_pass, included_applications],
+    lists:keysort(1, [P || P = {K, _} <- application:get_all_env(App),
+                           not lists:member(K, Ignore)]).
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
