@@ -235,6 +235,7 @@ run-tests: all
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 run-qc: all
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
 	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
 	./quickcheck $(RABBITMQ_NODENAME) gm_qc 1000 200
 
