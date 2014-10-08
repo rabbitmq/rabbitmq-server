@@ -22,7 +22,7 @@
          message/3, message/4, properties/1, prepend_table_header/3,
          extract_headers/1, map_headers/2, delivery/4, header_routes/1,
          parse_expiration/1]).
--export([build_content/2, from_content/1, msg_size/1]).
+-export([build_content/2, from_content/1, msg_size/1, maybe_gc_large_msg/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -78,6 +78,9 @@
 
 -spec(msg_size/1 :: (rabbit_types:content() | rabbit_types:message()) ->
                          non_neg_integer()).
+
+-spec(maybe_gc_large_msg/1 ::
+        (rabbit_types:content() | rabbit_types:message()) -> non_neg_integer()).
 
 -endif.
 
@@ -275,6 +278,25 @@ parse_expiration(#'P_basic'{expiration = Expiration}) ->
         {_, S} ->
             {error, {leftover_string, S}}
     end.
+
+%% Some processes (channel, writer) can get huge amounts of binary
+%% garbage when processing huge messages at high speed (since we only
+%% do enough reductions to GC every few hundred messages, and if each
+%% message is 1MB then that's ugly). So count how many bytes of
+%% message we have processed, and force a GC every so often.
+maybe_gc_large_msg(Content) ->
+    Size = msg_size(Content),
+    Current = case get(msg_size_for_gc) of
+                  undefined -> 0;
+                  C         -> C
+              end,
+    New = Current + Size,
+    put(msg_size_for_gc, case New > 1000000 of
+                             true  -> erlang:garbage_collect(),
+                                      0;
+                             false -> New
+                         end),
+    Size.
 
 msg_size(#content{payload_fragments_rev = PFR}) -> iolist_size(PFR);
 msg_size(#basic_message{content = Content})     -> msg_size(Content).

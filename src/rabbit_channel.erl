@@ -375,6 +375,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                             exchange     = ExchangeName#resource.name,
                             routing_key  = RoutingKey},
            Content),
+    rabbit_basic:maybe_gc_large_msg(Content),
     noreply(record_sent(ConsumerTag, AckRequired, Msg, State));
 
 handle_cast({deliver_reply, _K, _Del}, State = #ch{state = closing}) ->
@@ -607,7 +608,7 @@ check_internal_exchange(_) ->
     ok.
 
 check_msg_size(Content) ->
-    Size = rabbit_basic:msg_size(Content),
+    Size = rabbit_basic:maybe_gc_large_msg(Content),
     case Size > ?MAX_MSG_SIZE of
         true  -> precondition_failed("message size ~B larger than max size ~B",
                                      [Size, ?MAX_MSG_SIZE]);
