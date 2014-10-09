@@ -38,6 +38,7 @@
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
+-define(PARTIAL_PARTITION_NOTIFICATION_DELAY, 1000).
 
 -record(state, {monitors, partitions, subscribers, down_ping_timer,
                 keepalive_timer, autoheal, guid, node_guids}).
@@ -280,9 +281,11 @@ handle_cast(notify_node_up, State = #state{guid = GUID}) ->
 %% When one node gets nodedown from another, it then sends
 %% 'check_partial_partition' to all the nodes it still thinks are
 %% alive. If any of those (intermediate) nodes still see the "down"
-%% node as up, they inform it that this has happened. The "down" node
-%% (in 'ignore' or 'autoheal' mode) will then disconnect from the
-%% intermediate node to "upgrade" to a full partition.
+%% node as up, they inform it that this has happened (after a short
+%% delay to ensure we don't detect something that would become a full
+%% partition anyway as a partial one). The "down" node (in 'ignore' or
+%% 'autoheal' mode) will then disconnect from the intermediate node to
+%% "upgrade" to a full partition.
 %%
 %% In pause_minority mode it will instead immediately pause until all
 %% nodes come back. This is because the contract for pause_minority is
@@ -305,7 +308,9 @@ handle_cast({announce_guid, Node, GUID}, State = #state{node_guids = GUIDs}) ->
 handle_cast({check_partial_partition, Node, NodeGUID, Reporter, MyGUID},
             State = #state{guid = MyGUID}) ->
     case lists:member(Node, alive_nodes()) of
-        true  -> cast(Node, {partial_partition, NodeGUID, Reporter, node()});
+        true  -> erlang:send_after(
+                   ?PARTIAL_PARTITION_NOTIFICATION_DELAY, self(),
+                   {send_partial_partition, Node, NodeGUID, Reporter});
         false -> ok
     end,
     {noreply, State};
@@ -463,6 +468,10 @@ handle_info(ping_up_nodes, State) ->
     %% i.e. only nodes that we know to be up.
     [cast(N, keepalive) || N <- alive_nodes() -- [node()]],
     {noreply, ensure_keepalive_timer(State#state{keepalive_timer = undefined})};
+
+handle_info({send_partial_partition, Node, NodeGUID, Reporter}, State) ->
+    cast(Node, {partial_partition, NodeGUID, Reporter, node()}),
+    {noreply, State};
 
 handle_info(_Info, State) ->
     {noreply, State}.
