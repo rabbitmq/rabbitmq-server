@@ -1726,7 +1726,7 @@
           <listitem>
             <para>
               Display the name and value of each variable in the
-              application environment.
+              application environment for each running application.
             </para>
           </listitem>
         </varlistentry>
