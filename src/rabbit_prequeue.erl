@@ -64,13 +64,14 @@ init(Q, slave)  -> rabbit_mirror_queue_slave:init(Q);
 init(#amqqueue{name = QueueName}, restart) ->
     {ok, Q = #amqqueue{pid        = QPid,
                        slave_pids = SPids}} = rabbit_amqqueue:lookup(QueueName),
-    Local = node(QPid) =:= node(),
+    LocalOrMasterDown = node(QPid) =:= node()
+        orelse not rabbit_mnesia:on_running_node(QPid),
     Slaves = [SPid || SPid <- SPids, rabbit_misc:is_process_alive(SPid)],
     case rabbit_misc:is_process_alive(QPid) of
-        true  -> false = Local, %% assertion
+        true  -> false = LocalOrMasterDown, %% assertion
                  rabbit_mirror_queue_slave:go(self(), async),
                  rabbit_mirror_queue_slave:init(Q); %% [1]
-        false -> case Local andalso Slaves =:= [] of
+        false -> case LocalOrMasterDown andalso, Slaves =:= [] of
                      true  -> crash_restart(Q);     %% [2]
                      false -> timer:sleep(25),
                               init(Q, restart)      %% [3]
