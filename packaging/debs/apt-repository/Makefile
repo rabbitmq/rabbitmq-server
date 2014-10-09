@@ -25,9 +25,11 @@ ifeq ($(UNOFFICIAL_RELEASE), true)
 	@echo UNOFFICIAL_RELEASE set to true
 	sed -i '/gpgDisableSign/ s/false/true/' aptly.conf
 	./aptly_wrapper.sh -o publish 
+	./aptly_wrapper.sh -o snap-pub-testing
 else
 	sed -i '/gpgDisableSign/ s/true/false/' aptly.conf
 	./aptly_wrapper.sh -o publish -h $(HOME_ARG) -g $(SIGNING_KEY)
+	./aptly_wrapper.sh -o snap-pub-testing -h $(HOME_ARG) -g $(SIGNING_KEY)
 endif
 	./aptly_wrapper.sh -o push
 else

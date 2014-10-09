@@ -2,6 +2,8 @@
 
 # aptly_wrapper.sh
 
+# 2014.10.08: preserve hardlinks with rsync, aptly requires them
+
 # Commenting set -e, as it will cause the script to bail when handling
 # certain errors, such as a non-exisiting remote aptly dir when performing
 # a fetch.
@@ -9,8 +11,14 @@
 
 DEBUG=yes
 
-REPO=testing      # should this var name be more specific than repo?
-# TODO above should be kitten, with testing softlinked
+DATE=`date +%y%d-%H%M%S`
+
+# repo name, much like Debian's distribution name of Wheezy, Jessie, etc
+REPO=kitten
+# Similar to Debian's use of pointing stable, testing, etc to distributions
+# though here, testing is meant to imply frequent releases.
+# see bug25313 for explanation.
+LINKED_REPO=testing
 
 REPO_COMMENT="RabbitMQ Repository for Debian / Ubuntu etc"
 # Pulled these from the reprepro distributions conf file
@@ -21,11 +29,13 @@ REPO_ORIGIN=RabbitMQ
 # These would ideally come from the release.mk
 # Need to determine actual dir layout for prod server where we can put
 #  aptly/
-DEPLOY_HOST=10.17.184.50
+DEPLOY_HOST=
 DEPLOY_PATH=/tmp/rabbitmq/extras/releases
 DEPLOY_DEST=${DEPLOY_HOST}:${DEPLOY_PATH}
 
-RSYNC_CMD="rsync -rplt --delete-after --itemize-changes"
+# Rsync needs to preserve hardlinks which Aptly uses to map packages in the
+# metadata pool with the public pool
+RSYNC_CMD="rsync -rpltH --delete-after --itemize-changes"
 
 APTLY_CONF=aptly.conf  # packaging/debs/apt-repository/
 APTLY="aptly -config=${APTLY_CONF}"
@@ -39,7 +49,7 @@ Debug() {
 
 Usage() {
    echo ""
-   echo "`basename $0` -o [add|publish|fetch|push|diff] -h GPG_HOME -g GPG_KEY_ID -f \"pkg_full_name another_pkg_full_name\""
+   echo "`basename $0` -o [add|publish|fetch|push|diff|snap-pub-testing] -h GPG_HOME -g GPG_KEY_ID -f \"pkg_full_name another_pkg_full_name\""
    echo ""
    echo "For example:"
    echo "     To pull the persistence files from the server:"
@@ -52,7 +62,7 @@ Usage() {
    echo "     ./`basename $0` -o add -f \"rabbitmq-server_3.3.5-1_all.deb rabbitmq-server_3.3.5-1.dsc\""
    echo ""
    echo "     To publish the repo:"
-   echo "     ./`basename $0` -o publish -h /tmp -g 57F929F7"
+   echo "     ./`basename $0` -o publish -h HOME=/tmp -g 57F929F7"
    echo ""
    echo "     To push the persistence files and public repo data to server:"
    echo "     ./`basename $0` -o push"
@@ -99,7 +109,7 @@ case $OP in
          $RSYNC_CMD ${DEPLOY_DEST}/aptly/* aptly/
       else 
          echo "aptly dir does NOT exist on $DEPLOY_HOST"
-         echo "Nothing to fetch. Add operation automatically create"
+         echo "Nothing to fetch. Add operation will automatically create"
          echo "the repo."
       fi
       ;;
@@ -210,4 +220,46 @@ case $OP in
       Debug "$RSYNC_CMD aptly ${DEPLOY_DEST}/"
       $RSYNC_CMD aptly ${DEPLOY_DEST}/
       ;;
+   snap-pub-testing)
+      # Snapshot kitten repo then publish it with the testing distribution
+      # name to create the testing repo as a copy of kitten.
+
+      # Create snapshot of repo
+      SNAPSHOT_NAME=${LINKED_REPO}-${DATE}
+      $APTLY snapshot create $SNAPSHOT_NAME from repo $REPO
+
+
+      # If a gpg key was passed in, setup a variable for it
+      if [ ! -z "$GPG_KEY" ]; then
+         GPG_KEY_FLAG="-gpg-key=\"${GPG_KEY}\""
+      fi
+      # Has the initial snapshot been published before?
+      # More specifically, has a snapshot been published to this 
+      # distribution before?
+      if [ `$APTLY publish list | grep -c debian/${LINKED_REPO}` -gt "0" ]; then
+         # publish switch, the initial publish snapshot command has been run
+         # switch the public files from the old one to this one
+         if [ ! -z "$GPG_HOME" ]; then
+            export "$GPG_HOME"; $APTLY publish switch $GPG_KEY_FLAG \
+             ${LINKED_REPO} debian $SNAPSHOT_NAME
+         else
+            $APTLY publish switch $GPG_KEY_FLAG \
+             ${LINKED_REPO} debian $SNAPSHOT_NAME
+         fi
+      else
+         # publish snapshot, this is the initial publish for a snapshot
+         if [ ! -z "$GPG_HOME" ]; then
+            export "$GPG_HOME"; $APTLY publish snapshot \
+             -distribution="${LINKED_REPO}" $GPG_KEY_FLAG $SNAPSHOT_NAME debian
+         else
+            $APTLY publish snapshot \
+             -distribution="${LINKED_REPO}" $GPG_KEY_FLAG $SNAPSHOT_NAME debian
+         fi
+      fi
+
+
+      ;;
 esac
+
+# TODO make the aptly prefix, currently debian, to be a variable and describe
+# its purpose.
