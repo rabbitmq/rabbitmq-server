@@ -71,7 +71,7 @@ init(#amqqueue{name = QueueName}, restart) ->
         true  -> false = LocalOrMasterDown, %% assertion
                  rabbit_mirror_queue_slave:go(self(), async),
                  rabbit_mirror_queue_slave:init(Q); %% [1]
-        false -> case LocalOrMasterDown andalso, Slaves =:= [] of
+        false -> case LocalOrMasterDown andalso Slaves =:= [] of
                      true  -> crash_restart(Q);     %% [2]
                      false -> timer:sleep(25),
                               init(Q, restart)      %% [3]
