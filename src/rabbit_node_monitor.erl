@@ -411,7 +411,8 @@ handle_info({nodedown, Node, Info}, State = #state{node_guids = GUIDs}) ->
                              Node, DownGUID, node(), CheckGUID})
             end,
     case orddict:find(Node, GUIDs) of
-        {ok, DownGUID} -> Alive = alive_nodes() -- [node(), Node],
+        {ok, DownGUID} -> Alive = rabbit_mnesia:cluster_nodes(running)
+                              -- [node(), Node],
                           [case orddict:find(N, GUIDs) of
                                {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
                                error           -> ok
