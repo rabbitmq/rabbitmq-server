@@ -267,6 +267,31 @@ handle_cast(notify_node_up, State = #state{guid = GUID}) ->
                                            end}) || N <- Nodes],
     {noreply, State};
 
+%%----------------------------------------------------------------------------
+%% Partial partition detection
+%%
+%% Every node generates a GUID each time it starts, and announces that
+%% GUID in 'node_up', with 'announce_guid' sent by return so the new
+%% node knows the GUIDs of the others. These GUIDs are sent in all the
+%% partial partition related messages to ensure that we ignore partial
+%% partition messages from before we restarted (to avoid getting stuck
+%% in a loop).
+%%
+%% When one node gets nodedown from another, it then sends
+%% 'check_partial_partition' to all the nodes it still thinks are
+%% alive. If any of those (intermediate) nodes still see the "down"
+%% node as up, they inform it that this has happened. The "down" node
+%% (in 'ignore' or 'autoheal' mode) will then disconnect from the
+%% intermediate node to "upgrade" to a full partition.
+%%
+%% In pause_minority mode it will instead immediately pause until all
+%% nodes come back. This is because the contract for pause_minority is
+%% that nodes should never sit in a partitioned state - if it just
+%% disconnected, it would become a minority, pause, realise it's not
+%% in a minority any more, and come back, still partitioned (albeit no
+%% longer partially).
+%% ----------------------------------------------------------------------------
+
 handle_cast({node_up, Node, NodeType, GUID},
             State = #state{guid       = MyGUID,
                            node_guids = GUIDs}) ->
