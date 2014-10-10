@@ -28,6 +28,7 @@
          status/0,
          is_clustered/0,
          on_running_node/1,
+         is_process_alive/1,
          cluster_nodes/1,
          node_type/0,
          dir/0,
@@ -73,6 +74,7 @@
                          {'partitions', [{node(), [node()]}]}]).
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(on_running_node/1 :: (pid()) -> boolean()).
+-spec(is_process_alive/1 :: (pid()) -> boolean()).
 -spec(cluster_nodes/1 :: ('all' | 'disc' | 'ram' | 'running') -> [node()]).
 -spec(node_type/0 :: () -> node_type()).
 -spec(dir/0 :: () -> file:filename()).
@@ -339,6 +341,14 @@ is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
 
 on_running_node(Pid) -> lists:member(node(Pid), cluster_nodes(running)).
+
+%% This requires the process be in the same running cluster as us
+%% (i.e. not partitioned or some random node).
+%%
+%% See also rabbit_misc:is_process_alive/1 which does not.
+is_process_alive(Pid) ->
+    on_running_node(Pid) andalso
+        rpc:call(node(Pid), erlang, is_process_alive, [Pid]) =:= true.
 
 cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 

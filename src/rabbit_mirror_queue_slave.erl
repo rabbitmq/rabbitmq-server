@@ -167,11 +167,11 @@ init_it(Self, GM, Node, QName) ->
             case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
                 []     -> add_slave(Q, Self, GM),
                           {new, QPid, GMPids};
-                [QPid] -> case rabbit_misc:is_process_alive(QPid) of
+                [QPid] -> case rabbit_mnesia:is_process_alive(QPid) of
                               true  -> duplicate_live_master;
                               false -> {stale, QPid}
                           end;
-                [SPid] -> case rabbit_misc:is_process_alive(SPid) of
+                [SPid] -> case rabbit_mnesia:is_process_alive(SPid) of
                               true  -> existing;
                               false -> GMPids1 = [T || T = {_, S} <- GMPids,
                                                        S =/= SPid],
