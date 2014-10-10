@@ -5,14 +5,9 @@ endif
 
 all: debian_apt_repository
 
-clean:
-	rm -rf debian
-
 CAN_HAS_APTLY=$(shell [ -f /usr/bin/aptly ] && echo true)
 ifeq ($(CAN_HAS_APTLY), true)
-debian_apt_repository: clean
-	mkdir -p debian/conf
-	cp -a distributions debian/conf
+debian_apt_repository: 
 	
 	./aptly_wrapper.sh -o fetch
 	for FILE in ../Debian/*.deb ; do \
@@ -25,11 +20,9 @@ ifeq ($(UNOFFICIAL_RELEASE), true)
 	@echo UNOFFICIAL_RELEASE set to true
 	sed -i '/gpgDisableSign/ s/false/true/' aptly.conf
 	./aptly_wrapper.sh -o publish 
-	./aptly_wrapper.sh -o snap-pub-testing
 else
 	sed -i '/gpgDisableSign/ s/true/false/' aptly.conf
 	./aptly_wrapper.sh -o publish -h $(HOME_ARG) -g $(SIGNING_KEY)
-	./aptly_wrapper.sh -o snap-pub-testing -h $(HOME_ARG) -g $(SIGNING_KEY)
 endif
 	./aptly_wrapper.sh -o push
 else
