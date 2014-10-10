@@ -38,7 +38,6 @@
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
--define(PARTIAL_PARTITION_NOTIFICATION_DELAY, 1000).
 
 -record(state, {monitors, partitions, subscribers, down_ping_timer,
                 keepalive_timer, autoheal, guid, node_guids}).
@@ -305,26 +304,26 @@ handle_cast({node_up, Node, NodeType, GUID},
 handle_cast({announce_guid, Node, GUID}, State = #state{node_guids = GUIDs}) ->
     {noreply, State#state{node_guids = orddict:store(Node, GUID, GUIDs)}};
 
-handle_cast({check_partial_partition, Node, NodeGUID, Reporter, MyGUID},
-            State = #state{guid = MyGUID}) ->
-    case lists:member(Node, alive_nodes()) of
-        true  -> erlang:send_after(
-                   ?PARTIAL_PARTITION_NOTIFICATION_DELAY, self(),
-                   {send_partial_partition, Node, NodeGUID, Reporter});
+handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
+            State = #state{guid       = MyGUID,
+                           node_guids = GUIDs}) ->
+    case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) andalso
+        orddict:find(Node, GUIDs) =:= {ok, NodeGUID} of
+        true  -> cast(Rep, {partial_partition, Node, node(), RepGUID});
         false -> ok
     end,
     {noreply, State};
 
-handle_cast({check_partial_partition, _Node, _NodeGUID, _Reporter, _GUID},
-            State) ->
+handle_cast({check_partial_partition, _Node, _Reporter,
+             _NodeGUID, _GUID, _ReporterGUID}, State) ->
     {noreply, State};
 
-handle_cast({partial_partition, GUID, Reporter, Proxy},
-            State = #state{guid = GUID}) ->
+handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
+            State = #state{guid = MyGUID}) ->
     FmtBase = "Partial partition detected:~n"
-        " * This node was reported DOWN by ~s~n"
+        " * We saw DOWN from ~s~n"
         " * We can still see ~s which can see ~s~n",
-    ArgsBase = [Reporter, Proxy, Reporter],
+    ArgsBase = [NotReallyDown, Proxy, NotReallyDown],
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
             rabbit_log:error(
@@ -403,15 +402,17 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
-handle_info({nodedown, Node, Info}, State = #state{node_guids = GUIDs}) ->
+handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
+                                                   node_guids = GUIDs}) ->
     rabbit_log:info("node ~p down: ~p~n",
                     [Node, proplists:get_value(nodedown_reason, Info)]),
     Check = fun (N, CheckGUID, DownGUID) ->
                     cast(N, {check_partial_partition,
-                             Node, DownGUID, node(), CheckGUID})
+                             Node, node(), DownGUID, CheckGUID, MyGUID})
             end,
     case orddict:find(Node, GUIDs) of
-        {ok, DownGUID} -> Alive = alive_nodes() -- [node(), Node],
+        {ok, DownGUID} -> Alive = rabbit_mnesia:cluster_nodes(running)
+                              -- [node(), Node],
                           [case orddict:find(N, GUIDs) of
                                {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
                                error           -> ok
@@ -468,10 +469,6 @@ handle_info(ping_up_nodes, State) ->
     %% i.e. only nodes that we know to be up.
     [cast(N, keepalive) || N <- alive_nodes() -- [node()]],
     {noreply, ensure_keepalive_timer(State#state{keepalive_timer = undefined})};
-
-handle_info({send_partial_partition, Node, NodeGUID, Reporter}, State) ->
-    cast(Node, {partial_partition, NodeGUID, Reporter, node()}),
-    {noreply, State};
 
 handle_info(_Info, State) ->
     {noreply, State}.
