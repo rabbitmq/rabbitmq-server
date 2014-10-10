@@ -164,9 +164,8 @@ syncer(Ref, Log, MPid, SPids) ->
     end.
 
 await_slaves(Ref, SPids) ->
-    Nodes = rabbit_mnesia:cluster_nodes(running),
     [SPid || SPid <- SPids,
-             lists:member(node(SPid), Nodes) andalso %% [0]
+             rabbit_mnesia:on_running_node(SPid) andalso %% [0]
                  receive
                      {sync_ready, Ref, SPid}       -> true;
                      {sync_deny,  Ref, SPid}       -> false;
