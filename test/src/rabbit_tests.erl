@@ -1979,6 +1979,11 @@ msg_store_write(MsgIds, MSCState) ->
                              rabbit_msg_store:write(MsgId, MsgId, MSCState)
                      end, ok, MsgIds).
 
+msg_store_write_flow(MsgIds, MSCState) ->
+    ok = lists:foldl(fun (MsgId, ok) ->
+                             rabbit_msg_store:write_flow(MsgId, MsgId, MSCState)
+                     end, ok, MsgIds).
+
 msg_store_remove(MsgIds, MSCState) ->
     rabbit_msg_store:remove(MsgIds, MSCState).
 
@@ -2169,18 +2174,26 @@ test_msg_store_confirm_timer() ->
                          end
                  end, undefined),
     ok = msg_store_write([MsgId], MSCState),
-    ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState),
+    ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState, false),
     ok = msg_store_remove([MsgId], MSCState),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     passed.
 
-msg_store_keep_busy_until_confirm(MsgIds, MSCState) ->
+msg_store_keep_busy_until_confirm(MsgIds, MSCState, Blocked) ->
+    After = case Blocked of
+                false -> 0;
+                true  -> ?MAX_WAIT
+            end,
+    Recurse = fun () -> msg_store_keep_busy_until_confirm(
+                          MsgIds, MSCState, credit_flow:blocked()) end,
     receive
-        on_disk -> ok
-    after 0 ->
-            ok = msg_store_write(MsgIds, MSCState),
+        on_disk            -> ok;
+        {bump_credit, Msg} -> credit_flow:handle_bump_msg(Msg),
+                              Recurse()
+    after After ->
+            ok = msg_store_write_flow(MsgIds, MSCState),
             ok = msg_store_remove(MsgIds, MSCState),
-            msg_store_keep_busy_until_confirm(MsgIds, MSCState)
+            Recurse()
     end.
 
 test_msg_store_client_delete_and_terminate() ->
