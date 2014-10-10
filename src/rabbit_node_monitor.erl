@@ -619,10 +619,11 @@ cast(Node, Msg) -> gen_server:cast({?SERVER, Node}, Msg).
 %%--------------------------------------------------------------------
 
 %% mnesia:system_info(db_nodes) (and hence
-%% rabbit_mnesia:cluster_nodes(running)) does not give reliable
-%% results when partitioned. So we have a small set of replacement
-%% functions here. "rabbit" in a function's name implies we test if
-%% the rabbit application is up, not just the node.
+%% rabbit_mnesia:cluster_nodes(running)) does not return all nodes
+%% when partitioned, just those that we are sharing Mnesia state
+%% with. So we have a small set of replacement functions
+%% here. "rabbit" in a function's name implies we test if the rabbit
+%% application is up, not just the node.
 
 %% As we use these functions to decide what to do in pause_minority
 %% state, they *must* be fast, even in the case where TCP connections

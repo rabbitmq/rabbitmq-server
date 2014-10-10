@@ -853,9 +853,8 @@ ntoab(IP) ->
 %% loop in rabbit_amqqueue:on_node_down/1 and any delays we incur
 %% would be bad news.
 is_process_alive(Pid) ->
-    Node = node(Pid),
-    lists:member(Node, [node() | nodes()]) andalso
-	rpc:call(Node, erlang, is_process_alive, [Pid]) =:= true.
+    rabbit_mnesia:on_running_node(Pid) andalso
+        rpc:call(node(Pid), erlang, is_process_alive, [Pid]) =:= true.
 
 pget(K, P) -> proplists:get_value(K, P).
 pget(K, P, D) -> proplists:get_value(K, P, D).
