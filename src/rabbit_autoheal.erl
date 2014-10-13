@@ -21,6 +21,8 @@
 %% The named process we are running in.
 -define(SERVER, rabbit_node_monitor).
 
+-define(AUTOHEAL_INITIAL_PAUSE, 1000).
+
 %%----------------------------------------------------------------------------
 
 %% In order to autoheal we want to:
@@ -153,6 +155,14 @@ handle_msg({become_winner, Losers},
            not_healing, _Partitions) ->
     rabbit_log:info("Autoheal: I am the winner, waiting for ~p to stop~n",
                     [Losers]),
+    %% Since an autoheal will kick off after a partition heals it is
+    %% possible that the partition has healed for the leader but we
+    %% are marginally behind. In filter_already_down_losers/2 we will
+    %% abort the autoheal if any nodes are down, and it's possible
+    %% that we still think that some nodes are down but that they will
+    %% come back in the very near future. So sleep briefly to give a
+    %% chance of avoiding such a needlessly aborted autoheal.
+    timer:sleep(?AUTOHEAL_INITIAL_PAUSE),
     filter_already_down_losers(Losers, Losers);
 
 handle_msg({become_winner, Losers},
