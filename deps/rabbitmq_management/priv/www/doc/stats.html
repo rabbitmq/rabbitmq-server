@@ -309,6 +309,12 @@
         </td>
       </tr>
       <tr>
+        <td><code>contexts</code></td>
+        <td>
+          A list of web application contexts in the cluster.
+        </td>
+      </tr>
+      <tr>
         <td><code>erlang_full_version</code></td>
         <td>
           A string with extended detail about the Erlang VM and how it
@@ -385,15 +391,15 @@
         </td>
       </tr>
       <tr>
-        <td><code>statistics_db_node</code></td>
-        <td>
-          Name of the cluster node hosting the management statistics database.
-        </td>
-      </tr>
-      <tr>
         <td><code>rates_mode</code></td>
         <td>
           'none', 'basic' or 'detailed'.
+        </td>
+      </tr>
+      <tr>
+        <td><code>statistics_db_node</code></td>
+        <td>
+          Name of the cluster node hosting the management statistics database.
         </td>
       </tr>
     </table>
@@ -418,9 +424,21 @@
         </td>
       </tr>
       <tr>
+        <td><code>config_files</code></td>
+        <td>
+          List of config files read by the node.
+        </td>
+      </tr>
+      <tr>
         <td><code>contexts</code></td>
         <td>
           List of all HTTP listeners on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>db_dir</code></td>
+        <td>
+          Location of the persistent storage used by the node.
         </td>
       </tr>
       <tr>
@@ -442,6 +460,12 @@
         </td>
       </tr>
       <tr>
+        <td><code>enabled_plugins</code></td>
+        <td>
+          List of plugins which are both explicitly enabled and running.
+        </td>
+      </tr>
+      <tr>
         <td><code>exchange_types</code></td>
         <td>
           Exchange types available on the node.
@@ -457,6 +481,12 @@
         <td><code>fd_used</code></td>
         <td>
           Used file descriptors.
+        </td>
+      </tr>
+      <tr>
+        <td><code>log_file</code></td>
+        <td>
+          Location of main log file.
         </td>
       </tr>
       <tr>
@@ -481,6 +511,12 @@
         <td><code>name</code></td>
         <td>
           Node name.
+        </td>
+      </tr>
+      <tr>
+        <td><code>net_ticktime</code></td>
+        <td>
+          Current kernel net_ticktime setting for the node.
         </td>
       </tr>
       <tr>
@@ -515,6 +551,12 @@
         </td>
       </tr>
       <tr>
+        <td><code>rates_mode</code></td>
+        <td>
+          'none', 'basic' or 'detailed'.
+        </td>
+      </tr>
+      <tr>
         <td><code>run_queue</code></td>
         <td>
           Average number of Erlang processes waiting to run.
@@ -528,6 +570,12 @@
         </td>
       </tr>
       <tr>
+        <td><code>sasl_log_file</code></td>
+        <td>
+          Location of <a href="http://www.erlang.org/doc/man/sasl_app.html">sasl</a> log file.
+        </td>
+      </tr>
+      <tr>
         <td><code>sockets_total</code></td>
         <td>
           File descriptors available for use as sockets.
@@ -537,12 +585,6 @@
         <td><code>sockets_used</code></td>
         <td>
           File descriptors used as sockets.
-        </td>
-      </tr>
-      <tr>
-        <td><code>rates_mode</code></td>
-        <td>
-          'none', 'basic' or 'detailed'.
         </td>
       </tr>
       <tr>
