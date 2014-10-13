@@ -246,7 +246,7 @@ default_options = { "hostname"        : "localhost",
                     "ssl"             : False,
                     "verbose"         : True,
                     "format"          : "table",
-                    "depth"           : 0,
+                    "depth"           : 1,
                     "bash_completion" : False }
 
 
@@ -464,6 +464,11 @@ class Management:
         assert_usage(len(self.args) == 1, 'Exactly one argument required')
         return self.args[0]
 
+    def use_cols(self):
+        # Deliberately do not cast to int here; we only care about the
+        # default, not explicit setting.
+        return self.options.depth == 1 and not 'json' in self.options.format
+
     def invoke_help(self):
         if len(self.args) == 0:
             parser.print_help()
@@ -542,7 +547,7 @@ class Management:
         if obj_info['vhost'] and self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
         cols = self.args[1:]
-        if cols == [] and 'cols' in obj_info and self.options.depth == 0:
+        if cols == [] and 'cols' in obj_info and self.use_cols():
             cols = obj_info['cols']
         if cols != []:
             query.append("columns=" + ",".join(cols))
@@ -654,8 +659,6 @@ class Lister:
         depth = sys.maxint
         if len(self.columns) == 0:
             depth = int(self.options.depth)
-            if depth == 0:
-                depth = 1
         (columns, table) = self.list_to_table(json.loads(json_list), depth)
         if len(table) > 0:
             self.display_list(columns, table)
