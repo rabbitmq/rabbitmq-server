@@ -179,6 +179,7 @@ handle_msg({winner_is, Winner},
     rabbit_node_monitor:run_outside_applications(
       fun () ->
               MRef = erlang:monitor(process, {?SERVER, Winner}),
+              send(Winner, {shutting_down, node()}),
               rabbit:stop(),
               receive
                   {'DOWN', MRef, process, {?SERVER, Winner}, _Reason} -> ok;
@@ -188,6 +189,26 @@ handle_msg({winner_is, Winner},
               rabbit:start()
       end),
     restarting;
+
+handle_msg({shutting_down, Node},
+           {winner_waiting, _WaitFor, Notify}, _Partitions) ->
+    %% We should already know about it, but safer to add to Notify
+    %% than assert it's there
+    {winner_waiting, _WaitFor, lists:usort([Node|Notify])};
+
+handle_msg({shutting_down, Node}, State, _Partitions) ->
+    %% Somehow we have ended up with a node shutting down when we do
+    %% not think we are the leader. One way to do this is if we still
+    %% hadn't contacted the Node again after the timer:sleep/1 in
+    %% {become_winner, ...} above. We will abort the autoheal, but it
+    %% might go to sleep waiting for us.
+    %%
+    %% There might be other ways to hit this condition too. Anyway,
+    %% don't leave the remote node down, that's definitely not helpful.
+    rabbit_log:info("Autoheal: Received shutting_down from ~s when "
+                    "in state ~p~n", [Node, State]),
+    notify_safe(Node),
+    State;
 
 handle_msg(_, restarting, _Partitions) ->
     %% ignore, we can contribute no further
@@ -204,8 +225,11 @@ abort(Down, Notify) ->
     winner_finish(Notify).
 
 winner_finish(Notify) ->
-    [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
+    [notify_safe(N) || N <- Notify],
     not_healing.
+
+notify_safe(Node) ->
+    {rabbit_outside_app_process, Node} ! autoheal_safe_to_start.
 
 make_decision(AllPartitions) ->
     Sorted = lists:sort([{partition_value(P), P} || P <- AllPartitions]),
