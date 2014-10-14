@@ -155,13 +155,6 @@ handle_msg({become_winner, Losers},
                     [Losers]),
     filter_already_down_losers(Losers, Losers);
 
-handle_msg({become_winner, Losers},
-           {winner_waiting, WaitFor, Notify}, _Partitions) ->
-    rabbit_log:info("Autoheal: I am the winner, waiting additionally for "
-                    "~p to stop~n", [Losers]),
-    filter_already_down_losers(lists:usort(Losers ++ WaitFor),
-                               lists:usort(Losers ++ Notify));
-
 handle_msg({winner_is, Winner},
            not_healing, _Partitions) ->
     rabbit_log:warning(
