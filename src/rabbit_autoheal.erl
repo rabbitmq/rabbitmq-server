@@ -127,7 +127,6 @@ handle_msg({request_start, Node},
                                  "  * Winner:     ~p~n"
                                  "  * Losers:     ~p~n",
                                  [AllPartitions, Winner, Losers]),
-                 [send(L, {winner_is, Winner}) || L <- Losers],
                  Continue = fun(Msg) ->
                                     handle_msg(Msg, not_healing, Partitions)
                             end,
@@ -153,7 +152,14 @@ handle_msg({become_winner, Losers},
            not_healing, _Partitions) ->
     rabbit_log:info("Autoheal: I am the winner, waiting for ~p to stop~n",
                     [Losers]),
-    filter_already_down_losers(Losers, Losers);
+    %% The leader said everything was ready - do we agree? If not then
+    %% give up.
+    Down = Losers -- rabbit_node_monitor:alive_rabbit_nodes(Losers),
+    case Down of
+        [] -> [send(L, {winner_is, node()}) || L <- Losers],
+              {winner_waiting, Losers, Losers};
+        _  -> abort(Down, Losers)
+    end;
 
 handle_msg({winner_is, Winner},
            not_healing, _Partitions) ->
@@ -224,26 +230,3 @@ all_partitions([{Node, CantSee} | Rest], Partitions) ->
                       _        -> [A, B | Others]
                   end,
     all_partitions(Rest, Partitions1).
-
-%% We could have received and ignored DOWN messages from some losers
-%% before becoming the winner - check for already down nodes.
-filter_already_down_losers(WantStopped, Notify) ->
-    Down = WantStopped -- rabbit_node_monitor:alive_nodes(WantStopped),
-    case Down of
-        [] ->
-            Running = rabbit_node_monitor:alive_rabbit_nodes(WantStopped),
-            AlreadyStopped = WantStopped -- Running,
-            case AlreadyStopped of
-                [] -> ok;
-                _  -> rabbit_log:info(
-                        "Autoheal: ~p already down~n", [AlreadyStopped])
-            end,
-            case Running of
-                [] -> rabbit_log:info(
-                        "Autoheal: final node has stopped, starting...~n",[]),
-                      winner_finish(Notify);
-                _  -> {winner_waiting, Running, Notify}
-            end;
-        _ ->
-            abort(Down, Notify)
-    end.
