@@ -536,8 +536,16 @@ run_outside_applications(Fun) ->
                   %% Ensure only one such process at a time, the
                   %% exit(badarg) is harmless if one is already running
                   try register(rabbit_outside_app_process, self()) of
-                      true           -> Fun()
-                  catch error:badarg -> ok
+                      true ->
+                          try
+                              Fun()
+                          catch _:E ->
+                                  rabbit_log:error(
+                                    "rabbit_outside_app_process:~n~p~n~p~n",
+                                    [E, erlang:get_stacktrace()])
+                          end
+                  catch error:badarg ->
+                          ok
                   end
           end).
 
