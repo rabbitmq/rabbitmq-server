@@ -117,27 +117,28 @@ node_down(Node, _State) ->
 handle_msg({request_start, Node},
            not_healing, Partitions) ->
     rabbit_log:info("Autoheal request received from ~p~n", [Node]),
-    rabbit_node_monitor:ping_all(),
-    case rabbit_node_monitor:all_rabbit_nodes_up() of
-        false -> not_healing;
-        true  -> AllPartitions = all_partitions(Partitions),
-                 {Winner, Losers} = make_decision(AllPartitions),
-                 rabbit_log:info("Autoheal decision~n"
-                                 "  * Partitions: ~p~n"
-                                 "  * Winner:     ~p~n"
-                                 "  * Losers:     ~p~n",
-                                 [AllPartitions, Winner, Losers]),
-                 Continue = fun(Msg) ->
-                                    handle_msg(Msg, not_healing, Partitions)
-                            end,
-                 case node() =:= Winner of
-                     true  -> Continue({become_winner, Losers});
-                     false -> send(Winner, {become_winner, Losers}), %% [0]
-                              case lists:member(node(), Losers) of
-                                  true  -> Continue({winner_is, Winner});
-                                  false -> {leader_waiting, Losers}
-                              end
-                 end
+    case check_other_nodes(Partitions) of
+        {error, E} ->
+            rabbit_log:info("Autoheal request denied: ~s~n", [fmt_error(E)]),
+            not_healing;
+        {ok, AllPartitions} ->
+            {Winner, Losers} = make_decision(AllPartitions),
+            rabbit_log:info("Autoheal decision~n"
+                            "  * Partitions: ~p~n"
+                            "  * Winner:     ~p~n"
+                            "  * Losers:     ~p~n",
+                            [AllPartitions, Winner, Losers]),
+            Continue = fun(Msg) ->
+                               handle_msg(Msg, not_healing, Partitions)
+                       end,
+            case node() =:= Winner of
+                true  -> Continue({become_winner, Losers});
+                false -> send(Winner, {become_winner, Losers}), %% [0]
+                         case lists:member(node(), Losers) of
+                             true  -> Continue({winner_is, Winner});
+                             false -> {leader_waiting, Losers}
+                         end
+            end
     end;
 %% [0] If we are a loser we will never receive this message - but it
 %% won't stick in the mailbox as we are restarting anyway
@@ -211,11 +212,21 @@ partition_value(Partition) ->
 %% We have our local understanding of what partitions exist; but we
 %% only know which nodes we have been partitioned from, not which
 %% nodes are partitioned from each other.
-all_partitions(PartitionedWith) ->
+check_other_nodes(LocalPartitions) ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
-    Partitions = [{node(), PartitionedWith} |
-                  rabbit_node_monitor:partitions(Nodes -- [node()])],
-    all_partitions(Partitions, [Nodes]).
+    {Results, Bad} = rabbit_node_monitor:status(Nodes -- [node()]),
+    RemotePartitions = [{Node, proplists:get_value(partitions, Res)}
+                        || {Node, Res} <- Results],
+    RemoteDown = [{Node, Down}
+                  || {Node, Res} <- Results,
+                     Down <- [Nodes -- proplists:get_value(nodes, Res)],
+                     Down =/= []],
+    case {Bad, RemoteDown} of
+        {[], []} -> Partitions = [{node(), LocalPartitions} | RemotePartitions],
+                    {ok, all_partitions(Partitions, [Nodes])};
+        {[], _}  -> {error, {remote_down, RemoteDown}};
+        {_,  _}  -> {error, {nodes_down, Bad}}
+    end.
 
 all_partitions([], Partitions) ->
     Partitions;
@@ -230,3 +241,8 @@ all_partitions([{Node, CantSee} | Rest], Partitions) ->
                       _        -> [A, B | Others]
                   end,
     all_partitions(Rest, Partitions1).
+
+fmt_error({remote_down, RemoteDown}) ->
+    rabbit_misc:format("Remote nodes disconnected:~n ~p", [RemoteDown]);
+fmt_error({nodes_down, NodesDown}) ->
+    rabbit_misc:format("Local nodes down: ~p", [NodesDown]).

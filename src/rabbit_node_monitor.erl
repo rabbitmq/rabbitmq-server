@@ -24,7 +24,7 @@
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
--export([partitions/0, partitions/1, subscribe/1]).
+-export([partitions/0, partitions/1, status/1, subscribe/1]).
 -export([pause_minority_guard/0]).
 
 %% gen_server callbacks
@@ -62,6 +62,7 @@
 
 -spec(partitions/0 :: () -> [node()]).
 -spec(partitions/1 :: ([node()]) -> [{node(), [node()]}]).
+-spec(status/1 :: ([node()]) -> {[{node(), [node()]}], [node()]}).
 -spec(subscribe/1 :: (pid()) -> 'ok').
 -spec(pause_minority_guard/0 :: () -> 'ok' | 'pausing').
 
@@ -186,6 +187,9 @@ partitions(Nodes) ->
     {Replies, _} = gen_server:multi_call(Nodes, ?SERVER, partitions, infinity),
     Replies.
 
+status(Nodes) ->
+    gen_server:multi_call(Nodes, ?SERVER, status, infinity).
+
 subscribe(Pid) ->
     gen_server:cast(?SERVER, {subscribe, Pid}).
 
@@ -251,6 +255,10 @@ init([]) ->
 
 handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
     {reply, Partitions, State};
+
+handle_call(status, _From, State = #state{partitions = Partitions}) ->
+    {reply, [{partitions, Partitions},
+             {nodes,      [node() | nodes()]}], State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
