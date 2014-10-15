@@ -19,6 +19,7 @@
 # Non-empty defaults should be set in rabbitmq-env
 . `dirname $0`/rabbitmq-env
 
+[ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_NAME_TYPE=-name || RABBITMQ_NAME_TYPE=-sname
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
 [ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s rabbit boot "
@@ -54,7 +55,7 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     -noinput \
     -hidden \
     -s rabbit_prelaunch \
-    -sname rabbitmqprelaunch$$ \
+    $RABBITMQ_NAME_TYPE rabbitmqprelaunch$$ \
     -extra "${RABBITMQ_NODENAME}"
 
 PRELAUNCH_RESULT=$?
@@ -85,7 +86,7 @@ RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
 exec ${ERL_DIR}erl \
     -pa ${RABBITMQ_EBIN_ROOT} \
     ${RABBITMQ_START_RABBIT} \
-    -sname ${RABBITMQ_NODENAME} \
+    $RABBITMQ_NAME_TYPE ${RABBITMQ_NODENAME} \
     -boot "${SASL_BOOT_FILE}" \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
