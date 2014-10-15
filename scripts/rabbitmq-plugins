@@ -19,11 +19,13 @@
 # Non-empty defaults should be set in rabbitmq-env
 . `dirname $0`/rabbitmq-env
 
+[ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_NAME_TYPE=-name || RABBITMQ_NAME_TYPE=-sname
+
 exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
-    -sname rabbitmq-plugins$$ \
+    -$RABBITMQ_NAME_TYPE rabbitmq-plugins$$ \
     -boot "${CLEAN_BOOT_FILE}" \
     -s rabbit_plugins_main \
     -enabled_plugins_file "$RABBITMQ_ENABLED_PLUGINS_FILE" \
