@@ -2,7 +2,7 @@
 
 REM Usage: rabbitmq-echopid.bat <rabbitmq_nodename>
 REM
-REM <rabbitmq_nodename> sname of the erlang node to connect to (required)
+REM <rabbitmq_nodename> (s)name of the erlang node to connect to (required)
 
 setlocal
 
@@ -18,8 +18,18 @@ if not exist "%WMIC_PATH%" (
   goto fail
 )
 
+:: sets sname/name ::
+if "!RABBITMQ_USE_LONGNAME!"=="" (
+    set RABBITMQ_NAME_TYPE="-sname"
+)
+
+if "!RABBITMQ_USE_LONGNAME!"=="true" (
+    set RABBITMQ_NAME_TYPE="-name"
+)
+
+
 :getpid
-for /f "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='erl.exe' and commandline like '%%-sname %1%%'" get processid 2^>nul`) do (
+for /f "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='erl.exe' and commandline like '%%%RABBITMQ_NAME_TYPE% %1%%'" get processid 2^>nul`) do (
   set PID=%%P
   goto echopid
 )
