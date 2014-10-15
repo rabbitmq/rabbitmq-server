@@ -40,6 +40,9 @@
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-include_lib("webmachine/include/wm_reqdata.hrl").
+-include_lib("webmachine/include/wm_reqstate.hrl").
+
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 
 %%--------------------------------------------------------------------
@@ -116,11 +119,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
              end,
     case rabbit_access_control:check_user_pass_login(Username, Password) of
         {ok, User = #user{tags = Tags}} ->
-            IPStr = wrq:peer(ReqData),
-            %% inet_parse:address/1 is an undocumented function but
-            %% exists in old versions of Erlang. inet:parse_address/1
-            %% is a documented wrapper round it but introduced in R16B.
-            {ok, IP} = inet_parse:address(IPStr),
+            IP = peer(ReqData),
             case rabbit_access_control:check_user_loopback(Username, IP) of
                 ok ->
                     case is_mgmt_user(Tags) of
@@ -142,6 +141,16 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
                                [rabbit_misc:format(Msg, Args)]),
             not_authorised(<<"Login failed">>, ReqData, Context)
     end.
+
+%% We can't use wrq:peer/1 because that trusts X-Forwarded-For.
+peer(ReqData) ->
+    {ok, {IP,_Port}} = peername(ReqData#wm_reqdata.wm_state#wm_reqstate.socket),
+    IP.
+
+%% Like the one in rabbit_net, but we and webmachine have a different
+%% way of wrapping
+peername(Sock) when is_port(Sock) -> inet:peername(Sock);
+peername({ssl, SSL})              -> ssl:peername(SSL).
 
 vhost(ReqData) ->
     case id(vhost, ReqData) of
