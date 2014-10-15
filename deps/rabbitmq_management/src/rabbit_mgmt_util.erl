@@ -144,7 +144,8 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
 
 %% We can't use wrq:peer/1 because that trusts X-Forwarded-For.
 peer(ReqData) ->
-    {ok, {IP,_Port}} = peername(ReqData#wm_reqdata.wm_state#wm_reqstate.socket),
+    WMState = ReqData#wm_reqdata.wm_state,
+    {ok, {IP,_Port}} = peername(WMState#wm_reqstate.socket),
     IP.
 
 %% Like the one in rabbit_net, but we and webmachine have a different
