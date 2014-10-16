@@ -2,12 +2,9 @@
 
 # aptly_wrapper.sh
 
-# Commenting set -e, as it will cause the script to bail when handling
-# certain errors, such as a non-exisiting remote aptly dir when performing
-# a fetch.
-#set -e
+set -e
 
-DEBUG=yes
+DEBUG=no
 
 DATE=`date +%y%d-%H%M%S`
 
@@ -25,12 +22,6 @@ REPO_COMPONENT=main
 REPO_LABEL="RabbitMQ Repository for Debian / Ubuntu etc"
 REPO_ORIGIN=RabbitMQ
 
-# These would ideally come from the release.mk
-# Need to determine actual dir layout for prod server where we can put
-#  aptly/
-DEPLOY_HOST=localhost
-DEPLOY_PATH=/tmp/rabbitmq/extras/releases
-DEPLOY_DEST=${DEPLOY_HOST}:${DEPLOY_PATH}
 
 # Rsync needs to preserve hardlinks which Aptly uses to map packages in the
 # metadata pool with the public pool
@@ -51,17 +42,19 @@ APTLY="aptly -config=${APTLY_CONF}"
 Debug() {
    # Debug "this will appear when debug = yes only"
    if [ "$DEBUG" = "yes" ]; then
-      echo $*
+      #echo "   $*"
+      printf "\t%s\n" "$*"
    fi
 }
 
 Usage() {
    echo ""
-   echo "`basename $0` -o [add|publish|fetch|push|diff] -h GPG_HOME -g GPG_KEY_ID -f \"pkg_full_name another_pkg_full_name\""
+   echo "`basename $0` -o [add|publish|fetch|push|diff] -h GPG_HOME -g GPG_KEY_ID"
+   echo "     -d DEPLOY_HOST -p DEPLOY_PATH -f \"pkg_full_name another_pkg_full_name\""
    echo ""
    echo "For example:"
    echo "     To pull the persistence files from the server:"
-   echo "     ./`basename $0` -o fetch"
+   echo "     ./`basename $0` -o fetch -d server.example.com -p /tmp/rabbitmq/extras/releases"
    echo ""
    echo "     To add a package to a repo:"
    echo "     ./`basename $0` -o add -f rabbitmq-server_3.3.5-1_all.deb"
@@ -73,7 +66,10 @@ Usage() {
    echo "     ./`basename $0` -o publish -h HOME=/tmp -g 57F929F7"
    echo ""
    echo "     To push the persistence files and public repo data to server:"
-   echo "     ./`basename $0` -o push"
+   echo "     ./`basename $0` -o push -d server.example.com -p /tmp/rabbitmq/extras/releases"
+   echo ""
+   echo "     To compare the remote persistence files to local files:"
+   echo "     ./`basename $0` -o diff -d server.example.com -p /tmp/rabbitmq/extras/releases"
    echo ""
    exit
 }
@@ -84,12 +80,14 @@ if [ "$#" -lt "2" ]; then
 fi
 
 
-while getopts ":o:f:g:h:" opt; do
+while getopts ":o:f:g:h:d:p:" opt; do
    case $opt in
        o  ) OP=$OPTARG ;;
        f  ) PKG_NAME_FULL=$OPTARG ;;
        g  ) GPG_KEY=$OPTARG ;;
        h  ) GPG_HOME=$OPTARG ;;
+       d  ) DEPLOY_HOST=$OPTARG ;;
+       p  ) DEPLOY_PATH=$OPTARG ;;
        \? ) Usage ;;
    esac
 done
@@ -99,6 +97,7 @@ if [ -z "$OP" ]; then
    echo "The -o option is required"
    Usage
 fi
+
 
 # If the GPG_HOME value is passed in then export it here for aptly to use
 # to find the gpg key.
@@ -117,24 +116,60 @@ if [ ! -z "$GPG_KEY" ]; then
    export GPG_KEY_FLAG
 fi
 
+# Use the same case statement for fetch and push
+if [ "$OP" = "fetch" ]; then
+   SYNC_OPT=fetch
+   OP=sync
+fi
+if [ "$OP" = "push" ]; then
+   SYNC_OPT=push
+   OP=sync
+fi
+
+# Override passed in value from release.mk for testing purposes
+#DEPLOY_HOST=
+
+# Add the aptly dir to the path. The public repo files and internal aptly files
+# reside in the aptly dir.
+DEPLOY_PATH=${DEPLOY_PATH}/aptly
+DEPLOY_DEST=${DEPLOY_HOST}:${DEPLOY_PATH}
+
 case $OP in
-   fetch)
-      # Pull via ssh the Aptly persistence files from the server
+   sync)
+      if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_PATH" ]; then
+         echo "Both -p DEPLOY_PATH and -d DEPLOY_DEST are required for -o $SYNC_OPT"
+         Usage
+      fi
+      # using rsync over ssh, check that we can ssh to dest host
+      DEPLOY_SSH_CONNECT=`ssh -q ${DEPLOY_HOST} "exit" && echo yes || echo no`
 
-      # Check existence of remote persistence files expected to be in the
-      # aptly directory.
-      APTLY_DIR_EXISTS=`ssh ${DEPLOY_HOST} "ls $DEPLOY_PATH 2>/dev/null | grep -c aptly"`
-
-      # Use -gt to handle existence of more than one instance of an aptly
-      # named directory, such as aptly and aptly.old.
-      if [ "$APTLY_DIR_EXISTS" -gt "0" ]; then
-         echo "aptly dir does exist on $DEPLOY_HOST"
-         Debug "$RSYNC_CMD ${DEPLOY_DEST}/aptly/* aptly/"
-         $RSYNC_CMD ${DEPLOY_DEST}/aptly/* aptly/
-      else 
-         echo "aptly dir does NOT exist on $DEPLOY_HOST"
-         echo "Nothing to fetch. Add operation will automatically create"
-         echo "the repo."
+      if [ "$DEPLOY_SSH_CONNECT" = "no" ]; then
+         echo "Unable to access ${DEPLOY_HOST}"
+         echo "Using local repo files only."
+      else
+         DEPLOY_DIR_EXISTS=`ssh ${DEPLOY_HOST} "[ -d $DEPLOY_PATH ] && echo yes || echo no"`
+         if [ "$DEPLOY_DIR_EXISTS" = "no" ]; then
+            if [ "$SYNC_OPT" = "fetch" ]; then
+               echo "Aptly repo metadata files do NOT exist on $DEPLOY_HOST"
+            else
+               # push operation, attempt to create dest dir
+               # The set -e will prevent the rsync if the mkdir fails
+               ssh $DEPLOY_HOST "mkdir -p $DEPLOY_PATH" || echo "Failed to create $DEPLOY_PATH. Unable to push local repo to $DEPLOY_HOST."
+               Debug "$RSYNC_CMD aptly/ ${DEPLOY_DEST}/"
+               $RSYNC_CMD aptly/ ${DEPLOY_DEST}/
+            fi
+         else
+            if [ "$SYNC_OPT" = "fetch" ]; then
+               echo "Performing Aptly metadata sync from $DEPLOY_HOST"
+# removed unneeded /*
+               Debug "$RSYNC_CMD ${DEPLOY_DEST}/ aptly/"
+               $RSYNC_CMD ${DEPLOY_DEST}/ aptly/
+            else
+               # push operation
+               Debug "$RSYNC_CMD aptly/ ${DEPLOY_DEST}/"
+               $RSYNC_CMD aptly/ ${DEPLOY_DEST}/
+            fi
+         fi
       fi
       ;;
 
@@ -142,8 +177,12 @@ case $OP in
          # perform a dry-run fetch of the remote repo with rsync so
          # itemize-changes can be used to compare the remote persistence
          # files to what is local.
-         Debug "$RSYNC_CMD_DIFF ${DEPLOY_DEST}/aptly/* aptly/"
-         $RSYNC_CMD_DIFF ${DEPLOY_DEST}/aptly/* aptly/
+         if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_PATH" ]; then
+            echo "Both -p DEPLOY_PATH and -d DEPLOY_DEST are required for -o diff"
+            Usage
+         fi
+         Debug "$RSYNC_CMD_DIFF ${DEPLOY_DEST}/ aptly/"
+         $RSYNC_CMD_DIFF ${DEPLOY_DEST}/ aptly/
       ;;
    add)
       if [ -z "$PKG_NAME_FULL" ]; then
@@ -242,12 +281,5 @@ case $OP in
          $APTLY publish snapshot -distribution="${LINKED_REPO}"  \
             $GPG_KEY_FLAG $SNAPSHOT_NAME debian
       fi
-      ;;
-
-   push)
-      # Push via rsync over ssh the Aptly persistence files and public
-      # repo data. 
-      Debug "$RSYNC_CMD aptly ${DEPLOY_DEST}/"
-      $RSYNC_CMD aptly ${DEPLOY_DEST}/
       ;;
 esac

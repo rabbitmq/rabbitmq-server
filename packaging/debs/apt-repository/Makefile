@@ -9,11 +9,8 @@ CAN_HAS_APTLY=$(shell [ -f /usr/bin/aptly ] && echo true)
 ifeq ($(CAN_HAS_APTLY), true)
 debian_apt_repository: 
 	
-	./aptly_wrapper.sh -o fetch
-	for FILE in ../Debian/*.deb ; do \
-		./aptly_wrapper.sh -o add -f $${FILE} ; \
-	done
-	for FILE in ../Debian/*.dsc ; do \
+	./aptly_wrapper.sh -o fetch -d $(DEPLOY_HOST) -p $(DEPLOY_PATH)
+	for FILE in ../Debian/*.d?? ; do \
 		./aptly_wrapper.sh -o add -f $${FILE} ; \
 	done
 ifeq ($(UNOFFICIAL_RELEASE), true)
@@ -24,7 +21,7 @@ else
 	sed -i '/gpgDisableSign/ s/true/false/' aptly.conf
 	./aptly_wrapper.sh -o publish -h $(HOME_ARG) -g $(SIGNING_KEY)
 endif
-	./aptly_wrapper.sh -o push
+	./aptly_wrapper.sh -o push -d $(DEPLOY_HOST) -p $(DEPLOY_PATH)
 else
 debian_apt_repository:
 	@echo Not building APT repository as aptly could not be found
