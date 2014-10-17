@@ -37,8 +37,10 @@
 
 %%----------------------------------------------------------------------------
 
-ensure(FileJustChanged) ->
-    {ok, OurFile} = application:get_env(rabbit, enabled_plugins_file),
+ensure(FileJustChanged0) ->
+    {ok, OurFile0} = application:get_env(rabbit, enabled_plugins_file),
+    FileJustChanged = filename:nativename(FileJustChanged0),
+    OurFile = filename:nativename(OurFile0),
     case OurFile of
         FileJustChanged ->
             Enabled = read_enabled(OurFile),
