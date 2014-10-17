@@ -39,8 +39,17 @@ set -e
 
 SCRIPT_DIR=`dirname $SCRIPT_PATH`
 RABBITMQ_HOME="${SCRIPT_DIR}/.."
-[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
-NODENAME=rabbit@${HOSTNAME%%.*}
+
+[ "x" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME=${USE_LONGNAME}
+if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] ; then
+    RABBITMQ_NAME_TYPE=-name
+    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname --fqdn`
+    NODENAME=rabbit@${HOSTNAME}
+else
+    RABBITMQ_NAME_TYPE=-sname
+    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
+    NODENAME=rabbit@${HOSTNAME%%.*}
+fi
 
 ## Set defaults
 . ${SCRIPT_DIR}/rabbitmq-defaults
