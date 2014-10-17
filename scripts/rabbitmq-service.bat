@@ -192,7 +192,7 @@ if "!RABBITMQ_CONFIG_FILE!"=="" (
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
-        %RABBITMQ_NAME_TYPE% rabbitmqprelaunch!RANDOM!!TIME:~9!
+        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
 
 if ERRORLEVEL 3 (
     rem ERRORLEVEL means (or greater) so we need to catch all other failure
@@ -255,7 +255,7 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 -env ERL_CRASH_DUMP="!RABBITMQ_BASE:\=/!/erl_crash.dump" ^
 -workdir "!RABBITMQ_BASE!" ^
 -stopaction "rabbit:stop_and_halt()." ^
-%RABBITMQ_NAME_TYPE% !RABBITMQ_NODENAME! ^
+!RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
 !CONSOLE_FLAG! ^
 -comment "A robust and scalable messaging broker" ^
 -args "!ERLANG_SERVICE_ARGUMENTS!" > NUL
