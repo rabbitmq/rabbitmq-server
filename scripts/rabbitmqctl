@@ -21,11 +21,12 @@
 
 # rabbitmqctl starts distribution itself, so we need to make sure epmd
 # is running.
-${ERL_DIR}erl -sname rabbitmqctl-prelaunch-$$ -noinput -eval 'erlang:halt().'
+${ERL_DIR}erl ${RABBITMQ_NAME_TYPE} rabbitmqctl-prelaunch-$$ -noinput -eval 'erlang:halt().'
 
 # We specify Mnesia dir and sasl error logger since some actions
 # (e.g. forget_cluster_node --offline) require us to impersonate the
 # real node.
+RABBITMQ_USE_LONGNAME=${RABBITMQ_USE_LONGNAME} \
 exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
