@@ -26,12 +26,17 @@
 start_link(Listeners, []) ->
     supervisor2:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
-init([{Listeners, SslListeners}]) ->
+init([{Listeners, SslListeners0}]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_mqtt, tcp_listen_options),
-    SslOpts = case SslListeners of
-                  [] -> none;
-                  _  -> rabbit_networking:ensure_ssl()
-              end,
+    {SslOpts, SslListeners}
+        = case SslListeners0 of
+              [] -> {none, []};
+              _  -> {rabbit_networking:ensure_ssl(),
+                     case rabbit_networking:poodle_check('STOMP') of
+                         ok     -> SslListeners0;
+                         danger -> []
+                     end}
+          end,
     {ok, {{one_for_all, 10, 10},
           [{collector,
             {rabbit_mqtt_collector, start_link, []},
