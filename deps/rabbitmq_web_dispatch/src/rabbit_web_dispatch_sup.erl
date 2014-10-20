@@ -85,7 +85,8 @@ name(Listener) ->
 
 ssl_config(Options) ->
     case proplists:get_value(ssl, Options) of
-        true -> case rabbit_networking:poodle_check('HTTP') of
+        true -> rabbit_networking:ensure_ssl(),
+                case rabbit_networking:poodle_check('HTTP') of
                     ok     -> case proplists:get_value(ssl_opts, Options) of
                                   undefined -> auto_ssl(Options);
                                   _         -> fix_ssl(Options)
