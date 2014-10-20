@@ -82,9 +82,9 @@ hard_error_test() ->
 
 %% An error in a channel should result in the death of the entire connection.
 %% The death of the channel is caused by an error in generating the frames
-%% (writer dies) - only in the network case
+%% (writer dies)
 channel_writer_death_test() ->
-    {ok, Connection} = test_util:new_connection(just_network),
+    {ok, Connection} = test_util:new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     QoS = #'basic.qos'{prefetch_count = 0},
