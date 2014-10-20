@@ -317,6 +317,15 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     noreply(State);
 
+%% In the event of a short partition during sync we can detect the
+%% master's 'death', drop out of sync, and then receive sync messages
+%% which were still in flight. Ignore them.
+handle_info({sync_msg, _Ref, _Msg, _Props, _Unacked}, State) ->
+    noreply(State);
+
+handle_info({sync_complete, _Ref}, State) ->
+    noreply(State);
+
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 

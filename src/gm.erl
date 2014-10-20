@@ -720,6 +720,14 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
         {_, {shutdown, ring_shutdown}} ->
             noreply(State);
         _ ->
+            %% In the event of a partial partition we could see another member
+            %% go down and then remove them from Mnesia. While they can
+            %% recover from this they'd have to restart the queue - not
+            %% ideal. So let's sleep here briefly just in case this was caused
+            %% by a partial partition; in which case by the time we record the
+            %% member death in Mnesia we will probably be in a full
+            %% partition and will not be assassinating another member.
+            timer:sleep(100),
             View1 = group_to_view(record_dead_member_in_group(
                                     Member, GroupName, TxnFun)),
             handle_callback_result(
