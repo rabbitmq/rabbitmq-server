@@ -74,6 +74,8 @@ handle_message({force_event_refresh, Ref}, State = #state{node = Node}) ->
     {ok, State};
 handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
     {stop, {closing_timeout, Reason}, State};
+handle_message({nodedown, Node}, State = #state{node = Node}) ->
+    {stop, {nodedown, Node}, State};
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
 
@@ -134,6 +136,7 @@ connect(Params = #amqp_params_direct{username     = Username,
             {ok, ChMgr, Collector} = SIF(i(name, State1)),
             State2 = State1#state{user      = User,
                                   collector = Collector},
+            erlang:monitor_node(Node, true),
             {ok, {ServerProperties, 0, ChMgr, State2}};
         {error, _} = E ->
             E;

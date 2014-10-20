@@ -76,13 +76,14 @@ subscribe_nowait_test_()                -> ?RUN([]).
 connection_blocked_network_test_()      -> ?RUN([]).
 
 non_existent_exchange_test_()           -> ?RUN([negative]).
-bogus_rpc_test_()                    -> ?RUN([negative, repeat]).
-hard_error_test_()                   -> ?RUN([negative, repeat]).
+bogus_rpc_test_()                       -> ?RUN([negative, repeat]).
+hard_error_test_()                      -> ?RUN([negative, repeat]).
 non_existent_user_test_()               -> ?RUN([negative]).
 invalid_password_test_()                -> ?RUN([negative]).
 non_existent_vhost_test_()              -> ?RUN([negative]).
 no_permission_test_()                   -> ?RUN([negative]).
 channel_writer_death_test_()            -> ?RUN([negative]).
+connection_failure_test_()              -> ?RUN([negative]).
 channel_death_test_()                   -> ?RUN([negative]).
 shortstr_overflow_property_test_()      -> ?RUN([negative]).
 shortstr_overflow_field_test_()         -> ?RUN([negative]).
