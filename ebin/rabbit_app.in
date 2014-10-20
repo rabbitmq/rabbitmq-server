@@ -47,6 +47,7 @@
          {log_levels, [{connection, info}]},
          {ssl_cert_login_from, distinguished_name},
          {ssl_handshake_timeout, 5000},
+         {ssl_allow_poodle_attack, false},
          {handshake_timeout, 10000},
          {reverse_dns_lookups, false},
          {cluster_partition_handling, ignore},

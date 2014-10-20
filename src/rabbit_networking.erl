@@ -26,7 +26,7 @@
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/6,
-         ensure_ssl/0, fix_ssl_options/1, ssl_transform_fun/1]).
+         ensure_ssl/0, fix_ssl_options/1, poodle_check/1, ssl_transform_fun/1]).
 
 -export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
@@ -92,6 +92,7 @@
          label(), rabbit_types:mfargs()) -> supervisor:child_spec()).
 -spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
 -spec(fix_ssl_options/1 :: (rabbit_types:infos()) -> rabbit_types:infos()).
+-spec(poodle_check/1 :: (atom()) -> 'ok' | 'danger').
 -spec(ssl_transform_fun/1 ::
         (rabbit_types:infos())
         -> fun ((rabbit_net:socket())
@@ -140,7 +141,10 @@ boot_ssl() ->
             ok;
         {ok, SslListeners} ->
             SslOpts = ensure_ssl(),
-            [start_ssl_listener(Listener, SslOpts) || Listener <- SslListeners],
+            case poodle_check('AMQP') of
+                ok     -> [start_ssl_listener(L, SslOpts) || L <- SslListeners];
+                danger -> ok
+            end,
             ok
     end.
 
@@ -154,6 +158,31 @@ ensure_ssl() ->
     ok = app_utils:start_applications(SslAppsConfig),
     {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
     fix_ssl_options(SslOptsConfig).
+
+poodle_check(Context) ->
+    {ok, Vsn} = application:get_key(ssl, vsn),
+    case rabbit_misc:version_compare(Vsn, "5.3", gte) of %% R16B01
+        true  -> ok;
+        false -> case application:get_env(rabbit, ssl_allow_poodle_attack) of
+                     {ok, true}  -> ok;
+                     {ok, false} -> log_poodle_fail(Context),
+                                    danger
+                 end
+    end.
+
+log_poodle_fail(Context) ->
+    rabbit_log:error(
+      "The installed version of Erlang (~s) contains the bug OTP-10905,~n"
+      "which makes it impossible to disable SSLv3. This makes the system~n"
+      "vulnerable to the POODLE attack. SSL listeners for ~s have therefore~n"
+      "been disabled.~n~n"
+      "You are advised to upgrade to a recent Erlang version; R16B01 is the~n"
+      "first version in which this bug is fixed, but later is usually~n"
+      "better.~n~n"
+      "If you cannot upgrade now and want to re-enable SSL listeners, you can~n"
+      "set the config item 'ssl_allow_poodle_attack' to 'true' in the~n"
+      "'rabbit' section of your configuration file.~n",
+      [rabbit_misc:otp_release(), Context]).
 
 fix_ssl_options(Config) ->
     fix_verify_fun(fix_ssl_protocol_versions(Config)).
