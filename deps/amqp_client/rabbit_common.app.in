@@ -27,6 +27,7 @@
              rabbit_misc,
              rabbit_msg_store_index,
              rabbit_net,
+             rabbit_networking,
              rabbit_nodes,
              rabbit_policy_validator,
              rabbit_reader,
