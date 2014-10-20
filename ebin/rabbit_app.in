@@ -16,7 +16,8 @@
   {mod, {rabbit, []}},
   {env, [{tcp_listeners, [5672]},
          {ssl_listeners, []},
-         {ssl_options, []},
+         %% Disables SSLv3 to mitigate the POODLE attack
+         {ssl_options, [{versions, ['tlsv1.2', 'tlsv1.1', tlsv1]}]},
          {vm_memory_high_watermark, 0.4},
          {vm_memory_high_watermark_paging_ratio, 0.5},
          {disk_free_limit, 50000000}, %% 50MB
