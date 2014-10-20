@@ -415,6 +415,9 @@ handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
                             State).
 
 %% @private
+handle_cast({set_writer, Writer}, State = #state{driver = direct}) ->
+    link(Writer),
+    {noreply, State#state{writer = Writer}};
 handle_cast({set_writer, Writer}, State) ->
     {noreply, State#state{writer = Writer}};
 %% @private

@@ -74,6 +74,9 @@ handle_message({force_event_refresh, Ref}, State = #state{node = Node}) ->
     {ok, State};
 handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
     {stop, {closing_timeout, Reason}, State};
+handle_message({'DOWN', _MRef, process, _ConnSup, Reason},
+               State = #state{node = Node}) ->
+    {stop, {remote_node_down, Reason}, State};
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
 
@@ -134,6 +137,13 @@ connect(Params = #amqp_params_direct{username     = Username,
             {ok, ChMgr, Collector} = SIF(i(name, State1)),
             State2 = State1#state{user      = User,
                                   collector = Collector},
+            %% There's no real connection-level process on the remote
+            %% node for us to monitor or link to, but we want to
+            %% detect connection death if the remote node goes down
+            %% when there are no channels. So we monitor the
+            %% supervisor; that way we find out if the node goes down
+            %% or the rabbit app stops.
+            erlang:monitor(process, {rabbit_direct_client_sup, Node}),
             {ok, {ServerProperties, 0, ChMgr, State2}};
         {error, _} = E ->
             E;

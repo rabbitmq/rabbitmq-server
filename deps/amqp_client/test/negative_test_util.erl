@@ -80,11 +80,33 @@ hard_error_test() ->
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection).
 
+%% The connection should die if the underlying connection is prematurely
+%% closed. For a network connection, this means that the TCP socket is
+%% closed. For a direct connection (remotely only, of course), this means that
+%% the RabbitMQ node appears as down.
+connection_failure_test() ->
+    {ok, Connection} = test_util:new_connection(),
+    case amqp_connection:info(Connection, [type, amqp_params]) of
+        [{type, direct}, {amqp_params, Params}]  ->
+            case Params#amqp_params_direct.node of
+                N when N == node() ->
+                    amqp_connection:close(Connection);
+                N ->
+                    true = erlang:disconnect_node(N),
+                    net_adm:ping(N)
+            end;
+        [{type, network}, {amqp_params, _}] ->
+            [{sock, Sock}] = amqp_connection:info(Connection, [sock]),
+            ok = gen_tcp:close(Sock)
+    end,
+    test_util:wait_for_death(Connection),
+    ok.
+
 %% An error in a channel should result in the death of the entire connection.
 %% The death of the channel is caused by an error in generating the frames
-%% (writer dies) - only in the network case
+%% (writer dies)
 channel_writer_death_test() ->
-    {ok, Connection} = test_util:new_connection(just_network),
+    {ok, Connection} = test_util:new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     QoS = #'basic.qos'{prefetch_count = 0},

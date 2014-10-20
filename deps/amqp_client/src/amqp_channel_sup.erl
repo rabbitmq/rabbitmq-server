@@ -53,7 +53,6 @@ start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector],
         rpc:call(Node, rabbit_direct, start_channel,
                  [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
                   VHost, ?CLIENT_CAPABILITIES, Collector]),
-    link(RabbitCh),
     RabbitCh;
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     {ok, Writer} = supervisor2:start_child(
