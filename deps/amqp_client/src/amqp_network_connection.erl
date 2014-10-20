@@ -144,10 +144,12 @@ do_connect({Addr, Family},
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
         {ok, Sock} ->
-            SslOpts = orddict:merge(fun (_, _A, B) -> B end,
-                                    orddict:from_list(GlobalSslOpts),
-                                    orddict:from_list(SslOpts0)),
-            case ssl:connect(Sock, orddict:to_list(SslOpts)) of
+            SslOpts = rabbit_networking:fix_ssl_options(
+                        orddict:to_list(
+                          orddict:merge(fun (_, _A, B) -> B end,
+                                        orddict:from_list(GlobalSslOpts),
+                                        orddict:from_list(SslOpts0)))),
+            case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
                     try_handshake(AmqpParams, SIF,
