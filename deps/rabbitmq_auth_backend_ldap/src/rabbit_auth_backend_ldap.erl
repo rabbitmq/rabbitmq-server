@@ -314,7 +314,7 @@ ssl_opts() ->
     %% b) we have SSL turned on (or it breaks StartTLS...)
     case env(use_ssl) of
         false -> [{ssl, false}];
-        true  -> SSLOpts = env(ssl_options),
+        true  -> SSLOpts = rabbit_networking:fix_ssl_options(env(ssl_options)),
                  case {SSLOpts, at_least("5.10")} of %% R16A
                      {[], _}  -> [{ssl, true}];
                      {_,  lt} -> exit({ssl_options_requires_min_r16a});
