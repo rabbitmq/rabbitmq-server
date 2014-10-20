@@ -28,7 +28,7 @@ start_link(Listeners, []) ->
 
 init([{Listeners, SslListeners0}]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_mqtt, tcp_listen_options),
-    SslListeners = case rabbit_misc:poodle_check('MQTT') of
+    SslListeners = case rabbit_networking:poodle_check('MQTT') of
                        ok     -> SslListeners0;
                        danger -> []
                    end,
