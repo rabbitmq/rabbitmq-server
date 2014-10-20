@@ -292,13 +292,13 @@ with_ldap({ok, Creds}, Fun, Servers) ->
     end.
 
 eldap_open(Servers, Opts) ->
-    case eldap:open(Servers, ssl_opts() ++ Opts) of
+    case eldap:open(Servers, ssl_conf() ++ Opts) of
         {ok, LDAP} ->
             TLS = env(use_starttls),
             case {TLS, at_least("5.10.4")} of %%R16B03
                 {false, _}     -> {ok, LDAP};
                 {true,  false} -> exit({starttls_requires_min_r16b3});
-                {true,  _}     -> TLSOpts = env(ssl_options),
+                {true,  _}     -> TLSOpts = ssl_options(),
                                   ELDAP = eldap, %% Fool xref
                                   case ELDAP:start_tls(LDAP, TLSOpts) of
                                       ok    -> {ok, LDAP};
@@ -309,18 +309,21 @@ eldap_open(Servers, Opts) ->
             Error
     end.
 
-ssl_opts() ->
+ssl_conf() ->
     %% We must make sure not to add SSL options unless a) we have at least R16A
     %% b) we have SSL turned on (or it breaks StartTLS...)
     case env(use_ssl) of
         false -> [{ssl, false}];
-        true  -> SSLOpts = env(ssl_options),
-                 case {SSLOpts, at_least("5.10")} of %% R16A
-                     {[], _}  -> [{ssl, true}];
-                     {_,  lt} -> exit({ssl_options_requires_min_r16a});
-                     {_,  _}  -> [{ssl, true}, {sslopts, SSLOpts}]
+        true  -> %% Only the unfixed version can be []
+                 case {env(ssl_options), at_least("5.10")} of %% R16A
+                     {_,  true}  -> [{ssl, true}, {sslopts, ssl_options()}];
+                     {[], _}     -> [{ssl, true}];
+                     {_,  false} -> exit({ssl_options_requires_min_r16a})
                  end
     end.
+
+ssl_options() ->
+    rabbit_networking:fix_ssl_options(env(ssl_options)).
 
 at_least(Ver) ->
     rabbit_misc:version_compare(erlang:system_info(version), Ver) =/= lt.
