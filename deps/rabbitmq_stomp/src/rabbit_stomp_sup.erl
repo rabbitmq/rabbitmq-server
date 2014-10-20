@@ -25,8 +25,13 @@ start_link(Listeners, Configuration) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE,
                           [Listeners, Configuration]).
 
-init([{Listeners, SslListeners}, Configuration]) ->
+init([{Listeners, SslListeners0}, Configuration]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_stomp, tcp_listen_options),
+
+    SslListeners = case rabbit_misc:poodle_check('STOMP') of
+                       ok     -> SslListeners0;
+                       danger -> []
+                   end,
 
     SslOpts = case SslListeners of
                   [] -> none;
