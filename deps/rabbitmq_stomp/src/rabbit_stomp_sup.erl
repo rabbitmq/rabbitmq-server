@@ -28,7 +28,7 @@ start_link(Listeners, Configuration) ->
 init([{Listeners, SslListeners0}, Configuration]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_stomp, tcp_listen_options),
 
-    SslListeners = case rabbit_misc:poodle_check('STOMP') of
+    SslListeners = case rabbit_networking:poodle_check('STOMP') of
                        ok     -> SslListeners0;
                        danger -> []
                    end,
