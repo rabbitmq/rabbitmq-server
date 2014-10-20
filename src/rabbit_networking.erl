@@ -26,7 +26,7 @@
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/6,
-         ensure_ssl/0, ssl_transform_fun/1]).
+         ensure_ssl/0, fix_ssl_options/1, ssl_transform_fun/1]).
 
 -export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
@@ -34,10 +34,15 @@
 %% Internal
 -export([connections_local/0]).
 
+-import(rabbit_misc, [pget/2, pget/3, pset/3]).
+
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
 
 -define(FIRST_TEST_BIND_PORT, 10000).
+
+%% POODLE
+-define(BAD_SSL_PROTOCOL_VERSIONS, [sslv3]).
 
 %%----------------------------------------------------------------------------
 
@@ -86,6 +91,7 @@
         (name_prefix(), address(), [gen_tcp:listen_option()], protocol(),
          label(), rabbit_types:mfargs()) -> supervisor:child_spec()).
 -spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
+-spec(fix_ssl_options/1 :: (rabbit_types:infos()) -> rabbit_types:infos()).
 -spec(ssl_transform_fun/1 ::
         (rabbit_types:infos())
         -> fun ((rabbit_net:socket())
@@ -143,41 +149,40 @@ start() -> rabbit_sup:start_supervisor_child(
              [{local, rabbit_tcp_client_sup},
               {rabbit_connection_sup,start_link,[]}]).
 
--define(ENABLED_TLS_VERSIONS, ['tlsv1.2','tlsv1.1',tlsv1]).
-
 ensure_ssl() ->
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
     ok = app_utils:start_applications(SslAppsConfig),
     {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
-    SslOptsConfig1 = case rabbit_misc:pget(versions, SslOptsConfig) of
-                         undefined ->
-                             rabbit_misc:pset(versions, ?ENABLED_TLS_VERSIONS,
-                                              SslOptsConfig);
-                         [] ->
-                             rabbit_misc:pset(versions, ?ENABLED_TLS_VERSIONS,
-                                              SslOptsConfig);
-                         Val ->
-                             SslOptsConfig
-                     end,
-    rabbit_log:info("Enabled TLS/SSL versions: ~p~n",
-                    [rabbit_misc:pget(versions, SslOptsConfig1)]),
-    case rabbit_misc:pget(verify_fun, SslOptsConfig1) of
+    fix_ssl_options(SslOptsConfig).
+
+fix_ssl_options(Config) ->
+    fix_verify_fun(fix_ssl_protocol_versions(Config)).
+
+fix_verify_fun(SslOptsConfig) ->
+    case rabbit_misc:pget(verify_fun, SslOptsConfig) of
         {Module, Function} ->
             rabbit_misc:pset(verify_fun,
                              fun (ErrorList) ->
                                      Module:Function(ErrorList)
-                             end, SslOptsConfig1);
+                             end, SslOptsConfig);
         undefined ->
             % unknown_ca errors are silently ignored prior to R14B unless we
             % supply this verify_fun - remove when at least R14B is required
-            case proplists:get_value(verify, SslOptsConfig1, verify_none) of
-                verify_none -> SslOptsConfig1;
+            case proplists:get_value(verify, SslOptsConfig, verify_none) of
+                verify_none -> SslOptsConfig;
                 verify_peer -> [{verify_fun, fun([])    -> true;
                                                 ([_|_]) -> false
                                              end}
-                                | SslOptsConfig1]
+                                | SslOptsConfig]
             end
     end.
+
+fix_ssl_protocol_versions(Config) ->
+    Configured = case pget(versions, Config) of
+                     undefined -> pget(available, ssl:versions(), []);
+                     Vs        -> Vs
+                 end,
+    pset(versions, Configured -- ?BAD_SSL_PROTOCOL_VERSIONS, Config).
 
 ssl_timeout() ->
     {ok, Val} = application:get_env(rabbit, ssl_handshake_timeout),
