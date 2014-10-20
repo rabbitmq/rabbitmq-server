@@ -64,7 +64,8 @@
    %%                {certfile,             "/path/to/server/cert.pem"},
    %%                {keyfile,              "/path/to/server/key.pem"},
    %%                {verify,               verify_peer},
-   %%                {fail_if_no_peer_cert, false}]},
+   %%                {fail_if_no_peer_cert, false},
+   %%                {versions,             ['tlsv1.2', 'tlsv1.1']}]}
 
    %% Choose the available SASL mechanism(s) to expose.
    %% The two default (built in) mechanisms are 'PLAIN' and
