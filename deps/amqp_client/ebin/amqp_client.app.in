@@ -4,6 +4,7 @@
   {modules, []},
   {registered, [amqp_sup]},
   {env, [{prefer_ipv6, false},
-         {ssl_options, []}]},
+         %% Disables SSLv3
+         {ssl_options, [{versions, ['tlsv1.2', 'tlsv1.1', tlsv1]}]}]},
   {mod, {amqp_client, []}},
   {applications, [kernel, stdlib, xmerl]}]}.
