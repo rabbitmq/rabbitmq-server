@@ -1,6 +1,6 @@
 diff -r 16a4000624a7 stomp/connect.py
 --- a/stomp/connect.py	Sun May 02 18:15:34 2010 +0100
-+++ b/stomp/connect.py	Fri Aug 26 15:35:33 2011 +0100
++++ b/stomp/connect.py	Mon Oct 20 19:35:44 2014 +0100
 @@ -88,7 +88,10 @@
                   ssl_key_file = None,
                   ssl_cert_file = None,
@@ -98,6 +98,15 @@ diff -r 16a4000624a7 stomp/connect.py
      def __send_frame(self, command, headers={}, payload=''):
          """
          Send a STOMP frame.
+@@ -638,7 +670,7 @@
+                             cert_validation = ssl.CERT_NONE
+                         self.__socket = ssl.wrap_socket(self.__socket, keyfile = self.__ssl_key_file,
+                                 certfile = self.__ssl_cert_file, cert_reqs = cert_validation, 
+-                                ca_certs=self.__ssl_ca_certs, ssl_version = ssl.PROTOCOL_SSLv3)
++                                ca_certs=self.__ssl_ca_certs, ssl_version = ssl.PROTOCOL_TLSv1)
+                     self.__socket.settimeout(None)
+                     if self.blocking is not None:
+                         self.__socket.setblocking(self.blocking)
 @@ -680,4 +712,4 @@
                      sleep_exp += 1
  
