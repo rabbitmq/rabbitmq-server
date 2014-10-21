@@ -97,7 +97,8 @@ var COLUMNS =
      'connections':
      {'Overview': [['user',   'User name', true],
                    ['state',  'State',     true]],
-      'Details': [['ssl',      'SSL / TLS', true],
+      'Details': [['ssl',            'SSL / TLS',      true],
+                  ['ssl_info',       'SSL Details',    false],
                   ['protocol',       'Protocol',       true],
                   ['channels',       'Channels',       true],
                   ['channel_max',    'Channel max',    false],

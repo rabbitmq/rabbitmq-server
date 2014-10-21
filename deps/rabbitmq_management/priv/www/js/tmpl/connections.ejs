@@ -27,6 +27,9 @@
 <% if (show_column('connections',      'ssl')) { %>
     <th><%= fmt_sort('SSL / TLS',      'ssl') %></th>
 <% } %>
+<% if (show_column('connections',      'ssl_info')) { %>
+    <th>SSL Details</th>
+<% } %>
 <% if (show_column('connections',      'protocol')) { %>
     <th><%= fmt_sort('Protocol',       'protocol') %></th>
 <% } %>
@@ -80,6 +83,18 @@
 <% } %>
 <% if (show_column('connections', 'ssl')) { %>
     <td class="c"><%= fmt_boolean(connection.ssl) %></td>
+<% } %>
+<% if (show_column('connections', 'ssl_info')) { %>
+    <td>
+    <% if (connection.ssl) { %>
+      <%= connection.ssl_protocol %>
+      <sub>
+        <%= connection.ssl_key_exchange %>
+        <%= connection.ssl_cipher %>
+        <%= connection.ssl_hash %>
+      </sub>
+    <% } %>
+    </td>
 <% } %>
 <% if (show_column('connections', 'protocol')) { %>
     <td class="c"><%= connection.protocol %></td>
