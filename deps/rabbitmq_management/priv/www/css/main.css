@@ -51,6 +51,8 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 
 .rate-visibility-option-hidden { text-decoration: line-through; color: #888; }
 
+
+table.legend { float: left; }
 table.legend th { padding: 4px 10px 4px 0; width: 80px; }
 table.legend td { padding: 4px 0 4px 10px; width: 130px; }
 
@@ -178,8 +180,6 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 .chart-small  { width: 400px; height: 100px; }
 .chart-medium { width: 600px; height: 200px; }
 .chart-large  { width: 800px; height: 300px; }
-
-.chart-legend { float: left; }
 
 .micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .micro-highlight a { font-weight: normal !important; color: #888 !important; }
