@@ -82,7 +82,7 @@
     <td><%= fmt_object_state(connection) %></td>
 <% } %>
 <% if (show_column('connections', 'ssl')) { %>
-    <td class="c"><%= fmt_boolean(connection.ssl) %></td>
+    <td class="c"><%= fmt_boolean(connection.ssl, '') %></td>
 <% } %>
 <% if (show_column('connections', 'ssl_info')) { %>
     <td>
@@ -100,16 +100,16 @@
     <td class="c"><%= connection.protocol %></td>
 <% } %>
 <% if (show_column('connections', 'channels')) { %>
-    <td class="r"><%= fmt_string(connection.channels) %></td>
+    <td class="r"><%= fmt_string(connection.channels, '') %></td>
 <% } %>
 <% if (show_column('connections', 'channel_max')) { %>
-    <td class="r"><%= fmt_string(connection.channel_max) %></td>
+    <td class="r"><%= fmt_string(connection.channel_max, '') %></td>
 <% } %>
 <% if (show_column('connections', 'frame_max')) { %>
-    <td class="r"><%= fmt_string(connection.frame_max) %></td>
+    <td class="r"><%= fmt_string(connection.frame_max, '') %></td>
 <% } %>
 <% if (show_column('connections', 'auth_mechanism')) { %>
-    <td class="c"><%= fmt_string(connection.auth_mechanism) %></td>
+    <td class="c"><%= fmt_string(connection.auth_mechanism, '') %></td>
 <% } %>
 <% if (show_column('connections', 'client')) { %>
     <td><%= fmt_client_name(connection.client_properties) %></td>

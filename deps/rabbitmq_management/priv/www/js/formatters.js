@@ -34,8 +34,9 @@ function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
             num.toFixed(0)) + powers[power];
 }
 
-function fmt_boolean(b) {
-    if (b == undefined) return UNKNOWN_REPR;
+function fmt_boolean(b, unknown) {
+    if (unknown == undefined) unknown = UNKNOWN_REPR;
+    if (b == undefined) return unknown;
 
     return b ? "&#9679;" : "&#9675;";
 }
