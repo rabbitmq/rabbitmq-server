@@ -43,7 +43,7 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .help, .popup-options-link { color: #888; cursor: pointer; }
 .help:hover, .popup-options-link:hover { color: #444; }
 
-.rate-visibility-option { cursor: pointer; padding: 4px; background: #fafafa; border: 1px solid f0f0f0; border-radius: 3px; display:block; }
+.rate-visibility-option { cursor: pointer; padding: 4px; background: #fafafa; border: 1px solid #f0f0f0; border-radius: 3px; display:block; }
 .rate-visibility-option:hover { background: #ddf;
                                 background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #ddf),color-stop(1, #bbf));
                                 border: 1px solid #88d;
