@@ -215,7 +215,7 @@ dispatcher_add(function(sammy) {
         });
 
     sammy.put('#/logout', function() {
-            document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            clear_pref('auth');
             location.reload();
         });
 
