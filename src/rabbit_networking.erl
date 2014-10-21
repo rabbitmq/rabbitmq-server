@@ -165,7 +165,7 @@ poodle_check(Context) ->
         true  -> ok;
         false -> case application:get_env(rabbit, ssl_allow_poodle_attack) of
                      {ok, true}  -> ok;
-                     {ok, false} -> log_poodle_fail(Context),
+                     _           -> log_poodle_fail(Context),
                                     danger
                  end
     end.
@@ -207,11 +207,16 @@ fix_verify_fun(SslOptsConfig) ->
     end.
 
 fix_ssl_protocol_versions(Config) ->
-    Configured = case pget(versions, Config) of
-                     undefined -> pget(available, ssl:versions(), []);
-                     Vs        -> Vs
-                 end,
-    pset(versions, Configured -- ?BAD_SSL_PROTOCOL_VERSIONS, Config).
+    case application:get_env(rabbit, ssl_allow_poodle_attack) of
+        {ok, true} ->
+            Config;
+        _ ->
+            Configured = case pget(versions, Config) of
+                             undefined -> pget(available, ssl:versions(), []);
+                             Vs        -> Vs
+                         end,
+            pset(versions, Configured -- ?BAD_SSL_PROTOCOL_VERSIONS, Config)
+    end.
 
 ssl_timeout() ->
     {ok, Val} = application:get_env(rabbit, ssl_handshake_timeout),
