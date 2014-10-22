@@ -90,9 +90,10 @@ handle_cast(duplicate_id,
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 
-handle_info({#'basic.deliver'{}, #amqp_msg{}} = Delivery,
+handle_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
             State = #state{ proc_state = ProcState }) ->
-    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Delivery, ProcState));
+    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Delivery,
+                                                              ProcState));
 
 handle_info(#'basic.ack'{} = Ack, State = #state{ proc_state = ProcState }) ->
     callback_reply(State, rabbit_mqtt_processor:amqp_callback(Ack, ProcState));
@@ -177,13 +178,13 @@ terminate({network_error, Reason, ConnStr}, _State) ->
 terminate({network_error, Reason}, _State) ->
     log(error, "MQTT detected network error: ~p~n", [Reason]);
 
-terminate(normal, State = #state{proc_state = ProcState,
-                                 conn_name  = ConnName}) ->
+terminate(normal, #state{proc_state = ProcState,
+                         conn_name  = ConnName}) ->
     rabbit_mqtt_processor:close_connection(ProcState),
     log(info, "closing MQTT connection ~p (~s)~n", [self(), ConnName]),
     ok;
 
-terminate(_Reason, State = #state{proc_state = ProcState}) ->
+terminate(_Reason, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:close_connection(ProcState),
     ok.
 
@@ -230,7 +231,7 @@ process_received_bytes(Bytes,
 
 callback_reply(State, {ok, ProcState}) ->
     {noreply, pstate(State, ProcState), hibernate};
-callback_reply(State, {err, Reason, ProcState}) ->
+callback_reply(State, {error, Reason, ProcState}) ->
     {stop, Reason, pstate(State, ProcState)}.
 
 start_keepalive(_,   0        ) -> ok;
@@ -241,7 +242,6 @@ pstate(State = #state {}, PState = #proc_state{}) ->
 
 %%----------------------------------------------------------------------------
 
-log(Level, Fmt)       -> rabbit_log:log(connection, Level, Fmt, []).
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 send_will_and_terminate(PState, State) ->
