@@ -21,20 +21,22 @@
 -include("rabbit_shovel.hrl").
 
 -export([validate/5, notify/4, notify_clear/3]).
--export([register/0, parse/2]).
+-export([register/0, unregister/0, parse/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
-
--define(ROUTING_HEADER, <<"x-shovelled">>).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "shovel parameters"},
                     {mfa, {rabbit_shovel_parameters, register, []}},
+                    {cleanup, {?MODULE, unregister, []}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
 register() ->
     rabbit_registry:register(runtime_parameter, <<"shovel">>, ?MODULE).
+
+unregister() ->
+    rabbit_registry:unregister(runtime_parameter, <<"shovel">>).
 
 validate(_VHost, <<"shovel">>, Name, Def, User) ->
     [case pget2(<<"src-exchange">>, <<"src-queue">>, Def) of
@@ -84,6 +86,7 @@ validation(User) ->
      {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
      {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
+     {<<"publish-properties">>, fun validate_properties/2,  optional},
      {<<"ack-mode">>,        rabbit_parameter_validation:enum(
                                ['no-ack', 'on-publish', 'on-confirm']), optional},
      {<<"delete-after">>,    fun validate_delete_after/2, optional}
@@ -130,6 +133,25 @@ validate_delete_after(_Name, N) when is_integer(N) -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~s should be number, \"never\" or \"queue-length\", actually was "
      "~p", [Name, Term]}.
+
+%% TODO headers?
+validate_properties(Name, Term) ->
+    Str = fun rabbit_parameter_validation:binary/2,
+    Num = fun rabbit_parameter_validation:number/2,
+    rabbit_parameter_validation:proplist(
+      Name, [{<<"content_type">>,     Str, optional},
+             {<<"content_encoding">>, Str, optional},
+             {<<"delivery_mode">>,    Num, optional},
+             {<<"priority">>,         Num, optional},
+             {<<"correlation_id">>,   Str, optional},
+             {<<"reply_to">>,         Str, optional},
+             {<<"expiration">>,       Str, optional},
+             {<<"message_id">>,       Str, optional},
+             {<<"timestamp">>,        Num, optional},
+             {<<"type">>,             Str, optional},
+             {<<"user_id">>,          Str, optional},
+             {<<"app_id">>,           Str, optional},
+             {<<"cluster_id">>,       Str, optional}], Term).
 
 %%----------------------------------------------------------------------------
 
@@ -182,14 +204,17 @@ parse({VHost, Name}, Def) ->
              end,
     AddHeaders = pget(<<"add-forward-headers">>, Def, false),
     Table0 = [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
+              {<<"shovel-type">>,  <<"dynamic">>},
               {<<"shovel-name">>,  Name},
               {<<"shovel-vhost">>, VHost}],
-    PubPropsFun = fun (SrcURI, DestURI, P = #'P_basic'{headers = H}) ->
+    SetProps = lookup_indices(pget(<<"publish-properties">>, Def, []),
+                              record_info(fields, 'P_basic')),
+    PubPropsFun = fun (SrcURI, DestURI, P0) ->
+                          P = set_properties(P0, SetProps),
                           case AddHeaders of
-                              true  -> H1 = update_headers(
-                                              Table0, Table1 ++ Table2,
-                                              SrcURI, DestURI, H),
-                                       P#'P_basic'{headers = H1};
+                              true  -> rabbit_shovel_util:update_headers(
+                                         Table0, Table1 ++ Table2,
+                                         SrcURI, DestURI, P);
                               false -> P
                           end
                   end,
@@ -234,12 +259,19 @@ ensure_queue(Conn, Queue) ->
         catch amqp_channel:close(Ch)
     end.
 
-update_headers(Table0, Table1, SrcURI, DestURI, Headers) ->
-    Table = Table0 ++ [{<<"src-uri">>,  SrcURI},
-                       {<<"dest-uri">>, DestURI}] ++ Table1,
-    rabbit_basic:prepend_table_header(
-      ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
-      Headers).
-
 opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
 opt_b2a(N)                   -> N.
+
+set_properties(Props, []) ->
+    Props;
+set_properties(Props, [{Ix, V} | Rest]) ->
+    set_properties(setelement(Ix, Props, V), Rest).
+
+lookup_indices(KVs, L) ->
+    [{1 + list_find(list_to_atom(binary_to_list(K)), L), V} || {K, V} <- KVs].
+
+list_find(K, L) -> list_find(K, L, 1).
+
+list_find(K, [K|_], N) -> N;
+list_find(K, [],   _N) -> exit({not_found, K});
+list_find(K, [_|L], N) -> list_find(K, L, N + 1).
