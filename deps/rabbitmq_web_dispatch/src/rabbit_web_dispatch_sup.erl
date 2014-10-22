@@ -64,8 +64,8 @@ init([]) ->
 mochi_options(Listener) ->
     [{name, name(Listener)},
      {loop, loopfun(Listener)} |
-     easy_ssl(proplists:delete(
-                name, proplists:delete(ignore_in_use, Listener)))].
+     ssl_config(proplists:delete(
+                  name, proplists:delete(ignore_in_use, Listener)))].
 
 loopfun(Listener) ->
     fun (Req) ->
@@ -83,18 +83,30 @@ name(Listener) ->
     Port = proplists:get_value(port, Listener),
     list_to_atom(atom_to_list(?MODULE) ++ "_" ++ integer_to_list(Port)).
 
-easy_ssl(Options) ->
-    case {proplists:get_value(ssl, Options),
-          proplists:get_value(ssl_opts, Options)} of
-        {true, undefined} ->
-            {ok, ServerOpts} = application:get_env(rabbit, ssl_options),
-            SSLOpts = [{K, V} ||
-                          {K, V} <- ServerOpts,
-                          not lists:member(K, [verify, fail_if_no_peer_cert])],
-            [{ssl_opts, SSLOpts}|Options];
-        _ ->
-            Options
+ssl_config(Options) ->
+    case proplists:get_value(ssl, Options) of
+        true -> rabbit_networking:ensure_ssl(),
+                case rabbit_networking:poodle_check('HTTP') of
+                    ok     -> case proplists:get_value(ssl_opts, Options) of
+                                  undefined -> auto_ssl(Options);
+                                  _         -> fix_ssl(Options)
+                              end;
+                    danger -> proplists:delete(ssl, Options)
+                end;
+        _    -> Options
     end.
+
+auto_ssl(Options) ->
+    {ok, ServerOpts} = application:get_env(rabbit, ssl_options),
+    Remove = [verify, fail_if_no_peer_cert],
+    SSLOpts = [{K, V} || {K, V} <- ServerOpts,
+                         not lists:member(K, Remove)],
+    fix_ssl([{ssl_opts, SSLOpts} | Options]).
+
+fix_ssl(Options) ->
+    SSLOpts = proplists:get_value(ssl_opts, Options),
+    rabbit_misc:pset(ssl_opts,
+                     rabbit_networking:fix_ssl_options(SSLOpts), Options).
 
 check_error(Listener, Error) ->
     Ignore = proplists:get_value(ignore_in_use, Listener, false),

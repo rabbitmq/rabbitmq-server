@@ -112,7 +112,7 @@ handle_call(list_all, _From, undefined) ->
     {reply, list(), undefined};
 
 handle_call(Req, _From, State) ->
-    error_logger:format("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
+    rabbit_log:error("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
     {stop, unknown_request, State}.
 
 handle_cast(_, State) ->
