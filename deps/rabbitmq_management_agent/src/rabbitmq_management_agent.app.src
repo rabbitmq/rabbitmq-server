@@ -4,5 +4,5 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_mgmt_agent_app, []}},
-  {env, [{force_fine_statistics, true}]},
+  {env, []},
   {applications, [kernel, stdlib, rabbit]}]}.

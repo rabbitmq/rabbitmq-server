@@ -16,9 +16,19 @@
 
 -module(rabbit_mgmt_db_handler).
 
+%% Make sure our database is hooked in *before* listening on the network or
+%% recovering queues (i.e. so there can't be any events fired before it starts).
+-rabbit_boot_step({rabbit_mgmt_db_handler,
+                   [{description, "management agent"},
+                    {mfa,         {?MODULE, add_handler, []}},
+                    {cleanup,     {gen_event, delete_handler,
+                                   [rabbit_event, ?MODULE, []]}},
+                    {requires,    rabbit_event},
+                    {enables,     recovery}]}).
+
 -behaviour(gen_event).
 
--export([add_handler/0, gc/0]).
+-export([add_handler/0, gc/0, rates_mode/0]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -27,16 +37,31 @@
 
 add_handler() ->
     ensure_statistics_enabled(),
-    gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
+    gen_event:add_handler(rabbit_event, ?MODULE, []).
 
 gc() ->
     erlang:garbage_collect(whereis(rabbit_event)).
 
+rates_mode() ->
+    case application:get_env(rabbitmq_management, rates_mode) of
+        {ok, Mode} -> Mode;
+        _          -> basic
+    end.
+
 %%----------------------------------------------------------------------------
 
 ensure_statistics_enabled() ->
-    {ok, ForceStats} = application:get_env(rabbitmq_management_agent,
-                                           force_fine_statistics),
+    ForceStats = rates_mode() =/= none,
+    case application:get_env(rabbitmq_management_agent,
+                             force_fine_statistics) of
+        {ok, X} ->
+            rabbit_log:warning(
+              "force_fine_statistics set to ~p; ignored.~n"
+              "Replaced by {rates_mode, none} in the rabbitmq_management "
+              "application.~n", [X]);
+        undefined ->
+            ok
+    end,
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     case {ForceStats, StatsLevel} of
         {true,  fine} ->

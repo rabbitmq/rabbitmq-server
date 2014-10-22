@@ -30,9 +30,11 @@
 -define(KEYS, [name, partitions, os_pid, fd_used, fd_total,
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                disk_free_limit, disk_free, disk_free_alarm,
-               proc_used, proc_total, statistics_level,
+               proc_used, proc_total, rates_mode,
                uptime, run_queue, processors, exchange_types,
-               auth_mechanisms, applications, contexts]).
+               auth_mechanisms, applications, contexts,
+               log_file, sasl_log_file, db_dir, config_files, net_ticktime,
+               enabled_plugins]).
 
 %%--------------------------------------------------------------------
 
@@ -172,20 +174,24 @@ i(disk_free_limit, _State) -> get_disk_free_limit();
 i(disk_free,       _State) -> get_disk_free();
 i(disk_free_alarm, _State) -> resource_alarm_set(disk);
 i(contexts,        _State) -> rabbit_web_dispatch_contexts();
-i(uptime, _State) ->
-    {Total, _} = erlang:statistics(wall_clock),
-    Total;
-i(statistics_level, _State) ->
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    StatsLevel;
-i(exchange_types, _State) ->
-    list_registry_plugins(exchange);
+i(uptime,          _State) -> {Total, _} = erlang:statistics(wall_clock),
+                                Total;
+i(rates_mode,      _State) -> rabbit_mgmt_db_handler:rates_mode();
+i(exchange_types,  _State) -> list_registry_plugins(exchange);
+i(log_file,        _State) -> list_to_binary(rabbit:log_location(kernel));
+i(sasl_log_file,   _State) -> list_to_binary(rabbit:log_location(sasl));
+i(db_dir,          _State) -> list_to_binary(rabbit_mnesia:dir());
+i(config_files,    _State) -> [list_to_binary(F) || F <- rabbit:config_files()];
+i(net_ticktime,    _State) -> net_kernel:get_net_ticktime();
+i(enabled_plugins, _State) -> {ok, Dir} = application:get_env(
+                                           rabbit, enabled_plugins_file),
+                              rabbit_plugins:read_enabled(Dir);
 i(auth_mechanisms, _State) ->
     {ok, Mechanisms} = application:get_env(rabbit, auth_mechanisms),
     list_registry_plugins(
       auth_mechanism,
       fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
-i(applications, _State) ->
+i(applications,    _State) ->
     [format_application(A) ||
         A <- lists:keysort(1, rabbit_misc:which_applications())].
 
