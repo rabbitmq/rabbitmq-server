@@ -46,6 +46,7 @@
 -rabbit_boot_step({ ?MODULE
                   , [ {description, "exchange type JMS topic selector"}
                     , {mfa, {rabbit_registry, register, [exchange, ?X_TYPE_NAME, ?MODULE]}}
+                    , {cleanup, {rabbit_registry, unregister, [exchange, ?X_TYPE_NAME]}}
                     , {requires, rabbit_registry}
                     , {enables, kernel_ready} ] }).
 
