@@ -17,7 +17,7 @@
 -module(rabbit_cli).
 -include("rabbit_cli.hrl").
 
--export([main/3, parse_arguments/4]).
+-export([main/3, name_type/0, parse_arguments/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -31,6 +31,7 @@
 -spec(main/3 :: (fun (([string()], string()) -> parse_result()),
                      fun ((atom(), atom(), [any()], [any()]) -> any()),
                          atom()) -> no_return()).
+-spec(name_type/0 :: () -> 'shortnames' | 'longnames').
 -spec(usage/1 :: (atom()) -> no_return()).
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
@@ -57,7 +58,10 @@ main(ParseFun, DoFun, UsageMod) ->
 
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
-    case catch DoFun(Command, Node, Args, Opts) of
+    case catch begin
+                   start_distribution(),
+                   DoFun(Command, Node, Args, Opts)
+               end of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
@@ -73,6 +77,12 @@ main(ParseFun, DoFun, UsageMod) ->
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
             usage(UsageMod);
+        {error, {distribution_failed, _}} ->
+            print_error(
+              "Could not start distribution.~n"
+              "The most likely reason is that epmd has not been started by~n"
+              "the server. Make sure the server is running.~n", []),
+            rabbit_misc:quit(2);
         {error, {Problem, Reason}} when is_atom(Problem), is_binary(Reason) ->
             %% We handle this common case specially to avoid ~p since
             %% that has i18n issues
@@ -98,6 +108,19 @@ main(ParseFun, DoFun, UsageMod) ->
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
+    end.
+
+start_distribution() ->
+    CtlNodeName = rabbit_misc:format("rabbitmq-cli-~s", [os:getpid()]),
+    case net_kernel:start([list_to_atom(CtlNodeName), name_type()]) of
+        {ok, _}         -> ok;
+        {error, Reason} -> throw({error, {distribution_failed, Reason}})
+    end.
+
+name_type() ->
+    case os:getenv("RABBITMQ_USE_LONGNAME") of
+        "true" -> longnames;
+        _      -> shortnames
     end.
 
 usage(Mod) ->

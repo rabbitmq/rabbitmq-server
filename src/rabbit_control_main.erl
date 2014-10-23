@@ -121,7 +121,6 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    start_distribution(),
     rabbit_cli:main(
       fun (Args, NodeStr) ->
               parse_arguments(Args, NodeStr)
@@ -584,26 +583,16 @@ exit_loop(Port) ->
         {Port, _}                 -> exit_loop(Port)
     end.
 
-start_distribution() ->
-    CtlNodeName = rabbit_misc:format("rabbitmqctl-~s", [os:getpid()]),
-    {ok, _} = net_kernel:start([list_to_atom(CtlNodeName), name_type()]).
-
 become(BecomeNode) ->
     case net_adm:ping(BecomeNode) of
         pong -> exit({node_running, BecomeNode});
         pang -> io:format("  * Impersonating node: ~s...", [BecomeNode]),
                 error_logger:tty(false),
                 ok = net_kernel:stop(),
-                {ok, _} = net_kernel:start([BecomeNode, name_type()]),
+                {ok, _} = net_kernel:start([BecomeNode,rabbit_cli:name_type()]),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
                 io:format("  * Mnesia directory  : ~s~n", [Dir])
-    end.
-
-name_type() ->
-    case os:getenv("RABBITMQ_USE_LONGNAME") of
-        "true" -> longnames;
-        _      -> shortnames
     end.
 
 %%----------------------------------------------------------------------------
