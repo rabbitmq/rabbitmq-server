@@ -584,12 +584,18 @@ exit_loop(Port) ->
     end.
 
 become(BecomeNode) ->
+    %% We might not have started distribution if epmd was not running,
+    %% but we need it now even if we have to start epmd ourselves.
+    case erlang:is_alive() of
+        true  -> ok;
+        false -> rabbit_nodes:ensure_epmd(),
+                 rabbit_cli:start_distribution()
+    end,
     case net_adm:ping(BecomeNode) of
         pong -> exit({node_running, BecomeNode});
         pang -> io:format("  * Impersonating node: ~s...", [BecomeNode]),
-                error_logger:tty(false),
                 ok = net_kernel:stop(),
-                {ok, _} = net_kernel:start([BecomeNode,rabbit_cli:name_type()]),
+                {ok, _} = rabbit_cli:start_distribution(BecomeNode),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
                 io:format("  * Mnesia directory  : ~s~n", [Dir])

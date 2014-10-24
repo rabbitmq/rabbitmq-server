@@ -17,7 +17,8 @@
 -module(rabbit_cli).
 -include("rabbit_cli.hrl").
 
--export([main/3, name_type/0, parse_arguments/4]).
+-export([main/3, start_distribution/0, start_distribution/1,
+         parse_arguments/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -31,7 +32,8 @@
 -spec(main/3 :: (fun (([string()], string()) -> parse_result()),
                      fun ((atom(), atom(), [any()], [any()]) -> any()),
                          atom()) -> no_return()).
--spec(name_type/0 :: () -> 'shortnames' | 'longnames').
+-spec(start_distribution/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(start_distribution/1 :: (string()) -> {'ok', pid()} | {'error', any()}).
 -spec(usage/1 :: (atom()) -> no_return()).
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
@@ -42,6 +44,7 @@
 %%----------------------------------------------------------------------------
 
 main(ParseFun, DoFun, UsageMod) ->
+    error_logger:tty(false),
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
         case ParseFun(init:get_plain_arguments(), NodeStr) of
@@ -77,12 +80,6 @@ main(ParseFun, DoFun, UsageMod) ->
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
             usage(UsageMod);
-        {error, {distribution_failed, _}} ->
-            print_error(
-              "Could not start distribution.~n"
-              "The most likely reason is that epmd has not been started by~n"
-              "the server. Make sure the server is running.~n", []),
-            rabbit_misc:quit(2);
         {error, {Problem, Reason}} when is_atom(Problem), is_binary(Reason) ->
             %% We handle this common case specially to avoid ~p since
             %% that has i18n issues
@@ -111,11 +108,11 @@ main(ParseFun, DoFun, UsageMod) ->
     end.
 
 start_distribution() ->
-    CtlNodeName = rabbit_misc:format("rabbitmq-cli-~s", [os:getpid()]),
-    case net_kernel:start([list_to_atom(CtlNodeName), name_type()]) of
-        {ok, _}         -> ok;
-        {error, Reason} -> throw({error, {distribution_failed, Reason}})
-    end.
+    start_distribution(list_to_atom(
+                         rabbit_misc:format("rabbitmq-cli-~s", [os:getpid()]))).
+
+start_distribution(Name) ->
+    net_kernel:start([Name, name_type()]).
 
 name_type() ->
     case os:getenv("RABBITMQ_USE_LONGNAME") of
