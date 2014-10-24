@@ -97,7 +97,7 @@ function fmt_features_short(obj) {
 
     if (obj.owner_pid_details != undefined) {
         res += '<acronym title="Exclusive queue: click for owning connection">'
-            + link_conn(queue.owner_pid_details.name, "Excl") + '</acronym>';
+            + link_conn(obj.owner_pid_details.name, "Excl") + '</acronym>';
     }
 
     for (var k in ALL_ARGS) {
