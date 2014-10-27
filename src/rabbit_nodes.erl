@@ -78,10 +78,6 @@ diagnostics_node(Node) ->
     {Name, Host} = parts(Node),
     [{"~s:", [Node]} |
      case names(Host) of
-         {error, address} ->
-             [{"  * connection refused from epmd (port ~s) on ~s~n"
-               "    - has the server started it?~n",
-               [epmd_port(), Host]}];
          {error, Reason} ->
              [{"  * unable to connect to epmd (port ~s) on ~s: ~s~n",
                [epmd_port(), Host, rabbit_misc:format_inet_error(Reason)]}];

@@ -112,6 +112,7 @@ start_distribution() ->
                          rabbit_misc:format("rabbitmq-cli-~s", [os:getpid()]))).
 
 start_distribution(Name) ->
+    rabbit_nodes:ensure_epmd(),
     net_kernel:start([Name, name_type()]).
 
 name_type() ->
