@@ -27,14 +27,6 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\RabbitMQ
 )
 
-if "!RABBITMQ_USE_LONGNAME!"=="" (
-    set RABBITMQ_NAME_TYPE="-sname"
-)
-
-if "!RABBITMQ_USE_LONGNAME!"=="true" (
-    set RABBITMQ_NAME_TYPE="-name"
-)
-
 if "!COMPUTERNAME!"=="" (
     set COMPUTERNAME=localhost
 )
