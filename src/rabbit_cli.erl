@@ -45,6 +45,7 @@
 
 main(ParseFun, DoFun, UsageMod) ->
     error_logger:tty(false),
+    start_distribution(),
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
         case ParseFun(init:get_plain_arguments(), NodeStr) of
@@ -61,10 +62,7 @@ main(ParseFun, DoFun, UsageMod) ->
 
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
-    case catch begin
-                   start_distribution(),
-                   DoFun(Command, Node, Args, Opts)
-               end of
+    case catch DoFun(Command, Node, Args, Opts) of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
