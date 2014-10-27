@@ -37,10 +37,22 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+%% It's possible for epmd to be killed out from underneath us. If that
+%% happens, then obviously clustering and rabbitmqctl stop
+%% working. This process checks up on epmd and restarts it /
+%% re-registers us with it if it has gone away.
+%%
+%% How could epmd be killed?
+%%
+%% 1) The most popular way for this to happen is when running as a
+%%    Windows service. The user starts rabbitmqctl first, and this starts
+%%    epmd under the user's account. When they log out epmd is killed.
+%%
+%% 2) Some packagings of (non-RabbitMQ?) Erlang apps might do "killall
+%%    epmd" as a shutdown or uninstall step.
+%% ----------------------------------------------------------------------------
 
 start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-%%----------------------------------------------------------------------------
 
 init([]) ->
     {Me, Host} = rabbit_nodes:parts(node()),
