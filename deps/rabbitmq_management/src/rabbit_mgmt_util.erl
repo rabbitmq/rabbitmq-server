@@ -29,7 +29,8 @@
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/1]).
--export([with_decode/5, decode/1, decode/2, redirect/2, args/1]).
+-export([with_decode/5, decode/1, decode/2, redirect/2, set_resp_header/3,
+         args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
@@ -172,7 +173,7 @@ reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
 reply0(Facts, ReqData, Context) ->
-    ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
+    ReqData1 = set_resp_header("Cache-Control", "no-cache", ReqData),
     try
         {mochijson2:encode(Facts), ReqData1, Context}
     catch exit:{json_encode, E} ->
@@ -492,8 +493,13 @@ filter_conn_ch_list(List, ReqData, Context) ->
 
 redirect(Location, ReqData) ->
     wrq:do_redirect(true,
-                    wrq:set_resp_header("Location",
-                                        binary_to_list(Location), ReqData)).
+                    set_resp_header("Location",
+                                    binary_to_list(Location), ReqData)).
+
+set_resp_header(K, V, ReqData) ->
+    wrq:set_resp_header(K, strip_crlf(V), ReqData).
+
+strip_crlf(Str) -> lists:append(string:tokens(Str, "\r\n")).
 
 args({struct, L}) -> args(L);
 args(L)           -> rabbit_mgmt_format:to_amqp_table(L).
@@ -504,7 +510,7 @@ post_respond({true, ReqData, Context}) ->
 post_respond({{halt, Code}, ReqData, Context}) ->
     {{halt, Code}, ReqData, Context};
 post_respond({JSON, ReqData, Context}) ->
-    {true, wrq:set_resp_header(
+    {true, set_resp_header(
              "content-type", "application/json",
              wrq:append_to_response_body(JSON, ReqData)), Context}.
 

@@ -69,7 +69,7 @@ to_json(ReqData, Context) ->
          {bindings,    Bs}]),
       case wrq:get_qs_value("download", ReqData) of
           undefined -> ReqData;
-          Filename  -> wrq:set_resp_header(
+          Filename  -> rabbit_mgmt_util:set_resp_header(
                          "Content-Disposition",
                          "attachment; filename=" ++
                              mochiweb_util:unquote(Filename), ReqData)
