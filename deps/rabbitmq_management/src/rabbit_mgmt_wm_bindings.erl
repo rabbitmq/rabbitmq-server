@@ -81,8 +81,8 @@ accept_content(ReqData, {_Mode, Context}) ->
                         "/api/bindings/~s/e/~s/~s/~s/~s",
                         [VHost, Source, DestType, Dest,
                          rabbit_mgmt_format:pack_binding_props(Key, Args)]))),
-            ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
-            {true, ReqData2, Context2}
+            {true, rabbit_mgmt_util:set_resp_header("Location", Loc, ReqData),
+             Context2}
     end.
 
 is_authorized(ReqData, {Mode, Context}) ->
