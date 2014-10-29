@@ -174,6 +174,9 @@ permissions_list_test() ->
     2 = length(http_get("/users/myuser1/permissions")),
     1 = length(http_get("/users/myuser2/permissions")),
 
+    http_get("/users/notmyuser/permissions", ?NOT_FOUND),
+    http_get("/vhosts/notmyvhost/permissions", ?NOT_FOUND),
+
     http_delete("/users/myuser1", ?NO_CONTENT),
     http_delete("/users/myuser2", ?NO_CONTENT),
     http_delete("/vhosts/myvhost1", ?NO_CONTENT),

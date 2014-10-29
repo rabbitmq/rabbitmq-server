@@ -19,7 +19,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, put_vhost/2]).
+         delete_resource/2, id/1, put_vhost/2]).
 
 -import(rabbit_misc, [pget/2]).
 
