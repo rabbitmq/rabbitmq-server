@@ -22,7 +22,8 @@
 -export([makeloop/1, setup/0]).
 
 setup() ->
-    application:set_env(webmachine, error_handler, webmachine_error_handler).
+    application:set_env(
+      webmachine, error_handler, rabbit_webmachine_error_handler).
 
 makeloop(Dispatch) ->
     fun (MochiReq) ->
@@ -33,11 +34,11 @@ makeloop(Dispatch) ->
             %% however, we don't need to dispatch by the host name.
             case webmachine_dispatcher:dispatch(Path, Dispatch, ReqData) of
                 {no_dispatch_match, _Host, _PathElements} ->
-                    {ErrorHTML, ReqState1} =
-                        webmachine_error_handler:render_error(
+                    {ErrorBody, ReqState1} =
+                        rabbit_webmachine_error_handler:render_error(
                           404, Req, {none, none, []}),
                     Req1 = {webmachine_request, ReqState1},
-                    {ok, ReqState2} = Req1:append_to_response_body(ErrorHTML),
+                    {ok, ReqState2} = Req1:append_to_response_body(ErrorBody),
                     Req2 = {webmachine_request, ReqState2},
                     {ok, ReqState3} = Req2:send_response(404),
                     maybe_log_access(ReqState3);
