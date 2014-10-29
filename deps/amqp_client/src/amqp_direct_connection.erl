@@ -74,8 +74,7 @@ handle_message({force_event_refresh, Ref}, State = #state{node = Node}) ->
     {ok, State};
 handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
     {stop, {closing_timeout, Reason}, State};
-handle_message({'DOWN', _MRef, process, _ConnSup, Reason},
-               State = #state{node = Node}) ->
+handle_message({'DOWN', _MRef, process, _ConnSup, Reason}, State) ->
     {stop, {remote_node_down, Reason}, State};
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
