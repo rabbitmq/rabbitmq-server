@@ -222,27 +222,56 @@ def genErl(spec):
         print "  %s;" % (recordConstructorExpr,)
 
     def genDecodeProperties(c):
-        def presentBin(fields):
-            ps = ', '.join(['P' + str(f.index) + ':1' for f in fields])
-            return '<<' + ps + ', _:%d, R0/binary>>' % (16 - len(fields),)
-        def writePropFieldLine(field):
-            i = str(field.index)
-            if field.domain == 'bit':
-                print "  {F%s, R%s} = {P%s =/= 0, R%s}," % \
-                    (i, str(field.index + 1), i, i)
-            else:
-                print "  {F%s, R%s} = if P%s =:= 0 -> {undefined, R%s}; true -> ?%s_VAL(R%s, L%s, V%s, X%s) end," % \
-                    (i, str(field.index + 1), i, i, erlType(field.domain).upper(), i, i, i, i)
+        def presentList(char, fields, suffix = ''):
+            return ', '.join([char + str(f.index) + suffix for f in fields])
 
+        def presentBin(fields):
+            return '<<' + presentList('P', fields, ':1') + ', _:%d, R0/binary>>' % \
+                (16 - len(fields),)
         if len(c.fields) == 0:
             print "decode_properties(%d, <<>>) ->" % (c.index,)
         else:
             print ("decode_properties(%d, %s) ->" %
                    (c.index, presentBin(c.fields)))
-            for field in c.fields:
-                writePropFieldLine(field)
-            print "  <<>> = %s," % ('R' + str(len(c.fields)))
+            print ("  [%s] = decode_properties_%d_0(R0, [%s], [])," % \
+                   (presentList('F', c.fields[::-1]), c.index, presentList('P', c.fields)))
         print "  #'P_%s'{%s};" % (erlangize(c.name), fieldMapList(c.fields))
+
+    def genDecodePropertiesSpecific(c):
+        for field in c.fields:
+            if field.domain == 'shortstr':
+                matcher = '<<L:8/unsigned, Val:L/binary'
+                result = 'Val'
+            elif field.domain == 'table':
+                matcher = '<<L:8/unsigned, Val:L/binary'
+                result = 'rabbit_binary_parser:parse_table(Val)'
+            elif field.domain == 'octet':
+                matcher = '<<Val:8/unsigned'
+                result = 'Val'
+            elif field.domain == 'timestamp':
+                matcher = '<<Val:64/unsigned'
+                result = 'Val'
+            else:
+                raise Exception(field.domain)
+            last = field.index + 1 == len(c.fields)
+            if last:
+                print "decode_properties_%d_%d(%s>>, [1], Acc) ->" % \
+                    (c.index, field.index, matcher)
+                print "  [%s|Acc];" % (result,)
+                print "decode_properties_%d_%d(<<>>, [0], Acc) ->" % \
+                    (c.index, field.index)
+
+                print "  [undefined|Acc]."
+            else:
+                print "decode_properties_%d_%d(%s, Rest/binary>>, [1|PRest], Acc) ->" % \
+                    (c.index, field.index, matcher)
+                print "  decode_properties_%d_%d(Rest, PRest, [%s|Acc]);" % \
+                    (c.index, field.index + 1, result)
+                print "decode_properties_%d_%d(Bin, [0|PRest], Acc) ->" % \
+                    (c.index, field.index)
+
+                print "  decode_properties_%d_%d(Bin, PRest, [undefined|Acc])." % \
+                    (c.index, field.index + 1)
 
     def genFieldPreprocessing(packed):
         for f in packed:
@@ -433,54 +462,6 @@ shortstr_size(S) ->
         _                   -> exit(method_field_shortstr_overflow)
     end.
 
--define(SHORTSTR_VAL(R, L, V, X),
-        begin
-            <<L:8/unsigned, V:L/binary, X/binary>> = R,
-            {V, X}
-        end).
-
--define(LONGSTR_VAL(R, L, V, X),
-        begin
-            <<L:32/unsigned, V:L/binary, X/binary>> = R,
-            {V, X}
-        end).
-
--define(SHORT_VAL(R, L, V, X),
-        begin
-            <<V:8/unsigned, X/binary>> = R,
-            {V, X}
-        end).
-
--define(LONG_VAL(R, L, V, X),
-        begin
-            <<V:32/unsigned, X/binary>> = R,
-            {V, X}
-        end).
-
--define(LONGLONG_VAL(R, L, V, X),
-        begin
-            <<V:64/unsigned, X/binary>> = R,
-            {V, X}
-        end).
-
--define(OCTET_VAL(R, L, V, X),
-        begin
-            <<V:8/unsigned, X/binary>> = R,
-            {V, X}
-        end).
-
--define(TABLE_VAL(R, L, V, X),
-        begin
-            <<L:32/unsigned, V:L/binary, X/binary>> = R,
-            {rabbit_binary_parser:parse_table(V), X}
-        end).
-
--define(TIMESTAMP_VAL(R, L, V, X),
-        begin
-            <<V:64/unsigned, X/binary>> = R,
-            {V, X}
-        end).
-
 -define(SHORTSTR_PROP(X, L),
         begin
             L = size(X),
@@ -538,6 +519,9 @@ shortstr_size(S) ->
 
     for c in spec.allClasses(): genDecodeProperties(c)
     print "decode_properties(ClassId, _BinaryFields) -> exit({unknown_class_id, ClassId})."
+
+    for c in spec.allClasses():
+        genDecodePropertiesSpecific(c)
 
     for m in methods: genEncodeMethodFields(m)
     print "encode_method_fields(Record) -> exit({unknown_method_name, element(1, Record)})."
