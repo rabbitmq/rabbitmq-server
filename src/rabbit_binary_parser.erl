@@ -41,48 +41,91 @@
 %% parse_table supports the AMQP 0-8/0-9 standard types, S, I, D, T
 %% and F, as well as the QPid extensions b, d, f, l, s, t, x, and V.
 
+-define(SIMPLE_PARSE_TABLE(BType, Pattern, RType),
+        parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
+                      BType, Pattern, Rest/binary>>) ->
+               [{NameString, RType, Value} | parse_table(Rest)]).
+
+%% Note that we try to put these in approximately the order we expect
+%% to hit them, that's why the empty binary is half way through.
+
+parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
+              $S, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{NameString, longstr, Value} | parse_table(Rest)];
+
+?SIMPLE_PARSE_TABLE($I, Value:32/signed,   signedint);
+?SIMPLE_PARSE_TABLE($T, Value:64/unsigned, timestamp);
+
 parse_table(<<>>) ->
     [];
-parse_table(<<NLen:8/unsigned, NameString:NLen/binary, ValueAndRest/binary>>) ->
-    {Type, Value, Rest} = parse_field_value(ValueAndRest),
-    [{NameString, Type, Value} | parse_table(Rest)].
+
+?SIMPLE_PARSE_TABLE($b, Value:8/signed,  byte);
+?SIMPLE_PARSE_TABLE($d, Value:64/float, double);
+?SIMPLE_PARSE_TABLE($f, Value:32/float, float);
+?SIMPLE_PARSE_TABLE($l, Value:64/signed, long);
+?SIMPLE_PARSE_TABLE($s, Value:16/signed, short);
+
+parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
+              $t, Value:8/unsigned, Rest/binary>>) ->
+    [{NameString, bool, (Value /= 0)} | parse_table(Rest)];
+
+parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
+              $D, Before:8/unsigned, After:32/unsigned, Rest/binary>>) ->
+    [{NameString, decimal, {Before, After}} | parse_table(Rest)];
+
+parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
+              $F, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{NameString, table, parse_table(Value)} | parse_table(Rest)];
+
+parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
+              $A, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{NameString, array, parse_array(Value)} | parse_table(Rest)];
+
+parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
+              $x, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{NameString, binary, Value} | parse_table(Rest)];
+
+parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
+              $V, Rest/binary>>) ->
+    [{NameString, void, undefined} | parse_table(Rest)].
+
+-define(SIMPLE_PARSE_ARRAY(BType, Pattern, RType),
+        parse_array(<<BType, Pattern, Rest/binary>>) ->
+               [{RType, Value} | parse_table(Rest)]).
+
+parse_array(<<NLen:8/unsigned, NameString:NLen/binary,
+              $S, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{NameString, longstr, Value} | parse_array(Rest)];
+
+?SIMPLE_PARSE_ARRAY($I, Value:32/signed,   signedint);
+?SIMPLE_PARSE_ARRAY($T, Value:64/unsigned, timestamp);
 
 parse_array(<<>>) ->
     [];
-parse_array(<<ValueAndRest/binary>>) ->
-    {Type, Value, Rest} = parse_field_value(ValueAndRest),
-    [{Type, Value} | parse_array(Rest)].
 
-parse_field_value(<<$S, VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
-    {longstr, V, R};
+?SIMPLE_PARSE_ARRAY($b, Value:8/signed,  byte);
+?SIMPLE_PARSE_ARRAY($d, Value:64/float, double);
+?SIMPLE_PARSE_ARRAY($f, Value:32/float, float);
+?SIMPLE_PARSE_ARRAY($l, Value:64/signed, long);
+?SIMPLE_PARSE_ARRAY($s, Value:16/signed, short);
 
-parse_field_value(<<$I, V:32/signed, R/binary>>) ->
-    {signedint, V, R};
+parse_array(<<$t, Value:8/unsigned, Rest/binary>>) ->
+    [{bool, (Value /= 0)} | parse_array(Rest)];
 
-parse_field_value(<<$D, Before:8/unsigned, After:32/unsigned, R/binary>>) ->
-    {decimal, {Before, After}, R};
+parse_array(<<$D, Before:8/unsigned, After:32/unsigned, Rest/binary>>) ->
+    [{decimal, {Before, After}} | parse_array(Rest)];
 
-parse_field_value(<<$T, V:64/unsigned, R/binary>>) ->
-    {timestamp, V, R};
+parse_array(<<$F, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{table, parse_table(Value)} | parse_array(Rest)];
 
-parse_field_value(<<$F, VLen:32/unsigned, Table:VLen/binary, R/binary>>) ->
-    {table, parse_table(Table), R};
+parse_array(<<$A, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{array, parse_array(Value)} | parse_array(Rest)];
 
-parse_field_value(<<$A, VLen:32/unsigned, Array:VLen/binary, R/binary>>) ->
-    {array, parse_array(Array), R};
+parse_array(<<$x, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{binary, Value} | parse_array(Rest)];
 
-parse_field_value(<<$b, V:8/signed,   R/binary>>) -> {byte,        V, R};
-parse_field_value(<<$d, V:64/float,   R/binary>>) -> {double,      V, R};
-parse_field_value(<<$f, V:32/float,   R/binary>>) -> {float,       V, R};
-parse_field_value(<<$l, V:64/signed,  R/binary>>) -> {long,        V, R};
-parse_field_value(<<$s, V:16/signed,  R/binary>>) -> {short,       V, R};
-parse_field_value(<<$t, V:8/unsigned, R/binary>>) -> {bool, (V /= 0), R};
-
-parse_field_value(<<$x, VLen:32/unsigned, V:VLen/binary, R/binary>>) ->
-    {binary, V, R};
-
-parse_field_value(<<$V, R/binary>>) ->
-    {void, undefined, R}.
+parse_array(<<$V, Rest/binary>>) ->
+    [{void, undefined} | parse_array(Rest)].
 
 ensure_content_decoded(Content = #content{properties = Props})
   when Props =/= none ->
