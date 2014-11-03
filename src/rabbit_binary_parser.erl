@@ -91,7 +91,7 @@ parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
 
 -define(SIMPLE_PARSE_ARRAY(BType, Pattern, RType),
         parse_array(<<BType, Pattern, Rest/binary>>) ->
-               [{RType, Value} | parse_table(Rest)]).
+               [{RType, Value} | parse_array(Rest)]).
 
 parse_array(<<$S, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
     [{longstr, Value} | parse_array(Rest)];
