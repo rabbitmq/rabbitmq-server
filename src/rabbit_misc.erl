@@ -330,8 +330,8 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
                  true  -> ok;
                  false -> assert_field_equivalence(OrigVal, NewVal, Name, Key)
             end;
-        {_, _} ->
-            assert_field_equivalence(Orig, New, Name, Key)
+        {OrigTypeVal, NewTypeVal} ->
+            assert_field_equivalence(OrigTypeVal, NewTypeVal, Name, Key)
     end.
 
 assert_field_equivalence(_Orig, _Orig, _Name, _Key) ->
