@@ -349,13 +349,13 @@ val(undefined) ->
 val({Type, Value}) ->
     ValFmt = case is_binary(Value) of
                  true  -> "~s";
-                 false -> "~w"
+                 false -> "~p"
              end,
     format("the value '" ++ ValFmt ++ "' of type '~s'", [Value, Type]);
 val(Value) ->
     format(case is_binary(Value) of
                true  -> "'~s'";
-               false -> "'~w'"
+               false -> "'~p'"
            end, [Value]).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
