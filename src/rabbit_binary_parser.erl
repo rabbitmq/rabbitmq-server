@@ -93,9 +93,8 @@ parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
         parse_array(<<BType, Pattern, Rest/binary>>) ->
                [{RType, Value} | parse_table(Rest)]).
 
-parse_array(<<NLen:8/unsigned, NameString:NLen/binary,
-              $S, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
-    [{NameString, longstr, Value} | parse_array(Rest)];
+parse_array(<<$S, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
+    [{longstr, Value} | parse_array(Rest)];
 
 ?SIMPLE_PARSE_ARRAY($I, Value:32/signed,   signedint);
 ?SIMPLE_PARSE_ARRAY($T, Value:64/unsigned, timestamp);
