@@ -117,8 +117,14 @@ lookup_src_dest(static, _Name) ->
     [];
 
 lookup_src_dest(dynamic, {VHost, Name}) ->
-    Def = pget(value,
-               rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, Name)),
-    Ks = [<<"src-queue">>,  <<"src-exchange">>,  <<"src-exchange-key">>,
-          <<"dest-queue">>, <<"dest-exchange">>, <<"dest-exchange-key">>],
-    [{definition, [{K, V} || {K, V} <- Def, lists:member(K, Ks)]}].
+    case rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, Name) of
+        %% We might not find anything if the shovel has been deleted
+        %% before we got here
+        not_found ->
+            [];
+        Props ->
+            Def = pget(value, Props),
+            Ks = [<<"src-queue">>, <<"src-exchange">>, <<"src-exchange-key">>,
+                  <<"dest-queue">>,<<"dest-exchange">>,<<"dest-exchange-key">>],
+            [{definition, [{K, V} || {K, V} <- Def, lists:member(K, Ks)]}]
+    end.
