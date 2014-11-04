@@ -88,6 +88,10 @@ handle_cast(init, State = #state{config = Config}) ->
     end,
 
     Remaining = remaining(InboundChan, Config),
+    case Remaining of
+        0 -> exit({shutdown, autodelete});
+        _ -> ok
+    end,
 
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(
