@@ -105,7 +105,7 @@
       </th>
       <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <%= node_stat('mem_used', 'mem_limit', 'high watermark', node,
+   <%= node_stat('mem_used', 'Used', 'mem_limit', 'high watermark', node,
                  fmt_bytes_obj, fmt_bytes_axis,
                  node.mem_alarm ? 'red' : 'green',
                  node.mem_alarm ? 'memory-alarm' : null) %>
@@ -120,7 +120,7 @@
       </th>
       <td>
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
-   <%= node_stat('disk_free', 'disk_free_limit', 'low watermark', node,
+   <%= node_stat('disk_free', 'Free', 'disk_free_limit', 'low watermark', node,
                  fmt_bytes_obj, fmt_bytes_axis,
                  node.disk_free_alarm ? 'red' : 'green',
                  node.disk_free_alarm ? 'disk_free-alarm' : null,
