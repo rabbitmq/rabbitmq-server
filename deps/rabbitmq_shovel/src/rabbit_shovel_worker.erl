@@ -228,14 +228,14 @@ make_conn_and_chan(URIs) ->
     {ok, Chan} = amqp_connection:open_channel(Conn),
     {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))}.
 
-remaining(Ch, #shovel{delete_after = never}) ->
+remaining(_Ch, #shovel{delete_after = never}) ->
     unlimited;
 remaining(Ch, #shovel{delete_after = 'queue-length', queue = Queue}) ->
     #'queue.declare_ok'{message_count = N} =
         amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
                                                passive = true}),
     N;
-remaining(Ch, #shovel{delete_after = Count}) ->
+remaining(_Ch, #shovel{delete_after = Count}) ->
     Count.
 
 decr_remaining(_N, State = #state{remaining = unlimited}) ->
