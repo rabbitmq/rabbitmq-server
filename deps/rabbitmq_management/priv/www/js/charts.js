@@ -78,7 +78,7 @@ function node_stat_count(used_key, limit_key, stats, thresholds) {
     var used = stats[used_key];
     var limit = stats[limit_key];
     if (typeof used == 'number') {
-        return node_stat(used_key, limit_key, 'available', stats,
+        return node_stat(used_key, 'Used', limit_key, 'available', stats,
                          fmt_num_obj, fmt_num_axis,
                          fmt_color(used / limit, thresholds));
     } else {
@@ -97,10 +97,10 @@ function node_stat_count_bar(used_key, limit_key, stats, thresholds) {
     }
 }
 
-function node_stat(used_key, limit_key, suffix, stats, rate_fmt, axis_fmt,
-                   colour, help, invert) {
+function node_stat(used_key, used_name, limit_key, suffix, stats, rate_fmt,
+                   axis_fmt, colour, help, invert) {
     if (get_pref('rate-mode-node-stats') == 'chart') {
-        var items = [['Used', used_key], ['Limit', limit_key]];
+        var items = [[used_name, used_key], ['Limit', limit_key]];
         add_fake_limit_details(used_key, limit_key, stats);
         return rates_chart('node-stats', 'node-stats-' + used_key, items, stats,
                            rate_fmt, axis_fmt, 'node', false);
