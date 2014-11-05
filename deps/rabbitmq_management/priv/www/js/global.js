@@ -226,6 +226,10 @@ var current_template;
 // Which JSON requests do we need to populate it
 var current_reqs;
 
+// And which of those have yet to return (so we can cancel them when
+// changing current_template).
+var outstanding_reqs = [];
+
 // Which tab is highlighted
 var current_highlight;
 
