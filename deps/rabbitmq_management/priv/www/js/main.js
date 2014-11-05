@@ -202,6 +202,10 @@ function update_manual(div, query) {
 function render(reqs, template, highlight) {
     current_template = template;
     current_reqs = reqs;
+    for (var i in outstanding_reqs) {
+        outstanding_reqs[i].abort();
+    }
+    outstanding_reqs = [];
     current_highlight = highlight;
     update();
 }
@@ -871,12 +875,17 @@ function with_req(method, path, body, fun) {
     req.setRequestHeader('authorization', auth_header());
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
+            var ix = jQuery.inArray(req, outstanding_reqs);
+            if (ix != -1) {
+                outstanding_reqs.splice(ix, 1);
+            }
             if (check_bad_response(req, true)) {
                 last_successful_connect = new Date();
                 fun(req);
             }
         }
     };
+    outstanding_reqs.push(req);
     req.send(body);
 }
 
