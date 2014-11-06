@@ -24,6 +24,8 @@
 
 -export([list_registry_plugins/1]).
 
+-import(rabbit_misc, [pget/2]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
@@ -38,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 
--record(state, {fd_total}).
+-record(state, {fd_total, fhc_stats, fhc_stats_derived}).
 
 %%--------------------------------------------------------------------
 
@@ -183,7 +185,7 @@ i(sasl_log_file,   _State) -> list_to_binary(rabbit:log_location(sasl));
 i(db_dir,          _State) -> list_to_binary(rabbit_mnesia:dir());
 i(config_files,    _State) -> [list_to_binary(F) || F <- rabbit:config_files()];
 i(net_ticktime,    _State) -> net_kernel:get_net_ticktime();
-i(persister_stats, _State) -> file_handle_cache_stats:get();
+i(persister_stats,  State) -> persister_stats(State);
 i(enabled_plugins, _State) -> {ok, Dir} = application:get_env(
                                            rabbit, enabled_plugins_file),
                               rabbit_plugins:read_enabled(Dir);
@@ -218,6 +220,16 @@ format_application({Application, Description, Version}) ->
 set_plugin_name(Name, Module) ->
     [{name, list_to_binary(atom_to_list(Name))} |
      proplists:delete(name, Module:description())].
+
+persister_stats(#state{fhc_stats         = FHC,
+                       fhc_stats_derived = FHCD}) ->
+    [{flatten_key(K), V} || {{_Op, Type} = K, V} <- FHC,
+                            Type =/= time] ++
+        [{flatten_key(K), V} || {K, V} <- FHCD].
+
+flatten_key({A, B}) ->
+    list_to_atom("fhc_" ++ atom_to_list(A) ++ "_" ++ atom_to_list(B)).
+
 
 %%--------------------------------------------------------------------
 
@@ -261,7 +273,8 @@ format_mochiweb_option(_K, V) ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    State = #state{fd_total = file_handle_cache:ulimit()},
+    State = #state{fd_total  = file_handle_cache:ulimit(),
+                   fhc_stats = file_handle_cache_stats:get()},
     %% If we emit an update straight away we will do so just before
     %% the mgmt db starts up - and then have to wait ?REFRESH_RATIO
     %% until we send another. So let's have a shorter wait in the hope
@@ -289,7 +302,26 @@ code_change(_, State, _) -> {ok, State}.
 
 %%--------------------------------------------------------------------
 
-emit_update(State) ->
+emit_update(State0) ->
+    State = update_state(State0),
     rabbit_event:notify(node_stats, infos(?KEYS, State)),
     erlang:send_after(?REFRESH_RATIO, self(), emit_update),
     State.
+
+update_state(State0 = #state{fhc_stats = FHC0}) ->
+    FHC = file_handle_cache_stats:get(),
+    Avgs = [{{Op, avg_time}, avg_op_time(Op, V, FHC, FHC0)}
+            || {{Op, time}, V} <- FHC],
+    State0#state{fhc_stats         = FHC,
+                 fhc_stats_derived = Avgs}.
+
+-define(MICRO_TO_MILLI, 1000).
+
+avg_op_time(Op, Time, FHC, FHC0) ->
+    Time0 = pget({Op, time}, FHC0),
+    TimeDelta = Time - Time0,
+    OpDelta = pget({Op, count}, FHC) - pget({Op, count}, FHC0),
+    case OpDelta of
+        0 -> 0;
+        _ -> (TimeDelta / OpDelta) / ?MICRO_TO_MILLI
+    end.
