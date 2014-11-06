@@ -21,7 +21,6 @@
 -export([init/0, update/3, update/2, get/0]).
 
 -define(TABLE, ?MODULE).
--define(MICRO_TO_MILLI, 1000).
 
 init() ->
     ets:new(?TABLE, [public, named_table]),
@@ -44,10 +43,4 @@ update(Op, Thunk) ->
     Res.
 
 get() ->
-    lists:sort([output(K, V) || {K, V} <- ets:tab2list(?TABLE)]).
-
-output({Op, time}, Val) -> {flatten_key(Op, time), Val / ?MICRO_TO_MILLI};
-output({Op, Ctr},  Val) -> {flatten_key(Op, Ctr),  Val}.
-
-flatten_key(A, B) ->
-    list_to_atom("fhc_" ++ atom_to_list(A) ++ "_" ++ atom_to_list(B)).
+    lists:sort(ets:tab2list(?TABLE)).
