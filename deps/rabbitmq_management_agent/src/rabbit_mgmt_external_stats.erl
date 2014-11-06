@@ -34,7 +34,7 @@
                uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications, contexts,
                log_file, sasl_log_file, db_dir, config_files, net_ticktime,
-               enabled_plugins]).
+               persister_stats, enabled_plugins]).
 
 %%--------------------------------------------------------------------
 
@@ -183,6 +183,7 @@ i(sasl_log_file,   _State) -> list_to_binary(rabbit:log_location(sasl));
 i(db_dir,          _State) -> list_to_binary(rabbit_mnesia:dir());
 i(config_files,    _State) -> [list_to_binary(F) || F <- rabbit:config_files()];
 i(net_ticktime,    _State) -> net_kernel:get_net_ticktime();
+i(persister_stats, _State) -> file_handle_cache_stats:get();
 i(enabled_plugins, _State) -> {ok, Dir} = application:get_env(
                                            rabbit, enabled_plugins_file),
                               rabbit_plugins:read_enabled(Dir);
