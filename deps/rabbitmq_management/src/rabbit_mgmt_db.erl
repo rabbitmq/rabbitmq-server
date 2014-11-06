@@ -159,7 +159,10 @@
         [messages, messages_ready, messages_unacknowledged]).
 
 -define(COARSE_NODE_STATS,
-        [mem_used, fd_used, sockets_used, proc_used, disk_free]).
+        [mem_used, fd_used, sockets_used, proc_used, disk_free,
+        fhc_read_count, fhc_read_bytes, fhc_read_time,
+        fhc_write_count, fhc_write_bytes, fhc_write_time,
+        fhc_sync_count, fhc_sync_time]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
@@ -572,8 +575,10 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
 %% TODO: we don't clear up after dead nodes here - this is a very tiny
 %% leak every time a node is permanently removed from the cluster. Do
 %% we care?
-handle_event(#event{type = node_stats, props = Stats, timestamp = Timestamp},
+handle_event(#event{type = node_stats, props = Stats0, timestamp = Timestamp},
              State) ->
+    Stats = proplists:delete(persister_stats, Stats0) ++
+        pget(persister_stats, Stats0),
     handle_stats(node_stats, Stats, Timestamp, [], ?COARSE_NODE_STATS, State);
 
 handle_event(_Event, State) ->
