@@ -160,9 +160,9 @@
 
 -define(COARSE_NODE_STATS,
         [mem_used, fd_used, sockets_used, proc_used, disk_free,
-        fhc_read_count, fhc_read_bytes, fhc_read_time,
-        fhc_write_count, fhc_write_bytes, fhc_write_time,
-        fhc_sync_count, fhc_sync_time]).
+        fhc_read_count, fhc_read_bytes, fhc_read_avg_time,
+        fhc_write_count, fhc_write_bytes, fhc_write_avg_time,
+        fhc_sync_count, fhc_sync_avg_time]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 

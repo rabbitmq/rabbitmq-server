@@ -151,7 +151,7 @@
 
   <%= rates_chart_or_text('fhc-stats-bytes', node, [['Read', 'fhc_read_bytes'], ['Write', 'fhc_write_bytes']], fmt_rate_bytes, fmt_rate_bytes_large, fmt_rate_bytes_axis, true, 'Data rates') %>
 
-  <%= rates_chart_or_text('fhc-stats-time', node, [['Read', 'fhc_read_time'], ['Write', 'fhc_write_time'], ['Sync', 'fhc_sync_time']], fmt_rate, fmt_rate_large, fmt_num_axis, false, 'Time') %>
+  <%= rates_chart_or_text('fhc-stats-time', node, [['Read', 'fhc_read_avg_time'], ['Write', 'fhc_write_avg_time'], ['Sync', 'fhc_sync_avg_time']], fmt_msgs, fmt_msgs_large, fmt_num_axis, false, 'Time') %>
 
 <% } %>
 </div>
