@@ -335,7 +335,7 @@ read(Ref, Count) ->
       fun ([#handle { is_read = false }]) ->
               {error, not_open_for_reading};
           ([Handle = #handle { hdl = Hdl, offset = Offset }]) ->
-              case prim_file:read(Hdl, Count) of
+              case prim_file_read(Hdl, Count) of
                   {ok, Data} = Obj -> Offset1 = Offset + iolist_size(Data),
                                       {Obj,
                                        [Handle #handle { offset = Offset1 }]};
@@ -355,7 +355,7 @@ append(Ref, Data) ->
                                             write_buffer_size_limit = 0,
                                             at_eof = true } = Handle1} ->
                       Offset1 = Offset + iolist_size(Data),
-                      {prim_file:write(Hdl, Data),
+                      {prim_file_write(Hdl, Data),
                        [Handle1 #handle { is_dirty = true, offset = Offset1 }]};
                   {{ok, _Offset}, #handle { write_buffer = WriteBuffer,
                                             write_buffer_size = Size,
@@ -382,7 +382,7 @@ sync(Ref) ->
               ok;
           ([Handle = #handle { hdl = Hdl,
                                is_dirty = true, write_buffer = [] }]) ->
-              case prim_file:sync(Hdl) of
+              case prim_file_sync(Hdl) of
                   ok    -> {ok, [Handle #handle { is_dirty = false }]};
                   Error -> {Error, [Handle]}
               end
@@ -538,6 +538,17 @@ info(Items) -> gen_server2:call(?SERVER, {info, Items}, infinity).
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
+
+prim_file_read(Hdl, Size) ->
+    file_handle_cache_stats:update(
+      read, Size, fun() -> prim_file:read(Hdl, Size) end).
+
+prim_file_write(Hdl, Bytes) ->
+    file_handle_cache_stats:update(
+      write, iolist_size(Bytes), fun() -> prim_file:write(Hdl, Bytes) end).
+
+prim_file_sync(Hdl) ->
+    file_handle_cache_stats:update(sync, fun() -> prim_file:sync(Hdl) end).
 
 is_reader(Mode) -> lists:member(read, Mode).
 
@@ -742,7 +753,7 @@ soft_close(Handle) ->
                        is_dirty    = IsDirty,
                        last_used_at = Then } = Handle1 } ->
             ok = case IsDirty of
-                     true  -> prim_file:sync(Hdl);
+                     true  -> prim_file_sync(Hdl);
                      false -> ok
                  end,
             ok = prim_file:close(Hdl),
@@ -817,7 +828,7 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
                                 write_buffer = WriteBuffer,
                                 write_buffer_size = DataSize,
                                 at_eof = true }) ->
-    case prim_file:write(Hdl, lists:reverse(WriteBuffer)) of
+    case prim_file_write(Hdl, lists:reverse(WriteBuffer)) of
         ok ->
             Offset1 = Offset + DataSize,
             {ok, Handle #handle { offset = Offset1, is_dirty = true,
@@ -843,6 +854,7 @@ used(#fhc_state{open_count          = C1,
 %%----------------------------------------------------------------------------
 
 init([AlarmSet, AlarmClear]) ->
+    file_handle_cache_stats:init(),
     Limit = case application:get_env(file_handles_high_watermark) of
                 {ok, Watermark} when (is_integer(Watermark) andalso
                                       Watermark > 0) ->
