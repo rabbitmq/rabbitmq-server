@@ -41,13 +41,13 @@ maybe_stuck(Pids, Timeout) ->
     maybe_stuck(Pids2, Timeout - 500).
 
 looks_stuck(Pid) ->
-    case process_info(Pid, status) of
+    case catch process_info(Pid, status) of
         {status, waiting} ->
             %% It's tempting to just check for message_queue_len > 0
             %% here rather than mess around with stack traces and
             %% heuristics. But really, sometimes freshly stuck
             %% processes can have 0 messages...
-            case erlang:process_info(Pid, current_stacktrace) of
+            case catch erlang:process_info(Pid, current_stacktrace) of
                 {current_stacktrace, [H|_]} ->
                     maybe_stuck_stacktrace(H);
                 _ ->
