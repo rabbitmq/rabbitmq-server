@@ -550,6 +550,10 @@ prim_file_write(Hdl, Bytes) ->
 prim_file_sync(Hdl) ->
     file_handle_cache_stats:update(sync, fun() -> prim_file:sync(Hdl) end).
 
+prim_file_position(Hdl, NewOffset) ->
+    file_handle_cache_stats:update(
+      seek, fun() -> prim_file:position(Hdl, NewOffset) end).
+
 is_reader(Mode) -> lists:member(read, Mode).
 
 is_writer(Mode) -> lists:member(write, Mode).
@@ -791,7 +795,7 @@ maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, offset = Offset,
                                          at_eof = AtEoF }) ->
     {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Offset, NewOffset),
     case (case NeedsSeek of
-              true  -> prim_file:position(Hdl, NewOffset);
+              true  -> prim_file_position(Hdl, NewOffset);
               false -> {ok, Offset}
           end) of
         {ok, Offset1} = Result ->

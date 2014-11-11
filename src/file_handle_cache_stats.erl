@@ -26,7 +26,7 @@ init() ->
     ets:new(?TABLE, [public, named_table]),
     [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [read, write],
                                                Counter <- [count, bytes, time]],
-    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [sync],
+    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [sync, seek],
                                                Counter <- [count, time]].
 
 update(Op, Bytes, Thunk) ->
