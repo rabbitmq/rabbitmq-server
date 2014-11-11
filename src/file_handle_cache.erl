@@ -626,14 +626,16 @@ reopen([], Tree, RefHdls) ->
     {ok, lists:reverse(RefHdls)};
 reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
                                               path         = Path,
-                                              mode         = Mode,
+                                              mode         = Mode0,
                                               offset       = Offset,
                                               last_used_at = undefined }} |
         RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
-    case prim_file:open(Path, case NewOrReopen of
-                                  new    -> Mode;
-                                  reopen -> [read | Mode]
-                              end) of
+    Mode = case NewOrReopen of
+               new    -> Mode0;
+               reopen -> file_handle_cache_stats:update(reopen),
+                         [read | Mode0]
+           end,
+    case prim_file:open(Path, Mode) of
         {ok, Hdl} ->
             Now = now(),
             {{ok, _Offset}, Handle1} =
