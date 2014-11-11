@@ -564,15 +564,21 @@ range(ReqData) -> {range("lengths",    fun floor/2, ReqData),
 
 %% ...but if we know only one event could have contributed towards
 %% what we are interested in, then let's take the ceiling instead and
-%% get slightly fresher data.
+%% get slightly fresher data that will match up with any
+%% non-historical data we have (e.g. queue length vs queue messages in
+%% RAM, they should both come from the same snapshot or we might
+%% report more messages in RAM than total).
 %%
-%% Why does msg_rates still use floor/2? Because in the cases where we
-%% call this function (for connections and queues) the msg_rates are still
-%% aggregated even though the lengths and data rates aren't.
+%% However, we only do this for queue lengths since a) it's the only
+%% thing where this ends up being really glaring and b) for other
+%% numbers we care more about the rate than the absolute value, and if
+%% we use ceil() we stand a 50:50 chance of looking up the last sample
+%% in the range before we get it, and thus deriving an instantaneous
+%% rate of 0.0.
 range_ceil(ReqData) -> {range("lengths",    fun ceil/2,  ReqData),
                         range("msg_rates",  fun floor/2, ReqData),
-                        range("data_rates", fun ceil/2,  ReqData),
-                        range("node_stats", fun ceil/2,  ReqData)}.
+                        range("data_rates", fun floor/2,  ReqData),
+                        range("node_stats", fun floor/2,  ReqData)}.
 
 range(Prefix, Round, ReqData) ->
     Age0 = int(Prefix ++ "_age", ReqData),
