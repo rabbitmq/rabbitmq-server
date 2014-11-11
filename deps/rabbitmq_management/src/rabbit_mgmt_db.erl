@@ -163,7 +163,8 @@
         persister_read_count,  persister_read_bytes,  persister_read_avg_time,
         persister_write_count, persister_write_bytes, persister_write_avg_time,
         persister_sync_count,  persister_sync_avg_time,
-        persister_seek_count,  persister_seek_avg_time]).
+        persister_seek_count,  persister_seek_avg_time,
+        persister_reopen_count]).
 
 %% Normally 0 and no history means "has never happened, don't
 %% report". But for these things we do want to report even at 0 with
