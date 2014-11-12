@@ -469,7 +469,10 @@ group_bindings_fold(Fun, SrcName, Acc, Removed, Bindings, OnlyDurable) ->
 
 maybe_auto_delete(XName, Bindings, Deletions, OnlyDurable) ->
     {Entry, Deletions1} =
-        case mnesia:read({rabbit_exchange, XName}) of
+        case mnesia:read({case OnlyDurable of
+                              true  -> rabbit_durable_exchange;
+                              false -> rabbit_exchange
+                          end, XName}) of
             []  -> {{undefined, not_deleted, Bindings}, Deletions};
             [X] -> case rabbit_exchange:maybe_auto_delete(X, OnlyDurable) of
                        not_deleted ->
