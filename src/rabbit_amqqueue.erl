@@ -726,8 +726,10 @@ forget_all_durable(Node) ->
 
 forget_node_for_queue(#amqqueue{name             = Name,
                                 down_slave_nodes = []}) ->
-    %% No slaves to recover from, queue is gone
-    rabbit_binding:process_deletions(internal_delete1(Name, true));
+    %% No slaves to recover from, queue is gone.
+    %% Don't process_deletions since that just calls callbacks and we
+    %% are not really up.
+    internal_delete1(Name, true);
 
 forget_node_for_queue(Q = #amqqueue{down_slave_nodes = [H|T]}) ->
     %% Promote a slave while down - it'll happily recover as a master
