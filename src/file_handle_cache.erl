@@ -584,6 +584,10 @@ prim_file_write(Hdl, Bytes) ->
 prim_file_sync(Hdl) ->
     file_handle_cache_stats:update(sync, fun() -> prim_file:sync(Hdl) end).
 
+prim_file_position(Hdl, NewOffset) ->
+    file_handle_cache_stats:update(
+      seek, fun() -> prim_file:position(Hdl, NewOffset) end).
+
 is_reader(Mode) -> lists:member(read, Mode).
 
 is_writer(Mode) -> lists:member(write, Mode).
@@ -656,14 +660,16 @@ reopen([], Tree, RefHdls) ->
     {ok, lists:reverse(RefHdls)};
 reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
                                               path         = Path,
-                                              mode         = Mode,
+                                              mode         = Mode0,
                                               offset       = Offset,
                                               last_used_at = undefined }} |
         RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
-    case prim_file:open(Path, case NewOrReopen of
-                                  new    -> Mode;
-                                  reopen -> [read | Mode]
-                              end) of
+    Mode = case NewOrReopen of
+               new    -> Mode0;
+               reopen -> file_handle_cache_stats:update(reopen),
+                         [read | Mode0]
+           end,
+    case prim_file:open(Path, Mode) of
         {ok, Hdl} ->
             Now = now(),
             {{ok, _Offset}, Handle1} =
@@ -838,7 +844,7 @@ maybe_seek(NewOffset, Handle = #handle{hdl              = Hdl,
                 NewOffset < Offset orelse
                 NewOffset > BufSz + Offset of
                 true ->
-                    case prim_file:position(Hdl, NewOffset) of
+                    case prim_file_position(Hdl, NewOffset) of
                         {ok, Offset1} = Result ->
                             {Result, Handle#handle{offset           = Offset1,
                                                    at_eof           = AtEoF1,

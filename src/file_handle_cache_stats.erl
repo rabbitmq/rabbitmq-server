@@ -18,7 +18,7 @@
 
 %% stats about read / write operations that go through the fhc.
 
--export([init/0, update/3, update/2, get/0]).
+-export([init/0, update/3, update/2, update/1, get/0]).
 
 -define(TABLE, ?MODULE).
 
@@ -26,8 +26,10 @@ init() ->
     ets:new(?TABLE, [public, named_table]),
     [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [read, write],
                                                Counter <- [count, bytes, time]],
-    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [sync],
-                                               Counter <- [count, time]].
+    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [sync, seek],
+                                               Counter <- [count, time]],
+    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [reopen],
+                                               Counter <- [count]].
 
 update(Op, Bytes, Thunk) ->
     {Time, Res} = timer:tc(Thunk),
@@ -41,6 +43,10 @@ update(Op, Thunk) ->
     ets:update_counter(?TABLE, {Op, count}, 1),
     ets:update_counter(?TABLE, {Op, time}, Time),
     Res.
+
+update(Op) ->
+    ets:update_counter(?TABLE, {Op, count}, 1),
+    ok.
 
 get() ->
     lists:sort(ets:tab2list(?TABLE)).
