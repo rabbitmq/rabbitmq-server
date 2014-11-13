@@ -346,11 +346,11 @@ read(Ref, Count) ->
                                         read_buffer_size = BufSz - Count}]};
           ([Handle = #handle{read_buffer            = Buf,
                              read_buffer_size       = BufSz,
-                             read_buffer_size_limit = Limit,
+                             read_buffer_size_limit = BufSzLimit,
                              hdl                    = Hdl,
                              offset                 = Offset}]) ->
               WantedCount = Count - BufSz,
-              case prim_file_read(Hdl, Limit) of
+              case prim_file_read(Hdl, lists:max([BufSzLimit, WantedCount])) of
                   {ok, Data} ->
                       ReadCount = size(Data),
                       case ReadCount < WantedCount of
