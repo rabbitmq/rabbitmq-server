@@ -134,8 +134,7 @@
 -type(user() ::
         #user{username       :: username(),
               tags           :: [atom()],
-              authN_backend  :: atom(),
-              authZ_backends :: [{atom(), any()}]}).
+              authz_backends :: [{atom(), any()}]}).
 
 -type(internal_user() ::
         #internal_user{username      :: username(),

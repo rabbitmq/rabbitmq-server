@@ -16,7 +16,16 @@
 
 -module(rabbit_auth_backend).
 
+-include("rabbit.hrl").
+
 -ifdef(use_specs).
+
+-export_type([auth_user/0]).
+
+-type(auth_user() ::
+        #auth_user{username :: rabbit_types:username(),
+                   tags     :: [atom()],
+                   impl     :: any()}).
 
 %% A description proplist as with auth mechanisms,
 %% exchanges. Currently unused.
@@ -33,7 +42,7 @@
 %% {refused, Msg, Args}
 %%     Client failed authentication. Log and die.
 -callback check_user_login(rabbit_types:username(), [term()]) ->
-    {'ok', rabbit_types:user(), any()} |
+    {'ok', auth_user()} |
     {'refused', string(), [any()]} |
     {'error', any()}.
 
@@ -43,10 +52,9 @@
 %% false
 %% {error, Error}
 %%     Something went wrong. Log and die.
--callback check_vhost_access(rabbit_types:user(), any(),
+-callback check_vhost_access(auth_user(),
                              rabbit_types:vhost(), rabbit_net:socket()) ->
     boolean() | {'error', any()}.
-
 
 %% Given #user, resource and permission, can a user access a resource?
 %%
@@ -55,7 +63,7 @@
 %% false
 %% {error, Error}
 %%     Something went wrong. Log and die.
--callback check_resource_access(rabbit_types:user(), any(),
+-callback check_resource_access(auth_user(),
                                 rabbit_types:r(atom()),
                                 rabbit_access_control:permission_atom()) ->
     boolean() | {'error', any()}.
@@ -65,8 +73,8 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {check_user_login, 2}, {check_vhost_access, 4},
-     {check_resource_access, 4}];
+    [{description, 0}, {check_user_login, 2}, {check_vhost_access, 3},
+     {check_resource_access, 3}];
 behaviour_info(_Other) ->
     undefined.
 

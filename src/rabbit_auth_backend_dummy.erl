@@ -21,7 +21,7 @@
 
 -export([description/0]).
 -export([user/0]).
--export([check_user_login/2, check_vhost_access/4, check_resource_access/4]).
+-export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
 
 -ifdef(use_specs).
 
@@ -33,8 +33,11 @@
 %% not needed. This user can do anything AMQPish.
 user() -> #user{username       = <<"none">>,
                 tags           = [],
-                authN_backend  = ?MODULE,
-                authZ_backends = []}.
+                authz_backends = [{?MODULE, buser()}]}.
+
+buser() -> #auth_user{username = <<"none">>,
+                      tags     = [],
+                      impl     = none}.
 
 %% Implementation of rabbit_auth_backend
 
@@ -45,5 +48,5 @@ description() ->
 check_user_login(_, _) ->
     {refused, "cannot log in conventionally as dummy user", []}.
 
-check_vhost_access(#user{}, _Impl, _VHostPath, _Sock) -> true.
-check_resource_access(#user{}, _Impl, #resource{}, _Permission) -> true.
+check_vhost_access(#auth_user{}, _VHostPath, _Sock) -> true.
+check_resource_access(#auth_user{}, #resource{}, _Permission) -> true.

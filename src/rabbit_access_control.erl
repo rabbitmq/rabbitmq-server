@@ -55,55 +55,64 @@ check_user_pass_login(Username, Password) ->
 check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     R = lists:foldl(
-          fun ({ModN, ModZ}, {refused, _, _}) ->
+          fun ({ModN, ModZs0}, {refused, _, _}) ->
+                  ModZs = case ModZs0 of
+                              A when is_atom(A) -> [A];
+                              L when is_list(L) -> L
+                          end,
                   %% Different modules for authN vs authZ. So authenticate
                   %% with authN module, then if that succeeds do
                   %% passwordless (i.e pre-authenticated) login with authZ.
                   case try_authenticate(ModN, Username, AuthProps) of
-                      {ok, User, _AuthZ} -> try_authorize(ModZ, User, []);
-                      Else               -> Else
+                      {ok, ModNUser = #auth_user{username = Username2}} ->
+                          user(ModNUser, try_authorize(ModZs, Username2));
+                      Else ->
+                          Else
                   end;
               (Mod, {refused, _, _}) ->
                   %% Same module for authN and authZ. Just take the result
                   %% it gives us
-                  try_authenticate(Mod, Username, AuthProps);
-              (_, {ok, User, AuthZ}) ->
+                  case try_authenticate(Mod, Username, AuthProps) of
+                      {ok, ModNUser} -> user(ModNUser, {ok, [{Mod, ModNUser}]});
+                      Else           -> Else
+                  end;
+              (_, {ok, User}) ->
                   %% We've successfully authenticated. Skip to the end...
-                  {ok, User, AuthZ}
+                  {ok, User}
           end, {refused, "No modules checked '~s'", [Username]}, Modules),
-    case R of
-        {ok, RUser, RAuthZ} ->
-            rabbit_event:notify(user_authentication_success, [{name,Username}]),
-            %% Store the list of authorization backends
-            {ok, RUser#user{authZ_backends=RAuthZ}};
-        _ ->
-            rabbit_event:notify(user_authentication_failure, [{name,Username}]),
-            R
-    end.
+    rabbit_event:notify(case R of
+                            {ok, _User} -> user_authentication_success;
+                            _           -> user_authentication_failure
+                        end, [{name, Username}]),
+    R.
 
 try_authenticate(Module, Username, AuthProps) ->
     case Module:check_user_login(Username, AuthProps) of
-        {ok, User, AuthZ} -> {ok, User, [{Module, AuthZ}]};
-        {error, E}        -> {refused, "~s failed authenticating ~s: ~p~n",
-                              [Module, Username, E]};
-        {refused, F, A}   -> {refused, F, A}
+        {ok, AuthUser}  -> {ok, AuthUser};
+        {error, E}      -> {refused, "~s failed authenticating ~s: ~p~n",
+                            [Module, Username, E]};
+        {refused, F, A} -> {refused, F, A}
     end.
 
-try_authorize(Modules, User, AuthZList) when is_list(Modules) ->
+try_authorize(Modules, Username) ->
     lists:foldr(
-      fun (Module, {ok, _User, AuthZList2}) ->
-              try_authorize(Module, User, AuthZList2);
+      fun (Module, {ok, AUsers}) ->
+              case Module:check_user_login(Username, []) of
+                  {ok, AUser}     -> {ok, [{Module, AUser} | AUsers]};
+                  {error, E}      -> {refused, "~s failed authorizing ~s: ~p~n",
+                                        [Module, Username, E]};
+                  {refused, F, A} -> {refused, F, A}
+              end;
           (_,      {refused, _, _} = Error) ->
               Error
-      end, {ok, User, AuthZList}, Modules);
+      end, {ok, []}, Modules).
 
-try_authorize(Module, User = #user{username = Username}, AuthZList) ->
-    case Module:check_user_login(Username, []) of
-        {ok, _User, AuthZ} -> {ok, User, [{Module, AuthZ}|AuthZList]};
-        {error, E} -> {refused, "~s failed authorizing ~s: ~p~n",
-                       [Module, Username, E]};
-        Else       -> Else
-    end.
+user(#auth_user{username = Username, tags = Tags}, {ok, ModZUsers}) ->
+    {ok, #user{username       = Username,
+               tags           = Tags,
+               authz_backends = ModZUsers}};
+user(_AuthUser, Error) ->
+    Error.
 
 check_user_loopback(Username, SockOrAddr) ->
     {ok, Users} = application:get_env(rabbit, loopback_users),
@@ -113,14 +122,14 @@ check_user_loopback(Username, SockOrAddr) ->
         false -> not_allowed
     end.
 
-check_vhost_access(User = #user{username       = Username,
-                                authZ_backends = Modules}, VHostPath, Sock) ->
+check_vhost_access(#user{username       = Username,
+                         authz_backends = Modules}, VHostPath, Sock) ->
     lists:foldl(
-      fun({Mod, Impl}, ok) ->
+      fun({Mod, AUser}, ok) ->
               check_access(
                 fun() ->
                         rabbit_vhost:exists(VHostPath) andalso
-                            Mod:check_vhost_access(User, Impl, VHostPath, Sock)
+                            Mod:check_vhost_access(AUser, VHostPath, Sock)
                 end,
                 Mod, "access to vhost '~s' refused for user '~s'",
                 [VHostPath, Username]);
@@ -132,14 +141,14 @@ check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
                       Permission) ->
     check_resource_access(User, R#resource{name = <<"amq.default">>},
                           Permission);
-check_resource_access(User = #user{username       = Username,
-                                   authZ_backends = Modules},
+check_resource_access(#user{username       = Username,
+                            authz_backends = Modules},
                       Resource, Permission) ->
     lists:foldl(
-      fun({Module, Impl}, ok) ->
+      fun({Module, AUser}, ok) ->
               check_access(
                 fun() -> Module:check_resource_access(
-                           User, Impl, Resource, Permission) end,
+                           AUser, Resource, Permission) end,
                 Module, "access to ~s refused for user '~s'",
                 [rabbit_misc:rs(Resource), Username]);
          (_, Else) -> Else
