@@ -845,27 +845,21 @@ maybe_seek(NewOffset, Handle = #handle{hdl              = Hdl,
                                        at_eof           = AtEoF}) ->
     {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Offset, NewOffset),
     case NeedsSeek of
+        true when is_number(NewOffset) andalso
+                  NewOffset >= Offset andalso NewOffset =< BufSz + Offset ->
+            Diff = NewOffset - Offset,
+            <<_:Diff/binary, Rest/binary>> = Buf,
+            {{ok, NewOffset}, Handle#handle{offset           = NewOffset,
+                                            at_eof           = AtEoF1,
+                                            read_buffer      = Rest,
+                                            read_buffer_size = BufSz - Diff}};
         true ->
-            case not is_number(NewOffset) orelse
-                NewOffset < Offset orelse
-                NewOffset > BufSz + Offset of
-                true ->
-                    case prim_file_position(Hdl, NewOffset) of
-                        {ok, Offset1} = Result ->
-                            {Result, reset_read_buffer(
-                                       Handle#handle{offset = Offset1,
-                                                     at_eof = AtEoF1})};
-                        {error, _} = Error ->
-                            {Error, Handle}
-                    end;
-                false ->
-                    Diff = NewOffset - Offset,
-                    <<_:Diff/binary, Rest/binary>> = Buf,
-                    {{ok, NewOffset},
-                     Handle#handle{offset           = NewOffset,
-                                   at_eof           = AtEoF1,
-                                   read_buffer      = Rest,
-                                   read_buffer_size = BufSz - Diff}}
+            case prim_file_position(Hdl, NewOffset) of
+                {ok, Offset1} = Result ->
+                    {Result, reset_read_buffer(Handle#handle{offset = Offset1,
+                                                             at_eof = AtEoF1})};
+                {error, _} = Error ->
+                    {Error, Handle}
             end;
         false ->
             {{ok, Offset}, Handle}
