@@ -145,7 +145,7 @@
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
-  <%= rates_chart_or_text('persister-stats-count', node, [['Read', 'persister_read_count'], ['Write', 'persister_write_count'], ['Seek', 'persister_seek_count'], ['Sync', 'persister_sync_count'], ['Reopen', 'persister_reopen_count']], fmt_rate, fmt_rate_axis, true, 'Operations') %>
+  <%= rates_chart_or_text('persister-stats-count', node, [['Read', 'persister_read_count'], ['Write', 'persister_write_count'], ['Seek', 'persister_seek_count'], ['Sync', 'persister_sync_count'], ['Reopen', 'persister_reopen_count']], fmt_rate, fmt_rate_axis, true, 'Operations', 'io-operations') %>
 
   <%= rates_chart_or_text('persister-stats-bytes', node, [['Read', 'persister_read_bytes'], ['Write', 'persister_write_bytes']], fmt_rate_bytes, fmt_rate_bytes_axis, true, 'Data rates') %>
 

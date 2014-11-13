@@ -251,6 +251,28 @@ HELP = {
     'plugins' :
     'Note that only plugins which are both explicitly enabled and running are shown here.',
 
+    'io-operations':
+    'Rate of I/O operations. Only operations performed by the message \
+      persister are shown here (e.g. metadata changes in Mnesia or writes \
+      to the log files are not shown).\
+      <dl>\
+        <dt>Read</dt>\
+        <dd>Rate at which data is read from the disk.</dd>\
+        <dt>Write</dt>\
+        <dd>Rate at which data is written to the disk.</dd>\
+        <dt>Seek</dt>\
+        <dd>Rate at which the broker switches position while reading or \
+         writing to disk.</dd>\
+        <dt>Sync</dt>\
+        <dd>Rate at which the broker invokes <code>fsync()</code> to ensure \
+         data is flushed to disk.</dd>\
+        <dt>Reopen</dt>\
+        <dd>Rate at which the broker recycles file handles in order to support \
+         more queues than it has file handles. If this operation is occurring \
+         frequently you may get a performance boost from increasing the number \
+         of file handles available.</dd>\
+      </dl>',
+
     'foo': 'foo' // No comma.
 };
 
