@@ -16,8 +16,8 @@
 
 -record(user, {username,
                tags,
-               auth_backend, %% Module this user came from
-               impl          %% Scratch space for that module
+               authN_backend, %% Authentication module this user came from
+               authZ_backends %% List of authorization modules
               }).
 
 -record(internal_user, {username, password_hash, tags}).

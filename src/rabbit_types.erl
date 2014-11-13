@@ -132,10 +132,10 @@
 -type(protocol() :: rabbit_framing:protocol()).
 
 -type(user() ::
-        #user{username     :: username(),
-              tags         :: [atom()],
-              auth_backend :: atom(),
-              impl         :: any()}).
+        #user{username       :: username(),
+              tags           :: [atom()],
+              authN_backend  :: atom(),
+              authZ_backends :: [{atom(), any()}]}).
 
 -type(internal_user() ::
         #internal_user{username      :: username(),

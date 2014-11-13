@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
-         check_vhost_access/2, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -38,8 +38,8 @@
 -spec(check_user_loopback/2 :: (rabbit_types:username(),
                                 rabbit_net:socket() | inet:ip_address())
         -> 'ok' | 'not_allowed').
--spec(check_vhost_access/2 ::
-        (rabbit_types:user(), rabbit_types:vhost())
+-spec(check_vhost_access/3 ::
+        (rabbit_types:user(), rabbit_types:vhost(), rabbit_net:socket())
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(check_resource_access/3 ::
         (rabbit_types:user(), rabbit_types:r(atom()), permission_atom())
@@ -58,29 +58,48 @@ check_user_login(Username, AuthProps) ->
           fun ({ModN, ModZ}, {refused, _, _}) ->
                   %% Different modules for authN vs authZ. So authenticate
                   %% with authN module, then if that succeeds do
-                  %% passwordless (i.e pre-authenticated) login with authZ
-                  %% module, and use the #user{} the latter gives us.
-                  case try_login(ModN, Username, AuthProps) of
-                      {ok, _} -> try_login(ModZ, Username, []);
+                  %% passwordless (i.e pre-authenticated) login with authZ.
+                  case try_authenticate(ModN, Username, AuthProps) of
+                      {ok, User, _AuthZ} -> try_authorize(ModZ, User, []);
                       Else    -> Else
                   end;
               (Mod, {refused, _, _}) ->
                   %% Same module for authN and authZ. Just take the result
                   %% it gives us
-                  try_login(Mod, Username, AuthProps);
-              (_, {ok, User}) ->
+                  try_authenticate(Mod, Username, AuthProps);
+              (_, {ok, User, AuthZ}) ->
                   %% We've successfully authenticated. Skip to the end...
-                  {ok, User}
+                  {ok, User, AuthZ}
           end, {refused, "No modules checked '~s'", [Username]}, Modules),
-    rabbit_event:notify(case R of
-                            {ok, _User} -> user_authentication_success;
-                            _           -> user_authentication_failure
-                        end, [{name, Username}]),
-    R.
 
-try_login(Module, Username, AuthProps) ->
+    case R of
+        {ok, RUser, RAuthZ} ->
+            rabbit_event:notify(user_authentication_success, [{name, Username}]),
+            %% Store the list of authorization backends
+            {ok, RUser#user{authZ_backends=RAuthZ}};
+        _ ->
+            rabbit_event:notify(user_authentication_failure, [{name, Username}]),
+            R
+    end.
+
+try_authenticate(Module, Username, AuthProps) ->
     case Module:check_user_login(Username, AuthProps) of
+        {ok, User, AuthZ} -> {ok, User, [{Module, AuthZ}]};
         {error, E} -> {refused, "~s failed authenticating ~s: ~p~n",
+                       [Module, Username, E]};
+        Else       -> Else
+    end.
+
+try_authorize(Modules, User, AuthZList) when is_list(Modules) ->
+    lists:foldr(
+        fun (Module, {ok, _User, AuthZList2}) -> try_authorize(Module, User, AuthZList2);
+            (_, {refused, _, _} = Error) -> Error
+    end, {ok, User, AuthZList}, Modules);
+
+try_authorize(Module, User = #user{username = Username}, AuthZList) ->
+    case Module:check_user_login(Username, []) of
+        {ok, _User, AuthZ} -> {ok, User, [{Module, AuthZ}|AuthZList]};
+        {error, E} -> {refused, "~s failed authorizing ~s: ~p~n",
                        [Module, Username, E]};
         Else       -> Else
     end.
@@ -93,29 +112,39 @@ check_user_loopback(Username, SockOrAddr) ->
         false -> not_allowed
     end.
 
-check_vhost_access(User = #user{ username     = Username,
-                                 auth_backend = Module }, VHostPath) ->
-    check_access(
-      fun() ->
-              %% TODO this could be an andalso shortcut under >R13A
-              case rabbit_vhost:exists(VHostPath) of
-                  false -> false;
-                  true  -> Module:check_vhost_access(User, VHostPath)
-              end
-      end,
-      Module, "access to vhost '~s' refused for user '~s'",
-      [VHostPath, Username]).
+check_vhost_access(User = #user{ username = Username,
+                                 authZ_backends = Modules }, VHostPath, Sock) ->
+    lists:foldl(
+      fun({Module, Impl}, ok) ->
+          check_access(
+            fun() ->
+                %% TODO this could be an andalso shortcut under >R13A
+                case rabbit_vhost:exists(VHostPath) of
+                    false -> false;
+                    true  -> Module:check_vhost_access(User, Impl, VHostPath, Sock)
+                end
+            end,
+            Module, "access to vhost '~s' refused for user '~s'",
+            [VHostPath, Username]);
+
+         (_, Else) -> Else
+      end, ok, Modules).
 
 check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
                       Permission) ->
     check_resource_access(User, R#resource{name = <<"amq.default">>},
                           Permission);
-check_resource_access(User = #user{username = Username, auth_backend = Module},
+check_resource_access(User = #user{username = Username, authZ_backends = Modules},
                       Resource, Permission) ->
-    check_access(
-      fun() -> Module:check_resource_access(User, Resource, Permission) end,
-      Module, "access to ~s refused for user '~s'",
-      [rabbit_misc:rs(Resource), Username]).
+    lists:foldl(
+      fun({Module, Impl}, ok) ->
+          check_access(
+            fun() -> Module:check_resource_access(User, Impl, Resource, Permission) end,
+            Module, "access to ~s refused for user '~s'",
+            [rabbit_misc:rs(Resource), Username]);
+
+         (_, Else) -> Else
+      end, ok, Modules).
 
 check_access(Fun, Module, ErrStr, ErrArgs) ->
     Allow = case Fun() of

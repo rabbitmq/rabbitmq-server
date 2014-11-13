@@ -20,7 +20,7 @@
 -behaviour(rabbit_auth_backend).
 
 -export([description/0]).
--export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
+-export([check_user_login/2, check_vhost_access/4, check_resource_access/4]).
 
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
@@ -98,17 +98,16 @@ internal_check_user_login(Username, Fun) ->
     case lookup_user(Username) of
         {ok, User = #internal_user{tags = Tags}} ->
             case Fun(User) of
-                true -> {ok, #user{username     = Username,
-                                   tags         = Tags,
-                                   auth_backend = ?MODULE,
-                                   impl         = User}};
+                true -> {ok, #user{username      = Username,
+                                   tags          = Tags,
+                                   authN_backend = ?MODULE}, User};
                 _    -> Refused
             end;
         {error, not_found} ->
             Refused
     end.
 
-check_vhost_access(#user{username = Username}, VHostPath) ->
+check_vhost_access(#user{username = Username}, _Impl, VHostPath, _Sock) ->
     case mnesia:dirty_read({rabbit_user_permission,
                             #user_vhost{username     = Username,
                                         virtual_host = VHostPath}}) of
@@ -116,7 +115,7 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
         [_R] -> true
     end.
 
-check_resource_access(#user{username = Username},
+check_resource_access(#user{username = Username}, _Impl,
                       #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
     case mnesia:dirty_read({rabbit_user_permission,

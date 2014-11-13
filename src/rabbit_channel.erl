@@ -581,7 +581,7 @@ check_user_id_header(#'P_basic'{user_id = Username},
                      #ch{user = #user{username = Username}}) ->
     ok;
 check_user_id_header(
-  #'P_basic'{}, #ch{user = #user{auth_backend = rabbit_auth_backend_dummy}}) ->
+  #'P_basic'{}, #ch{user = #user{authN_backend = rabbit_auth_backend_dummy}}) ->
     ok;
 check_user_id_header(#'P_basic'{user_id = Claimed},
                      #ch{user = #user{username = Actual,
