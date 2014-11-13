@@ -240,7 +240,8 @@
 -spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(open/3 ::
         (file:filename(), [any()],
-         [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')}])
+         [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')} |
+          {'read_buffer', (non_neg_integer() | 'unbuffered')}])
         -> val_or_error(ref())).
 -spec(close/1 :: (ref()) -> ok_or_error()).
 -spec(read/2 :: (ref(), non_neg_integer()) ->
@@ -370,8 +371,8 @@ read(Ref, Count) ->
                       end;
                   eof ->
                       {eof, [Handle #handle { at_eof = true }]};
-                  Error -> %% TODO correct or change handle?
-                      {Error, [Handle]}
+                  Error ->
+                      {Error, [reset_read_buffer(Handle)]}
               end
       end).
 
@@ -768,6 +769,11 @@ new_closed_handle(Path, Mode, Options) ->
             infinity             -> infinity;
             N when is_integer(N) -> N
         end,
+    ReadBufferSize =
+        case proplists:get_value(read_buffer, Options, unbuffered) of
+            unbuffered             -> 0;
+            N2 when is_integer(N2) -> N2
+        end,
     Ref = make_ref(),
     put({Ref, fhc_handle}, #handle { hdl                     = closed,
                                      offset                  = 0,
@@ -776,7 +782,7 @@ new_closed_handle(Path, Mode, Options) ->
                                      write_buffer_size_limit = WriteBufferSize,
                                      write_buffer            = [],
                                      read_buffer_size        = 0,
-                                     read_buffer_size_limit  = 1000000, %% TODO
+                                     read_buffer_size_limit  = ReadBufferSize,
                                      read_buffer             = <<>>,
                                      at_eof                  = false,
                                      path                    = Path,
