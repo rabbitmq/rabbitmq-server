@@ -61,7 +61,7 @@ check_user_login(Username, AuthProps) ->
                   %% passwordless (i.e pre-authenticated) login with authZ.
                   case try_authenticate(ModN, Username, AuthProps) of
                       {ok, User, _AuthZ} -> try_authorize(ModZ, User, []);
-                      Else    -> Else
+                      Else               -> Else
                   end;
               (Mod, {refused, _, _}) ->
                   %% Same module for authN and authZ. Just take the result
@@ -71,30 +71,31 @@ check_user_login(Username, AuthProps) ->
                   %% We've successfully authenticated. Skip to the end...
                   {ok, User, AuthZ}
           end, {refused, "No modules checked '~s'", [Username]}, Modules),
-
     case R of
         {ok, RUser, RAuthZ} ->
-            rabbit_event:notify(user_authentication_success, [{name, Username}]),
+            rabbit_event:notify(user_authentication_success, [{name,Username}]),
             %% Store the list of authorization backends
             {ok, RUser#user{authZ_backends=RAuthZ}};
         _ ->
-            rabbit_event:notify(user_authentication_failure, [{name, Username}]),
+            rabbit_event:notify(user_authentication_failure, [{name,Username}]),
             R
     end.
 
 try_authenticate(Module, Username, AuthProps) ->
     case Module:check_user_login(Username, AuthProps) of
         {ok, User, AuthZ} -> {ok, User, [{Module, AuthZ}]};
-        {error, E} -> {refused, "~s failed authenticating ~s: ~p~n",
-                       [Module, Username, E]};
-        Else       -> Else
+        {error, E}        -> {refused, "~s failed authenticating ~s: ~p~n",
+                              [Module, Username, E]};
+        {refused, F, A}   -> {refused, F, A}
     end.
 
 try_authorize(Modules, User, AuthZList) when is_list(Modules) ->
     lists:foldr(
-        fun (Module, {ok, _User, AuthZList2}) -> try_authorize(Module, User, AuthZList2);
-            (_, {refused, _, _} = Error) -> Error
-    end, {ok, User, AuthZList}, Modules);
+      fun (Module, {ok, _User, AuthZList2}) ->
+              try_authorize(Module, User, AuthZList2);
+          (_,      {refused, _, _} = Error) ->
+              Error
+      end, {ok, User, AuthZList}, Modules);
 
 try_authorize(Module, User = #user{username = Username}, AuthZList) ->
     case Module:check_user_login(Username, []) of
@@ -112,37 +113,35 @@ check_user_loopback(Username, SockOrAddr) ->
         false -> not_allowed
     end.
 
-check_vhost_access(User = #user{ username = Username,
-                                 authZ_backends = Modules }, VHostPath, Sock) ->
+check_vhost_access(User = #user{username       = Username,
+                                authZ_backends = Modules}, VHostPath, Sock) ->
     lists:foldl(
-      fun({Module, Impl}, ok) ->
-          check_access(
-            fun() ->
-                %% TODO this could be an andalso shortcut under >R13A
-                case rabbit_vhost:exists(VHostPath) of
-                    false -> false;
-                    true  -> Module:check_vhost_access(User, Impl, VHostPath, Sock)
-                end
-            end,
-            Module, "access to vhost '~s' refused for user '~s'",
-            [VHostPath, Username]);
-
-         (_, Else) -> Else
+      fun({Mod, Impl}, ok) ->
+              check_access(
+                fun() ->
+                        rabbit_vhost:exists(VHostPath) andalso
+                            Mod:check_vhost_access(User, Impl, VHostPath, Sock)
+                end,
+                Mod, "access to vhost '~s' refused for user '~s'",
+                [VHostPath, Username]);
+         (_, Else) ->
+              Else
       end, ok, Modules).
 
 check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
                       Permission) ->
     check_resource_access(User, R#resource{name = <<"amq.default">>},
                           Permission);
-check_resource_access(User = #user{username = Username, authZ_backends = Modules},
+check_resource_access(User = #user{username       = Username,
+                                   authZ_backends = Modules},
                       Resource, Permission) ->
     lists:foldl(
       fun({Module, Impl}, ok) ->
-          check_access(
-            fun() -> Module:check_resource_access(User, Impl, Resource, Permission) end,
-            Module, "access to ~s refused for user '~s'",
-            [rabbit_misc:rs(Resource), Username]);
-
+              check_access(
+                fun() -> Module:check_resource_access(
+                           User, Impl, Resource, Permission) end,
+                Module, "access to ~s refused for user '~s'",
+                [rabbit_misc:rs(Resource), Username]);
          (_, Else) -> Else
       end, ok, Modules).
 
