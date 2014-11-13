@@ -32,14 +32,14 @@ init() ->
                                                Counter <- [count]].
 
 update(Op, Bytes, Thunk) ->
-    {Time, Res} = timer:tc(Thunk),
+    {Time, Res} = timer_tc(Thunk),
     ets:update_counter(?TABLE, {Op, count}, 1),
     ets:update_counter(?TABLE, {Op, bytes}, Bytes),
     ets:update_counter(?TABLE, {Op, time}, Time),
     Res.
 
 update(Op, Thunk) ->
-    {Time, Res} = timer:tc(Thunk),
+    {Time, Res} = timer_tc(Thunk),
     ets:update_counter(?TABLE, {Op, count}, 1),
     ets:update_counter(?TABLE, {Op, time}, Time),
     Res.
@@ -50,3 +50,11 @@ update(Op) ->
 
 get() ->
     lists:sort(ets:tab2list(?TABLE)).
+
+%% TODO timer:tc/1 was introduced in R14B03; use that function once we
+%% require that version.
+timer_tc(Thunk) ->
+    T1 = os:timestamp(),
+    Res = Thunk(),
+    T2 = os:timestamp(),
+    {timer:now_diff(T2, T1), Res}.
