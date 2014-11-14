@@ -21,10 +21,11 @@
 -include_lib("eldap/include/eldap.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--behaviour(rabbit_auth_backend).
+-behaviour(rabbit_authn_backend).
+-behaviour(rabbit_authz_backend).
 
--export([description/0]).
--export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
+-export([user_login_authentication/2, user_login_authorization/1,
+         check_vhost_access/3, check_resource_access/3]).
 
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
@@ -36,13 +37,7 @@
 
 %%--------------------------------------------------------------------
 
-description() ->
-    [{name, <<"LDAP">>},
-     {description, <<"LDAP authentication / authorisation">>}].
-
-%%--------------------------------------------------------------------
-
-check_user_login(Username, []) ->
+user_login_authentication(Username, []) ->
     %% Without password, e.g. EXTERNAL
     ?L("CHECK: passwordless login for ~s", [Username]),
     R = with_ldap(creds(none),
@@ -51,14 +46,14 @@ check_user_login(Username, []) ->
        [Username, log_result(R)]),
     R;
 
-check_user_login(Username, [{password, <<>>}]) ->
+user_login_authentication(Username, [{password, <<>>}]) ->
     %% Password "" is special in LDAP, see
     %% https://tools.ietf.org/html/rfc4513#section-5.1.2
     ?L("CHECK: unauthenticated login for ~s", [Username]),
     ?L("DECISION: unauthenticated login for ~s: denied", [Username]),
     {refused, "user '~s' - unauthenticated bind not allowed", [Username]};
 
-check_user_login(User, [{password, PW}]) ->
+user_login_authentication(User, [{password, PW}]) ->
     ?L("CHECK: login for ~s", [User]),
     R = case dn_lookup_when() of
             prebind -> UserDN = username_to_dn_prebind(User),
@@ -70,8 +65,14 @@ check_user_login(User, [{password, PW}]) ->
     ?L("DECISION: login for ~s: ~p", [User, log_result(R)]),
     R;
 
-check_user_login(Username, AuthProps) ->
+user_login_authentication(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
+
+user_login_authorization(Username) ->
+    case user_login_authentication(Username, []) of
+        {ok, #auth_user{impl = Impl}} -> {ok, Impl};
+        Else                          -> Else
+    end.
 
 check_vhost_access(User = #auth_user{username = Username,
                                      impl     = #impl{user_dn = UserDN}},
