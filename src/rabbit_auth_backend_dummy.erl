@@ -33,9 +33,9 @@
 %% not needed. This user can do anything AMQPish.
 user() -> #user{username       = <<"none">>,
                 tags           = [],
-                authz_backends = [{?MODULE, buser()}]}.
+                authz_backends = [{?MODULE, auser()}]}.
 
-buser() -> #auth_user{username = <<"none">>,
+auser() -> #auth_user{username = <<"none">>,
                       tags     = [],
                       impl     = none}.
 
