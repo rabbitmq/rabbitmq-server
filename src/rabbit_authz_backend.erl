@@ -14,56 +14,49 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_auth_backend).
+-module(rabbit_authz_backend).
 
 -include("rabbit.hrl").
 
 -ifdef(use_specs).
 
--export_type([auth_user/0]).
-
--type(auth_user() ::
-        #auth_user{username :: rabbit_types:username(),
-                   tags     :: [atom()],
-                   impl     :: any()}).
-
-%% A description proplist as with auth mechanisms,
-%% exchanges. Currently unused.
--callback description() -> [proplists:property()].
-
-%% Check a user can log in, given a username and a proplist of
-%% authentication information (e.g. [{password, Password}]).
+%% Check a user can log in, when this backend is being used for
+%% authorisation only. Authentication has already taken place
+%% successfully, but we need to check that the user exists in this
+%% backend, and initialise any impl field we will want to have passed
+%% back in future calls to check_vhost_access/3 and
+%% check_resource_access/3.
 %%
 %% Possible responses:
-%% {ok, User}
-%%     Authentication succeeded, and here's the user record.
+%% {ok, Impl}
+%%     User authorisation succeeded, and here's the impl field.
 %% {error, Error}
 %%     Something went wrong. Log and die.
 %% {refused, Msg, Args}
-%%     Client failed authentication. Log and die.
--callback check_user_login(rabbit_types:username(), [term()]) ->
-    {'ok', auth_user()} |
+%%     User authorisation failed. Log and die.
+-callback user_login_authorization(rabbit_types:username()) ->
+    {'ok', any()} |
     {'refused', string(), [any()]} |
     {'error', any()}.
 
-%% Given #user and vhost, can a user log in to a vhost?
+%% Given #auth_user and vhost, can a user log in to a vhost?
 %% Possible responses:
 %% true
 %% false
 %% {error, Error}
 %%     Something went wrong. Log and die.
--callback check_vhost_access(auth_user(),
+-callback check_vhost_access(rabbit_types:auth_user(),
                              rabbit_types:vhost(), rabbit_net:socket()) ->
     boolean() | {'error', any()}.
 
-%% Given #user, resource and permission, can a user access a resource?
+%% Given #auth_user, resource and permission, can a user access a resource?
 %%
 %% Possible responses:
 %% true
 %% false
 %% {error, Error}
 %%     Something went wrong. Log and die.
--callback check_resource_access(auth_user(),
+-callback check_resource_access(rabbit_types:auth_user(),
                                 rabbit_types:r(atom()),
                                 rabbit_access_control:permission_atom()) ->
     boolean() | {'error', any()}.
@@ -73,8 +66,8 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {check_user_login, 2}, {check_vhost_access, 3},
-     {check_resource_access, 3}];
+    [{user_login_authorization, 1},
+     {check_vhost_access, 3}, {check_resource_access, 3}];
 behaviour_info(_Other) ->
     undefined.
 

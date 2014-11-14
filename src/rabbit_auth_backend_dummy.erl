@@ -17,11 +17,12 @@
 -module(rabbit_auth_backend_dummy).
 -include("rabbit.hrl").
 
--behaviour(rabbit_auth_backend).
+-behaviour(rabbit_authn_backend).
+-behaviour(rabbit_authz_backend).
 
--export([description/0]).
 -export([user/0]).
--export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
+-export([user_login_authentication/2, user_login_authorization/1,
+         check_vhost_access/3, check_resource_access/3]).
 
 -ifdef(use_specs).
 
@@ -33,19 +34,14 @@
 %% not needed. This user can do anything AMQPish.
 user() -> #user{username       = <<"none">>,
                 tags           = [],
-                authz_backends = [{?MODULE, auser()}]}.
-
-auser() -> #auth_user{username = <<"none">>,
-                      tags     = [],
-                      impl     = none}.
+                authz_backends = [{?MODULE, none}]}.
 
 %% Implementation of rabbit_auth_backend
 
-description() ->
-    [{name, <<"Dummy">>},
-     {description, <<"Database for the dummy user">>}].
+user_login_authentication(_, _) ->
+    {refused, "cannot log in conventionally as dummy user", []}.
 
-check_user_login(_, _) ->
+user_login_authorization(_) ->
     {refused, "cannot log in conventionally as dummy user", []}.
 
 check_vhost_access(#auth_user{}, _VHostPath, _Sock) -> true.

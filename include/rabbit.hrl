@@ -17,7 +17,7 @@
 %% Passed around most places
 -record(user, {username,
                tags,
-               authz_backends}). %% List of {Module, AuthUser} pairs
+               authz_backends}). %% List of {Module, AuthUserImpl} pairs
 
 %% Passed to auth backends
 -record(auth_user, {username,

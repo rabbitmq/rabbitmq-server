@@ -17,10 +17,11 @@
 -module(rabbit_auth_backend_internal).
 -include("rabbit.hrl").
 
--behaviour(rabbit_auth_backend).
+-behaviour(rabbit_authn_backend).
+-behaviour(rabbit_authz_backend).
 
--export([description/0]).
--export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
+-export([user_login_authentication/2, user_login_authorization/1,
+         check_vhost_access/3, check_resource_access/3]).
 
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
@@ -76,13 +77,9 @@
 %%----------------------------------------------------------------------------
 %% Implementation of rabbit_auth_backend
 
-description() ->
-    [{name, <<"Internal">>},
-     {description, <<"Internal user / password database">>}].
-
-check_user_login(Username, []) ->
+user_login_authentication(Username, []) ->
     internal_check_user_login(Username, fun(_) -> true end);
-check_user_login(Username, [{password, Cleartext}]) ->
+user_login_authentication(Username, [{password, Cleartext}]) ->
     internal_check_user_login(
       Username,
       fun (#internal_user{password_hash = <<Salt:4/binary, Hash/binary>>}) ->
@@ -90,8 +87,14 @@ check_user_login(Username, [{password, Cleartext}]) ->
           (#internal_user{}) ->
               false
       end);
-check_user_login(Username, AuthProps) ->
+user_login_authentication(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
+
+user_login_authorization(Username) ->
+    case user_login_authentication(Username, []) of
+        {ok, #auth_user{impl = Impl}} -> {ok, Impl};
+        Else                          -> Else
+    end.
 
 internal_check_user_login(Username, Fun) ->
     Refused = {refused, "user '~s' - invalid credentials", [Username]},

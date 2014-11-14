@@ -1294,12 +1294,7 @@ test_spawn_remote() ->
 user(Username) ->
     #user{username       = Username,
           tags           = [administrator],
-          authz_backends = [{rabbit_auth_backend_internal, auser(Username)}]}.
-
-auser(Username) ->
-    #auth_user{username = Username,
-               tags     = [administrator],
-               impl     = none}.
+          authz_backends = [{rabbit_auth_backend_internal, none}]}.
 
 test_confirms() ->
     {_Writer, Ch} = test_spawn(),
