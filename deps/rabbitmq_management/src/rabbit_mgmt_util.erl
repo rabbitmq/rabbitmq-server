@@ -28,7 +28,7 @@
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
--export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/1]).
+-export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
 -export([with_decode/5, decode/1, decode/2, redirect/2, set_resp_header/3,
          args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
@@ -77,7 +77,7 @@ user_matches_vhost(ReqData, User) ->
     case vhost(ReqData) of
         not_found -> true;
         none      -> true;
-        V         -> lists:member(V, list_login_vhosts(User))
+        V         -> lists:member(V, list_login_vhosts(User, peersock(ReqData)))
     end.
 
 %% Used for connections / channels. A normal user can only see / delete
@@ -143,11 +143,14 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
             not_authorised(<<"Login failed">>, ReqData, Context)
     end.
 
-%% We can't use wrq:peer/1 because that trusts X-Forwarded-For.
 peer(ReqData) ->
-    WMState = ReqData#wm_reqdata.wm_state,
-    {ok, {IP,_Port}} = peername(WMState#wm_reqstate.socket),
+    {ok, {IP,_Port}} = peername(peersock(ReqData)),
     IP.
+
+%% We can't use wrq:peer/1 because that trusts X-Forwarded-For.
+peersock(ReqData) ->
+    WMState = ReqData#wm_reqdata.wm_state,
+    WMState#wm_reqstate.socket.
 
 %% Like the one in rabbit_net, but we and webmachine have a different
 %% way of wrapping
@@ -452,6 +455,8 @@ with_channel(VHost, ReqData,
             end;
         {error, {auth_failure, Msg}} ->
             not_authorised(Msg, ReqData, Context);
+        {error, access_refused} ->
+            not_authorised(<<"Access refused.">>, ReqData, Context);
         {error, {nodedown, N}} ->
             bad_request(
               list_to_binary(
@@ -470,8 +475,8 @@ all_or_one_vhost(ReqData, Fun) ->
         VHost     -> Fun(VHost)
     end.
 
-filter_vhost(List, _ReqData, Context) ->
-    VHosts = list_login_vhosts(Context#context.user),
+filter_vhost(List, ReqData, Context) ->
+    VHosts = list_login_vhosts(Context#context.user, peersock(ReqData)),
     [I || I <- List, lists:member(pget(vhost, I), VHosts)].
 
 filter_user(List, _ReqData, #context{user = User}) ->
@@ -533,12 +538,12 @@ intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 list_visible_vhosts(User = #user{tags = Tags}) ->
     case is_monitor(Tags) of
         true  -> rabbit_vhost:list();
-        false -> list_login_vhosts(User)
+        false -> list_login_vhosts(User, undefined)
     end.
 
-list_login_vhosts(User) ->
+list_login_vhosts(User, Sock) ->
     [V || V <- rabbit_vhost:list(),
-          case catch rabbit_access_control:check_vhost_access(User, V) of
+          case catch rabbit_access_control:check_vhost_access(User, V, Sock) of
               ok -> true;
               _  -> false
           end].
