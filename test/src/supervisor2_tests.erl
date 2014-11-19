@@ -49,7 +49,12 @@ check_shutdown(SigStop, Iterations, ChildCount, SupTimeout) ->
                     R
             end, ok, lists:seq(1, Iterations)),
     unlink(Sup),
+    MSupRef = erlang:monitor(process, Sup),
     exit(Sup, shutdown),
+    receive
+        {'DOWN', MSupRef, process, Sup, _Reason} ->
+            ok
+    end,
     Res.
 
 start_link() ->
