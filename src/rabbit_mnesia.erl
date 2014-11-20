@@ -116,18 +116,9 @@ init_from_config() ->
     {TryNodes, NodeType} =
         case application:get_env(rabbit, cluster_nodes) of
             {ok, Nodes} when is_list(Nodes) ->
-                Config = {Nodes -- [node()], case lists:member(node(), Nodes) of
-                                                 true  -> disc;
-                                                 false -> ram
-                                             end},
-                rabbit_log:warning(
-                  "Converting legacy 'cluster_nodes' configuration~n    ~w~n"
-                  "to~n    ~w.~n~n"
-                  "Please update the configuration to the new format "
-                  "{Nodes, NodeType}, where Nodes contains the nodes that the "
-                  "node will try to cluster with, and NodeType is either "
-                  "'disc' or 'ram'~n", [Nodes, Config]),
-                Config;
+                %% The legacy syntax (a nodes list without the node
+                %% type) is unsupported.
+                e(cluster_node_type_mandatory);
             {ok, Config} ->
                 Config
         end,
@@ -865,4 +856,7 @@ error_description(removing_node_from_offline_node) ->
     "To remove a node remotely from an offline node, the node you are removing "
         "from must be a disc node and all the other nodes must be offline.";
 error_description(no_running_cluster_nodes) ->
-    "You cannot leave a cluster if no online nodes are present.".
+    "You cannot leave a cluster if no online nodes are present.";
+error_description(cluster_node_type_mandatory) ->
+    "The 'cluster_nodes' configuration key must indicate the node type: "
+        "either {[...], disc} or {[...], ram}".
