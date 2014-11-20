@@ -57,7 +57,10 @@ main(ParseFun, DoFun, UsageMod) ->
 
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
-    case catch DoFun(Command, Node, Args, Opts) of
+    case catch begin
+                   sync_ticktime(Node),
+                   DoFun(Command, Node, Args, Opts)
+               end of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
@@ -185,3 +188,12 @@ print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 print_badrpc_diagnostics(Nodes) ->
     fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
 
+%% If the server we are talking to has non-standard net_ticktime, and
+%% our conncetion lasts a while, we could get disconnected because of
+%% a timeout unless we set our ticktime to be the same. So let's do
+%% that.
+sync_ticktime(Node) ->
+    case rpc:call(Node, net_kernel, get_net_ticktime, []) of
+        {badrpc, _} = E -> throw(E); %% To be caught in main/3
+        Time            -> net_kernel:set_net_ticktime(Time, 0)
+    end.
