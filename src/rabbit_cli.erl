@@ -192,7 +192,7 @@ print_badrpc_diagnostics(Nodes) ->
 %% that.
 rpc_call(Node, Mod, Fun, Args) ->
     case rpc:call(Node, net_kernel, get_net_ticktime, [], ?RPC_TIMEOUT) of
-        {badrpc, _} = E -> throw(E); %% To be caught in main/3
+        {badrpc, _} = E -> E;
         Time            -> net_kernel:set_net_ticktime(Time, 0),
                            rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT)
     end.
