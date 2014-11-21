@@ -317,10 +317,29 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                            node_guids = GUIDs}) ->
     case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) andalso
         orddict:find(Node, GUIDs) =:= {ok, NodeGUID} of
-        true  -> cast(Rep, {partial_partition, Node, node(), RepGUID});
+        true  -> spawn_link( %%[1]
+                   fun () ->
+                           case rpc:call(Node, rabbit, is_running, []) of
+                               {badrpc, _} ->
+                                   ok;
+                               _ ->
+                                   cast(Rep, {partial_partition,
+                                              Node, node(), RepGUID})
+                           end
+                   end);
         false -> ok
     end,
     {noreply, State};
+%% [1] We checked that we haven't heard the node go down - but we
+%% really should make sure we can actually communicate with
+%% it. Otherwise there's a race where we falsely detect a partial
+%% partition.
+%%
+%% Now of course the rpc:call/4 may take a long time to return if
+%% connectivity with the node is actually interrupted - but that's OK,
+%% we only really want to do something in a timely manner if
+%% connectivity is OK. However, of course as always we must not block
+%% the node monitor, so we do the check in a separate process.
 
 handle_cast({check_partial_partition, _Node, _Reporter,
              _NodeGUID, _GUID, _ReporterGUID}, State) ->
