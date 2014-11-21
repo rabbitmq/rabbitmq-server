@@ -346,7 +346,7 @@ handle_cast({check_partial_partition, _Node, _Reporter,
     {noreply, State};
 
 handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
-            State = #state{guid = MyGUID}) ->
+            State = #state{guid = MyGUID, partitions = Partitions}) ->
     FmtBase = "Partial partition detected:~n"
         " * We saw DOWN from ~s~n"
         " * We can still see ~s which can see ~s~n",
@@ -364,7 +364,11 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
               FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
               ArgsBase ++ [Proxy]),
             erlang:disconnect_node(Proxy),
-            {noreply, State}
+            %% In the event of explicitly disconnecting from a node,
+            %% sometimes Mnesia does not log that we were partitioned
+            %% - so note it here.
+            Partitions1 = lists:usort([Proxy | Partitions]),
+            {noreply, State#state{partitions = Partitions1}}
     end;
 
 handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
