@@ -464,8 +464,7 @@ handle_info({mnesia_system_event,
                             monitors = pmon:monitor({rabbit, Node}, Monitors)}
              end,
     ok = handle_live_rabbit(Node),
-    Partitions1 = ordsets:to_list(
-                    ordsets:add_element(Node, ordsets:from_list(Partitions))),
+    Partitions1 = lists:usort([Node | Partitions]),
     {noreply, maybe_autoheal(State1#state{partitions = Partitions1})};
 
 handle_info({autoheal_msg, Msg}, State = #state{autoheal   = AState,
