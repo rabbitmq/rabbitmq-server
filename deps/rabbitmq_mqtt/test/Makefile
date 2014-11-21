@@ -11,21 +11,23 @@ JUNIT_JAR=../lib/junit.jar
 JAVA_AMQP_DIR=../../rabbitmq-java-client/
 JAVA_AMQP_CLASSES=$(JAVA_AMQP_DIR)build/classes/
 
-TEST_SRCS:=$(shell find $(TEST_SRC) -name '*.java')
 ALL_CLASSES:=$(foreach f,$(shell find src -name '*.class'),'$(f)')
-TEST_CLASSES:=$(TEST_SRCS:.java=.class)
 CP:=$(PAHO_JAR):$(JUNIT_JAR):$(TEST_SRC):$(JAVA_AMQP_CLASSES)
+
+HOSTNAME:=$(shell hostname)
 
 define class_from_path
 $(subst .class,,$(subst src.,,$(subst /,.,$(1))))
 endef
 
 .PHONY: test
-test: $(TEST_CLASSES) build_java_amqp
-	$(foreach test,$(TEST_CLASSES),CLASSPATH=$(CP) java  junit.textui.TestRunner -text $(call class_from_path,$(test)))
+test: build_java_amqp
+	ant test -Dhostname=$(HOSTNAME)
 
 clean:
-	rm -rf $(PAHO_JAR) $(ALL_CLASSES)
+	ant clean
+	rm -rf test_client
+
 
 distclean: clean
 	rm -rf $(CHECKOUT_DIR)
@@ -34,13 +36,8 @@ $(CHECKOUT_DIR):
 	git clone $(UPSTREAM_GIT) $@
 	(cd $@ && git checkout $(REVISION)) || rm -rf $@
 
-$(PAHO_JAR): $(CHECKOUT_DIR)
-	ant -buildfile $</org.eclipse.paho.client.mqttv3/build.xml \
-	-Dship.folder=. -Dmqttv3-client-jar=$(PAHO_JAR_NAME) full
-
-%.class: %.java $(PAHO_JAR) $(JUNIT_JAR)
-	$(JC) -cp $(CP) $<
 
 .PHONY: build_java_amqp
-build_java_amqp:
-	make -C $(JAVA_AMQP_DIR)
+build_java_amqp: $(CHECKOUT_DIR)
+	make -C $(JAVA_AMQP_DIR) jar
+
