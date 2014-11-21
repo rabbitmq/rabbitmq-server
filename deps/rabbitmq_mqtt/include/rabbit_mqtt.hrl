@@ -40,4 +40,5 @@
                       will_msg,
                       channels,
                       connection,
-                      exchange }).
+                      exchange,
+                      ssl_login_name }).
