@@ -90,7 +90,7 @@ list(PluginsDir) ->
     EZs = [{ez, EZ} || EZ <- filelib:wildcard("*.ez", PluginsDir)],
     FreeApps = [{app, App} ||
                    App <- filelib:wildcard("*/ebin/*.app", PluginsDir)],
-    {Plugins, Problems} =
+    {AvailablePlugins, Problems} =
         lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                             {Plugins1, [{EZ, Reason} | Problems1]};
                         (Plugin = #plugin{}, {Plugins1, Problems1}) ->
@@ -102,6 +102,7 @@ list(PluginsDir) ->
         _  -> rabbit_log:warning(
                 "Problem reading some plugins: ~p~n", [Problems])
     end,
+    Plugins = lists:filter(fun keep_plugin/1, AvailablePlugins),
     ensure_dependencies(Plugins).
 
 %% @doc Read the list of enabled plugins from the supplied term file.
@@ -132,6 +133,55 @@ dependencies(Reverse, Sources, AllPlugins) ->
     true = digraph:delete(G),
     Dests.
 
+%% For a few known cases, an externally provided plugin can be trusted.
+%% In this special case, it overrides the plugin.
+keep_plugin(#plugin{name = App} = Plugin) ->
+    case application:load(App) of
+        {error, {already_loaded, _}} ->
+            not plugin_provided_by_otp(Plugin);
+        ok ->
+            Ret = not plugin_provided_by_otp(Plugin),
+            application:unload(App),
+            Ret;
+        _ ->
+            true
+   end.
+
+plugin_provided_by_otp(#plugin{name = eldap, version = PluginVsn}) ->
+    %% eldap was added to Erlang/OTP R15B01. We prefer this version
+    %% to the plugin. Before, eldap always advertised version "1". In
+    %% R15B01, it got proper versionning starting from "1.0". If eldap's
+    %% version is "1", we keep using the plugin, otherwise we take the
+    %% OTP application. As an extra check, we look at ERTS version to be
+    %% sure we're on R15B01.
+    case application:get_key(eldap, vsn) of
+        {ok, PluginVsn} ->
+            %% The plugin itself; the plugin was previously added to the
+            %% code path.
+            false;
+        {ok, "1"} ->
+            %% The version available on GitHub, not part of OTP.
+            false;
+        {ok, Vsn} ->
+            try rabbit_misc:version_compare(Vsn, "1.0", gte) of
+                true ->
+                    %% Probably part of OTP. Let's check ERTS version to
+                    %% be sure.
+                    rabbit_misc:version_compare(
+                      erlang:system_info(version), "5.9.1", gte);
+                false ->
+                    %% Probably not part of OTP. Use the plugin to be safe.
+                    false
+            catch
+                _:_ ->
+                    %% Couldn't parse the version. It's not the OTP
+                    %% application.
+                    false
+            end
+    end;
+plugin_provided_by_otp(_) ->
+    false.
+
 %% Make sure we don't list OTP apps in here, and also that we detect
 %% missing dependencies.
 ensure_dependencies(Plugins) ->
@@ -158,7 +208,7 @@ is_loadable(App) ->
         ok                           -> application:unload(App),
                                         true;
         _                            -> false
-   end.
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -197,8 +247,9 @@ clean_plugin(Plugin, ExpandDir) ->
     delete_recursively(rabbit_misc:format("~s/~s", [ExpandDir, Plugin])).
 
 prepare_dir_plugin(PluginAppDescPath) ->
-    code:add_path(filename:dirname(PluginAppDescPath)),
-    list_to_atom(filename:basename(PluginAppDescPath, ".app")).
+    rabbit_log:info("Plugins: adding \"~s\" to the beginning of the code path.~n",
+                    [filename:dirname(PluginAppDescPath)]),
+    code:add_patha(filename:dirname(PluginAppDescPath)).
 
 %%----------------------------------------------------------------------------
 
