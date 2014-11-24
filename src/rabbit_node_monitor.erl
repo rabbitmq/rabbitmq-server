@@ -288,8 +288,8 @@ handle_cast(notify_node_up, State = #state{guid = GUID}) ->
 %% When one node gets nodedown from another, it then sends
 %% 'check_partial_partition' to all the nodes it still thinks are
 %% alive. If any of those (intermediate) nodes still see the "down"
-%% node as up, they inform it that this has happened. The "down" node
-%% (in 'ignore' or 'autoheal' mode) will then disconnect from the
+%% node as up, they inform it that this has happened. The original
+%% node (in 'ignore' or 'autoheal' mode) will then disconnect from the
 %% intermediate node to "upgrade" to a full partition.
 %%
 %% In pause_minority mode it will instead immediately pause until all
