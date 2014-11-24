@@ -318,11 +318,9 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
         true  -> spawn_link( %%[1]
                    fun () ->
                            case rpc:call(Node, rabbit, is_running, []) of
-                               {badrpc, _} ->
-                                   ok;
-                               _ ->
-                                   cast(Rep, {partial_partition,
-                                              Node, node(), RepGUID})
+                               {badrpc, _} -> ok;
+                               _           -> cast(Rep, {partial_partition,
+                                                         Node, node(), RepGUID})
                            end
                    end);
         false -> ok
