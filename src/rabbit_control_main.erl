@@ -21,6 +21,8 @@
 -export([start/0, stop/0, parse_arguments/2, action/5,
          sync_queue/1, cancel_sync_queue/1]).
 
+-import(rabbit_cli, [rpc_call/4]).
+
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
@@ -691,9 +693,6 @@ list_to_binary_utf8(L) ->
         ok    -> B;
         error -> throw({error, {not_utf_8, L}})
     end.
-
-rpc_call(Node, Mod, Fun, Args) ->
-    rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
 
 %% escape does C-style backslash escaping of non-printable ASCII
 %% characters.  We don't escape characters above 127, since they may

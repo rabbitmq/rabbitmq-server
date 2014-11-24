@@ -17,7 +17,7 @@
 -module(rabbit_cli).
 -include("rabbit_cli.hrl").
 
--export([main/3, parse_arguments/4]).
+-export([main/3, parse_arguments/4, rpc_call/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -35,6 +35,7 @@
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
          [{string(), optdef()}], string(), [string()]) -> parse_result()).
+-spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()).
 
 -endif.
 
@@ -185,3 +186,13 @@ print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 print_badrpc_diagnostics(Nodes) ->
     fmt_stderr(rabbit_nodes:diagnostics(Nodes), []).
 
+%% If the server we are talking to has non-standard net_ticktime, and
+%% our connection lasts a while, we could get disconnected because of
+%% a timeout unless we set our ticktime to be the same. So let's do
+%% that.
+rpc_call(Node, Mod, Fun, Args) ->
+    case rpc:call(Node, net_kernel, get_net_ticktime, [], ?RPC_TIMEOUT) of
+        {badrpc, _} = E -> E;
+        Time            -> net_kernel:set_net_ticktime(Time, 0),
+                           rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT)
+    end.
