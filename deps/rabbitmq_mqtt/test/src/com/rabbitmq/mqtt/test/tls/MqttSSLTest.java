@@ -117,8 +117,6 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
         try {
             conOpt.setSocketFactory(MutualAuth.getSSLContext().getSocketFactory());
             client.connect(conOpt);
-        } catch (MqttException ex) {
-            Assert.assertEquals(MqttException.REASON_CODE_NOT_AUTHORIZED, ex.getReasonCode());
         } catch (Exception e) {
             e.printStackTrace();
             fail("Exception: " + e.getMessage());
