@@ -14,7 +14,7 @@
 //  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 //
 
-package com.rabbitmq.mqtt.ssltest;
+package com.rabbitmq.mqtt.test.tls;
 
 import junit.framework.Assert;
 import junit.framework.TestCase;
@@ -117,7 +117,6 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
         try {
             conOpt.setSocketFactory(MutualAuth.getSSLContext().getSocketFactory());
             client.connect(conOpt);
-            fail("Authentication failure expected");
         } catch (MqttException ex) {
             Assert.assertEquals(MqttException.REASON_CODE_NOT_AUTHORIZED, ex.getReasonCode());
         } catch (Exception e) {
