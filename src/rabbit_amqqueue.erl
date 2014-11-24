@@ -466,12 +466,16 @@ check_arguments(QueueName, Args, Validators) ->
 declare_args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
+     {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
+
+check_string_arg({longstr, _}, _) -> ok;
+check_string_arg({Type,    _}, _) -> {error, {unacceptable_type, Type}}.
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
