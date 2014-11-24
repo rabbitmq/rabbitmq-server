@@ -12,5 +12,5 @@
 ^test/src.*\.class$
 ^debug/
 ^test/certs
-^test/build
+^test/build$
 ^test/ebin

@@ -1,0 +1,150 @@
+<?xml version="1.0"?>
+<project name="MQTT Java Test client" default="build">
+
+  <property name="output.folder" value="./target/work" />
+  <property name="ship.folder" value="./" />
+
+  <property file="build.properties"/>
+
+  <property name="java-amqp-client-path" location="../../rabbitmq-java-client" />
+
+  <path id="test.javac.classpath">
+    <!-- cf dist target, infra -->
+    <fileset dir="lib">
+      <include name="**/*.jar"/>
+    </fileset>
+    <fileset dir="test_client">
+      <include name="**/*.jar"/>
+    </fileset>
+    <fileset dir="${java-amqp-client-path}">
+      <include name="**/rabbitmq-client.jar" />
+    </fileset>
+  </path>
+
+  <target name="clean-paho" description="Clean compiled Eclipe Paho Test Client jars" >
+    <ant antfile="test_client/org.eclipse.paho.client.mqttv3/build.xml" useNativeBasedir="true" target="clean"/>
+  </target>
+
+  <target name="clean"  >
+    <delete dir="${build.out}"/>
+  </target>
+
+  <target name="build-paho" depends="clean-paho" description="Build the Eclipse Paho Test Client">
+    <ant antfile="test_client/org.eclipse.paho.client.mqttv3/build.xml" useNativeBasedir="true" />
+  </target>
+
+  <target name="detect-ssl">
+    <available property="SSL_AVAILABLE" file="${certs.dir}/client"/>
+    <property name="CLIENT_KEYSTORE_PHRASE" value="bunnies"/>
+    <property name="SSL_P12_PASSWORD" value="${certs.password}"/>
+  </target>
+
+  <target name="detect-tmpdir">
+    <property environment="env"/>
+    <condition property="TMPDIR" value="${env.TMPDIR}" else="/tmp">
+      <available file="${env.TMPDIR}" type="dir"/>
+    </condition>
+  </target>
+
+  <target name="make-server-keystore" if="SSL_AVAILABLE" depends="detect-ssl, detect-tmpdir">
+    <mkdir dir="${test.resources}"/>
+    <exec executable="keytool" failonerror="true" osfamily="unix">
+      <arg line="-import"/>
+      <arg value="-alias"/>
+      <arg value="server1"/>
+      <arg value="-file"/>
+      <arg value="${server.cert}"/>
+      <arg value="-keystore"/>
+      <arg value="${server.keystore}"/>
+      <arg value="-noprompt"/>
+      <arg value="-storepass"/>
+      <arg value="${server.keystore.phrase}"/>
+    </exec>
+    <exec executable="keytool" failonerror="true" osfamily="unix">
+  	   <arg line="-import"/>
+  	   <arg value="-alias"/>
+  	   <arg value="testca"/>
+  	   <arg value="-trustcacerts"/>
+  	   <arg value="-file"/>
+  	   <arg value="${ca.cert}"/>
+  	   <arg value="-keystore"/>
+  	   <arg value="${server.keystore}"/>
+  	   <arg value="-noprompt"/>
+  	   <arg value="-storepass"/>
+  	   <arg value="${server.keystore.phrase}"/>
+  	 </exec>
+  </target>
+
+ <target name="make-client-keystore" if="SSL_AVAILABLE" depends="detect-ssl, detect-tmpdir">
+   <mkdir dir="${test.resources}"/>
+     <exec executable="keytool" failonerror="true" osfamily="unix">
+       <arg line="-importkeystore"/>
+       <arg line="-srckeystore" />
+       <arg line="${client.srckeystore}" />
+       <arg value="-srcstoretype"/>
+       <arg value="PKCS12"/>
+       <arg value="-srcstorepass"/>
+       <arg value="${client.srckeystore.password}"/>
+       <arg value="-destkeystore"/>
+       <arg value="${client.keystore}"/>
+       <arg value="-deststoretype"/>
+       <arg value="JKS"/>
+       <arg value="-noprompt"/>
+       <arg value="-storepass"/>
+      <arg value="${client.keystore.phrase}"/>
+    </exec>
+  </target>
+
+  <target name="test-build" depends="clean,build-paho">
+    <mkdir dir="${test.javac.out}"/>
+
+    <javac srcdir="./src"
+      destdir="${test.javac.out}"
+      debug="on"
+      includeantruntime="false" >
+      <classpath>
+        <path refid="test.javac.classpath"/>
+      </classpath>
+    </javac>
+  </target>
+
+  <target name="test-ssl" depends="test-build, make-server-keystore, make-client-keystore" if="SSL_AVAILABLE">
+    <junit printSummary="withOutAndErr"
+      haltOnFailure="true"
+      failureproperty="test.failure"
+      fork="yes">
+      <classpath>
+        <path refid="test.javac.classpath"/>
+        <pathelement path="${test.javac.out}"/>
+        <pathelement path="${test.resources}"/>
+      </classpath>
+      <jvmarg value="-Dhostname=${hostname}"/>
+      <jvmarg value="-Dserver.keystore.passwd=${server.keystore.phrase}"/>
+      <jvmarg value="-Dclient.keystore.passwd=${client.keystore.phrase}"/>
+      <formatter type="plain"/>
+      <formatter type="xml"/>
+      <test todir="${build.out}" name="com.rabbitmq.mqtt.ssltest.MqttSSLTest"/>
+    </junit>
+  </target>
+
+  <target name="test-server" depends="test-build">
+    <junit printSummary="withOutAndErr"
+        haltOnFailure="true"
+        failureproperty="test.failure"
+        fork="yes">
+        <classpath>
+          <path refid="test.javac.classpath"/>
+          <pathelement path="${test.javac.out}"/>
+        </classpath>
+
+      <formatter type="plain"/>
+      <formatter type="xml"/>
+      <test todir="${build.out}" name="com.rabbitmq.mqtt.test.MqttTest"/>
+    </junit>
+  </target>
+
+  <target name="test" depends="test-server, test-ssl" description="Build the test mqtt client libraries.">
+
+  </target>
+
+</project>
