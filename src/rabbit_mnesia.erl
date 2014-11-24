@@ -121,7 +121,7 @@ init_from_config() ->
         case application:get_env(rabbit, cluster_nodes) of
             {ok, {Nodes, Type} = Config}
             when is_list(Nodes) andalso (Type == disc orelse Type == ram) ->
-                case lists:foldl(FindBadNodeNames, [], Nodes) of
+                case lists:foldr(FindBadNodeNames, [], Nodes) of
                     []       -> Config;
                     BadNames -> e({invalid_cluster_node_names, BadNames})
                 end;
@@ -130,9 +130,9 @@ init_from_config() ->
             {ok, Nodes} when is_list(Nodes) ->
                 %% The legacy syntax (a nodes list without the node
                 %% type) is unsupported.
-                case lists:foldl(FindBadNodeNames, [], Nodes) of
-                    []       -> e(cluster_node_type_mandatory);
-                    BadNames -> e(invalid_cluster_nodes_conf)
+                case lists:foldr(FindBadNodeNames, [], Nodes) of
+                    [] -> e(cluster_node_type_mandatory);
+                    _  -> e(invalid_cluster_nodes_conf)
                 end;
             {ok, _} ->
                 e(invalid_cluster_nodes_conf)
