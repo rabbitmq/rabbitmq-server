@@ -376,7 +376,9 @@ creds(User, Pass, SSLLoginName) ->
     DefaultUser = rabbit_mqtt_util:env(default_user),
     DefaultPass = rabbit_mqtt_util:env(default_pass),
     Anon        = rabbit_mqtt_util:env(allow_anonymous),
-    U = case {User =/= undefined, is_binary(DefaultUser), Anon =:= true, SSLLoginName =/= none} of
+    TLSAuth     = rabbit_mqtt_util:env(ssl_cert_login),
+    U = case {User =/= undefined, is_binary(DefaultUser),
+              Anon =:= true, (TLSAuth andalso SSLLoginName =/= none)} of
              {true,  _,    _,    _}     -> list_to_binary(User);
              {false, _,    _,    true}  -> SSLLoginName;
              {false, true, true, false} -> DefaultUser;
