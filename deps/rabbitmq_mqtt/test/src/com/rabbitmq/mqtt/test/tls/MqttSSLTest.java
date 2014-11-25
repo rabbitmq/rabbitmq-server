@@ -112,17 +112,6 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
         conOpts.setKeepAliveInterval(60);
     }
 
-
-    public void testAnonymousUser() throws MqttException {
-        try {
-            conOpt.setSocketFactory(MutualAuth.getSSLContextWithoutCert().getSocketFactory());
-            client.connect(conOpt);
-        } catch (Exception e) {
-            e.printStackTrace();
-            fail("Exception: " + e.getMessage());
-        }
-    }
-
     public void testCertLogin() throws MqttException {
         try {
             conOpt.setSocketFactory(MutualAuth.getSSLContextWithClientCert().getSocketFactory());
