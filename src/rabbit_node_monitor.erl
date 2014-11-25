@@ -359,11 +359,20 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             rabbit_log:error(
               FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
               ArgsBase ++ [Proxy]),
-            erlang:disconnect_node(Proxy),
+            cast(Proxy, {partial_partition_disconnect, node()}),
+            disconnect(Proxy),
             {noreply, State}
     end;
 
 handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
+    {noreply, State};
+
+%% Sometimes it appears the Erlang VM does not give us nodedown
+%% messages reliably when another node disconnects from us. Therefore
+%% we are told just before the disconnection so we can reciprocate.
+handle_cast({partial_partition_disconnect, Other}, State) ->
+    rabbit_log:error("Partial partition disconnect from ~s~n", [Other]),
+    disconnect(Other),
     {noreply, State};
 
 %% Note: when updating the status file, we can't simply write the
@@ -645,6 +654,19 @@ add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 del_node(Node, Nodes) -> Nodes -- [Node].
 
 cast(Node, Msg) -> gen_server:cast({?SERVER, Node}, Msg).
+
+%% When we call this, it's because we want to force Mnesia to detect a
+%% partition. But if we just disconnect_node/1 then Mnesia won't
+%% detect a very short partition. So we want to force a slightly
+%% longer disconnect. Unfortunately we don't have a way to blacklist
+%% individual nodes; the best we can do is turn off auto-connect
+%% altogether.
+disconnect(Node) ->
+    application:set_env(kernel, dist_auto_connect, never),
+    erlang:disconnect_node(Node),
+    timer:sleep(1000),
+    application:unset_env(kernel, dist_auto_connect),
+    ok.
 
 %%--------------------------------------------------------------------
 
