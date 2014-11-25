@@ -41,7 +41,7 @@ public class MutualAuth {
 
         MutualAuth dummy = new MutualAuth();
         try {
-            SSLContext sslContext = SSLContext.getInstance("TLSV1.2");
+            SSLContext sslContext = SSLContext.getInstance("TLSV1.1");
             // Client Keystore
             KeyStore ks = KeyStore.getInstance("JKS");
             ks.load(dummy.getClass().getResourceAsStream("/client.jks"), clientPhrase);
@@ -58,7 +58,7 @@ public class MutualAuth {
 
     public static SSLContext getSSLContext() throws IOException {
         try {
-            SSLContext sslContext = SSLContext.getInstance("TLSV1.2");
+            SSLContext sslContext = SSLContext.getInstance("TLSV1.1");
             sslContext.init(null, getServerTrustManagerFactory().getTrustManagers(), null);
             return sslContext;
         } catch (Exception e) {
