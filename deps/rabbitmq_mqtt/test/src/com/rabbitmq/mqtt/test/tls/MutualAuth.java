@@ -1,4 +1,4 @@
-package com.rabbitmq.mqtt.ssltest;
+package com.rabbitmq.mqtt.test.tls;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
