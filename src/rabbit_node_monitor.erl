@@ -453,6 +453,10 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
     end,
     {noreply, handle_dead_node(Node, State)};
 
+handle_info({nodeup, Node, _Info}, State) ->
+    rabbit_log:info("node ~p up~n", [Node]),
+    {noreply, State};
+
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
             State = #state{partitions = Partitions,
