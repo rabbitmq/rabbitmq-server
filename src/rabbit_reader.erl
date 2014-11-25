@@ -1046,9 +1046,15 @@ auth_phase(Response,
                                        auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
+        {refused, Username, Msg, Args} ->
+            auth_fail(Username, Msg, Args, Name, State);
         {refused, Msg, Args} ->
-            auth_fail(Msg, Args, Name, State);
+            %% Older auth mechanisms didn't return the username, even if
+            %% they reach a stage where they know it.
+            auth_fail(none, Msg, Args, Name, State);
         {protocol_error, Msg, Args} ->
+            notify_auth_result(none, user_authentication_failure,
+                               Msg, Args, State),
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
             Secure = #'connection.secure'{challenge = Challenge},
@@ -1057,9 +1063,12 @@ auth_phase(Response,
                                     auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
             case rabbit_access_control:check_user_loopback(Username, Sock) of
-                ok          -> ok;
-                not_allowed -> auth_fail("user '~s' can only connect via "
-                                         "localhost", [Username], Name, State)
+                ok ->
+                    notify_auth_result(Username, user_authentication_success,
+                                       "", [], State);
+                not_allowed ->
+                    auth_fail(Username, "user '~s' can only connect via "
+                              "localhost", [Username], Name, State)
             end,
             Tune = #'connection.tune'{frame_max   = get_env(frame_max),
                                       channel_max = get_env(channel_max),
@@ -1071,11 +1080,14 @@ auth_phase(Response,
     end.
 
 -ifdef(use_specs).
--spec(auth_fail/4 :: (string(), [any()], binary(), #v1{}) -> no_return()).
+-spec(auth_fail/5 ::
+        (rabbit_types:username() | none, string(), [any()], binary(), #v1{}) ->
+           no_return()).
 -endif.
-auth_fail(Msg, Args, AuthName,
+auth_fail(Username, Msg, Args, AuthName,
           State = #v1{connection = #connection{protocol     = Protocol,
                                                capabilities = Capabilities}}) ->
+    notify_auth_result(Username, user_authentication_failure, Msg, Args, State),
     AmqpError = rabbit_misc:amqp_error(
                   access_refused, "~s login refused: ~s",
                   [AuthName, io_lib:format(Msg, Args)], none),
@@ -1093,6 +1105,37 @@ auth_fail(Msg, Args, AuthName,
         _ -> ok
     end,
     rabbit_misc:protocol_error(AmqpError).
+
+notify_auth_result(Username, AuthResult, Msg, Args, State) ->
+    EventProps0 = [{connection_type, network}],
+    EventProps1 = lists:foldl(
+      fun
+          (name, Acc) -> [{connection_name, i(name, State)} | Acc];
+          (Item, Acc) -> [{Item, i(Item, State)} | Acc]
+      end, EventProps0, [
+        peer_cert_validity,
+        peer_cert_subject,
+        peer_cert_issuer,
+        ssl_cipher,
+        ssl_protocol,
+        ssl,
+        auth_mechanism,
+        protocol,
+        peer_port,
+        peer_host,
+        name,
+        vhost,
+        host
+      ]),
+    EventProps2 = case Username of
+        none -> [{name, ''} | EventProps1];
+        _    -> [{name, Username} | EventProps1]
+    end,
+    EventProps = case Msg of
+        "" -> EventProps2;
+        _  -> [{error, lists:flatten(io_lib:format(Msg, Args))} | EventProps2]
+    end,
+    rabbit_event:notify(AuthResult, EventProps).
 
 %%--------------------------------------------------------------------------
 
