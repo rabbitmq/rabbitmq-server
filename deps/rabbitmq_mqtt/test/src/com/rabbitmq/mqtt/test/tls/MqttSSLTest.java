@@ -78,7 +78,7 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
         client = new MqttClient(brokerUrl, clientId, null);
         client2 = new MqttClient(brokerUrl, clientId2, null);
         conOpt = new MyConnOpts();
-        conOpt.setSocketFactory(MutualAuth.getSSLContext().getSocketFactory());
+        conOpt.setSocketFactory(MutualAuth.getSSLContextWithoutCert().getSocketFactory());
         setConOpts(conOpt);
         receivedMessages = new ArrayList<MqttMessage>();
         expectConnectionFailure = false;
@@ -115,7 +115,7 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
 
     public void testAnonymousUser() throws MqttException {
         try {
-            conOpt.setSocketFactory(MutualAuth.getSSLContext().getSocketFactory());
+            conOpt.setSocketFactory(MutualAuth.getSSLContextWithoutCert().getSocketFactory());
             client.connect(conOpt);
         } catch (Exception e) {
             e.printStackTrace();
