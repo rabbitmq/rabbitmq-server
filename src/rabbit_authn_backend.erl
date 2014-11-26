@@ -14,16 +14,16 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_auth_backend).
+-module(rabbit_authn_backend).
+
+-include("rabbit.hrl").
 
 -ifdef(use_specs).
 
-%% A description proplist as with auth mechanisms,
-%% exchanges. Currently unused.
--callback description() -> [proplists:property()].
-
 %% Check a user can log in, given a username and a proplist of
-%% authentication information (e.g. [{password, Password}]).
+%% authentication information (e.g. [{password, Password}]). If your
+%% backend is not to be used for authentication, this should always
+%% refuse access.
 %%
 %% Possible responses:
 %% {ok, User}
@@ -32,40 +32,17 @@
 %%     Something went wrong. Log and die.
 %% {refused, Msg, Args}
 %%     Client failed authentication. Log and die.
--callback check_user_login(rabbit_types:username(), [term()]) ->
-    {'ok', rabbit_types:user()} |
+-callback user_login_authentication(rabbit_types:username(), [term()]) ->
+    {'ok', rabbit_types:auth_user()} |
     {'refused', string(), [any()]} |
     {'error', any()}.
-
-%% Given #user and vhost, can a user log in to a vhost?
-%% Possible responses:
-%% true
-%% false
-%% {error, Error}
-%%     Something went wrong. Log and die.
--callback check_vhost_access(rabbit_types:user(), rabbit_types:vhost()) ->
-    boolean() | {'error', any()}.
-
-
-%% Given #user, resource and permission, can a user access a resource?
-%%
-%% Possible responses:
-%% true
-%% false
-%% {error, Error}
-%%     Something went wrong. Log and die.
--callback check_resource_access(rabbit_types:user(),
-                                rabbit_types:r(atom()),
-                                rabbit_access_control:permission_atom()) ->
-    boolean() | {'error', any()}.
 
 -else.
 
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {check_user_login, 2}, {check_vhost_access, 2},
-     {check_resource_access, 3}];
+    [{user_login_authentication, 2}];
 behaviour_info(_Other) ->
     undefined.
 
