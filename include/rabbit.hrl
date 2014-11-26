@@ -14,12 +14,17 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
+%% Passed around most places
 -record(user, {username,
                tags,
-               auth_backend, %% Module this user came from
-               impl          %% Scratch space for that module
-              }).
+               authz_backends}). %% List of {Module, AuthUserImpl} pairs
 
+%% Passed to auth backends
+-record(auth_user, {username,
+                    tags,
+                    impl}).
+
+%% Implementation for the internal auth backend
 -record(internal_user, {username, password_hash, tags}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).

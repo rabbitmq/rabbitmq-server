@@ -1299,7 +1299,8 @@ should_mask_action(CRef, MsgId,
 
 open_file(Dir, FileName, Mode) ->
     file_handle_cache:open(form_filename(Dir, FileName), ?BINARY_MODE ++ Mode,
-                           [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE}]).
+                           [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE},
+                            {read_buffer,  ?HANDLE_CACHE_BUFFER_SIZE}]).
 
 close_handle(Key, CState = #client_msstate { file_handle_cache = FHC }) ->
     CState #client_msstate { file_handle_cache = close_handle(Key, FHC) };
