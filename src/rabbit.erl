@@ -248,12 +248,12 @@ maybe_hipe_compile() ->
         {false, _}     -> {ok, disabled}
     end.
 
-warn_if_hipe_compilation_failed({ok, disabled}) ->
+log_hipe_result({ok, disabled}) ->
     ok;
-warn_if_hipe_compilation_failed({ok, Count, Duration}) ->
+log_hipe_result({ok, Count, Duration}) ->
     rabbit_log:info(
       "HiPE in use: compiled ~B modules in ~Bs.~n", [Count, Duration]);
-warn_if_hipe_compilation_failed(false) ->
+log_hipe_result(false) ->
     io:format(
       "~nNot HiPE compiling: HiPE not found in this Erlang installation.~n"),
     rabbit_log:warning(
@@ -312,9 +312,9 @@ start() ->
 boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
-                     Success = maybe_hipe_compile(),
+                     HipeResult = maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
-                     warn_if_hipe_compilation_failed(Success),
+                     log_hipe_result(HipeResult),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
