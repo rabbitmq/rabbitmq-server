@@ -19,7 +19,7 @@
 -include("rabbit_cli.hrl").
 
 -export([start/0, stop/0, parse_arguments/2, action/5,
-         sync_queue/1, cancel_sync_queue/1]).
+         sync_queue/1, cancel_sync_queue/1, become/1]).
 
 -import(rabbit_cli, [rpc_call/4]).
 
@@ -40,6 +40,7 @@
          change_cluster_node_type,
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
+         rename_current_node,
          force_boot,
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
@@ -104,8 +105,8 @@
 -define(COMMANDS_NOT_REQUIRING_APP,
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
-         forget_cluster_node, cluster_status, status, environment, eval,
-         force_boot]).
+         forget_cluster_node, rename_current_node, cluster_status, status,
+         environment, eval, force_boot]).
 
 %%----------------------------------------------------------------------------
 
@@ -233,6 +234,12 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
         false -> rpc_call(Node, rabbit_mnesia, forget_cluster_node,
                           [ClusterNode, false])
     end;
+
+action(rename_current_node, _Node, [FromNodeS, ToNodeS], _Opts, Inform) ->
+    FromNode = list_to_atom(FromNodeS),
+    ToNode = list_to_atom(ToNodeS),
+    Inform("Renaming local cluster node ~s to ~s", [FromNode, ToNode]),
+    rabbit_mnesia_offline:rename_local_node(FromNode, ToNode);
 
 action(force_boot, Node, [], _Opts, Inform) ->
     Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
