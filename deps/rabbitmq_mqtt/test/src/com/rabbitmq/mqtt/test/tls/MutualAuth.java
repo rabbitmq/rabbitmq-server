@@ -8,6 +8,8 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
+import java.util.Arrays;
+import java.util.List;
 
 public class MutualAuth {
 
@@ -41,7 +43,7 @@ public class MutualAuth {
 
         MutualAuth dummy = new MutualAuth();
         try {
-            SSLContext sslContext = SSLContext.getInstance("TLSV1.2");
+            SSLContext sslContext = getVanillaSSLContext();
             // Client Keystore
             KeyStore ks = KeyStore.getInstance("JKS");
             ks.load(dummy.getClass().getResourceAsStream("/client.jks"), clientPhrase);
@@ -56,9 +58,22 @@ public class MutualAuth {
 
     }
 
-    public static SSLContext getSSLContext() throws IOException {
+    private static SSLContext getVanillaSSLContext() throws NoSuchAlgorithmException {
+        SSLContext result = null;
+        List<String> xs = Arrays.asList("TLSv1.2", "TLSv1.1", "TLSv1");
+        for(String x : xs) {
+            try {
+                return SSLContext.getInstance(x);
+            } catch (NoSuchAlgorithmException nae) {
+                // keep trying
+            }
+        }
+        throw new NoSuchAlgorithmException("Could not obtain an SSLContext for TLS 1.0-1.2");
+    }
+
+    public static SSLContext getSSLContextWithoutCert() throws IOException {
         try {
-            SSLContext sslContext = SSLContext.getInstance("TLSV1.2");
+            SSLContext sslContext = getVanillaSSLContext();
             sslContext.init(null, getServerTrustManagerFactory().getTrustManagers(), null);
             return sslContext;
         } catch (Exception e) {
