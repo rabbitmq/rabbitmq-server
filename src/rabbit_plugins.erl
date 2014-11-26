@@ -148,37 +148,9 @@ keep_plugin(#plugin{name = App} = Plugin) ->
    end.
 
 plugin_provided_by_otp(#plugin{name = eldap, version = PluginVsn}) ->
-    %% eldap was added to Erlang/OTP R15B01. We prefer this version
-    %% to the plugin. Before, eldap always advertised version "1". In
-    %% R15B01, it got proper versionning starting from "1.0". If eldap's
-    %% version is "1", we keep using the plugin, otherwise we take the
-    %% OTP application. As an extra check, we look at ERTS version to be
-    %% sure we're on R15B01.
-    case application:get_key(eldap, vsn) of
-        {ok, PluginVsn} ->
-            %% The plugin itself; the plugin was previously added to the
-            %% code path.
-            false;
-        {ok, "1"} ->
-            %% The version available on GitHub, not part of OTP.
-            false;
-        {ok, Vsn} ->
-            try rabbit_misc:version_compare(Vsn, "1.0", gte) of
-                true ->
-                    %% Probably part of OTP. Let's check ERTS version to
-                    %% be sure.
-                    rabbit_misc:version_compare(
-                      erlang:system_info(version), "5.9.1", gte);
-                false ->
-                    %% Probably not part of OTP. Use the plugin to be safe.
-                    false
-            catch
-                _:_ ->
-                    %% Couldn't parse the version. It's not the OTP
-                    %% application.
-                    false
-            end
-    end;
+    %% eldap was added to Erlang/OTP R15B01 (ERTS 5.9.1). In this case,
+    %% we prefer this version to the plugin.
+    rabbit_misc:version_compare(erlang:system_info(version), "5.9.1", gte);
 plugin_provided_by_otp(_) ->
     false.
 
