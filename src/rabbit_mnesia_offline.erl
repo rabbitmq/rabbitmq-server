@@ -17,12 +17,14 @@
 -module(rabbit_mnesia_offline).
 
 -export([rename_local_node/2]).
+-export([rename_remote_node/2]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
 -spec(rename_local_node/2 :: (node(), node()) -> 'ok').
+-spec(rename_remote_node/2 :: (node(), node()) -> 'ok').
 
 -endif.
 
@@ -49,7 +51,7 @@ rename_local_node(FromNode, ToNode) ->
         rabbit_control_main:become(ToNode),
         io:format("  * Converting backup '~s'~n", [ToBackup]),
         convert_backup(FromNode, ToNode, FromBackup, ToBackup),
-        ok = mnesia:install_fallback(ToBackup),
+        ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
         io:format("  * Loading backup '~s'~n", [ToBackup]),
         start_mnesia(),
         io:format("  * Converting config files~n", []),
@@ -127,3 +129,21 @@ update_term(N1, N2, Pid) when is_pid(Pid), node(Pid) == N1 ->
     rabbit_misc:pid_change_node(Pid, N2);
 update_term(_N1, _N2, Term) ->
     Term.
+
+%%----------------------------------------------------------------------------
+
+rename_remote_node(FromNode, ToNode) ->
+    All = rabbit_mnesia:cluster_nodes(all),
+    Running = rabbit_mnesia:cluster_nodes(running),
+    case {lists:member(FromNode, All),
+          lists:member(FromNode, Running),
+          lists:member(ToNode, All)} of
+        {true,  false, false} -> ok;
+        {false, _,     _}     -> exit({node_not_in_cluster,     FromNode});
+        {_,     true,  _}     -> exit({node_running,            FromNode});
+        {_,     _,     true}  -> exit({node_already_in_cluster, ToNode})
+    end,
+    mnesia:del_table_copy(schema, FromNode),
+    mnesia:change_config(extra_db_nodes, [ToNode]),
+    mnesia:add_table_copy(schema, ToNode, ram_copies),
+    ok.
