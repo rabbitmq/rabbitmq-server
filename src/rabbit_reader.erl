@@ -1049,7 +1049,7 @@ auth_phase(Response,
         {refused, Username, Msg, Args} ->
             auth_fail(Username, Msg, Args, Name, State);
         {refused, Msg, Args} ->
-            %% Deprecated: older auth mechanisms didn't return the
+            %% Deprecated: older auth mechanisms don't return the
             %% username, even if they reach a stage where they know it.
             auth_fail(none, Msg, Args, Name, State);
         {protocol_error, Msg, Args} ->
