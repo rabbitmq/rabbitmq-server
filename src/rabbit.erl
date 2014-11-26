@@ -243,15 +243,19 @@ maybe_hipe_compile() ->
     {ok, Want} = application:get_env(rabbit, hipe_compile),
     Can = code:which(hipe) =/= non_existing,
     case {Want, Can} of
-        {true,  true}  -> hipe_compile(),
-                          true;
+        {true,  true}  -> hipe_compile();
         {true,  false} -> false;
-        {false, _}     -> true
+        {false, _}     -> {ok, disabled}
     end.
 
-warn_if_hipe_compilation_failed(true) ->
+warn_if_hipe_compilation_failed({ok, disabled}) ->
     ok;
+warn_if_hipe_compilation_failed({ok, Count, Duration}) ->
+    rabbit_log:info(
+      "HiPE in use: compiled ~B modules in ~Bs.~n", [Count, Duration]);
 warn_if_hipe_compilation_failed(false) ->
+    io:format(
+      "~nNot HiPE compiling: HiPE not found in this Erlang installation.~n"),
     rabbit_log:warning(
       "Not HiPE compiling: HiPE not found in this Erlang installation.~n").
 
@@ -276,8 +280,9 @@ hipe_compile() ->
          {'DOWN', MRef, process, _, Reason} -> exit(Reason)
      end || {_Pid, MRef} <- PidMRefs],
     T2 = erlang:now(),
-    io:format("|~n~nCompiled ~B modules in ~Bs~n",
-              [Count, timer:now_diff(T2, T1) div 1000000]).
+    Duration = timer:now_diff(T2, T1) div 1000000,
+    io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, Duration]),
+    {ok, Count, Duration}.
 
 split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
 
