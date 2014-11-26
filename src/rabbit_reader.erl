@@ -1049,8 +1049,8 @@ auth_phase(Response,
         {refused, Username, Msg, Args} ->
             auth_fail(Username, Msg, Args, Name, State);
         {refused, Msg, Args} ->
-            %% Older auth mechanisms didn't return the username, even if
-            %% they reach a stage where they know it.
+            %% Deprecated: older auth mechanisms didn't return the
+            %% username, even if they reach a stage where they know it.
             auth_fail(none, Msg, Args, Name, State);
         {protocol_error, Msg, Args} ->
             notify_auth_result(none, user_authentication_failure,

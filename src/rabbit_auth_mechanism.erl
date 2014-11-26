@@ -37,12 +37,15 @@
 %% {protocol_error, Msg, Args}
 %%     Client got the protocol wrong. Log and die.
 %% {refused, Msg, Args}
+%%     (deprecated) Client failed authentication. Log and die.
+%% {refused, Username, Msg, Args}
 %%     Client failed authentication. Log and die.
 -callback handle_response(binary(), any()) ->
     {'ok', rabbit_types:user()} |
     {'challenge', binary(), any()} |
     {'protocol_error', string(), [any()]} |
-    {'refused', string(), [any()]}.
+    {'refused', string(), [any()]} |
+    {'refused', rabbit_types:username() | none, string(), [any()]}.
 
 -else.
 
