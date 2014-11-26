@@ -124,6 +124,6 @@ update_term(N1, N2, T) when is_tuple(T) ->
 update_term(N1, N2, N1) ->
     N2;
 update_term(N1, N2, Pid) when is_pid(Pid), node(Pid) == N1 ->
-    rabbit_misc:node_to_fake_pid(N2);
+    rabbit_misc:pid_change_node(Pid, N2);
 update_term(_N1, _N2, Term) ->
     Term.
