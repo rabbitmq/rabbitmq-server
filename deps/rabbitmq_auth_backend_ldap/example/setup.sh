@@ -6,7 +6,7 @@
 
 sudo apt-get --yes purge slapd
 sudo rm -rf /var/lib/ldap
-sudo apt-get --yes install slapd
+sudo apt-get --yes install slapd ldap-utils
 sleep 1
 
 DIR=$(dirname $0)
