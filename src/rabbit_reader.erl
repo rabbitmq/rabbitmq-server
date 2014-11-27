@@ -334,10 +334,18 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock}) ->
             end
     end.
 
-stop(closed, State) -> maybe_emit_stats(State),
-                       throw(connection_closed_abruptly);
-stop(Reason, State) -> maybe_emit_stats(State),
-                       throw({inet_error, Reason}).
+stop(closed, #v1{connection_state = pre_init} = State) ->
+    %% The connection was closed before any packet was received. It's
+    %% probably a load-balancer healthcheck: don't consider this a
+    %% failure.
+    maybe_emit_stats(State),
+    ok;
+stop(closed, State) ->
+    maybe_emit_stats(State),
+    throw({connection_closed_abruptly, State});
+stop(Reason, State) ->
+    maybe_emit_stats(State),
+    throw({inet_error, Reason}).
 
 handle_other({conserve_resources, Source, Conserve},
              State = #v1{throttle = Throttle = #throttle{alarmed_by = CR}}) ->
