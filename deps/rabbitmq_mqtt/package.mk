@@ -23,6 +23,9 @@ $(TEST_CONFIG_PATH): $(CERTS_DIR) $(TEST_EBIN_DIR) $(ABS_PACKAGE_DIR)/test/src/s
 
 	@echo "\nRunning SSL tests\n"
 
+$(TEST_EBIN_DIR):
+	mkdir -p $(TEST_EBIN_DIR)
+
 $(CERTS_DIR):
 	mkdir -p $(CERTS_DIR)
 	make -C $(RABBITMQ_TEST_PATH)/certs all PASSWORD=bunnychow DIR=$(CERTS_DIR)
