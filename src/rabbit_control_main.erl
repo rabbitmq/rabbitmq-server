@@ -41,7 +41,6 @@
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
          rename_current_node,
-         rename_other_node,
          force_boot,
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
@@ -241,13 +240,6 @@ action(rename_current_node, _Node, [FromNodeS, ToNodeS], _Opts, Inform) ->
     ToNode = list_to_atom(ToNodeS),
     Inform("Renaming local cluster node ~s to ~s", [FromNode, ToNode]),
     rabbit_mnesia_offline:rename_local_node(FromNode, ToNode);
-
-action(rename_other_node, Node, [FromNodeS, ToNodeS], _Opts, Inform) ->
-    FromNode = list_to_atom(FromNodeS),
-    ToNode = list_to_atom(ToNodeS),
-    Inform("Renaming remote cluster node ~s to ~s", [FromNode, ToNode]),
-    rpc_call(Node, rabbit_mnesia_offline, rename_remote_node,
-             [FromNode, ToNode]);
 
 action(force_boot, Node, [], _Opts, Inform) ->
     Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
