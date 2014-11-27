@@ -15,9 +15,11 @@
 %%
 
 -module(rabbit_mnesia_offline).
+-include("rabbit.hrl").
 
 -export([rename_local_node/2]).
 -export([rename_remote_node/2]).
+-export([maybe_complete_rename/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -43,17 +45,16 @@ rename_local_node(FromNode, ToNode) ->
         end,
         rabbit_table:force_load(),
         rabbit_table:wait_for_replicated(),
-        FromBackup = rabbit_mnesia:dir() ++ "/rename-backup-from",
-        ToBackup = rabbit_mnesia:dir() ++ "/rename-backup-to",
+        FromBackup = from_backup_name(),
+        ToBackup = to_backup_name(),
         io:format("  * Backing up to '~s'~n", [FromBackup]),
         ok = mnesia:backup(FromBackup),
         stop_mnesia(),
         rabbit_control_main:become(ToNode),
         io:format("  * Converting backup '~s'~n", [ToBackup]),
         convert_backup(FromNode, ToNode, FromBackup, ToBackup),
-        ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
-        io:format("  * Loading backup '~s'~n", [ToBackup]),
-        start_mnesia(),
+        ok = rabbit_file:write_term_file(rename_config_name(),
+                                         [{FromNode, ToNode}]),
         io:format("  * Converting config files~n", []),
         convert_config_file(FromNode, ToNode,
                             rabbit_node_monitor:running_nodes_filename()),
@@ -63,6 +64,42 @@ rename_local_node(FromNode, ToNode) ->
     after
         stop_mnesia()
     end.
+
+maybe_complete_rename(primary, _AllNodes) ->
+    case rabbit_file:read_term_file(rename_config_name()) of
+        {ok, [{_FromNode, _ToNode}]} ->
+            %% We are alone, restore the backup we previously took
+            ToBackup = to_backup_name(),
+            io:format("  * Loading backup '~s'~n", [ToBackup]),
+            ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
+            start_mnesia(),
+            stop_mnesia(),
+            rabbit_file:delete(rename_config_name()),
+            rabbit_file:delete(from_backup_name()),
+            rabbit_file:delete(to_backup_name()),
+            ok;
+        _ ->
+            ok
+    end;
+
+maybe_complete_rename(secondary, AllNodes) ->
+    case rabbit_file:read_term_file(rename_config_name()) of
+        {ok, [{FromNode, ToNode}]} ->
+            rabbit_upgrade:secondary_upgrade(AllNodes),
+            [Another | _] = rabbit_mnesia:cluster_nodes(running) -- [node()],
+            ok = rpc:call(Another, ?MODULE, rename_remote_node,
+                          [FromNode, ToNode]),
+            rabbit_file:delete(rename_config_name()),
+            rabbit_file:delete(from_backup_name()),
+            rabbit_file:delete(to_backup_name()),
+            ok;
+        _ ->
+            ok
+    end.
+
+from_backup_name()   -> rabbit_mnesia:dir() ++ "/rename-backup-from".
+to_backup_name()     -> rabbit_mnesia:dir() ++ "/rename-backup-to".
+rename_config_name() -> rabbit_mnesia:dir() ++ "/rename-pending.config".
 
 start_mnesia() -> rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia).
 stop_mnesia()  -> stopped = mnesia:stop().
@@ -138,12 +175,15 @@ rename_remote_node(FromNode, ToNode) ->
     case {lists:member(FromNode, All),
           lists:member(FromNode, Running),
           lists:member(ToNode, All)} of
-        {true,  false, false} -> ok;
-        {false, _,     _}     -> exit({node_not_in_cluster,     FromNode});
-        {_,     true,  _}     -> exit({node_running,            FromNode});
-        {_,     _,     true}  -> exit({node_already_in_cluster, ToNode})
+        {true,  false, true}  -> ok;
+        {false, _,     _}     -> exit({old_node_not_in_cluster, FromNode});
+        {_,     true,  _}     -> exit({old_node_running,        FromNode});
+        {_,     _,     false} -> exit({new_node_not_in_cluster, ToNode})
     end,
     mnesia:del_table_copy(schema, FromNode),
-    mnesia:change_config(extra_db_nodes, [ToNode]),
-    mnesia:add_table_copy(schema, ToNode, ram_copies),
+    {atomic, ok} = mnesia:transform_table(
+                     rabbit_durable_queue,
+                     fun (Q) -> update_term(FromNode, ToNode, Q) end,
+                     record_info(fields, amqqueue)),
     ok.
+
