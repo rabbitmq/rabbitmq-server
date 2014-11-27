@@ -19,7 +19,7 @@
 
 -export([rename_local_node/2]).
 -export([rename_remote_node/2]).
--export([maybe_complete_rename/2]).
+-export([maybe_complete_rename/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -65,37 +65,42 @@ rename_local_node(FromNode, ToNode) ->
         stop_mnesia()
     end.
 
-maybe_complete_rename(primary, _AllNodes) ->
-    case rabbit_file:read_term_file(rename_config_name()) of
-        {ok, [{_FromNode, _ToNode}]} ->
-            %% We are alone, restore the backup we previously took
-            ToBackup = to_backup_name(),
-            io:format("  * Loading backup '~s'~n", [ToBackup]),
-            ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
-            start_mnesia(),
-            stop_mnesia(),
-            rabbit_file:delete(rename_config_name()),
-            rabbit_file:delete(from_backup_name()),
-            rabbit_file:delete(to_backup_name()),
-            ok;
-        _ ->
-            ok
-    end;
+nodes_running(Nodes) ->
+    [N || N <- Nodes, rabbit:is_running(N)].
 
-maybe_complete_rename(secondary, AllNodes) ->
+
+maybe_complete_rename(AllNodes) ->
     case rabbit_file:read_term_file(rename_config_name()) of
         {ok, [{FromNode, ToNode}]} ->
-            rabbit_upgrade:secondary_upgrade(AllNodes),
-            [Another | _] = rabbit_mnesia:cluster_nodes(running) -- [node()],
-            ok = rpc:call(Another, ?MODULE, rename_remote_node,
-                          [FromNode, ToNode]),
-            rabbit_file:delete(rename_config_name()),
-            rabbit_file:delete(from_backup_name()),
-            rabbit_file:delete(to_backup_name()),
-            ok;
+            case rabbit_upgrade:nodes_running(AllNodes) of
+                [] -> complete_rename_primary();
+                _  -> complete_rename_secondary(FromNode, ToNode, AllNodes)
+            end;
         _ ->
             ok
     end.
+
+complete_rename_primary() ->
+    %% We are alone, restore the backup we previously took
+    ToBackup = to_backup_name(),
+    io:format("  * Loading backup '~s'~n", [ToBackup]),
+    ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
+    start_mnesia(),
+    stop_mnesia(),
+    rabbit_file:delete(rename_config_name()),
+    rabbit_file:delete(from_backup_name()),
+    rabbit_file:delete(to_backup_name()),
+    ok.
+
+complete_rename_secondary(FromNode, ToNode, AllNodes) ->
+    rabbit_upgrade:secondary_upgrade(AllNodes),
+    [Another | _] = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    ok = rpc:call(Another, ?MODULE, rename_remote_node,
+                  [FromNode, ToNode]),
+    rabbit_file:delete(rename_config_name()),
+    rabbit_file:delete(from_backup_name()),
+    rabbit_file:delete(to_backup_name()),
+    ok.
 
 from_backup_name()   -> rabbit_mnesia:dir() ++ "/rename-backup-from".
 to_backup_name()     -> rabbit_mnesia:dir() ++ "/rename-backup-to".
