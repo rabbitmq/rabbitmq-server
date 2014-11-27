@@ -18,14 +18,12 @@ ifeq ($(CAN_RUN_SSL),true)
 
 WITH_BROKER_SETUP_SCRIPTS:=$(ABS_PACKAGE_DIR)/test/setup-rabbit-test.sh
 
-$(TEST_CONFIG_PATH): $(CERTS_DIR) $(ABS_PACKAGE_DIR)/test/src/ssl.config
-	mkdir -p $(ABS_PACKAGE_DIR)/test/ebin
-	sed -e "s|%%CERTS_DIR%%|$(CERTS_DIR)|g" < $(ABS_PACKAGE_DIR)/test/src/ssl.config > $(ABS_PACKAGE_DIR)/$@
+$(TEST_CONFIG_PATH): $(CERTS_DIR) $(TEST_EBIN_DIR) $(ABS_PACKAGE_DIR)/test/src/ssl.config
+	sed -e "s|%%CERTS_DIR%%|$(CERTS_DIR)|g" < $(ABS_PACKAGE_DIR)/test/src/ssl.config > $@
 
 	@echo "\nRunning SSL tests\n"
 
 $(CERTS_DIR):
-	mkdir -p $(ABS_PACKAGE_DIR)/test/ebin
 	mkdir -p $(CERTS_DIR)
 	make -C $(RABBITMQ_TEST_PATH)/certs all PASSWORD=bunnychow DIR=$(CERTS_DIR)
 
