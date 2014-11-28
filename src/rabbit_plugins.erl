@@ -102,7 +102,8 @@ list(PluginsDir) ->
         _  -> rabbit_log:warning(
                 "Problem reading some plugins: ~p~n", [Problems])
     end,
-    Plugins = lists:filter(fun keep_plugin/1, AvailablePlugins),
+    Plugins = lists:filter(fun(P) -> not plugin_provided_by_otp(P) end,
+                           AvailablePlugins),
     ensure_dependencies(Plugins).
 
 %% @doc Read the list of enabled plugins from the supplied term file.
@@ -135,19 +136,7 @@ dependencies(Reverse, Sources, AllPlugins) ->
 
 %% For a few known cases, an externally provided plugin can be trusted.
 %% In this special case, it overrides the plugin.
-keep_plugin(#plugin{name = App} = Plugin) ->
-    case application:load(App) of
-        {error, {already_loaded, _}} ->
-            not plugin_provided_by_otp(Plugin);
-        ok ->
-            Ret = not plugin_provided_by_otp(Plugin),
-            application:unload(App),
-            Ret;
-        _ ->
-            true
-   end.
-
-plugin_provided_by_otp(#plugin{name = eldap, version = PluginVsn}) ->
+plugin_provided_by_otp(#plugin{name = eldap}) ->
     %% eldap was added to Erlang/OTP R15B01 (ERTS 5.9.1). In this case,
     %% we prefer this version to the plugin.
     rabbit_misc:version_compare(erlang:system_info(version), "5.9.1", gte);
