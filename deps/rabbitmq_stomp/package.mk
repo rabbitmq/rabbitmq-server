@@ -13,7 +13,7 @@ CAN_RUN_SSL:=$(shell if [ -d $(RABBITMQ_TEST_PATH) ]; then echo "true"; else ech
 TEST_CONFIG_PATH_STOMP=$(TEST_EBIN_DIR)/test.config
 WITH_BROKER_TEST_CONFIG:=$(TEST_EBIN_DIR)/test
 
-.PHONY: $(TEST_CONFIG_PATH)
+.PHONY: $(TEST_CONFIG_PATH_STOMP)
 
 ifeq ($(CAN_RUN_SSL),true)
 
@@ -36,7 +36,7 @@ endif
 
 define package_rules
 
-$(PACKAGE_DIR)+pre-test:: $(TEST_CONFIG_PATH)
+$(PACKAGE_DIR)+pre-test:: $(TEST_CONFIG_PATH_STOMP)
 	make -C $(PACKAGE_DIR)/deps/stomppy
 
 $(PACKAGE_DIR)+clean::
