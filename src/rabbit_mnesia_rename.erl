@@ -14,10 +14,10 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_mnesia_offline).
+-module(rabbit_mnesia_rename).
 -include("rabbit.hrl").
 
--export([rename_local_node/3]).
+-export([rename/3]).
 -export([maybe_complete_rename/1]).
 
 -define(CONVERT_TABLES, [schema, rabbit_durable_queue]).
@@ -26,14 +26,14 @@
 
 -ifdef(use_specs).
 
--spec(rename_local_node/3 :: (node(), node(), [node()]) -> 'ok').
+-spec(rename/3 :: (node(), node(), [node()]) -> 'ok').
 -spec(maybe_complete_rename/1 :: ([node()]) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-rename_local_node(FromNode, ToNode, Others) ->
+rename(FromNode, ToNode, Others) ->
     NodeMap = dict:from_list(split_others([FromNode, ToNode | Others])),
     try
         rabbit_control_main:become(FromNode),
