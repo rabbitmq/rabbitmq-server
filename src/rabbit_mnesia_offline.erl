@@ -90,6 +90,7 @@ complete_rename_primary() ->
     rabbit_file:delete(rename_config_name()),
     rabbit_file:delete(from_backup_name()),
     rabbit_file:delete(to_backup_name()),
+    rabbit_mnesia:force_load_next_boot(),
     ok.
 
 complete_rename_secondary(FromNode, ToNode, AllNodes) ->
