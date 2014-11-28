@@ -346,7 +346,7 @@ stop(closed, #v1{connection_state = pre_init} = State) ->
     throw(connection_closed_with_no_data_received);
 stop(closed, State) ->
     maybe_emit_stats(State),
-    throw({connection_closed_abruptly, State});
+    throw(connection_closed_abruptly);
 stop(Reason, State) ->
     maybe_emit_stats(State),
     throw({inet_error, Reason}).
