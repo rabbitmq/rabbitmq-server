@@ -40,7 +40,7 @@
          change_cluster_node_type,
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
-         rename_current_node,
+         rename_node,
          force_boot,
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
@@ -105,7 +105,7 @@
 -define(COMMANDS_NOT_REQUIRING_APP,
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
-         forget_cluster_node, rename_current_node, cluster_status, status,
+         forget_cluster_node, rename_node, cluster_status, status,
          environment, eval, force_boot]).
 
 %%----------------------------------------------------------------------------
@@ -235,13 +235,12 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
                           [ClusterNode, false])
     end;
 
-action(rename_current_node, _Node, [FromNodeS, ToNodeS | OthersS],
-       _Opts, Inform) ->
+action(rename_node, _Node, [FromNodeS, ToNodeS | OthersS], _Opts, Inform) ->
     Others = [list_to_atom(N) || N <- OthersS],
     FromNode = list_to_atom(FromNodeS),
     ToNode = list_to_atom(ToNodeS),
     Inform("Renaming local cluster node ~s to ~s", [FromNode, ToNode]),
-    rabbit_mnesia_offline:rename_local_node(FromNode, ToNode, Others);
+    rabbit_mnesia_rename:rename(FromNode, ToNode, Others);
 
 action(force_boot, Node, [], _Opts, Inform) ->
     Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
