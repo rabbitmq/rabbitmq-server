@@ -582,13 +582,13 @@ check_cluster_consistency() ->
             throw(E)
     end.
 
-check_cluster_consistency(Node, AlreadyFormed) ->
+check_cluster_consistency(Node, CheckNodesConsistency) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _Reason} ->
             {error, not_found};
         {_OTP, _Rabbit, {error, _}} ->
             {error, not_found};
-        {OTP, Rabbit, {ok, Status}} when AlreadyFormed ->
+        {OTP, Rabbit, {ok, Status}} when CheckNodesConsistency ->
             case check_consistency(OTP, Rabbit, Node, Status) of
                 {error, _} = E -> E;
                 {ok, Res}      -> {ok, Res}
