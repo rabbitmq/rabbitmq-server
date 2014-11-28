@@ -37,7 +37,6 @@ rename(FromNode, ToNode, Others) ->
     NodeMap = dict:from_list(split_others([FromNode, ToNode | Others])),
     try
         rabbit_control_main:become(FromNode),
-        rabbit_log:info("Renaming node ~s to ~s~n", [FromNode, ToNode]),
         start_mnesia(),
         Nodes = rabbit_mnesia:cluster_nodes(all),
         case {lists:member(FromNode, Nodes), lists:member(ToNode, Nodes)} of
@@ -49,14 +48,11 @@ rename(FromNode, ToNode, Others) ->
         rabbit_table:wait_for_replicated(),
         FromBackup = from_backup_name(),
         ToBackup = to_backup_name(),
-        io:format("  * Backing up to '~s'~n", [FromBackup]),
         ok = mnesia:backup(FromBackup),
         stop_mnesia(),
-        io:format("  * Converting backup '~s'~n", [ToBackup]),
         convert_backup(NodeMap, FromBackup, ToBackup),
         ok = rabbit_file:write_term_file(rename_config_name(),
                                          [{FromNode, ToNode}]),
-        io:format("  * Converting config files~n", []),
         convert_config_file(NodeMap,
                             rabbit_node_monitor:running_nodes_filename()),
         convert_config_file(NodeMap,
@@ -74,17 +70,18 @@ maybe_complete_rename(AllNodes) ->
     case rabbit_file:read_term_file(rename_config_name()) of
         {ok, [{FromNode, ToNode}]} ->
             case rabbit_upgrade:nodes_running(AllNodes) of
-                [] -> complete_rename_primary();
+                [] -> complete_rename_primary(FromNode, ToNode);
                 _  -> complete_rename_secondary(FromNode, ToNode, AllNodes)
             end;
         _ ->
             ok
     end.
 
-complete_rename_primary() ->
+complete_rename_primary(FromNode, ToNode) ->
     %% We are alone, restore the backup we previously took
     ToBackup = to_backup_name(),
-    io:format("  * Loading backup '~s'~n", [ToBackup]),
+    rabbit_log:info("Restarting as primary after rename from ~s to ~s~n",
+                    [FromNode, ToNode]),
     ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
     start_mnesia(),
     rabbit_table:wait_for_replicated(),
@@ -96,6 +93,8 @@ complete_rename_primary() ->
     ok.
 
 complete_rename_secondary(FromNode, ToNode, AllNodes) ->
+    rabbit_log:info("Restarting as secondary after rename from ~s to ~s~n",
+                    [FromNode, ToNode]),
     rabbit_upgrade:secondary_upgrade(AllNodes),
     rename_remote_node(FromNode, ToNode),
     rabbit_file:delete(rename_config_name()),
