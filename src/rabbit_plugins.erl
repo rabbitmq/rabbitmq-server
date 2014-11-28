@@ -219,8 +219,6 @@ clean_plugin(Plugin, ExpandDir) ->
     delete_recursively(rabbit_misc:format("~s/~s", [ExpandDir, Plugin])).
 
 prepare_dir_plugin(PluginAppDescPath) ->
-    rabbit_log:info("Plugins: adding \"~s\" to the beginning of the code path.~n",
-                    [filename:dirname(PluginAppDescPath)]),
     code:add_patha(filename:dirname(PluginAppDescPath)).
 
 %%----------------------------------------------------------------------------
