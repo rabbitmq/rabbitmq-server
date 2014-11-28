@@ -97,6 +97,7 @@ finish_primary(FromNode, ToNode) ->
     ToBackup = to_backup_name(),
     ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
     start_mnesia(),
+    rabbit_table:force_load(),
     rabbit_table:wait_for_replicated(),
     stop_mnesia(),
     delete_rename_files(),
