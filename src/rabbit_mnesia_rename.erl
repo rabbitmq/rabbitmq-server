@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 
 -export([rename/3]).
--export([maybe_complete_rename/1]).
+-export([maybe_finish/1]).
 
 -define(CONVERT_TABLES, [schema, rabbit_durable_queue]).
 
@@ -27,7 +27,7 @@
 -ifdef(use_specs).
 
 -spec(rename/3 :: (node(), node(), [node()]) -> 'ok').
--spec(maybe_complete_rename/1 :: ([node()]) -> 'ok').
+-spec(maybe_finish/1 :: ([node()]) -> 'ok').
 
 -endif.
 
@@ -53,10 +53,7 @@ rename(FromNode, ToNode, Others) ->
         convert_backup(NodeMap, FromBackup, ToBackup),
         ok = rabbit_file:write_term_file(rename_config_name(),
                                          [{FromNode, ToNode}]),
-        convert_config_file(NodeMap,
-                            rabbit_node_monitor:running_nodes_filename()),
-        convert_config_file(NodeMap,
-                            rabbit_node_monitor:cluster_status_filename()),
+        convert_config_files(NodeMap),
         ok
     after
         stop_mnesia()
@@ -66,41 +63,58 @@ split_others([])         -> [];
 split_others([_])        -> exit(even_list_needed);
 split_others([A, B | T]) -> [{A, B} | split_others(T)].
 
-maybe_complete_rename(AllNodes) ->
+maybe_finish(AllNodes) ->
     case rabbit_file:read_term_file(rename_config_name()) of
-        {ok, [{FromNode, ToNode}]} ->
-            case rabbit_upgrade:nodes_running(AllNodes) of
-                [] -> complete_rename_primary(FromNode, ToNode);
-                _  -> complete_rename_secondary(FromNode, ToNode, AllNodes)
-            end;
-        _ ->
-            ok
+        {ok, [{FromNode, ToNode}]} -> finish(FromNode, ToNode, AllNodes);
+        _                          -> ok
     end.
 
-complete_rename_primary(FromNode, ToNode) ->
-    %% We are alone, restore the backup we previously took
-    ToBackup = to_backup_name(),
+finish(FromNode, ToNode, AllNodes) ->
+    case node() of
+        ToNode ->
+            case rabbit_upgrade:nodes_running(AllNodes) of
+                [] -> finish_primary(FromNode, ToNode);
+                _  -> finish_secondary(FromNode, ToNode, AllNodes)
+            end;
+        FromNode ->
+            rabbit_log:info(
+              "Abandoning rename from ~s to ~s since we are still ~s~n",
+              [FromNode, ToNode, FromNode]),
+            convert_config_files(mini_map(ToNode, FromNode)),
+            delete_rename_files();
+        _ ->
+            %% Boot will almost certainly fail but we might as
+            %% well just log this
+            rabbit_log:info(
+              "Rename attempted from ~s to ~s but we are ~s - ignoring.~n",
+              [FromNode, ToNode, node()])
+    end.
+
+finish_primary(FromNode, ToNode) ->
     rabbit_log:info("Restarting as primary after rename from ~s to ~s~n",
                     [FromNode, ToNode]),
+    %% We are alone, restore the backup we previously took
+    ToBackup = to_backup_name(),
     ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
     start_mnesia(),
     rabbit_table:wait_for_replicated(),
     stop_mnesia(),
-    rabbit_file:delete(rename_config_name()),
-    rabbit_file:delete(from_backup_name()),
-    rabbit_file:delete(to_backup_name()),
+    delete_rename_files(),
     rabbit_mnesia:force_load_next_boot(),
     ok.
 
-complete_rename_secondary(FromNode, ToNode, AllNodes) ->
+finish_secondary(FromNode, ToNode, AllNodes) ->
     rabbit_log:info("Restarting as secondary after rename from ~s to ~s~n",
                     [FromNode, ToNode]),
     rabbit_upgrade:secondary_upgrade(AllNodes),
     rename_remote_node(FromNode, ToNode),
+    delete_rename_files(),
+    ok.
+
+delete_rename_files() ->
     rabbit_file:delete(rename_config_name()),
     rabbit_file:delete(from_backup_name()),
-    rabbit_file:delete(to_backup_name()),
-    ok.
+    rabbit_file:delete(to_backup_name()).
 
 from_backup_name()   -> rabbit_mnesia:dir() ++ "/rename-backup-from".
 to_backup_name()     -> rabbit_mnesia:dir() ++ "/rename-backup-to".
@@ -120,6 +134,11 @@ convert_backup(NodeMap, FromBackup, ToBackup) ->
               end
       end, switched).
 
+convert_config_files(NodeMap) ->
+    [convert_config_file(NodeMap, Path) ||
+        Path <- [rabbit_node_monitor:running_nodes_filename(),
+                 rabbit_node_monitor:cluster_status_filename()]].
+
 convert_config_file(NodeMap, Path) ->
     {ok, Term} = rabbit_file:read_term_file(Path),
     ok = rabbit_file:write_term_file(Path, update_term(NodeMap, Term)).
@@ -129,6 +148,8 @@ lookup_node(OldNode, NodeMap) ->
         {ok, NewNode} -> NewNode;
         error         -> OldNode
     end.
+
+mini_map(FromNode, ToNode) -> dict:from_list([{FromNode, ToNode}]).
 
 update_term(NodeMap, L) when is_list(L) ->
     [update_term(NodeMap, I) || I <- L];
@@ -141,8 +162,6 @@ update_term(NodeMap, Pid) when is_pid(Pid) ->
 update_term(_NodeMap, Term) ->
     Term.
 
-%%----------------------------------------------------------------------------
-
 rename_remote_node(FromNode, ToNode) ->
     All = rabbit_mnesia:cluster_nodes(all),
     Running = rabbit_mnesia:cluster_nodes(running),
@@ -152,9 +171,8 @@ rename_remote_node(FromNode, ToNode) ->
         {_,     false} -> exit({new_node_not_in_cluster, ToNode})
     end,
     mnesia:del_table_copy(schema, FromNode),
-    NodeMap = dict:from_list([{FromNode, ToNode}]),
+    Map = mini_map(FromNode, ToNode),
     {atomic, ok} = mnesia:transform_table(
-                     rabbit_durable_queue,
-                     fun (Q) -> update_term(NodeMap, Q) end,
+                     rabbit_durable_queue, fun (Q) -> update_term(Map, Q) end,
                      record_info(fields, amqqueue)),
     ok.
