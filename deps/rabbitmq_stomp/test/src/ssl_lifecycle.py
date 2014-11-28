@@ -1,12 +1,17 @@
 import unittest
 import os
+import os.path
+import sys
 
 import stomp
 import base
 
-ssl_key_file = os.path.abspath("test/certs/client/key.pem")
-ssl_cert_file = os.path.abspath("test/certs/client/cert.pem")
-ssl_ca_certs = os.path.abspath("test/certs/testca/cacert.pem")
+
+base_path = os.path.dirname(sys.argv[0])
+
+ssl_key_file = os.path.abspath(base_path + "/../certs/client/key.pem")
+ssl_cert_file = os.path.abspath(base_path + "/../certs/client/cert.pem")
+ssl_ca_certs = os.path.abspath(base_path  + "/../certs/testca/cacert.pem")
 
 class TestSslClient(unittest.TestCase):
 
@@ -16,7 +21,7 @@ class TestSslClient(unittest.TestCase):
                                 use_ssl = True, ssl_key_file = ssl_key_file,
                                 ssl_cert_file = ssl_cert_file,
                                 ssl_ca_certs = ssl_ca_certs)
-
+        print "FILE: ", ssl_cert_file
         conn.start()
         conn.connect()
         return conn
