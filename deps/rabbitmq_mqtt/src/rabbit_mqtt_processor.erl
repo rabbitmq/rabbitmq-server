@@ -24,6 +24,7 @@
 -include("rabbit_mqtt_frame.hrl").
 -include("rabbit_mqtt.hrl").
 
+-define(APP, rabbitmq_mqtt).
 -define(FRAME_TYPE(Frame, Type),
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
 
@@ -373,10 +374,10 @@ get_vhost_username(UserBin) ->
     end.
 
 creds(User, Pass, SSLLoginName) ->
-    DefaultUser = rabbit_mqtt_util:env(default_user),
-    DefaultPass = rabbit_mqtt_util:env(default_pass),
-    Anon        = rabbit_mqtt_util:env(allow_anonymous),
-    TLSAuth     = rabbit_mqtt_util:env(ssl_cert_login),
+    DefaultUser   = rabbit_mqtt_util:env(default_user),
+    DefaultPass   = rabbit_mqtt_util:env(default_pass),
+    {ok, Anon}    = application:get_env(?APP, allow_anonymous),
+    {ok, TLSAuth} = application:get_env(?APP, ssl_cert_login),
     U = case {User =/= undefined, is_binary(DefaultUser),
               Anon =:= true, (TLSAuth andalso SSLLoginName =/= none)} of
              {true,  _,    _,    _}     -> list_to_binary(User);
