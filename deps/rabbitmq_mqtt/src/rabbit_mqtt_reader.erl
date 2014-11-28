@@ -214,7 +214,7 @@ process_received_bytes(Bytes,
                                     proc_state = ProcState1 });
                 {error, Reason, ProcState1} ->
                     log(info, "MQTT protocol error ~p for connection ~p~n",
-                        [ConnStr, Reason]),
+                        [Reason, ConnStr]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, Error} ->
                     log(error, "MQTT detected framing error '~p' for connection ~p~n",
