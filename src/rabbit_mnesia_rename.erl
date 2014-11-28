@@ -87,6 +87,7 @@ complete_rename_primary() ->
     io:format("  * Loading backup '~s'~n", [ToBackup]),
     ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
     start_mnesia(),
+    rabbit_table:wait_for_replicated(),
     stop_mnesia(),
     rabbit_file:delete(rename_config_name()),
     rabbit_file:delete(from_backup_name()),
