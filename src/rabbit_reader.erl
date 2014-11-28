@@ -259,11 +259,15 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                           handshake, 8)]}),
         log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
-        Ex -> log(case Ex of
-                      connection_closed_abruptly -> warning;
-                      _                          -> error
-                  end, "closing AMQP connection ~p (~s):~n~p~n",
-                  [self(), Name, Ex])
+        connection_closed_with_no_data_received ->
+            log(info, "closing AMQP connection ~p (~s) - "
+                      "no data received~n", [self(), Name]);
+        Ex ->
+            log(case Ex of
+                    connection_closed_abruptly -> warning;
+                    _                          -> error
+                end, "closing AMQP connection ~p (~s):~n~p~n",
+                [self(), Name, Ex])
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
@@ -339,7 +343,7 @@ stop(closed, #v1{connection_state = pre_init} = State) ->
     %% probably a load-balancer healthcheck: don't consider this a
     %% failure.
     maybe_emit_stats(State),
-    ok;
+    throw(connection_closed_with_no_data_received);
 stop(closed, State) ->
     maybe_emit_stats(State),
     throw({connection_closed_abruptly, State});
