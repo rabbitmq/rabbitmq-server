@@ -12,7 +12,7 @@ WITH_BROKER_TEST_CONFIG:=$(TEST_EBIN_DIR)/test
 WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/test.sh
 
 
-.PHONY: $(TEST_CONFIG_PATH)
+.PHONY: $(TEST_CONFIG_PATH_MQTT)
 
 ifeq ($(CAN_RUN_SSL),true)
 
@@ -35,7 +35,7 @@ $(TEST_CONFIG_PATH_MQTT): $(ABS_PACKAGE_DIR)/test/src/non_ssl.config
 endif
 
 define package_rules
-$(PACKAGE_DIR)+pre-test:: $(TEST_CONFIG_PATH)
+$(PACKAGE_DIR)+pre-test:: $(TEST_CONFIG_PATH_MQTT)
 
 
 
