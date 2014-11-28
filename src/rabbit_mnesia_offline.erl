@@ -18,15 +18,16 @@
 -include("rabbit.hrl").
 
 -export([rename_local_node/3]).
--export([rename_remote_node/2]).
 -export([maybe_complete_rename/1]).
+
+-define(CONVERT_TABLES, [schema, rabbit_durable_queue]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
 -spec(rename_local_node/3 :: (node(), node(), [node()]) -> 'ok').
--spec(rename_remote_node/2 :: (node(), node()) -> 'ok').
+-spec(maybe_complete_rename/1 :: ([node()]) -> 'ok').
 
 -endif.
 
@@ -95,9 +96,7 @@ complete_rename_primary() ->
 
 complete_rename_secondary(FromNode, ToNode, AllNodes) ->
     rabbit_upgrade:secondary_upgrade(AllNodes),
-    [Another | _] = rabbit_mnesia:cluster_nodes(running) -- [node()],
-    ok = rpc:call(Another, ?MODULE, rename_remote_node,
-                  [FromNode, ToNode]),
+    rename_remote_node(FromNode, ToNode),
     rabbit_file:delete(rename_config_name()),
     rabbit_file:delete(from_backup_name()),
     rabbit_file:delete(to_backup_name()),
@@ -111,47 +110,15 @@ start_mnesia() -> rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia).
 stop_mnesia()  -> stopped = mnesia:stop().
 
 convert_backup(NodeMap, FromBackup, ToBackup) ->
-    Switch = fun (OldNode) ->
-                     lookup_node(OldNode, NodeMap)
-             end,
-    Convert =
-        fun
-            %% TODO do we ever hit these three heads?
-            %% ({schema, db_nodes, Nodes}, Acc) ->
-            %%     io:format(" +++ db_nodes ~p~n", [Nodes]),
-            %%     {[{schema, db_nodes, lists:map(Switch,Nodes)}], Acc};
-            %% ({schema, version, Version}, Acc) ->
-            %%     io:format(" +++ version: ~p~n", [Version]),
-            %%     {[{schema, version, Version}], Acc};
-            %% ({schema, cookie, Cookie}, Acc) ->
-            %%     io:format(" +++ cookie: ~p~n", [Cookie]),
-            %%     {[{schema, cookie, Cookie}], Acc};
-            %% ({schema, Tab, CreateList}, Acc) ->
-            %%      io:format("~n * Checking table: '~p'~n", [Tab]),
-            %%     io:format("  . Initial content: ~p~n", [CreateList]),
-            %%     Keys = [ram_copies, disc_copies, disc_only_copies],
-            %%     OptSwitch =
-            %%         fun({Key, Val}) ->
-            %%                 case lists:member(Key, Keys) of
-            %%                     true ->
-            %%                         %%io:format("   + Checking key: '~p'~n", [Key]),
-            %%                         {Key, lists:map(Switch, Val)};
-            %%                     false->
-            %%                         {Key, Val}
-            %%                 end
-            %%         end,
-            %%     Res = {[{schema, Tab, lists:map(OptSwitch, CreateList)}], Acc},
-            %%     io:format("  . Resulting content: ~p~n", [Res]),
-            %%     Res;
-            (Other, Acc) ->
-                case lists:member(element(1, Other), [schema, rabbit_durable_queue]) of
-                    true  -> Other1 = update_term(NodeMap, Other),
-                             io:format(" --- ~p~n +++ ~p~n", [Other, Other1]),
-                             {[Other1], Acc};
-                    false -> {[Other], Acc}
-                end
-        end,
-    mnesia:traverse_backup(FromBackup, ToBackup, Convert, switched).
+    mnesia:traverse_backup(
+      FromBackup, ToBackup,
+      fun
+          (Row, Acc) ->
+              case lists:member(element(1, Row), ?CONVERT_TABLES) of
+                  true  -> {[update_term(NodeMap, Row)], Acc};
+                  false -> {[Row], Acc}
+              end
+      end, switched).
 
 convert_config_file(NodeMap, Path) ->
     {ok, Term} = rabbit_file:read_term_file(Path),
@@ -191,4 +158,3 @@ rename_remote_node(FromNode, ToNode) ->
                      fun (Q) -> update_term(NodeMap, Q) end,
                      record_info(fields, amqqueue)),
     ok.
-
