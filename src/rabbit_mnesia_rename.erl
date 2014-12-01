@@ -17,7 +17,7 @@
 -module(rabbit_mnesia_rename).
 -include("rabbit.hrl").
 
--export([rename/3]).
+-export([rename/2]).
 -export([maybe_finish/1]).
 
 -define(CONVERT_TABLES, [schema, rabbit_durable_queue]).
@@ -26,23 +26,37 @@
 
 -ifdef(use_specs).
 
--spec(rename/3 :: (node(), node(), [node()]) -> 'ok').
+-spec(rename/2 :: (node(), [{node(), node()}]) -> 'ok').
 -spec(maybe_finish/1 :: ([node()]) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-rename(FromNode, ToNode, Others) ->
-    NodeMap = dict:from_list(split_others([FromNode, ToNode | Others])),
+rename(Node, NodeMapList) ->
     try
+        NodeMap = dict:from_list(NodeMapList),
+        {FromNodes, ToNodes} = lists:unzip(NodeMapList),
+        case length(FromNodes) - length(lists:usort(ToNodes)) of
+            0 -> ok;
+            _ -> exit({duplicate_node, ToNodes})
+        end,
+        FromNode = case [From || {From, To} <- NodeMapList,
+                                 To =:= Node] of
+                       [N] -> N;
+                       []  -> Node
+                   end,
+        ToNode = case dict:find(FromNode, NodeMap) of
+                     {ok, N2} -> N2;
+                     error    -> FromNode
+                 end,
         rabbit_control_main:become(FromNode),
         start_mnesia(),
         Nodes = rabbit_mnesia:cluster_nodes(all),
-        case {lists:member(FromNode, Nodes), lists:member(ToNode, Nodes)} of
-            {true,  false} -> ok;
-            {false, _}     -> exit({node_not_in_cluster,     FromNode});
-            {_,     true}  -> exit({node_already_in_cluster, ToNode})
+        case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes)} of
+            {[], []} -> ok;
+            {F,  []} -> exit({nodes_not_in_cluster,     F});
+            {_,  T}  -> exit({nodes_already_in_cluster, T})
         end,
         rabbit_table:force_load(),
         rabbit_table:wait_for_replicated(),
@@ -58,10 +72,6 @@ rename(FromNode, ToNode, Others) ->
     after
         stop_mnesia()
     end.
-
-split_others([])         -> [];
-split_others([_])        -> exit(even_list_needed);
-split_others([A, B | T]) -> [{A, B} | split_others(T)].
 
 maybe_finish(AllNodes) ->
     case rabbit_file:read_term_file(rename_config_name()) of
@@ -171,9 +181,21 @@ rename_remote_node(FromNode, ToNode) ->
         {true,  _}     -> exit({old_node_running,        FromNode});
         {_,     false} -> exit({new_node_not_in_cluster, ToNode})
     end,
-    mnesia:del_table_copy(schema, FromNode),
+    {atomic, ok} = mnesia:del_table_copy(schema, FromNode),
     Map = mini_map(FromNode, ToNode),
-    {atomic, ok} = mnesia:transform_table(
-                     rabbit_durable_queue, fun (Q) -> update_term(Map, Q) end,
-                     record_info(fields, amqqueue)),
+    {atomic, _} = transform_table(rabbit_durable_queue, Map),
     ok.
+
+transform_table(Table, Map) ->
+    mnesia:sync_transaction(
+      fun () ->
+              mnesia:lock({table, Table}, write),
+              transform_table(Table, Map, mnesia:first(Table))
+      end).
+
+transform_table(Table, Map, '$end_of_table') ->
+    ok;
+transform_table(Table, Map, Key) ->
+    [Term] = mnesia:read(Table, Key, write),
+    ok = mnesia:write(Table, update_term(Map, Term), write),
+    transform_table(Table, Map, mnesia:next(Table, Key)).
