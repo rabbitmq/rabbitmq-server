@@ -83,7 +83,6 @@ maybe_finish(AllNodes) ->
 finish(FromNode, ToNode, AllNodes) ->
     case node() of
         ToNode ->
-            [{ok, _} = file:copy(new_conf_path(F), F) || F <- config_files()],
             case rabbit_upgrade:nodes_running(AllNodes) of
                 [] -> finish_primary(FromNode, ToNode);
                 _  -> finish_secondary(FromNode, ToNode, AllNodes)
@@ -92,6 +91,7 @@ finish(FromNode, ToNode, AllNodes) ->
             rabbit_log:info(
               "Abandoning rename from ~s to ~s since we are still ~s~n",
               [FromNode, ToNode, FromNode]),
+            [{ok, _} = file:copy(backup_of_conf(F), F) || F <- config_files()],
             delete_rename_files();
         _ ->
             %% Boot will almost certainly fail but we might as
@@ -149,7 +149,7 @@ config_files() ->
     [rabbit_node_monitor:running_nodes_filename(),
      rabbit_node_monitor:cluster_status_filename()].
 
-new_conf_path(Path) ->
+backup_of_conf(Path) ->
     filename:join([filename:dirname(Path),
                    temp_dir_name(),
                    filename:basename(Path)]).
@@ -159,8 +159,8 @@ convert_config_files(NodeMap) ->
 
 convert_config_file(NodeMap, Path) ->
     {ok, Term} = rabbit_file:read_term_file(Path),
-    ok = rabbit_file:write_term_file(
-           new_conf_path(Path), update_term(NodeMap, Term)).
+    {ok, _} = file:copy(Path, backup_of_conf(Path)),
+    ok = rabbit_file:write_term_file(Path, update_term(NodeMap, Term)).
 
 lookup_node(OldNode, NodeMap) ->
     case dict:find(OldNode, NodeMap) of
