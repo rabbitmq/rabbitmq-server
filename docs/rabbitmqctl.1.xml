@@ -429,7 +429,7 @@
           <term><cmdsynopsis><command>rename_cluster_node</command> <arg choice="req">oldnode1</arg> <arg choice="req">newnode1</arg> <arg choice="opt">oldnode2</arg> <arg choice="opt">newnode2 ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
-              Supports renaming of the local cluster node.
+              Supports renaming of cluster nodes in the local database.
             </para>
             <para>
               This subcommand causes rabbitmqctl to temporarily become
