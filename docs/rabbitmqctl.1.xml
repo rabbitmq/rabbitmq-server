@@ -426,6 +426,41 @@
           </listitem>
         </varlistentry>
         <varlistentry>
+          <term><cmdsynopsis><command>rename_cluster_node</command> <arg choice="req">oldnode1</arg> <arg choice="req">newnode1</arg> <arg choice="opt">oldnode2</arg> <arg choice="opt">newnode2 ...</arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Supports renaming of the local cluster node.
+            </para>
+            <para>
+              This subcommand causes rabbitmqctl to temporarily become
+              the node in order to make the change. The local cluster
+              node must therefore be completely stopped; other nodes
+              can be online or offline.
+            </para>
+            <para>
+              This subcommand takes an even number of arguments, in
+              pairs representing the old and new names for nodes. You
+              must specify the old and new names for this node and for
+              any other nodes that are stopped and being renamed at
+              the same time.
+            </para>
+            <para>
+              It is possible to stop all nodes and rename them all
+              simultaneously (in which case old and new names for all
+              nodes must be given to every node) or stop and rename
+              nodes one at a time (in which case each node only needs
+              to be told how its own name is changing).
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia</screen>
+            <para role="example">
+              This command will rename the node
+              <command>rabbit@misshelpful</command> to the node
+              <command>rabbit@cordelia</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
           <term><cmdsynopsis><command>update_cluster_nodes</command> <arg choice="req">clusternode</arg></cmdsynopsis>
           </term>
           <listitem>
