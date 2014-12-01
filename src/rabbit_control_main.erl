@@ -235,13 +235,10 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
                           [ClusterNode, false])
     end;
 
-action(rename_cluster_node, _Node, [FromNodeS, ToNodeS | OthersS], _Opts,
-       Inform) ->
-    Others = [list_to_atom(N) || N <- OthersS],
-    FromNode = list_to_atom(FromNodeS),
-    ToNode = list_to_atom(ToNodeS),
-    Inform("Renaming local cluster node ~s to ~s", [FromNode, ToNode]),
-    rabbit_mnesia_rename:rename(FromNode, ToNode, Others);
+action(rename_cluster_node, Node, NodesS, _Opts, Inform) ->
+    Nodes = split_list([list_to_atom(N) || N <- NodesS]),
+    Inform("Renaming cluster nodes:~n  ~p~n", [Nodes]),
+    rabbit_mnesia_rename:rename(Node, Nodes);
 
 action(force_boot, Node, [], _Opts, Inform) ->
     Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
@@ -729,3 +726,7 @@ prettify_typed_amqp_value(table,   Value) -> prettify_amqp_table(Value);
 prettify_typed_amqp_value(array,   Value) -> [prettify_typed_amqp_value(T, V) ||
                                                  {T, V} <- Value];
 prettify_typed_amqp_value(_Type,   Value) -> Value.
+
+split_list([])         -> [];
+split_list([_])        -> exit(even_list_needed);
+split_list([A, B | T]) -> [{A, B} | split_list(T)].
