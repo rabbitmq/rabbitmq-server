@@ -62,6 +62,7 @@ rename(Node, NodeMapList) ->
         rabbit_table:wait_for_replicated(),
         FromBackup = from_backup_name(),
         ToBackup = to_backup_name(),
+        ok = rabbit_file:ensure_dir(FromBackup),
         ok = mnesia:backup(FromBackup),
         stop_mnesia(),
         convert_backup(NodeMap, FromBackup, ToBackup),
@@ -82,6 +83,7 @@ maybe_finish(AllNodes) ->
 finish(FromNode, ToNode, AllNodes) ->
     case node() of
         ToNode ->
+            [{ok, _} = file:copy(new_conf_path(F), F) || F <- config_files()],
             case rabbit_upgrade:nodes_running(AllNodes) of
                 [] -> finish_primary(FromNode, ToNode);
                 _  -> finish_secondary(FromNode, ToNode, AllNodes)
@@ -90,7 +92,6 @@ finish(FromNode, ToNode, AllNodes) ->
             rabbit_log:info(
               "Abandoning rename from ~s to ~s since we are still ~s~n",
               [FromNode, ToNode, FromNode]),
-            convert_config_files(mini_map(ToNode, FromNode)),
             delete_rename_files();
         _ ->
             %% Boot will almost certainly fail but we might as
@@ -122,14 +123,13 @@ finish_secondary(FromNode, ToNode, AllNodes) ->
     delete_rename_files(),
     ok.
 
-delete_rename_files() ->
-    rabbit_file:delete(rename_config_name()),
-    rabbit_file:delete(from_backup_name()),
-    rabbit_file:delete(to_backup_name()).
+temp_dir_name()      -> "rename".
+dir()                -> rabbit_mnesia:dir() ++ "/" ++ temp_dir_name().
+from_backup_name()   -> dir() ++ "/backup-from".
+to_backup_name()     -> dir() ++ "/backup-to".
+rename_config_name() -> dir() ++ "/pending.config".
 
-from_backup_name()   -> rabbit_mnesia:dir() ++ "/rename-backup-from".
-to_backup_name()     -> rabbit_mnesia:dir() ++ "/rename-backup-to".
-rename_config_name() -> rabbit_mnesia:dir() ++ "/rename-pending.config".
+delete_rename_files() -> ok = rabbit_file:recursive_delete([dir()]).
 
 start_mnesia() -> rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia).
 stop_mnesia()  -> stopped = mnesia:stop().
@@ -145,14 +145,22 @@ convert_backup(NodeMap, FromBackup, ToBackup) ->
               end
       end, switched).
 
+config_files() ->
+    [rabbit_node_monitor:running_nodes_filename(),
+     rabbit_node_monitor:cluster_status_filename()].
+
+new_conf_path(Path) ->
+    filename:join([filename:dirname(Path),
+                   temp_dir_name(),
+                   filename:basename(Path)]).
+
 convert_config_files(NodeMap) ->
-    [convert_config_file(NodeMap, Path) ||
-        Path <- [rabbit_node_monitor:running_nodes_filename(),
-                 rabbit_node_monitor:cluster_status_filename()]].
+    [convert_config_file(NodeMap, Path) || Path <- config_files()].
 
 convert_config_file(NodeMap, Path) ->
     {ok, Term} = rabbit_file:read_term_file(Path),
-    ok = rabbit_file:write_term_file(Path, update_term(NodeMap, Term)).
+    ok = rabbit_file:write_term_file(
+           new_conf_path(Path), update_term(NodeMap, Term)).
 
 lookup_node(OldNode, NodeMap) ->
     case dict:find(OldNode, NodeMap) of
@@ -193,7 +201,7 @@ transform_table(Table, Map) ->
               transform_table(Table, Map, mnesia:first(Table))
       end).
 
-transform_table(Table, Map, '$end_of_table') ->
+transform_table(_Table, _Map, '$end_of_table') ->
     ok;
 transform_table(Table, Map, Key) ->
     [Term] = mnesia:read(Table, Key, write),
