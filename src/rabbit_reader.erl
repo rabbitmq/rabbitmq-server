@@ -59,9 +59,9 @@
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 -define(AUTH_NOTIFICATION_INFO_KEYS,
-        [peer_cert_validity, peer_cert_subject, peer_cert_issuer,
-         ssl_cipher, ssl_protocol, ssl, auth_mechanism, protocol,
-         peer_port, peer_host, name, vhost, host]).
+        [host, vhost, name, peer_host, peer_port, protocol, auth_mechanism,
+         ssl, ssl_protocol, ssl_cipher, peer_cert_issuer, peer_cert_subject,
+         peer_cert_validity]).
 
 -define(IS_RUNNING(State),
         (State#v1.connection_state =:= running orelse
@@ -1109,11 +1109,11 @@ auth_fail(Username, Msg, Args, AuthName,
 
 notify_auth_result(Username, AuthResult, Msg, Args, State) ->
     EventProps0 = [{connection_type, network}],
-    EventProps1 = lists:foldl(
-      fun
-          (name, Acc) -> [{connection_name, i(name, State)} | Acc];
-          (Item, Acc) -> [{Item, i(Item, State)} | Acc]
-      end, EventProps0, ?AUTH_NOTIFICATION_INFO_KEYS),
+    EventProps1 = EventProps0 ++ [
+      case Item of
+          name -> {connection_name, i(name, State)};
+          _    -> {Item, i(Item, State)}
+      end || Item <- ?AUTH_NOTIFICATION_INFO_KEYS],
     EventProps2 = case Username of
         none -> [{name, ''} | EventProps1];
         _    -> [{name, Username} | EventProps1]
