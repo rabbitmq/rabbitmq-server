@@ -58,6 +58,11 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
+-define(AUTH_NOTIFICATION_INFO_KEYS,
+        [peer_cert_validity, peer_cert_subject, peer_cert_issuer,
+         ssl_cipher, ssl_protocol, ssl, auth_mechanism, protocol,
+         peer_port, peer_host, name, vhost, host]).
+
 -define(IS_RUNNING(State),
         (State#v1.connection_state =:= running orelse
          State#v1.connection_state =:= blocking orelse
@@ -1108,21 +1113,7 @@ notify_auth_result(Username, AuthResult, Msg, Args, State) ->
       fun
           (name, Acc) -> [{connection_name, i(name, State)} | Acc];
           (Item, Acc) -> [{Item, i(Item, State)} | Acc]
-      end, EventProps0, [
-        peer_cert_validity,
-        peer_cert_subject,
-        peer_cert_issuer,
-        ssl_cipher,
-        ssl_protocol,
-        ssl,
-        auth_mechanism,
-        protocol,
-        peer_port,
-        peer_host,
-        name,
-        vhost,
-        host
-      ]),
+      end, EventProps0, ?AUTH_NOTIFICATION_INFO_KEYS),
     EventProps2 = case Username of
         none -> [{name, ''} | EventProps1];
         _    -> [{name, Username} | EventProps1]
