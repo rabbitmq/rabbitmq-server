@@ -208,7 +208,27 @@ clean_plugin(Plugin, ExpandDir) ->
     delete_recursively(rabbit_misc:format("~s/~s", [ExpandDir, Plugin])).
 
 prepare_dir_plugin(PluginAppDescPath) ->
-    code:add_patha(filename:dirname(PluginAppDescPath)).
+    PluginEbinDir = filename:dirname(PluginAppDescPath),
+    Plugin = filename:basename(PluginAppDescPath, ".app"),
+    code:add_patha(PluginEbinDir),
+    case filelib:wildcard(PluginEbinDir++ "/*.beam") of
+        [] ->
+            ok;
+        [BeamPath | _] ->
+            Module = list_to_atom(filename:basename(BeamPath, ".beam")),
+            case code:ensure_loaded(Module) of
+                {module, _} ->
+                    ok;
+                {error, badfile} ->
+                    rabbit_log:error("Failed to enable plugin \"~s\": "
+                                     "it may have been built with an "
+                                     "incompatible (more recent?) "
+                                     "version of Erlang~n", [Plugin]),
+                    throw({plugin_built_with_incompatible_erlang, Plugin});
+                Error ->
+                    throw({plugin_module_unloadable, Plugin, Error})
+            end
+    end.
 
 %%----------------------------------------------------------------------------
 
