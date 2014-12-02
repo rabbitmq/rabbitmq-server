@@ -6,6 +6,7 @@
   {mod, {rabbit_mqtt, []}},
   {env, [{default_user, <<"guest">>},
          {default_pass, <<"guest">>},
+         {ssl_cert_login,false},
          {allow_anonymous, true},
          {vhost, <<"/">>},
          {exchange, <<"amq.topic">>},

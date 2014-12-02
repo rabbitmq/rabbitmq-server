@@ -52,7 +52,7 @@ handle_cast({go, Sock0, SockTransform, KeepaliveSup}, undefined) ->
                 {ok, Sock} ->
                     rabbit_alarm:register(
                       self(), {?MODULE, conserve_resources, []}),
-                    ProcessorState = rabbit_mqtt_processor:initial_state(Sock),
+                    ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(Sock)),
                     {noreply,
                      control_throttle(
                        #state{socket           = Sock,
@@ -190,6 +190,17 @@ terminate(_Reason, #state{proc_state = ProcState}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+ssl_login_name(Sock) ->
+  case rabbit_net:peercert(Sock) of
+      {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(C) of
+                                    unsafe    -> none;
+                                    not_found -> none;
+                                    Name      -> Name
+                                end;
+      {error, no_peercert} -> none;
+      nossl                -> none
+  end.
 
 %%----------------------------------------------------------------------------
 
