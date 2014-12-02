@@ -85,26 +85,24 @@ connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
         true  -> case AuthFun() of
                      {ok, User = #user{username = Username}} ->
                          notify_auth_result(Username,
-                           user_authentication_success, "", []),
+                           user_authentication_success, []),
                          connect1(User, VHost, Protocol, Pid, Infos);
                      {refused, Username, Msg, Args} ->
                          notify_auth_result(Username,
-                           user_authentication_failure, Msg, Args),
+                           user_authentication_failure,
+                           [{error, rabbit_misc:format(Msg, Args)}]),
                          {error, {auth_failure, "Refused"}}
                  end;
         false -> {error, broker_not_found_on_node}
     end.
 
-notify_auth_result(Username, AuthResult, Msg, Args) ->
+notify_auth_result(Username, AuthResult, ExtraProps) ->
     EventProps0 = [{connection_type, direct}],
     EventProps1 = case Username of
         none -> [{name, ''} | EventProps0];
         _    -> [{name, Username} | EventProps0]
     end,
-    EventProps = case Msg of
-        "" -> EventProps1;
-        _  -> [{error, rabbit_misc:format(Msg, Args)} | EventProps1]
-    end,
+    EventProps = EventProps1 ++ ExtraProps,
     rabbit_event:notify(AuthResult, EventProps).
 
 connect1(User, VHost, Protocol, Pid, Infos) ->

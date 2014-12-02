@@ -1058,7 +1058,8 @@ auth_phase(Response,
             auth_fail(Username, Msg, Args, Name, State);
         {protocol_error, Msg, Args} ->
             notify_auth_result(none, user_authentication_failure,
-                               Msg, Args, State),
+                               [{error, rabbit_misc:format(Msg, Args)}],
+                               State),
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
             Secure = #'connection.secure'{challenge = Challenge},
@@ -1069,7 +1070,7 @@ auth_phase(Response,
             case rabbit_access_control:check_user_loopback(Username, Sock) of
                 ok ->
                     notify_auth_result(Username, user_authentication_success,
-                                       "", [], State);
+                                       [], State);
                 not_allowed ->
                     auth_fail(Username, "user '~s' can only connect via "
                               "localhost", [Username], Name, State)
@@ -1091,7 +1092,8 @@ auth_phase(Response,
 auth_fail(Username, Msg, Args, AuthName,
           State = #v1{connection = #connection{protocol     = Protocol,
                                                capabilities = Capabilities}}) ->
-    notify_auth_result(Username, user_authentication_failure, Msg, Args, State),
+    notify_auth_result(Username, user_authentication_failure,
+      [{error, rabbit_misc:format(Msg, Args)}], State),
     AmqpError = rabbit_misc:amqp_error(
                   access_refused, "~s login refused: ~s",
                   [AuthName, io_lib:format(Msg, Args)], none),
@@ -1110,7 +1112,7 @@ auth_fail(Username, Msg, Args, AuthName,
     end,
     rabbit_misc:protocol_error(AmqpError).
 
-notify_auth_result(Username, AuthResult, Msg, Args, State) ->
+notify_auth_result(Username, AuthResult, ExtraProps, State) ->
     EventProps0 = [{connection_type, network}],
     EventProps1 = EventProps0 ++ [
       case Item of
@@ -1129,10 +1131,7 @@ notify_auth_result(Username, AuthResult, Msg, Args, State) ->
         none -> [{name, ''} | EventProps2];
         _    -> [{name, Username} | EventProps2]
     end,
-    EventProps = case Msg of
-        "" -> EventProps3;
-        _  -> [{error, rabbit_misc:format(Msg, Args)} | EventProps3]
-    end,
+    EventProps = EventProps3 ++ ExtraProps,
     rabbit_event:notify(AuthResult, EventProps).
 
 %%--------------------------------------------------------------------------
