@@ -103,7 +103,7 @@ notify_auth_result(Username, AuthResult, Msg, Args) ->
     end,
     EventProps = case Msg of
         "" -> EventProps1;
-        _  -> [{error, lists:flatten(io_lib:format(Msg, Args))} | EventProps1]
+        _  -> [{error, rabbit_misc:format(Msg, Args)} | EventProps1]
     end,
     rabbit_event:notify(AuthResult, EventProps).
 
