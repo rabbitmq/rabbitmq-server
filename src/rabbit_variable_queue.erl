@@ -455,7 +455,11 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
         case IsDurable of
             true  -> C = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
                                                MsgOnDiskFun, AsyncCallback),
-                     {C, fun (MId) -> rabbit_msg_store:contains(MId, C) end};
+                     {C, fun (MsgId) when is_binary(MsgId) ->
+                                 rabbit_msg_store:contains(MsgId, C);
+                             (#basic_message{}) ->
+                                 true
+                         end};
             false -> {undefined, fun(_MsgId) -> false end}
         end,
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
