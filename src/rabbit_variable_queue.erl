@@ -362,7 +362,7 @@
              out_counter           :: non_neg_integer(),
              in_counter            :: non_neg_integer(),
              rates                 :: rates(),
-             msgs_on_disk          :: gb_sets:set(),
+             msgs_on_disk          :: gb_sets:set(), %% TODO fix confirms!
              msg_indices_on_disk   :: gb_sets:set(),
              unconfirmed           :: gb_sets:set(),
              confirmed             :: gb_sets:set(),
@@ -645,7 +645,7 @@ fetch(AckRequired, State) ->
             %% at this point, so read it in.
             {Msg, State2} = read_msg(MsgStatus, State1),
             {AckTag, State3} = remove(AckRequired, MsgStatus, State2),
-            {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
+            {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, State3}
     end.
 
 drop(AckRequired, State) ->
@@ -963,9 +963,19 @@ msg_status(IsPersistent, IsDelivered, SeqId,
                 index_on_disk = false,
                 msg_props     = MsgProps}.
 
+beta_msg_status({Msg = #basic_message{id = MsgId},
+                 SeqId, MsgProps, IsPersistent, IsDelivered}) ->
+    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered),
+    MS0#msg_status{msg_id = MsgId,
+                   msg    = Msg};
+
 beta_msg_status({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered}) ->
+    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered),
+    MS0#msg_status{msg_id = MsgId,
+                   msg    = undefined}.
+
+beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered) ->
   #msg_status{seq_id        = SeqId,
-              msg_id        = MsgId,
               msg           = undefined,
               is_persistent = IsPersistent,
               is_delivered  = IsDelivered,
@@ -973,7 +983,7 @@ beta_msg_status({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered}) ->
               index_on_disk = true,
               msg_props     = MsgProps}.
 
-trim_msg_status(MsgStatus) -> MsgStatus #msg_status { msg = undefined }.
+trim_msg_status(MsgStatus) -> MsgStatus.%% TODO #msg_status { msg = undefined }.
 
 with_msg_store_state({MSCStateP, MSCStateT},  true, Fun) ->
     {Result, MSCStateP1} = Fun(MSCStateP),
@@ -1002,21 +1012,21 @@ msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
       fun (MSCState1) ->
-              rabbit_msg_store:write_flow(MsgId, Msg, MSCState1)
+              ok %% rabbit_msg_store:write_flow(MsgId, Msg, MSCState1)
       end).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
     with_msg_store_state(
       MSCState, IsPersistent,
       fun (MSCState1) ->
-              rabbit_msg_store:read(MsgId, MSCState1)
+              exit(nah) %% rabbit_msg_store:read(MsgId, MSCState1)
       end).
 
 msg_store_remove(MSCState, IsPersistent, MsgIds) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
       fun (MCSState1) ->
-              rabbit_msg_store:remove(MsgIds, MCSState1)
+              ok %% rabbit_msg_store:remove(MsgIds, MCSState1)
       end).
 
 msg_store_close_fds(MSCState, IsPersistent) ->
@@ -1038,7 +1048,7 @@ maybe_write_delivered(true, SeqId, IndexState) ->
 betas_from_index_entries(List, TransientThreshold, RPA, DPA, IndexState) ->
     {Filtered, Delivers, Acks} =
         lists:foldr(
-          fun ({_MsgId, SeqId, _MsgProps, IsPersistent, IsDelivered} = M,
+          fun ({_MsgOrId, SeqId, _MsgProps, IsPersistent, IsDelivered} = M,
                {Filtered1, Delivers1, Acks1} = Acc) ->
                   case SeqId < TransientThreshold andalso not IsPersistent of
                       true  -> {Filtered1,
@@ -1308,11 +1318,11 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                  msg = Msg, msg_id = MsgId,
                                  is_persistent = IsPersistent }, MSCState)
   when Force orelse IsPersistent ->
-    Msg1 = Msg #basic_message {
-             %% don't persist any recoverable decoded properties
-             content = rabbit_binary_parser:clear_decoded_content(
-                         Msg #basic_message.content)},
-    ok = msg_store_write(MSCState, IsPersistent, MsgId, Msg1),
+    %% Msg1 = Msg #basic_message {
+    %%          %% don't persist any recoverable decoded properties
+    %%          content = rabbit_binary_parser:clear_decoded_content(
+    %%                      Msg #basic_message.content)},
+    %% ok = msg_store_write(MSCState, IsPersistent, MsgId, Msg1),
     MsgStatus #msg_status { msg_on_disk = true };
 maybe_write_msg_to_disk(_Force, MsgStatus, _MSCState) ->
     MsgStatus.
@@ -1322,6 +1332,7 @@ maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
     true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
     {MsgStatus, IndexState};
 maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
+                                   msg           = Msg,
                                    msg_id        = MsgId,
                                    seq_id        = SeqId,
                                    is_persistent = IsPersistent,
@@ -1329,8 +1340,12 @@ maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
                                    msg_props     = MsgProps}, IndexState)
   when Force orelse IsPersistent ->
     true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
+    Msg1 = Msg #basic_message {
+             %% don't persist any recoverable decoded properties
+             content = rabbit_binary_parser:clear_decoded_content(
+                         Msg #basic_message.content)},
     IndexState1 = rabbit_queue_index:publish(
-                    MsgId, SeqId, MsgProps, IsPersistent, IndexState),
+                    Msg1, SeqId, MsgProps, IsPersistent, IndexState),
     {MsgStatus #msg_status { index_on_disk = true },
      maybe_write_delivered(IsDelivered, SeqId, IndexState1)};
 maybe_write_index_to_disk(_Force, MsgStatus, IndexState) ->
@@ -1575,7 +1590,8 @@ next({delta, #delta{start_seq_id = SeqId,
                     end_seq_id   = SeqIdEnd} = Delta, State}, IndexState) ->
     SeqIdB = rabbit_queue_index:next_segment_boundary(SeqId),
     SeqId1 = lists:min([SeqIdB, SeqIdEnd]),
-    {List, IndexState1} = rabbit_queue_index:read(SeqId, SeqId1, IndexState),
+    {List, _, _, IndexState1} =
+        rabbit_queue_index:read(SeqId, SeqId1, IndexState),
     next({delta, Delta#delta{start_seq_id = SeqId1}, List, State}, IndexState1);
 next({delta, Delta, [], State}, IndexState) ->
     next({delta, Delta, State}, IndexState);
@@ -1744,6 +1760,8 @@ maybe_deltas_to_betas(State = #vqstate {
                         delta                = Delta,
                         q3                   = Q3,
                         index_state          = IndexState,
+                        ram_msg_count        = RamMsgCount,
+                        ram_bytes            = RamBytes,
                         ram_pending_ack      = RPA,
                         disk_pending_ack     = DPA,
                         transient_threshold  = TransientThreshold }) ->
@@ -1753,11 +1771,13 @@ maybe_deltas_to_betas(State = #vqstate {
     DeltaSeqId1 =
         lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
                    DeltaSeqIdEnd]),
-    {List, IndexState1} = rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1,
-                                                  IndexState),
+    {List, RamCountDelta, RamBytesDelta, IndexState1} =
+        rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
     {Q3a, IndexState2} = betas_from_index_entries(List, TransientThreshold,
                                                   RPA, DPA, IndexState1),
-    State1 = State #vqstate { index_state = IndexState2 },
+    State1 = State #vqstate { index_state   = IndexState2,
+                              ram_msg_count = RamMsgCount + RamCountDelta,
+                              ram_bytes     = RamBytes    + RamBytesDelta },
     case ?QUEUE:len(Q3a) of
         0 ->
             %% we ignored every message in the segment due to it being

@@ -128,8 +128,8 @@
 -define(REL_SEQ_ONLY_RECORD_BYTES, 2).
 
 %% publish record is binary 1 followed by a bit for is_persistent,
-%% then 14 bits of rel seq id, 64 bits for message expiry and 128 bits
-%% of md5sum msg id
+%% then 14 bits of rel seq id, 64 bits for message expiry, 32 bits of
+%% size and then 128 bits of md5sum msg id.
 -define(PUB_PREFIX, 1).
 -define(PUB_PREFIX_BITS, 1).
 
@@ -140,25 +140,36 @@
 -define(MSG_ID_BYTES, 16). %% md5sum is 128 bit or 16 bytes
 -define(MSG_ID_BITS, (?MSG_ID_BYTES * 8)).
 
+%% This is the size of the message body content, for stats
 -define(SIZE_BYTES, 4).
 -define(SIZE_BITS, (?SIZE_BYTES * 8)).
 
-%% 16 bytes for md5sum + 8 for expiry + 4 for size
--define(PUB_RECORD_BODY_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES + ?SIZE_BYTES)).
-%% + 2 for seq, bits and prefix
--define(PUB_RECORD_BYTES, (?PUB_RECORD_BODY_BYTES + 2)).
+%% This is the size of the message record embedded in the queue
+%% index. If 0, the message can be found in the message store.
+-define(MSG_IN_INDEX_SIZE_BYTES, 4).
+-define(MSG_IN_INDEX_SIZE_BITS, (?MSG_IN_INDEX_SIZE_BYTES * 8)).
 
-%% 1 publish, 1 deliver, 1 ack per msg
--define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
-            (?PUB_RECORD_BYTES + (2 * ?REL_SEQ_ONLY_RECORD_BYTES))).
+%% 16 bytes for md5sum + 8 for expiry + 4 for size
+-define(PUB_RECORD_BODY_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES + ?SIZE_BYTES +
+                                    ?MSG_IN_INDEX_SIZE_BYTES)).
+%% + 2 for seq, bits and prefix
+-define(PUB_RECORD_PREFIX_BYTES, 2).
+
+-define(PUB_RECORD_BYTES, (?PUB_RECORD_BODY_BYTES + ?PUB_RECORD_PREFIX_BYTES)).
+
+%% %% 1 publish, 1 deliver, 1 ack per msg
+%% -define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
+%%             (?PUB_RECORD_BYTES + (2 * ?REL_SEQ_ONLY_RECORD_BYTES))).
 
 %% ---- misc ----
 
 -define(PUB, {_, _, _}). %% {MsgId, MsgProps, IsPersistent}
 
 -define(READ_MODE, [binary, raw, read]).
--define(READ_AHEAD_MODE, [{read_ahead, ?SEGMENT_TOTAL_SIZE} | ?READ_MODE]).
+-define(READ_AHEAD_MODE, ?READ_MODE).
 -define(WRITE_MODE, [write | ?READ_MODE]).
+
+-define(READ_BUFFER_SIZE, 1048576). %% 1MB
 
 %%----------------------------------------------------------------------------
 
@@ -219,7 +230,8 @@
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_types:msg_id(), seq_id(),
                         rabbit_types:message_properties(),
-                        boolean(), boolean()}], qistate()}).
+                        boolean(), boolean()}],
+                      non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
@@ -267,9 +279,12 @@ delete_and_terminate(State) ->
     ok = rabbit_file:recursive_delete([Dir]),
     State1.
 
-publish(MsgId, SeqId, MsgProps, IsPersistent,
-        State = #qistate { unconfirmed = Unconfirmed })
-  when is_binary(MsgId) ->
+publish(MsgOrId, SeqId, MsgProps, IsPersistent,
+        State = #qistate { unconfirmed = Unconfirmed }) ->
+    MsgId = case MsgOrId of
+                #basic_message{id = Id} -> Id;
+                Id when is_binary(Id)   -> Id
+            end,
     ?MSG_ID_BYTES = size(MsgId),
     {JournalHdl, State1} =
         get_journal_handle(
@@ -284,9 +299,9 @@ publish(MsgId, SeqId, MsgProps, IsPersistent,
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS,
                           SeqId:?SEQ_BITS>>,
-                        create_pub_record_body(MsgId, MsgProps)]),
+                        create_pub_record_body(MsgOrId, MsgProps)]),
     maybe_flush_journal(
-      add_to_journal(SeqId, {MsgId, MsgProps, IsPersistent}, State1)).
+      add_to_journal(SeqId, {MsgOrId, MsgProps, IsPersistent}, State1)).
 
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
@@ -323,11 +338,12 @@ read(Start, End, State = #qistate { segments = Segments,
     %% Start is inclusive, End is exclusive.
     LowerB = {StartSeg, _StartRelSeq} = seq_id_to_seg_and_rel_seq_id(Start),
     UpperB = {EndSeg,   _EndRelSeq}   = seq_id_to_seg_and_rel_seq_id(End - 1),
-    {Messages, Segments1} =
+    {Messages, {BodiesRead, BodyBytesRead}, Segments1} =
         lists:foldr(fun (Seg, Acc) ->
                             read_bounded_segment(Seg, LowerB, UpperB, Acc, Dir)
-                    end, {[], Segments}, lists:seq(StartSeg, EndSeg)),
-    {Messages, State #qistate { segments = Segments1 }}.
+                    end, {[], {0, 0}, Segments}, lists:seq(StartSeg, EndSeg)),
+    {Messages, BodiesRead, BodyBytesRead,
+     State #qistate { segments = Segments1 }}.
 
 next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
@@ -541,7 +557,8 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
 queue_index_walker_reader(QueueName, Gatherer) ->
     State = blank_state(QueueName),
     ok = scan_segments(
-           fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok) ->
+           fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok)
+                 when is_binary(MsgId) ->
                    gatherer:sync_in(Gatherer, {MsgId, 1});
                (_SeqId, _MsgId, _MsgProps, _IsPersistent, _IsDelivered,
                 _IsAcked, Acc) ->
@@ -555,9 +572,9 @@ scan_segments(Fun, Acc, State) ->
     Result = lists:foldr(
       fun (Seg, AccN) ->
               segment_entries_foldr(
-                fun (RelSeq, {{MsgId, MsgProps, IsPersistent},
+                fun (RelSeq, {{MsgOrId, MsgProps, IsPersistent},
                               IsDelivered, IsAcked}, AccM) ->
-                        Fun(reconstruct_seq_id(Seg, RelSeq), MsgId, MsgProps,
+                        Fun(reconstruct_seq_id(Seg, RelSeq), MsgOrId, MsgProps,
                             IsPersistent, IsDelivered, IsAcked, AccM)
                 end, AccN, segment_find_or_new(Seg, Dir, Segments))
       end, Acc, all_segment_nums(State1)),
@@ -568,24 +585,42 @@ scan_segments(Fun, Acc, State) ->
 %% expiry/binary manipulation
 %%----------------------------------------------------------------------------
 
-create_pub_record_body(MsgId, #message_properties { expiry = Expiry,
-                                                    size   = Size }) ->
-    [MsgId, expiry_to_binary(Expiry), <<Size:?SIZE_BITS>>].
+create_pub_record_body(MsgOrId, #message_properties { expiry = Expiry,
+                                                      size   = Size }) ->
+    case MsgOrId of
+        MsgId when is_binary(MsgId) ->
+            [MsgId, expiry_to_binary(Expiry), <<Size:?SIZE_BITS>>,
+             <<0:?MSG_IN_INDEX_SIZE_BITS>>];
+        #basic_message{id = MsgId} ->
+            MsgBin = term_to_binary(MsgOrId),
+            MsgBinSize = size(MsgBin),
+            [MsgId, expiry_to_binary(Expiry), <<Size:?SIZE_BITS>>,
+             <<MsgBinSize:?MSG_IN_INDEX_SIZE_BITS>>, MsgBin]
+    end.
 
 expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
 expiry_to_binary(Expiry)    -> <<Expiry:?EXPIRY_BITS>>.
 
-parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
-                        Size:?SIZE_BITS>>) ->
+read_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
+                       Size:?SIZE_BITS, IndexSize:?MSG_IN_INDEX_SIZE_BITS>>,
+                     Hdl) ->
     %% work around for binary data fragmentation. See
     %% rabbit_msg_file:read_next/2
     <<MsgId:?MSG_ID_BYTES/binary>> = <<MsgIdNum:?MSG_ID_BITS>>,
-    Exp = case Expiry of
-              ?NO_EXPIRY -> undefined;
-              X          -> X
-          end,
-    {MsgId, #message_properties { expiry = Exp,
-                                  size   = Size }}.
+    Props = #message_properties{expiry = case Expiry of
+                                             ?NO_EXPIRY -> undefined;
+                                             X          -> X
+                                         end,
+                                size   = Size},
+    case IndexSize of
+        0 -> {MsgId, Props};
+        _ -> case file_handle_cache:read(Hdl, IndexSize) of
+                 {ok, MsgBin} -> Msg = #basic_message{id = MsgId} =
+                                     binary_to_term(MsgBin),
+                                 {Msg, Props};
+                 _            -> exit(could_not_read)
+             end
+    end.
 
 %%----------------------------------------------------------------------------
 %% journal manipulation
@@ -719,14 +754,14 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                         {ok, <<0:?PUB_RECORD_BODY_BYTES/unit:8>>} ->
                             State;
                         {ok, <<Bin:?PUB_RECORD_BODY_BYTES/binary>>} ->
-                            {MsgId, MsgProps} = parse_pub_record_body(Bin),
+                            {MsgOrId, Props} = read_pub_record_body(Bin, Hdl),
                             IsPersistent = case Prefix of
                                                ?PUB_PERSIST_JPREFIX -> true;
                                                ?PUB_TRANS_JPREFIX   -> false
                                            end,
                             load_journal_entries(
                               add_to_journal(
-                                SeqId, {MsgId, MsgProps, IsPersistent}, State));
+                                SeqId, {MsgOrId, Props, IsPersistent}, State));
                         _ErrOrEoF -> %% err, we've lost at least a publish
                             State
                     end
@@ -829,12 +864,22 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
     ok = case Pub of
              no_pub ->
                  ok;
-             {MsgId, MsgProps, IsPersistent} ->
+             {MsgOrId, MsgProps, IsPersistent} ->
+                 %% Body = create_pub_record_body(MsgOrId, MsgProps),
+                 %% io:format("pub ~p~n",
+                 %%           [[{persist, IsPersistent},
+                 %%                         {relseq, RelSeq},
+                 %%                         {body, Body}]]),
+                 %% io:format("write ~p~n",
+                 %%           [iolist_to_binary([<<?PUB_PREFIX:?PUB_PREFIX_BITS,
+                 %%                                (bool_to_int(IsPersistent)):1,
+                 %%                                RelSeq:?REL_SEQ_BITS>>,
+                 %%                              Body])]),
                  file_handle_cache:append(
                    Hdl, [<<?PUB_PREFIX:?PUB_PREFIX_BITS,
                            (bool_to_int(IsPersistent)):1,
                            RelSeq:?REL_SEQ_BITS>>,
-                         create_pub_record_body(MsgId, MsgProps)])
+                         create_pub_record_body(MsgOrId, MsgProps)])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
@@ -851,24 +896,33 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
     Hdl.
 
 read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
-                     {Messages, Segments}, Dir) ->
+                     {Messages, BodyReadCounts, Segments}, Dir) ->
     Segment = segment_find_or_new(Seg, Dir, Segments),
-    {segment_entries_foldr(
-       fun (RelSeq, {{MsgId, MsgProps, IsPersistent}, IsDelivered, no_ack}, Acc)
-             when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
-                  (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
-               [ {MsgId, reconstruct_seq_id(StartSeg, RelSeq), MsgProps,
-                  IsPersistent, IsDelivered == del} | Acc ];
-           (_RelSeq, _Value, Acc) ->
-               Acc
-       end, Messages, Segment),
-     segment_store(Segment, Segments)}.
+    {Messages1, BodyReadCounts1} =
+        segment_entries_foldr(
+          fun (RelSeq, {{MsgOrId, MsgProps, IsPersistent}, IsDelivered, no_ack},
+               {Acc, BodyReadAcc})
+                when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
+                     (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
+                  {[{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), MsgProps,
+                     IsPersistent, IsDelivered == del} | Acc],
+                   incr_body_read_counts(MsgOrId, MsgProps, BodyReadAcc)};
+              (_RelSeq, _Value, Acc) ->
+                  Acc
+          end, {Messages, BodyReadCounts}, Segment),
+    {Messages1, BodyReadCounts1, segment_store(Segment, Segments)}.
 
 segment_entries_foldr(Fun, Init,
                       Segment = #segment { journal_entries = JEntries }) ->
     {SegEntries, _UnackedCount} = load_segment(false, Segment),
     {SegEntries1, _UnackedCountD} = segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldr(Fun, Init, SegEntries1).
+
+incr_body_read_counts(MsgId, _MsgProps, Counts) when is_binary(MsgId) ->
+    Counts;
+incr_body_read_counts(#basic_message{}, #message_properties{size = Size},
+                      {BodiesRead, BodyBytesRead}) ->
+    {BodiesRead + 1, BodyBytesRead + Size}.
 
 %% Loading segments
 %%
@@ -877,44 +931,50 @@ load_segment(KeepAcked, #segment { path = Path }) ->
     Empty = {array_new(), 0},
     case rabbit_file:is_file(Path) of
         false -> Empty;
-        true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_AHEAD_MODE, []),
+        true  -> {ok, Hdl} = file_handle_cache:open(
+                               Path, ?READ_AHEAD_MODE,
+                               [{read_buffer, ?READ_BUFFER_SIZE}]),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
-                 Res = case file_handle_cache:read(Hdl, ?SEGMENT_TOTAL_SIZE) of
-                           {ok, SegData} -> load_segment_entries(
-                                              KeepAcked, SegData, Empty);
-                           eof           -> Empty
-                       end,
+                 Res = load_segment_entries(Hdl, KeepAcked, Empty),
                  ok = file_handle_cache:close(Hdl),
                  Res
     end.
 
-load_segment_entries(KeepAcked,
-                     <<?PUB_PREFIX:?PUB_PREFIX_BITS,
-                       IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
-                       PubRecordBody:?PUB_RECORD_BODY_BYTES/binary,
-                       SegData/binary>>,
-                     {SegEntries, UnackedCount}) ->
-    {MsgId, MsgProps} = parse_pub_record_body(PubRecordBody),
-    Obj = {{MsgId, MsgProps, 1 == IsPersistentNum}, no_del, no_ack},
-    SegEntries1 = array:set(RelSeq, Obj, SegEntries),
-    load_segment_entries(KeepAcked, SegData, {SegEntries1, UnackedCount + 1});
-load_segment_entries(KeepAcked,
-                     <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                       RelSeq:?REL_SEQ_BITS, SegData/binary>>,
-                     {SegEntries, UnackedCount}) ->
-    {UnackedCountDelta, SegEntries1} =
-        case array:get(RelSeq, SegEntries) of
-            {Pub, no_del, no_ack} ->
-                { 0, array:set(RelSeq, {Pub, del, no_ack}, SegEntries)};
-            {Pub, del, no_ack} when KeepAcked ->
-                {-1, array:set(RelSeq, {Pub, del, ack}, SegEntries)};
-            {_Pub, del, no_ack} ->
-                {-1, array:reset(RelSeq, SegEntries)}
-        end,
-    load_segment_entries(KeepAcked, SegData,
-                         {SegEntries1, UnackedCount + UnackedCountDelta});
-load_segment_entries(_KeepAcked, _SegData, Res) ->
-    Res.
+load_segment_entries(Hdl, KeepAcked, Acc) ->
+    case file_handle_cache:read(Hdl, ?PUB_RECORD_PREFIX_BYTES) of
+        {ok, <<?PUB_PREFIX:?PUB_PREFIX_BITS,
+               IsPersistNum:1, RelSeq:?REL_SEQ_BITS>>} ->
+            load_segment_entries(
+              Hdl, KeepAcked,
+              load_segment_publish_entry(Hdl, 1 == IsPersistNum, RelSeq, Acc));
+        {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
+               RelSeq:?REL_SEQ_BITS>>} ->
+            load_segment_entries(
+              Hdl, KeepAcked, add_segment_relseq_entry(KeepAcked, RelSeq, Acc));
+        eof -> %% TODO or maybe _
+            Acc
+    end.
+
+load_segment_publish_entry(Hdl, IsPersistent, RelSeq, {SegEntries, Unacked}) ->
+    case file_handle_cache:read(Hdl, ?PUB_RECORD_BODY_BYTES) of
+        {ok, <<PubRecordBody:?PUB_RECORD_BODY_BYTES/binary>>} ->
+            {MsgOrId, MsgProps} = read_pub_record_body(PubRecordBody, Hdl),
+            Obj = {{MsgOrId, MsgProps, IsPersistent}, no_del, no_ack},
+            SegEntries1 = array:set(RelSeq, Obj, SegEntries),
+            {SegEntries1, Unacked + 1};
+        _ ->
+            {SegEntries, Unacked}
+    end.
+
+add_segment_relseq_entry(KeepAcked, RelSeq, {SegEntries, Unacked}) ->
+    case array:get(RelSeq, SegEntries) of
+        {Pub, no_del, no_ack} ->
+            {array:set(RelSeq, {Pub, del, no_ack}, SegEntries), Unacked};
+        {Pub, del, no_ack} when KeepAcked ->
+            {array:set(RelSeq, {Pub, del, ack},    SegEntries), Unacked - 1};
+        {_Pub, del, no_ack} ->
+            {array:reset(RelSeq,                   SegEntries), Unacked - 1}
+    end.
 
 array_new() ->
     array:new([{default, undefined}, fixed, {size, ?SEGMENT_ENTRY_COUNT}]).
@@ -1124,6 +1184,8 @@ store_msg_size_segment(_) ->
 
 %%----------------------------------------------------------------------------
 
+%% TODO here?
+
 foreach_queue_index(Funs) ->
     QueuesDir = queues_dir(),
     QueueDirNames = all_queue_directory_names(QueuesDir),
@@ -1157,7 +1219,8 @@ transform_file(Path, Fun) when is_function(Fun)->
                                            [{write_buffer, infinity}]),
 
                 {ok, PathHdl} = file_handle_cache:open(
-                                  Path, [{read_ahead, Size} | ?READ_MODE], []),
+                                  Path, [{read_ahead, Size} | ?READ_MODE],
+                                  [{read_buffer, ?READ_BUFFER_SIZE}]),
                 {ok, Content} = file_handle_cache:read(PathHdl, Size),
                 ok = file_handle_cache:close(PathHdl),
 
