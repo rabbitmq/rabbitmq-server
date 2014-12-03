@@ -26,3 +26,17 @@ http://www.rabbitmq.com/community-plugins.html.
 
 You can build and install it like any other plugin (see
 [the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
+
+# API
+
+You can drive the HTTP API yourself. It installs into the management plugin's API; you should understand that first. Once you do, the additional paths look like:
+
+    /api/top/<node-name>
+
+List of processes. Takes similar query string parameters to other
+lists, `sort`, `sort_reverse` and `columns`. Sorting is quite
+important as it currently hard-codes returning the top 20 processes.
+
+    /api/process/<pid>
+
+Individual process details.
