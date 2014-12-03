@@ -1,8 +1,0 @@
-This package, the RabbitMQ server is licensed under the MPL. For the
-MPL, please see LICENSE-MPL-RabbitMQ.
-
-The files `mochijson2.erl' and `mochinum.erl' are (c) 2007 Mochi Media, Inc and
-licensed under a MIT license, see LICENSE-MIT-Mochi.
-
-If you have any questions regarding licensing, please contact us at
-info@rabbitmq.com.
