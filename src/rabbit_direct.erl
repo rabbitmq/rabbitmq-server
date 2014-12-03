@@ -100,7 +100,7 @@ notify_auth_result(Username, AuthResult, ExtraProps) ->
     EventProps = [{connection_type, direct}] ++
                  [{name, case Username of none -> ''; _ -> Username end}] ++
                  ExtraProps,
-    rabbit_event:notify(AuthResult, EventProps).
+    rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
 connect1(User, VHost, Protocol, Pid, Infos) ->
     try rabbit_access_control:check_vhost_access(User, VHost, undefined) of
