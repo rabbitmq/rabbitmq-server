@@ -2422,7 +2422,7 @@ variable_queue_init(Q, Recover) ->
       Q, case Recover of
              true  -> non_clean_shutdown;
              false -> new
-         end, fun nop/2, fun nop/2, fun nop/1).
+         end, fun nop/2, fun nop/2, fun nop/1, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).

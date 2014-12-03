@@ -16,7 +16,7 @@
 
 -module(rabbit_queue_index).
 
--export([erase/1, init/2, recover/5,
+-export([erase/1, init/3, recover/6,
          terminate/2, delete_and_terminate/1,
          publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
@@ -173,10 +173,11 @@
 
 %%----------------------------------------------------------------------------
 
--record(qistate, { dir, segments, journal_handle, dirty_count,
-                   max_journal_entries, on_sync, unconfirmed }).
+-record(qistate, {dir, segments, journal_handle, dirty_count,
+                  max_journal_entries, on_sync, on_sync_msg,
+                  unconfirmed, unconfirmed_msg}).
 
--record(segment, { num, path, journal_entries, unacked }).
+-record(segment, {num, path, journal_entries, unacked}).
 
 -include("rabbit.hrl").
 
@@ -204,7 +205,9 @@
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
-                              unconfirmed         :: gb_sets:set()
+                              on_sync_msg         :: on_sync_fun(),
+                              unconfirmed         :: gb_sets:set(),
+                              unconfirmed_msg     :: gb_sets:set()
                             }).
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
@@ -212,9 +215,11 @@
 -type(shutdown_terms() :: [term()] | 'non_clean_shutdown').
 
 -spec(erase/1 :: (rabbit_amqqueue:name()) -> 'ok').
--spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
--spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
-                    contains_predicate(), on_sync_fun()) ->
+-spec(init/3 :: (rabbit_amqqueue:name(),
+                 on_sync_fun(), on_sync_fun()) -> qistate()).
+-spec(recover/6 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
+                    contains_predicate(),
+                    on_sync_fun(), on_sync_fun()) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
@@ -253,14 +258,17 @@ erase(Name) ->
         false -> ok
     end.
 
-init(Name, OnSyncFun) ->
+init(Name, OnSyncFun, OnSyncMsgFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
-    State #qistate { on_sync = OnSyncFun }.
+    State#qistate{on_sync     = OnSyncFun,
+                  on_sync_msg = OnSyncMsgFun}.
 
-recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
+recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun,
+        OnSyncFun, OnSyncMsgFun) ->
     State = blank_state(Name),
-    State1 = State #qistate { on_sync = OnSyncFun },
+    State1 = State #qistate{on_sync     = OnSyncFun,
+                            on_sync_msg = OnSyncMsgFun},
     CleanShutdown = Terms /= non_clean_shutdown,
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
@@ -280,7 +288,8 @@ delete_and_terminate(State) ->
     State1.
 
 publish(MsgOrId, SeqId, MsgProps, IsPersistent,
-        State = #qistate { unconfirmed = Unconfirmed }) ->
+        State = #qistate{unconfirmed     = UC,
+                         unconfirmed_msg = UCM}) ->
     MsgId = case MsgOrId of
                 #basic_message{id = Id} -> Id;
                 Id when is_binary(Id)   -> Id
@@ -288,10 +297,12 @@ publish(MsgOrId, SeqId, MsgProps, IsPersistent,
     ?MSG_ID_BYTES = size(MsgId),
     {JournalHdl, State1} =
         get_journal_handle(
-          case MsgProps#message_properties.needs_confirming of
-              true  -> Unconfirmed1 = gb_sets:add_element(MsgId, Unconfirmed),
-                       State #qistate { unconfirmed = Unconfirmed1 };
-              false -> State
+          case {MsgProps#message_properties.needs_confirming, MsgOrId} of
+              {true,  MsgId} -> UC1  = gb_sets:add_element(MsgId, UC),
+                                State#qistate{unconfirmed     = UC1};
+              {true,  _}     -> UCM1 = gb_sets:add_element(MsgId, UCM),
+                                State#qistate{unconfirmed_msg = UCM1};
+              {false, _}     -> State
           end),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
@@ -317,10 +328,12 @@ sync(State = #qistate { journal_handle = JournalHdl }) ->
     ok = file_handle_cache:sync(JournalHdl),
     notify_sync(State).
 
-needs_sync(#qistate { journal_handle = undefined }) ->
+needs_sync(#qistate{journal_handle = undefined}) ->
     false;
-needs_sync(#qistate { journal_handle = JournalHdl, unconfirmed = UC }) ->
-    case gb_sets:is_empty(UC) of
+needs_sync(#qistate{journal_handle  = JournalHdl,
+                    unconfirmed     = UC,
+                    unconfirmed_msg = UCM}) ->
+    case gb_sets:is_empty(UC) andalso gb_sets:is_empty(UCM) of
         true  -> case file_handle_cache:needs_sync(JournalHdl) of
                      true  -> other;
                      false -> false
@@ -425,7 +438,9 @@ blank_state_dir(Dir) ->
                dirty_count         = 0,
                max_journal_entries = MaxJournal,
                on_sync             = fun (_) -> ok end,
-               unconfirmed         = gb_sets:new() }.
+               on_sync_msg         = fun (_) -> ok end,
+               unconfirmed         = gb_sets:new(),
+               unconfirmed_msg     = gb_sets:new() }.
 
 init_clean(RecoveredCounts, State) ->
     %% Load the journal. Since this is a clean recovery this (almost)
@@ -781,11 +796,19 @@ deliver_or_ack(Kind, SeqIds, State) ->
                                             add_to_journal(SeqId, Kind, StateN)
                                     end, State1, SeqIds)).
 
-notify_sync(State = #qistate { unconfirmed = UC, on_sync = OnSyncFun }) ->
-    case gb_sets:is_empty(UC) of
-        true  -> State;
-        false -> OnSyncFun(UC),
-                 State #qistate { unconfirmed = gb_sets:new() }
+notify_sync(State = #qistate{unconfirmed     = UC,
+                             unconfirmed_msg = UCM,
+                             on_sync         = OnSyncFun,
+                             on_sync_msg     = OnSyncMsgFun}) ->
+    State1 = case gb_sets:is_empty(UC) of
+                 true  -> State;
+                 false -> OnSyncFun(UC),
+                          State#qistate{unconfirmed = gb_sets:new()}
+             end,
+    case gb_sets:is_empty(UCM) of
+        true  -> State1;
+        false -> OnSyncMsgFun(UCM),
+                 State1#qistate{unconfirmed_msg = gb_sets:new()}
     end.
 
 %%----------------------------------------------------------------------------

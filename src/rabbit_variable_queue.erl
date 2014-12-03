@@ -28,7 +28,7 @@
 -export([start/1, stop/0]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0, init/5]).
+-export([start_msg_store/2, stop_msg_store/0, init/6]).
 
 %%----------------------------------------------------------------------------
 %% Definitions:
@@ -362,7 +362,7 @@
              out_counter           :: non_neg_integer(),
              in_counter            :: non_neg_integer(),
              rates                 :: rates(),
-             msgs_on_disk          :: gb_sets:set(), %% TODO fix confirms!
+             msgs_on_disk          :: gb_sets:set(),
              msg_indices_on_disk   :: gb_sets:set(),
              unconfirmed           :: gb_sets:set(),
              confirmed             :: gb_sets:set(),
@@ -426,16 +426,19 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
-init(Queue, Recover, AsyncCallback) ->
-    init(Queue, Recover, AsyncCallback,
-         fun (MsgIds, ActionTaken) ->
-                 msgs_written_to_disk(AsyncCallback, MsgIds, ActionTaken)
-         end,
-         fun (MsgIds) -> msg_indices_written_to_disk(AsyncCallback, MsgIds) end).
+init(Queue, Recover, Callback) ->
+    init(
+      Queue, Recover, Callback,
+      fun (MsgIds, ActionTaken) ->
+              msgs_written_to_disk(Callback, MsgIds, ActionTaken)
+      end,
+      fun (MsgIds) -> msg_indices_written_to_disk(Callback, MsgIds) end,
+      fun (MsgIds) -> msgs_and_indices_written_to_disk(Callback, MsgIds) end).
 
 init(#amqqueue { name = QueueName, durable = IsDurable }, new,
-     AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
-    IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
+     AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) ->
+    IndexState = rabbit_queue_index:init(QueueName,
+                                         MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     init(IsDurable, IndexState, 0, 0, [],
          case IsDurable of
              true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
@@ -446,7 +449,7 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, new,
 
 %% We can be recovering a transient queue if it crashed
 init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
-     AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+     AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) ->
     {PRef, RecoveryTerms} = process_recovery_terms(Terms),
     {PersistentClient, ContainsCheckFun} =
         case IsDurable of
@@ -461,7 +464,7 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
         rabbit_queue_index:recover(
           QueueName, RecoveryTerms,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
-          ContainsCheckFun, MsgIdxOnDiskFun),
+          ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     init(IsDurable, IndexState, DeltaCount, DeltaBytes, RecoveryTerms,
          PersistentClient, TransientClient).
 
@@ -1478,6 +1481,10 @@ msg_indices_written_to_disk(Callback, MsgIdSet) ->
                                        msg_indices_on_disk =
                                            gb_sets:union(MIOD, Confirmed) })
              end).
+
+msgs_and_indices_written_to_disk(Callback, MsgIdSet) ->
+    Callback(?MODULE,
+             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end).
 
 %%----------------------------------------------------------------------------
 %% Internal plumbing for requeue
