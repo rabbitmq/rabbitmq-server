@@ -97,12 +97,9 @@ connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
     end.
 
 notify_auth_result(Username, AuthResult, ExtraProps) ->
-    EventProps0 = [{connection_type, direct}],
-    EventProps1 = case Username of
-        none -> [{name, ''} | EventProps0];
-        _    -> [{name, Username} | EventProps0]
-    end,
-    EventProps = EventProps1 ++ ExtraProps,
+    EventProps = [{connection_type, direct}] ++
+                 [{name, case Username of none -> ''; _ -> Username end}] ++
+                 ExtraProps,
     rabbit_event:notify(AuthResult, EventProps).
 
 connect1(User, VHost, Protocol, Pid, Infos) ->

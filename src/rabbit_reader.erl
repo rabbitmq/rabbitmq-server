@@ -1113,25 +1113,20 @@ auth_fail(Username, Msg, Args, AuthName,
     rabbit_misc:protocol_error(AmqpError).
 
 notify_auth_result(Username, AuthResult, ExtraProps, State) ->
-    EventProps0 = [{connection_type, network}],
-    EventProps1 = EventProps0 ++ [
-      case Item of
-          name -> {connection_name, i(name, State)};
-          _    -> {Item, i(Item, State)}
-      end || Item <- ?AUTH_NOTIFICATION_INFO_KEYS],
-    EventProps2 = case i(ssl, State) of
-        false -> EventProps1;
-        true  -> EventProps1 ++ [
-                 case Item of
-                     name -> {connection_name, i(name, State)};
-                     _    -> {Item, i(Item, State)}
-                 end || Item <- ?AUTH_NOTIFICATION_SSL_INFO_KEYS]
-    end,
-    EventProps3 = case Username of
-        none -> [{name, ''} | EventProps2];
-        _    -> [{name, Username} | EventProps2]
-    end,
-    EventProps = EventProps3 ++ ExtraProps,
+    EventProps = [{connection_type, network}] ++
+                 [case Item of
+                      name -> {connection_name, i(name, State)};
+                      _    -> {Item, i(Item, State)}
+                  end || Item <- ?AUTH_NOTIFICATION_INFO_KEYS] ++
+                 case i(ssl, State) of
+                     false -> [];
+                     true  -> [case Item of
+                                   name -> {connection_name, i(name, State)};
+                                   _    -> {Item, i(Item, State)}
+                               end || Item <- ?AUTH_NOTIFICATION_SSL_INFO_KEYS]
+                 end ++
+                 [{name, case Username of none -> ''; _ -> Username end}] ++
+                 ExtraProps,
     rabbit_event:notify(AuthResult, EventProps).
 
 %%--------------------------------------------------------------------------
