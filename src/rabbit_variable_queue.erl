@@ -1239,9 +1239,10 @@ remove(AckRequired, MsgStatus = #msg_status {
           end,
     Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
     IndexState2 = case {AckRequired, MsgInStore, IndexOnDisk} of
-                      {false, true, false} -> Rem(), IndexState1;
-                      {false, true,  true} -> Rem(), Ack();
-                      _                    -> IndexState1
+                      {false, true,  false} -> Rem(), IndexState1;
+                      {false, true,   true} -> Rem(), Ack();
+                      {false, false,  true} -> Ack();
+                      _                     -> IndexState1
                   end,
 
     %% 3. If an ack is required, add something sensible to PA
