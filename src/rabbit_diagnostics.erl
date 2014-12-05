@@ -17,10 +17,11 @@
 -module(rabbit_diagnostics).
 
 -define(PROCESS_INFO,
-        [current_stacktrace, initial_call, dictionary, message_queue_len,
-         links, monitors, monitored_by, heap_size]).
+        [registered_name, current_stacktrace, initial_call, dictionary,
+         message_queue_len, links, monitors, monitored_by, heap_size]).
 
--export([maybe_stuck/0, maybe_stuck/1]).
+-export([maybe_stuck/0, maybe_stuck/1, top_memory_use/0, top_memory_use/1,
+         top_binary_refs/0, top_binary_refs/1]).
 
 maybe_stuck() -> maybe_stuck(5000).
 
@@ -74,6 +75,33 @@ maybe_stuck_stacktrace({_M, F, _A}) ->
         0 -> true;
         _ -> false
     end.
+
+top_memory_use() -> top_memory_use(30).
+
+top_memory_use(Count) ->
+    Pids = processes(),
+    io:format("Memory use: top ~p of ~p processes.~n", [Count, length(Pids)]),
+    Procs = [{catch process_info(Pid, memory), catch info(Pid)} || Pid <- Pids],
+    Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
+    io:format("~p~n", [Sorted]).
+
+top_binary_refs() -> top_binary_refs(30).
+
+top_binary_refs(Count) ->
+    Pids = processes(),
+    io:format("Binary refs: top ~p of ~p processes.~n", [Count, length(Pids)]),
+    Procs = [{binary_refs(Pid), catch info(Pid)} || Pid <- Pids],
+    Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
+    io:format("~p~n", [Sorted]).
+
+binary_refs(Pid) ->
+    Refs = try
+               {binary, Rs} = process_info(Pid, binary),
+               Rs
+           catch _:badarg -> []
+           end,
+    lists:sum([Sz || {_Ptr, Sz} <- lists:usort([{Ptr, Sz} ||
+                                                   {Ptr, Sz, _Cnt} <- Refs])]).
 
 info(Pid) ->
     [{pid, Pid} | process_info(Pid, ?PROCESS_INFO)].
