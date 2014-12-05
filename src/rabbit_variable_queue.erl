@@ -652,7 +652,7 @@ fetch(AckRequired, State) ->
             %% at this point, so read it in.
             {Msg, State2} = read_msg(MsgStatus, State1),
             {AckTag, State3} = remove(AckRequired, MsgStatus, State2),
-            {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, State3}
+            {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
     end.
 
 drop(AckRequired, State) ->
