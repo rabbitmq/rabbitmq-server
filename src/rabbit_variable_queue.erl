@@ -457,8 +457,8 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
                                                MsgOnDiskFun, AsyncCallback),
                      {C, fun (MsgId) when is_binary(MsgId) ->
                                  rabbit_msg_store:contains(MsgId, C);
-                             (#basic_message{}) ->
-                                 true
+                             (#basic_message{is_persistent = Persistent}) ->
+                                 Persistent
                          end};
             false -> {undefined, fun(_MsgId) -> false end}
         end,
