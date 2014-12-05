@@ -28,7 +28,13 @@
 %%----------------------------------------------------------------------------
 
 %% The queue index is responsible for recording the order of messages
-%% within a queue on disk.
+%% within a queue on disk. As such it contains records of messages
+%% being published, delivered and acknowledged. The publish record
+%% includes the sequence ID, message ID and a small quantity of
+%% metadata about the message; the delivery and acknowledgement
+%% records just contain the sequence ID. A publish record may also
+%% contain the complete message if provided to publish/5; this allows
+%% the message store to be avoided altogether for small messages.
 %%
 %% Because of the fact that the queue can decide at any point to send
 %% a queue entry to disk, you can not rely on publishes appearing in
@@ -36,7 +42,7 @@
 %% then delivered, then ack'd.
 %%
 %% In order to be able to clean up ack'd messages, we write to segment
-%% files. These files have a fixed maximum size: ?SEGMENT_ENTRY_COUNT
+%% files. These files have a fixed number of entries: ?SEGMENT_ENTRY_COUNT
 %% publishes, delivers and acknowledgements. They are numbered, and so
 %% it is known that the 0th segment contains messages 0 ->
 %% ?SEGMENT_ENTRY_COUNT - 1, the 1st segment contains messages
@@ -156,10 +162,6 @@
 -define(PUB_RECORD_PREFIX_BYTES, 2).
 
 -define(PUB_RECORD_BYTES, (?PUB_RECORD_BODY_BYTES + ?PUB_RECORD_PREFIX_BYTES)).
-
-%% %% 1 publish, 1 deliver, 1 ack per msg
-%% -define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
-%%             (?PUB_RECORD_BYTES + (2 * ?REL_SEQ_ONLY_RECORD_BYTES))).
 
 %% ---- misc ----
 
