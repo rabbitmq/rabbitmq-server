@@ -2219,7 +2219,7 @@ init_test_queue() ->
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
-            fun nop/1),
+            fun nop/1, fun nop/1),
     ok = rabbit_msg_store:client_delete_and_terminate(PersistentClient),
     Res.
 
@@ -2283,7 +2283,7 @@ test_queue_index_props() ->
               Props = #message_properties{expiry=12345, size = 10},
               Qi1 = rabbit_queue_index:publish(MsgId, 1, Props, true, Qi0),
               {[{MsgId, 1, Props, _, _}], Qi2} =
-                  rabbit_queue_index:read(1, 2, Qi1),
+                  queue_index_read(1, 2, Qi1),
               Qi2
       end),
 
@@ -2306,7 +2306,7 @@ test_queue_index() ->
               {0, 0, Qi1} = rabbit_queue_index:bounds(Qi0),
               {Qi2, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, false, Qi1),
               {0, SegmentSize, Qi3} = rabbit_queue_index:bounds(Qi2),
-              {ReadA, Qi4} = rabbit_queue_index:read(0, SegmentSize, Qi3),
+              {ReadA, Qi4} = queue_index_read(0, SegmentSize, Qi3),
               ok = verify_read_with_published(false, false, ReadA,
                                               lists:reverse(SeqIdsMsgIdsA)),
               %% should get length back as 0, as all the msgs were transient
@@ -2314,7 +2314,7 @@ test_queue_index() ->
               {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
               {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
               {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
-              {ReadB, Qi10} = rabbit_queue_index:read(0, SegmentSize, Qi9),
+              {ReadB, Qi10} = queue_index_read(0, SegmentSize, Qi9),
               ok = verify_read_with_published(false, true, ReadB,
                                               lists:reverse(SeqIdsMsgIdsB)),
               %% should get length back as MostOfASegment
@@ -2323,7 +2323,7 @@ test_queue_index() ->
               {LenB, BytesB, Qi12} = restart_test_queue(Qi10),
               {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
               Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
-              {ReadC, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
+              {ReadC, Qi15} = queue_index_read(0, SegmentSize, Qi14),
               ok = verify_read_with_published(true, true, ReadC,
                                               lists:reverse(SeqIdsMsgIdsB)),
               Qi16 = rabbit_queue_index:ack(SeqIdsB, Qi15),
@@ -2386,11 +2386,11 @@ test_queue_index() ->
               {Qi5, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi4),
               Qi6 = rabbit_queue_index:deliver([2,3,5,6], Qi5),
               Qi7 = rabbit_queue_index:ack([1,2,3], Qi6),
-              {[], Qi8} = rabbit_queue_index:read(0, 4, Qi7),
-              {ReadD, Qi9} = rabbit_queue_index:read(4, 7, Qi8),
+              {[], Qi8} = queue_index_read(0, 4, Qi7),
+              {ReadD, Qi9} = queue_index_read(4, 7, Qi8),
               ok = verify_read_with_published(true, false, ReadD,
                                               [Four, Five, Six]),
-              {ReadE, Qi10} = rabbit_queue_index:read(7, 9, Qi9),
+              {ReadE, Qi10} = queue_index_read(7, 9, Qi9),
               ok = verify_read_with_published(false, false, ReadE,
                                               [Seven, Eight]),
               Qi10
@@ -2416,6 +2416,10 @@ test_queue_index() ->
     {ok, _} = rabbit_variable_queue:start([]),
 
     passed.
+
+queue_index_read(Seq1, Seq2, State) ->
+    {Res, _, _, State1} = rabbit_queue_index:read(Seq1, Seq2, State),
+    {Res, State1}.
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
