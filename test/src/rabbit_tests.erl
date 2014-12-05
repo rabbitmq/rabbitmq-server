@@ -2466,7 +2466,10 @@ variable_queue_set_ram_duration_target(Duration, VQ) ->
       rabbit_variable_queue:set_ram_duration_target(Duration, VQ)).
 
 assert_prop(List, Prop, Value) ->
-    Value = proplists:get_value(Prop, List).
+    case proplists:get_value(Prop, List)of
+        Value -> ok;
+        _     -> {exit, Prop, exp, Value, List}
+    end.
 
 assert_props(List, PropVals) ->
     [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals].
@@ -2489,12 +2492,18 @@ with_fresh_variable_queue(Fun) ->
                                           {delta, undefined, 0, undefined}},
                                          {q3, 0}, {q4, 0},
                                          {len, 0}]),
-                       _ = rabbit_variable_queue:delete_and_terminate(
-                        shutdown, Fun(VQ)),
-                       Me ! Ref
+                       try
+                           _ = rabbit_variable_queue:delete_and_terminate(
+                                 shutdown, Fun(VQ)),
+                           Me ! Ref
+                       catch
+                           Type:Error ->
+                               Me ! {Ref, Type, Error, erlang:get_stacktrace()}
+                       end
                end),
     receive
-        Ref -> ok
+        Ref                    -> ok;
+        {Ref, Type, Error, ST} -> exit({Type, Error, ST})
     end,
     passed.
 
