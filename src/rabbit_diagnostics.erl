@@ -42,13 +42,13 @@ maybe_stuck(Pids, Timeout) ->
     maybe_stuck(Pids2, Timeout - 500).
 
 looks_stuck(Pid) ->
-    case catch process_info(Pid, status) of
+    case info(Pid, status, gone) of
         {status, waiting} ->
             %% It's tempting to just check for message_queue_len > 0
             %% here rather than mess around with stack traces and
             %% heuristics. But really, sometimes freshly stuck
             %% processes can have 0 messages...
-            case catch erlang:process_info(Pid, current_stacktrace) of
+            case info(Pid, current_stacktrace, gone) of
                 {current_stacktrace, [H|_]} ->
                     maybe_stuck_stacktrace(H);
                 _ ->
@@ -81,7 +81,7 @@ top_memory_use() -> top_memory_use(30).
 top_memory_use(Count) ->
     Pids = processes(),
     io:format("Memory use: top ~p of ~p processes.~n", [Count, length(Pids)]),
-    Procs = [{catch process_info(Pid, memory), catch info(Pid)} || Pid <- Pids],
+    Procs = [{info(Pid, memory, 0), info(Pid)} || Pid <- Pids],
     Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
     io:format("~p~n", [Sorted]).
 
@@ -90,18 +90,24 @@ top_binary_refs() -> top_binary_refs(30).
 top_binary_refs(Count) ->
     Pids = processes(),
     io:format("Binary refs: top ~p of ~p processes.~n", [Count, length(Pids)]),
-    Procs = [{binary_refs(Pid), catch info(Pid)} || Pid <- Pids],
+    Procs = [{{binary_refs, binary_refs(Pid)}, info(Pid)} || Pid <- Pids],
     Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
     io:format("~p~n", [Sorted]).
 
 binary_refs(Pid) ->
-    Refs = try
-               {binary, Rs} = process_info(Pid, binary),
-               Rs
-           catch _:badarg -> []
-           end,
+    {binary, Refs} = info(Pid, binary, []),
     lists:sum([Sz || {_Ptr, Sz} <- lists:usort([{Ptr, Sz} ||
                                                    {Ptr, Sz, _Cnt} <- Refs])]).
 
 info(Pid) ->
-    [{pid, Pid} | process_info(Pid, ?PROCESS_INFO)].
+    [{pid, Pid} | info(Pid, ?PROCESS_INFO, [])].
+
+info(Pid, Infos, Default) ->
+    try
+        process_info(Pid, Infos)
+    catch
+        _:_ -> case is_atom(Infos) of
+                   true  -> {Infos, Default};
+                   false -> Default
+               end
+    end.
