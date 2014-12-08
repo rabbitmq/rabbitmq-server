@@ -69,6 +69,14 @@ rename(Node, NodeMapList) ->
         ok = rabbit_file:write_term_file(rename_config_name(),
                                          [{FromNode, ToNode}]),
         convert_config_files(NodeMap),
+        rabbit_control_main:become(ToNode),
+        ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
+        application:set_env(kernel, dist_auto_connect, never),
+        start_mnesia(),
+        rabbit_table:force_load(),
+        rabbit_table:wait_for_replicated(),
+        stop_mnesia(),
+        rabbit_mnesia:force_load_next_boot(),
         ok
     after
         stop_mnesia()
@@ -88,11 +96,12 @@ finish(FromNode, ToNode, AllNodes) ->
                 _  -> finish_secondary(FromNode, ToNode, AllNodes)
             end;
         FromNode ->
-            rabbit_log:info(
-              "Abandoning rename from ~s to ~s since we are still ~s~n",
-              [FromNode, ToNode, FromNode]),
-            [{ok, _} = file:copy(backup_of_conf(F), F) || F <- config_files()],
-            delete_rename_files();
+            exit(todo_fix_this_case);
+            %% rabbit_log:info(
+            %%   "Abandoning rename from ~s to ~s since we are still ~s~n",
+            %%   [FromNode, ToNode, FromNode]),
+            %% [{ok, _} = file:copy(backup_of_conf(F), F) || F <- config_files()],
+            %% delete_rename_files();
         _ ->
             %% Boot will almost certainly fail but we might as
             %% well just log this
@@ -104,15 +113,7 @@ finish(FromNode, ToNode, AllNodes) ->
 finish_primary(FromNode, ToNode) ->
     rabbit_log:info("Restarting as primary after rename from ~s to ~s~n",
                     [FromNode, ToNode]),
-    %% We are alone, restore the backup we previously took
-    ToBackup = to_backup_name(),
-    ok = mnesia:install_fallback(ToBackup, [{scope, local}]),
-    start_mnesia(),
-    rabbit_table:force_load(),
-    rabbit_table:wait_for_replicated(),
-    stop_mnesia(),
     delete_rename_files(),
-    rabbit_mnesia:force_load_next_boot(),
     ok.
 
 finish_secondary(FromNode, ToNode, AllNodes) ->
