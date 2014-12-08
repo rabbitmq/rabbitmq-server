@@ -90,7 +90,7 @@ list(PluginsDir) ->
     EZs = [{ez, EZ} || EZ <- filelib:wildcard("*.ez", PluginsDir)],
     FreeApps = [{app, App} ||
                    App <- filelib:wildcard("*/ebin/*.app", PluginsDir)],
-    {Plugins, Problems} =
+    {AvailablePlugins, Problems} =
         lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                             {Plugins1, [{EZ, Reason} | Problems1]};
                         (Plugin = #plugin{}, {Plugins1, Problems1}) ->
@@ -102,6 +102,8 @@ list(PluginsDir) ->
         _  -> rabbit_log:warning(
                 "Problem reading some plugins: ~p~n", [Problems])
     end,
+    Plugins = lists:filter(fun(P) -> not plugin_provided_by_otp(P) end,
+                           AvailablePlugins),
     ensure_dependencies(Plugins).
 
 %% @doc Read the list of enabled plugins from the supplied term file.
@@ -132,6 +134,15 @@ dependencies(Reverse, Sources, AllPlugins) ->
     true = digraph:delete(G),
     Dests.
 
+%% For a few known cases, an externally provided plugin can be trusted.
+%% In this special case, it overrides the plugin.
+plugin_provided_by_otp(#plugin{name = eldap}) ->
+    %% eldap was added to Erlang/OTP R15B01 (ERTS 5.9.1). In this case,
+    %% we prefer this version to the plugin.
+    rabbit_misc:version_compare(erlang:system_info(version), "5.9.1", gte);
+plugin_provided_by_otp(_) ->
+    false.
+
 %% Make sure we don't list OTP apps in here, and also that we detect
 %% missing dependencies.
 ensure_dependencies(Plugins) ->
@@ -158,7 +169,7 @@ is_loadable(App) ->
         ok                           -> application:unload(App),
                                         true;
         _                            -> false
-   end.
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -197,8 +208,27 @@ clean_plugin(Plugin, ExpandDir) ->
     delete_recursively(rabbit_misc:format("~s/~s", [ExpandDir, Plugin])).
 
 prepare_dir_plugin(PluginAppDescPath) ->
-    code:add_path(filename:dirname(PluginAppDescPath)),
-    list_to_atom(filename:basename(PluginAppDescPath, ".app")).
+    PluginEbinDir = filename:dirname(PluginAppDescPath),
+    Plugin = filename:basename(PluginAppDescPath, ".app"),
+    code:add_patha(PluginEbinDir),
+    case filelib:wildcard(PluginEbinDir++ "/*.beam") of
+        [] ->
+            ok;
+        [BeamPath | _] ->
+            Module = list_to_atom(filename:basename(BeamPath, ".beam")),
+            case code:ensure_loaded(Module) of
+                {module, _} ->
+                    ok;
+                {error, badfile} ->
+                    rabbit_log:error("Failed to enable plugin \"~s\": "
+                                     "it may have been built with an "
+                                     "incompatible (more recent?) "
+                                     "version of Erlang~n", [Plugin]),
+                    throw({plugin_built_with_incompatible_erlang, Plugin});
+                Error ->
+                    throw({plugin_module_unloadable, Plugin, Error})
+            end
+    end.
 
 %%----------------------------------------------------------------------------
 
