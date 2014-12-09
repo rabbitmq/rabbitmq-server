@@ -237,7 +237,9 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
 
 action(rename_cluster_node, Node, NodesS, _Opts, Inform) ->
     Nodes = split_list([list_to_atom(N) || N <- NodesS]),
-    Inform("Renaming cluster nodes:~n  ~p~n", [Nodes]),
+    Inform("Renaming cluster nodes:~n~s~n",
+           [lists:flatten([rabbit_misc:format("  ~s -> ~s~n", [F, T]) ||
+                              {F, T} <- Nodes])]),
     rabbit_mnesia_rename:rename(Node, Nodes);
 
 action(force_boot, Node, [], _Opts, Inform) ->
