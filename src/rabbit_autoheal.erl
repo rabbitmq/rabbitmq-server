@@ -54,6 +54,10 @@
 %%   - we are the winner and are waiting for all losing nodes to stop
 %%   before telling them they can restart
 %%
+%% about_to_heal
+%%   - we are the leader, and have already assigned the winner and losers.
+%%     We are part of the losers and we wait for the winner_is announcement.
+%%
 %% {leader_waiting, OutstandingStops}
 %%   - we are the leader, and have already assigned the winner and losers.
 %%     We are neither but need to ignore further requests to autoheal.
@@ -135,7 +139,7 @@ handle_msg({request_start, Node},
                 true  -> Continue({become_winner, Losers});
                 false -> send(Winner, {become_winner, Losers}), %% [0]
                          case lists:member(node(), Losers) of
-                             true  -> Continue({winner_is, Winner});
+                             true  -> about_to_heal;
                              false -> {leader_waiting, Losers}
                          end
             end
@@ -163,7 +167,8 @@ handle_msg({become_winner, Losers},
     end;
 
 handle_msg({winner_is, Winner},
-           not_healing, _Partitions) ->
+           State, _Partitions)
+           when State =:= not_healing orelse State =:= about_to_heal ->
     rabbit_log:warning(
       "Autoheal: we were selected to restart; winner is ~p~n", [Winner]),
     rabbit_node_monitor:run_outside_applications(
