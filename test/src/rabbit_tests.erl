@@ -1292,11 +1292,9 @@ test_spawn_remote() ->
     end.
 
 user(Username) ->
-    #user{username     = Username,
-          tags         = [administrator],
-          auth_backend = rabbit_auth_backend_internal,
-          impl         = #internal_user{username = Username,
-                                        tags     = [administrator]}}.
+    #user{username       = Username,
+          tags           = [administrator],
+          authz_backends = [{rabbit_auth_backend_internal, none}]}.
 
 test_confirms() ->
     {_Writer, Ch} = test_spawn(),
