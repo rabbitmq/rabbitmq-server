@@ -53,10 +53,12 @@ rename(Node, NodeMapList) ->
         rabbit_control_main:become(FromNode),
         start_mnesia(),
         Nodes = rabbit_mnesia:cluster_nodes(all),
-        case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes)} of
-            {[], []} -> ok;
-            {F,  []} -> exit({nodes_not_in_cluster,     F});
-            {_,  T}  -> exit({nodes_already_in_cluster, T})
+        case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes),
+              lists:member(Node, Nodes ++ ToNodes)} of
+            {[], [], true}  -> ok;
+            {[], [], false} -> exit({i_am_not_involved,        Node});
+            {F,  [], _}     -> exit({nodes_not_in_cluster,     F});
+            {_,  T,  _}     -> exit({nodes_already_in_cluster, T})
         end,
         rabbit_table:force_load(),
         rabbit_table:wait_for_replicated(),
