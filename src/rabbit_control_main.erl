@@ -597,11 +597,11 @@ start_distribution() ->
     {ok, _} = net_kernel:start([list_to_atom(CtlNodeName), name_type()]).
 
 become(BecomeNode) ->
+    error_logger:tty(false),
+    ok = net_kernel:stop(),
     case net_adm:ping(BecomeNode) of
         pong -> exit({node_running, BecomeNode});
         pang -> io:format("  * Impersonating node: ~s...", [BecomeNode]),
-                error_logger:tty(false),
-                ok = net_kernel:stop(),
                 {ok, _} = net_kernel:start([BecomeNode, name_type()]),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
