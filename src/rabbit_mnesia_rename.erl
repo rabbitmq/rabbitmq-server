@@ -22,6 +22,25 @@
 
 -define(CONVERT_TABLES, [schema, rabbit_durable_queue]).
 
+%% Supports renaming the nodes in the Mnesia database. In order to do
+%% this, we take a backup of the database, traverse the backup
+%% changing node names and pids as we go, then restore it.
+%%
+%% That's enough for a standalone node, for clusters the story is more
+%% complex. We can take pairs of nodes From and To, but backing up and
+%% restoring the database changes schema cookies, so if we just do
+%% this on all nodes the cluster will refuse to re-form with
+%% "Incompatible schema cookies.". Therefore we do something similar
+%% to what we do for upgrades - the first node in the cluster to
+%% restart becomes the authority, and other nodes wipe their own
+%% Mnesia state and rejoin. They also need to tell Mnesia the old node
+%% is not coming back.
+%%
+%% If we are renaming nodes one at a time then the running cluster
+%% might not be aware that a rename has taken place, so after we wipe
+%% and rejoin we then update any tables (in practice just
+%% rabbit_durable_queue) which should be aware that we have changed.
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -35,37 +54,27 @@
 
 rename(Node, NodeMapList) ->
     try
-        case rabbit_file:is_dir(dir()) of
-            true  -> exit({rename_in_progress,
-                           "Restart node under old name to roll back"});
-            false -> ok = rabbit_file:ensure_dir(mnesia_copy_dir())
-        end,
-        NodeMap = dict:from_list(NodeMapList),
-        {FromNodes, ToNodes} = lists:unzip(NodeMapList),
-        case length(FromNodes) - length(lists:usort(ToNodes)) of
-            0 -> ok;
-            _ -> exit({duplicate_node, ToNodes})
-        end,
-        FromNode = case [From || {From, To} <- NodeMapList,
-                                 To =:= Node] of
-                       [N] -> N;
-                       []  -> Node
-                   end,
-        ToNode = case dict:find(FromNode, NodeMap) of
-                     {ok, N2} -> N2;
-                     error    -> FromNode
-                 end,
+        %% Check everything is correct and figure out what we are
+        %% changing from and to.
+        {FromNode, ToNode, NodeMap} = prepare(Node, NodeMapList),
+
+        %% We backup and restore Mnesia even if other nodes are
+        %% running at the time, and defer the final decision about
+        %% whether to use our mutated copy or rejoin the cluster until
+        %% we restart. That means we might be mutating our copy of the
+        %% database while the cluster is running. *Do not* contact the
+        %% cluster while this is happening, we are likely to get
+        %% confused.
         application:set_env(kernel, dist_auto_connect, never),
-        rabbit_control_main:become(FromNode),
+
+        %% Take a copy we can restore from if we abandon the
+        %% rename. We don't restore from the "backup" since restoring
+        %% that changes schema cookies and might stop us rejoining the
+        %% cluster.
         ok = rabbit_mnesia:copy_db(mnesia_copy_dir()),
-        Nodes = rabbit_mnesia:cluster_nodes(all),
-        case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes),
-              lists:member(Node, Nodes ++ ToNodes)} of
-            {[], [], true}  -> ok;
-            {[], [], false} -> exit({i_am_not_involved,        Node});
-            {F,  [], _}     -> exit({nodes_not_in_cluster,     F});
-            {_,  T,  _}     -> exit({nodes_already_in_cluster, T})
-        end,
+
+        %% And make the actual changes
+        rabbit_control_main:become(FromNode),
         take_backup(before_backup_name()),
         convert_backup(NodeMap, before_backup_name(), after_backup_name()),
         ok = rabbit_file:write_term_file(rename_config_name(),
@@ -77,6 +86,45 @@ rename(Node, NodeMapList) ->
     after
         stop_mnesia()
     end.
+
+prepare(Node, NodeMapList) ->
+    %% If we have a previous rename and haven't started since, give up.
+    case rabbit_file:is_dir(dir()) of
+        true  -> exit({rename_in_progress,
+                       "Restart node under old name to roll back"});
+        false -> ok = rabbit_file:ensure_dir(mnesia_copy_dir())
+    end,
+
+    %% Check we don't have two nodes mapped to the same node
+    {FromNodes, ToNodes} = lists:unzip(NodeMapList),
+    case length(FromNodes) - length(lists:usort(ToNodes)) of
+        0 -> ok;
+        _ -> exit({duplicate_node, ToNodes})
+    end,
+
+    %% Figure out which node we are before and after the change
+    FromNode = case [From || {From, To} <- NodeMapList,
+                             To =:= Node] of
+                   [N] -> N;
+                   []  -> Node
+               end,
+    NodeMap = dict:from_list(NodeMapList),
+    ToNode = case dict:find(FromNode, NodeMap) of
+                 {ok, N2} -> N2;
+                 error    -> FromNode
+             end,
+
+    %% Check that we are in the cluster, all old nodes are in the
+    %% cluster, and no new nodes are.
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes),
+          lists:member(Node, Nodes ++ ToNodes)} of
+        {[], [], true}  -> ok;
+        {[], [], false} -> exit({i_am_not_involved,        Node});
+        {F,  [], _}     -> exit({nodes_not_in_cluster,     F});
+        {_,  T,  _}     -> exit({nodes_already_in_cluster, T})
+    end,
+    {FromNode, ToNode, NodeMap}.
 
 take_backup(Backup) ->
     start_mnesia(),
