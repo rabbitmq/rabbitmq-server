@@ -214,7 +214,7 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                     rabbit_net:fast_close(Sock),
                                     exit(normal)
            end,
-    log(info, "accepting AMQP connection ~p (~s)~n", [self(), Name]),
+    log(debug, "incoming connection ~p (~s)~n", [self(), Name]),
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
@@ -259,15 +259,12 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                           handshake, 8)]}),
         log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
-        connection_closed_with_no_data_received ->
-            log(info, "closing AMQP connection ~p (~s) - "
-                      "no data received~n", [self(), Name]);
-        Ex ->
-            log(case Ex of
-                    connection_closed_abruptly -> warning;
-                    _                          -> error
-                end, "closing AMQP connection ~p (~s):~n~p~n",
-                [self(), Name, Ex])
+        Ex -> log(case Ex of
+                      connection_closed_with_no_data_received -> debug;
+                      connection_closed_abruptly              -> warning;
+                      _                                       -> error
+                  end, "closing AMQP connection ~p (~s):~n~p~n",
+                  [self(), Name, Ex])
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
@@ -317,8 +314,34 @@ binlist_split(Len, L, [Acc0|Acc]) when Len < 0 ->
 binlist_split(Len, [H|T], Acc) ->
     binlist_split(Len - size(H), T, [H|Acc]).
 
-mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock}) ->
-    case rabbit_net:recv(Sock) of
+mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
+                                       connection_state = CS,
+                                       connection = #connection{
+                                         name = ConnName,
+                                         connected_at = ConnectionTime}}) ->
+    Recv = rabbit_net:recv(Sock),
+    case CS of
+        pre_init when Buf =:= [] ->
+            %% We only new incoming connections only when either the
+            %% first byte was received or there was an error (eg. a
+            %% timeout).
+            %%
+            %% The goal is to not log TCP healthchecks (a connection
+            %% with no data received) unless specified otherwise.
+            Now = rabbit_misc:ms_to_now(ConnectionTime),
+            {{Year, Month, Day}, {Hour, Min, Sec}} =
+              calendar:now_to_local_time(Now),
+            log(case Recv of
+                  closed -> debug;
+                  _      -> info
+                end, "new AMQP connection ~p (~s) - "
+                "accepted at ~b-~2..0b-~2..0b::~2..0b:~2..0b:~2..0b~n",
+                [self(), ConnName, Year, Month, Day,
+                 Hour, Min, Sec]);
+        _ ->
+            ok
+    end,
+    case Recv of
         {data, Data} ->
             recvloop(Deb, [Data | Buf], BufLen + size(Data),
                      State#v1{pending_recv = false});
