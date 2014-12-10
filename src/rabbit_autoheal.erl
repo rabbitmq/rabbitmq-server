@@ -55,12 +55,16 @@
 %%   before telling them they can restart
 %%
 %% about_to_heal
-%%   - we are the leader, and have already assigned the winner and losers.
-%%     We are part of the losers and we wait for the winner_is announcement.
+%%   - we are the leader, and have already assigned the winner and
+%%   losers. We are part of the losers and we wait for the winner_is
+%%   announcement. This leader-specific state differs from not_healing
+%%   (the state other losers are in), because the leader could still
+%%   receive request_start messages: those subsequent requests must be
+%%   ignored.
 %%
 %% {leader_waiting, OutstandingStops}
 %%   - we are the leader, and have already assigned the winner and losers.
-%%     We are neither but need to ignore further requests to autoheal.
+%%   We are neither but need to ignore further requests to autoheal.
 %%
 %% restarting
 %%   - we are restarting. Of course the node monitor immediately dies
