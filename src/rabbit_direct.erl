@@ -92,7 +92,7 @@ connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
     end.
 
 connect1(User, VHost, Protocol, Pid, Infos) ->
-    try rabbit_access_control:check_vhost_access(User, VHost) of
+    try rabbit_access_control:check_vhost_access(User, VHost, undefined) of
         ok -> ok = pg_local:join(rabbit_direct, Pid),
               rabbit_event:notify(connection_created, Infos),
               {ok, {User, rabbit_reader:server_properties(Protocol)}}
