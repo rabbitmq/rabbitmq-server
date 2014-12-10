@@ -180,18 +180,25 @@ join_cluster(DiscoveryNode, NodeType) ->
     {ClusterNodes, _, _} = discover_cluster([DiscoveryNode]),
     case me_in_nodes(ClusterNodes) of
         false ->
-            %% reset the node. this simplifies things and it will be needed in
-            %% this case - we're joining a new cluster with new nodes which
-            %% are not in synch with the current node. I also lifts the burden
-            %% of reseting the node from the user.
-            reset_gracefully(),
+            case check_cluster_consistency(DiscoveryNode, false) of
+                {ok, _} ->
+                    %% reset the node. this simplifies things and it
+                    %% will be needed in this case - we're joining a new
+                    %% cluster with new nodes which are not in synch
+                    %% with the current node. It also lifts the burden
+                    %% of resetting the node from the user.
+                    reset_gracefully(),
 
-            %% Join the cluster
-            rabbit_log:info("Clustering with ~p as ~p node~n",
-                            [ClusterNodes, NodeType]),
-            ok = init_db_with_mnesia(ClusterNodes, NodeType, true, true),
-            rabbit_node_monitor:notify_joined_cluster(),
-            ok;
+                    %% Join the cluster
+                    rabbit_log:info("Clustering with ~p as ~p node~n",
+                                    [ClusterNodes, NodeType]),
+                    ok = init_db_with_mnesia(ClusterNodes, NodeType,
+                                             true, true),
+                    rabbit_node_monitor:notify_joined_cluster(),
+                    ok;
+                {error, Reason} ->
+                    {error, Reason}
+            end;
         true ->
             rabbit_log:info("Already member of cluster: ~p~n", [ClusterNodes]),
             {ok, already_member}
@@ -551,7 +558,7 @@ maybe_force_load() ->
 check_cluster_consistency() ->
     %% We want to find 0 or 1 consistent nodes.
     case lists:foldl(
-           fun (Node,  {error, _})    -> check_cluster_consistency(Node);
+           fun (Node,  {error, _})    -> check_cluster_consistency(Node, true);
                (_Node, {ok, Status})  -> {ok, Status}
            end, {error, not_found}, nodes_excl_me(cluster_nodes(all)))
     of
@@ -581,16 +588,21 @@ check_cluster_consistency() ->
             throw(E)
     end.
 
-check_cluster_consistency(Node) ->
+check_cluster_consistency(Node, CheckNodesConsistency) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _Reason} ->
             {error, not_found};
         {_OTP, _Rabbit, {error, _}} ->
             {error, not_found};
-        {OTP, Rabbit, {ok, Status}} ->
+        {OTP, Rabbit, {ok, Status}} when CheckNodesConsistency ->
             case check_consistency(OTP, Rabbit, Node, Status) of
                 {error, _} = E -> E;
                 {ok, Res}      -> {ok, Res}
+            end;
+        {OTP, Rabbit, {ok, Status}} ->
+            case check_consistency(OTP, Rabbit) of
+                {error, _} = E -> E;
+                ok             -> {ok, Status}
             end;
         {_OTP, Rabbit, _Hash, _Status} ->
             %% delegate hash checking implies version mismatch
