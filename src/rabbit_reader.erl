@@ -60,10 +60,7 @@
 
 -define(AUTH_NOTIFICATION_INFO_KEYS,
         [host, vhost, name, peer_host, peer_port, protocol, auth_mechanism,
-         ssl]).
-
--define(AUTH_NOTIFICATION_SSL_INFO_KEYS,
-        [ssl_protocol, ssl_cipher, peer_cert_issuer, peer_cert_subject,
+         ssl, ssl_protocol, ssl_cipher, peer_cert_issuer, peer_cert_subject,
          peer_cert_validity]).
 
 -define(IS_RUNNING(State),
@@ -1118,13 +1115,6 @@ notify_auth_result(Username, AuthResult, ExtraProps, State) ->
                       name -> {connection_name, i(name, State)};
                       _    -> {Item, i(Item, State)}
                   end || Item <- ?AUTH_NOTIFICATION_INFO_KEYS] ++
-                 case i(ssl, State) of
-                     false -> [];
-                     true  -> [case Item of
-                                   name -> {connection_name, i(name, State)};
-                                   _    -> {Item, i(Item, State)}
-                               end || Item <- ?AUTH_NOTIFICATION_SSL_INFO_KEYS]
-                 end ++
                  [{name, case Username of none -> ''; _ -> Username end}] ++
                  ExtraProps,
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
