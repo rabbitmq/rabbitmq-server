@@ -136,11 +136,9 @@ handle_msg({request_start, Node},
                             "  * Winner:     ~p~n"
                             "  * Losers:     ~p~n",
                             [AllPartitions, Winner, Losers]),
-            Continue = fun(Msg) ->
-                               handle_msg(Msg, not_healing, Partitions)
-                       end,
             case node() =:= Winner of
-                true  -> Continue({become_winner, Losers});
+                true  -> handle_msg({become_winner, Losers},
+                                    not_healing, Partitions);
                 false -> send(Winner, {become_winner, Losers}), %% [0]
                          case lists:member(node(), Losers) of
                              true  -> about_to_heal;
