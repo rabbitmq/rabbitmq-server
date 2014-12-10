@@ -1110,12 +1110,12 @@ auth_fail(Username, Msg, Args, AuthName,
     rabbit_misc:protocol_error(AmqpError).
 
 notify_auth_result(Username, AuthResult, ExtraProps, State) ->
-    EventProps = [{connection_type, network}] ++
+    EventProps = [{connection_type, network},
+                  {name, case Username of none -> ''; _ -> Username end}] ++
                  [case Item of
                       name -> {connection_name, i(name, State)};
                       _    -> {Item, i(Item, State)}
                   end || Item <- ?AUTH_NOTIFICATION_INFO_KEYS] ++
-                 [{name, case Username of none -> ''; _ -> Username end}] ++
                  ExtraProps,
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
