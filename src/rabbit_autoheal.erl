@@ -199,13 +199,13 @@ winner_finish(Notify) ->
     %% There is a race in Mnesia causing a starting loser to hang
     %% forever if another loser stops at the same time: the starting
     %% node connects to the other node, negotiates the protocol and
-    %% attemps to acquire a write lock on the schema on the other node.
+    %% attempts to acquire a write lock on the schema on the other node.
     %% If the other node stops between the protocol negotiation and lock
-    %% request, the starting node never gets and answer to its lock
+    %% request, the starting node never gets an answer to its lock
     %% request.
     %%
-    %% To workaround the problem, we make sure Mnesia is stopped on all
-    %% loosing nodes before sending the "autoheal_safe_to_start" signal.
+    %% To work around the problem, we make sure Mnesia is stopped on all
+    %% losing nodes before sending the "autoheal_safe_to_start" signal.
     wait_for_mnesia_shutdown(Notify),
     [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
     not_healing.
