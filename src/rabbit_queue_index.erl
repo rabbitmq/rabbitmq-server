@@ -889,16 +889,6 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
              no_pub ->
                  ok;
              {MsgOrId, MsgProps, IsPersistent} ->
-                 %% Body = create_pub_record_body(MsgOrId, MsgProps),
-                 %% io:format("pub ~p~n",
-                 %%           [[{persist, IsPersistent},
-                 %%                         {relseq, RelSeq},
-                 %%                         {body, Body}]]),
-                 %% io:format("write ~p~n",
-                 %%           [iolist_to_binary([<<?PUB_PREFIX:?PUB_PREFIX_BITS,
-                 %%                                (bool_to_int(IsPersistent)):1,
-                 %%                                RelSeq:?REL_SEQ_BITS>>,
-                 %%                              Body])]),
                  file_handle_cache:append(
                    Hdl, [<<?PUB_PREFIX:?PUB_PREFIX_BITS,
                            (bool_to_int(IsPersistent)):1,

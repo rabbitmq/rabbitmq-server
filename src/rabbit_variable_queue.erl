@@ -32,11 +32,11 @@
 
 %%----------------------------------------------------------------------------
 %% Definitions:
-
+%%
 %% alpha: this is a message where both the message itself, and its
 %%        position within the queue are held in RAM
 %%
-%% beta: this is a message where the message itself is only held on
+%% beta:  this is a message where the message itself is only held on
 %%        disk, but its position within the queue is held in RAM.
 %%
 %% gamma: this is a message where the message itself is only held on
@@ -53,6 +53,11 @@
 %% Also note that within this code, the term gamma seldom
 %% appears. It's frequently the case that gammas are defined by betas
 %% who have had their queue position recorded on disk.
+%%
+%% Furthermore note that for small messages we can persist the message
+%% to the queue index rather than the message store; if this happens
+%% then the message will still be in memory when the message is a
+%% beta.
 %%
 %% In general, messages move q1 -> q2 -> delta -> q3 -> q4, though
 %% many of these steps are frequently skipped. q1 and q4 only hold
@@ -1669,8 +1674,7 @@ next({delta, #delta{start_seq_id = SeqId,
                     end_seq_id   = SeqIdEnd} = Delta, State}, IndexState) ->
     SeqIdB = rabbit_queue_index:next_segment_boundary(SeqId),
     SeqId1 = lists:min([SeqIdB, SeqIdEnd]),
-    {List, IndexState1} =
-        rabbit_queue_index:read(SeqId, SeqId1, IndexState),
+    {List, IndexState1} = rabbit_queue_index:read(SeqId, SeqId1, IndexState),
     next({delta, Delta#delta{start_seq_id = SeqId1}, List, State}, IndexState1);
 next({delta, Delta, [], State}, IndexState) ->
     next({delta, Delta, State}, IndexState);
@@ -1852,8 +1856,8 @@ maybe_deltas_to_betas(State = #vqstate {
     DeltaSeqId1 =
         lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
                    DeltaSeqIdEnd]),
-    {List, IndexState1} =
-        rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
+    {List, IndexState1} = rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1,
+                                                  IndexState),
     {Q3a, RamCountsInc, RamBytesInc, IndexState2} =
         betas_from_index_entries(List, TransientThreshold,
                                  RPA, DPA, QPA, IndexState1),
