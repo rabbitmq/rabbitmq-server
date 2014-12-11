@@ -1888,11 +1888,15 @@ test_backing_queue() ->
             passed = test_msg_store(),
             application:set_env(rabbit, msg_store_file_size_limit,
                                 FileSizeLimit),
-            passed = test_queue_index(),
-            passed = test_queue_index_props(),
-            passed = test_variable_queue(),
-            passed = test_variable_queue_delete_msg_store_files_callback(),
-            passed = test_queue_recover(),
+            [begin
+                 application:set_env(
+                   rabbit, queue_index_embed_msgs_below, Bytes),
+                 passed = test_queue_index(),
+                 passed = test_queue_index_props(),
+                 passed = test_variable_queue(),
+                 passed = test_variable_queue_delete_msg_store_files_callback(),
+                 passed = test_queue_recover()
+             end || Bytes <- [0, 1024]],
             application:set_env(rabbit, queue_index_max_journal_entries,
                                 MaxJournal),
             %% We will have restarted the message store, and thus changed
