@@ -238,8 +238,7 @@
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_types:msg_id(), seq_id(),
                         rabbit_types:message_properties(),
-                        boolean(), boolean()}],
-                      non_neg_integer(), non_neg_integer(), qistate()}).
+                        boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}).
@@ -354,12 +353,11 @@ read(Start, End, State = #qistate { segments = Segments,
     %% Start is inclusive, End is exclusive.
     LowerB = {StartSeg, _StartRelSeq} = seq_id_to_seg_and_rel_seq_id(Start),
     UpperB = {EndSeg,   _EndRelSeq}   = seq_id_to_seg_and_rel_seq_id(End - 1),
-    {Messages, {BodiesRead, BodyBytesRead}, Segments1} =
+    {Messages, Segments1} =
         lists:foldr(fun (Seg, Acc) ->
                             read_bounded_segment(Seg, LowerB, UpperB, Acc, Dir)
-                    end, {[], {0, 0}, Segments}, lists:seq(StartSeg, EndSeg)),
-    {Messages, BodiesRead, BodyBytesRead,
-     State #qistate { segments = Segments1 }}.
+                    end, {[], Segments}, lists:seq(StartSeg, EndSeg)),
+    {Messages, State #qistate { segments = Segments1 }}.
 
 next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
@@ -636,7 +634,7 @@ read_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
                  {ok, MsgBin} -> Msg = #basic_message{id = MsgId} =
                                      binary_to_term(MsgBin),
                                  {Msg, Props};
-                 _            -> exit(could_not_read)
+                 _            -> exit(could_not_read) %% TODO
              end
     end.
 
@@ -922,33 +920,25 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
     Hdl.
 
 read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
-                     {Messages, BodyReadCounts, Segments}, Dir) ->
+                     {Messages, Segments}, Dir) ->
     Segment = segment_find_or_new(Seg, Dir, Segments),
-    {Messages1, BodyReadCounts1} =
-        segment_entries_foldr(
-          fun (RelSeq, {{MsgOrId, MsgProps, IsPersistent}, IsDelivered, no_ack},
-               {Acc, BodyReadAcc})
-                when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
-                     (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
-                  {[{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), MsgProps,
-                     IsPersistent, IsDelivered == del} | Acc],
-                   incr_body_read_counts(MsgOrId, MsgProps, BodyReadAcc)};
-              (_RelSeq, _Value, Acc) ->
-                  Acc
-          end, {Messages, BodyReadCounts}, Segment),
-    {Messages1, BodyReadCounts1, segment_store(Segment, Segments)}.
+    {segment_entries_foldr(
+       fun (RelSeq, {{MsgOrId, MsgProps, IsPersistent}, IsDelivered, no_ack},
+            Acc)
+             when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
+                  (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
+               [{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), MsgProps,
+                 IsPersistent, IsDelivered == del} | Acc];
+           (_RelSeq, _Value, Acc) ->
+               Acc
+       end, Messages, Segment),
+     segment_store(Segment, Segments)}.
 
 segment_entries_foldr(Fun, Init,
                       Segment = #segment { journal_entries = JEntries }) ->
     {SegEntries, _UnackedCount} = load_segment(false, Segment),
     {SegEntries1, _UnackedCountD} = segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldr(Fun, Init, SegEntries1).
-
-incr_body_read_counts(MsgId, _MsgProps, Counts) when is_binary(MsgId) ->
-    Counts;
-incr_body_read_counts(#basic_message{}, #message_properties{size = Size},
-                      {BodiesRead, BodyBytesRead}) ->
-    {BodiesRead + 1, BodyBytesRead + Size}.
 
 %% Loading segments
 %%
