@@ -334,8 +334,8 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             log(case Recv of
                   closed -> debug;
                   _      -> info
-                end, "new AMQP connection ~p (~s) - "
-                "accepted at ~b-~2..0b-~2..0b::~2..0b:~2..0b:~2..0b~n",
+                end, "accepting AMQP connection ~p (~s)~n"
+                "(opened at ~b-~2..0b-~2..0b::~2..0b:~2..0b:~2..0b)~n",
                 [self(), ConnName, Year, Month, Day,
                  Hour, Min, Sec]);
         _ ->
