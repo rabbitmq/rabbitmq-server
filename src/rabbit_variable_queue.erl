@@ -31,13 +31,31 @@
 -export([start_msg_store/2, stop_msg_store/0, init/6]).
 
 %%----------------------------------------------------------------------------
+%% Messages, and their position in the queue, can be in memory or on
+%% disk, or both. Persistent messages will have both message and
+%% position pushed to disk as soon as they arrive; transient messages
+%% can be written to disk (and thus both types can be evicted from
+%% memory) under memory pressure. The question of whether a message is
+%% in RAM and whether it is persistent are orthogonal.
+%%
+%% Messages are persisted using the queue index and the message
+%% store. Normally the queue index holds the position of the message
+%% *within this queue* along with a couple of small bits of metadata,
+%% while the message store holds the message itself (including headers
+%% and other properties).
+%%
+%% However, as an optimisation, small messages can be embedded
+%% directly in the queue index and bypass the message store
+%% altogether.
+%%
 %% Definitions:
 %%
 %% alpha: this is a message where both the message itself, and its
 %%        position within the queue are held in RAM
 %%
 %% beta:  this is a message where the message itself is only held on
-%%        disk, but its position within the queue is held in RAM.
+%%        disk (if persisted to the message store) but its position
+%%        within the queue is held in RAM.
 %%
 %% gamma: this is a message where the message itself is only held on
 %%        disk, but its position is both in RAM and on disk.
@@ -53,11 +71,6 @@
 %% Also note that within this code, the term gamma seldom
 %% appears. It's frequently the case that gammas are defined by betas
 %% who have had their queue position recorded on disk.
-%%
-%% Furthermore note that for small messages we can persist the message
-%% to the queue index rather than the message store; if this happens
-%% then the message will still be in memory when the message is a
-%% beta.
 %%
 %% In general, messages move q1 -> q2 -> delta -> q3 -> q4, though
 %% many of these steps are frequently skipped. q1 and q4 only hold
