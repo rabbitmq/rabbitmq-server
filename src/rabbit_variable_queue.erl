@@ -1198,6 +1198,8 @@ upd_ram_bytes(Sign, MsgStatus, State = #vqstate{ram_bytes = RamBytes}) ->
 
 msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
 
+msg_in_ram(#msg_status{msg = Msg}) -> Msg =/= undefined.
+
 remove(AckRequired, MsgStatus = #msg_status {
                       seq_id        = SeqId,
                       msg_id        = MsgId,
@@ -1485,7 +1487,11 @@ publish_alpha(MsgStatus, State) ->
 
 publish_beta(MsgStatus, State) ->
     {MsgStatus1, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
-    {m(trim_msg_status(MsgStatus1)), State1}.
+    MsgStatus2 = m(trim_msg_status(MsgStatus1)),
+    case msg_in_ram(MsgStatus1) andalso not msg_in_ram(MsgStatus2) of
+        true -> {MsgStatus2, upd_ram_bytes(-1, MsgStatus, State1)};
+        _    -> {MsgStatus2, State1}
+    end.
 
 %% Rebuild queue, inserting sequence ids to maintain ordering
 queue_merge(SeqIds, Q, MsgIds, Limit, PubFun, State) ->
@@ -1521,8 +1527,13 @@ delta_merge(SeqIds, Delta, MsgIds, State) ->
                             msg_from_pending_ack(SeqId, State0),
                         {_MsgStatus, State2} =
                             maybe_write_to_disk(true, true, MsgStatus, State1),
+                        State3 =
+                            case msg_in_ram(MsgStatus) of
+                                false -> State2;
+                                true  -> upd_ram_bytes(-1, MsgStatus, State2)
+                            end,
                         {expand_delta(SeqId, Delta0), [MsgId | MsgIds0],
-                         upd_bytes(1, -1, MsgStatus, State2)}
+                         upd_bytes(1, -1, MsgStatus, State3)}
                 end, {Delta, MsgIds, State}, SeqIds).
 
 %% Mostly opposite of record_pending_ack/2
