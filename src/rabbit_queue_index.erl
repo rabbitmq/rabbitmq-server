@@ -168,7 +168,6 @@
 -define(PUB, {_, _, _}). %% {MsgId, MsgProps, IsPersistent}
 
 -define(READ_MODE, [binary, raw, read]).
--define(READ_AHEAD_MODE, ?READ_MODE).
 -define(WRITE_MODE, [write | ?READ_MODE]).
 
 -define(READ_BUFFER_SIZE, 1048576). %% 1MB
@@ -938,7 +937,7 @@ load_segment(KeepAcked, #segment { path = Path }) ->
     case rabbit_file:is_file(Path) of
         false -> Empty;
         true  -> {ok, Hdl} = file_handle_cache:open(
-                               Path, ?READ_AHEAD_MODE,
+                               Path, ?READ_MODE,
                                [{read_buffer, ?READ_BUFFER_SIZE}]),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  Res = load_segment_entries(Hdl, KeepAcked, Empty),
@@ -1257,8 +1256,7 @@ transform_file(Path, Fun) when is_function(Fun)->
                                            [{write_buffer, infinity}]),
 
                 {ok, PathHdl} = file_handle_cache:open(
-                                  Path, [{read_ahead, Size} | ?READ_MODE],
-                                  [{read_buffer, ?READ_BUFFER_SIZE}]),
+                                  Path, ?READ_MODE, [{read_buffer, Size}]),
                 {ok, Content} = file_handle_cache:read(PathHdl, Size),
                 ok = file_handle_cache:close(PathHdl),
 
