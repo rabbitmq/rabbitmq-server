@@ -194,7 +194,7 @@ subscribe(Pid) ->
     gen_server:cast(?SERVER, {subscribe, Pid}).
 
 %%----------------------------------------------------------------------------
-%% pause_minority/keep_preferred safety
+%% pause_minority/pause_if_all_down safety
 %%----------------------------------------------------------------------------
 
 %% If we are in a minority and pause_minority mode then a) we are
@@ -202,7 +202,7 @@ subscribe(Pid) ->
 %% until then, since anything we confirm is likely to be lost.
 %%
 %% The same principles apply to a node which isn't part of the preferred
-%% partition when we are in keep_preferred mode.
+%% partition when we are in pause_if_all_down mode.
 %%
 %% We could confirm something by having an HA queue see the pausing
 %% state (and fail over into it) before the node monitor stops us, or
@@ -221,16 +221,20 @@ pause_partition_guard() ->
             case M of
                 pause_minority ->
                     pause_minority_guard([]);
-                {keep_preferred, PreferredNode} when is_atom(PreferredNode) ->
-                    keep_preferred_guard(PreferredNode, []);
+                {pause_if_all_down, PreferredNodes} ->
+                    case verify_pause_if_all_down_list(PreferredNodes) of
+                        []    -> put(pause_partition_guard, not_pause_mode),
+                                 ok;
+                        Nodes -> pause_if_all_down_guard(Nodes, [])
+                    end;
                 _ ->
                     put(pause_partition_guard, not_pause_mode),
                     ok
             end;
         {minority_mode, Nodes} ->
             pause_minority_guard(Nodes);
-        {keep_preferred_mode, PreferredNode, Nodes} ->
-            keep_preferred_guard(PreferredNode, Nodes)
+        {pause_if_all_down_mode, PreferredNodes, Nodes} ->
+            pause_if_all_down_guard(PreferredNodes, Nodes)
     end.
 
 pause_minority_guard(LastNodes) ->
@@ -243,12 +247,12 @@ pause_minority_guard(LastNodes) ->
                      end
     end.
 
-keep_preferred_guard(PreferredNode, LastNodes) ->
+pause_if_all_down_guard(PreferredNodes, LastNodes) ->
     case nodes() of
         LastNodes -> ok;
         _         -> put(pause_partition_guard,
-                         {keep_preferred_mode, PreferredNode, nodes()}),
-                     case in_preferred_partition(PreferredNode) of
+                         {pause_if_all_down_mode, PreferredNodes, nodes()}),
+                     case in_preferred_partition(PreferredNodes) of
                          false -> pausing;
                          true  -> ok
                      end
@@ -309,7 +313,7 @@ handle_cast(notify_node_up, State = #state{guid = GUID}) ->
 %% 'check_partial_partition' to all the nodes it still thinks are
 %% alive. If any of those (intermediate) nodes still see the "down"
 %% node as up, they inform it that this has happened. The original
-%% node (in 'ignore', 'keep_preferred' or 'autoheal' mode) will then
+%% node (in 'ignore', 'pause_if_all_down' or 'autoheal' mode) will then
 %% disconnect from the intermediate node to "upgrade" to a full
 %% partition.
 %%
@@ -546,7 +550,7 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     %% that we can respond in the same way to "rabbitmqctl stop_app"
     %% and "rabbitmqctl stop" as much as possible.
     %%
-    %% However, for pause_minority and keep_preferred modes we can't do
+    %% However, for pause_minority and pause_if_all_down modes we can't do
     %% this, since we depend on looking at whether other nodes are up
     %% to decide whether to come back up ourselves - if we decide that
     %% based on the rabbit application we would go down and never come
@@ -558,19 +562,14 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
                 false -> await_cluster_recovery(fun majority/0)
             end,
             State;
-        {ok, {keep_preferred, PreferredNode}} when is_atom(PreferredNode) ->
-            AllNodes = rabbit_mnesia:cluster_nodes(all),
-            case lists:member(PreferredNode, AllNodes) of
-                true ->
-                    case in_preferred_partition(PreferredNode) of
-                        true  -> ok;
-                        false -> await_cluster_recovery(
-                                    fun in_preferred_partition/0)
-                    end;
-                false ->
-                    rabbit_log:warning("cluster_partition_handling: preferred "
-                                       "node ~s not part of the cluster, "
-                                       "assuming 'ignore'~n", [PreferredNode])
+        {ok, {pause_if_all_down, PreferredNodes}} ->
+            case verify_pause_if_all_down_list(PreferredNodes) of
+                []    -> ok;
+                Nodes -> case in_preferred_partition(Nodes) of
+                             true  -> ok;
+                             false -> await_cluster_recovery(
+                                        fun in_preferred_partition/0)
+                         end
             end,
             State;
         {ok, ignore} ->
@@ -709,6 +708,26 @@ disconnect(Node) ->
     application:unset_env(kernel, dist_auto_connect),
     ok.
 
+verify_pause_if_all_down_list(Nodes) when is_list(Nodes) ->
+    case [N || N <- Nodes, is_atom(N)] of
+        Nodes ->
+            ClusteredNodes = rabbit_mnesia:cluster_nodes(all),
+            RealNodes = [N || N <- Nodes, lists:member(N, ClusteredNodes)],
+            case RealNodes of
+                [] -> rabbit_log:error("pause_if_all_down: listed nodes "
+                                       "are not part of the cluster~n");
+                _  -> ok
+            end,
+            RealNodes;
+        _ ->
+            rabbit_log:error("pause_if_all_down: invalid nodes list ~p~n",
+              Nodes),
+            []
+    end;
+verify_pause_if_all_down_list(Nodes) ->
+    rabbit_log:error("pause_if_all_down: invalid nodes list ~p~n", Nodes),
+    [].
+
 %%--------------------------------------------------------------------
 
 %% mnesia:system_info(db_nodes) (and hence
@@ -719,7 +738,7 @@ disconnect(Node) ->
 %% application is up, not just the node.
 
 %% As we use these functions to decide what to do in pause_minority or
-%% keep_preferred states, they *must* be fast, even in the case where
+%% pause_if_all_down states, they *must* be fast, even in the case where
 %% TCP connections are timing out. So that means we should be careful
 %% about whether we connect to nodes which are currently disconnected.
 
@@ -728,14 +747,14 @@ majority() ->
     length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
 
 in_preferred_partition() ->
-    {ok, {keep_preferred, PreferredNode}} =
+    {ok, {pause_if_all_down, PreferredNodes}} =
         application:get_env(rabbit, cluster_partition_handling),
-    in_preferred_partition(PreferredNode).
+    in_preferred_partition(PreferredNodes).
 
-in_preferred_partition(PreferredNode) ->
+in_preferred_partition(PreferredNodes) ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
-    lists:member(PreferredNode, Nodes) andalso
-    alive_nodes([PreferredNode]) =/= [].
+    RealPreferredNodes = [N || N <- PreferredNodes, lists:member(N, Nodes)],
+    RealPreferredNodes =:= [] orelse alive_nodes(RealPreferredNodes) =/= [].
 
 all_nodes_up() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
