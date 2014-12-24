@@ -16,7 +16,8 @@
 
 -module(rabbit_autoheal).
 
--export([init/0, maybe_start/1, rabbit_down/2, node_down/2, handle_msg/3]).
+-export([init/0, enabled/0, maybe_start/1, rabbit_down/2, node_down/2,
+         handle_msg/3]).
 
 %% The named process we are running in.
 -define(SERVER, rabbit_node_monitor).
@@ -80,7 +81,11 @@ maybe_start(State) ->
     State.
 
 enabled() ->
-    {ok, autoheal} =:= application:get_env(rabbit, cluster_partition_handling).
+    case application:get_env(rabbit, cluster_partition_handling) of
+        {ok, autoheal}                         -> true;
+        {ok, {pause_if_all_down, _, autoheal}} -> true;
+        _                                      -> false
+    end.
 
 
 %% This is the winner receiving its last notification that a node has

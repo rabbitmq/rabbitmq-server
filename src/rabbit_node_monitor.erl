@@ -221,7 +221,7 @@ pause_partition_guard() ->
             case M of
                 pause_minority ->
                     pause_minority_guard([]);
-                {pause_if_all_down, PreferredNodes} ->
+                {pause_if_all_down, PreferredNodes, _} ->
                     case verify_pause_if_all_down_list(PreferredNodes) of
                         []    -> put(pause_partition_guard, not_pause_mode),
                                  ok;
@@ -562,7 +562,7 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
                 false -> await_cluster_recovery(fun majority/0)
             end,
             State;
-        {ok, {pause_if_all_down, PreferredNodes}} ->
+        {ok, {pause_if_all_down, PreferredNodes, HowToRecover}} ->
             case verify_pause_if_all_down_list(PreferredNodes) of
                 []    -> ok;
                 Nodes -> case in_preferred_partition(Nodes) of
@@ -571,7 +571,11 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
                                         fun in_preferred_partition/0)
                          end
             end,
-            State;
+            case HowToRecover of
+                autoheal -> State#state{autoheal =
+                              rabbit_autoheal:node_down(Node, Autoheal)};
+                _        -> State
+            end;
         {ok, ignore} ->
             State;
         {ok, autoheal} ->
@@ -747,7 +751,7 @@ majority() ->
     length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
 
 in_preferred_partition() ->
-    {ok, {pause_if_all_down, PreferredNodes}} =
+    {ok, {pause_if_all_down, PreferredNodes, _}} =
         application:get_env(rabbit, cluster_partition_handling),
     in_preferred_partition(PreferredNodes).
 
