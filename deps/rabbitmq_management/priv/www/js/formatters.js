@@ -84,8 +84,9 @@ function fmt_features(obj) {
 
 function fmt_policy_short(obj) {
     if (obj.policy != undefined && obj.policy != '') {
-        return '<acronym class="policy" title="Policy: ' + obj.policy +
-            '">' + obj.policy + '</acronym> ';
+        return '<acronym class="policy" title="Policy: ' +
+            fmt_escape_html(obj.policy) + '">' +
+            fmt_escape_html(obj.policy) + '</acronym> ';
     } else {
         return '';
     }
