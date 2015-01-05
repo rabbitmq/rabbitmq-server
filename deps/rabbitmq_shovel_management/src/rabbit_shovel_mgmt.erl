@@ -65,7 +65,7 @@ filter_vhost_req(List, ReqData) ->
 %% static shovels do not have a vhost, so only allow admins (not
 %% monitors) to see them.
 filter_vhost_user(List, _ReqData, #context{user = User = #user{tags = Tags}}) ->
-    VHosts = rabbit_mgmt_util:list_login_vhosts(User),
+    VHosts = rabbit_mgmt_util:list_login_vhosts(User, undefined),
     [I || I <- List, case pget(vhost, I) of
                          undefined -> lists:member(administrator, Tags);
                          VHost     -> lists:member(VHost, VHosts)
