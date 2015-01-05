@@ -66,7 +66,7 @@ HELP['shovel-delete-after'] =
 </dl>';
 
 function link_shovel(vhost, name) {
-    return _link_to(fmt_escape_html(name), '#/dynamic-shovels/' + esc(vhost) + '/' + esc(name));
+    return _link_to(name, '#/dynamic-shovels/' + esc(vhost) + '/' + esc(name));
 }
 
 function fmt_shovel_endpoint(prefix, shovel) {
