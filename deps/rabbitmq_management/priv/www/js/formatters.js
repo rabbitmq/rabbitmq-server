@@ -351,8 +351,8 @@ function fmt_table_long(table) {
 function fmt_table_body(table, x) {
     var res = '';
     for (k in table) {
-        res += '<tr><th>' + k + x + '</th><td>' + fmt_amqp_value(table[k]) +
-            '</td>';
+        res += '<tr><th>' + fmt_escape_html(k) + x + '</th>' +
+            '<td>' + fmt_amqp_value(table[k]) + '</td>';
     }
     return res;
 }
