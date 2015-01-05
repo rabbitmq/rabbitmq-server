@@ -66,5 +66,5 @@ HELP['federation-trust-user-id'] =
     'Set "Yes" to preserve the "user-id" field across a federation link, even if the user-id does not match that used to republish the message. Set to "No" to clear the "user-id" field when messages are federated. Only set this to "Yes" if you trust the upstream broker not to forge user-ids.';
 
 function link_fed_conn(vhost, name) {
-    return _link_to(fmt_escape_html(name), '#/federation-upstreams/' + esc(vhost) + '/' + esc(name));
+    return _link_to(name, '#/federation-upstreams/' + esc(vhost) + '/' + esc(name));
 }
