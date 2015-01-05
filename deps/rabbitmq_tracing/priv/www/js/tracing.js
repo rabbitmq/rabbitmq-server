@@ -30,7 +30,7 @@ dispatcher_add(function(sammy) {
 NAVIGATION['Admin'][0]['Tracing'] = ['#/traces', 'administrator'];
 
 function link_trace(name) {
-    return _link_to(fmt_escape_html(name), 'api/trace-files/' + esc(name));
+    return _link_to(name, 'api/trace-files/' + esc(name));
 }
 
 function link_trace_queue(trace) {
