@@ -777,7 +777,7 @@ function fmt_permissions(obj, permissions, lookup, show, warning) {
     for (var i in permissions) {
         var permission = permissions[i];
         if (permission[lookup] == obj.name) {
-            res.push(permission[show]);
+            res.push(fmt_escape_html(permission[show]));
         }
     }
     return res.length == 0 ? warning : res.join(', ');
