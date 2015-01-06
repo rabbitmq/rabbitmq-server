@@ -34,9 +34,9 @@
 <% } else { %>
       <td><%= link_exchange(pub.exchange.vhost, pub.exchange.name) %></td>
 <% } %>
-      <td class="r"><%= fmt_rate(pub.stats, 'publish') %></td>
+      <td class="r"><%= fmt_detail_rate(pub.stats, 'publish') %></td>
 <% if (col_confirm) { %>
-      <td class="r"><%= fmt_rate(pub.stats, 'confirm') %></td>
+      <td class="r"><%= fmt_detail_rate(pub.stats, 'confirm') %></td>
 <% } %>
     </tr>
 <% } %>
