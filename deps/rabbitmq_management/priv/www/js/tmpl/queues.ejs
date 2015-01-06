@@ -160,16 +160,16 @@
 <% } %>
 <% if (rates_mode != 'none') { %>
   <% if (show_column('queues', 'rate-incoming')) { %>
-    <td class="r"><%= fmt_rate(queue.message_stats, 'publish') %></td>
+    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'publish') %></td>
   <% } %>
   <% if (show_column('queues', 'rate-deliver')) { %>
-    <td class="r"><%= fmt_rate(queue.message_stats, 'deliver_get') %></td>
+    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'deliver_get') %></td>
   <% } %>
   <% if (show_column('queues', 'rate-redeliver')) { %>
-    <td class="r"><%= fmt_rate(queue.message_stats, 'redeliver') %></td>
+    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'redeliver') %></td>
   <% } %>
   <% if (show_column('queues', 'rate-ack')) { %>
-    <td class="r"><%= fmt_rate(queue.message_stats, 'ack') %></td>
+    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'ack') %></td>
   <% } %>
 <% } %>
   </tr>

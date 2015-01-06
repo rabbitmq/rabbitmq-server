@@ -533,6 +533,82 @@
         </td>
       </tr>
       <tr>
+        <td><code>persister_read_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each disk read operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>persister_read_bytes</code></td>
+        <td>
+          Total number of bytes read from disk by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>persister_read_count</code></td>
+        <td>
+          Total number of read operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>persister_reopen_count</code></td>
+        <td>
+          Total number of times the persister has needed to recycle
+          file handles between queues. In an ideal world this number
+          will be zero; if the number is large, performance might be
+          improved by increasing the number of file handles available
+          to RabbitMQ.
+        </td>
+      </tr>
+      <tr>
+        <td><code>persister_seek_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each seek operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      </tr>
+      <tr>
+        <td><code>persister_seek_count</code></td>
+        <td>
+          Total number of seek operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>persister_sync_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each fsync() operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      </tr>
+      <tr>
+        <td><code>persister_sync_count</code></td>
+        <td>
+          Total number of fsync() operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>persister_write_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each disk write operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>persister_write_bytes</code></td>
+        <td>
+          Total number of bytes written to disk by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>persister_write_count</code></td>
+        <td>
+          Total number of write operations by the persister.
+        </td>
+      </tr>
+      <tr>
         <td><code>proc_total</code></td>
         <td>
           Maximum number of Erlang processes.
