@@ -578,13 +578,10 @@ function fmt_client_name(properties) {
 }
 
 function fmt_trunc(str, max_length) {
-    return fmt_escape_html(fmt_trunc0(str, max_length));
-}
-
-function fmt_trunc0(str, max_length) {
     return str.length > max_length ?
-        ('<acronym class="normal" title="' + str + '">' +
-         str.substring(0, max_length) + '...</acronym>') : str;
+        ('<acronym class="normal" title="' + fmt_escape_html(str) + '">' +
+         fmt_escape_html(str.substring(0, max_length)) + '...</acronym>') :
+        fmt_escape_html(str);
 }
 
 function alt_rows(i, args) {
