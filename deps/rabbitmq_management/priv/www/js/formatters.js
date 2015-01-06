@@ -579,6 +579,10 @@ function fmt_client_name(properties) {
 }
 
 function fmt_trunc(str, max_length) {
+    return fmt_escape_html(fmt_trunc0(str, max_length));
+}
+
+function fmt_trunc0(str, max_length) {
     return str.length > max_length ?
         ('<acronym class="normal" title="' + str + '">' +
          str.substring(0, max_length) + '...</acronym>') : str;
