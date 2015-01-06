@@ -137,7 +137,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
                 not_allowed ->
                     ErrFun(<<"User can only log in via localhost">>)
             end;
-        {refused, Msg, Args} ->
+        {refused, _Username, Msg, Args} ->
             rabbit_log:warning("HTTP access denied: ~s~n",
                                [rabbit_misc:format(Msg, Args)]),
             not_authorised(<<"Login failed">>, ReqData, Context)
