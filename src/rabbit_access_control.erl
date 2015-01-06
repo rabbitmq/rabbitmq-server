@@ -31,10 +31,12 @@
 
 -spec(check_user_pass_login/2 ::
         (rabbit_types:username(), rabbit_types:password())
-        -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
+        -> {'ok', rabbit_types:user()} |
+           {'refused', rabbit_types:username(), string(), [any()]}).
 -spec(check_user_login/2 ::
         (rabbit_types:username(), [{atom(), any()}])
-        -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
+        -> {'ok', rabbit_types:user()} |
+           {'refused', rabbit_types:username(), string(), [any()]}).
 -spec(check_user_loopback/2 :: (rabbit_types:username(),
                                 rabbit_net:socket() | inet:ip_address())
         -> 'ok' | 'not_allowed').
@@ -55,7 +57,7 @@ check_user_pass_login(Username, Password) ->
 check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     R = lists:foldl(
-          fun ({ModN, ModZs0}, {refused, _, _}) ->
+          fun ({ModN, ModZs0}, {refused, _, _, _}) ->
                   ModZs = case ModZs0 of
                               A when is_atom(A) -> [A];
                               L when is_list(L) -> L
@@ -69,7 +71,7 @@ check_user_login(Username, AuthProps) ->
                       Else ->
                           Else
                   end;
-              (Mod, {refused, _, _}) ->
+              (Mod, {refused, _, _, _}) ->
                   %% Same module for authN and authZ. Just take the result
                   %% it gives us
                   case try_authenticate(Mod, Username, AuthProps) of
@@ -81,19 +83,17 @@ check_user_login(Username, AuthProps) ->
               (_, {ok, User}) ->
                   %% We've successfully authenticated. Skip to the end...
                   {ok, User}
-          end, {refused, "No modules checked '~s'", [Username]}, Modules),
-    rabbit_event:notify(case R of
-                            {ok, _User} -> user_authentication_success;
-                            _           -> user_authentication_failure
-                        end, [{name, Username}]),
+          end,
+          {refused, Username, "No modules checked '~s'", [Username]}, Modules),
     R.
 
 try_authenticate(Module, Username, AuthProps) ->
     case Module:user_login_authentication(Username, AuthProps) of
         {ok, AuthUser}  -> {ok, AuthUser};
-        {error, E}      -> {refused, "~s failed authenticating ~s: ~p~n",
+        {error, E}      -> {refused, Username,
+                            "~s failed authenticating ~s: ~p~n",
                             [Module, Username, E]};
-        {refused, F, A} -> {refused, F, A}
+        {refused, F, A} -> {refused, Username, F, A}
     end.
 
 try_authorize(Modules, Username) ->
@@ -101,12 +101,13 @@ try_authorize(Modules, Username) ->
       fun (Module, {ok, ModsImpls}) ->
               case Module:user_login_authorization(Username) of
                   {ok, Impl}      -> {ok, [{Module, Impl} | ModsImpls]};
-                  {error, E}      -> {refused, "~s failed authorizing ~s: ~p~n",
+                  {error, E}      -> {refused, Username,
+                                        "~s failed authorizing ~s: ~p~n",
                                         [Module, Username, E]};
-                  {refused, F, A} -> {refused, F, A}
+                  {refused, F, A} -> {refused, Username, F, A}
               end;
-          (_,      {refused, _, _} = Error) ->
-              Error
+          (_,      {refused, F, A}) ->
+              {refused, Username, F, A}
       end, {ok, []}, Modules).
 
 user(#auth_user{username = Username, tags = Tags}, {ok, ModZImpls}) ->
