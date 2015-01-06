@@ -84,8 +84,9 @@ function fmt_features(obj) {
 
 function fmt_policy_short(obj) {
     if (obj.policy != undefined && obj.policy != '') {
-        return '<acronym class="policy" title="Policy: ' + obj.policy +
-            '">' + obj.policy + '</acronym> ';
+        return '<acronym class="policy" title="Policy: ' +
+            fmt_escape_html(obj.policy) + '">' +
+            fmt_escape_html(obj.policy) + '</acronym> ';
     } else {
         return '';
     }
@@ -351,8 +352,8 @@ function fmt_table_long(table) {
 function fmt_table_body(table, x) {
     var res = '';
     for (k in table) {
-        res += '<tr><th>' + k + x + '</th><td>' + fmt_amqp_value(table[k]) +
-            '</td>';
+        res += '<tr><th>' + fmt_escape_html(k) + x + '</th>' +
+            '<td>' + fmt_amqp_value(table[k]) + '</td>';
     }
     return res;
 }
@@ -578,6 +579,10 @@ function fmt_client_name(properties) {
 }
 
 function fmt_trunc(str, max_length) {
+    return fmt_escape_html(fmt_trunc0(str, max_length));
+}
+
+function fmt_trunc0(str, max_length) {
     return str.length > max_length ?
         ('<acronym class="normal" title="' + str + '">' +
          str.substring(0, max_length) + '...</acronym>') : str;
