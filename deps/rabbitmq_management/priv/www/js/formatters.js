@@ -84,8 +84,9 @@ function fmt_features(obj) {
 
 function fmt_policy_short(obj) {
     if (obj.policy != undefined && obj.policy != '') {
-        return '<acronym class="policy" title="Policy: ' + obj.policy +
-            '">' + obj.policy + '</acronym> ';
+        return '<acronym class="policy" title="Policy: ' +
+            fmt_escape_html(obj.policy) + '">' +
+            fmt_escape_html(obj.policy) + '</acronym> ';
     } else {
         return '';
     }
@@ -579,8 +580,9 @@ function fmt_client_name(properties) {
 
 function fmt_trunc(str, max_length) {
     return str.length > max_length ?
-        ('<acronym class="normal" title="' + str + '">' +
-         str.substring(0, max_length) + '...</acronym>') : str;
+        ('<acronym class="normal" title="' + fmt_escape_html(str) + '">' +
+         fmt_escape_html(str.substring(0, max_length)) + '...</acronym>') :
+        fmt_escape_html(str);
 }
 
 function alt_rows(i, args) {
@@ -777,7 +779,7 @@ function fmt_permissions(obj, permissions, lookup, show, warning) {
     for (var i in permissions) {
         var permission = permissions[i];
         if (permission[lookup] == obj.name) {
-            res.push(permission[show]);
+            res.push(fmt_escape_html(permission[show]));
         }
     }
     return res.length == 0 ? warning : res.join(', ');
