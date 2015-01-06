@@ -380,7 +380,7 @@ function fmt_amqp_value(val) {
 function fmt_table_flat(table) {
     var res = [];
     for (k in table) {
-        res.push(k + ': ' + fmt_amqp_value_flat(table[k]));
+        res.push(fmt_escape_html(k) + ': ' + fmt_amqp_value_flat(table[k]));
     }
     return res.join(', ');
 }
