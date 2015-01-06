@@ -168,14 +168,14 @@ function setup_global_vars() {
     user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
     user_monitor = jQuery.inArray("monitoring", user_tags) != -1;
     replace_content('login-details',
-                    '<p>User: <b>' + user.name + '</b></p>' +
-                    '<p>Cluster: <b>' + overview.cluster_name + '</b> ' +
+                    '<p>User: <b>' + fmt_escape_html(user.name) + '</b></p>' +
+                    '<p>Cluster: <b>' + fmt_escape_html(overview.cluster_name) + '</b> ' +
                     (user_administrator ?
                      '(<a href="#/cluster-name">change</a>)' : '') + '</p>' +
-                    '<p>RabbitMQ ' + overview.rabbitmq_version +
+                    '<p>RabbitMQ ' + fmt_escape_html(overview.rabbitmq_version) +
                     ', <acronym class="normal" title="' +
-                    overview.erlang_full_version + '">Erlang ' +
-                    overview.erlang_version + '</acronym></p>');
+                    fmt_escape_html(overview.erlang_full_version) + '">Erlang ' +
+                    fmt_escape_html(overview.erlang_version) + '</acronym></p>');
     nodes_interesting = false;
     rabbit_versions_interesting = false;
     if (user_monitor) {
