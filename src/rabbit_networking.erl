@@ -188,12 +188,21 @@ fix_ssl_options(Config) ->
     fix_verify_fun(fix_ssl_protocol_versions(Config)).
 
 fix_verify_fun(SslOptsConfig) ->
+    %% Starting with ssl 4.0.1 in Erlang R14B, the verify_fun function
+    %% takes 3 arguments and returns a tuple.
+    {ok, SslAppVer} = application:get_key(ssl, vsn),
+    UseNewVerifyFun = rabbit_misc:version_compare(SslAppVer, "4.0.1", gte),
     case rabbit_misc:pget(verify_fun, SslOptsConfig) of
+        {Module, Function, InitialUserState} ->
+            Fun = make_verify_fun(Module, Function, InitialUserState,
+                                  UseNewVerifyFun),
+            rabbit_misc:pset(verify_fun, Fun, SslOptsConfig);
         {Module, Function} ->
-            rabbit_misc:pset(verify_fun,
-                             fun (ErrorList) ->
-                                     Module:Function(ErrorList)
-                             end, SslOptsConfig);
+            Fun = make_verify_fun(Module, Function, none,
+                                  UseNewVerifyFun),
+            rabbit_misc:pset(verify_fun, Fun, SslOptsConfig);
+        undefined when UseNewVerifyFun ->
+            SslOptsConfig;
         undefined ->
             % unknown_ca errors are silently ignored prior to R14B unless we
             % supply this verify_fun - remove when at least R14B is required
@@ -204,6 +213,48 @@ fix_verify_fun(SslOptsConfig) ->
                                              end}
                                 | SslOptsConfig]
             end
+    end.
+
+make_verify_fun(Module, Function, InitialUserState, UseNewVerifyFun) ->
+    try
+        %% Preload the module: it is required to use
+        %% erlang:function_exported/3.
+        Module:module_info()
+    catch
+        _:Exception ->
+            rabbit_log:error("SSL verify_fun: module ~s missing: ~p~n",
+                             [Module, Exception]),
+            throw({error, {invalid_verify_fun, missing_module}})
+    end,
+    NewForm = erlang:function_exported(Module, Function, 3),
+    OldForm = erlang:function_exported(Module, Function, 1),
+    case {NewForm, OldForm} of
+        {true, _} when UseNewVerifyFun ->
+            %% This verify_fun is supported by Erlang R14B+ (ssl
+            %% 4.0.1 and later).
+            Fun = fun(OtpCert, Event, UserState) ->
+                    Module:Function(OtpCert, Event, UserState)
+            end,
+            {Fun, InitialUserState};
+        {_, true} ->
+            %% This verify_fun is supported by:
+            %%     o  Erlang up-to R13B;
+            %%     o  Erlang R14B+ for undocumented backward
+            %%        compatibility.
+            %%
+            %% InitialUserState is ignored in this case.
+            fun(ErrorList) ->
+                    Module:Function(ErrorList)
+            end;
+        {_, false} when not UseNewVerifyFun ->
+            rabbit_log:error("SSL verify_fun: ~s:~s/1 form required "
+              "for Erlang R13B~n", [Module, Function]),
+            throw({error, {invalid_verify_fun, old_form_required}});
+        _ ->
+            Arity = case UseNewVerifyFun of true -> 3; _ -> 1 end,
+            rabbit_log:error("SSL verify_fun: no ~s:~s/~b exported~n",
+              [Module, Function, Arity]),
+            throw({error, {invalid_verify_fun, function_not_exported}})
     end.
 
 fix_ssl_protocol_versions(Config) ->
