@@ -60,7 +60,7 @@
 </div>
 
 <div class="section">
-<h2>Statistics</h2>
+<h2>Process Statistics</h2>
 <div class="hider">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
@@ -106,7 +106,7 @@
       <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
    <%= node_stat('mem_used', 'Used', 'mem_limit', 'high watermark', node,
-                 fmt_bytes_obj, fmt_bytes_axis,
+                 fmt_bytes, fmt_bytes_axis,
                  node.mem_alarm ? 'red' : 'green',
                  node.mem_alarm ? 'memory-alarm' : null) %>
 <% } else { %>
@@ -121,7 +121,7 @@
       <td>
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
    <%= node_stat('disk_free', 'Free', 'disk_free_limit', 'low watermark', node,
-                 fmt_bytes_obj, fmt_bytes_axis,
+                 fmt_bytes, fmt_bytes_axis,
                  node.disk_free_alarm ? 'red' : 'green',
                  node.disk_free_alarm ? 'disk_free-alarm' : null,
                  true) %>
@@ -136,6 +136,25 @@
 <% } %>
 </div>
 </div>
+
+<div class="section">
+<h2>I/O Statistics</h2>
+<div class="hider">
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
+<% } else { %>
+  <%= rates_chart_or_text('persister-stats-count', node, [['Read', 'persister_read_count'], ['Write', 'persister_write_count'], ['Seek', 'persister_seek_count'], ['Sync', 'persister_sync_count'], ['Reopen', 'persister_reopen_count']], fmt_rate, fmt_rate_axis, true, 'Operations', 'io-operations') %>
+
+  <%= rates_chart_or_text('persister-stats-bytes', node, [['Read', 'persister_read_bytes'], ['Write', 'persister_write_bytes']], fmt_rate_bytes, fmt_rate_bytes_axis, true, 'Data rates') %>
+
+  <%= rates_chart_or_text('persister-stats-time', node, [['Read', 'persister_read_avg_time'], ['Write', 'persister_write_avg_time'], ['Seek', 'persister_seek_avg_time'], ['Sync', 'persister_sync_avg_time']], fmt_ms, fmt_ms, false, 'Average time per operation') %>
+
+<% } %>
+</div>
+</div>
+
 
 <div class="section">
 <h2>Memory details</h2>
