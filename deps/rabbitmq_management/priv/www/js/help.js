@@ -273,6 +273,39 @@ HELP = {
          of file handles available.</dd>\
       </dl>',
 
+    'mnesia-transactions':
+    'Rate at which Mnesia transactions are initiated on this node (this node \
+     will also take part in Mnesia transactions initiated on other nodes).\
+      <dl>\
+        <dt>RAM only</dt>\
+        <dd>Rate at which RAM-only transactions take place (e.g. creation / \
+            deletion of transient queues).</dd>\
+        <dt>Disk</dt>\
+        <dd>Rate at which disk (and RAM) transactions take place (.e.g \
+            creation / deletion of durable queues).</dd>\
+      </dl>',
+
+    'persister-operations':
+    'Rate at which persister operations take place on this node. See \
+     <a href="http://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
+     for more information on the persister. \
+      <dl>\
+        <dt>QI Read</dt>\
+        <dd>Rate at which message information is read from queue index \
+            segment files.</dd>\
+        <dt>QI Write</dt>\
+        <dd>Rate at which message information is written to queue index \
+            segment files.</dd>\
+        <dt>QI Journal</dt>\
+        <dd>Rate at which message information is written to queue index \
+            journals.</dd>\
+        <dt>Store Read</dt>\
+        <dd>Rate at which messages are read from the message store.</dd>\
+        <dt>Store Write</dt>\
+        <dd>Rate at which messages are written to the message store.</dd>\
+      </dl>',
+
+
     'foo': 'foo' // No comma.
 };
 

@@ -138,19 +138,45 @@
 </div>
 
 <div class="section">
-<h2>I/O Statistics</h2>
+<h2>Persistence and I/O Statistics</h2>
 <div class="hider">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
-  <%= rates_chart_or_text('persister-stats-count', node, [['Read', 'persister_read_count'], ['Write', 'persister_write_count'], ['Seek', 'persister_seek_count'], ['Sync', 'persister_sync_count'], ['Reopen', 'persister_reopen_count']], fmt_rate, fmt_rate_axis, true, 'Operations', 'io-operations') %>
+  <%= rates_chart_or_text('mnesia-stats-count', node,
+      [['RAM only', 'mnesia_ram_tx_count'],
+       ['Disk', 'mnesia_disk_tx_count']],
+      fmt_rate, fmt_rate_axis, true, 'Mnesia transactions', 'mnesia-transactions') %>
 
-  <%= rates_chart_or_text('persister-stats-bytes', node, [['Read', 'persister_read_bytes'], ['Write', 'persister_write_bytes']], fmt_rate_bytes, fmt_rate_bytes_axis, true, 'Data rates') %>
+  <%= rates_chart_or_text('persister-stats-count', node,
+      [['QI Read', 'queue_index_read_count'],
+       ['QI Write', 'queue_index_write_count'],
+       ['QI Journal', 'queue_index_journal_write_count'],
+       ['Store Read', 'msg_store_read_count'],
+       ['Store Write', 'msg_store_write_count']],
+      fmt_rate, fmt_rate_axis, true, 'Persistence operations', 'persister-operations') %>
 
-  <%= rates_chart_or_text('persister-stats-time', node, [['Read', 'persister_read_avg_time'], ['Write', 'persister_write_avg_time'], ['Seek', 'persister_seek_avg_time'], ['Sync', 'persister_sync_avg_time']], fmt_ms, fmt_ms, false, 'Average time per operation') %>
+  <%= rates_chart_or_text('persister-io-stats-count', node,
+      [['Read', 'io_read_count'],
+       ['Write', 'io_write_count'],
+       ['Seek', 'io_seek_count'],
+       ['Sync', 'io_sync_count'],
+       ['Reopen', 'io_reopen_count']],
+      fmt_rate, fmt_rate_axis, true, 'I/O operations', 'io-operations') %>
 
+  <%= rates_chart_or_text('persister-io-stats-bytes', node,
+      [['Read', 'io_read_bytes'],
+       ['Write', 'io_write_bytes']],
+      fmt_rate_bytes, fmt_rate_bytes_axis, true, 'I/O data rates') %>
+
+  <%= rates_chart_or_text('persister-io-stats-time', node,
+      [['Read', 'io_read_avg_time'],
+       ['Write', 'io_write_avg_time'],
+       ['Seek', 'io_seek_avg_time'],
+       ['Sync', 'io_sync_avg_time']],
+      fmt_ms, fmt_ms, false, 'I/O average time per operation') %>
 <% } %>
 </div>
 </div>

@@ -160,18 +160,21 @@
 
 -define(COARSE_NODE_STATS,
         [mem_used, fd_used, sockets_used, proc_used, disk_free,
-        persister_read_count,  persister_read_bytes,  persister_read_avg_time,
-        persister_write_count, persister_write_bytes, persister_write_avg_time,
-        persister_sync_count,  persister_sync_avg_time,
-        persister_seek_count,  persister_seek_avg_time,
-        persister_reopen_count]).
+         io_read_count,  io_read_bytes,  io_read_avg_time,
+         io_write_count, io_write_bytes, io_write_avg_time,
+         io_sync_count,  io_sync_avg_time,
+         io_seek_count,  io_seek_avg_time,
+         io_reopen_count, mnesia_ram_tx_count,  mnesia_disk_tx_count,
+         msg_store_read_count, msg_store_write_count,
+         queue_index_journal_write_count,
+         queue_index_write_count, queue_index_read_count]).
 
 %% Normally 0 and no history means "has never happened, don't
 %% report". But for these things we do want to report even at 0 with
 %% no history.
 -define(ALWAYS_REPORT_STATS,
-        [persister_read_avg_time, persister_write_avg_time,
-         persister_sync_avg_time | ?COARSE_QUEUE_STATS]).
+        [io_read_avg_time, io_write_avg_time,
+         io_sync_avg_time | ?COARSE_QUEUE_STATS]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
