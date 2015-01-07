@@ -305,6 +305,26 @@ HELP = {
         <dd>Rate at which messages are written to the message store.</dd>\
       </dl>',
 
+    'msg-store-sizes':
+    'Number of messages which are currently written to disk in the message \
+     store. See <a href="http://www.rabbitmq.com/persistence-conf.html" \
+     target="_blank">here</a> for more information on the persister. Note \
+     that:\
+      <ul> \
+        <li>Messages which are embedded in queue indices are not shown \
+            here</li> \
+        <li>If a message is routed to multiple queues it will only be \
+            stored in the message store once</li> \
+        <li>No messages will show here if you have installed an alternate \
+            message store index implementation</li> \
+      </ul> \
+      <dl>\
+        <dt>Transient</dt>\
+        <dd>Number of transient messages on disk in the message store \
+            (paged out due to RAM pressure).</dd>\
+        <dt>Persistent</dt>\
+        <dd>Number of persistent messages on disk in the message store.</dd>\
+      </dl>',
 
     'foo': 'foo' // No comma.
 };

@@ -166,6 +166,7 @@
          io_seek_count,  io_seek_avg_time,
          io_reopen_count, mnesia_ram_tx_count,  mnesia_disk_tx_count,
          msg_store_read_count, msg_store_write_count,
+         msg_store_transient_size, msg_store_persistent_size,
          queue_index_journal_write_count,
          queue_index_write_count, queue_index_read_count]).
 
