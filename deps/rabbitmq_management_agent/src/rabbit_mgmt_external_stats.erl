@@ -36,7 +36,8 @@
                uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications, contexts,
                log_file, sasl_log_file, db_dir, config_files, net_ticktime,
-               persister_stats, enabled_plugins]).
+               persister_stats, msg_store_transient_size,
+               msg_store_persistent_size, enabled_plugins]).
 
 %%--------------------------------------------------------------------
 
@@ -186,6 +187,8 @@ i(db_dir,          _State) -> list_to_binary(rabbit_mnesia:dir());
 i(config_files,    _State) -> [list_to_binary(F) || F <- rabbit:config_files()];
 i(net_ticktime,    _State) -> net_kernel:get_net_ticktime();
 i(persister_stats,  State) -> persister_stats(State);
+i(msg_store_transient_size, _State) -> msg_store_size(msg_store_transient);
+i(msg_store_persistent_size, _State) -> msg_store_size(msg_store_persistent);
 i(enabled_plugins, _State) -> {ok, Dir} = application:get_env(
                                            rabbit, enabled_plugins_file),
                               rabbit_plugins:read_enabled(Dir);
@@ -207,6 +210,16 @@ log_location(Type) ->
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
                  rabbit_alarm:get_alarms()).
+
+msg_store_size(MsgStore) ->
+    case [ets:info(T, size) || T <- ets:all(),
+                               O <- [ets:info(T, owner)],
+                               N <- [ets:info(T, name)],
+                               O =:= whereis(MsgStore),
+                               N =:= rabbit_msg_store_ets_index] of
+        []  -> 0;
+        [S] -> S
+    end.
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
