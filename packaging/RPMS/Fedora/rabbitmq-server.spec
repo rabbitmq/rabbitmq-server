@@ -129,6 +129,10 @@ done
 %clean
 rm -rf %{buildroot}
 
+# rabbitmq.config.example (%doc) was copied to /tmp (DOC_INSTALL_DIR)
+# during make install.
+rm -f /tmp/rabbitmq.config.example
+
 %changelog
 * Tue Jan 6 2015 jean-sebastien@rabbitmq.com 3.4.3-1
 - New Upstream Release
