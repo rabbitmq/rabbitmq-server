@@ -22,13 +22,20 @@
 
 -define(TABLE, ?MODULE).
 
+-define(COUNT,
+        [io_reopen, mnesia_ram_tx, mnesia_disk_tx,
+         msg_store_read, msg_store_write,
+         queue_index_journal_write, queue_index_write, queue_index_read]).
+-define(COUNT_TIME, [io_sync, io_seek]).
+-define(COUNT_TIME_BYTES, [io_read, io_write]).
+
 init() ->
     ets:new(?TABLE, [public, named_table]),
-    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [read, write],
+    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- ?COUNT_TIME_BYTES,
                                                Counter <- [count, bytes, time]],
-    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [sync, seek],
+    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- ?COUNT_TIME,
                                                Counter <- [count, time]],
-    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- [reopen],
+    [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- ?COUNT,
                                                Counter <- [count]].
 
 update(Op, Bytes, Thunk) ->

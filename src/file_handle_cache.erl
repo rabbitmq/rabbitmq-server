@@ -573,18 +573,18 @@ info(Items) -> gen_server2:call(?SERVER, {info, Items}, infinity).
 
 prim_file_read(Hdl, Size) ->
     file_handle_cache_stats:update(
-      read, Size, fun() -> prim_file:read(Hdl, Size) end).
+      io_read, Size, fun() -> prim_file:read(Hdl, Size) end).
 
 prim_file_write(Hdl, Bytes) ->
     file_handle_cache_stats:update(
-      write, iolist_size(Bytes), fun() -> prim_file:write(Hdl, Bytes) end).
+      io_write, iolist_size(Bytes), fun() -> prim_file:write(Hdl, Bytes) end).
 
 prim_file_sync(Hdl) ->
-    file_handle_cache_stats:update(sync, fun() -> prim_file:sync(Hdl) end).
+    file_handle_cache_stats:update(io_sync, fun() -> prim_file:sync(Hdl) end).
 
 prim_file_position(Hdl, NewOffset) ->
     file_handle_cache_stats:update(
-      seek, fun() -> prim_file:position(Hdl, NewOffset) end).
+      io_seek, fun() -> prim_file:position(Hdl, NewOffset) end).
 
 is_reader(Mode) -> lists:member(read, Mode).
 
@@ -674,7 +674,7 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
         RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
     Mode = case NewOrReopen of
                new    -> Mode0;
-               reopen -> file_handle_cache_stats:update(reopen),
+               reopen -> file_handle_cache_stats:update(io_reopen),
                          [read | Mode0]
            end,
     case prim_file:open(Path, Mode) of
