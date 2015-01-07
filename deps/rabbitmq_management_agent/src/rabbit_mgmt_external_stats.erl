@@ -234,7 +234,7 @@ persister_stats(#state{fhc_stats         = FHC,
         [{flatten_key(K), V} || {K, V} <- FHCD].
 
 flatten_key({A, B}) ->
-    list_to_atom("persister_" ++ atom_to_list(A) ++ "_" ++ atom_to_list(B)).
+    list_to_atom(atom_to_list(A) ++ "_" ++ atom_to_list(B)).
 
 %%--------------------------------------------------------------------
 
