@@ -58,6 +58,11 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
+-define(AUTH_NOTIFICATION_INFO_KEYS,
+        [host, vhost, name, peer_host, peer_port, protocol, auth_mechanism,
+         ssl, ssl_protocol, ssl_cipher, peer_cert_issuer, peer_cert_subject,
+         peer_cert_validity]).
+
 -define(IS_RUNNING(State),
         (State#v1.connection_state =:= running orelse
          State#v1.connection_state =:= blocking orelse
@@ -944,7 +949,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
-    ok = rabbit_access_control:check_vhost_access(User, VHostPath),
+    ok = rabbit_access_control:check_vhost_access(User, VHostPath, Sock),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
@@ -1046,9 +1051,12 @@ auth_phase(Response,
                                        auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
-        {refused, Msg, Args} ->
-            auth_fail(Msg, Args, Name, State);
+        {refused, Username, Msg, Args} ->
+            auth_fail(Username, Msg, Args, Name, State);
         {protocol_error, Msg, Args} ->
+            notify_auth_result(none, user_authentication_failure,
+                               [{error, rabbit_misc:format(Msg, Args)}],
+                               State),
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
             Secure = #'connection.secure'{challenge = Challenge},
@@ -1057,9 +1065,12 @@ auth_phase(Response,
                                     auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
             case rabbit_access_control:check_user_loopback(Username, Sock) of
-                ok          -> ok;
-                not_allowed -> auth_fail("user '~s' can only connect via "
-                                         "localhost", [Username], Name, State)
+                ok ->
+                    notify_auth_result(Username, user_authentication_success,
+                                       [], State);
+                not_allowed ->
+                    auth_fail(Username, "user '~s' can only connect via "
+                              "localhost", [Username], Name, State)
             end,
             Tune = #'connection.tune'{frame_max   = get_env(frame_max),
                                       channel_max = get_env(channel_max),
@@ -1071,11 +1082,15 @@ auth_phase(Response,
     end.
 
 -ifdef(use_specs).
--spec(auth_fail/4 :: (string(), [any()], binary(), #v1{}) -> no_return()).
+-spec(auth_fail/5 ::
+        (rabbit_types:username() | none, string(), [any()], binary(), #v1{}) ->
+           no_return()).
 -endif.
-auth_fail(Msg, Args, AuthName,
+auth_fail(Username, Msg, Args, AuthName,
           State = #v1{connection = #connection{protocol     = Protocol,
                                                capabilities = Capabilities}}) ->
+    notify_auth_result(Username, user_authentication_failure,
+      [{error, rabbit_misc:format(Msg, Args)}], State),
     AmqpError = rabbit_misc:amqp_error(
                   access_refused, "~s login refused: ~s",
                   [AuthName, io_lib:format(Msg, Args)], none),
@@ -1093,6 +1108,16 @@ auth_fail(Msg, Args, AuthName,
         _ -> ok
     end,
     rabbit_misc:protocol_error(AmqpError).
+
+notify_auth_result(Username, AuthResult, ExtraProps, State) ->
+    EventProps = [{connection_type, network},
+                  {name, case Username of none -> ''; _ -> Username end}] ++
+                 [case Item of
+                      name -> {connection_name, i(name, State)};
+                      _    -> {Item, i(Item, State)}
+                  end || Item <- ?AUTH_NOTIFICATION_INFO_KEYS] ++
+                 ExtraProps,
+    rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
 %%--------------------------------------------------------------------------
 

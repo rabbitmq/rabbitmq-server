@@ -288,11 +288,9 @@ handle_cast(notify_node_up, State = #state{guid = GUID}) ->
 %% When one node gets nodedown from another, it then sends
 %% 'check_partial_partition' to all the nodes it still thinks are
 %% alive. If any of those (intermediate) nodes still see the "down"
-%% node as up, they inform it that this has happened (after a short
-%% delay to ensure we don't detect something that would become a full
-%% partition anyway as a partial one). The "down" node (in 'ignore' or
-%% 'autoheal' mode) will then disconnect from the intermediate node to
-%% "upgrade" to a full partition.
+%% node as up, they inform it that this has happened. The original
+%% node (in 'ignore' or 'autoheal' mode) will then disconnect from the
+%% intermediate node to "upgrade" to a full partition.
 %%
 %% In pause_minority mode it will instead immediately pause until all
 %% nodes come back. This is because the contract for pause_minority is
@@ -317,10 +315,27 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                            node_guids = GUIDs}) ->
     case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) andalso
         orddict:find(Node, GUIDs) =:= {ok, NodeGUID} of
-        true  -> cast(Rep, {partial_partition, Node, node(), RepGUID});
+        true  -> spawn_link( %%[1]
+                   fun () ->
+                           case rpc:call(Node, rabbit, is_running, []) of
+                               {badrpc, _} -> ok;
+                               _           -> cast(Rep, {partial_partition,
+                                                         Node, node(), RepGUID})
+                           end
+                   end);
         false -> ok
     end,
     {noreply, State};
+%% [1] We checked that we haven't heard the node go down - but we
+%% really should make sure we can actually communicate with
+%% it. Otherwise there's a race where we falsely detect a partial
+%% partition.
+%%
+%% Now of course the rpc:call/4 may take a long time to return if
+%% connectivity with the node is actually interrupted - but that's OK,
+%% we only really want to do something in a timely manner if
+%% connectivity is OK. However, of course as always we must not block
+%% the node monitor, so we do the check in a separate process.
 
 handle_cast({check_partial_partition, _Node, _Reporter,
              _NodeGUID, _GUID, _ReporterGUID}, State) ->
@@ -344,11 +359,20 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             rabbit_log:error(
               FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
               ArgsBase ++ [Proxy]),
-            erlang:disconnect_node(Proxy),
+            cast(Proxy, {partial_partition_disconnect, node()}),
+            disconnect(Proxy),
             {noreply, State}
     end;
 
 handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
+    {noreply, State};
+
+%% Sometimes it appears the Erlang VM does not give us nodedown
+%% messages reliably when another node disconnects from us. Therefore
+%% we are told just before the disconnection so we can reciprocate.
+handle_cast({partial_partition_disconnect, Other}, State) ->
+    rabbit_log:error("Partial partition disconnect from ~s~n", [Other]),
+    disconnect(Other),
     {noreply, State};
 
 %% Note: when updating the status file, we can't simply write the
@@ -429,6 +453,10 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
     end,
     {noreply, handle_dead_node(Node, State)};
 
+handle_info({nodeup, Node, _Info}, State) ->
+    rabbit_log:info("node ~p up~n", [Node]),
+    {noreply, State};
+
 handle_info({mnesia_system_event,
              {inconsistent_database, running_partitioned_network, Node}},
             State = #state{partitions = Partitions,
@@ -441,8 +469,7 @@ handle_info({mnesia_system_event,
                             monitors = pmon:monitor({rabbit, Node}, Monitors)}
              end,
     ok = handle_live_rabbit(Node),
-    Partitions1 = ordsets:to_list(
-                    ordsets:add_element(Node, ordsets:from_list(Partitions))),
+    Partitions1 = lists:usort([Node | Partitions]),
     {noreply, maybe_autoheal(State1#state{partitions = Partitions1})};
 
 handle_info({autoheal_msg, Msg}, State = #state{autoheal   = AState,
@@ -631,6 +658,19 @@ add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 del_node(Node, Nodes) -> Nodes -- [Node].
 
 cast(Node, Msg) -> gen_server:cast({?SERVER, Node}, Msg).
+
+%% When we call this, it's because we want to force Mnesia to detect a
+%% partition. But if we just disconnect_node/1 then Mnesia won't
+%% detect a very short partition. So we want to force a slightly
+%% longer disconnect. Unfortunately we don't have a way to blacklist
+%% individual nodes; the best we can do is turn off auto-connect
+%% altogether.
+disconnect(Node) ->
+    application:set_env(kernel, dist_auto_connect, never),
+    erlang:disconnect_node(Node),
+    timer:sleep(1000),
+    application:unset_env(kernel, dist_auto_connect),
+    ok.
 
 %%--------------------------------------------------------------------
 

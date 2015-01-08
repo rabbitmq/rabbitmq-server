@@ -252,6 +252,9 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
         {'$gen_cast', {set_ram_duration_target, Duration}} ->
             BQS1 = BQ:set_ram_duration_target(Duration, BQS),
             slave_sync_loop(Args, {MA, TRef, BQS1});
+        {'$gen_cast', {run_backing_queue, Mod, Fun}} ->
+            BQS1 = BQ:invoke(Mod, Fun, BQS),
+            slave_sync_loop(Args, {MA, TRef, BQS1});
         update_ram_duration ->
             {TRef1, BQS1} = UpdateRamDuration(BQ, BQS),
             slave_sync_loop(Args, {MA, TRef1, BQS1});

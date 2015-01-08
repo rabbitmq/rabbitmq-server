@@ -17,10 +17,11 @@
 -module(rabbit_diagnostics).
 
 -define(PROCESS_INFO,
-        [current_stacktrace, initial_call, dictionary, message_queue_len,
-         links, monitors, monitored_by, heap_size]).
+        [registered_name, current_stacktrace, initial_call, dictionary,
+         message_queue_len, links, monitors, monitored_by, heap_size]).
 
--export([maybe_stuck/0, maybe_stuck/1]).
+-export([maybe_stuck/0, maybe_stuck/1, top_memory_use/0, top_memory_use/1,
+         top_binary_refs/0, top_binary_refs/1]).
 
 maybe_stuck() -> maybe_stuck(5000).
 
@@ -41,13 +42,13 @@ maybe_stuck(Pids, Timeout) ->
     maybe_stuck(Pids2, Timeout - 500).
 
 looks_stuck(Pid) ->
-    case process_info(Pid, status) of
+    case info(Pid, status, gone) of
         {status, waiting} ->
             %% It's tempting to just check for message_queue_len > 0
             %% here rather than mess around with stack traces and
             %% heuristics. But really, sometimes freshly stuck
             %% processes can have 0 messages...
-            case erlang:process_info(Pid, current_stacktrace) of
+            case info(Pid, current_stacktrace, gone) of
                 {current_stacktrace, [H|_]} ->
                     maybe_stuck_stacktrace(H);
                 _ ->
@@ -75,5 +76,38 @@ maybe_stuck_stacktrace({_M, F, _A}) ->
         _ -> false
     end.
 
+top_memory_use() -> top_memory_use(30).
+
+top_memory_use(Count) ->
+    Pids = processes(),
+    io:format("Memory use: top ~p of ~p processes.~n", [Count, length(Pids)]),
+    Procs = [{info(Pid, memory, 0), info(Pid)} || Pid <- Pids],
+    Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
+    io:format("~p~n", [Sorted]).
+
+top_binary_refs() -> top_binary_refs(30).
+
+top_binary_refs(Count) ->
+    Pids = processes(),
+    io:format("Binary refs: top ~p of ~p processes.~n", [Count, length(Pids)]),
+    Procs = [{{binary_refs, binary_refs(Pid)}, info(Pid)} || Pid <- Pids],
+    Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
+    io:format("~p~n", [Sorted]).
+
+binary_refs(Pid) ->
+    {binary, Refs} = info(Pid, binary, []),
+    lists:sum([Sz || {_Ptr, Sz} <- lists:usort([{Ptr, Sz} ||
+                                                   {Ptr, Sz, _Cnt} <- Refs])]).
+
 info(Pid) ->
-    [{pid, Pid} | process_info(Pid, ?PROCESS_INFO)].
+    [{pid, Pid} | info(Pid, ?PROCESS_INFO, [])].
+
+info(Pid, Infos, Default) ->
+    try
+        process_info(Pid, Infos)
+    catch
+        _:_ -> case is_atom(Infos) of
+                   true  -> {Infos, Default};
+                   false -> Default
+               end
+    end.

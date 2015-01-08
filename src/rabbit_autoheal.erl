@@ -21,6 +21,8 @@
 %% The named process we are running in.
 -define(SERVER, rabbit_node_monitor).
 
+-define(MNESIA_STOPPED_PING_INTERNAL, 200).
+
 %%----------------------------------------------------------------------------
 
 %% In order to autoheal we want to:
@@ -54,9 +56,17 @@
 %%   - we are the winner and are waiting for all losing nodes to stop
 %%   before telling them they can restart
 %%
+%% about_to_heal
+%%   - we are the leader, and have already assigned the winner and
+%%   losers. We are part of the losers and we wait for the winner_is
+%%   announcement. This leader-specific state differs from not_healing
+%%   (the state other losers are in), because the leader could still
+%%   receive request_start messages: those subsequent requests must be
+%%   ignored.
+%%
 %% {leader_waiting, OutstandingStops}
 %%   - we are the leader, and have already assigned the winner and losers.
-%%     We are neither but need to ignore further requests to autoheal.
+%%   We are neither but need to ignore further requests to autoheal.
 %%
 %% restarting
 %%   - we are restarting. Of course the node monitor immediately dies
@@ -128,14 +138,12 @@ handle_msg({request_start, Node},
                             "  * Winner:     ~p~n"
                             "  * Losers:     ~p~n",
                             [AllPartitions, Winner, Losers]),
-            Continue = fun(Msg) ->
-                               handle_msg(Msg, not_healing, Partitions)
-                       end,
             case node() =:= Winner of
-                true  -> Continue({become_winner, Losers});
+                true  -> handle_msg({become_winner, Losers},
+                                    not_healing, Partitions);
                 false -> send(Winner, {become_winner, Losers}), %% [0]
                          case lists:member(node(), Losers) of
-                             true  -> Continue({winner_is, Winner});
+                             true  -> about_to_heal;
                              false -> {leader_waiting, Losers}
                          end
             end
@@ -163,7 +171,8 @@ handle_msg({become_winner, Losers},
     end;
 
 handle_msg({winner_is, Winner},
-           not_healing, _Partitions) ->
+           State, _Partitions)
+           when State =:= not_healing orelse State =:= about_to_heal ->
     rabbit_log:warning(
       "Autoheal: we were selected to restart; winner is ~p~n", [Winner]),
     rabbit_node_monitor:run_outside_applications(
@@ -194,8 +203,35 @@ abort(Down, Notify) ->
     winner_finish(Notify).
 
 winner_finish(Notify) ->
+    %% There is a race in Mnesia causing a starting loser to hang
+    %% forever if another loser stops at the same time: the starting
+    %% node connects to the other node, negotiates the protocol and
+    %% attempts to acquire a write lock on the schema on the other node.
+    %% If the other node stops between the protocol negotiation and lock
+    %% request, the starting node never gets an answer to its lock
+    %% request.
+    %%
+    %% To work around the problem, we make sure Mnesia is stopped on all
+    %% losing nodes before sending the "autoheal_safe_to_start" signal.
+    wait_for_mnesia_shutdown(Notify),
     [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
     not_healing.
+
+wait_for_mnesia_shutdown([Node | Rest] = AllNodes) ->
+    case rpc:call(Node, mnesia, system_info, [is_running]) of
+        no ->
+            wait_for_mnesia_shutdown(Rest);
+        Running when
+        Running =:= yes orelse
+        Running =:= starting orelse
+        Running =:= stopping ->
+            timer:sleep(?MNESIA_STOPPED_PING_INTERNAL),
+            wait_for_mnesia_shutdown(AllNodes);
+        _ ->
+            wait_for_mnesia_shutdown(Rest)
+    end;
+wait_for_mnesia_shutdown([]) ->
+    ok.
 
 make_decision(AllPartitions) ->
     Sorted = lists:sort([{partition_value(P), P} || P <- AllPartitions]),

@@ -83,16 +83,27 @@ connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
 connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
     case rabbit:is_running() of
         true  -> case AuthFun() of
-                     {ok, User} ->
+                     {ok, User = #user{username = Username}} ->
+                         notify_auth_result(Username,
+                           user_authentication_success, []),
                          connect1(User, VHost, Protocol, Pid, Infos);
-                     {refused, _M, _A} ->
+                     {refused, Username, Msg, Args} ->
+                         notify_auth_result(Username,
+                           user_authentication_failure,
+                           [{error, rabbit_misc:format(Msg, Args)}]),
                          {error, {auth_failure, "Refused"}}
                  end;
         false -> {error, broker_not_found_on_node}
     end.
 
+notify_auth_result(Username, AuthResult, ExtraProps) ->
+    EventProps = [{connection_type, direct},
+                  {name, case Username of none -> ''; _ -> Username end}] ++
+                 ExtraProps,
+    rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
+
 connect1(User, VHost, Protocol, Pid, Infos) ->
-    try rabbit_access_control:check_vhost_access(User, VHost) of
+    try rabbit_access_control:check_vhost_access(User, VHost, undefined) of
         ok -> ok = pg_local:join(rabbit_direct, Pid),
               rabbit_event:notify(connection_created, Infos),
               {ok, {User, rabbit_reader:server_properties(Protocol)}}
