@@ -214,7 +214,6 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                     rabbit_net:fast_close(Sock),
                                     exit(normal)
            end,
-    log(debug, "incoming connection ~p (~s)~n", [self(), Name]),
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
@@ -328,16 +327,11 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             %%
             %% The goal is to not log TCP healthchecks (a connection
             %% with no data received) unless specified otherwise.
-            Now = rabbit_misc:ms_to_now(ConnectionTime),
-            {{Year, Month, Day}, {Hour, Min, Sec}} =
-              calendar:now_to_local_time(Now),
             log(case Recv of
                   closed -> debug;
                   _      -> info
-                end, "accepting AMQP connection ~p (~s)~n"
-                "(opened at ~b-~2..0b-~2..0b::~2..0b:~2..0b:~2..0b)~n",
-                [self(), ConnName, Year, Month, Day,
-                 Hour, Min, Sec]);
+                end, "accepting AMQP connection ~p (~s)~n",
+                [self(), ConnName]);
         _ ->
             ok
     end,

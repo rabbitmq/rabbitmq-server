@@ -69,7 +69,7 @@
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
--export([now_to_ms/1, ms_to_now/1]).
+-export([now_to_ms/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -987,12 +987,6 @@ term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
 
 now_to_ms({Mega, Sec, Micro}) ->
     (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) div 1000.
-
-ms_to_now(Ms) ->
-    Mega = Ms div 1000 div 1000000,
-    Sec = Ms div 1000 - Mega * 1000000,
-    Micro = (Ms - Mega * 1000 * 1000000 - Sec * 1000) * 1000,
-    {Mega, Sec, Micro}.
 
 check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
 check_expiry(_N)                           -> ok.
