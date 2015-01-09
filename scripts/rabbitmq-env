@@ -111,3 +111,6 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
 ##--- End of overridden <var_name> variables
+
+# Since we source this elsewhere, don't accidentally stop execution
+true

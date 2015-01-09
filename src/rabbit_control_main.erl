@@ -19,7 +19,7 @@
 -include("rabbit_cli.hrl").
 
 -export([start/0, stop/0, parse_arguments/2, action/5,
-         sync_queue/1, cancel_sync_queue/1]).
+         sync_queue/1, cancel_sync_queue/1, become/1]).
 
 -import(rabbit_cli, [rpc_call/4]).
 
@@ -40,6 +40,7 @@
          change_cluster_node_type,
          update_cluster_nodes,
          {forget_cluster_node, [?OFFLINE_DEF]},
+         rename_cluster_node,
          force_boot,
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
@@ -104,8 +105,8 @@
 -define(COMMANDS_NOT_REQUIRING_APP,
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
-         forget_cluster_node, cluster_status, status, environment, eval,
-         force_boot]).
+         forget_cluster_node, rename_cluster_node, cluster_status, status,
+         environment, eval, force_boot]).
 
 %%----------------------------------------------------------------------------
 
@@ -233,6 +234,13 @@ action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
         false -> rpc_call(Node, rabbit_mnesia, forget_cluster_node,
                           [ClusterNode, false])
     end;
+
+action(rename_cluster_node, Node, NodesS, _Opts, Inform) ->
+    Nodes = split_list([list_to_atom(N) || N <- NodesS]),
+    Inform("Renaming cluster nodes:~n~s~n",
+           [lists:flatten([rabbit_misc:format("  ~s -> ~s~n", [F, T]) ||
+                              {F, T} <- Nodes])]),
+    rabbit_mnesia_rename:rename(Node, Nodes);
 
 action(force_boot, Node, [], _Opts, Inform) ->
     Inform("Forcing boot for Mnesia dir ~s", [mnesia:system_info(directory)]),
@@ -591,11 +599,11 @@ start_distribution() ->
     {ok, _} = net_kernel:start([list_to_atom(CtlNodeName), name_type()]).
 
 become(BecomeNode) ->
+    error_logger:tty(false),
+    ok = net_kernel:stop(),
     case net_adm:ping(BecomeNode) of
         pong -> exit({node_running, BecomeNode});
         pang -> io:format("  * Impersonating node: ~s...", [BecomeNode]),
-                error_logger:tty(false),
-                ok = net_kernel:stop(),
                 {ok, _} = net_kernel:start([BecomeNode, name_type()]),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
@@ -720,3 +728,7 @@ prettify_typed_amqp_value(table,   Value) -> prettify_amqp_table(Value);
 prettify_typed_amqp_value(array,   Value) -> [prettify_typed_amqp_value(T, V) ||
                                                  {T, V} <- Value];
 prettify_typed_amqp_value(_Type,   Value) -> Value.
+
+split_list([])         -> [];
+split_list([_])        -> exit(even_list_needed);
+split_list([A, B | T]) -> [{A, B} | split_list(T)].

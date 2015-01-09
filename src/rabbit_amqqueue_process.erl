@@ -84,7 +84,6 @@
          slave_pids,
          synchronised_slave_pids,
          down_slave_nodes,
-         backing_queue_status,
          state
         ]).
 
