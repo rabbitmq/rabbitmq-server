@@ -25,9 +25,10 @@ fill(Fmt, [{K, V} | T]) ->
     Var = [[$\\, $$, ${] ++ atom_to_list(K) ++ [$}]],
     fill(re:replace(Fmt, Var, [to_repl(V)], [global]), T).
 
-to_repl(V)  when is_atom(V) -> atom_to_list(V);
-to_repl([])                 -> [];
-to_repl([$\\ | T])          -> [$\\, $\\ | to_repl(T)];
-to_repl([$&  | T])          -> [$\\, $&  | to_repl(T)];
-to_repl([H   | T])          -> [H        | to_repl(T)].
+to_repl(V) when is_atom(V)   -> to_repl(atom_to_list(V));
+to_repl(V) when is_binary(V) -> to_repl(binary_to_list(V));
+to_repl([])                  -> [];
+to_repl([$\\ | T])           -> [$\\, $\\ | to_repl(T)];
+to_repl([$&  | T])           -> [$\\, $&  | to_repl(T)];
+to_repl([H   | T])           -> [H        | to_repl(T)].
 
