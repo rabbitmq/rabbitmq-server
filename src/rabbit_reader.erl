@@ -316,8 +316,7 @@ binlist_split(Len, [H|T], Acc) ->
 mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                                        connection_state = CS,
                                        connection = #connection{
-                                         name = ConnName,
-                                         connected_at = ConnectionTime}}) ->
+                                         name = ConnName}}) ->
     Recv = rabbit_net:recv(Sock),
     case CS of
         pre_init when Buf =:= [] ->
