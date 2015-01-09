@@ -22,10 +22,12 @@ fill_test() ->
     F = fun(Fmt, Args, Res) ->
                 ?assertEqual(Res, rabbit_auth_backend_ldap_util:fill(Fmt, Args))
         end,
-    F("x${username}x", [{username,  "ab"}],   "xabx"),
-    F("x${username}x", [{username,  ""}],     "xx"),
-    F("x${username}x", [{fusername, "ab"}],   "x${username}x"),
-    F("x${usernamex",  [{username,  "ab"}],   "x${usernamex"),
-    F("x${username}x", [{username,  "a\\b"}], "xa\\bx"),
-    F("x${username}x", [{username,  "a&b"}],  "xa&bx"),
+    F("x${username}x", [{username,  "ab"}],     "xabx"),
+    F("x${username}x", [{username,  ab}],       "xabx"),
+    F("x${username}x", [{username,  <<"ab">>}], "xabx"),
+    F("x${username}x", [{username,  ""}],       "xx"),
+    F("x${username}x", [{fusername, "ab"}],     "x${username}x"),
+    F("x${usernamex",  [{username,  "ab"}],     "x${usernamex"),
+    F("x${username}x", [{username,  "a\\b"}],   "xa\\bx"),
+    F("x${username}x", [{username,  "a&b"}],    "xa&bx"),
     ok.
