@@ -1414,7 +1414,7 @@ determine_persist_to(Msg, #message_properties{size = Size}) ->
     %% anyway.
     case Size >= IndexMaxSize of
         true  -> msg_store;
-        false -> case size(term_to_binary(Msg)) >= IndexMaxSize of
+        false -> case truncate:term_limit(Msg, IndexMaxSize) of
                      true  -> msg_store;
                      false -> queue_index
                  end
