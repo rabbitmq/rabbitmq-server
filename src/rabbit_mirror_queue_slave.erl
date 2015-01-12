@@ -628,7 +628,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                         (_Msgid, _Status, MTC0) ->
                             MTC0
                     end, gb_trees:empty(), MS),
-    Deliveries = [Delivery#delivery{mandatory = false} || %% [0]
+    Deliveries = [promote_delivery(Delivery) ||
                    {_ChPid, {PubQ, _PendCh, _ChState}} <- dict:to_list(SQ),
                    Delivery <- queue:to_list(PubQ)],
     AwaitGmDown = [ChPid || {ChPid, {_, _, down_from_ch}} <- dict:to_list(SQ)],
@@ -640,8 +640,16 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
       Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS1,
       MTC).
 
-%% [0] We reset mandatory to false here because we will have sent the
-%% mandatory_received already as soon as we got the message
+%% We reset mandatory to false here because we will have sent the
+%% mandatory_received already as soon as we got the message. We also
+%% need to send an ack for these messages since the channel is waiting
+%% for one for the via-GM case and we will not now receive one.
+promote_delivery(Delivery = #delivery{sender = Sender, flow = Flow}) ->
+    case Flow of
+        flow   -> credit_flow:ack(Sender);
+        noflow -> ok
+    end,
+    Delivery#delivery{mandatory = false}.
 
 noreply(State) ->
     {NewState, Timeout} = next_state(State),

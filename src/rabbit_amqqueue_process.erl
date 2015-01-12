@@ -1107,15 +1107,22 @@ handle_cast({run_backing_queue, Mod, Fun},
     noreply(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)});
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender,
-                                           flow   = Flow}, Delivered},
+                                           flow   = Flow}, SlaveWhenPublished},
             State = #q{senders = Senders}) ->
     Senders1 = case Flow of
                    flow   -> credit_flow:ack(Sender),
+                             case SlaveWhenPublished of
+                                 true  -> credit_flow:ack(Sender); %% [0]
+                                 false -> ok
+                             end,
                              pmon:monitor(Sender, Senders);
                    noflow -> Senders
                end,
     State1 = State#q{senders = Senders1},
-    noreply(deliver_or_enqueue(Delivery, Delivered, State1));
+    noreply(deliver_or_enqueue(Delivery, SlaveWhenPublished, State1));
+%% [0] The second ack is since the channel thought we were a slave at
+%% the time it published this message, so it used two credits (see
+%% rabbit_amqqueue:deliver/2).
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));
