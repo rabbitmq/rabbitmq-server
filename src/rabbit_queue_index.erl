@@ -165,7 +165,7 @@
 
 %% ---- misc ----
 
--define(PUB, {_, _, _}). %% {MsgId, MsgProps, IsPersistent}
+-define(PUB, {_, _}).
 
 -define(READ_MODE, [binary, raw, read]).
 -define(WRITE_MODE, [write | ?READ_MODE]).
@@ -305,15 +305,14 @@ publish(MsgOrId, SeqId, MsgProps, IsPersistent,
                                 State#qistate{unconfirmed_msg = UCM1};
               {false, _}     -> State
           end),
+    Body = create_pub_record_body(MsgOrId, MsgProps),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS,
-                          SeqId:?SEQ_BITS>>,
-                        create_pub_record_body(MsgOrId, MsgProps)]),
-    maybe_flush_journal(
-      add_to_journal(SeqId, {MsgOrId, MsgProps, IsPersistent}, State1)).
+                          SeqId:?SEQ_BITS>>, Body]),
+    maybe_flush_journal(add_to_journal(SeqId, {IsPersistent, Body}, State1)).
 
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
@@ -776,10 +775,10 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                                             ?PUB_PERSIST_JPREFIX -> true;
                                             ?PUB_TRANS_JPREFIX   -> false
                                         end,
+                                    B = create_pub_record_body(MsgOrId, Props),
                                     load_journal_entries(
                                       add_to_journal(
-                                        SeqId, {MsgOrId, Props, IsPersistent},
-                                        State));
+                                        SeqId, {IsPersistent, B}, State));
                                 _ErrOrEoF ->
                                     State
                             end;
@@ -893,12 +892,11 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
     ok = case Pub of
              no_pub ->
                  ok;
-             {MsgOrId, MsgProps, IsPersistent} ->
+             {IsPersistent, Body} ->
                  file_handle_cache:append(
                    Hdl, [<<?PUB_PREFIX:?PUB_PREFIX_BITS,
                            (bool_to_int(IsPersistent)):1,
-                           RelSeq:?REL_SEQ_BITS>>,
-                         create_pub_record_body(MsgOrId, MsgProps)])
+                           RelSeq:?REL_SEQ_BITS>>, Body])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
