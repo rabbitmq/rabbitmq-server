@@ -1410,11 +1410,11 @@ determine_persist_to(Msg, #message_properties{size = Size}) ->
     %% The >= is so that you can set the env to 0 and never persist
     %% to the index.
     %%
-    %% We avoid invoking term_to_binary/1 if the message is large
+    %% We avoid invoking exceeds_size/2 if the message is large
     %% anyway.
     case Size >= IndexMaxSize of
         true  -> msg_store;
-        false -> case truncate:term_limit(Msg, IndexMaxSize) of
+        false -> case truncate:exceeds_size(Msg, IndexMaxSize) of
                      true  -> msg_store;
                      false -> queue_index
                  end

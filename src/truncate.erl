@@ -20,7 +20,7 @@
 
 -record(params, {content, struct, content_dec, struct_dec}).
 
--export([log_event/2, term/2, term_limit/2]).
+-export([log_event/2, term/2, exceeds_size/2]).
 %% exported for testing
 -export([test/0]).
 
@@ -45,7 +45,7 @@ report(List, Params) when is_list(List) -> [case Item of
 report(Other, Params)                   -> term(Other, Params).
 
 term(Thing, {Max, {Content, Struct, ContentDec, StructDec}}) ->
-    case term_limit(Thing, Max) of
+    case exceeds_size(Thing, Max) of
         true  -> term(Thing, true, #params{content     = Content,
                                            struct      = Struct,
                                            content_dec = ContentDec,
@@ -93,7 +93,7 @@ shrink_list([H|T], #params{content     = Content,
 %% sizes. This is all going to be rather approximate though, these
 %% sizes are probably not very "fair" but we are just trying to see if
 %% we reach a fairly arbitrary limit anyway though.
-term_limit(Thing, Max) ->
+exceeds_size(Thing, Max) ->
     case term_size(Thing, Max, erlang:system_info(wordsize)) of
         limit_exceeded -> true;
         _              -> false
