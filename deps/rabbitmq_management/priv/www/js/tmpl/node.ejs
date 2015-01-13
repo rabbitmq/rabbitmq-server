@@ -137,8 +137,8 @@
 </div>
 </div>
 
-<div class="section">
-<h2>Persistence and I/O Statistics</h2>
+<div class="section-hidden">
+<h2>Persistence Statistics</h2>
 <div class="hider">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
@@ -157,7 +157,19 @@
        ['Store Read', 'msg_store_read_count'],
        ['Store Write', 'msg_store_write_count']],
       fmt_rate, fmt_rate_axis, true, 'Persistence operations', 'persister-operations') %>
+</div>
+<% } %>
+</div>
+</div>
 
+<div class="section-hidden">
+<h2>I/O Statistics</h2>
+<div class="hider">
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
+<% } else { %>
   <%= rates_chart_or_text('persister-io-stats-count', node,
       [['Read', 'io_read_count'],
        ['Write', 'io_write_count'],
