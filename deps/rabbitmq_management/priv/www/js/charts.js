@@ -192,6 +192,10 @@ function rates_chart(type_id, id, items, stats, fmt, axis_fmt, type,
         (chart_rates ? ' chart-rates' : '') + '"></div>';
     html += '<table class="legend">';
     for (var i = 0; i < legend.length; i++) {
+        if (i % 3 == 0 && i < legend.length - 1) {
+            html += '</table><table class="legend">';
+        }
+
         html += '<tr><th><span title="Click to toggle line" ';
         html += 'class="rate-visibility-option';
         html += legend[i].show ? '' : ' rate-visibility-option-hidden';
