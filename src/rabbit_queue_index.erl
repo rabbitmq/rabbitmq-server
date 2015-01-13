@@ -93,7 +93,7 @@
 %% and seeding the message store on start up.
 %%
 %% Note that in general, the representation of a message's state as
-%% the tuple: {('no_pub'|{IsPersistent, Body}),
+%% the tuple: {('no_pub'|{IsPersistent, Bin, MsgBin}),
 %% ('del'|'no_del'), ('ack'|'no_ack')} is richer than strictly
 %% necessary for most operations. However, for startup, and to ensure
 %% the safe and correct combination of journal entries with entries
@@ -313,7 +313,8 @@ publish(MsgOrId, SeqId, MsgProps, IsPersistent,
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS,
-                          SeqId:?SEQ_BITS>>, Bin, MsgBin]),
+                          SeqId:?SEQ_BITS, Bin/binary,
+                          (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin]),
     maybe_flush_journal(
       add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)).
 
@@ -608,13 +609,10 @@ create_pub_record_body(MsgOrId, #message_properties { expiry = Expiry,
     ExpiryBin = expiry_to_binary(Expiry),
     case MsgOrId of
         MsgId when is_binary(MsgId) ->
-            {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS,
-               0:?EMBEDDED_SIZE_BITS>>, <<>>};
+            {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS>>, <<>>};
         #basic_message{id = MsgId} ->
             MsgBin = term_to_binary(MsgOrId),
-            MsgBinSize = size(MsgBin),
-            {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS,
-               MsgBinSize:?EMBEDDED_SIZE_BITS>>, MsgBin}
+            {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS>>, MsgBin}
     end.
 
 expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
@@ -903,7 +901,8 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
                  file_handle_cache:append(
                    Hdl, [<<?PUB_PREFIX:?PUB_PREFIX_BITS,
                            (bool_to_int(IsPersistent)):1,
-                           RelSeq:?REL_SEQ_BITS>>, Bin, MsgBin])
+                           RelSeq:?REL_SEQ_BITS, Bin/binary,
+                           (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
