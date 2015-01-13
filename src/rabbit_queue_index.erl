@@ -307,6 +307,7 @@ publish(MsgOrId, SeqId, MsgProps, IsPersistent,
                                 State#qistate{unconfirmed_msg = UCM1};
               {false, _}     -> State
           end),
+    file_handle_cache_stats:update(queue_index_journal_write),
     {Bin, MsgBin} = create_pub_record_body(MsgOrId, MsgProps),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
@@ -799,6 +800,7 @@ deliver_or_ack(_Kind, [], State) ->
 deliver_or_ack(Kind, SeqIds, State) ->
     JPrefix = case Kind of ack -> ?ACK_JPREFIX; del -> ?DEL_JPREFIX end,
     {JournalHdl, State1} = get_journal_handle(State),
+    file_handle_cache_stats:update(queue_index_journal_write),
     ok = file_handle_cache:append(
            JournalHdl,
            [<<JPrefix:?JPREFIX_BITS, SeqId:?SEQ_BITS>> || SeqId <- SeqIds]),
@@ -898,6 +900,7 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
              no_pub ->
                  ok;
              {IsPersistent, Bin, MsgBin} ->
+                 file_handle_cache_stats:update(queue_index_write),
                  file_handle_cache:append(
                    Hdl, [<<?PUB_PREFIX:?PUB_PREFIX_BITS,
                            (bool_to_int(IsPersistent)):1,
@@ -910,6 +913,7 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
              _ ->
                  Binary = <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                             RelSeq:?REL_SEQ_BITS>>,
+                 file_handle_cache_stats:update(queue_index_write),
                  file_handle_cache:append(
                    Hdl, case {Del, Ack} of
                             {del, ack} -> [Binary, Binary];
@@ -960,6 +964,7 @@ load_segment(KeepAcked, #segment { path = Path }) ->
     end.
 
 load_segment_entries(Hdl, KeepAcked, Acc) ->
+    file_handle_cache_stats:update(queue_index_read),
     case file_handle_cache:read(Hdl, ?PUB_RECORD_PREFIX_BYTES) of
         {ok, <<?PUB_PREFIX:?PUB_PREFIX_BITS,
                IsPersistNum:1, RelSeq:?REL_SEQ_BITS>>} ->
