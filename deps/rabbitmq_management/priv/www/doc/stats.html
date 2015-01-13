@@ -484,6 +484,82 @@
         </td>
       </tr>
       <tr>
+        <td><code>io_read_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each disk read operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_read_bytes</code></td>
+        <td>
+          Total number of bytes read from disk by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_read_count</code></td>
+        <td>
+          Total number of read operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_reopen_count</code></td>
+        <td>
+          Total number of times the persister has needed to recycle
+          file handles between queues. In an ideal world this number
+          will be zero; if the number is large, performance might be
+          improved by increasing the number of file handles available
+          to RabbitMQ.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_seek_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each seek operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      </tr>
+      <tr>
+        <td><code>io_seek_count</code></td>
+        <td>
+          Total number of seek operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_sync_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each fsync() operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      </tr>
+      <tr>
+        <td><code>io_sync_count</code></td>
+        <td>
+          Total number of fsync() operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each disk write operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_bytes</code></td>
+        <td>
+          Total number of bytes written to disk by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_count</code></td>
+        <td>
+          Total number of write operations by the persister.
+        </td>
+      </tr>
+      <tr>
         <td><code>log_file</code></td>
         <td>
           Location of main log file.
@@ -505,6 +581,36 @@
         <td><code>mem_limit</code></td>
         <td>
           Point at which the memory alarm will go off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mnesia_disk_tx_count</code></td>
+        <td>
+          Number of Mnesia transactions which have been performed that
+          required writes to disk. (e.g. creating a durable
+          queue). Only transactions which originated on this node are
+          included.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mnesia_ram_tx_count</code></td>
+        <td>
+          Number of Mnesia transactions which have been performed that
+          did not require writes to disk. (e.g. creating a transient
+          queue). Only transactions which originated on this node are
+          included.
+        </td>
+      </tr>
+      <tr>
+        <td><code>msg_store_read_count</code></td>
+        <td>
+          Number of messages which have been read from the message store.
+        </td>
+      </tr>
+      <tr>
+        <td><code>msg_store_write_count</code></td>
+        <td>
+          Number of messages which have been written to the message store.
         </td>
       </tr>
       <tr>
@@ -533,82 +639,6 @@
         </td>
       </tr>
       <tr>
-        <td><code>persister_read_avg_time</code></td>
-        <td>
-          Average wall time (milliseconds) for each disk read operation in
-          the last statistics interval.
-        </td>
-      </tr>
-      <tr>
-        <td><code>persister_read_bytes</code></td>
-        <td>
-          Total number of bytes read from disk by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>persister_read_count</code></td>
-        <td>
-          Total number of read operations by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>persister_reopen_count</code></td>
-        <td>
-          Total number of times the persister has needed to recycle
-          file handles between queues. In an ideal world this number
-          will be zero; if the number is large, performance might be
-          improved by increasing the number of file handles available
-          to RabbitMQ.
-        </td>
-      </tr>
-      <tr>
-        <td><code>persister_seek_avg_time</code></td>
-        <td>
-          Average wall time (milliseconds) for each seek operation in
-          the last statistics interval.
-        </td>
-      </tr>
-      </tr>
-      <tr>
-        <td><code>persister_seek_count</code></td>
-        <td>
-          Total number of seek operations by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>persister_sync_avg_time</code></td>
-        <td>
-          Average wall time (milliseconds) for each fsync() operation in
-          the last statistics interval.
-        </td>
-      </tr>
-      </tr>
-      <tr>
-        <td><code>persister_sync_count</code></td>
-        <td>
-          Total number of fsync() operations by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>persister_write_avg_time</code></td>
-        <td>
-          Average wall time (milliseconds) for each disk write operation in
-          the last statistics interval.
-        </td>
-      </tr>
-      <tr>
-        <td><code>persister_write_bytes</code></td>
-        <td>
-          Total number of bytes written to disk by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>persister_write_count</code></td>
-        <td>
-          Total number of write operations by the persister.
-        </td>
-      </tr>
-      <tr>
         <td><code>proc_total</code></td>
         <td>
           Maximum number of Erlang processes.
@@ -624,6 +654,27 @@
         <td><code>processors</code></td>
         <td>
           Number of cores detected and usable by Erlang.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_journal_write_count</code></td>
+        <td>
+          Number of records written to the queue index journal. Each
+          record represents a message being published to a queue,
+          being delivered from a queue, and being acknowledged in a
+          queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_read_count</code></td>
+        <td>
+          Number of records read from the queue index.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_write_count</code></td>
+        <td>
+          Number of records written to the queue index.
         </td>
       </tr>
       <tr>
