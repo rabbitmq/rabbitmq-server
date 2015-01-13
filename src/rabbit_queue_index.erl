@@ -307,14 +307,15 @@ publish(MsgOrId, SeqId, MsgProps, IsPersistent,
                                 State#qistate{unconfirmed_msg = UCM1};
               {false, _}     -> State
           end),
-    Body = create_pub_record_body(MsgOrId, MsgProps),
+    {Bin, MsgBin} = create_pub_record_body(MsgOrId, MsgProps),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS,
-                          SeqId:?SEQ_BITS>>, Body]),
-    maybe_flush_journal(add_to_journal(SeqId, {IsPersistent, Body}, State1)).
+                          SeqId:?SEQ_BITS>>, Bin, MsgBin]),
+    maybe_flush_journal(
+      add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)).
 
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
@@ -604,21 +605,22 @@ scan_segments(Fun, Acc, State) ->
 
 create_pub_record_body(MsgOrId, #message_properties { expiry = Expiry,
                                                       size   = Size }) ->
+    ExpiryBin = expiry_to_binary(Expiry),
     case MsgOrId of
         MsgId when is_binary(MsgId) ->
-            [MsgId, expiry_to_binary(Expiry), <<Size:?SIZE_BITS>>,
-             <<0:?EMBEDDED_SIZE_BITS>>];
+            {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS,
+               0:?EMBEDDED_SIZE_BITS>>, <<>>};
         #basic_message{id = MsgId} ->
             MsgBin = term_to_binary(MsgOrId),
             MsgBinSize = size(MsgBin),
-            [MsgId, expiry_to_binary(Expiry), <<Size:?SIZE_BITS>>,
-             <<MsgBinSize:?EMBEDDED_SIZE_BITS>>, MsgBin]
+            {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS,
+               MsgBinSize:?EMBEDDED_SIZE_BITS>>, MsgBin}
     end.
 
 expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
 expiry_to_binary(Expiry)    -> <<Expiry:?EXPIRY_BITS>>.
 
-read_msg(0,   _Hdl) -> {ok, none};
+read_msg(0,   _Hdl) -> {ok, <<>>};
 read_msg(Size, Hdl) -> case file_handle_cache:read(Hdl, Size) of
                            {ok, MsgBin} -> {ok, MsgBin};
                            Else         -> Else
@@ -635,7 +637,7 @@ parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
                                          end,
                                 size   = Size},
     case MsgBin of
-        none -> {MsgId, Props};
+        <<>> -> {MsgId, Props};
         _    -> Msg = #basic_message{id = MsgId} = binary_to_term(MsgBin),
                 {Msg, Props}
     end.
@@ -897,11 +899,11 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
     ok = case Pub of
              no_pub ->
                  ok;
-             {IsPersistent, Body} ->
+             {IsPersistent, Bin, MsgBin} ->
                  file_handle_cache:append(
                    Hdl, [<<?PUB_PREFIX:?PUB_PREFIX_BITS,
                            (bool_to_int(IsPersistent)):1,
-                           RelSeq:?REL_SEQ_BITS>>, Body])
+                           RelSeq:?REL_SEQ_BITS>>, Bin, MsgBin])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
