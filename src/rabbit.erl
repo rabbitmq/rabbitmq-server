@@ -118,6 +118,13 @@
                     {requires,    [rabbit_alarm, guid_generator]},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({rabbit_epmd_monitor,
+                   [{description, "epmd monitor"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_epmd_monitor]}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({core_initialized,
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
