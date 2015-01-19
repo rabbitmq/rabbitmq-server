@@ -422,7 +422,7 @@ function fmt_plugins_small(node) {
     var plugins = [];
     for (var i = 0; i < node.applications.length; i++) {
         var application = node.applications[i];
-        if (node.enabled_plugins.indexOf(application.name) != -1) {
+        if (jQuery.inArray(application.name, node.enabled_plugins) != -1 ) {
             plugins.push(application.name);
         }
     }
@@ -434,7 +434,7 @@ function get_plugins_list(node) {
     var result = [];
     for (var i = 0; i < node.applications.length; i++) {
         var application = node.applications[i];
-        if (node.enabled_plugins.indexOf(application.name) != -1) {
+        if (jQuery.inArray(application.name, node.enabled_plugins) != -1 ) {
             result.push(application);
         }
     }
