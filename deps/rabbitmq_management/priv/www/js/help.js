@@ -251,6 +251,61 @@ HELP = {
     'plugins' :
     'Note that only plugins which are both explicitly enabled and running are shown here.',
 
+    'io-operations':
+    'Rate of I/O operations. Only operations performed by the message \
+      persister are shown here (e.g. metadata changes in Mnesia or writes \
+      to the log files are not shown).\
+      <dl>\
+        <dt>Read</dt>\
+        <dd>Rate at which data is read from the disk.</dd>\
+        <dt>Write</dt>\
+        <dd>Rate at which data is written to the disk.</dd>\
+        <dt>Seek</dt>\
+        <dd>Rate at which the broker switches position while reading or \
+         writing to disk.</dd>\
+        <dt>Sync</dt>\
+        <dd>Rate at which the broker invokes <code>fsync()</code> to ensure \
+         data is flushed to disk.</dd>\
+        <dt>Reopen</dt>\
+        <dd>Rate at which the broker recycles file handles in order to support \
+         more queues than it has file handles. If this operation is occurring \
+         frequently you may get a performance boost from increasing the number \
+         of file handles available.</dd>\
+      </dl>',
+
+    'mnesia-transactions':
+    'Rate at which Mnesia transactions are initiated on this node (this node \
+     will also take part in Mnesia transactions initiated on other nodes).\
+      <dl>\
+        <dt>RAM only</dt>\
+        <dd>Rate at which RAM-only transactions take place (e.g. creation / \
+            deletion of transient queues).</dd>\
+        <dt>Disk</dt>\
+        <dd>Rate at which disk (and RAM) transactions take place (.e.g \
+            creation / deletion of durable queues).</dd>\
+      </dl>',
+
+    'persister-operations':
+    'Rate at which persister operations take place on this node. See \
+     <a href="http://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
+     for more information on the persister. \
+      <dl>\
+        <dt>QI Read</dt>\
+        <dd>Rate at which message information is read from queue index \
+            segment files.</dd>\
+        <dt>QI Write</dt>\
+        <dd>Rate at which message information is written to queue index \
+            segment files.</dd>\
+        <dt>QI Journal</dt>\
+        <dd>Rate at which message information is written to queue index \
+            journals.</dd>\
+        <dt>Store Read</dt>\
+        <dd>Rate at which messages are read from the message store.</dd>\
+        <dt>Store Write</dt>\
+        <dd>Rate at which messages are written to the message store.</dd>\
+      </dl>',
+
+
     'foo': 'foo' // No comma.
 };
 
