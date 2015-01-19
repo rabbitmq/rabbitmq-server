@@ -179,7 +179,8 @@
           write_buffer_size_limit,
           write_buffer,
           read_buffer,
-          read_buffer_size,
+          read_buffer_pos,
+          read_buffer_rem, %% Num of bytes from pos to end
           read_buffer_size_limit,
           at_eof,
           path,
@@ -338,36 +339,40 @@ read(Ref, Count) ->
       [Ref], keep,
       fun ([#handle { is_read = false }]) ->
               {error, not_open_for_reading};
-          ([Handle = #handle{read_buffer      = Buf,
-                             read_buffer_size = BufSz,
-                             offset           = Offset}]) when BufSz >= Count ->
-              <<Hd:Count/binary, Tl/binary>> = Buf,
-              {{ok, Hd}, [Handle#handle{offset           = Offset + Count,
-                                        read_buffer      = Tl,
-                                        read_buffer_size = BufSz - Count}]};
+          ([Handle = #handle{read_buffer     = Buf,
+                             read_buffer_pos = BufPos,
+                             read_buffer_rem = BufRem,
+                             offset          = Offset}]) when BufRem >= Count ->
+              <<_:BufPos/binary, Res:Count/binary, _/binary>> = Buf,
+              {{ok, Res}, [Handle#handle{offset          = Offset + Count,
+                                         read_buffer_pos = BufPos + Count,
+                                         read_buffer_rem = BufRem - Count}]};
           ([Handle = #handle{read_buffer            = Buf,
-                             read_buffer_size       = BufSz,
+                             read_buffer_pos        = BufPos,
+                             read_buffer_rem        = BufRem,
                              read_buffer_size_limit = BufSzLimit,
                              hdl                    = Hdl,
                              offset                 = Offset}]) ->
-              WantedCount = Count - BufSz,
+              WantedCount = Count - BufRem,
               case prim_file_read(Hdl, lists:max([BufSzLimit, WantedCount])) of
                   {ok, Data} ->
+                      <<_:BufPos/binary, BufTl/binary>> = Buf,
                       ReadCount = size(Data),
                       case ReadCount < WantedCount of
                           true ->
-                              OffSet1 = Offset + BufSz + ReadCount,
-                              {{ok, <<Buf/binary, Data/binary>>},
+                              OffSet1 = Offset + BufRem + ReadCount,
+                              {{ok, <<BufTl/binary, Data/binary>>},
                                [reset_read_buffer(
                                   Handle#handle{offset = OffSet1})]};
                           false ->
-                              <<Hd:WantedCount/binary, Tl/binary>> = Data,
-                              OffSet1 = Offset + BufSz + WantedCount,
-                              BufSz1 = ReadCount - WantedCount,
-                              {{ok, <<Buf/binary, Hd/binary>>},
-                               [Handle#handle{offset           = OffSet1,
-                                              read_buffer      = Tl,
-                                              read_buffer_size = BufSz1}]}
+                              <<Hd:WantedCount/binary, _/binary>> = Data,
+                              OffSet1 = Offset + BufRem + WantedCount,
+                              BufRem1 = ReadCount - WantedCount,
+                              {{ok, <<BufTl/binary, Hd/binary>>},
+                               [Handle#handle{offset          = OffSet1,
+                                              read_buffer     = Data,
+                                              read_buffer_pos = WantedCount,
+                                              read_buffer_rem = BufRem1}]}
                       end;
                   eof ->
                       {eof, [Handle #handle { at_eof = true }]};
@@ -781,9 +786,10 @@ new_closed_handle(Path, Mode, Options) ->
                                      write_buffer_size       = 0,
                                      write_buffer_size_limit = WriteBufferSize,
                                      write_buffer            = [],
-                                     read_buffer_size        = 0,
-                                     read_buffer_size_limit  = ReadBufferSize,
                                      read_buffer             = <<>>,
+                                     read_buffer_pos         = 0,
+                                     read_buffer_rem         = 0,
+                                     read_buffer_size_limit  = ReadBufferSize,
                                      at_eof                  = false,
                                      path                    = Path,
                                      mode                    = Mode,
@@ -844,23 +850,23 @@ hard_close(Handle) ->
             Result
     end.
 
-maybe_seek(NewOffset, Handle = #handle{hdl              = Hdl,
-                                       offset           = Offset,
-                                       read_buffer      = Buf,
-                                       read_buffer_size = BufSz,
-                                       at_eof           = AtEoF}) ->
-    {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Offset, NewOffset),
+maybe_seek(New, Handle = #handle{hdl              = Hdl,
+                                 offset           = Old,
+                                 read_buffer_pos  = BufPos,
+                                 read_buffer_rem  = BufRem,
+                                 at_eof           = AtEoF}) ->
+    {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Old, New),
     case NeedsSeek of
-        true when is_number(NewOffset) andalso
-                  NewOffset >= Offset andalso NewOffset =< BufSz + Offset ->
-            Diff = NewOffset - Offset,
-            <<_:Diff/binary, Rest/binary>> = Buf,
-            {{ok, NewOffset}, Handle#handle{offset           = NewOffset,
-                                            at_eof           = AtEoF1,
-                                            read_buffer      = Rest,
-                                            read_buffer_size = BufSz - Diff}};
+        true when is_number(New) andalso
+                  ((New >= Old andalso New =< BufRem + Old)
+                   orelse (New < Old andalso Old - New =< BufPos)) ->
+            Diff = New - Old,
+            {{ok, New}, Handle#handle{offset          = New,
+                                      at_eof          = AtEoF1,
+                                      read_buffer_pos = BufPos + Diff,
+                                      read_buffer_rem = BufRem - Diff}};
         true ->
-            case prim_file_position(Hdl, NewOffset) of
+            case prim_file_position(Hdl, New) of
                 {ok, Offset1} = Result ->
                     {Result, reset_read_buffer(Handle#handle{offset = Offset1,
                                                              at_eof = AtEoF1})};
@@ -868,7 +874,7 @@ maybe_seek(NewOffset, Handle = #handle{hdl              = Hdl,
                     {Error, Handle}
             end;
         false ->
-            {{ok, Offset}, Handle}
+            {{ok, Old}, Handle}
     end.
 
 needs_seek( AtEoF, _CurOffset,  cur     ) -> {AtEoF, false};
@@ -909,8 +915,9 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
     end.
 
 reset_read_buffer(Handle) ->
-    Handle#handle{read_buffer      = <<>>,
-                  read_buffer_size = 0}.
+    Handle#handle{read_buffer     = <<>>,
+                  read_buffer_pos = 0,
+                  read_buffer_rem = 0}.
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
