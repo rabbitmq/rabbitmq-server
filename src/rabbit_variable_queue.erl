@@ -1430,7 +1430,10 @@ determine_persist_to(#basic_message{
         false -> Est = case is_binary(PropsBin) of
                            true  -> BodySize + size(PropsBin);
                            false -> #'P_basic'{headers = Hs} = Props,
-                                    length(Hs) * ?HEADER_GUESS_SIZE + BodySize
+                                    case Hs of
+                                        undefined -> 0;
+                                        _         -> length(Hs)
+                                    end * ?HEADER_GUESS_SIZE + BodySize
                        end,
                  case Est >= IndexMaxSize of
                      true  -> msg_store;
