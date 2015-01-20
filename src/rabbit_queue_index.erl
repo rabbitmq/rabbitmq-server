@@ -953,46 +953,38 @@ load_segment(KeepAcked, #segment { path = Path }) ->
     Empty = {array_new(), 0},
     case rabbit_file:is_file(Path) of
         false -> Empty;
-        true  -> {ok, Hdl} = file_handle_cache:open(
-                               Path, ?READ_MODE,
-                               [{read_buffer, ?READ_BUFFER_SIZE}]),
+        true  -> Size = rabbit_file:file_size(Path),
+                 file_handle_cache_stats:update(queue_index_read),
+                 {ok, Hdl} = file_handle_cache:open(Path, ?READ_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
-                 Res = load_segment_entries(Hdl, KeepAcked, Empty),
+                 {ok, SegBin} = file_handle_cache:read(Hdl, Size),
                  ok = file_handle_cache:close(Hdl),
+                 Res = parse_segment_entries(SegBin, KeepAcked, Empty),
                  Res
     end.
 
-load_segment_entries(Hdl, KeepAcked, Acc) ->
-    file_handle_cache_stats:update(queue_index_read),
-    case file_handle_cache:read(Hdl, ?PUB_RECORD_PREFIX_BYTES) of
-        {ok, <<?PUB_PREFIX:?PUB_PREFIX_BITS,
-               IsPersistNum:1, RelSeq:?REL_SEQ_BITS>>} ->
-            load_segment_entries(
-              Hdl, KeepAcked,
-              load_segment_publish_entry(Hdl, 1 == IsPersistNum, RelSeq, Acc));
-        {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-               RelSeq:?REL_SEQ_BITS>>} ->
-            load_segment_entries(
-              Hdl, KeepAcked, add_segment_relseq_entry(KeepAcked, RelSeq, Acc));
-        eof -> %% TODO or maybe _
-            Acc
-    end.
+parse_segment_entries(<<?PUB_PREFIX:?PUB_PREFIX_BITS,
+                        IsPersistNum:1, RelSeq:?REL_SEQ_BITS, Rest/binary>>,
+                      KeepAcked, Acc) ->
+    parse_segment_publish_entry(
+      Rest, 1 == IsPersistNum, RelSeq, KeepAcked, Acc);
+parse_segment_entries(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
+                       RelSeq:?REL_SEQ_BITS, Rest/binary>>, KeepAcked, Acc) ->
+    parse_segment_entries(
+      Rest, KeepAcked, add_segment_relseq_entry(KeepAcked, RelSeq, Acc));
+parse_segment_entries(<<>>, _KeepAcked, Acc) ->
+    Acc.
 
-load_segment_publish_entry(Hdl, IsPersistent, RelSeq, {SegEntries, Unacked}) ->
-    case file_handle_cache:read(Hdl, ?PUB_RECORD_SIZE_BYTES) of
-        {ok, <<Bin:?PUB_RECORD_BODY_BYTES/binary,
-               MsgSize:?EMBEDDED_SIZE_BITS>>} ->
-            case read_msg(MsgSize, Hdl) of
-                {ok, MsgBin} ->
-                    Obj = {{IsPersistent, Bin, MsgBin}, no_del, no_ack},
-                    SegEntries1 = array:set(RelSeq, Obj, SegEntries),
-                    {SegEntries1, Unacked + 1};
-                _ ->
-                    {SegEntries, Unacked}
-            end;
-        _ ->
-            {SegEntries, Unacked}
-    end.
+parse_segment_publish_entry(<<Bin:?PUB_RECORD_BODY_BYTES/binary,
+                              MsgSize:?EMBEDDED_SIZE_BITS,
+                              MsgBin:MsgSize/binary, Rest/binary>>,
+                            IsPersistent, RelSeq, KeepAcked,
+                            {SegEntries, Unacked}) ->
+    Obj = {{IsPersistent, Bin, MsgBin}, no_del, no_ack},
+    SegEntries1 = array:set(RelSeq, Obj, SegEntries),
+    parse_segment_entries(Rest, KeepAcked, {SegEntries1, Unacked + 1});
+parse_segment_publish_entry(Rest, _IsPersistent, _RelSeq, KeepAcked, Acc) ->
+    parse_segment_entries(Rest, KeepAcked, Acc).
 
 add_segment_relseq_entry(KeepAcked, RelSeq, {SegEntries, Unacked}) ->
     case array:get(RelSeq, SegEntries) of
