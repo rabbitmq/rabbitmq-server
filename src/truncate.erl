@@ -20,7 +20,7 @@
 
 -record(params, {content, struct, content_dec, struct_dec}).
 
--export([log_event/2, term/2, exceeds_size/2]).
+-export([log_event/2, term/2]).
 %% exported for testing
 -export([test/0]).
 

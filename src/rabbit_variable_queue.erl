@@ -320,11 +320,13 @@
 %% betas, the IO_BATCH_SIZE sets the number of betas that we must be
 %% due to write indices for before we do any work at all.
 -define(IO_BATCH_SIZE, 2048). %% next power-of-2 after ?CREDIT_DISC_BOUND
+-define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(QUEUE, lqueue).
 
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -1404,17 +1406,33 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
         maybe_write_index_to_disk(ForceIndex, MsgStatus1, IndexState),
     {MsgStatus2, State #vqstate { index_state = IndexState1 }}.
 
-determine_persist_to(Msg, #message_properties{size = Size}) ->
+determine_persist_to(#basic_message{
+                        content = #content{properties     = Props,
+                                           properties_bin = PropsBin}},
+                     #message_properties{size = BodySize}) ->
     {ok, IndexMaxSize} = application:get_env(
                            rabbit, queue_index_embed_msgs_below),
     %% The >= is so that you can set the env to 0 and never persist
     %% to the index.
     %%
-    %% We avoid invoking exceeds_size/2 if the message is large
-    %% anyway.
-    case Size >= IndexMaxSize of
+    %% We want this to be fast, so we avoid size(term_to_binary())
+    %% here, or using the term size estimation from truncate.erl, both
+    %% of which are too slow. So instead, if the message body size
+    %% goes over the limit then we avoid any other checks.
+    %%
+    %% If it doesn't we need to decide if the properties will push
+    %% it past the limit. If we have the encoded properties (usual
+    %% case) we can just check their size. If we don't (message came
+    %% via the direct client), we make a guess based on the number of
+    %% headers.
+    case BodySize >= IndexMaxSize of
         true  -> msg_store;
-        false -> case truncate:exceeds_size(Msg, IndexMaxSize) of
+        false -> Est = case is_binary(PropsBin) of
+                           true  -> BodySize + size(PropsBin);
+                           false -> #'P_basic'{headers = Hs} = Props,
+                                    length(Hs) * ?HEADER_GUESS_SIZE + BodySize
+                       end,
+                 case Est >= IndexMaxSize of
                      true  -> msg_store;
                      false -> queue_index
                  end
