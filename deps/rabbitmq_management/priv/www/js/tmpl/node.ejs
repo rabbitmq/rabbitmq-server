@@ -150,13 +150,16 @@
        ['Disk', 'mnesia_disk_tx_count']],
       fmt_rate, fmt_rate_axis, true, 'Mnesia transactions', 'mnesia-transactions') %>
 
-  <%= rates_chart_or_text('persister-stats-count', node,
-      [['QI Read', 'queue_index_read_count'],
-       ['QI Write', 'queue_index_write_count'],
-       ['QI Journal', 'queue_index_journal_write_count'],
+  <%= rates_chart_or_text('persister-msg-stats-count', node,
+      [['QI Journal', 'queue_index_journal_write_count'],
        ['Store Read', 'msg_store_read_count'],
        ['Store Write', 'msg_store_write_count']],
-      fmt_rate, fmt_rate_axis, true, 'Persistence operations', 'persister-operations') %>
+      fmt_rate, fmt_rate_axis, true, 'Persistence operations (messages)', 'persister-operations-msg') %>
+
+  <%= rates_chart_or_text('persister-bulk-stats-count', node,
+      [['QI Read', 'queue_index_read_count'],
+       ['QI Write', 'queue_index_write_count']],
+      fmt_rate, fmt_rate_axis, true, 'Persistence operations (bulk)', 'persister-operations-bulk') %>
 </div>
 <% } %>
 </div>

@@ -285,26 +285,30 @@ HELP = {
             creation / deletion of durable queues).</dd>\
       </dl>',
 
-    'persister-operations':
-    'Rate at which persister operations take place on this node. See \
+    'persister-operations-msg':
+    'Rate at which per-message persister operations take place on this node. See \
      <a href="http://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
      for more information on the persister. \
       <dl>\
-        <dt>QI Read</dt>\
-        <dd>Rate at which message information is read from queue index \
-            segment files.</dd>\
-        <dt>QI Write</dt>\
-        <dd>Rate at which message information is written to queue index \
-            segment files.</dd>\
         <dt>QI Journal</dt>\
-        <dd>Rate at which message information is written to queue index \
-            journals.</dd>\
+        <dd>Rate at which message information (publishes, deliveries and \
+            acknowledgements) is written to queue index journals.</dd>\
         <dt>Store Read</dt>\
         <dd>Rate at which messages are read from the message store.</dd>\
         <dt>Store Write</dt>\
         <dd>Rate at which messages are written to the message store.</dd>\
       </dl>',
 
+    'persister-operations-bulk':
+    'Rate at which whole-file persister operations take place on this node. See \
+     <a href="http://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
+     for more information on the persister. \
+      <dl>\
+        <dt>QI Read</dt>\
+        <dd>Rate at which queue index segment files are read.</dd>\
+        <dt>QI Write</dt>\
+        <dd>Rate at which queue index segment files are written. </dd>\
+      </dl>',
 
     'foo': 'foo' // No comma.
 };
