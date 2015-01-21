@@ -159,7 +159,22 @@
         [messages, messages_ready, messages_unacknowledged]).
 
 -define(COARSE_NODE_STATS,
-        [mem_used, fd_used, sockets_used, proc_used, disk_free]).
+        [mem_used, fd_used, sockets_used, proc_used, disk_free,
+         io_read_count,  io_read_bytes,  io_read_avg_time,
+         io_write_count, io_write_bytes, io_write_avg_time,
+         io_sync_count,  io_sync_avg_time,
+         io_seek_count,  io_seek_avg_time,
+         io_reopen_count, mnesia_ram_tx_count,  mnesia_disk_tx_count,
+         msg_store_read_count, msg_store_write_count,
+         queue_index_journal_write_count,
+         queue_index_write_count, queue_index_read_count]).
+
+%% Normally 0 and no history means "has never happened, don't
+%% report". But for these things we do want to report even at 0 with
+%% no history.
+-define(ALWAYS_REPORT_STATS,
+        [io_read_avg_time, io_write_avg_time,
+         io_sync_avg_time | ?COARSE_QUEUE_STATS]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
@@ -572,8 +587,10 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
 %% TODO: we don't clear up after dead nodes here - this is a very tiny
 %% leak every time a node is permanently removed from the cluster. Do
 %% we care?
-handle_event(#event{type = node_stats, props = Stats, timestamp = Timestamp},
+handle_event(#event{type = node_stats, props = Stats0, timestamp = Timestamp},
              State) ->
+    Stats = proplists:delete(persister_stats, Stats0) ++
+        pget(persister_stats, Stats0),
     handle_stats(node_stats, Stats, Timestamp, [], ?COARSE_NODE_STATS, State);
 
 handle_event(_Event, State) ->
@@ -965,7 +982,7 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
 format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
     lists:append(
       [case rabbit_mgmt_stats:is_blank(Stats) andalso
-           not lists:member(K, ?COARSE_QUEUE_STATS) of
+           not lists:member(K, ?ALWAYS_REPORT_STATS) of
            true  -> [];
            false -> {Details, Counter} = rabbit_mgmt_stats:format(
                                            pick_range(K, Ranges),
@@ -1095,7 +1112,7 @@ gc_batch(State = #state{aggregated_stats = ETS}) ->
 gc_batch(0, _Policies, State) ->
     State;
 gc_batch(Rows, Policies, State = #state{aggregated_stats = ETS,
-                         gc_next_key      = Key0}) ->
+                                        gc_next_key      = Key0}) ->
     Key = case Key0 of
               undefined -> ets:first(ETS);
               _         -> ets:next(ETS, Key0)
