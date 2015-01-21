@@ -172,8 +172,6 @@
 -define(READ_MODE, [binary, raw, read]).
 -define(WRITE_MODE, [write | ?READ_MODE]).
 
--define(READ_BUFFER_SIZE, 1048576). %% 1MB
-
 %%----------------------------------------------------------------------------
 
 -record(qistate, {dir, segments, journal_handle, dirty_count,
