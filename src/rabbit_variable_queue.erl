@@ -18,7 +18,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
-         publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
+         publish/6, publish_delivered/5, discard/4, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
@@ -581,13 +581,14 @@ purge_acks(State) -> a(purge_pending_ack(false, State)).
 
 publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-        IsDelivered, _ChPid, State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
-                                                next_seq_id      = SeqId,
-                                                len              = Len,
-                                                in_counter       = InCount,
-                                                persistent_count = PCount,
-                                                durable          = IsDurable,
-                                                unconfirmed      = UC }) ->
+        IsDelivered, _ChPid, _Flow,
+        State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
+                           next_seq_id      = SeqId,
+                           len              = Len,
+                           in_counter       = InCount,
+                           persistent_count = PCount,
+                           durable          = IsDurable,
+                           unconfirmed      = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps),
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
@@ -611,12 +612,13 @@ publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
                                          id = MsgId },
                   MsgProps = #message_properties {
                     needs_confirming = NeedsConfirming },
-                  _ChPid, State = #vqstate { next_seq_id      = SeqId,
-                                             out_counter      = OutCount,
-                                             in_counter       = InCount,
-                                             persistent_count = PCount,
-                                             durable          = IsDurable,
-                                             unconfirmed      = UC }) ->
+                  _ChPid, _Flow,
+                  State = #vqstate { next_seq_id      = SeqId,
+                                     out_counter      = OutCount,
+                                     in_counter       = InCount,
+                                     persistent_count = PCount,
+                                     durable          = IsDurable,
+                                     unconfirmed      = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps),
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
@@ -631,7 +633,7 @@ publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
                                          unconfirmed      = UC1 }),
     {SeqId, a(reduce_memory_use(maybe_update_rates(State3)))}.
 
-discard(_MsgId, _ChPid, State) -> State.
+discard(_MsgId, _ChPid, _Flow, State) -> State.
 
 drain_confirmed(State = #vqstate { confirmed = C }) ->
     case gb_sets:is_empty(C) of

@@ -263,9 +263,10 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
             Props1 = Props#message_properties{needs_confirming = false},
             {MA1, BQS1} =
                 case Unacked of
-                    false -> {MA, BQ:publish(Msg, Props1, true, none, BQS)};
+                    false -> {MA,
+                              BQ:publish(Msg, Props1, true, none, noflow, BQS)};
                     true  -> {AckTag, BQS2} = BQ:publish_delivered(
-                                                Msg, Props1, none, BQS),
+                                                Msg, Props1, none, noflow, BQS),
                              {[{Msg#basic_message.id, AckTag} | MA], BQS2}
                 end,
             slave_sync_loop(Args, {MA1, TRef, BQS1});

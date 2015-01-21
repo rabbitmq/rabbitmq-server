@@ -2448,7 +2448,7 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
                                                      end},
                     PayloadFun(N)),
                   PropFun(N, #message_properties{size = 10}),
-                  false, self(), VQN)
+                  false, self(), noflow, VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -2514,7 +2514,8 @@ publish_and_confirm(Q, Payload, Count) ->
                                     <<>>, #'P_basic'{delivery_mode = 2},
                                     Payload),
          Delivery = #delivery{mandatory = false, sender = self(),
-                              confirm = true, message = Msg, msg_seq_no = Seq},
+                              confirm = true, message = Msg, msg_seq_no = Seq,
+                              flow = noflow},
           _QPids = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).

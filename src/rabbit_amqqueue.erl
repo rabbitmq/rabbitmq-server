@@ -23,7 +23,7 @@
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
+         stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([list_down/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
@@ -149,8 +149,6 @@
 -spec(forget_all_durable/1 :: (node()) -> 'ok').
 -spec(deliver/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
                         qpids()).
--spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
-                             qpids()).
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
@@ -623,10 +621,6 @@ delete_crashed_internal(Q = #amqqueue{ name = QName }) ->
 
 purge(#amqqueue{ pid = QPid }) -> delegate:call(QPid, purge).
 
-deliver(Qs, Delivery) -> deliver(Qs, Delivery, noflow).
-
-deliver_flow(Qs, Delivery) -> deliver(Qs, Delivery, flow).
-
 requeue(QPid, MsgIds, ChPid) -> delegate:call(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, MsgIds, ChPid) -> delegate:cast(QPid, {ack, MsgIds, ChPid}).
@@ -816,15 +810,20 @@ immutable(Q) -> Q#amqqueue{pid              = none,
                            decorators       = none,
                            state            = none}.
 
-deliver([], _Delivery, _Flow) ->
+deliver([], _Delivery) ->
     %% /dev/null optimisation
     [];
 
-deliver(Qs, Delivery, Flow) ->
+deliver(Qs, Delivery = #delivery{flow = Flow}) ->
     {MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
+    %% We use up two credits to send to a slave since the message
+    %% arrives at the slave from two directions. We will ack one when
+    %% the slave receives the message direct from the channel, and the
+    %% other when it receives it via GM.
     case Flow of
-        flow   -> [credit_flow:send(QPid) || QPid <- QPids];
+        flow   -> [credit_flow:send(QPid) || QPid <- QPids],
+                  [credit_flow:send(QPid) || QPid <- SPids];
         noflow -> ok
     end,
 
@@ -833,8 +832,8 @@ deliver(Qs, Delivery, Flow) ->
     %% after they have become master they should mark the message as
     %% 'delivered' since they do not know what the master may have
     %% done with it.
-    MMsg = {deliver, Delivery, false, Flow},
-    SMsg = {deliver, Delivery, true,  Flow},
+    MMsg = {deliver, Delivery, false},
+    SMsg = {deliver, Delivery, true},
     delegate:cast(MPids, MMsg),
     delegate:cast(SPids, SMsg),
     QPids.
