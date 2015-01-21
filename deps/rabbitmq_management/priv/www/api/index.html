@@ -227,11 +227,24 @@ Content-Length: 0</pre>
           messages. POST to upload an existing set of definitions. Note
           that:
           <ul>
-            <li>The definitions are merged. Anything already existing is
-            untouched.</li>
-            <li>Conflicts will cause an error.</li>
-            <li>In the event of an error you will be left with a
-            part-applied set of definitions.</li>
+            <li>
+              The definitions are merged. Anything already existing on
+              the server but not in the uploaded definitions is
+              untouched.
+            </li>
+            <li>
+              Conflicting definitions on immutable objects (exchanges,
+              queues and bindings) will cause an error.
+            </li>
+            <li>
+              Conflicting definitions on mutable objects will cause
+              the object in the server to be overwritten with the
+              object from the definitions.
+            </li>
+            <li>
+              In the event of an error you will be left with a
+              part-applied set of definitions.
+            </li>
           </ul>
           For convenience you may upload a file from a browser to this
           URI (i.e. you can use <code>multipart/form-data</code> as
