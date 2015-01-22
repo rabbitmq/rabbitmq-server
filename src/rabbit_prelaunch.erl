@@ -22,9 +22,9 @@
 
 -include("rabbit.hrl").
 
--define(DIST_PORT_NOT_CONFIGURED, 0).
+-define(SET_DIST_PORT, 0).
 -define(ERROR_CODE, 1).
--define(DIST_PORT_CONFIGURED, 2).
+-define(DO_NOT_SET_DIST_PORT, 2).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -46,13 +46,14 @@ start() ->
             {NodeName, NodeHost} = rabbit_nodes:parts(Node),
             ok = duplicate_node_check(NodeName, NodeHost),
             ok = dist_port_set_check(),
+            ok = dist_port_range_check(),
             ok = dist_port_use_check(NodeHost);
         [] ->
             %% Ignore running node while installing windows service
             ok = dist_port_set_check(),
             ok
     end,
-    rabbit_misc:quit(?DIST_PORT_NOT_CONFIGURED),
+    rabbit_misc:quit(?SET_DIST_PORT),
     ok.
 
 stop() ->
@@ -88,13 +89,24 @@ dist_port_set_check() ->
                     case {pget(inet_dist_listen_min, Kernel, none),
                           pget(inet_dist_listen_max, Kernel, none)} of
                         {none, none} -> ok;
-                        _            -> rabbit_misc:quit(?DIST_PORT_CONFIGURED)
+                        _            -> rabbit_misc:quit(?DO_NOT_SET_DIST_PORT)
                     end;
                 {ok, _} ->
                     ok;
                 {error, _} ->
                     ok
             end
+    end.
+
+dist_port_range_check() ->
+    case os:getenv("RABBITMQ_DIST_PORT") of
+        false   -> ok;
+        PortStr -> case catch list_to_integer(PortStr) of
+                       Port when is_integer(Port) andalso Port > 65535 ->
+                           rabbit_misc:quit(?DO_NOT_SET_DIST_PORT);
+                       _ ->
+                           ok
+                   end
     end.
 
 dist_port_use_check(NodeHost) ->
