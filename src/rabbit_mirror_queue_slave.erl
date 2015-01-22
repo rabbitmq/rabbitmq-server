@@ -206,21 +206,28 @@ handle_call({gm_deaths, DeadGMPids}, From,
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
-        {ok, Pid, DeadPids} ->
+        {ok, Pid, DeadPids, ExtraNodes} ->
             rabbit_mirror_queue_misc:report_deaths(Self, false, QName,
                                                    DeadPids),
             case Pid of
                 MPid ->
                     %% master hasn't changed
                     gen_server2:reply(From, ok),
+                    rabbit_mirror_queue_misc:add_mirrors(
+                      QName, ExtraNodes, async),
                     noreply(State);
                 Self ->
                     %% we've become master
                     QueueState = promote_me(From, State),
+                    rabbit_mirror_queue_misc:add_mirrors(
+                      QName, ExtraNodes, async),
                     {become, rabbit_amqqueue_process, QueueState, hibernate};
                 _ ->
                     %% master has changed to not us
                     gen_server2:reply(From, ok),
+                    %% assertion, we don't need to add_mirrors/2 in this
+                    %% branch, see last clause in remove_from_queue/2
+                    [] = ExtraNodes,
                     %% Since GM is by nature lazy we need to make sure
                     %% there is some traffic when a master dies, to
                     %% make sure all slaves get informed of the

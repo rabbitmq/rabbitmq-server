@@ -353,9 +353,10 @@ handle_cast({gm_deaths, DeadGMPids},
   when node(MPid) =:= node() ->
     case rabbit_mirror_queue_misc:remove_from_queue(
            QueueName, MPid, DeadGMPids) of
-        {ok, MPid, DeadPids} ->
+        {ok, MPid, DeadPids, ExtraNodes} ->
             rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName,
                                                    DeadPids),
+            rabbit_mirror_queue_misc:add_mirrors(QueueName, ExtraNodes, async),
             noreply(State);
         {error, not_found} ->
             {stop, normal, State}
