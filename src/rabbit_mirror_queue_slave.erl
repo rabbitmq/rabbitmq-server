@@ -246,7 +246,7 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 handle_cast({gm, Instruction}, State) ->
     handle_process_result(process_instruction(Instruction, State));
 
-handle_cast({deliver, Delivery = #delivery{sender = Sender}, true, Flow},
+handle_cast({deliver, Delivery = #delivery{sender = Sender, flow = Flow}, true},
             State) ->
     %% Asynchronous, non-"mandatory", deliver mode.
     case Flow of
@@ -628,7 +628,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                         (_Msgid, _Status, MTC0) ->
                             MTC0
                     end, gb_trees:empty(), MS),
-    Deliveries = [Delivery#delivery{mandatory = false} || %% [0]
+    Deliveries = [promote_delivery(Delivery) ||
                    {_ChPid, {PubQ, _PendCh, _ChState}} <- dict:to_list(SQ),
                    Delivery <- queue:to_list(PubQ)],
     AwaitGmDown = [ChPid || {ChPid, {_, _, down_from_ch}} <- dict:to_list(SQ)],
@@ -640,8 +640,16 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
       Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS1,
       MTC).
 
-%% [0] We reset mandatory to false here because we will have sent the
-%% mandatory_received already as soon as we got the message
+%% We reset mandatory to false here because we will have sent the
+%% mandatory_received already as soon as we got the message. We also
+%% need to send an ack for these messages since the channel is waiting
+%% for one for the via-GM case and we will not now receive one.
+promote_delivery(Delivery = #delivery{sender = Sender, flow = Flow}) ->
+    case Flow of
+        flow   -> credit_flow:ack(Sender);
+        noflow -> ok
+    end,
+    Delivery#delivery{mandatory = false}.
 
 noreply(State) ->
     {NewState, Timeout} = next_state(State),
@@ -823,24 +831,27 @@ publish_or_discard(Status, ChPid, MsgId,
     State1 #state { sender_queues = SQ1, msg_id_status = MS1 }.
 
 
-process_instruction({publish, ChPid, MsgProps,
+process_instruction({publish, ChPid, Flow, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
+    maybe_flow_ack(ChPid, Flow),
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(published, ChPid, MsgId, State),
-    BQS1 = BQ:publish(Msg, MsgProps, true, ChPid, BQS),
+    BQS1 = BQ:publish(Msg, MsgProps, true, ChPid, Flow, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
-process_instruction({publish_delivered, ChPid, MsgProps,
+process_instruction({publish_delivered, ChPid, Flow, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
+    maybe_flow_ack(ChPid, Flow),
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(published, ChPid, MsgId, State),
     true = BQ:is_empty(BQS),
-    {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, BQS),
+    {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
     {ok, maybe_store_ack(true, MsgId, AckTag,
                          State1 #state { backing_queue_state = BQS1 })};
-process_instruction({discard, ChPid, MsgId}, State) ->
+process_instruction({discard, ChPid, Flow, MsgId}, State) ->
+    maybe_flow_ack(ChPid, Flow),
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(discarded, ChPid, MsgId, State),
-    BQS1 = BQ:discard(MsgId, ChPid, BQS),
+    BQS1 = BQ:discard(MsgId, ChPid, Flow, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
 process_instruction({drop, Length, Dropped, AckRequired},
                     State = #state { backing_queue       = BQ,
@@ -898,6 +909,9 @@ process_instruction({delete_and_terminate, Reason},
                                      backing_queue_state = BQS }) ->
     BQ:delete_and_terminate(Reason, BQS),
     {stop, State #state { backing_queue_state = undefined }}.
+
+maybe_flow_ack(ChPid, flow)    -> credit_flow:ack(ChPid);
+maybe_flow_ack(_ChPid, noflow) -> ok.
 
 msg_ids_to_acktags(MsgIds, MA) ->
     {AckTags, MA1} =
