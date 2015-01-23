@@ -1227,9 +1227,8 @@ read_msg(MsgId, IsPersistent, State = #vqstate{msg_store_clients = MSCState}) ->
 counters(Signs, Statuses, State) ->
     counters0(expand_signs(Signs), expand_statuses(Statuses), State).
 
-expand_signs(ready0)   -> {0, 0, ready};
-expand_signs(unacked0) -> {0, 0, unacked};
-expand_signs({A, B})   -> {A, B, no_hint}.
+expand_signs(ready0)   -> {0, 0, true};
+expand_signs({A, B})   -> {A, B, false}.
 
 expand_statuses({none, A})    -> {false,         msg_in_ram(A), A};
 expand_statuses({B,    none}) -> {msg_in_ram(B), false,         B};
@@ -1238,7 +1237,7 @@ expand_statuses({B,    A})    -> {msg_in_ram(B), msg_in_ram(A), B}.
 %% In this function at least, we are religious: the variable name
 %% contains "Ready" or "Unacked" iff that is what it counts. If
 %% neither is present it counts both.
-counters0({SignReady, SignUnacked, RamReadyHint},
+counters0({SignReady, SignUnacked, ReadyMsgPaged},
           {InRamBefore, InRamAfter, MsgStatus},
           State = #vqstate{len              = ReadyCount,
                            bytes            = ReadyBytes,
@@ -1249,29 +1248,18 @@ counters0({SignReady, SignUnacked, RamReadyHint},
                            persistent_bytes = PersistentBytes}) ->
     S = msg_size(MsgStatus),
     SignTotal = SignReady + SignUnacked,
-    %% TODO there has got to be a simpler way!
-    SignRamReady =
-        case {SignReady, SignUnacked} of
-            {0,  0} -> case {InRamBefore, InRamAfter, RamReadyHint} of
-                           {false, false, _}       -> 0;
-                           {true,  true,  _}       -> 0;
-                           {false, true,  unacked} -> 0;
-                           {true,  false, unacked} -> 0;
-                           {false, true,  ready}   -> 1;
-                           {true,  false, ready}   -> -1;
-                           {false, true,  no_hint} -> -1;
-                           {true,  false, no_hint} -> 1
-                       end;
-            {1,  _} -> one_if(InRamAfter);
-            {-1, _} -> -one_if(InRamBefore);
-            {0,  _} -> 0
-        end,
     SignRam = case {InRamBefore, InRamAfter} of
                   {false, false} ->  0;
                   {false, true}  ->  1;
                   {true,  false} -> -1;
                   {true,  true}  ->  0
               end,
+    SignRamReady = case SignReady of
+                       1                    -> one_if(InRamAfter);
+                       -1                   -> -one_if(InRamBefore);
+                       0 when ReadyMsgPaged -> SignRam;
+                       0                    -> 0
+                   end,
     SignPersistent = SignTotal * one_if(MsgStatus#msg_status.is_persistent),
     State#vqstate{len               = ReadyCount      + SignReady,
                   ram_msg_count     = RamReadyCount   + SignRamReady,
@@ -1821,7 +1809,7 @@ limit_ram_acks(Quota, State = #vqstate { ram_pending_ack  = RPA,
             DPA1 = gb_trees:insert(SeqId, MsgStatus2, DPA),
             limit_ram_acks(Quota - 1,
                            counters(
-                             unacked0, {MsgStatus, MsgStatus2},
+                             {0, 0}, {MsgStatus, MsgStatus2},
                              State1 #vqstate { ram_pending_ack  = RPA1,
                                                disk_pending_ack = DPA1 }))
     end.
@@ -2017,7 +2005,7 @@ push_betas_to_deltas1(Generator, Limit, Q,
           when SeqId < Limit ->
             {Q, PushState};
         {{value, MsgStatus = #msg_status { seq_id = SeqId }}, Qa} ->
-            {#msg_status { index_on_disk = true } = MsgStatus1, IndexState1} =
+            {#msg_status { index_on_disk = true }, IndexState1} =
                 maybe_write_index_to_disk(true, MsgStatus, IndexState),
             State1 = counters(ready0, {MsgStatus, none}, State),
             Delta1 = expand_delta(SeqId, Delta),
