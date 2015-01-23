@@ -231,7 +231,7 @@ run-background-node: all
 run-tests: all
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) -n hare || true
-	OUT=$$(echo "rabbit_tests:test_backing_queue()." | $(ERL_CALL)) ; \
+	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 run-qc: all
