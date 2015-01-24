@@ -325,7 +325,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
     Recv = rabbit_net:recv(Sock),
     case CS of
         pre_init when Buf =:= [] ->
-            %% We only new incoming connections only when either the
+            %% We only log incoming connections when either the
             %% first byte was received or there was an error (eg. a
             %% timeout).
             %%
