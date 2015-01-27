@@ -1292,11 +1292,9 @@ test_spawn_remote() ->
     end.
 
 user(Username) ->
-    #user{username     = Username,
-          tags         = [administrator],
-          auth_backend = rabbit_auth_backend_internal,
-          impl         = #internal_user{username = Username,
-                                        tags     = [administrator]}}.
+    #user{username       = Username,
+          tags           = [administrator],
+          authz_backends = [{rabbit_auth_backend_internal, none}]}.
 
 test_confirms() ->
     {_Writer, Ch} = test_spawn(),
@@ -1890,11 +1888,15 @@ test_backing_queue() ->
             passed = test_msg_store(),
             application:set_env(rabbit, msg_store_file_size_limit,
                                 FileSizeLimit),
-            passed = test_queue_index(),
-            passed = test_queue_index_props(),
-            passed = test_variable_queue(),
-            passed = test_variable_queue_delete_msg_store_files_callback(),
-            passed = test_queue_recover(),
+            [begin
+                 application:set_env(
+                   rabbit, queue_index_embed_msgs_below, Bytes),
+                 passed = test_queue_index(),
+                 passed = test_queue_index_props(),
+                 passed = test_variable_queue(),
+                 passed = test_variable_queue_delete_msg_store_files_callback(),
+                 passed = test_queue_recover()
+             end || Bytes <- [0, 1024]],
             application:set_env(rabbit, queue_index_max_journal_entries,
                                 MaxJournal),
             %% We will have restarted the message store, and thus changed
@@ -2221,7 +2223,7 @@ init_test_queue() ->
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
-            fun nop/1),
+            fun nop/1, fun nop/1),
     ok = rabbit_msg_store:client_delete_and_terminate(PersistentClient),
     Res.
 
@@ -2260,7 +2262,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   MsgId = rabbit_guid:gen(),
                   QiM = rabbit_queue_index:publish(
                           MsgId, SeqId, #message_properties{size = 10},
-                          Persistent, QiN),
+                          Persistent, infinity, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
@@ -2283,7 +2285,8 @@ test_queue_index_props() ->
       fun(Qi0) ->
               MsgId = rabbit_guid:gen(),
               Props = #message_properties{expiry=12345, size = 10},
-              Qi1 = rabbit_queue_index:publish(MsgId, 1, Props, true, Qi0),
+              Qi1 = rabbit_queue_index:publish(
+                      MsgId, 1, Props, true, infinity, Qi0),
               {[{MsgId, 1, Props, _, _}], Qi2} =
                   rabbit_queue_index:read(1, 2, Qi1),
               Qi2
@@ -2424,7 +2427,7 @@ variable_queue_init(Q, Recover) ->
       Q, case Recover of
              true  -> non_clean_shutdown;
              false -> new
-         end, fun nop/2, fun nop/2, fun nop/1).
+         end, fun nop/2, fun nop/2, fun nop/1, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
@@ -2446,7 +2449,7 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
                                                      end},
                     PayloadFun(N)),
                   PropFun(N, #message_properties{size = 10}),
-                  false, self(), VQN)
+                  false, self(), noflow, VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -2464,7 +2467,10 @@ variable_queue_set_ram_duration_target(Duration, VQ) ->
       rabbit_variable_queue:set_ram_duration_target(Duration, VQ)).
 
 assert_prop(List, Prop, Value) ->
-    Value = proplists:get_value(Prop, List).
+    case proplists:get_value(Prop, List)of
+        Value -> ok;
+        _     -> {exit, Prop, exp, Value, List}
+    end.
 
 assert_props(List, PropVals) ->
     [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals].
@@ -2487,12 +2493,18 @@ with_fresh_variable_queue(Fun) ->
                                           {delta, undefined, 0, undefined}},
                                          {q3, 0}, {q4, 0},
                                          {len, 0}]),
-                       _ = rabbit_variable_queue:delete_and_terminate(
-                        shutdown, Fun(VQ)),
-                       Me ! Ref
+                       try
+                           _ = rabbit_variable_queue:delete_and_terminate(
+                                 shutdown, Fun(VQ)),
+                           Me ! Ref
+                       catch
+                           Type:Error ->
+                               Me ! {Ref, Type, Error, erlang:get_stacktrace()}
+                       end
                end),
     receive
-        Ref -> ok
+        Ref                    -> ok;
+        {Ref, Type, Error, ST} -> exit({Type, Error, ST})
     end,
     passed.
 
@@ -2503,7 +2515,8 @@ publish_and_confirm(Q, Payload, Count) ->
                                     <<>>, #'P_basic'{delivery_mode = 2},
                                     Payload),
          Delivery = #delivery{mandatory = false, sender = self(),
-                              confirm = true, message = Msg, msg_seq_no = Seq},
+                              confirm = true, message = Msg, msg_seq_no = Seq,
+                              flow = noflow},
           _QPids = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
@@ -2789,8 +2802,6 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
     VQ7 = lists:foldl(
             fun (Duration1, VQ4) ->
                     {_Duration, VQ5} = rabbit_variable_queue:ram_duration(VQ4),
-                    io:format("~p:~n~p~n",
-                              [Duration1, variable_queue_status(VQ5)]),
                     VQ6 = variable_queue_set_ram_duration_target(
                             Duration1, VQ5),
                     publish_fetch_and_ack(Churn, Len, VQ6)
@@ -2851,7 +2862,6 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
 check_variable_queue_status(VQ0, Props) ->
     VQ1 = variable_queue_wait_for_shuffling_end(VQ0),
     S = variable_queue_status(VQ1),
-    io:format("~p~n", [S]),
     assert_props(S, Props),
     VQ1.
 

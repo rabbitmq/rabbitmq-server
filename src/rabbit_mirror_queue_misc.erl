@@ -49,7 +49,7 @@
 
 -spec(remove_from_queue/3 ::
         (rabbit_amqqueue:name(), pid(), [pid()])
-        -> {'ok', pid(), [pid()]} | {'error', 'not_found'}).
+        -> {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'}).
 -spec(on_node_up/0 :: () -> 'ok').
 -spec(add_mirrors/3 :: (rabbit_amqqueue:name(), [node()], 'sync' | 'async')
                        -> 'ok').
@@ -70,7 +70,7 @@
 
 %%----------------------------------------------------------------------------
 
-%% Returns {ok, NewMPid, DeadPids}
+%% Returns {ok, NewMPid, DeadPids, ExtraNodes}
 remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
@@ -94,32 +94,36 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                                       Pid <- SPids,
                                       not lists:member(Pid, AlivePids)] ++ DSNs,
                       {QPid1, SPids1} = promote_slave(Alive),
-                      case {{QPid, SPids}, {QPid1, SPids1}} of
-                          {Same, Same} ->
-                              ok;
-                          _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
-                              %% Either master hasn't changed, so
-                              %% we're ok to update mnesia; or we have
-                              %% become the master.
-                              Q1 = Q#amqqueue{pid              = QPid1,
-                                              slave_pids       = SPids1,
-                                              gm_pids          = AliveGM,
-                                              down_slave_nodes = DSNs1},
-                              store_updated_slaves(Q1),
-                              %% If we add and remove nodes at the same time we
-                              %% might tell the old master we need to sync and
-                              %% then shut it down. So let's check if the new
-                              %% master needs to sync.
-                              maybe_auto_sync(Q1);
+                      Extra =
+                          case {{QPid, SPids}, {QPid1, SPids1}} of
+                              {Same, Same} ->
+                                  [];
+                              _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
+                                  %% Either master hasn't changed, so
+                                  %% we're ok to update mnesia; or we have
+                                  %% become the master.
+                                  Q1 = Q#amqqueue{pid              = QPid1,
+                                                  slave_pids       = SPids1,
+                                                  gm_pids          = AliveGM,
+                                                  down_slave_nodes = DSNs1},
+                                  store_updated_slaves(Q1),
+                                  %% If we add and remove nodes at the
+                                  %% same time we might tell the old
+                                  %% master we need to sync and then
+                                  %% shut it down. So let's check if
+                                  %% the new master needs to sync.
+                                  maybe_auto_sync(Q1),
+                                  slaves_to_start_on_failure(Q1, DeadGMPids);
                           _ ->
-                              %% Master has changed, and we're not it.
-                              %% [1].
-                              Q1 = Q#amqqueue{slave_pids       = Alive,
-                                              gm_pids          = AliveGM,
-                                              down_slave_nodes = DSNs1},
-                              store_updated_slaves(Q1)
-                      end,
-                      {ok, QPid1, DeadPids}
+                                  %% Master has changed, and we're not it.
+                                  %% [1].
+                                  Q1 = Q#amqqueue{slave_pids       = Alive,
+                                                  gm_pids          = AliveGM,
+                                                  down_slave_nodes = DSNs1},
+                                  store_updated_slaves(Q1),
+                                  []
+                          end,
+                      {ok, QPid1, DeadPids, Extra}
               end
       end).
 %% [1] We still update mnesia here in case the slave that is supposed
@@ -144,6 +148,17 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
 %% corresponding entry in gm_pids. By contrast, due to the
 %% aforementioned restriction on updating the master pid, that pid may
 %% not be present in gm_pids, but only if said master has died.
+
+%% Sometimes a slave dying means we need to start more on other
+%% nodes - "exactly" mode can cause this to happen.
+slaves_to_start_on_failure(Q, DeadGMPids) ->
+    %% In case Mnesia has not caught up yet, filter out nodes we know
+    %% to be dead..
+    ClusterNodes = rabbit_mnesia:cluster_nodes(running) --
+        [node(P) || P <- DeadGMPids],
+    {_, OldNodes, _} = actual_queue_nodes(Q),
+    {_, NewNodes} = suggested_queue_nodes(Q, ClusterNodes),
+    NewNodes -- OldNodes.
 
 on_node_up() ->
     QNames =
@@ -344,6 +359,13 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     {NewMNode, NewSNodes}    = suggested_queue_nodes(NewQ),
     OldNodes = [OldMNode | OldSNodes],
     NewNodes = [NewMNode | NewSNodes],
+    %% When a mirror dies, remove_from_queue/2 might have to add new
+    %% slaves (in "exactly" mode). It will check mnesia to see which
+    %% slaves there currently are. If drop_mirror/2 is invoked first
+    %% then when we end up in remove_from_queue/2 it will not see the
+    %% slaves that add_mirror/2 will add, and also want to add them
+    %% (even though we are not responding to the death of a
+    %% mirror). Breakage ensues.
     add_mirrors (QName, NewNodes -- OldNodes, async),
     drop_mirrors(QName, OldNodes -- NewNodes),
     %% This is for the case where no extra nodes were added but we changed to

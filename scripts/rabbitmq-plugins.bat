@@ -23,14 +23,6 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
-if "!RABBITMQ_USE_LONGNAME!"=="" (
-    set RABBITMQ_NAME_TYPE="-sname"
-)
-
-if "!RABBITMQ_USE_LONGNAME!"=="true" (
-    set RABBITMQ_NAME_TYPE="-name"
-)
-
 if "!RABBITMQ_SERVICENAME!"=="" (
     set RABBITMQ_SERVICENAME=RabbitMQ
 )
@@ -63,7 +55,7 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
     set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 )
 
-"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden !RABBITMQ_NAME_TYPE! rabbitmq-plugins!RANDOM!!TIME:~9! -s rabbit_plugins_main -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -nodename !RABBITMQ_NODENAME! -extra !STAR!
+"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -s rabbit_plugins_main -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -nodename !RABBITMQ_NODENAME! -extra !STAR!
 
 endlocal
 endlocal

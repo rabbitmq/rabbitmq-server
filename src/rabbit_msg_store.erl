@@ -473,6 +473,7 @@ write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
 
 read(MsgId,
      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
+    file_handle_cache_stats:update(msg_store_read),
     %% Check the cur file cache
     case ets:lookup(CurFileCacheEts, MsgId) of
         [] ->
@@ -507,6 +508,7 @@ server_cast(#client_msstate { server = Server }, Msg) ->
 client_write(MsgId, Msg, Flow,
              CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
                                         client_ref         = CRef }) ->
+    file_handle_cache_stats:update(msg_store_write),
     ok = client_update_flying(+1, MsgId, CState),
     ok = update_msg_cache(CurFileCacheEts, MsgId, Msg),
     ok = server_cast(CState, {write, CRef, MsgId, Flow}).
@@ -1299,7 +1301,8 @@ should_mask_action(CRef, MsgId,
 
 open_file(Dir, FileName, Mode) ->
     file_handle_cache:open(form_filename(Dir, FileName), ?BINARY_MODE ++ Mode,
-                           [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE}]).
+                           [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE},
+                            {read_buffer,  ?HANDLE_CACHE_BUFFER_SIZE}]).
 
 close_handle(Key, CState = #client_msstate { file_handle_cache = FHC }) ->
     CState #client_msstate { file_handle_cache = close_handle(Key, FHC) };
