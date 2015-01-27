@@ -1813,7 +1813,9 @@
               </varlistentry>
             </variablelist>
             <para>
-              Starts tracing.
+              Starts tracing. Note that the trace state is not
+              persistent; it will revert to being off if the server is
+              restarted.
             </para>
           </listitem>
         </varlistentry>
