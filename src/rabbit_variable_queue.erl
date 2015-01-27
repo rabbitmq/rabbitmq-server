@@ -1351,33 +1351,35 @@ maybe_write_msg_to_disk(_Force, MsgStatus, _MSCState) ->
     MsgStatus.
 
 maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
-                                    index_on_disk = true }, IndexState) ->
-    {MsgStatus, IndexState};
+                                    index_on_disk = true }, State) ->
+    {MsgStatus, State};
 maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
                                    msg           = Msg,
                                    msg_id        = MsgId,
                                    seq_id        = SeqId,
                                    is_persistent = IsPersistent,
                                    is_delivered  = IsDelivered,
-                                   msg_props     = MsgProps}, IndexState)
+                                   msg_props     = MsgProps},
+                          State = #vqstate{target_ram_count = TargetRamCount,
+                                           index_state      = IndexState})
   when Force orelse IsPersistent ->
     IndexState1 = rabbit_queue_index:publish(
                     case persist_to(MsgStatus) of
                         msg_store   -> MsgId;
                         queue_index -> prepare_to_store(Msg)
-                    end, SeqId, MsgProps, IsPersistent, IndexState),
+                    end, SeqId, MsgProps, IsPersistent, TargetRamCount,
+                    IndexState),
+    IndexState2 = maybe_write_delivered(IsDelivered, SeqId, IndexState1),
     {MsgStatus#msg_status{index_on_disk = true},
-     maybe_write_delivered(IsDelivered, SeqId, IndexState1)};
-maybe_write_index_to_disk(_Force, MsgStatus, IndexState) ->
-    {MsgStatus, IndexState}.
+     State#vqstate{index_state = IndexState2}};
+
+maybe_write_index_to_disk(_Force, MsgStatus, State) ->
+    {MsgStatus, State}.
 
 maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
-                    State = #vqstate { index_state       = IndexState,
-                                       msg_store_clients = MSCState }) ->
+                    State = #vqstate { msg_store_clients = MSCState }) ->
     MsgStatus1 = maybe_write_msg_to_disk(ForceMsg, MsgStatus, MSCState),
-    {MsgStatus2, IndexState1} =
-        maybe_write_index_to_disk(ForceIndex, MsgStatus1, IndexState),
-    {MsgStatus2, State #vqstate { index_state = IndexState1 }}.
+    maybe_write_index_to_disk(ForceIndex, MsgStatus1, State).
 
 determine_persist_to(#basic_message{
                         content = #content{properties     = Props,
@@ -1930,11 +1932,10 @@ push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
                  end
     end.
 
-push_betas_to_deltas(Quota, State = #vqstate { q2          = Q2,
-                                               delta       = Delta,
-                                               q3          = Q3,
-                                               index_state = IndexState }) ->
-    PushState = {Quota, Delta, IndexState, State},
+push_betas_to_deltas(Quota, State = #vqstate { q2    = Q2,
+                                               delta = Delta,
+                                               q3    = Q3}) ->
+    PushState = {Quota, Delta, State},
     {Q3a, PushState1} = push_betas_to_deltas(
                           fun ?QUEUE:out_r/1,
                           fun rabbit_queue_index:next_segment_boundary/1,
@@ -1943,11 +1944,10 @@ push_betas_to_deltas(Quota, State = #vqstate { q2          = Q2,
                           fun ?QUEUE:out/1,
                           fun (Q2MinSeqId) -> Q2MinSeqId end,
                           Q2, PushState1),
-    {_, Delta1, IndexState1, State1} = PushState2,
-    State1 #vqstate { q2          = Q2a,
-                      delta       = Delta1,
-                      q3          = Q3a,
-                      index_state = IndexState1 }.
+    {_, Delta1, State1} = PushState2,
+    State1 #vqstate { q2    = Q2a,
+                      delta = Delta1,
+                      q3    = Q3a }.
 
 push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
     case ?QUEUE:is_empty(Q) of
@@ -1963,11 +1963,9 @@ push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
             end
     end.
 
-push_betas_to_deltas1(_Generator, _Limit, Q,
-                      {0, _Delta, _IndexState, _State} = PushState) ->
+push_betas_to_deltas1(_Generator, _Limit, Q, {0, _Delta, _State} = PushState) ->
     {Q, PushState};
-push_betas_to_deltas1(Generator, Limit, Q,
-                      {Quota, Delta, IndexState, State} = PushState) ->
+push_betas_to_deltas1(Generator, Limit, Q, {Quota, Delta, State} = PushState) ->
     case Generator(Q) of
         {empty, _Q} ->
             {Q, PushState};
@@ -1975,12 +1973,12 @@ push_betas_to_deltas1(Generator, Limit, Q,
           when SeqId < Limit ->
             {Q, PushState};
         {{value, MsgStatus = #msg_status { seq_id = SeqId }}, Qa} ->
-            {#msg_status { index_on_disk = true }, IndexState1} =
-                maybe_write_index_to_disk(true, MsgStatus, IndexState),
-            State1 = stats(ready0, {MsgStatus, none}, State),
+            {#msg_status { index_on_disk = true }, State1} =
+                maybe_write_index_to_disk(true, MsgStatus, State),
+            State2 = stats(ready0, {MsgStatus, none}, State1),
             Delta1 = expand_delta(SeqId, Delta),
             push_betas_to_deltas1(Generator, Limit, Qa,
-                                  {Quota - 1, Delta1, IndexState1, State1})
+                                  {Quota - 1, Delta1, State2})
     end.
 
 %%----------------------------------------------------------------------------
