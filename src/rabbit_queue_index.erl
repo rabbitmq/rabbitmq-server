@@ -18,7 +18,7 @@
 
 -export([erase/1, init/3, recover/6,
          terminate/2, delete_and_terminate/1,
-         publish/5, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
+         publish/6, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
@@ -226,9 +226,9 @@
                          'undefined' | non_neg_integer(), qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
--spec(publish/5 :: (rabbit_types:msg_id(), seq_id(),
-                    rabbit_types:message_properties(), boolean(), qistate())
-                   -> qistate()).
+-spec(publish/6 :: (rabbit_types:msg_id(), seq_id(),
+                    rabbit_types:message_properties(), boolean(),
+                    non_neg_integer(), qistate()) -> qistate()).
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/1 :: (qistate()) -> qistate()).
@@ -288,7 +288,7 @@ delete_and_terminate(State) ->
     ok = rabbit_file:recursive_delete([Dir]),
     State1.
 
-publish(MsgOrId, SeqId, MsgProps, IsPersistent,
+publish(MsgOrId, SeqId, MsgProps, IsPersistent, JournalSizeHint,
         State = #qistate{unconfirmed     = UC,
                          unconfirmed_msg = UCM}) ->
     MsgId = case MsgOrId of
@@ -315,6 +315,7 @@ publish(MsgOrId, SeqId, MsgProps, IsPersistent,
                           SeqId:?SEQ_BITS, Bin/binary,
                           (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin]),
     maybe_flush_journal(
+      JournalSizeHint,
       add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)).
 
 deliver(SeqIds, State) ->
@@ -674,11 +675,14 @@ add_to_journal(RelSeq, Action, JEntries) ->
             array:reset(RelSeq, JEntries)
     end.
 
-maybe_flush_journal(State = #qistate { dirty_count = DCount,
-                                       max_journal_entries = MaxJournal })
-  when DCount > MaxJournal ->
-    flush_journal(State);
 maybe_flush_journal(State) ->
+    maybe_flush_journal(infinity, State).
+
+maybe_flush_journal(Hint, State = #qistate { dirty_count = DCount,
+                                             max_journal_entries = MaxJournal })
+  when DCount > MaxJournal orelse (Hint =/= infinity andalso DCount > Hint) ->
+    flush_journal(State);
+maybe_flush_journal(_Hint, State) ->
     State.
 
 flush_journal(State = #qistate { segments = Segments }) ->

@@ -2262,7 +2262,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   MsgId = rabbit_guid:gen(),
                   QiM = rabbit_queue_index:publish(
                           MsgId, SeqId, #message_properties{size = 10},
-                          Persistent, QiN),
+                          Persistent, infinity, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
@@ -2285,7 +2285,8 @@ test_queue_index_props() ->
       fun(Qi0) ->
               MsgId = rabbit_guid:gen(),
               Props = #message_properties{expiry=12345, size = 10},
-              Qi1 = rabbit_queue_index:publish(MsgId, 1, Props, true, Qi0),
+              Qi1 = rabbit_queue_index:publish(
+                      MsgId, 1, Props, true, infinity, Qi0),
               {[{MsgId, 1, Props, _, _}], Qi2} =
                   rabbit_queue_index:read(1, 2, Qi1),
               Qi2
