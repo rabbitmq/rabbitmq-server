@@ -23,6 +23,7 @@ exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
+    ${RABBITMQ_PLUGINS_ERL_ARGS} \
     ${RABBITMQ_NAME_TYPE} rabbitmq-plugins$$ \
     -boot "${CLEAN_BOOT_FILE}" \
     -s rabbit_plugins_main \

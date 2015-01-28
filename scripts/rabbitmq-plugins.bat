@@ -63,7 +63,17 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
     set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 )
 
-"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden !RABBITMQ_NAME_TYPE! rabbitmq-plugins!RANDOM!!TIME:~9! -s rabbit_plugins_main -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -nodename !RABBITMQ_NODENAME! -extra !STAR!
+"!ERLANG_HOME!\bin\erl.exe" ^
+-pa "!TDP0!..\ebin" ^
+-noinput ^
+-hidden ^
+!RABBITMQ_CTL_ERL_ARGS! ^
+!RABBITMQ_NAME_TYPE! rabbitmq-plugins!RANDOM!!TIME:~9! ^
+-s rabbit_plugins_main ^
+-enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+-plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" ^
+-nodename !RABBITMQ_NODENAME! ^
+-extra !STAR!
 
 endlocal
 endlocal
