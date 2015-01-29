@@ -78,10 +78,9 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
               %% get here.
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
-                  [Q = #amqqueue { pid              = QPid,
-                                   slave_pids       = SPids,
-                                   gm_pids          = GMPids,
-                                   down_slave_nodes = DSNs}] ->
+                  [Q = #amqqueue { pid        = QPid,
+                                   slave_pids = SPids,
+                                   gm_pids    = GMPids }] ->
                       {DeadGM, AliveGM} = lists:partition(
                                             fun ({GM, _}) ->
                                                     lists:member(GM, DeadGMPids)
@@ -90,9 +89,6 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                       AlivePids = [Pid || {_GM, Pid} <- AliveGM],
                       Alive     = [Pid || Pid <- [QPid | SPids],
                                           lists:member(Pid, AlivePids)],
-                      DSNs1     = [node(Pid) ||
-                                      Pid <- SPids,
-                                      not lists:member(Pid, AlivePids)] ++ DSNs,
                       {QPid1, SPids1} = promote_slave(Alive),
                       Extra =
                           case {{QPid, SPids}, {QPid1, SPids1}} of
@@ -102,10 +98,9 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                                   %% Either master hasn't changed, so
                                   %% we're ok to update mnesia; or we have
                                   %% become the master.
-                                  Q1 = Q#amqqueue{pid              = QPid1,
-                                                  slave_pids       = SPids1,
-                                                  gm_pids          = AliveGM,
-                                                  down_slave_nodes = DSNs1},
+                                  Q1 = Q#amqqueue{pid        = QPid1,
+                                                  slave_pids = SPids1,
+                                                  gm_pids    = AliveGM},
                                   store_updated_slaves(Q1),
                                   %% If we add and remove nodes at the
                                   %% same time we might tell the old
@@ -117,9 +112,8 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                           _ ->
                                   %% Master has changed, and we're not it.
                                   %% [1].
-                                  Q1 = Q#amqqueue{slave_pids       = Alive,
-                                                  gm_pids          = AliveGM,
-                                                  down_slave_nodes = DSNs1},
+                                  Q1 = Q#amqqueue{slave_pids = Alive,
+                                                  gm_pids    = AliveGM},
                                   store_updated_slaves(Q1),
                                   []
                           end,
@@ -249,21 +243,38 @@ log(Level, QName, Fmt, Args) ->
     rabbit_log:log(mirroring, Level, "Mirrored ~s: " ++ Fmt,
                    [rabbit_misc:rs(QName) | Args]).
 
-store_updated_slaves(Q = #amqqueue{pid              = MPid,
-                                   slave_pids       = SPids,
-                                   sync_slave_pids  = SSPids,
-                                   down_slave_nodes = DSNs}) ->
+store_updated_slaves(Q = #amqqueue{slave_pids         = SPids,
+                                   sync_slave_pids    = SSPids,
+                                   recoverable_slaves = RS}) ->
     %% TODO now that we clear sync_slave_pids in rabbit_durable_queue,
     %% do we still need this filtering?
     SSPids1 = [SSPid || SSPid <- SSPids, lists:member(SSPid, SPids)],
-    DSNs1 = DSNs -- [node(P) || P <- [MPid | SPids]],
-    Q1 = Q#amqqueue{sync_slave_pids  = SSPids1,
-                    down_slave_nodes = DSNs1,
-                    state            = live},
+    Q1 = Q#amqqueue{sync_slave_pids    = SSPids1,
+                    recoverable_slaves = update_recoverable(SPids, RS),
+                    state              = live},
     ok = rabbit_amqqueue:store_queue(Q1),
     %% Wake it up so that we emit a stats event
     rabbit_amqqueue:notify_policy_changed(Q1),
     Q1.
+
+%% Recoverable nodes are those which we could promote if the whole
+%% cluster were to suddenly stop and we then lose the master; i.e. all
+%% nodes with running slaves, and all stopped nodes which had running
+%% slaves when they were up.
+%%
+%% Therefore we aim here to add new nodes with slaves, and remove
+%% running nodes without slaves, We also try to keep the order
+%% constant, and similar to the live SPids field (i.e. oldest
+%% first). That's not necessarily optimal if nodes spend a long time
+%% down, but we don't have a good way to predict what the optimal is
+%% in that case anyway, and we assume nodes will not just be down for
+%% a long time without being removed.
+update_recoverable(SPids, RS) ->
+    SNodes = [node(SPid) || SPid <- SPids],
+    RunningNodes = rabbit_mnesia:cluster_nodes(running),
+    AddNodes = SNodes -- RS,
+    DelNodes = RunningNodes -- SNodes, %% i.e. running with no slave
+    (RS -- DelNodes) ++ AddNodes.
 
 %%----------------------------------------------------------------------------
 

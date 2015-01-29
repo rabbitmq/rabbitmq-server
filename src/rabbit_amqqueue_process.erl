@@ -83,7 +83,7 @@
          memory,
          slave_pids,
          synchronised_slave_pids,
-         down_slave_nodes,
+         recoverable_slaves,
          state
         ]).
 
@@ -861,9 +861,9 @@ i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
         false -> '';
         true  -> SSPids
     end;
-i(down_slave_nodes, #q{q = #amqqueue{name    = Name,
-                                     durable = Durable}}) ->
-    {ok, Q = #amqqueue{down_slave_nodes = Nodes}} =
+i(recoverable_slaves, #q{q = #amqqueue{name    = Name,
+                                       durable = Durable}}) ->
+    {ok, Q = #amqqueue{recoverable_slaves = Nodes}} =
         rabbit_amqqueue:lookup(Name),
     case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
         false -> '';
