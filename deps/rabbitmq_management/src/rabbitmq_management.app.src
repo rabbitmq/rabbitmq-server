@@ -9,7 +9,7 @@
          {load_definitions,  none},
          {rates_mode,        basic},
          {sample_retention_policies,
-          %% List of {MaxAgeSecs, IfTimestampDivisibleBySecs}
+          %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
           [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
            {basic,    [{605, 5}, {3600, 60}]},
            {detailed, [{10, 5}]}]}
