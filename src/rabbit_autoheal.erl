@@ -170,6 +170,17 @@ handle_msg({become_winner, Losers},
         _  -> abort(Down, Losers)
     end;
 
+handle_msg({become_winner, _},
+           {winner_waiting, _, _} = State, _Partitions) ->
+    %% The leader treated a nodedown event after starting the autoheal
+    %% process, while we treated the same nodedown event before (messages
+    %% received in a reverse order compared to the leader).
+    %%
+    %% We continue to proceed with the autoheal in progress.
+    rabbit_log:info("Autoheal: I am already the winner, "
+      "ignoring new become_winner~n", []),
+    State;
+
 handle_msg({winner_is, Winner},
            State, _Partitions)
            when State =:= not_healing orelse State =:= about_to_heal ->
