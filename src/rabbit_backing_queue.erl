@@ -30,6 +30,7 @@
 -type(ack()   :: any()).
 -type(state() :: any()).
 
+-type(flow() :: 'flow' | 'noflow').
 -type(msg_ids() :: [rabbit_types:msg_id()]).
 -type(fetch_result(Ack) ::
         ('empty' | {rabbit_types:basic_message(), boolean(), Ack})).
@@ -99,19 +100,20 @@
 
 %% Publish a message.
 -callback publish(rabbit_types:basic_message(),
-                  rabbit_types:message_properties(), boolean(), pid(),
+                  rabbit_types:message_properties(), boolean(), pid(), flow(),
                   state()) -> state().
 
 %% Called for messages which have already been passed straight
 %% out to a client. The queue will be empty for these calls
 %% (i.e. saves the round trip through the backing queue).
 -callback publish_delivered(rabbit_types:basic_message(),
-                            rabbit_types:message_properties(), pid(), state())
+                            rabbit_types:message_properties(), pid(), flow(),
+                            state())
                            -> {ack(), state()}.
 
 %% Called to inform the BQ about messages which have reached the
 %% queue, but are not going to be further passed to BQ.
--callback discard(rabbit_types:msg_id(), pid(), state()) -> state().
+-callback discard(rabbit_types:msg_id(), pid(), flow(), state()) -> state().
 
 %% Return ids of messages which have been confirmed since the last
 %% invocation of this function (or initialisation).
@@ -249,8 +251,8 @@
 
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
-     {delete_and_terminate, 2}, {purge, 1}, {purge_acks, 1}, {publish, 5},
-     {publish_delivered, 4}, {discard, 3}, {drain_confirmed, 1},
+     {delete_and_terminate, 2}, {purge, 1}, {purge_acks, 1}, {publish, 6},
+     {publish_delivered, 5}, {discard, 4}, {drain_confirmed, 1},
      {dropwhile, 2}, {fetchwhile, 4},
      {fetch, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},

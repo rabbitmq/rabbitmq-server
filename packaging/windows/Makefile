@@ -7,9 +7,9 @@ dist:
 	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
 	$(MAKE) -C $(SOURCE_DIR)
 
-	mkdir $(SOURCE_DIR)/sbin
+	mkdir -p $(SOURCE_DIR)/sbin
 	mv $(SOURCE_DIR)/scripts/*.bat $(SOURCE_DIR)/sbin
-	mkdir $(SOURCE_DIR)/etc
+	mkdir -p $(SOURCE_DIR)/etc
 	cp $(SOURCE_DIR)/docs/rabbitmq.config.example $(SOURCE_DIR)/etc/rabbitmq.config.example
 	cp README-etc $(SOURCE_DIR)/etc/README.txt
 	rm -rf $(SOURCE_DIR)/scripts
