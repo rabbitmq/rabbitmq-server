@@ -725,6 +725,9 @@ forget_all_durable(Node) ->
           end),
     ok.
 
+%% Try to promote a slave while down - it should recover as a
+%% master. We try to take the oldest slave here for best chance of
+%% recovery.
 forget_node_for_queue(DeadNode, Q = #amqqueue{recoverable_slaves = RS}) ->
     forget_node_for_queue(DeadNode, RS, Q).
 
@@ -742,9 +745,6 @@ forget_node_for_queue(DeadNode, [H|T], Q) ->
     case node_permits_offline_promotion(H) of
         false -> forget_node_for_queue(DeadNode, T, Q);
         true  -> Q1 = Q#amqqueue{pid = rabbit_misc:node_to_fake_pid(H)},
-                 %% Promote a slave while down - it should recover as a
-                 %% master. We try to take the oldest slave here for best
-                 %% chance of recovery.
                  ok = mnesia:write(rabbit_durable_queue, Q1, write)
     end.
 
