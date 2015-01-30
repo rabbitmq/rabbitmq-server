@@ -525,7 +525,7 @@ wait_for_startup(Node, Pid) ->
       Node, Pid, fun() -> rpc:call(Node, rabbit, await_startup, []) =:= ok end).
 
 while_process_is_alive(Node, Pid, Activity) ->
-    case process_up(Pid) of
+    case rabbit_misc:is_os_process_alive(Pid) of
         true  -> case Activity() of
                      true  -> ok;
                      false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
@@ -535,7 +535,7 @@ while_process_is_alive(Node, Pid, Activity) ->
     end.
 
 wait_for_process_death(Pid) ->
-    case process_up(Pid) of
+    case rabbit_misc:is_os_process_alive(Pid) of
         true  -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
                  wait_for_process_death(Pid);
         false -> ok
@@ -557,40 +557,6 @@ read_pid_file(PidFile, Wait) ->
             read_pid_file(PidFile, Wait);
         {{error, _} = E, _} ->
             exit({error, {could_not_read_pid, E}})
-    end.
-
-% Test using some OS clunkiness since we shouldn't trust
-% rpc:call(os, getpid, []) at this point
-process_up(Pid) ->
-    with_os([{unix, fun () ->
-                            run_ps(Pid) =:= 0
-                    end},
-             {win32, fun () ->
-                             Cmd = "tasklist /nh /fi \"pid eq " ++ Pid ++ "\" ",
-                             Res = rabbit_misc:os_cmd(Cmd ++ "2>&1"),
-                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
-                                 match -> true;
-                                 _     -> false
-                             end
-                     end}]).
-
-with_os(Handlers) ->
-    {OsFamily, _} = os:type(),
-    case proplists:get_value(OsFamily, Handlers) of
-        undefined -> throw({unsupported_os, OsFamily});
-        Handler   -> Handler()
-    end.
-
-run_ps(Pid) ->
-    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
-                            [exit_status, {line, 16384},
-                             use_stdio, stderr_to_stdout]),
-    exit_loop(Port).
-
-exit_loop(Port) ->
-    receive
-        {Port, {exit_status, Rc}} -> Rc;
-        {Port, _}                 -> exit_loop(Port)
     end.
 
 become(BecomeNode) ->

@@ -59,6 +59,7 @@
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
 -export([os_cmd/1]).
+-export([is_os_process_alive/1]).
 -export([gb_sets_difference/2]).
 -export([version/0, otp_release/0, which_applications/0]).
 -export([sequence_error/1]).
@@ -232,6 +233,7 @@
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 -spec(os_cmd/1 :: (string()) -> string()).
+-spec(is_os_process_alive/1 :: (non_neg_integer()) -> boolean()).
 -spec(gb_sets_difference/2 :: (gb_sets:set(), gb_sets:set()) -> gb_sets:set()).
 -spec(version/0 :: () -> string()).
 -spec(otp_release/0 :: () -> string()).
@@ -930,6 +932,38 @@ os_cmd(Command) ->
                 false -> throw({command_not_found, Exec});
                 _     -> os:cmd(Command)
             end
+    end.
+
+is_os_process_alive(Pid) ->
+    with_os([{unix, fun () ->
+                            run_ps(Pid) =:= 0
+                    end},
+             {win32, fun () ->
+                             Cmd = "tasklist /nh /fi \"pid eq " ++ Pid ++ "\" ",
+                             Res = os_cmd(Cmd ++ "2>&1"),
+                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
+                                 match -> true;
+                                 _     -> false
+                             end
+                     end}]).
+
+with_os(Handlers) ->
+    {OsFamily, _} = os:type(),
+    case proplists:get_value(OsFamily, Handlers) of
+        undefined -> throw({unsupported_os, OsFamily});
+        Handler   -> Handler()
+    end.
+
+run_ps(Pid) ->
+    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
+                            [exit_status, {line, 16384},
+                             use_stdio, stderr_to_stdout]),
+    exit_loop(Port).
+
+exit_loop(Port) ->
+    receive
+        {Port, {exit_status, Rc}} -> Rc;
+        {Port, _}                 -> exit_loop(Port)
     end.
 
 gb_sets_difference(S1, S2) ->
