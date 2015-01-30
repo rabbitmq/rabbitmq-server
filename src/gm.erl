@@ -633,6 +633,7 @@ handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
                              members_state = MembersState,
                              group_name    = GroupName }) ->
+    timer:sleep(100),
     {Result, State1} =
         case needs_view_update(ReqVer, View) of
             true  -> View1 = group_to_view(dirty_read_group(GroupName)),
