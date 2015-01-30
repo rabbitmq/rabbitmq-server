@@ -739,17 +739,27 @@ forget_node_for_queue(DeadNode, [DeadNode | T], Q) ->
     forget_node_for_queue(DeadNode, T, Q);
 
 forget_node_for_queue(DeadNode, [H|T], Q) ->
-    case H =/= node() andalso %% TODO not really good enough test
-        lists:member(H, rabbit_mnesia:cluster_nodes(running)) of
-        true ->
-            forget_node_for_queue(DeadNode, T, Q);
-        false ->
-            %% Promote a slave while down - it should recover as a
-            %% master. We try to take the oldest slave here for best
-            %% chance of recovery.
-            Q1 = Q#amqqueue{pid = rabbit_misc:node_to_fake_pid(H)},
-            ok = mnesia:write(rabbit_durable_queue, Q1, write)
+    case node_permits_offline_promotion(H) of
+        false -> forget_node_for_queue(DeadNode, T, Q);
+        true  -> Q1 = Q#amqqueue{pid = rabbit_misc:node_to_fake_pid(H)},
+                 %% Promote a slave while down - it should recover as a
+                 %% master. We try to take the oldest slave here for best
+                 %% chance of recovery.
+                 ok = mnesia:write(rabbit_durable_queue, Q1, write)
     end.
+
+node_permits_offline_promotion(Node) ->
+    case node() of
+        Node -> not rabbit:is_running(); %% [1]
+        _    -> Running = rabbit_mnesia:cluster_nodes(running),
+                not lists:member(Node, Running) %% [2]
+    end.
+%% [1] In this case if we are a real running node (i.e. rabbitmqctl
+%% has RPCed into us) then we cannot allow promotion. If on the other
+%% hand we *are* rabbitmqctl impersonating the node for offline
+%% node-forgetting then we can.
+%%
+%% [2] This is simpler; as long as it's down that's OK
 
 run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
