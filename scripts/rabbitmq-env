@@ -60,7 +60,7 @@ fi
 [ "x" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME=${USE_LONGNAME}
 if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] ; then
     RABBITMQ_NAME_TYPE=-name
-    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname --fqdn`
+    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -f`
     [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME}
 else
     RABBITMQ_NAME_TYPE=-sname
