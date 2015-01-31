@@ -138,9 +138,10 @@ handle_info({start_keepalives, Keepalive},
                     KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
     {noreply, State #state { keepalive = Heartbeater }};
 
-handle_info(keepalive_timeout, State = #state { conn_name = ConnStr }) ->
+handle_info(keepalive_timeout, State = #state {conn_name = ConnStr,
+                                               proc_state = PState}) ->
     log(error, "closing MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
-    {stop, {shutdown, keepalive_timeout}, State};
+    send_will_and_terminate(PState, {shutdown, keepalive_timeout}, State);
 
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
@@ -245,9 +246,12 @@ pstate(State = #state {}, PState = #proc_state{}) ->
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 send_will_and_terminate(PState, State) ->
+    send_will_and_terminate(PState, {shutdown, conn_closed}, State).
+
+send_will_and_terminate(PState, Reason, State) ->
     rabbit_mqtt_processor:send_will(PState),
     % todo: flush channel after publish
-    {stop, {shutdown, conn_closed}, State}.
+    {stop, Reason, State}.
 
 network_error(closed,
               State = #state{ conn_name  = ConnStr,
