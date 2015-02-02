@@ -22,7 +22,7 @@
 %%
 %% Each channel has an associated limiter process, created with
 %% start_link/1, which it passes to queues on consumer creation with
-%% rabbit_amqqueue:basic_consume/9, and rabbit_amqqueue:basic_get/4.
+%% rabbit_amqqueue:basic_consume/10, and rabbit_amqqueue:basic_get/4.
 %% The latter isn't strictly necessary, since basic.get is not
 %% subject to limiting, but it means that whenever a queue knows about
 %% a channel, it also knows about its limiter, which is less fiddly.
