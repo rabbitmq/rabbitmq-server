@@ -155,8 +155,14 @@
                      ack, deliver_get, confirm, return_unroutable, redeliver] ++
             ?DELIVER_GET).
 
--define(COARSE_QUEUE_STATS,
-        [messages, messages_ready, messages_unacknowledged]).
+%% Most come from channels as fine stats, but queues emit these directly.
+-define(QUEUE_MSG_RATES, [disk_read_count, disk_write_count]).
+
+-define(MSG_RATES, ?FINE_STATS ++ ?QUEUE_MSG_RATES).
+
+-define(QUEUE_MSG_COUNTS, [messages, messages_ready, messages_unacknowledged]).
+
+-define(COARSE_QUEUE_STATS, ?QUEUE_MSG_COUNTS ++ ?QUEUE_MSG_RATES).
 
 -define(COARSE_NODE_STATS,
         [mem_used, fd_used, sockets_used, proc_used, disk_free,
@@ -174,7 +180,7 @@
 %% no history.
 -define(ALWAYS_REPORT_STATS,
         [io_read_avg_time, io_write_avg_time,
-         io_sync_avg_time | ?COARSE_QUEUE_STATS]).
+         io_sync_avg_time | ?QUEUE_MSG_COUNTS]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
@@ -336,8 +342,8 @@ handle_call({get_overview, User, Ranges}, _From,
     %% recv_oct now!
     VStats = [read_simple_stats(vhost_stats, VHost, State) ||
                  VHost <- VHosts],
-    MessageStats = [overview_sum(Type, VStats) || Type <- ?FINE_STATS],
-    QueueStats = [overview_sum(Type, VStats) || Type <- ?COARSE_QUEUE_STATS],
+    MessageStats = [overview_sum(Type, VStats) || Type <- ?MSG_RATES],
+    QueueStats = [overview_sum(Type, VStats) || Type <- ?QUEUE_MSG_COUNTS],
     F = case User of
             all -> fun (L) -> length(L) end;
             _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
@@ -507,7 +513,7 @@ handle_event(Event = #event{type = queue_deleted,
     TS = ceil(Timestamp, State),
     OldStats = lookup_element(OldTable, Id),
     [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
-     || Key <- ?COARSE_QUEUE_STATS],
+     || Key <- ?QUEUE_MSG_COUNTS],
     delete_samples(channel_queue_stats,  {'_', Name}, State),
     delete_samples(queue_exchange_stats, {Name, '_'}, State),
     delete_samples(queue_stats,          Name,        State),
@@ -960,7 +966,7 @@ read_detail_stats(Type, Id, #state{aggregated_stats = ETS}) ->
       end, [], FromETS).
 
 extract_msg_stats(Stats) ->
-    FineStats = lists:append([[K, details_key(K)] || K <- ?FINE_STATS]),
+    FineStats = lists:append([[K, details_key(K)] || K <- ?MSG_RATES]),
     {MsgStats, Other} =
         lists:partition(fun({K, _}) -> lists:member(K, FineStats) end, Stats),
     case MsgStats of
@@ -992,8 +998,8 @@ format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
        end || {K, Stats} <- ManyStats]).
 
 pick_range(K, {RangeL, RangeM, RangeD, RangeN}) ->
-    case {lists:member(K, ?COARSE_QUEUE_STATS),
-          lists:member(K, ?FINE_STATS),
+    case {lists:member(K, ?QUEUE_MSG_COUNTS),
+          lists:member(K, ?MSG_RATES),
           lists:member(K, ?COARSE_CONN_STATS),
           lists:member(K, ?COARSE_NODE_STATS)} of
         {true, false, false, false} -> RangeL;
