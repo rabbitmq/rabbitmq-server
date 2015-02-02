@@ -22,7 +22,8 @@
                     messages_unacknowledged_ram, messages_persistent,
                     message_bytes, message_bytes_ready,
                     message_bytes_unacknowledged, message_bytes_ram,
-                    message_bytes_persistent, backing_queue_status]).
+                    message_bytes_persistent,
+                    disk_read_count, disk_write_count, backing_queue_status]).
 
 -ifdef(use_specs).
 
