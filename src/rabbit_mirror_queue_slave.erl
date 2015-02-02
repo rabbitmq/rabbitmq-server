@@ -428,6 +428,9 @@ members_changed([ SPid], _Births, Deaths) ->
         {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
     end.
 
+handle_msg([_SPid], _From, hibernate_heartbeat) ->
+    %% See rabbit_mirror_queue_coordinator:handle_pre_hibernate/1
+    ok;
 handle_msg([_SPid], _From, request_depth) ->
     %% This is only of value to the master
     ok;
