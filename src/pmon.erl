@@ -16,6 +16,18 @@
 
 -module(pmon).
 
+%% Process Monitor
+%% ================
+%%
+%% This module provides a way to monitor processes.
+%% Processes monitored can be dynamically added and removed.
+%%
+%% Unlike erlang:[de]monitor* functions, this module keeps a dictionary
+%% of monitored processes and provides basic querying capability.
+%%
+%% It is used to monitor nodes, queue mirrors, and by
+%% the queue collector, among other things.
+
 -export([new/0, new/1, monitor/2, monitor_all/2, demonitor/2,
          is_monitored/2, erase/2, monitored/1, is_empty/1]).
 
