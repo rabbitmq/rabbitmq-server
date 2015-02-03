@@ -220,6 +220,11 @@
    %%
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
+   %% Used by node monitor. Interval (in milliseconds) at which
+   %% cluster members known to be up are contacted.
+   %%
+   %% {cluster_keepalive_interval, 10000},
+
    %% Set (internal) statistics collection granularity.
    %%
    %% {collect_statistics, none},
