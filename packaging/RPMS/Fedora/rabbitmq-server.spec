@@ -48,12 +48,9 @@ make %{?_smp_mflags}
 %install
 rm -rf %{buildroot}
 
-# Note that we pass /tmp to DOC_INSTALL_DIR here because we're using %doc
-# to actually install rabbitmq.config.example, so this is just a fake/temp path
 make install TARGET_DIR=%{_maindir} \
              SBIN_DIR=%{buildroot}%{_rabbit_libdir}/bin \
-             MAN_DIR=%{buildroot}%{_mandir} \
-             DOC_INSTALL_DIR=/tmp
+             MAN_DIR=%{buildroot}%{_mandir}
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
@@ -128,10 +125,6 @@ done
 
 %clean
 rm -rf %{buildroot}
-
-# rabbitmq.config.example (%doc) was copied to /tmp (DOC_INSTALL_DIR)
-# during make install.
-rm -f /tmp/rabbitmq.config.example
 
 %changelog
 * Tue Jan 6 2015 jean-sebastien@rabbitmq.com 3.4.3-1

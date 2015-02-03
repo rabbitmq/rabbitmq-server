@@ -366,19 +366,22 @@ install_docs: docs_all install_dirs
 			cp $$manpage $(MAN_DIR)/man$$section; \
 		done; \
 	done
-	cp $(DOCS_DIR)/rabbitmq.config.example $(DOC_INSTALL_DIR)/rabbitmq.config.example
+	if test "$(DOC_INSTALL_DIR)"; then \
+		cp $(DOCS_DIR)/rabbitmq.config.example $(DOC_INSTALL_DIR)/rabbitmq.config.example; \
+	fi
 
 install_dirs:
 	@ OK=true && \
 	  { [ -n "$(TARGET_DIR)" ] || { echo "Please set TARGET_DIR."; OK=false; }; } && \
 	  { [ -n "$(SBIN_DIR)" ] || { echo "Please set SBIN_DIR."; OK=false; }; } && \
-	  { [ -n "$(MAN_DIR)" ] || { echo "Please set MAN_DIR."; OK=false; }; } && \
-	  { [ -n "$(DOC_INSTALL_DIR)" ] || { echo "Please set DOC_INSTALL_DIR."; OK=false; }; } && $$OK
+	  { [ -n "$(MAN_DIR)" ] || { echo "Please set MAN_DIR."; OK=false; }; } && $$OK
 
 	mkdir -p $(TARGET_DIR)/sbin
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(MAN_DIR)
-	mkdir -p $(DOC_INSTALL_DIR)
+	if test "$(DOC_INSTALL_DIR)"; then \
+		mkdir -p $(DOC_INSTALL_DIR); \
+	fi
 
 $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
