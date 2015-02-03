@@ -16,6 +16,20 @@
 
 -module(gatherer).
 
+%% Gatherer is a queue which has producer and consumer processes. Before producers
+%% push items to the queue using gatherer:in/2 they need to declare their intent
+%% to do so with gatherer:fork/1. When a publisher's work is done, it states so
+%% using gatherer:finish/1.
+%%
+%% Consumers pop messages off queues with gatherer:out/1. If a queue is empty
+%% and there are producers that haven't finished working, the caller is blocked
+%% until an item is available. If there are no active producers, gatherer:out/1
+%% immediately returns 'empty'.
+%%
+%% This module is primarily used to collect results from asynchronous tasks
+%% running in a worker pool, e.g. when recovering bindings or rebuilding
+%% message store indices.
+
 -behaviour(gen_server2).
 
 -export([start_link/0, stop/1, fork/1, finish/1, in/2, sync_in/2, out/1]).
