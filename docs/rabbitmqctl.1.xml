@@ -1261,6 +1261,14 @@
                 <listitem><para>Like <command>message_bytes</command> but counting only those messages which are persistent.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>disk_reads</term>
+                <listitem><para>Total number of messages which have been read from disk by this queue since it started.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>disk_writes</term>
+                <listitem><para>Total number of messages which have been written to disk by this queue since it started.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>consumers</term>
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
