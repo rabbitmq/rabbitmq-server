@@ -12,8 +12,8 @@ function message_rates(id, stats) {
                  ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                  ['Get (noack)', 'get_no_ack'],
                  ['Return', 'return_unroutable'],
-                 ['Disk Read', 'disk_read_count'],
-                 ['Disk Write', 'disk_write_count']];
+                 ['Disk read', 'disk_reads'],
+                 ['Disk write', 'disk_writes']];
     return rates_chart_or_text(id, stats, items, fmt_rate, fmt_rate_axis, true, 'Message rates', 'message-rates');
 }
 

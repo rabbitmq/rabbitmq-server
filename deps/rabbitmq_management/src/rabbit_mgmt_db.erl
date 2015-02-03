@@ -156,7 +156,7 @@
             ?DELIVER_GET).
 
 %% Most come from channels as fine stats, but queues emit these directly.
--define(QUEUE_MSG_RATES, [disk_read_count, disk_write_count]).
+-define(QUEUE_MSG_RATES, [disk_reads, disk_writes]).
 
 -define(MSG_RATES, ?FINE_STATS ++ ?QUEUE_MSG_RATES).
 
