@@ -217,7 +217,16 @@ HELP = {
         <dd>Rate at which messages with the \'redelivered\' flag set are being delivered. Note that these messages will <b>also</b> be counted in one of the delivery rates above.</dd>\
         <dt>Return</dt>\
         <dd>Rate at which basic.return is sent to publishers for unroutable messages published with the \'mandatory\' flag set.</dd>\
-      </dl>',
+        <dt>Disk read</dt>\
+        <dd>Rate at which queues read messages from disk.</dd>\
+        <dt>Disk write</dt>\
+        <dd>Rate at which queues write messages to disk.</dd>\
+      </dl>\
+      <p>\
+        Note that the last two items are originate in queues rather than \
+        channels; they may therefore be slightly out of sync with other \
+        statistics.\
+      </p>',
 
     'disk-monitoring-no-watermark' : 'There is no <a target="_blank" href="http://www.rabbitmq.com/memory.html#diskfreesup">disk space low watermark</a> set. RabbitMQ will not take any action to avoid running out of disk space.',
 
