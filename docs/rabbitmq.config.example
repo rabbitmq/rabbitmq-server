@@ -220,6 +220,13 @@
    %%
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
+   %% Interval (in milliseconds) at which we send keepalive messages
+   %% to other cluster members. Note that this is not the same thing
+   %% as net_ticktime; missed keepalive messages will not cause nodes
+   %% to be considered down.
+   %%
+   %% {cluster_keepalive_interval, 10000},
+
    %% Set (internal) statistics collection granularity.
    %%
    %% {collect_statistics, none},
