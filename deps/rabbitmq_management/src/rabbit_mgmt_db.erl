@@ -710,11 +710,12 @@ append_samples(Stats, TS, OldStats, Id, Keys,
             %% queue_deleted
             NewMS = ceil(TS, State),
             case Keys of
-                all -> [append_sample(Key, Value, NewMS, OldStats, Id, State)
-                        || {Key, Value} <- Stats];
-                _   -> [append_sample(
-                          Key, pget(Key, Stats), NewMS, OldStats, Id, State)
-                        || Key <- Keys]
+                all -> [append_sample(K, V, NewMS, OldStats, Id, State)
+                        || {K, V} <- Stats];
+                _   -> [append_sample(K, V, NewMS, OldStats, Id, State)
+                        || K <- Keys,
+                           V <- [pget(K, Stats)],
+                           V =/= 0 orelse lists:member(K, ?ALWAYS_REPORT_STATS)]
             end,
             ets:insert(OldTable, {Id, Stats});
         true ->
