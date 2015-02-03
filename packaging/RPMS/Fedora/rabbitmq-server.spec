@@ -118,6 +118,7 @@ done
 %files -f ../%{name}.files
 %defattr(-,root,root,-)
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq/mnesia
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
 %{_initrddir}/rabbitmq-server
