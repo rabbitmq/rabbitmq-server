@@ -19,11 +19,12 @@
 %% Process Monitor
 %% ================
 %%
-%% This module provides a way to monitor processes.
+%% This module monitors processes so that every process has at most
+%% 1 monitor.
 %% Processes monitored can be dynamically added and removed.
 %%
-%% Unlike erlang:[de]monitor* functions, this module keeps a dictionary
-%% of monitored processes and provides basic querying capability.
+%% Unlike erlang:[de]monitor* functions, this module
+%% provides basic querying capability and avoids contacting down nodes.
 %%
 %% It is used to monitor nodes, queue mirrors, and by
 %% the queue collector, among other things.
