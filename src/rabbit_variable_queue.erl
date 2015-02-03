@@ -877,9 +877,9 @@ info(message_bytes_ram, #vqstate{ram_bytes = RamBytes}) ->
     RamBytes;
 info(message_bytes_persistent, #vqstate{persistent_bytes = PersistentBytes}) ->
     PersistentBytes;
-info(disk_read_count, #vqstate{disk_read_count = Count}) ->
+info(disk_reads, #vqstate{disk_read_count = Count}) ->
     Count;
-info(disk_write_count, #vqstate{disk_write_count = Count}) ->
+info(disk_writes, #vqstate{disk_write_count = Count}) ->
     Count;
 info(backing_queue_status, #vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
