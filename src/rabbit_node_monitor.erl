@@ -718,8 +718,8 @@ verify_pause_if_all_down_list(Nodes) when is_list(Nodes) ->
             ClusteredNodes = rabbit_mnesia:cluster_nodes(all),
             RealNodes = [N || N <- Nodes, lists:member(N, ClusteredNodes)],
             case RealNodes of
-                [] -> rabbit_log:error("pause_if_all_down: listed nodes "
-                                       "are not part of the cluster~n");
+                [] -> rabbit_log:warning("pause_if_all_down: listed nodes "
+                                         "are not part of the cluster~n");
                 _  -> ok
             end,
             RealNodes;
