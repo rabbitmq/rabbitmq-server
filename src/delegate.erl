@@ -16,6 +16,22 @@
 
 -module(delegate).
 
+%% Delegates is an alternative way of doing remote calls. Compared to
+%% the rpc module, it reduces inter-node communication. For example,
+%% if a message is routed to 1,000 queues on node A and needs to be
+%% propagated to nodes B and C, it would be nice to avoid doing 2,000
+%% remote calls to mirror processes.
+%%
+%% When a function is invoked using delegate:invoke/2, delegate:call/2
+%% or delegate:cast/2 on a group of pids, the pids are first split
+%% into local and remote ones. Remote processes are then grouped by
+%% node. The function is then invoked locally and on every node (using
+%% gen_server2:multi/4) as many times as there are processes on that
+%% node, sequentially.
+%%
+%% Errors returned when executing functions on remote nodes are re-raised
+%% in the caller.
+
 -behaviour(gen_server2).
 
 -export([start_link/1, invoke_no_result/2, invoke/2,
