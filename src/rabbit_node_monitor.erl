@@ -40,7 +40,7 @@
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
 
 -record(state, {monitors, partitions, subscribers, down_ping_timer,
-                keepalive_timer, autoheal, guid, node_guids}).
+                keepalive_timer, autoheal, guid, node_guids, expecting_down}).
 
 %%----------------------------------------------------------------------------
 
@@ -246,12 +246,13 @@ init([]) ->
     process_flag(trap_exit, true),
     net_kernel:monitor_nodes(true, [nodedown_reason]),
     {ok, _} = mnesia:subscribe(system),
-    {ok, ensure_keepalive_timer(#state{monitors    = pmon:new(),
-                                       subscribers = pmon:new(),
-                                       partitions  = [],
-                                       guid        = rabbit_guid:gen(),
-                                       node_guids  = orddict:new(),
-                                       autoheal    = rabbit_autoheal:init()})}.
+    {ok, ensure_keepalive_timer(#state{monitors       = pmon:new(),
+                                       subscribers    = pmon:new(),
+                                       partitions     = [],
+                                       guid           = rabbit_guid:gen(),
+                                       node_guids     = orddict:new(),
+                                       autoheal       = rabbit_autoheal:init(),
+                                       expecting_down = []})}.
 
 handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
     {reply, Partitions, State};
@@ -289,8 +290,11 @@ handle_cast(notify_node_up, State = #state{guid = GUID}) ->
 %% 'check_partial_partition' to all the nodes it still thinks are
 %% alive. If any of those (intermediate) nodes still see the "down"
 %% node as up, they inform it that this has happened. The original
-%% node (in 'ignore' or 'autoheal' mode) will then disconnect from the
-%% intermediate node to "upgrade" to a full partition.
+%% node (in 'ignore' or 'autoheal' mode) will then ask the intermediate
+%% node to disconnect from it to "upgrade" to a full partition. If the
+%% original node receives autoheal messages from the intermediate node
+%% before the expected nodedown event, those autoheal messages are
+%% ignored (see rabbit_autoheal.erl).
 %%
 %% In pause_minority mode it will instead immediately pause until all
 %% nodes come back. This is because the contract for pause_minority is
@@ -342,7 +346,8 @@ handle_cast({check_partial_partition, _Node, _Reporter,
     {noreply, State};
 
 handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
-            State = #state{guid = MyGUID}) ->
+            State = #state{guid           = MyGUID,
+                           expecting_down = ExpectingDown}) ->
     FmtBase = "Partial partition detected:~n"
         " * We saw DOWN from ~s~n"
         " * We can still see ~s which can see ~s~n",
@@ -357,11 +362,12 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             {noreply, State};
         {ok, _} ->
             rabbit_log:error(
-              FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
+              FmtBase ++ "We will therefore intentionally ask ~s "
+              "to disconnect from us~n",
               ArgsBase ++ [Proxy]),
             cast(Proxy, {partial_partition_disconnect, node()}),
-            disconnect(Proxy),
-            {noreply, State}
+            ExpectingDown1 = [Proxy | ExpectingDown -- [Proxy]],
+            {noreply, State#state{expecting_down = ExpectingDown1}}
     end;
 
 handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
@@ -372,7 +378,7 @@ handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
 %% we are told just before the disconnection so we can reciprocate.
 handle_cast({partial_partition_disconnect, Other}, State) ->
     rabbit_log:error("Partial partition disconnect from ~s~n", [Other]),
-    disconnect(Other),
+    erlang:disconnect_node(Other),
     {noreply, State};
 
 %% Note: when updating the status file, we can't simply write the
@@ -434,10 +440,17 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
-handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
-                                                   node_guids = GUIDs}) ->
-    rabbit_log:info("node ~p down: ~p~n",
+handle_info({nodedown, Node, Info},
+            State = #state{guid           = MyGUID,
+                           node_guids     = GUIDs,
+                           expecting_down = ExpectingDown}) ->
+    DownExpected = case lists:member(Node, ExpectingDown) of
+        true  -> "(this was expected)~n";
+        false -> ""
+    end,
+    rabbit_log:info("node ~p down: ~p~n" ++ DownExpected,
                     [Node, proplists:get_value(nodedown_reason, Info)]),
+    ExpectingDown1 = ExpectingDown -- [Node],
     Check = fun (N, CheckGUID, DownGUID) ->
                     cast(N, {check_partial_partition,
                              Node, node(), DownGUID, CheckGUID, MyGUID})
@@ -451,7 +464,8 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
                            end || N <- Alive];
         error          -> ok
     end,
-    {noreply, handle_dead_node(Node, State)};
+    {noreply, handle_dead_node(Node,
+                               State#state{expecting_down = ExpectingDown1})};
 
 handle_info({nodeup, Node, _Info}, State) ->
     rabbit_log:info("node ~p up~n", [Node]),
@@ -472,9 +486,12 @@ handle_info({mnesia_system_event,
     Partitions1 = lists:usort([Node | Partitions]),
     {noreply, maybe_autoheal(State1#state{partitions = Partitions1})};
 
-handle_info({autoheal_msg, Msg}, State = #state{autoheal   = AState,
-                                                partitions = Partitions}) ->
-    AState1 = rabbit_autoheal:handle_msg(Msg, AState, Partitions),
+handle_info({autoheal_msg, Msg},
+            State = #state{autoheal       = AState,
+                           partitions     = Partitions,
+                           expecting_down = ExpectingDown}) ->
+    AState1 = rabbit_autoheal:handle_msg(Msg, AState, Partitions,
+                                         ExpectingDown),
     {noreply, State#state{autoheal = AState1}};
 
 handle_info(ping_down_nodes, State) ->
@@ -658,19 +675,6 @@ add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 del_node(Node, Nodes) -> Nodes -- [Node].
 
 cast(Node, Msg) -> gen_server:cast({?SERVER, Node}, Msg).
-
-%% When we call this, it's because we want to force Mnesia to detect a
-%% partition. But if we just disconnect_node/1 then Mnesia won't
-%% detect a very short partition. So we want to force a slightly
-%% longer disconnect. Unfortunately we don't have a way to blacklist
-%% individual nodes; the best we can do is turn off auto-connect
-%% altogether.
-disconnect(Node) ->
-    application:set_env(kernel, dist_auto_connect, never),
-    erlang:disconnect_node(Node),
-    timer:sleep(1000),
-    application:unset_env(kernel, dist_auto_connect),
-    ok.
 
 %%--------------------------------------------------------------------
 

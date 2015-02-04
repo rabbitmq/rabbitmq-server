@@ -16,7 +16,7 @@
 
 -module(rabbit_autoheal).
 
--export([init/0, maybe_start/1, rabbit_down/2, node_down/2, handle_msg/3]).
+-export([init/0, maybe_start/1, rabbit_down/2, node_down/2, handle_msg/4]).
 
 %% The named process we are running in.
 -define(SERVER, rabbit_node_monitor).
@@ -80,7 +80,7 @@ init() -> not_healing.
 
 maybe_start(not_healing) ->
     case enabled() of
-        true  -> [Leader | _] = lists:usort(rabbit_mnesia:cluster_nodes(all)),
+        true  -> Leader = leader(),
                  send(Leader, {request_start, node()}),
                  rabbit_log:info("Autoheal request sent to ~p~n", [Leader]),
                  not_healing;
@@ -91,6 +91,10 @@ maybe_start(State) ->
 
 enabled() ->
     {ok, autoheal} =:= application:get_env(rabbit, cluster_partition_handling).
+
+leader() ->
+    [Leader | _] = lists:usort(rabbit_mnesia:cluster_nodes(all)),
+    Leader.
 
 
 %% This is the winner receiving its last notification that a node has
@@ -122,10 +126,38 @@ node_down(Node, _State) ->
     rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
     not_healing.
 
+%% When handling an autoheal message, we check if the sending node is
+%% about to disconnect from us (this happens if a partial partition was
+%% detected). If that is the case, the message is ignored because the
+%% autoheal process would be aborted when the nodedown event is actually
+%% delivered.
+
+handle_msg(Msg, State, Partitions, ExpectingDown) ->
+    case msg_from_node_going_down(Msg, ExpectingDown) of
+        true  -> State;
+        false -> do_handle_msg(Msg, State, Partitions)
+    end.
+
+msg_from_node_going_down({request_start, Node}, ExpectingDown) ->
+    msg_from_node_going_down1(Node, ExpectingDown);
+msg_from_node_going_down({become_winner, _}, ExpectingDown) ->
+    msg_from_node_going_down1(leader(), ExpectingDown);
+msg_from_node_going_down({winner_is, Winner}, ExpectingDown) ->
+    msg_from_node_going_down1(Winner, ExpectingDown).
+
+msg_from_node_going_down1(Node, ExpectingDown) ->
+    case lists:member(Node, ExpectingDown) of
+        false -> false;
+        true  -> rabbit_log:info("Autoheal: ignoring message from ~s~n"
+                                 "(still expecting a nodedown from it)~n",
+                                 [Node]),
+                 true
+    end.
+
 %% By receiving this message we become the leader
 %% TODO should we try to debounce this?
-handle_msg({request_start, Node},
-           not_healing, Partitions) ->
+do_handle_msg({request_start, Node},
+              not_healing, Partitions) ->
     rabbit_log:info("Autoheal request received from ~p~n", [Node]),
     case check_other_nodes(Partitions) of
         {error, E} ->
@@ -139,8 +171,8 @@ handle_msg({request_start, Node},
                             "  * Losers:     ~p~n",
                             [AllPartitions, Winner, Losers]),
             case node() =:= Winner of
-                true  -> handle_msg({become_winner, Losers},
-                                    not_healing, Partitions);
+                true  -> do_handle_msg({become_winner, Losers},
+                                       not_healing, Partitions);
                 false -> send(Winner, {become_winner, Losers}), %% [0]
                          case lists:member(node(), Losers) of
                              true  -> about_to_heal;
@@ -151,14 +183,14 @@ handle_msg({request_start, Node},
 %% [0] If we are a loser we will never receive this message - but it
 %% won't stick in the mailbox as we are restarting anyway
 
-handle_msg({request_start, Node},
-           State, _Partitions) ->
+do_handle_msg({request_start, Node},
+              State, _Partitions) ->
     rabbit_log:info("Autoheal request received from ~p when healing; "
                     "ignoring~n", [Node]),
     State;
 
-handle_msg({become_winner, Losers},
-           not_healing, _Partitions) ->
+do_handle_msg({become_winner, Losers},
+              not_healing, _Partitions) ->
     rabbit_log:info("Autoheal: I am the winner, waiting for ~p to stop~n",
                     [Losers]),
     %% The leader said everything was ready - do we agree? If not then
@@ -170,9 +202,9 @@ handle_msg({become_winner, Losers},
         _  -> abort(Down, Losers)
     end;
 
-handle_msg({winner_is, Winner},
-           State, _Partitions)
-           when State =:= not_healing orelse State =:= about_to_heal ->
+do_handle_msg({winner_is, Winner},
+              State, _Partitions)
+              when State =:= not_healing orelse State =:= about_to_heal ->
     rabbit_log:warning(
       "Autoheal: we were selected to restart; winner is ~p~n", [Winner]),
     rabbit_node_monitor:run_outside_applications(
@@ -188,7 +220,7 @@ handle_msg({winner_is, Winner},
       end),
     restarting;
 
-handle_msg(_, restarting, _Partitions) ->
+do_handle_msg(_, restarting, _Partitions) ->
     %% ignore, we can contribute no further
     restarting.
 
