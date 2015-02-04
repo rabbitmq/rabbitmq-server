@@ -31,6 +31,9 @@
 %%
 %% Errors returned when executing functions on remote nodes are re-raised
 %% in the caller.
+%%
+%% Delegates are used for queue mirroring. RabbitMQ starts a pool of
+%% delegate processes on boot. The size of the pool is configurable.
 
 -behaviour(gen_server2).
 
