@@ -28,6 +28,11 @@
 %% worker process out of the pool. Nested jobs are always executed
 %% immediately in current worker process.
 %%
+%% 'single' mode is offered to work around a bug in Mnesia: after
+%% network partitions reply messages for prior failed requests can be
+%% sent to Mnesia clients - a reused worker pool process can crash on
+%% receiving one.
+%%
 %% Caller submissions are enqueued internally. When the next worker
 %% process is available, it communicates it to the pool and is
 %% assigned a job to execute. If job execution fails with an error, no
