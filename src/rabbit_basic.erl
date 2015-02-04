@@ -114,7 +114,7 @@ publish(X, Delivery) ->
 
 delivery(Mandatory, Confirm, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, confirm = Confirm, sender = self(),
-              message = Message, msg_seq_no = MsgSeqNo}.
+              message = Message, msg_seq_no = MsgSeqNo, flow = noflow}.
 
 build_content(Properties, BodyBin) when is_binary(BodyBin) ->
     build_content(Properties, [BodyBin]);
