@@ -22,6 +22,10 @@
 %% (using worker_pool:submit/1, worker_pool:submit/2) or synchronously
 %% (using worker_pool:submit_async/1).
 %%
+%% We typically use the worker pool if we want to limit the maximum
+%% parallelism of some job. We are not trying to dodge the cost of
+%% creating Erlang processes.
+%%
 %% Supports nested submission of jobs and two execution modes:
 %% 'single' and 'reuse'. Jobs executed in 'single' mode are invoked in
 %% a one-off process. Those executed in 'reuse' mode are invoked in a
