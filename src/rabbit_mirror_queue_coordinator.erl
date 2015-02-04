@@ -19,7 +19,7 @@
 -export([start_link/4, get_gm/1, ensure_monitoring/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
+         code_change/3, handle_pre_hibernate/1]).
 
 -export([joined/2, members_changed/3, handle_msg/3, handle_terminate/2]).
 
@@ -388,6 +388,15 @@ terminate(_Reason, #state{}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+handle_pre_hibernate(State = #state { gm = GM }) ->
+    %% Since GM notifications of deaths are lazy we might not get a
+    %% timely notification of slave death if policy changes when
+    %% everything is idle. So cause some activity just before we
+    %% sleep. This won't cause us to go into perpetual motion as the
+    %% heartbeat does not wake up coordinator or slaves.
+    gm:broadcast(GM, hibernate_heartbeat),
+    {hibernate, State}.
 
 %% ---------------------------------------------------------------------------
 %% GM

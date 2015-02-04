@@ -153,7 +153,6 @@ init_it2(Recover, From, State = #q{q                   = Q,
         #amqqueue{} = Q1 ->
             case matches(Recover, Q, Q1) of
                 true ->
-                    send_reply(From, {new, Q}),
                     ok = file_handle_cache:register_callback(
                            rabbit_amqqueue, set_maximum_since_use, [self()]),
                     ok = rabbit_memory_monitor:register(
@@ -161,6 +160,7 @@ init_it2(Recover, From, State = #q{q                   = Q,
                                     set_ram_duration_target, [self()]}),
                     BQ = backing_queue_module(Q1),
                     BQS = bq_init(BQ, Q, TermsOrNew),
+                    send_reply(From, {new, Q}),
                     recovery_barrier(Barrier),
                     State1 = process_args_policy(
                                State#q{backing_queue       = BQ,
