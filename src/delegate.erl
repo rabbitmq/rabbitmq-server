@@ -16,11 +16,20 @@
 
 -module(delegate).
 
-%% Delegates is an alternative way of doing remote calls. Compared to
+%% delegate is an alternative way of doing remote calls. Compared to
 %% the rpc module, it reduces inter-node communication. For example,
 %% if a message is routed to 1,000 queues on node A and needs to be
 %% propagated to nodes B and C, it would be nice to avoid doing 2,000
-%% remote calls to mirror processes.
+%% remote casts to queue processes.
+%%
+%% An important issue here is preserving order - we need to make sure
+%% that messages from a certain channel to a certain queue take a
+%% consistent route, to prevent them being reordered. In fact all
+%% AMQP-ish things (such as queue declaration results and basic.get)
+%% must take the same route as well, to ensure that clients see causal
+%% ordering correctly. Therefore we have a rather generic mechanism
+%% here rather than just a message-reflector. That's also why we pick
+%% the delegate process to use based on a hash of the source pid.
 %%
 %% When a function is invoked using delegate:invoke/2, delegate:call/2
 %% or delegate:cast/2 on a group of pids, the pids are first split
@@ -32,8 +41,9 @@
 %% Errors returned when executing functions on remote nodes are re-raised
 %% in the caller.
 %%
-%% Delegates are used for queue mirroring. RabbitMQ starts a pool of
-%% delegate processes on boot. The size of the pool is configurable.
+%% RabbitMQ starts a pool of delegate processes on boot. The size of
+%% the pool is configurable, the aim is to make sure we don't have too
+%% few delegates and thus limit performance on many-CPU machines.
 
 -behaviour(gen_server2).
 
