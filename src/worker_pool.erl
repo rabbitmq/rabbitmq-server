@@ -18,13 +18,25 @@
 
 %% Generic worker pool manager.
 %%
-%% Supports nested submission of jobs (nested jobs always run
-%% immediately in current worker process).
+%% Submitted jobs are functions. They can be executed asynchronously
+%% (using worker_pool:submit/1, worker_pool:submit/2) or synchronously
+%% (using worker_pool:submit_async/1).
 %%
-%% Possible future enhancements:
+%% Supports nested submission of jobs and two execution modes:
+%% 'single' and 'reuse'. Jobs executed in 'single' mode are invoked in
+%% a one-off process. Those executed in 'reuse' mode are invoked in a
+%% worker process out of the pool. Nested jobs are always executed
+%% immediately in current worker process.
 %%
-%% 1. Allow priorities (basically, change the pending queue to a
-%% priority_queue).
+%% Caller submissions are enqueued internally. When the next worker
+%% process is available, it communicates it to the pool and is
+%% assigned a job to execute. If job execution fails with an error, no
+%% response is returned to the caller.
+%%
+%% Worker processes prioritise certain command-and-control messages
+%% from the pool.
+%%
+%% Future improvement points: job prioritisation.
 
 -behaviour(gen_server2).
 
