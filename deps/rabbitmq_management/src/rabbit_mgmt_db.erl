@@ -162,8 +162,6 @@
 
 -define(QUEUE_MSG_COUNTS, [messages, messages_ready, messages_unacknowledged]).
 
--define(COARSE_QUEUE_STATS, ?QUEUE_MSG_COUNTS ++ ?QUEUE_MSG_RATES).
-
 -define(COARSE_NODE_STATS,
         [mem_used, fd_used, sockets_used, proc_used, disk_free,
          io_read_count,  io_read_bytes,  io_read_avg_time,
@@ -497,7 +495,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:now_to_str/1, [idle_since]},
                   {fun rabbit_mgmt_format:queue_state/1, [state]}],
-                 ?COARSE_QUEUE_STATS, State);
+                 ?QUEUE_MSG_COUNTS, ?QUEUE_MSG_RATES, State);
 
 handle_event(Event = #event{type = queue_deleted,
                             props = [{name, Name}],
@@ -512,7 +510,7 @@ handle_event(Event = #event{type = queue_deleted,
     %% This ceil must correspond to the ceil in append_samples/5
     TS = ceil(Timestamp, State),
     OldStats = lookup_element(OldTable, Id),
-    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
+    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, true, State)
      || Key <- ?QUEUE_MSG_COUNTS],
     delete_samples(channel_queue_stats,  {'_', Name}, State),
     delete_samples(queue_exchange_stats, {Name, '_'}, State),
@@ -609,12 +607,18 @@ handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
                                               pget(name, Stats)}),
     {ok, State}.
 
-handle_stats(TName, Stats, Timestamp, Funs, RatesKeys,
+handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, State) ->
+    handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, [], State).
+
+handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, NoAggRatesKeys,
              State = #state{tables = Tables, old_stats = OldTable}) ->
     Id = id(TName, Stats),
     IdSamples = {coarse, {TName, Id}},
     OldStats = lookup_element(OldTable, IdSamples),
-    append_samples(Stats, Timestamp, OldStats, IdSamples, RatesKeys, State),
+    append_samples(
+      Stats, Timestamp, OldStats, IdSamples, RatesKeys, true, State),
+    append_samples(
+      Stats, Timestamp, OldStats, IdSamples, NoAggRatesKeys, false, State),
     StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
     Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
@@ -678,7 +682,7 @@ handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, State).
+    append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, true, State).
 
 delete_samples(Type, {Id, '_'}, State) ->
     delete_samples_with_index(Type, Id, fun forward/2, State);
@@ -702,7 +706,7 @@ reverse(A, B) -> {B, A}.
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
-append_samples(Stats, TS, OldStats, Id, Keys,
+append_samples(Stats, TS, OldStats, Id, Keys, Agg,
                State = #state{old_stats = OldTable}) ->
     case ignore_coarse_sample(Id, State) of
         false ->
@@ -710,9 +714,9 @@ append_samples(Stats, TS, OldStats, Id, Keys,
             %% queue_deleted
             NewMS = ceil(TS, State),
             case Keys of
-                all -> [append_sample(K, V, NewMS, OldStats, Id, State)
+                all -> [append_sample(K, V, NewMS, OldStats, Id, Agg, State)
                         || {K, V} <- Stats];
-                _   -> [append_sample(K, V, NewMS, OldStats, Id, State)
+                _   -> [append_sample(K, V, NewMS, OldStats, Id, Agg, State)
                         || K <- Keys,
                            V <- [pget(K, Stats)],
                            V =/= 0 orelse lists:member(K, ?ALWAYS_REPORT_STATS)]
@@ -722,11 +726,11 @@ append_samples(Stats, TS, OldStats, Id, Keys,
             ok
     end.
 
-append_sample(Key, Value, NewMS, OldStats, Id, State) when is_number(Value) ->
+append_sample(Key, Val, NewMS, OldStats, Id, Agg, State) when is_number(Val) ->
     record_sample(
-      Id, {Key, Value - pget(Key, OldStats, 0), NewMS, State}, State);
+      Id, {Key, Val - pget(Key, OldStats, 0), NewMS, State}, Agg, State);
 
-append_sample(_Key, _Value, _NewMS, _OldStats, _Id, _State) ->
+append_sample(_Key, _Value, _NewMS, _OldStats, _Id, _Agg, _State) ->
     ok.
 
 ignore_coarse_sample({coarse, {queue_stats, Q}}, State) ->
@@ -735,15 +739,18 @@ ignore_coarse_sample(_, _) ->
     false.
 
 %% Node stats do not have a vhost of course
-record_sample({coarse, {node_stats, _Node} = Id}, Args, _State) ->
+record_sample({coarse, {node_stats, _Node} = Id}, Args, true, _State) ->
     record_sample0(Id, Args);
 
-record_sample({coarse, Id}, Args, State) ->
+record_sample({coarse, Id}, Args, false, _State) ->
+    record_sample0(Id, Args);
+
+record_sample({coarse, Id}, Args, true, State) ->
     record_sample0(Id, Args),
     record_sample0({vhost_stats, vhost(Id, State)}, Args);
 
 %% Deliveries / acks (Q -> Ch)
-record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, State) ->
+record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, true, State) ->
     case object_exists(Q, State) of
         true  -> record_sample0({channel_queue_stats, {Ch, Q}}, Args),
                  record_sample0({queue_stats,         Q},       Args);
@@ -753,7 +760,7 @@ record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, State) ->
     record_sample0({vhost_stats,   vhost(Q)}, Args);
 
 %% Publishes / confirms (Ch -> X)
-record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, State) ->
+record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, true,State) ->
     case object_exists(X, State) of
         true  -> record_sample0({channel_exchange_stats, {Ch, X}}, Args),
                  record_sampleX(publish_in,              X,        Args);
@@ -765,7 +772,7 @@ record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, State) ->
 %% Publishes (but not confirms) (Ch -> X -> Q)
 record_sample({fine, {_Ch,
                       Q = #resource{kind = queue},
-                      X = #resource{kind = exchange}}}, Args, State) ->
+                      X = #resource{kind = exchange}}}, Args, true, State) ->
     %% TODO This one logically feels like it should be here. It would
     %% correspond to "publishing channel message rates to queue" -
     %% which would be nice to handle - except we don't. And just
