@@ -20,6 +20,8 @@ syntax: regexp
 ^ebin/rabbit\.(app|rel|boot|script)$
 ^plugins/
 ^priv/plugins/
+^#
+^\.#
 
 ^packaging/RPMS/Fedora/(BUILD|RPMS|SOURCES|SPECS|SRPMS)$
 ^packaging/debs/Debian/rabbitmq-server_.*\.(dsc|(diff|tar)\.gz|deb|changes)$

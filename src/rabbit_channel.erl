@@ -581,7 +581,8 @@ check_user_id_header(#'P_basic'{user_id = Username},
                      #ch{user = #user{username = Username}}) ->
     ok;
 check_user_id_header(
-  #'P_basic'{}, #ch{user = #user{auth_backend = rabbit_auth_backend_dummy}}) ->
+  #'P_basic'{}, #ch{user = #user{authz_backends =
+                                     [{rabbit_auth_backend_dummy, _}]}}) ->
     ok;
 check_user_id_header(#'P_basic'{user_id = Claimed},
                      #ch{user = #user{username = Actual,
@@ -660,7 +661,7 @@ check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
 check_not_default_exchange(_) ->
     ok.
 
-check_exchange_deletion(XName = #resource{name = <<"amq.rabbitmq.", _/binary>>,
+check_exchange_deletion(XName = #resource{name = <<"amq.", _/binary>>,
                                           kind = exchange}) ->
     rabbit_misc:protocol_error(
       access_refused, "deletion of system ~s not allowed",
@@ -794,7 +795,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             Delivery = rabbit_basic:delivery(
                          Mandatory, DoConfirm, Message, MsgSeqNo),
             QNames = rabbit_exchange:route(Exchange, Delivery),
-            DQ = {Delivery, QNames},
+            DQ = {Delivery#delivery{flow = flow}, QNames},
             {noreply, case Tx of
                           none         -> deliver_to_queues(DQ, State1);
                           {Msgs, Acks} -> Msgs1 = queue:in(DQ, Msgs),
@@ -1665,7 +1666,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                    DelQNames}, State = #ch{queue_names    = QNames,
                                            queue_monitors = QMons}) ->
     Qs = rabbit_amqqueue:lookup(DelQNames),
-    DeliveredQPids = rabbit_amqqueue:deliver_flow(Qs, Delivery),
+    DeliveredQPids = rabbit_amqqueue:deliver(Qs, Delivery),
     %% The pmon:monitor_all/2 monitors all queues to which we
     %% delivered. But we want to monitor even queues we didn't deliver
     %% to, since we need their 'DOWN' messages to clean

@@ -16,7 +16,8 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0]).
+-export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0,
+         nodes_running/1, secondary_upgrade/1]).
 
 -include("rabbit.hrl").
 
@@ -122,6 +123,7 @@ remove_backup() ->
 
 maybe_upgrade_mnesia() ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
+    ok = rabbit_mnesia_rename:maybe_finish(AllNodes),
     case rabbit_version:upgrades_required(mnesia) of
         {error, starting_from_scratch} ->
             ok;

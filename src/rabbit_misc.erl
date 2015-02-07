@@ -44,7 +44,8 @@
 -export([format/2, format_many/1, format_stderr/2]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
--export([pid_to_string/1, string_to_pid/1, node_to_fake_pid/1]).
+-export([pid_to_string/1, string_to_pid/1,
+         pid_change_node/2, node_to_fake_pid/1]).
 -export([version_compare/2, version_compare/3]).
 -export([version_minor_equivalent/2]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
@@ -58,6 +59,7 @@
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
 -export([os_cmd/1]).
+-export([is_os_process_alive/1]).
 -export([gb_sets_difference/2]).
 -export([version/0, otp_release/0, which_applications/0]).
 -export([sequence_error/1]).
@@ -196,6 +198,7 @@
         (rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
+-spec(pid_change_node/2 :: (pid(), node()) -> pid()).
 -spec(node_to_fake_pid/1 :: (atom()) -> pid()).
 -spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
 -spec(version_compare/3 ::
@@ -230,6 +233,7 @@
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 -spec(os_cmd/1 :: (string()) -> string()).
+-spec(is_os_process_alive/1 :: (non_neg_integer()) -> boolean()).
 -spec(gb_sets_difference/2 :: (gb_sets:set(), gb_sets:set()) -> gb_sets:set()).
 -spec(version/0 :: () -> string()).
 -spec(otp_release/0 :: () -> string()).
@@ -520,8 +524,12 @@ execute_mnesia_transaction(TxFun) ->
                                 Res = mnesia:sync_transaction(TxFun),
                                 DiskLogAfter  = mnesia_dumper:get_log_writes(),
                                 case DiskLogAfter == DiskLogBefore of
-                                    true  -> Res;
-                                    false -> {sync, Res}
+                                    true  -> file_handle_cache_stats:update(
+                                              mnesia_ram_tx),
+                                             Res;
+                                    false -> file_handle_cache_stats:update(
+                                              mnesia_disk_tx),
+                                             {sync, Res}
                                 end;
                        true  -> mnesia:sync_transaction(TxFun)
                    end
@@ -686,11 +694,7 @@ sort_field_table(Arguments) ->
 %% regardless of what node we are running on. The representation also
 %% permits easy identification of the pid's node.
 pid_to_string(Pid) when is_pid(Pid) ->
-    %% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and
-    %% 8.7)
-    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
-        = term_to_binary(Pid),
-    Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
+    {Node, Cre, Id, Ser} = decompose_pid(Pid),
     format("<~s.~B.~B.~B>", [Node, Cre, Id, Ser]).
 
 %% inverse of above
@@ -701,17 +705,32 @@ string_to_pid(Str) ->
     case re:run(Str, "^<(.*)\\.(\\d+)\\.(\\d+)\\.(\\d+)>\$",
                 [{capture,all_but_first,list}]) of
         {match, [NodeStr, CreStr, IdStr, SerStr]} ->
-            <<131,NodeEnc/binary>> = term_to_binary(list_to_atom(NodeStr)),
             [Cre, Id, Ser] = lists:map(fun list_to_integer/1,
                                        [CreStr, IdStr, SerStr]),
-            binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>);
+            compose_pid(list_to_atom(NodeStr), Cre, Id, Ser);
         nomatch ->
             throw(Err)
     end.
 
+pid_change_node(Pid, NewNode) ->
+    {_OldNode, Cre, Id, Ser} = decompose_pid(Pid),
+    compose_pid(NewNode, Cre, Id, Ser).
+
 %% node(node_to_fake_pid(Node)) =:= Node.
 node_to_fake_pid(Node) ->
-    string_to_pid(format("<~s.0.0.0>", [Node])).
+    compose_pid(Node, 0, 0, 0).
+
+decompose_pid(Pid) when is_pid(Pid) ->
+    %% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and
+    %% 8.7)
+    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
+        = term_to_binary(Pid),
+    Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
+    {Node, Cre, Id, Ser}.
+
+compose_pid(Node, Cre, Id, Ser) ->
+    <<131,NodeEnc/binary>> = term_to_binary(Node),
+    binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>).
 
 version_compare(A, B, lte) ->
     case version_compare(A, B) of
@@ -913,6 +932,38 @@ os_cmd(Command) ->
                 false -> throw({command_not_found, Exec});
                 _     -> os:cmd(Command)
             end
+    end.
+
+is_os_process_alive(Pid) ->
+    with_os([{unix, fun () ->
+                            run_ps(Pid) =:= 0
+                    end},
+             {win32, fun () ->
+                             Cmd = "tasklist /nh /fi \"pid eq " ++ Pid ++ "\" ",
+                             Res = os_cmd(Cmd ++ "2>&1"),
+                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
+                                 match -> true;
+                                 _     -> false
+                             end
+                     end}]).
+
+with_os(Handlers) ->
+    {OsFamily, _} = os:type(),
+    case proplists:get_value(OsFamily, Handlers) of
+        undefined -> throw({unsupported_os, OsFamily});
+        Handler   -> Handler()
+    end.
+
+run_ps(Pid) ->
+    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
+                            [exit_status, {line, 16384},
+                             use_stdio, stderr_to_stdout]),
+    exit_loop(Port).
+
+exit_loop(Port) ->
+    receive
+        {Port, {exit_status, Rc}} -> Rc;
+        {Port, _}                 -> exit_loop(Port)
     end.
 
 gb_sets_difference(S1, S2) ->
