@@ -158,9 +158,24 @@ handle_info({'EXIT', Conn,
              {shutdown, {server_initiated_close, Code, Explanation}}},
             State = #state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
+handle_info({'EXIT', Conn,
+             {shutdown, {connection_closing,
+                         {server_initiated_close, Code, Explanation}}}},
+            State = #state{connection = Conn}) ->
+    amqp_death(Code, Explanation, State);
 handle_info({'EXIT', Conn, Reason}, State = #state{connection = Conn}) ->
     send_error("AMQP connection died", "Reason: ~p", [Reason], State),
     {stop, {conn_died, Reason}, State};
+
+handle_info({'EXIT', Ch, Reason}, State = #state{channel = Ch}) ->
+    send_error("AMQP channel died", "Reason: ~p", [Reason], State),
+    {stop, {channel_died, Reason}, State};
+handle_info({'EXIT', Ch,
+             {shutdown, {server_initiated_close, Code, Explanation}}},
+            State = #state{channel = Ch}) ->
+    amqp_death(Code, Explanation, State);
+
+
 handle_info({inet_reply, _, ok}, State) ->
     {noreply, State, hibernate};
 handle_info({bump_credit, Msg}, State) ->
@@ -511,6 +526,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
         {ok, Connection} ->
             link(Connection),
             {ok, Channel} = amqp_connection:open_channel(Connection),
+            link(Channel),
             amqp_channel:enable_delivery_flow_control(Channel),
             SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
             {{SendTimeout, ReceiveTimeout}, State1} =
