@@ -1,6 +1,6 @@
 open_source_license.txt
 
-JMS Client for Pivotal RabbitMQ 1.3.2 GA
+JMS Client for Pivotal RabbitMQ 1.3.3 GA
 
 
 ===========================================================================
@@ -29,7 +29,6 @@ of the license associated with each component.
 
 
 
-
 SECTION 1: BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES
 
    >>> slf4j-api-1.7.5
@@ -45,7 +44,7 @@ SECTION 2: Apache License, V2.0
 
 SECTION 3: Mozilla Public License, V1.1
 
-   >>> amqp-client-3.4.2
+   >>> amqp-client-3.4.3
 
 
 
@@ -57,7 +56,8 @@ APPENDIX. Standard License Files
 
 
 
---------------- SECTION 1:  BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES -------------
+
+-------------- SECTION 1:  BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES ----------
 
 BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES are applicable to the following component(s).
 
@@ -113,34 +113,34 @@ Code license:  Apache License 2.0
 Mozilla Public License, V1.1 is applicable to the following component(s).
 
 
->>> amqp-client-3.4.2
+>>> amqp-client-3.4.3
 
-[PLEASE NOTE:  PIVOTAL SOFTWARE, INC. ELECTS TO USE AND DISTRIBUTE THIS COMPONENT UNDER THE TERMS OF THE MPL 1.1. PLEASE SEE THE APPENDIX TO REVIEW THE FULL TEXT OF MPL 1.1. THE ORIGINAL LICENSE TERMS ARE REPRODUCED BELOW ONLY AS A REFERENCE]
-
-
-This package, the RabbitMQ Java client library, is triple-licensed under
-the Mozilla Public License 1.1 ("MPL"), the GNU General Public License
-version 2 ("GPL") and the Apache License version 2 ("ASL"). For the MPL,
-please see LICENSE-MPL-RabbitMQ. For the GPL, please see LICENSE-GPL2.
-For the ASL, please see LICENSE-APACHE2.
-
-The RabbitMQ Java client library includes third-party software under the
-ASL. For this license, please see LICENSE-APACHE2. For attribution of
-copyright and other details of provenance, please refer to the source code.
-
-If you have any questions regarding licensing, please contact us at 
-info@rabbitmq.com.
+//  The contents of this file are subject to the Mozilla Public License
+//  Version 1.1 (the "License"); you may not use this file except in
+//  compliance with the License. You may obtain a copy of the License
+//  at http://www.mozilla.org/MPL/
+//
+//  Software distributed under the License is distributed on an "AS IS"
+//  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+//  the License for the specific language governing rights and
+//  limitations under the License.
+//
+//  The Original Code is RabbitMQ.
+//
+//  The Initial Developer of the Original Code is GoPivotal, Inc.
+//  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
+//
 
 
 ADDITIONAL LICENSE INFORMATION:
 
 > Apache 2.0
 
-rabbitmq-java-client-3.4.2.tar.gz\rabbitmq-java-client-3.4.2.tar\rabbitmq-java-client-3.4.2\src\com\rabbitmq\tools\json\JSONReader.java
+amqp-client-3.4.3-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
 
 
-Copyright (c) 2006-2007 Frank Carver
-   Copyright (c) 2007-2014 Pivotal Software,Inc. All Rights Reserved
+   Copyright (c) 2006-2007 Frank Carver
+   Copyright (c) 2007-2014 GoPivotal, Inc. All Rights Reserved
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -153,35 +153,6 @@ Copyright (c) 2006-2007 Frank Carver
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-
-
-
-> MIT Style
-
-rabbitmq-java-client-3.4.2.tar.gz\rabbitmq-java-client-3.4.2.tar\rabbitmq-java-client-3.4.2\codegen\amqp-rabbitmq-0.8.json
-
-
-"Copyright (C) 2008-2013 Pivotal Software, Inc.
-        
-        "Permission is hereby granted, free of charge, to any person\n",
-        "obtaining a copy of this file (the \"Software\"), to deal in the\n",
-        "Software without restriction, including without limitation the \n",
-        "rights to use, copy, modify, merge, publish, distribute, \n",
-        "sublicense, and/or sell copies of the Software, and to permit \n",
-        "persons to whom the Software is furnished to do so, subject to \n",
-        "the following conditions:\n",
-        "\n",
-        "The above copyright notice and this permission notice shall be\n",
-        "included in all copies or substantial portions of the Software.\n",
-        "\n",
-        "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\n",
-        "EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES\n",
-        "OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\n",
-        "NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT\n",
-        "HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\n",
-        "WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n",
-        "FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR\n",
-        "OTHER DEALINGS IN THE SOFTWARE.
 
 
 =============== APPENDIX. Standard License Files ============== 
@@ -887,4 +858,4 @@ years from the date you acquired this Software product.
 Alternatively, the Source Files may accompany the Pivotal product.
 
 
-[RABBITJMS132GAKD120514]
+[RABBITJMS133GAKD020515]
