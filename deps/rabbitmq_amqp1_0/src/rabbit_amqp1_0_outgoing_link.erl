@@ -91,9 +91,10 @@ attach(#'v1_0.attach'{name = Name,
                     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                    "Consume failed: ~p", [Fail])
             end;
-        {error, _Reason} ->
-            %% TODO Deal with this properly -- detach and what have you
-            {ok, [#'v1_0.attach'{source = undefined}]}
+        {error, Reason} ->
+            %% TODO proper link establishment protocol here?
+            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                               "Attach rejected: ~p", [Reason])
     end.
 
 credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
