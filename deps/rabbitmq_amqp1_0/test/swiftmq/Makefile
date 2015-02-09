@@ -13,6 +13,8 @@ build/lib: $(CLIENT_PKG)
 	mv build/tmp/$(CLIENT_DIR)/jars/*.jar build/lib
 	rm -rf build/tmp
 	cp ../lib-java/*.jar build/lib
+	(cd ../../../rabbitmq-java-client && ant dist)
+	cp ../../../rabbitmq-java-client/build/dist/rabbitmq-client.jar build/lib
 
 $(CLIENT_PKG):
 	@echo
