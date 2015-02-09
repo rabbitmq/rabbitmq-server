@@ -178,7 +178,9 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                     ER = rabbit_routing_util:parse_routing(Dest),
                     ok = rabbit_routing_util:ensure_binding(Queue, ER, DCh),
                     {ok, Source, Link#outgoing_link{route_state = RouteState1,
-                                                    queue       = Queue}}
+                                                    queue       = Queue}};
+                {error, _} = E ->
+                    E
             end;
         _ ->
             {error, {address_not_utf8_string, Address}}
