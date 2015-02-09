@@ -106,7 +106,10 @@ ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
                                     #'queue.declare'{queue  = Queue,
                                                      nowait = true},
                                     queue, Params1),
-                         amqp_channel:cast(Channel, Method),
+                         case Method#'queue.declare'.nowait of
+                             true  -> amqp_channel:cast(Channel, Method);
+                             false -> amqp_channel:call(Channel, Method)
+                         end,
                          sets:add_element(Queue, State)
              end,
     {ok, Queue, State1};
@@ -185,6 +188,12 @@ update_queue_declare_auto_delete(Method, Params) ->
         Val       -> Method#'queue.declare'{auto_delete = Val}
     end.
 
+update_queue_declare_nowait(Method, Params) ->
+    case proplists:get_value(nowait, Params) of
+        undefined -> Method;
+        Val       -> Method#'queue.declare'{nowait = Val}
+    end.
+
 queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
     %% defaults
     Method1 = case proplists:get_value(durable, Params, false) of
@@ -196,7 +205,8 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
     Method2 = lists:foldl(fun (F, Acc) -> F(Acc, Params) end,
                 Method1, [fun update_queue_declare_arguments/2,
                           fun update_queue_declare_exclusive/2,
-                          fun update_queue_declare_auto_delete/2]),
+                          fun update_queue_declare_auto_delete/2,
+                          fun update_queue_declare_nowait/2]),
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
             Method2#'queue.declare'{queue = SQNG()};
