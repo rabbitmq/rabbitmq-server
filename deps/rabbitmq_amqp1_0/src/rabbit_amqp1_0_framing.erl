@@ -64,7 +64,7 @@ keys(Record) ->
     [{symbol, symbolify(K)} || K <- rabbit_amqp1_0_framing0:fields(Record)].
 
 symbolify(FieldName) when is_atom(FieldName) ->
-    re:replace(atom_to_list(FieldName), "_", "-", [{return,list}, global]).
+    re:replace(atom_to_list(FieldName), "_", "-", [{return,binary}, global]).
 
 %% TODO: in fields of composite types with multiple=true, "a null
 %% value and a zero-length array (with a correct type for its
