@@ -147,7 +147,7 @@ handle_cast({frame, Frame, FlowPid},
     catch exit:Reason = #'v1_0.error'{} ->
             %% TODO shut down nicely like rabbit_channel
             End = #'v1_0.end'{ error = Reason },
-            rabbit_log:warning("Closing session for connection ~p: ~p~n",
+            rabbit_log:warning("Closing session for connection ~p:~n~p~n",
                                [ReaderPid, Reason]),
             ok = rabbit_amqp1_0_writer:send_command_sync(Sock, End),
             {stop, normal, State};
