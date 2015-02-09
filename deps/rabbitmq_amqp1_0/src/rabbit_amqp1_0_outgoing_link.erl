@@ -91,9 +91,10 @@ attach(#'v1_0.attach'{name = Name,
                     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                    "Consume failed: ~p", [Fail])
             end;
-        {error, _Reason} ->
-            %% TODO Deal with this properly -- detach and what have you
-            {ok, [#'v1_0.attach'{source = undefined}]}
+        {error, Reason} ->
+            %% TODO proper link establishment protocol here?
+            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                               "Attach rejected: ~p", [Reason])
     end.
 
 credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
@@ -156,7 +157,8 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                                       timeout       = _Timeout},
               Link = #outgoing_link{ route_state = RouteState }, DCh) ->
     DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)},
-                     {check_exchange, true}],
+                     {check_exchange, true},
+                     {nowait, false}],
     case Dynamic of
         true -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
                                "Dynamic sources not supported", []);
@@ -176,10 +178,12 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                     ER = rabbit_routing_util:parse_routing(Dest),
                     ok = rabbit_routing_util:ensure_binding(Queue, ER, DCh),
                     {ok, Source, Link#outgoing_link{route_state = RouteState1,
-                                                    queue       = Queue}}
+                                                    queue       = Queue}};
+                {error, _} = E ->
+                    E
             end;
         _ ->
-            {error, {unknown_address, Address}}
+            {error, {address_not_utf8_string, Address}}
     end.
 
 delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,

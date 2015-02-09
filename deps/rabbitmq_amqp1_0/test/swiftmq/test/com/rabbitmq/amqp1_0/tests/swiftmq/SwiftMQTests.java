@@ -1,7 +1,10 @@
 package com.rabbitmq.amqp1_0.tests.swiftmq;
 
+import com.rabbitmq.client.*;
 import com.swiftmq.amqp.AMQPContext;
 import com.swiftmq.amqp.v100.client.*;
+import com.swiftmq.amqp.v100.client.Connection;
+import com.swiftmq.amqp.v100.client.Consumer;
 import com.swiftmq.amqp.v100.generated.messaging.message_format.*;
 import com.swiftmq.amqp.v100.generated.messaging.message_format.Properties;
 import com.swiftmq.amqp.v100.messaging.AMQPMessage;
@@ -213,16 +216,6 @@ public class SwiftMQTests extends TestCase {
         route(QUEUE,                      "test",                  "",         true);
         route("test",                     "test",                  "",         true);
 
-        try {
-            route(QUEUE,                  "/exchange/missing",    "",        false);
-            fail("Missing exchange should fail");
-        } catch (Exception e) { }
-
-        try {
-            route("/exchange/missing/",    QUEUE,                  "",        false);
-            fail("Missing exchange should fail");
-        } catch (Exception e) { }
-
         route("/topic/#.c.*",              "/topic/a.b.c.d",        "",        true);
         route("/topic/#.c.*",              "/exchange/amq.topic",   "a.b.c.d", true);
         route("/exchange/amq.topic/#.y.*", "/topic/w.x.y.z",        "",        true);
@@ -240,6 +233,19 @@ public class SwiftMQTests extends TestCase {
         route(QUEUE,                       "/exchange/amq.fanout",  "",        false);
         route(QUEUE,                       "/exchange/amq.headers", "",        false);
         emptyQueue(QUEUE);
+    }
+
+    public void testRoutingInvalidRoutes() throws Exception {
+        ConnectionFactory factory = new ConnectionFactory();
+        com.rabbitmq.client.Connection connection = factory.newConnection();
+        Channel channel = connection.createChannel();
+        channel.queueDeclare("transient", false, false, false, null);
+        connection.close();
+
+        for (String dest : Arrays.asList("/exchange/missing", "/queue/transient", "/fruit/orange")) {
+            routeInvalidSource(dest);
+            routeInvalidTarget(dest);
+        }
     }
 
     private void emptyQueue(String q) throws Exception {
@@ -289,6 +295,42 @@ public class SwiftMQTests extends TestCase {
         c.close();
         p.close();
         conn.close();
+    }
+
+    private void routeInvalidSource(String consumerSource) throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        try {
+            Consumer c = s.createConsumer(consumerSource, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
+            c.close();
+            fail("Source '" + consumerSource + "' should fail");
+        }
+        catch (Exception e) {
+            // no-op
+        }
+        finally {
+            conn.close();
+        }
+    }
+
+    private void routeInvalidTarget(String producerTarget) throws Exception {
+        AMQPContext ctx = new AMQPContext(AMQPContext.CLIENT);
+        Connection conn = new Connection(ctx, host, port, false);
+        conn.connect();
+        Session s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
+        try {
+            Producer p = s.createProducer(producerTarget, QoS.AT_LEAST_ONCE);
+            p.close();
+            fail("Target '" + producerTarget + "' should fail");
+        }
+        catch (Exception e) {
+            // no-op
+        }
+        finally {
+            conn.close();
+        }
     }
 
     // TODO: generalise to a comparison of all immutable parts of messages
