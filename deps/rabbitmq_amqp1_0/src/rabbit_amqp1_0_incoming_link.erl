@@ -227,7 +227,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                     E
             end;
         _Else ->
-            {error, {unknown_address, Address}}
+            {error, {address_not_utf8_string, Address}}
     end.
 
 incoming_flow(#incoming_link{ delivery_count = Count }, Handle) ->

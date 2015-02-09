@@ -180,7 +180,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                                                     queue       = Queue}}
             end;
         _ ->
-            {error, {unknown_address, Address}}
+            {error, {address_not_utf8_string, Address}}
     end.
 
 delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
