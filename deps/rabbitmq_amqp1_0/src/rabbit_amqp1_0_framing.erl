@@ -105,23 +105,19 @@ decode(Other) ->
 decode_map(Fields) ->
     [{decode(K), decode(V)} || {K, V} <- Fields].
 
-encode_described(list, ListOrNumber, Frame) ->
-    Desc = descriptor(ListOrNumber),
-    {described, Desc,
+encode_described(list, CodeNumber, Frame) ->
+    {described, {ulong, CodeNumber},
      {list, lists:map(fun encode/1, tl(tuple_to_list(Frame)))}};
-encode_described(map, ListOrNumber, Frame) ->
-    Desc = descriptor(ListOrNumber),
-    {described, Desc,
+encode_described(map, CodeNumber, Frame) ->
+    {described, {ulong, CodeNumber},
      {map, lists:zip(keys(Frame),
                      lists:map(fun encode/1, tl(tuple_to_list(Frame))))}};
-encode_described(binary, ListOrNumber, #'v1_0.data'{content = Content}) ->
-    Desc = descriptor(ListOrNumber),
-    {described, Desc, {binary, Content}};
-encode_described('*', ListOrNumber, #'v1_0.amqp_value'{content = Content}) ->
-    Desc = descriptor(ListOrNumber),
-    {described, Desc, Content};
-encode_described(annotations, ListOrNumber, Frame) ->
-    encode_described(map, ListOrNumber, Frame).
+encode_described(binary, CodeNumber, #'v1_0.data'{content = Content}) ->
+    {described, {ulong, CodeNumber}, {binary, Content}};
+encode_described('*', CodeNumber, #'v1_0.amqp_value'{content = Content}) ->
+    {described, {ulong, CodeNumber}, Content};
+encode_described(annotations, CodeNumber, Frame) ->
+    encode_described(map, CodeNumber, Frame).
 
 encode(X) ->
     rabbit_amqp1_0_framing0:encode(X).
@@ -139,12 +135,6 @@ symbol_for(X) ->
 
 number_for(X) ->
     rabbit_amqp1_0_framing0:number_for(X).
-
-descriptor(Symbol) when is_list(Symbol) ->
-    {symbol, Symbol};
-descriptor(Number) when is_number(Number) ->
-    {ulong, Number}.
-
 
 pprint(Thing) when is_tuple(Thing) ->
     case rabbit_amqp1_0_framing0:fields(Thing) of
