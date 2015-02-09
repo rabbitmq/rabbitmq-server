@@ -81,7 +81,6 @@ attach(#'v1_0.attach'{name = Name,
                 IncomingLink#incoming_link{recv_settle_mode = RcvSettleMode},
             {ok, [Attach, Flow], IncomingLink1, Confirm};
         {error, Reason} ->
-            rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
             %% TODO proper link establishment protocol here?
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                                "Attach rejected: ~p", [Reason])
