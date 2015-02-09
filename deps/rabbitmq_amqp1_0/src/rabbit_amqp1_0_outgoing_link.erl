@@ -156,7 +156,8 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                                       timeout       = _Timeout},
               Link = #outgoing_link{ route_state = RouteState }, DCh) ->
     DeclareParams = [{durable, rabbit_amqp1_0_link_util:durable(Durable)},
-                     {check_exchange, true}],
+                     {check_exchange, true},
+                     {nowait, false}],
     case Dynamic of
         true -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
                                "Dynamic sources not supported", []);
