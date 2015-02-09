@@ -124,4 +124,4 @@ constructor(symbol) ->
      <<16#a3>>.
 
 generate(symbol, Value) ->
-    [<<(length(Value)):8>>, list_to_binary(Value)].
+    [<<(size(Value)):8>>, Value].

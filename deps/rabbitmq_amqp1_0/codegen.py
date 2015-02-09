@@ -87,7 +87,7 @@ def print_hrl(types, defines):
 def print_define(opt, source):
     (name, value) = opt
     if source == 'symbol':
-        quoted = '"%s"' % value
+        quoted = '<<"%s">>' % value
     else:
         quoted = value
     print """-define(V_1_0_%s, {%s, %s}).""" % (name, source, quoted)
