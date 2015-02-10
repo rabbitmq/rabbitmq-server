@@ -157,6 +157,7 @@ For targets, addresses are:
     | "/topic/"     RK        Publish to amq.topic with routing key RK
     | "/amq/queue/" Q         Publish to default exchange with routing key Q
     | "/queue/"     Q         Publish to default exchange with routing key Q
+    | Q (no leading slash)    Publish to default exchange with routing key Q
     | "/queue"                Publish to default exchange with message subj as routing key
 
 For sources, addresses are:
@@ -165,6 +166,11 @@ For sources, addresses are:
     | "/topic/"     RK        Consume from temp queue bound to amq.topic with routing key RK
     | "/amq/queue/" Q         Consume from Q
     | "/queue/"     Q         Consume from Q
+    | Q (no leading slash)    Consume from Q
+
+The intent is that the source and destination address formats should be
+mostly the same as those supported by the STOMP plugin, to the extent
+permitted by AMQP 1.0 semantics.
 
 ## Virtual Hosts
 
