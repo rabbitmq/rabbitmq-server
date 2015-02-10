@@ -76,6 +76,7 @@ process_request(?CONNECT,
                             {?CONNACK_ACCEPT, Conn} ->
                                 link(Conn),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
+                                link(Ch),
                                 amqp_channel:enable_delivery_flow_control(Ch),
                                 ok = rabbit_mqtt_collector:register(
                                   ClientId, self()),
