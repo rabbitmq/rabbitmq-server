@@ -4,9 +4,13 @@ This plugin adds AMQP 1.0 support to RabbitMQ.
 
 # Status
 
-This is a prototype.  You can send and receive messages between 0-9-1
-or 0-8 clients and 1.0 clients with broadly the same semantics as you
-would get with 0-9-1.
+This is mostly a prototype, but it is supported. We describe it as a
+prototype since the amount of real world use and thus battle-testing
+it has received is not so large as that of the STOMP or MQTT
+plugins. Howver, bugs do get fixed as they are reported.
+
+You can send and receive messages between 0-9-1 or 0-8 clients and 1.0
+clients with broadly the same semantics as you would get with 0-9-1.
 
 # Building and configuring
 
