@@ -146,8 +146,11 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
     {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
-             #amqp_msg{props = Props, payload = Payload}}, State) ->
-    {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
+             #amqp_msg{props = Props, payload = Payload},
+             DeliveryCtx}, State) ->
+    State1 = send_delivery(Delivery, Props, Payload, State),
+    amqp_channel:notify_received(DeliveryCtx),
+    {noreply, State1, hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     process_request(
       fun(StateN) -> server_cancel_consumer(Ctag, StateN) end, State);
@@ -155,9 +158,24 @@ handle_info({'EXIT', Conn,
              {shutdown, {server_initiated_close, Code, Explanation}}},
             State = #state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
+handle_info({'EXIT', Conn,
+             {shutdown, {connection_closing,
+                         {server_initiated_close, Code, Explanation}}}},
+            State = #state{connection = Conn}) ->
+    amqp_death(Code, Explanation, State);
 handle_info({'EXIT', Conn, Reason}, State = #state{connection = Conn}) ->
     send_error("AMQP connection died", "Reason: ~p", [Reason], State),
     {stop, {conn_died, Reason}, State};
+
+handle_info({'EXIT', Ch, Reason}, State = #state{channel = Ch}) ->
+    send_error("AMQP channel died", "Reason: ~p", [Reason], State),
+    {stop, {channel_died, Reason}, State};
+handle_info({'EXIT', Ch,
+             {shutdown, {server_initiated_close, Code, Explanation}}},
+            State = #state{channel = Ch}) ->
+    amqp_death(Code, Explanation, State);
+
+
 handle_info({inet_reply, _, ok}, State) ->
     {noreply, State, hibernate};
 handle_info({bump_credit, Msg}, State) ->
@@ -294,10 +312,10 @@ handle_frame("SEND", Frame, State) ->
         end);
 
 handle_frame("ACK", Frame, State) ->
-    ack_action("ACK", Frame, State, fun create_ack_method/2);
+    ack_action("ACK", Frame, State, fun create_ack_method/3);
 
 handle_frame("NACK", Frame, State) ->
-    ack_action("NACK", Frame, State, fun create_nack_method/2);
+    ack_action("NACK", Frame, State, fun create_nack_method/3);
 
 handle_frame("BEGIN", Frame, State) ->
     transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
@@ -329,7 +347,8 @@ ack_action(Command, Frame,
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
                     case dict:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
-                            Method = MethodFun(DeliveryTag, Sub),
+                            Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", true),
+                            Method = MethodFun(DeliveryTag, Sub, Requeue),
                             case transactional(Frame) of
                                 {yes, Transaction} ->
                                     extend_transaction(
@@ -430,7 +449,7 @@ maybe_delete_durable_sub({topic, Name}, Frame,
                                            ?HEADER_PERSISTENT, false) of
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-            QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
+            QName = rabbit_stomp_util:subscription_queue_name(Name, Id),
             amqp_channel:call(Channel,
                               #'queue.delete'{queue  = list_to_binary(QName),
                                               nowait = false}),
@@ -507,6 +526,8 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
         {ok, Connection} ->
             link(Connection),
             {ok, Channel} = amqp_connection:open_channel(Connection),
+            link(Channel),
+            amqp_channel:enable_delivery_flow_control(Channel),
             SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
             {{SendTimeout, ReceiveTimeout}, State1} =
                 ensure_heartbeats(Heartbeat, State),
@@ -656,13 +677,14 @@ do_send(Destination, _DestHdr,
             Err
     end.
 
-create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
+create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}, _) ->
     #'basic.ack'{delivery_tag = DeliveryTag,
                  multiple     = IsMulti}.
 
-create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
+create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}, Requeue) ->
     #'basic.nack'{delivery_tag = DeliveryTag,
-                  multiple     = IsMulti}.
+                  multiple     = IsMulti,
+                  requeue      = Requeue}.
 
 negotiate_version(Frame) ->
     ClientVers = re:split(rabbit_stomp_frame:header(
@@ -690,6 +712,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
                        [ConsumerTag],
                        State)
     end.
+
 
 send_method(Method, Channel, State) ->
     amqp_channel:call(Channel, Method),
@@ -960,12 +983,20 @@ ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
                           {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
                           {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
                           list_to_binary(
-                            rabbit_stomp_util:durable_subscription_queue(Name,
-                                                                         Id))
+                            rabbit_stomp_util:subscription_queue_name(Name,
+                                                                      Id))
                   end},
                  {durable, true}];
             false ->
-                [{durable, false}]
+                [{subscription_queue_name_gen,
+                  fun () ->
+                          Id = rabbit_guid:gen_secure(),
+                          {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
+                          list_to_binary(
+                            rabbit_stomp_util:subscription_queue_name(Name,
+                                                                      Id))
+                  end},
+                 {durable, false}]
         end,
     rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, Params, State);
 

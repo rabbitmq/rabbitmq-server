@@ -25,14 +25,17 @@ start_link(Listeners, Configuration) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE,
                           [Listeners, Configuration]).
 
-init([{Listeners, SslListeners}, Configuration]) ->
+init([{Listeners, SslListeners0}, Configuration]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_stomp, tcp_listen_options),
-
-    SslOpts = case SslListeners of
-                  [] -> none;
-                  _  -> rabbit_networking:ensure_ssl()
-              end,
-
+    {SslOpts, SslListeners}
+        = case SslListeners0 of
+              [] -> {none, []};
+              _  -> {rabbit_networking:ensure_ssl(),
+                     case rabbit_networking:poodle_check('STOMP') of
+                         ok     -> SslListeners0;
+                         danger -> []
+                     end}
+          end,
     {ok, {{one_for_all, 10, 10},
           [{rabbit_stomp_client_sup_sup,
             {rabbit_client_sup, start_link,

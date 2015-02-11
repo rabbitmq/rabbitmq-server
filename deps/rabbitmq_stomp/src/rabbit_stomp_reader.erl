@@ -17,7 +17,8 @@
 -module(rabbit_stomp_reader).
 
 -export([start_link/3]).
--export([init/3]).
+-export([init/3, mainloop/2]).
+-export([system_continue/3, system_terminate/4, system_code_change/4]).
 -export([conserve_resources/3]).
 
 -include("rabbit_stomp.hrl").
@@ -25,7 +26,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -record(reader_state, {socket, parse_state, processor, state,
-                       conserve_resources, recv_outstanding}).
+                       conserve_resources, recv_outstanding,
+                       parent}).
 
 %%----------------------------------------------------------------------------
 
@@ -48,7 +50,7 @@ go(SupHelperPid, ProcessorPid, Configuration) ->
                 {ok, ConnStr} ->
                     case SockTransform(Sock0) of
                         {ok, Sock} ->
-
+                            DebugOpts = sys:debug_options([]),
                             ProcInitArgs = processor_args(SupHelperPid,
                                                           Configuration,
                                                           Sock),
@@ -59,7 +61,7 @@ go(SupHelperPid, ProcessorPid, Configuration) ->
 
                             ParseState = rabbit_stomp_frame:initial_state(),
                             try
-                                mainloop(
+                                mainloop(DebugOpts,
                                   register_resource_alarm(
                                     #reader_state{socket             = Sock,
                                                   parse_state        = ParseState,
@@ -86,21 +88,26 @@ go(SupHelperPid, ProcessorPid, Configuration) ->
             end
     end.
 
-mainloop(State0 = #reader_state{socket = Sock}) ->
+mainloop(DebugOpts, State0 = #reader_state{socket = Sock}) ->
     State = run_socket(control_throttle(State0)),
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
-            mainloop(process_received_bytes(
+            mainloop(DebugOpts, process_received_bytes(
                        Data, State#reader_state{recv_outstanding = false}));
         {inet_async, _Sock, _Ref, {error, closed}} ->
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
             throw({inet_error, Reason});
+        {inet_reply, _Sock, {error, closed}} ->
+            ok;
         {conserve_resources, Conserve} ->
-            mainloop(State#reader_state{conserve_resources = Conserve});
+            mainloop(DebugOpts, State#reader_state{conserve_resources = Conserve});
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
-            mainloop(State);
+            mainloop(DebugOpts, State);
+        {system, From, Request} ->
+            sys:handle_system_msg(Request, From, State#reader_state.parent,
+                                 ?MODULE, DebugOpts, State);
         {'EXIT', _From, shutdown} ->
             ok;
         Other ->
@@ -155,6 +162,17 @@ run_socket(State = #reader_state{recv_outstanding = true}) ->
 run_socket(State = #reader_state{socket = Sock}) ->
     rabbit_net:async_recv(Sock, 0, infinity),
     State#reader_state{recv_outstanding = true}.
+
+%%----------------------------------------------------------------------------
+
+system_continue(Parent, DebugOpts, State) ->
+    mainloop(DebugOpts, State#reader_state{parent = Parent}).
+
+system_terminate(Reason, _Parent, _OldVsn, _Extra) ->
+    exit(Reason).
+
+system_code_change(Misc, _Module, _OldSvn, _Extra) ->
+    {ok, Misc}.
 
 %%----------------------------------------------------------------------------
 

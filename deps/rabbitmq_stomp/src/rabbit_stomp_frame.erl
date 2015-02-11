@@ -193,6 +193,9 @@ boolean_header(#stomp_frame{headers = Headers}, Key) ->
     case lists:keysearch(Key, 1, Headers) of
         {value, {_, "true"}}  -> {ok, true};
         {value, {_, "false"}} -> {ok, false};
+        %% some Python clients serialize True/False as "True"/"False"
+        {value, {_, "True"}}  -> {ok, true};
+        {value, {_, "False"}} -> {ok, false};
         _                     -> not_found
     end.
 

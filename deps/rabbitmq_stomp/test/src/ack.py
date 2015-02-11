@@ -195,3 +195,16 @@ class TestAck(base.BaseTest):
         self.assertTrue(self.listener.await(), "Not received message again")
         message_id = self.listener.messages[1]['headers']['message-id']
         self.conn.ack({'message-id' : message_id})
+
+    def test_nack_without_requeueing(self):
+        d = "/queue/nack-test-no-requeue"
+
+        self.conn.subscribe(destination=d, ack='client-individual')
+        self.conn.send("nack-test", destination=d)
+
+        self.assertTrue(self.listener.await(), "Not received message")
+        message_id = self.listener.messages[0]['headers']['message-id']
+        self.listener.reset()
+
+        self.conn.send_frame("NACK", {"message-id" : message_id, "requeue": False})
+        self.assertFalse(self.listener.await(4), "Received message after NACK with requeue = False")
