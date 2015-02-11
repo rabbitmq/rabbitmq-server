@@ -142,11 +142,16 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    )
 )
 
+set RABBITMQ_START_RABBIT=
+if "!RABBITMQ_NODE_ONLY!"=="" (
+    set RABBITMQ_START_RABBIT=-s rabbit boot
+)
+
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput ^
 -boot start_sasl ^
--s rabbit boot ^
+!RABBITMQ_START_RABBIT! ^
 !RABBITMQ_CONFIG_ARG! ^
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
 +W w ^
