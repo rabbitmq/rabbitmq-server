@@ -57,20 +57,21 @@ init(Sock) ->
     Username = case rabbit_net:peercert(Sock) of
                    {ok, C} ->
                        case rabbit_ssl:peer_cert_auth_name(C) of
-                           unsafe    -> {refused, "configuration unsafe", []};
-                           not_found -> {refused, "no name found", []};
+                           unsafe    -> {refused, none,
+                                         "configuration unsafe", []};
+                           not_found -> {refused, none, "no name found", []};
                            Name      -> Name
                        end;
                    {error, no_peercert} ->
-                       {refused, "no peer certificate", []};
+                       {refused, none, "no peer certificate", []};
                    nossl ->
-                       {refused, "not SSL connection", []}
+                       {refused, none, "not SSL connection", []}
                end,
     #state{username = Username}.
 
 handle_response(_Response, #state{username = Username}) ->
     case Username of
-        {refused, _, _} = E ->
+        {refused, _, _, _} = E ->
             E;
         _ ->
             rabbit_access_control:check_user_login(Username, [])
