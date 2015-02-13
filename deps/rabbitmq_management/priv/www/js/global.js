@@ -20,7 +20,8 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-max-length':              {'short': 'Lim', 'type': 'int'},
                   'x-max-length-bytes':        {'short': 'Lim B', 'type': 'int'},
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
-                  'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'}};
+                  'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'},
+                  'x-max-priority':            {'short': 'Pri', 'type': 'int'}};
 
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
