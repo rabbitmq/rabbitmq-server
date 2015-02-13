@@ -202,7 +202,9 @@ Content-Length: 0</pre>
         <td class="path">/api/nodes/<i>name</i></td>
         <td>
           An individual node in the RabbitMQ cluster. Add
-          "?memory=true" to get memory statistics.
+          "?memory=true" to get memory statistics, and "?binary=true"
+          to get a breakdown of binary memory use (may be expensive if
+          there are many small binaries in the system).
         </td>
       </tr>
       <tr>
