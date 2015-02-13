@@ -467,7 +467,8 @@ declare_args() ->
      {<<"x-dead-letter-exchange">>,    fun check_dlxname_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
-     {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2}].
+     {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
+     {<<"x-max-priority">>,            fun check_non_neg_int_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
