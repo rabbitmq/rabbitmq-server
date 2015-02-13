@@ -58,7 +58,9 @@ delete_resource(ReqData, Context) ->
     rabbit_mgmt_util:amqp_request(
       rabbit_mgmt_util:vhost(ReqData),
       ReqData, Context,
-      #'queue.delete'{ queue = rabbit_mgmt_util:id(queue, ReqData) }).
+      #'queue.delete'{ queue     = rabbit_mgmt_util:id(queue, ReqData),
+                       if_empty  = qs_true("if-empty", ReqData),
+                       if_unused = qs_true("if-unused", ReqData) }).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
@@ -78,3 +80,5 @@ queue(VHost, QName) ->
         {ok, Q}            -> rabbit_mgmt_format:queue(Q);
         {error, not_found} -> not_found
     end.
+
+qs_true(Key, ReqData) -> "true" =:= wrq:get_qs_value(Key, ReqData).
