@@ -50,6 +50,7 @@
 -rabbit_upgrade({cluster_name,          mnesia, [runtime_parameters]}).
 -rabbit_upgrade({down_slave_nodes,      mnesia, [queue_decorators]}).
 -rabbit_upgrade({queue_state,           mnesia, [down_slave_nodes]}).
+-rabbit_upgrade({recoverable_slaves,    mnesia, [queue_state]}).
 
 %% -------------------------------------------------------------------
 
@@ -82,6 +83,7 @@
 -spec(cluster_name/0          :: () -> 'ok').
 -spec(down_slave_nodes/0      :: () -> 'ok').
 -spec(queue_state/0           :: () -> 'ok').
+-spec(recoverable_slaves/0    :: () -> 'ok').
 
 -endif.
 
@@ -417,6 +419,18 @@ queue_state(Table) ->
       end,
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, down_slave_nodes, policy, gm_pids, decorators, state]).
+
+recoverable_slaves() ->
+    ok = recoverable_slaves(rabbit_queue),
+    ok = recoverable_slaves(rabbit_durable_queue).
+
+recoverable_slaves(Table) ->
+    transform(
+      Table, fun (Q) -> Q end, %% Don't change shape of record
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators,
+       state]).
+
 
 %%--------------------------------------------------------------------
 

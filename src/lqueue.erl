@@ -16,6 +16,10 @@
 
 -module(lqueue).
 
+%% lqueue implements a subset of Erlang's queue module. lqueues
+%% maintain their own length, so lqueue:len/1
+%% is an O(1) operation, in contrast with queue:len/1 which is O(n).
+
 -export([new/0, is_empty/1, len/1, in/2, in_r/2, out/1, out_r/1, join/2,
          foldl/3, foldr/3, from_list/1, to_list/1, peek/1, peek_r/1]).
 

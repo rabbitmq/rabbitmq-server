@@ -178,6 +178,10 @@
           write_buffer_size,
           write_buffer_size_limit,
           write_buffer,
+          read_buffer,
+          read_buffer_pos,
+          read_buffer_rem, %% Num of bytes from pos to end
+          read_buffer_size_limit,
           at_eof,
           path,
           mode,
@@ -237,7 +241,8 @@
 -spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(open/3 ::
         (file:filename(), [any()],
-         [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')}])
+         [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')} |
+          {'read_buffer', (non_neg_integer() | 'unbuffered')}])
         -> val_or_error(ref())).
 -spec(close/1 :: (ref()) -> ok_or_error()).
 -spec(read/2 :: (ref(), non_neg_integer()) ->
@@ -331,16 +336,48 @@ close(Ref) ->
 
 read(Ref, Count) ->
     with_flushed_handles(
-      [Ref],
+      [Ref], keep,
       fun ([#handle { is_read = false }]) ->
               {error, not_open_for_reading};
-          ([Handle = #handle { hdl = Hdl, offset = Offset }]) ->
-              case prim_file:read(Hdl, Count) of
-                  {ok, Data} = Obj -> Offset1 = Offset + iolist_size(Data),
-                                      {Obj,
-                                       [Handle #handle { offset = Offset1 }]};
-                  eof              -> {eof, [Handle #handle { at_eof = true }]};
-                  Error            -> {Error, [Handle]}
+          ([Handle = #handle{read_buffer     = Buf,
+                             read_buffer_pos = BufPos,
+                             read_buffer_rem = BufRem,
+                             offset          = Offset}]) when BufRem >= Count ->
+              <<_:BufPos/binary, Res:Count/binary, _/binary>> = Buf,
+              {{ok, Res}, [Handle#handle{offset          = Offset + Count,
+                                         read_buffer_pos = BufPos + Count,
+                                         read_buffer_rem = BufRem - Count}]};
+          ([Handle = #handle{read_buffer            = Buf,
+                             read_buffer_pos        = BufPos,
+                             read_buffer_rem        = BufRem,
+                             read_buffer_size_limit = BufSzLimit,
+                             hdl                    = Hdl,
+                             offset                 = Offset}]) ->
+              WantedCount = Count - BufRem,
+              case prim_file_read(Hdl, lists:max([BufSzLimit, WantedCount])) of
+                  {ok, Data} ->
+                      <<_:BufPos/binary, BufTl/binary>> = Buf,
+                      ReadCount = size(Data),
+                      case ReadCount < WantedCount of
+                          true ->
+                              OffSet1 = Offset + BufRem + ReadCount,
+                              {{ok, <<BufTl/binary, Data/binary>>},
+                               [reset_read_buffer(
+                                  Handle#handle{offset = OffSet1})]};
+                          false ->
+                              <<Hd:WantedCount/binary, _/binary>> = Data,
+                              OffSet1 = Offset + BufRem + WantedCount,
+                              BufRem1 = ReadCount - WantedCount,
+                              {{ok, <<BufTl/binary, Hd/binary>>},
+                               [Handle#handle{offset          = OffSet1,
+                                              read_buffer     = Data,
+                                              read_buffer_pos = WantedCount,
+                                              read_buffer_rem = BufRem1}]}
+                      end;
+                  eof ->
+                      {eof, [Handle #handle { at_eof = true }]};
+                  Error ->
+                      {Error, [reset_read_buffer(Handle)]}
               end
       end).
 
@@ -355,7 +392,7 @@ append(Ref, Data) ->
                                             write_buffer_size_limit = 0,
                                             at_eof = true } = Handle1} ->
                       Offset1 = Offset + iolist_size(Data),
-                      {prim_file:write(Hdl, Data),
+                      {prim_file_write(Hdl, Data),
                        [Handle1 #handle { is_dirty = true, offset = Offset1 }]};
                   {{ok, _Offset}, #handle { write_buffer = WriteBuffer,
                                             write_buffer_size = Size,
@@ -377,12 +414,12 @@ append(Ref, Data) ->
 
 sync(Ref) ->
     with_flushed_handles(
-      [Ref],
+      [Ref], keep,
       fun ([#handle { is_dirty = false, write_buffer = [] }]) ->
               ok;
           ([Handle = #handle { hdl = Hdl,
                                is_dirty = true, write_buffer = [] }]) ->
-              case prim_file:sync(Hdl) of
+              case prim_file_sync(Hdl) of
                   ok    -> {ok, [Handle #handle { is_dirty = false }]};
                   Error -> {Error, [Handle]}
               end
@@ -397,7 +434,7 @@ needs_sync(Ref) ->
 
 position(Ref, NewOffset) ->
     with_flushed_handles(
-      [Ref],
+      [Ref], keep,
       fun ([Handle]) -> {Result, Handle1} = maybe_seek(NewOffset, Handle),
                         {Result, [Handle1]}
       end).
@@ -465,8 +502,8 @@ clear(Ref) ->
       fun ([#handle { at_eof = true, write_buffer_size = 0, offset = 0 }]) ->
               ok;
           ([Handle]) ->
-              case maybe_seek(bof, Handle #handle { write_buffer = [],
-                                                    write_buffer_size = 0 }) of
+              case maybe_seek(bof, Handle#handle{write_buffer      = [],
+                                                 write_buffer_size = 0}) of
                   {{ok, 0}, Handle1 = #handle { hdl = Hdl }} ->
                       case prim_file:truncate(Hdl) of
                           ok    -> {ok, [Handle1 #handle { at_eof = true }]};
@@ -539,6 +576,21 @@ info(Items) -> gen_server2:call(?SERVER, {info, Items}, infinity).
 %% Internal functions
 %%----------------------------------------------------------------------------
 
+prim_file_read(Hdl, Size) ->
+    file_handle_cache_stats:update(
+      io_read, Size, fun() -> prim_file:read(Hdl, Size) end).
+
+prim_file_write(Hdl, Bytes) ->
+    file_handle_cache_stats:update(
+      io_write, iolist_size(Bytes), fun() -> prim_file:write(Hdl, Bytes) end).
+
+prim_file_sync(Hdl) ->
+    file_handle_cache_stats:update(io_sync, fun() -> prim_file:sync(Hdl) end).
+
+prim_file_position(Hdl, NewOffset) ->
+    file_handle_cache_stats:update(
+      io_seek, fun() -> prim_file:position(Hdl, NewOffset) end).
+
 is_reader(Mode) -> lists:member(read, Mode).
 
 is_writer(Mode) -> lists:member(write, Mode).
@@ -550,8 +602,15 @@ append_to_write(Mode) ->
     end.
 
 with_handles(Refs, Fun) ->
+    with_handles(Refs, reset, Fun).
+
+with_handles(Refs, ReadBuffer, Fun) ->
     case get_or_reopen([{Ref, reopen} || Ref <- Refs]) of
-        {ok, Handles} ->
+        {ok, Handles0} ->
+            Handles = case ReadBuffer of
+                          reset -> [reset_read_buffer(H) || H <- Handles0];
+                          keep  -> Handles0
+                      end,
             case Fun(Handles) of
                 {Result, Handles1} when is_list(Handles1) ->
                     lists:zipwith(fun put_handle/2, Refs, Handles1),
@@ -564,8 +623,11 @@ with_handles(Refs, Fun) ->
     end.
 
 with_flushed_handles(Refs, Fun) ->
+    with_flushed_handles(Refs, reset, Fun).
+
+with_flushed_handles(Refs, ReadBuffer, Fun) ->
     with_handles(
-      Refs,
+      Refs, ReadBuffer,
       fun (Handles) ->
               case lists:foldl(
                      fun (Handle, {ok, HandlesAcc}) ->
@@ -611,20 +673,23 @@ reopen([], Tree, RefHdls) ->
     {ok, lists:reverse(RefHdls)};
 reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
                                               path         = Path,
-                                              mode         = Mode,
+                                              mode         = Mode0,
                                               offset       = Offset,
                                               last_used_at = undefined }} |
         RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
-    case prim_file:open(Path, case NewOrReopen of
-                                  new    -> Mode;
-                                  reopen -> [read | Mode]
-                              end) of
+    Mode = case NewOrReopen of
+               new    -> Mode0;
+               reopen -> file_handle_cache_stats:update(io_reopen),
+                         [read | Mode0]
+           end,
+    case prim_file:open(Path, Mode) of
         {ok, Hdl} ->
             Now = now(),
             {{ok, _Offset}, Handle1} =
-                maybe_seek(Offset, Handle #handle { hdl          = Hdl,
-                                                    offset       = 0,
-                                                    last_used_at = Now }),
+                maybe_seek(Offset, reset_read_buffer(
+                                     Handle#handle{hdl              = Hdl,
+                                                   offset           = 0,
+                                                   last_used_at     = Now})),
             put({Ref, fhc_handle}, Handle1),
             reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
                    [{Ref, Handle1} | RefHdls]);
@@ -709,6 +774,11 @@ new_closed_handle(Path, Mode, Options) ->
             infinity             -> infinity;
             N when is_integer(N) -> N
         end,
+    ReadBufferSize =
+        case proplists:get_value(read_buffer, Options, unbuffered) of
+            unbuffered             -> 0;
+            N2 when is_integer(N2) -> N2
+        end,
     Ref = make_ref(),
     put({Ref, fhc_handle}, #handle { hdl                     = closed,
                                      offset                  = 0,
@@ -716,6 +786,10 @@ new_closed_handle(Path, Mode, Options) ->
                                      write_buffer_size       = 0,
                                      write_buffer_size_limit = WriteBufferSize,
                                      write_buffer            = [],
+                                     read_buffer             = <<>>,
+                                     read_buffer_pos         = 0,
+                                     read_buffer_rem         = 0,
+                                     read_buffer_size_limit  = ReadBufferSize,
                                      at_eof                  = false,
                                      path                    = Path,
                                      mode                    = Mode,
@@ -742,7 +816,7 @@ soft_close(Handle) ->
                        is_dirty    = IsDirty,
                        last_used_at = Then } = Handle1 } ->
             ok = case IsDirty of
-                     true  -> prim_file:sync(Hdl);
+                     true  -> prim_file_sync(Hdl);
                      false -> ok
                  end,
             ok = prim_file:close(Hdl),
@@ -776,17 +850,31 @@ hard_close(Handle) ->
             Result
     end.
 
-maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, offset = Offset,
-                                         at_eof = AtEoF }) ->
-    {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Offset, NewOffset),
-    case (case NeedsSeek of
-              true  -> prim_file:position(Hdl, NewOffset);
-              false -> {ok, Offset}
-          end) of
-        {ok, Offset1} = Result ->
-            {Result, Handle #handle { offset = Offset1, at_eof = AtEoF1 }};
-        {error, _} = Error ->
-            {Error, Handle}
+maybe_seek(New, Handle = #handle{hdl              = Hdl,
+                                 offset           = Old,
+                                 read_buffer_pos  = BufPos,
+                                 read_buffer_rem  = BufRem,
+                                 at_eof           = AtEoF}) ->
+    {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Old, New),
+    case NeedsSeek of
+        true when is_number(New) andalso
+                  ((New >= Old andalso New =< BufRem + Old)
+                   orelse (New < Old andalso Old - New =< BufPos)) ->
+            Diff = New - Old,
+            {{ok, New}, Handle#handle{offset          = New,
+                                      at_eof          = AtEoF1,
+                                      read_buffer_pos = BufPos + Diff,
+                                      read_buffer_rem = BufRem - Diff}};
+        true ->
+            case prim_file_position(Hdl, New) of
+                {ok, Offset1} = Result ->
+                    {Result, reset_read_buffer(Handle#handle{offset = Offset1,
+                                                             at_eof = AtEoF1})};
+                {error, _} = Error ->
+                    {Error, Handle}
+            end;
+        false ->
+            {{ok, Old}, Handle}
     end.
 
 needs_seek( AtEoF, _CurOffset,  cur     ) -> {AtEoF, false};
@@ -817,7 +905,7 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
                                 write_buffer = WriteBuffer,
                                 write_buffer_size = DataSize,
                                 at_eof = true }) ->
-    case prim_file:write(Hdl, lists:reverse(WriteBuffer)) of
+    case prim_file_write(Hdl, lists:reverse(WriteBuffer)) of
         ok ->
             Offset1 = Offset + DataSize,
             {ok, Handle #handle { offset = Offset1, is_dirty = true,
@@ -825,6 +913,11 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
         {error, _} = Error ->
             {Error, Handle}
     end.
+
+reset_read_buffer(Handle) ->
+    Handle#handle{read_buffer     = <<>>,
+                  read_buffer_pos = 0,
+                  read_buffer_rem = 0}.
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
@@ -843,6 +936,7 @@ used(#fhc_state{open_count          = C1,
 %%----------------------------------------------------------------------------
 
 init([AlarmSet, AlarmClear]) ->
+    file_handle_cache_stats:init(),
     Limit = case application:get_env(file_handles_high_watermark) of
                 {ok, Watermark} when (is_integer(Watermark) andalso
                                       Watermark > 0) ->

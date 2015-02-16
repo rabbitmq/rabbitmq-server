@@ -16,6 +16,11 @@
 
 -module(worker_pool_worker).
 
+%% Executes jobs (functions) submitted to a worker pool with worker_pool:submit/1,
+%% worker_pool:submit/2 or worker_pool:submit_async/1.
+%%
+%% See worker_pool for an overview.
+
 -behaviour(gen_server2).
 
 -export([start_link/0, next_job_from/2, submit/3, submit_async/2, run/1]).

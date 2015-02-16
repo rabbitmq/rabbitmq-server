@@ -113,23 +113,29 @@ init() ->
     ok.
 
 init_from_config() ->
+    FindBadNodeNames = fun
+        (Name, BadNames) when is_atom(Name) -> BadNames;
+        (Name, BadNames)                    -> [Name | BadNames]
+    end,
     {TryNodes, NodeType} =
         case application:get_env(rabbit, cluster_nodes) of
+            {ok, {Nodes, Type} = Config}
+            when is_list(Nodes) andalso (Type == disc orelse Type == ram) ->
+                case lists:foldr(FindBadNodeNames, [], Nodes) of
+                    []       -> Config;
+                    BadNames -> e({invalid_cluster_node_names, BadNames})
+                end;
+            {ok, {_, BadType}} when BadType /= disc andalso BadType /= ram ->
+                e({invalid_cluster_node_type, BadType});
             {ok, Nodes} when is_list(Nodes) ->
-                Config = {Nodes -- [node()], case lists:member(node(), Nodes) of
-                                                 true  -> disc;
-                                                 false -> ram
-                                             end},
-                rabbit_log:warning(
-                  "Converting legacy 'cluster_nodes' configuration~n    ~w~n"
-                  "to~n    ~w.~n~n"
-                  "Please update the configuration to the new format "
-                  "{Nodes, NodeType}, where Nodes contains the nodes that the "
-                  "node will try to cluster with, and NodeType is either "
-                  "'disc' or 'ram'~n", [Nodes, Config]),
-                Config;
-            {ok, Config} ->
-                Config
+                %% The legacy syntax (a nodes list without the node
+                %% type) is unsupported.
+                case lists:foldr(FindBadNodeNames, [], Nodes) of
+                    [] -> e(cluster_node_type_mandatory);
+                    _  -> e(invalid_cluster_nodes_conf)
+                end;
+            {ok, _} ->
+                e(invalid_cluster_nodes_conf)
         end,
     case TryNodes of
         [] -> init_db_and_upgrade([node()], disc, false);
@@ -850,6 +856,20 @@ nodes_excl_me(Nodes) -> Nodes -- [node()].
 
 e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 
+error_description({invalid_cluster_node_names, BadNames}) ->
+    "In the 'cluster_nodes' configuration key, the following node names "
+        "are invalid: " ++ lists:flatten(io_lib:format("~p", [BadNames]));
+error_description({invalid_cluster_node_type, BadType}) ->
+    "In the 'cluster_nodes' configuration key, the node type is invalid "
+        "(expected 'disc' or 'ram'): " ++
+        lists:flatten(io_lib:format("~p", [BadType]));
+error_description(cluster_node_type_mandatory) ->
+    "The 'cluster_nodes' configuration key must indicate the node type: "
+        "either {[...], disc} or {[...], ram}";
+error_description(invalid_cluster_nodes_conf) ->
+    "The 'cluster_nodes' configuration key is invalid, it must be of the "
+        "form {[Nodes], Type}, where Nodes is a list of node names and "
+        "Type is either 'disc' or 'ram'";
 error_description(clustering_only_disc_node) ->
     "You cannot cluster a node if it is the only disc node in its existing "
         " cluster. If new nodes joined while this node was offline, use "

@@ -17,7 +17,8 @@
 -module(rabbit_cli).
 -include("rabbit_cli.hrl").
 
--export([main/3, parse_arguments/4, rpc_call/4]).
+-export([main/3, start_distribution/0, start_distribution/1,
+         parse_arguments/4, rpc_call/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -31,6 +32,8 @@
 -spec(main/3 :: (fun (([string()], string()) -> parse_result()),
                      fun ((atom(), atom(), [any()], [any()]) -> any()),
                          atom()) -> no_return()).
+-spec(start_distribution/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(start_distribution/1 :: (string()) -> {'ok', pid()} | {'error', any()}).
 -spec(usage/1 :: (atom()) -> no_return()).
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
@@ -42,6 +45,8 @@
 %%----------------------------------------------------------------------------
 
 main(ParseFun, DoFun, UsageMod) ->
+    error_logger:tty(false),
+    start_distribution(),
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
         case ParseFun(init:get_plain_arguments(), NodeStr) of
@@ -99,6 +104,20 @@ main(ParseFun, DoFun, UsageMod) ->
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
+    end.
+
+start_distribution() ->
+    start_distribution(list_to_atom(
+                         rabbit_misc:format("rabbitmq-cli-~s", [os:getpid()]))).
+
+start_distribution(Name) ->
+    rabbit_nodes:ensure_epmd(),
+    net_kernel:start([Name, name_type()]).
+
+name_type() ->
+    case os:getenv("RABBITMQ_USE_LONGNAME") of
+        "true" -> longnames;
+        _      -> shortnames
     end.
 
 usage(Mod) ->
