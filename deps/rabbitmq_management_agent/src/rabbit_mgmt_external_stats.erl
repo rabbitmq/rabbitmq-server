@@ -36,7 +36,7 @@
                uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications, contexts,
                log_file, sasl_log_file, db_dir, config_files, net_ticktime,
-               persister_stats, enabled_plugins]).
+               cluster_links, enabled_plugins, persister_stats]).
 
 %%--------------------------------------------------------------------
 
@@ -186,6 +186,7 @@ i(db_dir,          _State) -> list_to_binary(rabbit_mnesia:dir());
 i(config_files,    _State) -> [list_to_binary(F) || F <- rabbit:config_files()];
 i(net_ticktime,    _State) -> net_kernel:get_net_ticktime();
 i(persister_stats,  State) -> persister_stats(State);
+i(cluster_links,   _State) -> cluster_links();
 i(enabled_plugins, _State) -> {ok, Dir} = application:get_env(
                                            rabbit, enabled_plugins_file),
                               rabbit_plugins:read_enabled(Dir);
@@ -235,6 +236,39 @@ persister_stats(#state{fhc_stats         = FHC,
 
 flatten_key({A, B}) ->
     list_to_atom(atom_to_list(A) ++ "_" ++ atom_to_list(B)).
+
+cluster_links() ->
+    {ok, Items} = net_kernel:nodes_info(),
+    [Link || Item <- Items,
+             Link <- [format_nodes_info(Item)], Link =/= undefined].
+
+format_nodes_info({Node, Info}) ->
+    case catch process_info(proplists:get_value(owner, Info), links) of
+        {links, Links} ->
+            case [Link || Link <- Links, is_port(Link)] of
+                [Port] ->
+                    {Node, format_nodes_info1(Port)};
+                _ ->
+                    undefined
+            end;
+        _ ->
+            undefined
+    end.
+
+format_nodes_info1(Port) ->
+    case {rabbit_net:socket_ends(Port, inbound),
+          rabbit_net:getstat(Port, [recv_oct, send_oct])} of
+        {{ok, {PeerAddr, PeerPort, SockAddr, SockPort}}, {ok, Stats}} ->
+            [{peer_addr, maybe_ntoab(PeerAddr)},
+             {peer_port, PeerPort},
+             {sock_addr, maybe_ntoab(SockAddr)},
+             {sock_port, SockPort} | Stats];
+        _ ->
+            []
+    end.
+
+maybe_ntoab(A) when is_tuple(A) -> list_to_binary(rabbit_misc:ntoab(A));
+maybe_ntoab(H)                  -> H.
 
 %%--------------------------------------------------------------------
 
