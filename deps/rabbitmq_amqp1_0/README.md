@@ -1,3 +1,6 @@
+**Repository [moved to GitHub](https://github.com/rabbitmq/rabbitmq-amqp1.0)**.
+This is a stale read-only repository.
+
 # AMQP 1.0 support for RabbitMQ
 
 This plugin adds AMQP 1.0 support to RabbitMQ.
