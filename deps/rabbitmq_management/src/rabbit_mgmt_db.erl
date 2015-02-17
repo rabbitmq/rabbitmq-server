@@ -937,7 +937,8 @@ vhost_stats(Ranges, Objs, State) ->
 node_stats(Ranges, Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(node_stats, State),
                        simple_stats_fun(Ranges, node_stats, State),
-                       detail_stats_fun(Ranges, ?NODE_DETAILS, State)]).
+                       detail_and_basic_stats_fun(
+                         node_node_stats, Ranges, ?NODE_DETAILS, State)]).
 
 merge_stats(Objs, Funs) ->
     [lists:foldl(fun (Fun, Props) -> combine(Fun(Props), Props) end, Obj, Funs)
@@ -972,6 +973,28 @@ detail_stats_fun(Ranges, {IdType, FineSpecs}, State) ->
             Id = id_lookup(IdType, Props),
             [detail_stats(Ranges, Name, AggregatedStatsType, IdFun(Id), State)
              || {Name, AggregatedStatsType, IdFun} <- FineSpecs]
+    end.
+
+%% This does not quite do the same as detail_stats_fun +
+%% basic_stats_fun; the basic part here assumes compound keys (like
+%% detail stats) but non-calculated (like basic stats). Currently the
+%% only user of that is node-node stats.
+%%
+%% We also assume that FineSpecs is single length here (at [1]).
+detail_and_basic_stats_fun(Type, Ranges, {IdType, FineSpecs},
+                           State = #state{tables = Tables}) ->
+    Table = orddict:fetch(Type, Tables),
+    F = detail_stats_fun(Ranges, {IdType, FineSpecs}, State),
+    fun (Props) ->
+            Id = id_lookup(IdType, Props),
+            BasicStatsRaw = ets:match(Table, {{{Id, '$1'}, stats}, '$2', '_'}),
+            BasicStatsDict = dict:from_list([{K, V} || [K,V] <- BasicStatsRaw]),
+            [{K, Items}] = F(Props), %% [1]
+            Items2 = [case dict:find(id_lookup(IdType, Item), BasicStatsDict) of
+                          {ok, BasicStats} -> BasicStats ++ Item;
+                          error            -> Item
+                      end || Item <- Items],
+            [{K, Items2}]
     end.
 
 read_simple_stats(Type, Id, #state{aggregated_stats = ETS}) ->
@@ -1012,7 +1035,7 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
                  _State) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}];
 format_detail_id(Node, _State) when is_atom(Node) ->
-    [{node, Node}].
+    [{name, Node}].
 
 format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
     lists:append(
