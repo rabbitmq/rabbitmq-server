@@ -1,3 +1,6 @@
+**Repository [moved to GitHub](https://github.com/rabbitmq/rabbitmq-stomp)**.
+This is a stale read-only repository.
+
 # RabbitMQ STOMP adapter
 
 The STOMP adapter is included in the RabbitMQ distribution.  To enable
