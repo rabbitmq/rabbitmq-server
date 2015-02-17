@@ -1,3 +1,6 @@
+**Repository [moved to GitHub](https://github.com/rabbitmq/rabbitmq-mqtt)**.
+This is a stale read-only repository.
+
 # RabbitMQ MQTT adapter
 
 The MQTT adapter is included in the RabbitMQ distribution.  To enable
