@@ -1,6 +1,3 @@
-**Repository [moved to GitHub](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange)**.
-This is a stale read-only repository.
-
 # RabbitMQ Consistent Hash Exchange Type
 
 This plugin adds a consistent-hash exchange type to RabbitMQ.
