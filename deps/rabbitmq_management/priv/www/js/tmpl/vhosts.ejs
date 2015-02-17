@@ -64,17 +64,17 @@
    <td class="r"><%= fmt_num_thousands(vhost.messages) %></td>
 <% } %>
 <% if (show_column('vhosts', 'from_client')) { %>
-    <td><%= fmt_rate_bytes(vhost, 'recv_oct') %></td>
+    <td><%= fmt_detail_rate_bytes(vhost, 'recv_oct') %></td>
 <% } %>
 <% if (show_column('vhosts', 'to_client')) { %>
-    <td><%= fmt_rate_bytes(vhost, 'send_oct') %></td>
+    <td><%= fmt_detail_rate_bytes(vhost, 'send_oct') %></td>
 <% } %>
 <% if (rates_mode != 'none') { %>
   <% if (show_column('vhosts', 'rate-publish')) { %>
-    <td class="r"><%= fmt_rate(vhost.message_stats, 'publish') %></td>
+    <td class="r"><%= fmt_detail_rate(vhost.message_stats, 'publish') %></td>
   <% } %>
   <% if (show_column('vhosts', 'rate-deliver')) { %>
-    <td class="r"><%= fmt_rate(vhost.message_stats, 'deliver_get') %></td>
+    <td class="r"><%= fmt_detail_rate(vhost.message_stats, 'deliver_get') %></td>
   <% } %>
 <% } %>
        </tr>

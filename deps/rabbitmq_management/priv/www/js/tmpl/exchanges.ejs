@@ -64,10 +64,10 @@
 <% } %>
 <% if (rates_mode != 'none') { %>
 <% if (show_column('exchanges', 'rate-in')) { %>
-   <td class="r"><%= fmt_rate(exchange.message_stats, 'publish_in') %></td>
+   <td class="r"><%= fmt_detail_rate(exchange.message_stats, 'publish_in') %></td>
 <% } %>
 <% if (show_column('exchanges', 'rate-out')) { %>
-   <td class="r"><%= fmt_rate(exchange.message_stats, 'publish_out') %></td>
+   <td class="r"><%= fmt_detail_rate(exchange.message_stats, 'publish_out') %></td>
 <% } %>
 <% } %>
   </tr>

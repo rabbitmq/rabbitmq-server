@@ -20,7 +20,8 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-max-length':              {'short': 'Lim', 'type': 'int'},
                   'x-max-length-bytes':        {'short': 'Lim B', 'type': 'int'},
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
-                  'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'}};
+                  'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'},
+                  'x-max-priority':            {'short': 'Pri', 'type': 'int'}};
 
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
@@ -137,6 +138,7 @@ var COLUMNS =
 // All these are to do with hiding UI elements if
 var rates_mode;                  // ...there are no fine stats
 var user_administrator;          // ...user is not an admin
+var user_policymaker;            // ...user is not a policymaker
 var user_monitor;                // ...user cannot monitor
 var nodes_interesting;           // ...we are not in a cluster
 var vhosts_interesting;          // ...there is only one vhost
@@ -164,6 +166,7 @@ function setup_global_vars() {
     rates_mode = overview.rates_mode;
     user_tags = expand_user_tags(user.tags.split(","));
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
+    user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
     user_monitor = jQuery.inArray("monitoring", user_tags) != -1;
     replace_content('login-details',
                     '<p>User: <b>' + fmt_escape_html(user.name) + '</b></p>' +
