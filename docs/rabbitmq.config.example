@@ -406,7 +406,8 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ MQTT Adapter
  %%
- %% See http://hg.rabbitmq.com/rabbitmq-mqtt/file/stable/README.md for details
+ %% See https://github.com/rabbitmq/rabbitmq-mqtt/blob/stable/README.md
+ %% for details
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_mqtt,
@@ -460,7 +461,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ AMQP 1.0 Support
  %%
- %% See http://hg.rabbitmq.com/rabbitmq-amqp1.0/file/default/README.md
+ %% See https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md
  %% for details
  %% ----------------------------------------------------------------------------
 
