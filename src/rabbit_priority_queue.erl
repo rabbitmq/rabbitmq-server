@@ -20,6 +20,8 @@
 -include_lib("rabbit_framing.hrl").
 -behaviour(rabbit_backing_queue).
 
+%% enabled unconditionally. Disabling priority queueing after
+%% it has been enabled is dangerous.
 -rabbit_boot_step({?MODULE,
                    [{description, "enable priority queue"},
                     {mfa,         {?MODULE, enable, []}},
@@ -48,6 +50,23 @@
         {Res, BQS1} = BQ:F, {Res, State#passthrough{bqs = BQS1}}).
 -define(passthrough3(F),
         {Res1, Res2, BQS1} = BQ:F, {Res1, Res2, State#passthrough{bqs = BQS1}}).
+
+%% This module adds suport for priority queues.
+%%
+%% Priority queues have one backing queue per priority. Backing queue functions
+%% then produce a list of results for each BQ and fold over them, sorting
+%% by priority.
+%%
+%%For queues that do not
+%% have priorities enabled, the functions in this module delegate to
+%% their "regular" backing queue module counterparts. See the `passthrough`
+%% record and passthrough{1,2,3} macros.
+%%
+%% Delivery to consumers happens by first "running" the queue with
+%% the highest priority until there are no more messages to deliver,
+%% then the next one, and so on. This offers good prioritisation
+%% but may result in lower priority messages not being delivered
+%% when there's a high ingress rate of messages with higher priority.
 
 enable() ->
     {ok, RealBQ} = application:get_env(rabbit, backing_queue_module),
@@ -495,6 +514,7 @@ bq_store(P, BQS, BQSs) ->
               _ -> BQSN
           end} || {PN, BQSN} <- BQSs].
 
+%%
 a(State = #state{bqss = BQSs}) ->
     Ps = [P || {P, _} <- BQSs],
     case lists:reverse(lists:usort(Ps)) of
