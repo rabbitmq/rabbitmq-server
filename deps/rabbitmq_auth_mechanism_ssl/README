@@ -1,3 +1,6 @@
+/!\ Repository moved to GitHub: https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl
+    This is a stale read-only repository.
+
 Authenticates the user, obtaining the username from the client's
 SSL certificate. The user's password is not checked.
 
