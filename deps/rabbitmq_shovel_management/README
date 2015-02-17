@@ -1,3 +1,6 @@
+/!\ Repository moved to GitHub: https://github.com/rabbitmq/rabbitmq-shovel-management
+    This is a stale read-only repository.
+
 Adds information on shovel status to the management plugin. Build it
 like any other plugin.
 
