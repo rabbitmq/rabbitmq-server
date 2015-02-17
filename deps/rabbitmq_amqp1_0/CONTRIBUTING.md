@@ -3,7 +3,7 @@
 RabbitMQ projects use pull requests to discuss, collaborate on and accept code contributions.
 Pull requests is the primary place of discussing code changes.
 
-## The Process
+## How to Contribute
 
 The process is fairly standard:
 
@@ -24,9 +24,10 @@ of their opinion on [RabbitMQ mailing list](https://groups.google.com/forum/#!fo
 
 In one line: don't be a dick.
 
-Be respectful to the maintainers and other contributors. Open source contributors
-put long hours into developing projects and doing user support that are then
-available for free. We believe this deserves some respect.
+Be respectful to the maintainers and other contributors. Open source
+contributors put long hours into developing projects and doing user
+support. Those projects and support then available for free. We
+believe this deserves some respect.
 
 Be respectful to people of all races, genders, religious beliefs and
 political views. Regardless of how brilliant a pull request is
@@ -45,6 +46,6 @@ you submit your pull request. This will make it much easier (in some cases, poss
 for the RabbitMQ team at Pivotal to merge your contribution.
 
 
-## Getting Help
+## Where to Ask Questions
 
 If something isn't clear, feel free to ask on our [mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
