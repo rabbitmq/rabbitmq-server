@@ -1,6 +1,3 @@
-/!\ Repository moved to GitHub: https://github.com/rabbitmq/rabbitmq-tracing
-    This is a stale read-only repository.
-
 An opinionated tracing plugin for RabbitMQ management. Build it like
 any other plugin. After installation you should see a "Tracing" tab in
 the management UI. Hopefully use is obvious.
