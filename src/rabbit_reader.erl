@@ -1220,9 +1220,9 @@ ssl_info(F, #v1{sock = Sock}) ->
 
 cert_info(F, #v1{sock = Sock}) ->
     case rabbit_net:peercert(Sock) of
-        nossl                -> '';
-        {error, no_peercert} -> '';
-        {ok, Cert}           -> list_to_binary(F(Cert))
+        nossl      -> '';
+        {error, _} -> '';
+        {ok, Cert} -> list_to_binary(F(Cert))
     end.
 
 maybe_emit_stats(State) ->
