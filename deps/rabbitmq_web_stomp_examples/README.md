@@ -1,3 +1,5 @@
+**Repository [moved to GitHub](https://github.com/rabbitmq/rabbitmq-web-stomp-examples)**.
+This is a stale read-only repository.
 
 RabbitMQ-Web-Stomp-Examples plugin
 ==================================
