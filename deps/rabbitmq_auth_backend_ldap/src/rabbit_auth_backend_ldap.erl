@@ -341,18 +341,25 @@ do_login(Username, PrebindUserDN, Password, LDAP) ->
                  auth_backend = ?MODULE,
                  impl         = #impl{user_dn  = UserDN,
                                       password = Password}},
-    TagRes = [begin
-                  ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
-                  R = evaluate(Q, [{username, Username},
-                                   {user_dn,  UserDN}], User, LDAP),
-                  ?L1("DECISION: does ~s have tag ~s? ~p",
-                      [Username, Tag, R]),
-                  {Tag, R}
-              end || {Tag, Q} <- env(tag_queries)],
+    DTQ = fun (LDAPn) -> do_tag_queries(Username, UserDN, User, LDAPn) end,
+    TagRes = case env(other_bind) of
+                 as_user -> DTQ(LDAP);
+                 _       -> with_ldap(creds(User), DTQ)
+             end,
     case [E || {_, E = {error, _}} <- TagRes] of
         []      -> {ok, User#user{tags = [Tag || {Tag, true} <- TagRes]}};
         [E | _] -> E
     end.
+
+do_tag_queries(Username, UserDN, User, LDAP) ->
+    [begin
+         ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
+         R = evaluate(Q, [{username, Username},
+                          {user_dn,  UserDN}], User, LDAP),
+         ?L1("DECISION: does ~s have tag ~s? ~p",
+             [Username, Tag, R]),
+         {Tag, R}
+     end || {Tag, Q} <- env(tag_queries)].
 
 dn_lookup_when() -> case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
                         {none, _}       -> never;
