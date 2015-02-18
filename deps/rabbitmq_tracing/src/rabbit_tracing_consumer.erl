@@ -24,7 +24,7 @@
 
 -record(state, {conn, ch, vhost, queue, file, filename, format}).
 -record(log_record, {timestamp, type, exchange, queue, node, connection,
-                     vhost, username, channel, routing_keys,
+                     vhost, username, channel, routing_keys, routed_queues,
                      properties, payload}).
 
 -define(X, <<"amq.rabbitmq.trace">>).
@@ -122,10 +122,13 @@ code_change(_, State, _) -> {ok, State}.
 delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                         #amqp_msg{props   = #'P_basic'{headers = H},
                                   payload = Payload}}) ->
-    {Type, Q} = case Key of
-                    <<"publish.", _Rest/binary>> -> {published, none};
-                    <<"deliver.", Rest/binary>>  -> {received,  Rest}
-                end,
+    {Type, Q, RQs} = case Key of
+                         <<"publish.", _Rest/binary>> ->
+                             {array, Qs} = table_lookup(H, <<"routed_queues">>),
+                             {published, none, [Q || {_, Q} <- Qs]};
+                         <<"deliver.", Rest/binary>> ->
+                             {received,  Rest, none}
+                     end,
     {longstr, Node}   = table_lookup(H, <<"node">>),
     {longstr, X}      = table_lookup(H, <<"exchange_name">>),
     {array, Keys}     = table_lookup(H, <<"routing_keys">>),
@@ -144,6 +147,7 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                 username     = User,
                 channel      = Chan,
                 routing_keys = [K || {_, K} <- Keys],
+                routed_queues= RQs,
                 properties   = Props,
                 payload      = Payload}.
 
@@ -165,6 +169,10 @@ log(text, P, Record) ->
         Q    -> P("Queue:        ~s~n", [Q])
     end,
     P("Routing keys: ~p~n", [Record#log_record.routing_keys]),
+    case Record#log_record.routed_queues of
+        none -> ok;
+        RQs  -> P("Routed queues: ~p~n",[Record#log_record.routed_queues])
+    end,
     P("Properties:   ~p~n", [Record#log_record.properties]),
     P("Payload: ~n~s~n",    [Record#log_record.payload]);
 
@@ -179,6 +187,7 @@ log(json, P, Record) ->
                   {channel,      Record#log_record.channel},
                   {exchange,     Record#log_record.exchange},
                   {queue,        Record#log_record.queue},
+                  {routed_queues, Record#log_record.routed_queues},
                   {routing_keys, Record#log_record.routing_keys},
                   {properties,   rabbit_mgmt_format:amqp_table(
                                    Record#log_record.properties)},
