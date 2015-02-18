@@ -1,6 +1,3 @@
-**Repository [moved to GitHub](https://github.com/rabbitmq/rabbitmq-sharding)**.
-This is a stale read-only repository.
-
 # RabbitMQ Sharding Plugin #
 
 This plugin introduces the concept of sharded queues for
