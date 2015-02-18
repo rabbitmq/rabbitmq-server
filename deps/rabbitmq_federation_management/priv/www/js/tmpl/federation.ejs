@@ -74,7 +74,7 @@
     </td>
     <td class="r">
       <% if (link.local_channel) { %>
-        <%= fmt_rate(link.local_channel.message_stats, 'confirm') %>
+        <%= fmt_detail_rate(link.local_channel.message_stats, 'confirm') %>
       <% } %>
     </td>
     <td><%= link.timestamp %></td>
