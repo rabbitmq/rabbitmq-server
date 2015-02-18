@@ -238,11 +238,11 @@ function pick_abs(fmt, obj, name, mode) {
 }
 
 function fmt_detail_rate(obj, name, mode) {
-    return pick_rate(fmt_rate, name, mode);
+    return pick_rate(fmt_rate, obj, name, mode);
 }
 
 function fmt_detail_rate_bytes(obj, name, mode) {
-    return pick_rate(fmt_rate_bytes, name, mode);
+    return pick_rate(fmt_rate_bytes, obj, name, mode);
 }
 
 // ---------------------------------------------------------------------
