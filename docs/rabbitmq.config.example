@@ -108,7 +108,7 @@
 
    %% This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
    %% STOMP ssl_cert_login configurations. See the rabbitmq_stomp
-   %% configuration section later in this fail and the README in
+   %% configuration section later in this file and the README in
    %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
    %% details.
    %%
