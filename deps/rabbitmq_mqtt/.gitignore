@@ -1,0 +1,14 @@
+*~
+.sw?
+.*.sw?
+*.beam
+erl_crash.dump
+/build/
+/cover/
+/debug/
+/dist/
+/ebin/
+/tags/
+/test/src*.class
+/test/test_client
+/tmp/
