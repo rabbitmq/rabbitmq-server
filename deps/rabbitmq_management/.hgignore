@@ -1,8 +1,0 @@
-~$
-\.beam$
-^build/
-^dist/
-^cover/
-^erl_crash.dump$
-^priv/www-cli/rabbitmqadmin$
-^ebin/rabbitmq_management\.app$
