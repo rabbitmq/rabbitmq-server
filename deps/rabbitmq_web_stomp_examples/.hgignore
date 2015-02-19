@@ -1,7 +1,0 @@
-~$
-\.beam$
-^build/
-^dist/
-^cover/
-^erl_crash.dump$
-^ebin/rabbitmq_web_stomp_examples.app$
