@@ -547,9 +547,11 @@ add_maybe_infinity(A, B)        -> A + B.
 partition_acktags(AckTags) -> partition_acktags(AckTags, orddict:new()).
 
 partition_acktags([], Partitioned) ->
-    Partitioned;
+    orddict:map(fun (_P, RevAckTags) ->
+                        lists:reverse(RevAckTags)
+                end, Partitioned);
 partition_acktags([{P, AckTag} | Rest], Partitioned) ->
-    partition_acktags(Rest, orddict:append(P, AckTag, Partitioned)).
+    partition_acktags(Rest, rabbit_misc:orddict_cons(P, AckTag, Partitioned)).
 
 priority_on_acktags(P, AckTags) ->
     [case Tag of
