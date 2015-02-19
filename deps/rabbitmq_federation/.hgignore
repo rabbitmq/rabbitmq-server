@@ -1,8 +1,0 @@
-syntax: regexp
-
-^build/
-^cover/
-^dist/
-.*\.beam
-^ebin/rabbitmq_federation.app
-^tmp/
