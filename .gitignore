@@ -8,6 +8,7 @@
 *.tmp
 \#*
 .#*
+TAGS
 erl_crash.dump
 /build/
 /cover/
