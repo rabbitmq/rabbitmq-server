@@ -31,15 +31,21 @@ function data_rates(id, stats) {
 
 function rates_chart_or_text(id, stats, items, fmt, axis_fmt, chart_rates,
                              heading, heading_help) {
-    var mode = get_pref('rate-mode-' + id);
-    var range = get_pref('chart-range');
     var prefix = chart_h3(id, heading, heading_help);
-    var res;
 
+    return prefix + rates_chart_or_text_no_heading(
+            id, id, stats, items, fmt, axis_fmt, chart_rates);
+}
+
+function rates_chart_or_text_no_heading(type_id, id, stats, items,
+                                        fmt, axis_fmt, chart_rates) {
+    var mode = get_pref('rate-mode-' + type_id);
+    var range = get_pref('chart-range');
+    var res;
     if (keys(stats).length > 0) {
         if (mode == 'chart') {
             res = rates_chart(
-                id, id, items, stats, fmt, axis_fmt, 'full', chart_rates);
+                type_id, id, items, stats, fmt, axis_fmt, 'full', chart_rates);
         }
         else {
             res = rates_text(items, stats, mode, fmt, chart_rates);
@@ -49,7 +55,7 @@ function rates_chart_or_text(id, stats, items, fmt, axis_fmt, chart_rates,
     else {
         res = '<p>Currently idle</p>';
     }
-    return prefix + res;
+    return res;
 }
 
 function chart_h3(id, heading, heading_help) {

@@ -173,9 +173,53 @@
       fmt_ms, fmt_ms, false, 'I/O average time per operation') %>
 </div>
 </div>
+
+<div class="section-hidden">
+<h2>Cluster links</h2>
+<div class="hider">
+<% if (node.cluster_links.length > 0) { %>
+<table class="list">
+  <tr>
+    <th>Remote node</th>
+    <th>Local address</th>
+    <th>Local port</th>
+    <th>Remote address</th>
+    <th>Remote port</th>
+    <th class="plain">
+      <%= chart_h3('cluster-link-data-rates', 'Data rates') %>
+    </th>
+  </tr>
+  <%
+   for (var i = 0; i < node.cluster_links.length; i++) {
+     var link = node.cluster_links[i];
+  %>
+   <tr<%= alt_rows(i)%>>
+     <td><%= link_node(link.name) %></td>
+     <td><%= fmt_string(link.sock_addr) %></td>
+     <td><%= fmt_string(link.sock_port) %></td>
+     <td><%= fmt_string(link.peer_addr) %></td>
+     <td><%= fmt_string(link.peer_port) %></td>
+     <td class="plain">
+       <%= rates_chart_or_text_no_heading(
+           'cluster-link-data-rates', 'cluster-link-data-rates' + link.name,
+           link.stats,
+           [['Recv', 'recv_bytes'],
+            ['Send', 'send_bytes']],
+           fmt_rate_bytes, fmt_rate_bytes_axis, true) %>
+     </td>
+   </tr>
+<% } %>
+</table>
+<% } else { %>
+  <p>... no cluster links ...</p>
+<% } %>
+</div>
+</div>
+
 <% } %>
 
 </div>
+
 <!--
   The next two need to be non-updatable or we will wipe the memory details
   as soon as we have drawn it.
