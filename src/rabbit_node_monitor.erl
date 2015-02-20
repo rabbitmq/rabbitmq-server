@@ -222,11 +222,7 @@ pause_partition_guard() ->
                 pause_minority ->
                     pause_minority_guard([]);
                 {pause_if_all_down, PreferredNodes, _} ->
-                    case verify_pause_if_all_down_list(PreferredNodes) of
-                        []    -> put(pause_partition_guard, not_pause_mode),
-                                 ok;
-                        Nodes -> pause_if_all_down_guard(Nodes, [])
-                    end;
+                    pause_if_all_down_guard(PreferredNodes, []);
                 _ ->
                     put(pause_partition_guard, not_pause_mode),
                     ok
@@ -563,13 +559,10 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
             end,
             State;
         {ok, {pause_if_all_down, PreferredNodes, HowToRecover}} ->
-            case verify_pause_if_all_down_list(PreferredNodes) of
-                []    -> ok;
-                Nodes -> case in_preferred_partition(Nodes) of
-                             true  -> ok;
-                             false -> await_cluster_recovery(
-                                        fun in_preferred_partition/0)
-                         end
+            case in_preferred_partition(PreferredNodes) of
+                true  -> ok;
+                false -> await_cluster_recovery(
+                           fun in_preferred_partition/0)
             end,
             case HowToRecover of
                 autoheal -> State#state{autoheal =
@@ -711,26 +704,6 @@ disconnect(Node) ->
     timer:sleep(1000),
     application:unset_env(kernel, dist_auto_connect),
     ok.
-
-verify_pause_if_all_down_list(Nodes) when is_list(Nodes) ->
-    case [N || N <- Nodes, is_atom(N)] of
-        Nodes ->
-            ClusteredNodes = rabbit_mnesia:cluster_nodes(all),
-            RealNodes = [N || N <- Nodes, lists:member(N, ClusteredNodes)],
-            case RealNodes of
-                [] -> rabbit_log:warning("pause_if_all_down: listed nodes "
-                                         "are not part of the cluster~n");
-                _  -> ok
-            end,
-            RealNodes;
-        _ ->
-            rabbit_log:error("pause_if_all_down: invalid nodes list ~p~n",
-              Nodes),
-            []
-    end;
-verify_pause_if_all_down_list(Nodes) ->
-    rabbit_log:error("pause_if_all_down: invalid nodes list ~p~n", Nodes),
-    [].
 
 %%--------------------------------------------------------------------
 
