@@ -26,7 +26,7 @@ In one line: don't be a dick.
 
 Be respectful to the maintainers and other contributors. Open source
 contributors put long hours into developing projects and doing user
-support. Those projects and support then available for free. We
+support. Those projects and user support are available for free. We
 believe this deserves some respect.
 
 Be respectful to people of all races, genders, religious beliefs and
