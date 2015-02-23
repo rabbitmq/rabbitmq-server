@@ -335,9 +335,9 @@ start_it(StartFun) ->
                     end
                 catch
                     throw:{could_not_start, _App, _Reason}=Err ->
-                        boot_error(Err, not_available);
+                        boot_error(Err, wrapper, not_available);
                     _:Reason ->
-                        boot_error(Reason, erlang:get_stacktrace())
+                        boot_error(Reason, wrapper, erlang:get_stacktrace())
                 after
                     unlink(Marker),
                     Marker ! stop,
@@ -539,10 +539,9 @@ run_step(StepName, Attributes, AttributeName) ->
                  apply(M,F,A)
              of
                  ok              -> ok;
-                 {error, Reason} -> boot_error({boot_step, StepName, Reason},
-                                               not_available)
+                 {error, Reason} -> boot_error(Reason, StepName, not_available)
              catch
-                 _:Reason -> boot_error({boot_step, StepName, Reason},
+                 _:Reason -> boot_error(Reason, StepName,
                                         erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             ok
@@ -607,9 +606,10 @@ sort_boot_steps(UnsortedSteps) ->
     end.
 
 -ifdef(use_specs).
--spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
+-spec(boot_error/3 :: (term(), atom(), not_available | [tuple()])
+                      -> no_return()).
 -endif.
-boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Step, _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     {Err, Nodes} =
         case AllNodes -- [node()] of
@@ -622,10 +622,11 @@ boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
         end,
     basic_boot_error(Term,
                      Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
-boot_error(Reason, Stacktrace) ->
-    Fmt = "Error description:~n   ~p~n~n" ++
+boot_error(Reason, Step, Stacktrace) ->
+    Fmt = "Boot step:~n   ~p~n~n"
+        "Error description:~n   ~p~n~n"
         "Log files (may contain more information):~n   ~s~n   ~s~n~n",
-    Args = [Reason, log_location(kernel), log_location(sasl)],
+    Args = [Step, Reason, log_location(kernel), log_location(sasl)],
     boot_error(Reason, Fmt, Args, Stacktrace).
 
 -ifdef(use_specs).
