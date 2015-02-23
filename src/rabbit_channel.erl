@@ -1736,7 +1736,7 @@ send_nacks(_, State) ->
 send_confirms(State = #ch{tx = none, confirmed = []}) ->
     State;
 send_confirms(State = #ch{tx = none, confirmed = C}) ->
-    case rabbit_node_monitor:pause_minority_guard() of
+    case rabbit_node_monitor:pause_partition_guard() of
         ok      -> MsgSeqNos =
                        lists:foldl(
                          fun ({MsgSeqNo, XName}, MSNs) ->
@@ -1748,7 +1748,7 @@ send_confirms(State = #ch{tx = none, confirmed = C}) ->
         pausing -> State
     end;
 send_confirms(State) ->
-    case rabbit_node_monitor:pause_minority_guard() of
+    case rabbit_node_monitor:pause_partition_guard() of
         ok      -> maybe_complete_tx(State);
         pausing -> State
     end.
