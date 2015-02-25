@@ -5,7 +5,7 @@ COVER:=false
 WITH_BROKER_TEST_COMMANDS:=rabbit_test_runner:run_in_broker(\"$(PACKAGE_DIR)/test/ebin\",\"$(FILTER)\")
 WITH_BROKER_TEST_CONFIG:=$(PACKAGE_DIR)/etc/rabbit-test
 STANDALONE_TEST_COMMANDS:=rabbit_test_runner:run_multi(\"$(UMBRELLA_BASE_DIR)/rabbitmq-server\",\"$(PACKAGE_DIR)/test/ebin\",\"$(FILTER)\",$(COVER),\"/tmp/rabbitmq-multi-node/plugins\")
-WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/src/rabbitmqadmin-test.py
+WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/src/rabbitmqadmin-test-wrapper.sh
 
 CONSTRUCT_APP_PREREQS:=$(shell find $(PACKAGE_DIR)/priv -type f) $(PACKAGE_DIR)/bin/rabbitmqadmin
 define construct_app_commands
