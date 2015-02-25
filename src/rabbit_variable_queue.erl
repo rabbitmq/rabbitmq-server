@@ -877,6 +877,11 @@ info(message_bytes_ram, #vqstate{ram_bytes = RamBytes}) ->
     RamBytes;
 info(message_bytes_persistent, #vqstate{persistent_bytes = PersistentBytes}) ->
     PersistentBytes;
+info(head_msg_timestamp, #vqstate{
+          q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+          ram_pending_ack  = RPA,
+          disk_pending_ack = DPA }) ->
+          head_msg_timestamp(Q3, Q4, RPA, DPA);
 info(disk_reads, #vqstate{disk_read_count = Count}) ->
     Count;
 info(disk_writes, #vqstate{disk_write_count = Count}) ->
@@ -901,7 +906,6 @@ info(backing_queue_status, #vqstate {
       {len                 , Len},
       {target_ram_count    , TargetRamCount},
       {next_seq_id         , NextSeqId},
-      {head_msg_timestamp  , head_msg_timestamp(Q3, Q4, RPA, DPA)},
       {avg_ingress_rate    , AvgIngressRate},
       {avg_egress_rate     , AvgEgressRate},
       {avg_ack_ingress_rate, AvgAckIngressRate},
