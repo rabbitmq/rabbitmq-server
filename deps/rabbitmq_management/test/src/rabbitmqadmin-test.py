@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import unittest
 import os
@@ -212,21 +212,24 @@ tracing: False
         args.extend(args0)
         self.assertEqual(expected, [l.split('\t') for l in self.admin(args)[0].splitlines()])
 
-    def admin(self, args, stdin=None):
-        return run('../../../bin/rabbitmqadmin', args, stdin)
+    def admin(self, args0, stdin=None):
+        args = ['python{0}'.format(sys.version_info[0]),
+                norm('../../../bin/rabbitmqadmin')]
+        args.extend(args0)
+        return run(args, stdin)
 
     def ctl(self, args0, stdin=None):
-        args = ['-n', 'rabbit-test']
+        args = [norm('../../../../rabbitmq-server/scripts/rabbitmqctl'), '-n', 'rabbit-test']
         args.extend(args0)
-        (stdout, ret) = run('../../../../rabbitmq-server/scripts/rabbitmqctl', args, stdin)
+        (stdout, ret) = run(args, stdin)
         if ret != 0:
             self.fail(stdout)
 
-def run(cmd, args, stdin):
-    path = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], cmd))
-    cmdline = [path]
-    cmdline.extend(args)
-    proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def norm(cmd):
+    return os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], cmd))
+
+def run(args, stdin):
+    proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (stdout, stderr) = proc.communicate(stdin)
     returncode = proc.returncode
     res = stdout.decode('utf-8') + stderr.decode('utf-8')
