@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import unittest
 import os
@@ -156,12 +156,12 @@ tracing: False
         self.run_success(['declare', 'queue', 'name=test'])
         self.run_success(['publish', 'routing_key=test', 'payload=test_1'])
         self.run_success(['publish', 'routing_key=test', 'payload=test_2'])
-        self.run_success(['publish', 'routing_key=test'], stdin='test_3')
+        self.run_success(['publish', 'routing_key=test'], stdin=b'test_3')
         self.assert_table([exp_msg('test', 2, False, 'test_1')], ['get', 'queue=test', 'requeue=false'])
         self.assert_table([exp_msg('test', 1, False, 'test_2')], ['get', 'queue=test', 'requeue=true'])
         self.assert_table([exp_msg('test', 1, True,  'test_2')], ['get', 'queue=test', 'requeue=false'])
         self.assert_table([exp_msg('test', 0, False, 'test_3')], ['get', 'queue=test', 'requeue=false'])
-        self.run_success(['publish', 'routing_key=test'], stdin='test_4')
+        self.run_success(['publish', 'routing_key=test'], stdin=b'test_4')
         filename = '/tmp/rabbitmq-test/get.txt'
         self.run_success(['get', 'queue=test', 'requeue=false', 'payload_file=' + filename])
         with open(filename) as f:
@@ -229,7 +229,8 @@ def run(cmd, args, stdin):
     proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (stdout, stderr) = proc.communicate(stdin)
     returncode = proc.returncode
-    return (stdout + stderr, returncode)
+    res = stdout.decode('utf-8') + stderr.decode('utf-8')
+    return (res, returncode)
 
 def l(thing):
     return ['list', thing, 'name']
@@ -239,7 +240,7 @@ def exp_msg(key, count, redelivered, payload):
     return [key, '', str(count), payload, str(len(payload)), 'string', '', str(redelivered)]
 
 if __name__ == '__main__':
-    print "\nrabbitmqadmin tests\n===================\n"
+    print("\nrabbitmqadmin tests\n===================\n")
     suite = unittest.TestLoader().loadTestsFromTestCase(TestRabbitMQAdmin)
     results = unittest.TextTestRunner(verbosity=2).run(suite)
     if not results.wasSuccessful():
