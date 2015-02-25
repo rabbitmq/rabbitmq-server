@@ -266,7 +266,6 @@
           q3,
           q4,
           next_seq_id,
-          head_msg_timestamp, %% copy of ts prop. of first msg, if present
           ram_pending_ack,    %% msgs using store, still in RAM
           disk_pending_ack,   %% msgs in store, paged out
           qi_pending_ack,     %% msgs using qi, *can't* be paged out
