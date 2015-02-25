@@ -52,7 +52,7 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo Please either set ERLANG_HOME to point to your Erlang installation or place the
     echo RabbitMQ server distribution in the Erlang lib folder.
     echo.
-    exit /B
+    exit /B 1
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
