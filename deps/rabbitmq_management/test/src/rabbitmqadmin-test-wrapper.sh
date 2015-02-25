@@ -12,13 +12,14 @@ if [ $THREE != 3 ] ; then
     exit 1
 fi
 
+echo
 echo ----------------------
 echo Testing under Python 2
 echo ----------------------
 
-# TODO make this pass!
-#python2 $(dirname $0)/rabbitmqadmin-test.py
+python2 $(dirname $0)/rabbitmqadmin-test.py
 
+echo
 echo ----------------------
 echo Testing under Python 3
 echo ----------------------

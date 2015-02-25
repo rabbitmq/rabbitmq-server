@@ -20,15 +20,27 @@ if sys.version_info[0] < 2 or (sys.version_info[0] == 2 and sys.version_info[1] 
     print("Sorry, rabbitmqadmin requires at least Python 2.6.")
     sys.exit(1)
 
-from configparser import ConfigParser, NoSectionError
 from optparse import OptionParser, TitledHelpFormatter
-import http.client as httplib
 import urllib
-import urllib.parse as urlparse
 import base64
 import json
 import os
 import socket
+
+if sys.version_info[0] == 2:
+    from ConfigParser import ConfigParser, NoSectionError
+    import httplib
+    import urlparse
+    from urllib import quote_plus
+    def b64(s):
+        return base64.b64encode(s)
+else:
+    from configparser import ConfigParser, NoSectionError
+    import http.client as httplib
+    import urllib.parse as urlparse
+    from urllib.parse import quote_plus
+    def b64(s):
+        return base64.b64encode(s.encode('utf-8')).decode('utf-8')
 
 VERSION = '%%VSN%%'
 
@@ -396,8 +408,7 @@ def die(s):
     exit(1)
 
 def maybe_utf8(s, stream):
-    return s
-    if stream.isatty():
+    if sys.version_info[0] == 3 or stream.isatty():
         # It will have an encoding, which Python will respect
         return s
     else:
@@ -432,8 +443,7 @@ class Management:
                                           self.options.port)
         auth = (self.options.username + ":" + self.options.password)
 
-        headers = {"Authorization":
-                       "Basic " + base64.b64encode(auth.encode('utf-8')).decode('utf-8')}
+        headers = {"Authorization": "Basic " + b64(auth)}
         if body != "":
             headers["Content-Type"] = "application/json"
         try:
@@ -491,7 +501,7 @@ class Management:
         (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
         if not 'payload' in upload:
             data = sys.stdin.read()
-            upload['payload'] = base64.b64encode(data.encode('utf-8')).decode('utf-8')
+            upload['payload'] = b64(data)
             upload['payload_encoding'] = 'base64'
         resp = json.loads(self.post(uri, json.dumps(upload)))
         if resp['routed']:
@@ -547,7 +557,7 @@ class Management:
         uri = "/%s" % obj_type
         query = []
         if obj_info['vhost'] and self.options.vhost:
-            uri += "/%s" % urllib.parse.quote_plus(self.options.vhost)
+            uri += "/%s" % quote_plus(self.options.vhost)
         cols = self.args[1:]
         if cols == [] and 'cols' in obj_info and self.use_cols():
             cols = obj_info['cols']
@@ -622,7 +632,7 @@ class Management:
         for k in upload:
             v = upload[k]
             if v and isinstance(v, (str, bytes)):
-                uri_args[k] = urllib.parse.quote_plus(v)
+                uri_args[k] = quote_plus(v)
                 if k == 'destination_type':
                     uri_args['destination_char'] = v[0]
         uri = uri_template.format(**uri_args)
