@@ -334,10 +334,14 @@ start_it(StartFun) ->
                         false -> StartFun()
                     end
                 catch
-                    throw:{could_not_start, _App, _Reason}=Err ->
-                        boot_error(Err, not_available);
+                    throw:{could_not_start, rabbit,
+                           boot_failure_already_logged} ->
+                        throw(boot_failure_already_logged),
+                        ok;
+                    throw:{could_not_start, _App, _Reason} = Err ->
+                        boot_error(Err, wrapper, not_available);
                     _:Reason ->
-                        boot_error(Reason, erlang:get_stacktrace())
+                        boot_error(Reason, wrapper, erlang:get_stacktrace())
                 after
                     unlink(Marker),
                     Marker ! stop,
@@ -387,7 +391,7 @@ stop_apps(Apps) ->
     ok.
 
 handle_app_error(Term) ->
-    fun(App, {bad_return, {_MFA, {'EXIT', {ExitReason, _}}}}) ->
+    fun(App, {bad_return, {_MFA, {'EXIT', ExitReason}}}) ->
             throw({Term, App, ExitReason});
        (App, Reason) ->
             throw({Term, App, Reason})
@@ -539,10 +543,9 @@ run_step(StepName, Attributes, AttributeName) ->
                  apply(M,F,A)
              of
                  ok              -> ok;
-                 {error, Reason} -> boot_error({boot_step, StepName, Reason},
-                                               not_available)
+                 {error, Reason} -> boot_error(Reason, StepName, not_available)
              catch
-                 _:Reason -> boot_error({boot_step, StepName, Reason},
+                 _:Reason -> boot_error(Reason, StepName,
                                         erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             ok
@@ -581,35 +584,20 @@ sort_boot_steps(UnsortedSteps) ->
                      {_App, StepName, Attributes} <- SortedSteps,
                      {mfa, {M,F,A}}               <- Attributes,
                      not erlang:function_exported(M, F, length(A))] of
-                []               -> SortedSteps;
-                MissingFunctions -> basic_boot_error(
-                                      {missing_functions, MissingFunctions},
-                                      "Boot step functions not exported: ~p~n",
-                                      [MissingFunctions])
+                []         -> SortedSteps;
+                MissingFns -> exit({boot_functions_not_exported, MissingFns})
             end;
         {error, {vertex, duplicate, StepName}} ->
-            basic_boot_error({duplicate_boot_step, StepName},
-                             "Duplicate boot step name: ~w~n", [StepName]);
+            exit({duplicate_boot_step, StepName});
         {error, {edge, Reason, From, To}} ->
-            basic_boot_error(
-              {invalid_boot_step_dependency, From, To},
-              "Could not add boot step dependency of ~w on ~w:~n~s",
-              [To, From,
-               case Reason of
-                   {bad_vertex, V} ->
-                       io_lib:format("Boot step not registered: ~w~n", [V]);
-                   {bad_edge, [First | Rest]} ->
-                       [io_lib:format("Cyclic dependency: ~w", [First]),
-                        [io_lib:format(" depends on ~w", [Next]) ||
-                            Next <- Rest],
-                        io_lib:format(" depends on ~w~n", [First])]
-               end])
+            exit({invalid_boot_step_dependency, From, To, Reason})
     end.
 
 -ifdef(use_specs).
--spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
+-spec(boot_error/3 :: (term(), atom(), not_available | [tuple()])
+                      -> no_return()).
 -endif.
-boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+boot_error({error, {timeout_waiting_for_tables, _}}, _Step, _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     {Err, Nodes} =
         case AllNodes -- [node()] of
@@ -620,29 +608,34 @@ boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
                      "Timeout contacting cluster nodes: ~p.~n", [Ns]),
                    Ns}
         end,
-    basic_boot_error(Term,
-                     Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
-boot_error(Reason, Stacktrace) ->
-    Fmt = "Error description:~n   ~p~n~n" ++
+    log_boot_error_and_exit(
+      Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
+boot_error(Reason, Step, Stacktrace) ->
+    Fmt0 = case Step of
+               wrapper -> "";
+               _       -> rabbit_misc:format("Boot step:~n   ~p~n~n", [Step])
+           end,
+    Fmt = Fmt0 ++
+        "Error description:~n   ~p~n~n"
         "Log files (may contain more information):~n   ~s~n   ~s~n~n",
     Args = [Reason, log_location(kernel), log_location(sasl)],
-    boot_error(Reason, Fmt, Args, Stacktrace).
+    boot_error1(Fmt, Args, Stacktrace).
 
 -ifdef(use_specs).
--spec(boot_error/4 :: (term(), string(), [any()], not_available | [tuple()])
+-spec(boot_error1/3 :: (string(), [any()], not_available | [tuple()])
                       -> no_return()).
 -endif.
-boot_error(Reason, Fmt, Args, not_available) ->
-    basic_boot_error(Reason, Fmt, Args);
-boot_error(Reason, Fmt, Args, Stacktrace) ->
-    basic_boot_error(Reason, Fmt ++ "Stack trace:~n   ~p~n~n",
-                     Args ++ [Stacktrace]).
+boot_error1(Fmt, Args, not_available) ->
+    log_boot_error_and_exit(Fmt, Args);
+boot_error1(Fmt, Args, Stacktrace) ->
+    log_boot_error_and_exit(Fmt ++ "Stack trace:~n   ~p~n~n",
+                            Args ++ [Stacktrace]).
 
-basic_boot_error(Reason, Format, Args) ->
+log_boot_error_and_exit(Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
     rabbit_log:info(Format, Args),
     timer:sleep(1000),
-    exit({?MODULE, failure_during_boot, Reason}).
+    exit(boot_failure_already_logged).
 
 %%---------------------------------------------------------------------------
 %% boot step functions
