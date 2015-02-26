@@ -580,29 +580,13 @@ sort_boot_steps(UnsortedSteps) ->
                      {_App, StepName, Attributes} <- SortedSteps,
                      {mfa, {M,F,A}}               <- Attributes,
                      not erlang:function_exported(M, F, length(A))] of
-                []               -> SortedSteps;
-                MissingFunctions -> basic_boot_error(
-                                      {missing_functions, MissingFunctions},
-                                      "Boot step functions not exported: ~p~n",
-                                      [MissingFunctions])
+                []         -> SortedSteps;
+                MissingFns -> exit({boot_functions_not_exported, MissingFns})
             end;
         {error, {vertex, duplicate, StepName}} ->
-            basic_boot_error({duplicate_boot_step, StepName},
-                             "Duplicate boot step name: ~w~n", [StepName]);
+            exit({duplicate_boot_step, StepName});
         {error, {edge, Reason, From, To}} ->
-            basic_boot_error(
-              {invalid_boot_step_dependency, From, To},
-              "Could not add boot step dependency of ~w on ~w:~n~s",
-              [To, From,
-               case Reason of
-                   {bad_vertex, V} ->
-                       io_lib:format("Boot step not registered: ~w~n", [V]);
-                   {bad_edge, [First | Rest]} ->
-                       [io_lib:format("Cyclic dependency: ~w", [First]),
-                        [io_lib:format(" depends on ~w", [Next]) ||
-                            Next <- Rest],
-                        io_lib:format(" depends on ~w~n", [First])]
-               end])
+            exit({invalid_boot_step_dependency, From, To, Reason})
     end.
 
 -ifdef(use_specs).
