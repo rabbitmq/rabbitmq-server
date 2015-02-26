@@ -334,14 +334,10 @@ start_it(StartFun) ->
                         false -> StartFun()
                     end
                 catch
-                    throw:{could_not_start, rabbit,
-                           boot_failure_already_logged} ->
-                        throw(boot_failure_already_logged),
-                        ok;
                     throw:{could_not_start, _App, _Reason} = Err ->
-                        boot_error(Err, wrapper, not_available);
+                        boot_error(Err, not_available);
                     _:Reason ->
-                        boot_error(Reason, wrapper, erlang:get_stacktrace())
+                        boot_error(Reason, erlang:get_stacktrace())
                 after
                     unlink(Marker),
                     Marker ! stop,
@@ -398,7 +394,7 @@ handle_app_error(Term) ->
     end.
 
 run_cleanup_steps(Apps) ->
-    [run_step(Name, Attrs, cleanup) || {_, Name, Attrs} <- find_steps(Apps)],
+    [run_step(Attrs, cleanup) || Attrs <- find_steps(Apps)],
     ok.
 
 await_startup() ->
@@ -526,27 +522,22 @@ run_boot_steps() ->
     run_boot_steps([App || {App, _, _} <- application:loaded_applications()]).
 
 run_boot_steps(Apps) ->
-    [ok = run_step(Step, Attrs, mfa) || {_, Step, Attrs} <- find_steps(Apps)],
+    [ok = run_step(Attrs, mfa) || Attrs <- find_steps(Apps)],
     ok.
 
 find_steps(Apps) ->
     All = sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)),
-    [Step || {App, _, _} = Step <- All, lists:member(App, Apps)].
+    [Attrs || {App, _, Attrs} <- All, lists:member(App, Apps)].
 
-run_step(StepName, Attributes, AttributeName) ->
+run_step(Attributes, AttributeName) ->
     case [MFA || {Key, MFA} <- Attributes,
                  Key =:= AttributeName] of
         [] ->
             ok;
         MFAs ->
-            [try
-                 apply(M,F,A)
-             of
+            [case apply(M,F,A) of
                  ok              -> ok;
-                 {error, Reason} -> boot_error(Reason, StepName, not_available)
-             catch
-                 _:Reason -> boot_error(Reason, StepName,
-                                        erlang:get_stacktrace())
+                 {error, Reason} -> exit({error, Reason})
              end || {M,F,A} <- MFAs],
             ok
     end.
@@ -594,10 +585,10 @@ sort_boot_steps(UnsortedSteps) ->
     end.
 
 -ifdef(use_specs).
--spec(boot_error/3 :: (term(), atom(), not_available | [tuple()])
-                      -> no_return()).
+-spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
 -endif.
-boot_error({error, {timeout_waiting_for_tables, _}}, _Step, _Stacktrace) ->
+boot_error({could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}},
+           _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     {Err, Nodes} =
         case AllNodes -- [node()] of
@@ -609,33 +600,29 @@ boot_error({error, {timeout_waiting_for_tables, _}}, _Step, _Stacktrace) ->
                    Ns}
         end,
     log_boot_error_and_exit(
+      timeout_waiting_for_tables,
       Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
-boot_error(Reason, Step, Stacktrace) ->
-    Fmt0 = case Step of
-               wrapper -> "";
-               _       -> rabbit_misc:format("Boot step:~n   ~p~n~n", [Step])
-           end,
-    Fmt = Fmt0 ++
-        "Error description:~n   ~p~n~n"
+boot_error(Reason, Stacktrace) ->
+    Fmt = "Error description:~n   ~p~n~n"
         "Log files (may contain more information):~n   ~s~n   ~s~n~n",
     Args = [Reason, log_location(kernel), log_location(sasl)],
-    boot_error1(Fmt, Args, Stacktrace).
+    boot_error(Reason, Fmt, Args, Stacktrace).
 
 -ifdef(use_specs).
--spec(boot_error1/3 :: (string(), [any()], not_available | [tuple()])
+-spec(boot_error/4 :: (term(), string(), [any()], not_available | [tuple()])
                       -> no_return()).
 -endif.
-boot_error1(Fmt, Args, not_available) ->
-    log_boot_error_and_exit(Fmt, Args);
-boot_error1(Fmt, Args, Stacktrace) ->
-    log_boot_error_and_exit(Fmt ++ "Stack trace:~n   ~p~n~n",
+boot_error(Reason, Fmt, Args, not_available) ->
+    log_boot_error_and_exit(Reason, Fmt, Args);
+boot_error(Reason, Fmt, Args, Stacktrace) ->
+    log_boot_error_and_exit(Reason, Fmt ++ "Stack trace:~n   ~p~n~n",
                             Args ++ [Stacktrace]).
 
-log_boot_error_and_exit(Format, Args) ->
+log_boot_error_and_exit(Reason, Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
     rabbit_log:info(Format, Args),
     timer:sleep(1000),
-    exit(boot_failure_already_logged).
+    exit(Reason).
 
 %%---------------------------------------------------------------------------
 %% boot step functions
