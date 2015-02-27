@@ -1,14 +1,15 @@
 <h1>Node <b><%= node.name %></b></h1>
+<div class="updatable">
 
-<div class="section">
-<h2>Overview</h2>
-<div class="hider updatable">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
 
+<div class="section">
+<h2>Overview</h2>
+<div class="hider">
   <div class="box">
   <table class="facts facts-l">
     <tr>
@@ -55,20 +56,13 @@
            </tr>
     <% } %>
   </table>
-<% } %>
 </div>
 </div>
 
 <div class="section">
 <h2>Process statistics</h2>
 <div class="hider">
-<% if (!node.running) { %>
-<p class="warning">Node not running</p>
-<% } else if (node.os_pid == undefined) { %>
-<p class="warning">Node statistics not available</p>
-<% } else { %>
   <%= node_stats_prefs() %>
-<div class="updatable">
   <table class="facts">
     <tr>
       <th>
@@ -131,20 +125,12 @@
       </td>
     </tr>
   </table>
-
-</div>
-<% } %>
 </div>
 </div>
 
 <div class="section-hidden">
 <h2>Persistence statistics</h2>
 <div class="hider">
-<% if (!node.running) { %>
-<p class="warning">Node not running</p>
-<% } else if (node.os_pid == undefined) { %>
-<p class="warning">Node statistics not available</p>
-<% } else { %>
   <%= rates_chart_or_text('mnesia-stats-count', node,
       [['RAM only', 'mnesia_ram_tx_count'],
        ['Disk', 'mnesia_disk_tx_count']],
@@ -161,18 +147,11 @@
        ['QI Write', 'queue_index_write_count']],
       fmt_rate, fmt_rate_axis, true, 'Persistence operations (bulk)', 'persister-operations-bulk') %>
 </div>
-<% } %>
-</div>
 </div>
 
 <div class="section-hidden">
 <h2>I/O statistics</h2>
 <div class="hider">
-<% if (!node.running) { %>
-<p class="warning">Node not running</p>
-<% } else if (node.os_pid == undefined) { %>
-<p class="warning">Node statistics not available</p>
-<% } else { %>
   <%= rates_chart_or_text('persister-io-stats-count', node,
       [['Read', 'io_read_count'],
        ['Write', 'io_write_count'],
@@ -192,10 +171,17 @@
        ['Seek', 'io_seek_avg_time'],
        ['Sync', 'io_sync_avg_time']],
       fmt_ms, fmt_ms, false, 'I/O average time per operation') %>
+</div>
+</div>
 <% } %>
-</div>
-</div>
 
+</div>
+<!--
+  The next two need to be non-updatable or we will wipe the memory details
+  as soon as we have drawn it.
+ -->
+
+<% if (node.running && node.os_pid != undefined) { %>
 
 <div class="section">
 <h2>Memory details</h2>
@@ -217,14 +203,14 @@
 </div>
 </div>
 
+<% } %>
+
+<div class="updatable">
+<% if (node.running && node.os_pid != undefined) { %>
+
 <div class="section-hidden">
 <h2>Advanced</h2>
-<div class="hider updatable">
-<% if (!node.running) { %>
-<p class="warning">Node not running</p>
-<% } else if (node.os_pid == undefined) { %>
-<p class="warning">Node statistics not available</p>
-<% } else { %>
+<div class="hider">
   <div class="box">
   <h3>VM</h3>
   <table class="facts">
@@ -278,6 +264,9 @@
 <h3>Authentication mechanisms</h3>
 <%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
 
-<% } %>
 </div>
+</div>
+
+<% } %>
+
 </div>

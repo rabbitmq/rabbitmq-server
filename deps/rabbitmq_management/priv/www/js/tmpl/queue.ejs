@@ -2,13 +2,12 @@
 
 <div class="section">
   <h2>Overview</h2>
-  <div class="hider">
+  <div class="hider updatable">
     <%= queue_lengths('lengths-q', queue) %>
 <% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-q', queue.message_stats) %>
 <% } %>
 
-    <div class="updatable">
     <h3>Details</h3>
     <table class="facts facts-l">
       <tr>
@@ -153,7 +152,6 @@
         <td class="r"><%= fmt_bytes(queue.memory) %></td>
       </tr>
     </table>
-    </div>
   </div>
 </div>
 
