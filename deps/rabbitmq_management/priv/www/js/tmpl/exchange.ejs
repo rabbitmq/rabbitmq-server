@@ -2,12 +2,10 @@
 
 <div class="section">
   <h2>Overview</h2>
-  <div class="hider">
+  <div class="hider updatable">
 <% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-x', exchange.message_stats) %>
 <% } %>
-
-    <div class="updatable">
     <h3>Details</h3>
     <table class="facts">
       <tr>
@@ -23,7 +21,6 @@
         <td><%= fmt_string(exchange.policy, '') %></td>
       </tr>
     </table>
-    </div>
   </div>
 </div>
 

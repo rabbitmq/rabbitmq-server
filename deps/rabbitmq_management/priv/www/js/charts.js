@@ -49,14 +49,14 @@ function rates_chart_or_text(id, stats, items, fmt, axis_fmt, chart_rates,
     else {
         res = '<p>Currently idle</p>';
     }
-    return prefix + '<div class="updatable">' + res + '</div>';
+    return prefix + res;
 }
 
 function chart_h3(id, heading, heading_help) {
     var mode = get_pref('rate-mode-' + id);
     var range = get_pref('chart-range');
     return '<h3>' + heading +
-        ' <span class="popup-options-link updatable" title="Click to change" ' +
+        ' <span class="popup-options-link" title="Click to change" ' +
         'type="rate" for="' + id + '">(' + prefix_title(mode, range) +
         ')</span>' + (heading_help == undefined ? '' :
          ' <span class="help" id="' + heading_help + '"></span>') +

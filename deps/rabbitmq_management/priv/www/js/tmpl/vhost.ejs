@@ -9,13 +9,12 @@
 
 <div class="section">
   <h2>Overview</h2>
-  <div class="hider">
+  <div class="hider updatable">
     <%= queue_lengths('lengths-vhost', vhost) %>
 <% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-vhost', vhost.message_stats) %>
 <% } %>
     <%= data_rates('data-rates-vhost', vhost, 'Data rates') %>
-  <div class="updatable">
     <h3>Details</h3>
     <table class="facts">
       <tr>
@@ -23,7 +22,6 @@
         <td><%= fmt_boolean(vhost.tracing) %></td>
       </tr>
     </table>
-  </div>
 </div>
 </div>
 

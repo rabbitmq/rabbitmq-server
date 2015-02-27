@@ -463,7 +463,7 @@ function postprocess() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
         });
-    $('div.section h2, div.section-hidden h2').click(function() {
+    $('div.section h2, div.section-hidden h2').die().live('click', function() {
             toggle_visibility($(this));
         });
     $('label').map(function() {
@@ -507,7 +507,6 @@ function postprocess() {
             }
         }
     });
-    setup_visibility();
     $('.help').die().live('click', function() {
         help($(this).attr('id'))
     });
@@ -561,6 +560,7 @@ function postprocess() {
 }
 
 function postprocess_partial() {
+    setup_visibility();
     $('.sort').click(function() {
             var sort = $(this).attr('sort');
             if (current_sort == sort) {
