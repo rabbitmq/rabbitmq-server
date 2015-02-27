@@ -36,11 +36,11 @@
                uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications, contexts,
                log_file, sasl_log_file, db_dir, config_files, net_ticktime,
-               persister_stats, enabled_plugins]).
+               enabled_plugins, persister_stats]).
 
 %%--------------------------------------------------------------------
 
--record(state, {fd_total, fhc_stats, fhc_stats_derived}).
+-record(state, {fd_total, fhc_stats, fhc_stats_derived, node_owners}).
 
 %%--------------------------------------------------------------------
 
@@ -236,6 +236,42 @@ persister_stats(#state{fhc_stats         = FHC,
 flatten_key({A, B}) ->
     list_to_atom(atom_to_list(A) ++ "_" ++ atom_to_list(B)).
 
+cluster_links() ->
+    {ok, Items} = net_kernel:nodes_info(),
+    [Link || Item <- Items,
+             Link <- [format_nodes_info(Item)], Link =/= undefined].
+
+format_nodes_info({Node, Info}) ->
+    Owner = proplists:get_value(owner, Info),
+    case catch process_info(Owner, links) of
+        {links, Links} ->
+            case [Link || Link <- Links, is_port(Link)] of
+                [Port] ->
+                    {Node, Owner, format_nodes_info1(Port)};
+                _ ->
+                    undefined
+            end;
+        _ ->
+            undefined
+    end.
+
+format_nodes_info1(Port) ->
+    case {rabbit_net:socket_ends(Port, inbound),
+          rabbit_net:getstat(Port, [recv_oct, send_oct])} of
+        {{ok, {PeerAddr, PeerPort, SockAddr, SockPort}}, {ok, Stats}} ->
+            [{peer_addr, maybe_ntoab(PeerAddr)},
+             {peer_port, PeerPort},
+             {sock_addr, maybe_ntoab(SockAddr)},
+             {sock_port, SockPort},
+             {recv_bytes, pget(recv_oct, Stats)},
+             {send_bytes, pget(send_oct, Stats)}];
+        _ ->
+            []
+    end.
+
+maybe_ntoab(A) when is_tuple(A) -> list_to_binary(rabbit_misc:ntoab(A));
+maybe_ntoab(H)                  -> H.
+
 %%--------------------------------------------------------------------
 
 %% This is slightly icky in that we introduce knowledge of
@@ -277,8 +313,9 @@ format_mochiweb_option(_K, V) ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    State = #state{fd_total  = file_handle_cache:ulimit(),
-                   fhc_stats = file_handle_cache_stats:get()},
+    State = #state{fd_total    = file_handle_cache:ulimit(),
+                   fhc_stats   = file_handle_cache_stats:get(),
+                   node_owners = sets:new()},
     %% If we emit an update straight away we will do so just before
     %% the mgmt db starts up - and then have to wait ?REFRESH_RATIO
     %% until we send another. So let's have a shorter wait in the hope
@@ -310,7 +347,20 @@ emit_update(State0) ->
     State = update_state(State0),
     rabbit_event:notify(node_stats, infos(?KEYS, State)),
     erlang:send_after(?REFRESH_RATIO, self(), emit_update),
-    State.
+    emit_node_node_stats(State).
+
+emit_node_node_stats(State = #state{node_owners = Owners}) ->
+    Links = cluster_links(),
+    NewOwners = sets:from_list([{Node, Owner} || {Node, Owner, _} <- Links]),
+    Dead = sets:to_list(sets:subtract(Owners, NewOwners)),
+    [rabbit_event:notify(
+       node_node_deleted, [{route, Route}]) || {Node, _Owner} <- Dead,
+                                               Route <- [{node(), Node},
+                                                         {Node,   node()}]],
+    [rabbit_event:notify(
+       node_node_stats, [{route, {node(), Node}} | Stats]) ||
+        {Node, _Owner, Stats} <- Links],
+    State#state{node_owners = NewOwners}.
 
 update_state(State0 = #state{fhc_stats = FHC0}) ->
     FHC = file_handle_cache_stats:get(),
