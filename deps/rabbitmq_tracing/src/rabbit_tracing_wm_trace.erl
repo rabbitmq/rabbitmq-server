@@ -23,6 +23,8 @@
 -define(ERR, <<"Something went wrong trying to start the trace - check the "
                "logs.">>).
 
+-import(rabbit_misc, [pget/3]).
+
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 
@@ -49,18 +51,25 @@ to_json(ReqData, Context) ->
 
 accept_content(ReqData, Context) ->
     case rabbit_mgmt_util:vhost(ReqData) of
-        not_found -> not_found;
-        VHost     -> Name = rabbit_mgmt_util:id(name, ReqData),
-                     rabbit_mgmt_util:with_decode(
-                       [format, pattern], ReqData, Context,
-                       fun([_, _], Trace) ->
-                               case rabbit_tracing_traces:create(
-                                      VHost, Name, Trace) of
-                                   {ok, _} -> {true, ReqData, Context};
-                                   _       -> rabbit_mgmt_util:bad_request(
-                                                ?ERR, ReqData, Context)
-                               end
-                       end)
+        not_found ->
+            not_found;
+        VHost ->
+            Name = rabbit_mgmt_util:id(name, ReqData),
+            rabbit_mgmt_util:with_decode(
+              [format, pattern], ReqData, Context,
+              fun([_, _], Trace) ->
+                      case is_integer(pget(max_payload_bytes, Trace, 0)) of
+                          false -> rabbit_mgmt_util:bad_request(
+                                     <<"max_payload_byes not integer">>,
+                                     ReqData, Context);
+                          true  -> ok
+                      end,
+                      case rabbit_tracing_traces:create(VHost, Name, Trace) of
+                          {ok, _} -> {true, ReqData, Context};
+                          _       -> rabbit_mgmt_util:bad_request(
+                                       ?ERR, ReqData, Context)
+                      end
+              end)
     end.
 
 delete_resource(ReqData, Context) ->
