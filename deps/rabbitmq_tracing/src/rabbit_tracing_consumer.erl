@@ -152,29 +152,37 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                 payload      = Payload}.
 
 log(text, P, Record) ->
-    P("~n~s~n", [string:copies("=", 80)]),
-    P("~s: ", [Record#log_record.timestamp]),
-    case Record#log_record.type of
-        published -> P("Message published~n~n", []);
-        received  -> P("Message received~n~n", [])
-    end,
-    P("Node:         ~s~n", [Record#log_record.node]),
-    P("Connection:   ~s~n", [Record#log_record.connection]),
-    P("Virtual host: ~s~n", [Record#log_record.vhost]),
-    P("User:         ~s~n", [Record#log_record.username]),
-    P("Channel:      ~p~n", [Record#log_record.channel]),
-    P("Exchange:     ~s~n", [Record#log_record.exchange]),
-    case Record#log_record.queue of
-        none -> ok;
-        Q    -> P("Queue:        ~s~n", [Q])
-    end,
-    P("Routing keys: ~p~n", [Record#log_record.routing_keys]),
-    case Record#log_record.routed_queues of
-        none -> ok;
-        RQs  -> P("Routed queues: ~p~n",[Record#log_record.routed_queues])
-    end,
-    P("Properties:   ~p~n", [Record#log_record.properties]),
-    P("Payload: ~n~s~n",    [Record#log_record.payload]);
+    Fmt = "~n~s~n~s: Message ~s~n~n"
+        "Node:         ~s~nConnection:   ~s~n"
+        "Virtual host: ~s~nUser:         ~s~n"
+        "Channel:      ~p~nExchange:     ~s~n"
+        "Routing keys: ~p~n" ++
+        case Record#log_record.queue of
+            none -> "";
+            _    -> "Queue:        ~s~n"
+        end ++
+        case Record#log_record.routed_queues of
+            none -> "";
+            _    -> "Routed queues: ~p~n"
+        end ++
+        "Properties:   ~p~nPayload: ~n~s~n",
+    Args =
+        [string:copies("=", 80),    Record#log_record.timestamp,
+         Record#log_record.type,
+         Record#log_record.node,    Record#log_record.connection,
+         Record#log_record.vhost,   Record#log_record.username,
+         Record#log_record.channel, Record#log_record.exchange,
+         Record#log_record.routing_keys] ++
+        case Record#log_record.queue of
+            none -> [];
+            Q    -> [Q]
+        end ++
+        case Record#log_record.routed_queues of
+            none -> [];
+            RQs  -> [RQs]
+        end ++
+        [Record#log_record.properties, Record#log_record.payload],
+    P(Fmt, Args);
 
 log(json, P, Record) ->
     P("~s~n", [mochijson2:encode(
