@@ -23,6 +23,8 @@
 -define(ERR, <<"Something went wrong trying to start the trace - check the "
                "logs.">>).
 
+-import(rabbit_misc, [pget/2, pget/3]).
+
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 
@@ -47,20 +49,24 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(trace(ReqData), ReqData, Context).
 
-accept_content(ReqData, Context) ->
-    case rabbit_mgmt_util:vhost(ReqData) of
-        not_found -> not_found;
-        VHost     -> Name = rabbit_mgmt_util:id(name, ReqData),
-                     rabbit_mgmt_util:with_decode(
-                       [format], ReqData, Context,
-                       fun([_], Trace) ->
-                               case rabbit_tracing_traces:create(
-                                      VHost, Name, Trace) of
-                                   {ok, _} -> {true, ReqData, Context};
-                                   _       -> rabbit_mgmt_util:bad_request(
-                                                ?ERR, ReqData, Context)
-                               end
-                       end)
+accept_content(RD, Ctx) ->
+    case rabbit_mgmt_util:vhost(RD) of
+        not_found ->
+            not_found;
+        VHost ->
+            Name = rabbit_mgmt_util:id(name, RD),
+            rabbit_mgmt_util:with_decode(
+              [format, pattern], RD, Ctx,
+              fun([_, _], Trace) ->
+                      Fs = [fun val_payload_bytes/3, fun val_format/3,
+                            fun val_create/3],
+                      case lists:foldl(fun (F,  ok)  -> F(VHost, Name, Trace);
+                                           (_F, Err) -> Err
+                                       end, ok, Fs) of
+                          ok  -> {true, RD, Ctx};
+                          Err -> rabbit_mgmt_util:bad_request(Err, RD, Ctx)
+                      end
+              end)
     end.
 
 delete_resource(ReqData, Context) ->
@@ -79,4 +85,22 @@ trace(ReqData) ->
         not_found -> not_found;
         VHost     -> rabbit_tracing_traces:lookup(
                        VHost, rabbit_mgmt_util:id(name, ReqData))
+    end.
+
+val_payload_bytes(_VHost, _Name, Trace) ->
+    case is_integer(pget(max_payload_bytes, Trace, 0)) of
+        false -> <<"max_payload_bytes not integer">>;
+        true  -> ok
+    end.
+
+val_format(_VHost, _Name, Trace) ->
+    case lists:member(pget(format, Trace), [<<"json">>, <<"text">>]) of
+        false -> <<"format not json or text">>;
+        true  -> ok
+    end.
+
+val_create(VHost, Name, Trace) ->
+    case rabbit_tracing_traces:create(VHost, Name, Trace) of
+        {ok, _} -> ok;
+        _       -> ?ERR
     end.

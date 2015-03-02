@@ -22,7 +22,8 @@
 
 -import(rabbit_misc, [pget/2, pget/3, table_lookup/2]).
 
--record(state, {conn, ch, vhost, queue, file, filename, format, buf, buf_cnt}).
+-record(state, {conn, ch, vhost, queue, file, filename, format, buf, buf_cnt,
+                max_payload}).
 -record(log_record, {timestamp, type, exchange, queue, node, connection,
                      vhost, username, channel, routing_keys, routed_queues,
                      properties, payload}).
@@ -46,6 +47,7 @@ init(Args) ->
     process_flag(trap_exit, true),
     Name = pget(name, Args),
     VHost = pget(vhost, Args),
+    MaxPayload = pget(max_payload_bytes, Args, unlimited),
     {ok, Conn} = amqp_connection:start(
                    #amqp_params_direct{virtual_host = VHost}),
     link(Conn),
@@ -74,7 +76,8 @@ init(Args) ->
                                     "format ~p~n", [Filename, Format]),
                     {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
                                 file = F, filename = Filename,
-                                format = Format, buf = [], buf_cnt = 0}};
+                                format = Format, buf = [], buf_cnt = 0,
+                                max_payload = MaxPayload}};
                 {error, E} ->
                     {stop, {could_not_open, Filename, E}}
             end;
@@ -97,7 +100,8 @@ handle_cast(_C, State) ->
 handle_info({BasicDeliver, Msg, DeliveryCtx},
             State = #state{format = Format}) ->
     amqp_channel:notify_received(DeliveryCtx),
-    {noreply, log(Format, delivery_to_log_record({BasicDeliver, Msg}), State),
+    {noreply, log(Format, delivery_to_log_record({BasicDeliver, Msg}, State),
+                  State),
      0};
 
 handle_info(timeout, State) ->
@@ -124,7 +128,7 @@ code_change(_, State, _) -> {ok, State}.
 
 delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                         #amqp_msg{props   = #'P_basic'{headers = H},
-                                  payload = Payload}}) ->
+                                  payload = Payload}}, State) ->
     {Type, Q, RQs} = case Key of
                          <<"publish.", _Rest/binary>> ->
                              {array, Qs} = table_lookup(H, <<"routed_queues">>),
@@ -152,7 +156,7 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                 routing_keys = [K || {_, K} <- Keys],
                 routed_queues= RQs,
                 properties   = Props,
-                payload      = Payload}.
+                payload      = truncate(Payload, State)}.
 
 log(text, Record, State) ->
     Fmt = "~n========================================"
@@ -203,7 +207,8 @@ log(json, Record, State) ->
                  {routing_keys, Record#log_record.routing_keys},
                  {properties,   rabbit_mgmt_format:amqp_table(
                                    Record#log_record.properties)},
-                 {payload,      base64:encode(Record#log_record.payload)}]),
+                 {payload,      base64:encode(Record#log_record.payload)}])
+              ++ "\n",
               State).
 
 print_log(LogMsg, State = #state{buf = Buf, buf_cnt = BufCnt}) ->
@@ -217,3 +222,10 @@ maybe_flush(State) ->
 flush(State = #state{file = F, buf = Buf}) ->
     prim_file:write(F, lists:reverse(Buf)),
     State#state{buf = [], buf_cnt = 0}.
+
+truncate(Payload, #state{max_payload = Max}) ->
+    case Max =:= unlimited orelse size(Payload) =< Max of
+        true  -> Payload;
+        false -> <<Trunc:Max/binary, _/binary>> = Payload,
+                 Trunc
+    end.

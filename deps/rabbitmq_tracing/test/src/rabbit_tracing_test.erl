@@ -69,6 +69,21 @@ tracing_test() ->
     http_delete("/trace-files/test.log", ?NO_CONTENT),
     ok.
 
+tracing_validation_test() ->
+    Path = "/traces/%2f/test",
+    http_put(Path, [{pattern,           <<"#">>}],    ?BAD_REQUEST),
+    http_put(Path, [{format,            <<"json">>}], ?BAD_REQUEST),
+    http_put(Path, [{format,            <<"ebcdic">>},
+                    {pattern,           <<"#">>}],    ?BAD_REQUEST),
+    http_put(Path, [{format,            <<"text">>},
+                    {pattern,           <<"#">>},
+                    {max_payload_bytes, <<"abc">>}],  ?BAD_REQUEST),
+    http_put(Path, [{format,            <<"json">>},
+                    {pattern,           <<"#">>},
+                    {max_payload_bytes, 1000}],       ?NO_CONTENT),
+    http_delete(Path, ?NO_CONTENT),
+    ok.
+
 %%---------------------------------------------------------------------------
 %% Below is copypasta from rabbit_mgmt_test_http, it's not obvious how
 %% to share that given the build system.

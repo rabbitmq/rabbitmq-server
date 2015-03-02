@@ -36,5 +36,7 @@ Example for how to create a trace:
 
 $ curl -i -u guest:guest -H "content-type:application/json" -XPUT \
   http://localhost:55672/api/traces/%2f/my-trace \
-  -d'{"format":"text","pattern":"#"}'
+  -d'{"format":"text","pattern":"#", "max_payload_bytes":1000}'
 
+max_payload_bytes is optional (omit it to prevent payload truncation),
+format and pattern are mandatory.
