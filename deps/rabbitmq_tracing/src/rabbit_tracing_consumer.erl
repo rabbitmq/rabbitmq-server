@@ -65,7 +65,7 @@ init(Args) ->
     Filename = Dir ++ "/" ++ binary_to_list(Name) ++ ".log",
     case filelib:ensure_dir(Filename) of
         ok ->
-            case file:open(Filename, [append]) of
+            case prim_file:open(Filename, [append]) of
                 {ok, F} ->
                     rabbit_tracing_traces:announce(VHost, Name, self()),
                     Format = list_to_atom(binary_to_list(pget(format, Args))),
@@ -96,7 +96,9 @@ handle_cast(_C, State) ->
 handle_info({BasicDeliver, Msg, DeliveryCtx},
             State    = #state{ch = Ch, file = F, format = Format}) ->
     amqp_channel:notify_received(DeliveryCtx),
-    Print = fun(Fmt, Args) -> io:format(F, Fmt, Args) end,
+    Print = fun(Fmt, Args) ->
+                    prim_file:write(F, io_lib:format(Fmt, Args))
+            end,
     log(Format, Print, delivery_to_log_record({BasicDeliver, Msg})),
     {noreply, State};
 
@@ -107,7 +109,7 @@ terminate(shutdown, #state{conn = Conn, ch = Ch,
                            file = F, filename = Filename}) ->
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn),
-    catch file:close(F),
+    catch prim_file:close(F),
     rabbit_log:info("Tracer closed log file ~p~n", [Filename]),
     ok;
 
