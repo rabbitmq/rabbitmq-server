@@ -22,12 +22,13 @@
 
 -import(rabbit_misc, [pget/2, pget/3, table_lookup/2]).
 
--record(state, {conn, ch, vhost, queue, file, filename, format}).
+-record(state, {conn, ch, vhost, queue, file, filename, format, buf, buf_cnt}).
 -record(log_record, {timestamp, type, exchange, queue, node, connection,
                      vhost, username, channel, routing_keys, routed_queues,
                      properties, payload}).
 
 -define(X, <<"amq.rabbitmq.trace">>).
+-define(MAX_BUF, 100).
 
 -export([start_link/1, info_all/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -73,7 +74,7 @@ init(Args) ->
                                     "format ~p~n", [Filename, Format]),
                     {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
                                 file = F, filename = Filename,
-                                format = Format}};
+                                format = Format, buf = [], buf_cnt = 0}};
                 {error, E} ->
                     {stop, {could_not_open, Filename, E}}
             end;
@@ -94,19 +95,20 @@ handle_cast(_C, State) ->
     {noreply, State}.
 
 handle_info({BasicDeliver, Msg, DeliveryCtx},
-            State    = #state{ch = Ch, file = F, format = Format}) ->
+            State = #state{format = Format}) ->
     amqp_channel:notify_received(DeliveryCtx),
-    Print = fun(Fmt, Args) ->
-                    prim_file:write(F, io_lib:format(Fmt, Args))
-            end,
-    log(Format, Print, delivery_to_log_record({BasicDeliver, Msg})),
-    {noreply, State};
+    {noreply, log(Format, delivery_to_log_record({BasicDeliver, Msg}), State),
+     0};
+
+handle_info(timeout, State) ->
+    {noreply, flush(State)};
 
 handle_info(_I, State) ->
     {noreply, State}.
 
-terminate(shutdown, #state{conn = Conn, ch = Ch,
-                           file = F, filename = Filename}) ->
+terminate(shutdown, State = #state{conn = Conn, ch = Ch,
+                                   file = F, filename = Filename}) ->
+    flush(State),
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn),
     catch prim_file:close(F),
@@ -152,7 +154,7 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                 properties   = Props,
                 payload      = Payload}.
 
-log(text, P, Record) ->
+log(text, Record, State) ->
     Fmt = "~n========================================"
         "========================================~n~s: Message ~s~n~n"
         "Node:         ~s~nConnection:   ~s~n"
@@ -184,21 +186,34 @@ log(text, P, Record) ->
             RQs  -> [RQs]
         end ++
         [Record#log_record.properties, Record#log_record.payload],
-    P(Fmt, Args);
+    print_log(io_lib:format(Fmt, Args), State);
 
-log(json, P, Record) ->
-    P("~s~n", [mochijson2:encode(
-                 [{timestamp,    Record#log_record.timestamp},
-                  {type,         Record#log_record.type},
-                  {node,         Record#log_record.node},
-                  {connection,   Record#log_record.connection},
-                  {vhost,        Record#log_record.vhost},
-                  {user,         Record#log_record.username},
-                  {channel,      Record#log_record.channel},
-                  {exchange,     Record#log_record.exchange},
-                  {queue,        Record#log_record.queue},
-                  {routed_queues, Record#log_record.routed_queues},
-                  {routing_keys, Record#log_record.routing_keys},
-                  {properties,   rabbit_mgmt_format:amqp_table(
+log(json, Record, State) ->
+    print_log(mochijson2:encode(
+                [{timestamp,    Record#log_record.timestamp},
+                 {type,         Record#log_record.type},
+                 {node,         Record#log_record.node},
+                 {connection,   Record#log_record.connection},
+                 {vhost,        Record#log_record.vhost},
+                 {user,         Record#log_record.username},
+                 {channel,      Record#log_record.channel},
+                 {exchange,     Record#log_record.exchange},
+                 {queue,        Record#log_record.queue},
+                 {routed_queues, Record#log_record.routed_queues},
+                 {routing_keys, Record#log_record.routing_keys},
+                 {properties,   rabbit_mgmt_format:amqp_table(
                                    Record#log_record.properties)},
-                  {payload,      base64:encode(Record#log_record.payload)}])]).
+                 {payload,      base64:encode(Record#log_record.payload)}]),
+              State).
+
+print_log(LogMsg, State = #state{buf = Buf, buf_cnt = BufCnt}) ->
+    maybe_flush(State#state{buf = [LogMsg | Buf], buf_cnt = BufCnt + 1}).
+
+maybe_flush(State = #state{buf_cnt = ?MAX_BUF}) ->
+    flush(State);
+maybe_flush(State) ->
+    State.
+
+flush(State = #state{file = F, buf = Buf}) ->
+    prim_file:write(F, lists:reverse(Buf)),
+    State#state{buf = [], buf_cnt = 0}.
