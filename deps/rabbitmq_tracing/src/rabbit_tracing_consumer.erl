@@ -151,7 +151,8 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                 payload      = Payload}.
 
 log(text, P, Record) ->
-    Fmt = "~n~s~n~s: Message ~s~n~n"
+    Fmt = "~n========================================"
+        "========================================~n~s: Message ~s~n~n"
         "Node:         ~s~nConnection:   ~s~n"
         "Virtual host: ~s~nUser:         ~s~n"
         "Channel:      ~p~nExchange:     ~s~n"
@@ -166,7 +167,7 @@ log(text, P, Record) ->
         end ++
         "Properties:   ~p~nPayload: ~n~s~n",
     Args =
-        [string:copies("=", 80),    Record#log_record.timestamp,
+        [Record#log_record.timestamp,
          Record#log_record.type,
          Record#log_record.node,    Record#log_record.connection,
          Record#log_record.vhost,   Record#log_record.username,
