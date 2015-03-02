@@ -35,7 +35,7 @@
                 <td><%= fmt_string(trace.format) %></td>
                 <% if (trace.queue) { %>
                 <td class="r">
-                  <%= fmt_detail_rate(trace.queue.message_stats, 'ack') %>
+                  <%= fmt_detail_rate(trace.queue.message_stats, 'deliver_no_ack') %>
                 </td>
                 <td class="r">
                   <%= trace.queue.messages %>
