@@ -52,8 +52,8 @@ accept_content(ReqData, Context) ->
         not_found -> not_found;
         VHost     -> Name = rabbit_mgmt_util:id(name, ReqData),
                      rabbit_mgmt_util:with_decode(
-                       [format], ReqData, Context,
-                       fun([_], Trace) ->
+                       [format, pattern], ReqData, Context,
+                       fun([_, _], Trace) ->
                                case rabbit_tracing_traces:create(
                                       VHost, Name, Trace) of
                                    {ok, _} -> {true, ReqData, Context};
