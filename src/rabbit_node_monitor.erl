@@ -220,38 +220,42 @@ pause_partition_guard() ->
             {ok, M} = application:get_env(rabbit, cluster_partition_handling),
             case M of
                 pause_minority ->
-                    pause_minority_guard([]);
+                    pause_minority_guard([], ok);
                 {pause_if_all_down, PreferredNodes, _} ->
-                    pause_if_all_down_guard(PreferredNodes, []);
+                    pause_if_all_down_guard(PreferredNodes, [], ok);
                 _ ->
                     put(pause_partition_guard, not_pause_mode),
                     ok
             end;
-        {minority_mode, Nodes} ->
-            pause_minority_guard(Nodes);
-        {pause_if_all_down_mode, PreferredNodes, Nodes} ->
-            pause_if_all_down_guard(PreferredNodes, Nodes)
+        {minority_mode, Nodes, LastState} ->
+            pause_minority_guard(Nodes, LastState);
+        {pause_if_all_down_mode, PreferredNodes, Nodes, LastState} ->
+            pause_if_all_down_guard(PreferredNodes, Nodes, LastState)
     end.
 
-pause_minority_guard(LastNodes) ->
+pause_minority_guard(LastNodes, LastState) ->
     case nodes() of
-        LastNodes -> ok;
-        _         -> put(pause_partition_guard, {minority_mode, nodes()}),
-                     case majority() of
-                         false -> pausing;
-                         true  -> ok
-                     end
+        LastNodes -> LastState;
+        _         -> NewState = case majority() of
+                                    false -> pausing;
+                                    true  -> ok
+                                end,
+                     put(pause_partition_guard,
+                         {minority_mode, nodes(), NewState}),
+                     NewState
     end.
 
-pause_if_all_down_guard(PreferredNodes, LastNodes) ->
+pause_if_all_down_guard(PreferredNodes, LastNodes, LastState) ->
     case nodes() of
-        LastNodes -> ok;
-        _         -> put(pause_partition_guard,
-                         {pause_if_all_down_mode, PreferredNodes, nodes()}),
-                     case in_preferred_partition(PreferredNodes) of
-                         false -> pausing;
-                         true  -> ok
-                     end
+        LastNodes -> LastState;
+        _         -> NewState = case in_preferred_partition(PreferredNodes) of
+                                    false -> pausing;
+                                    true  -> ok
+                                end,
+                     put(pause_partition_guard,
+                         {pause_if_all_down_mode, PreferredNodes, nodes(),
+                          NewState}),
+                     NewState
     end.
 
 %%----------------------------------------------------------------------------
