@@ -516,7 +516,7 @@ post_respond({{halt, Code}, ReqData, Context}) ->
     {{halt, Code}, ReqData, Context};
 post_respond({JSON, ReqData, Context}) ->
     {true, set_resp_header(
-             "content-type", "application/json",
+             "Content-Type", "application/json",
              wrq:append_to_response_body(JSON, ReqData)), Context}.
 
 is_admin(T)       -> intersects(T, [administrator]).
