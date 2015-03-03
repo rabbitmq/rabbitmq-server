@@ -216,22 +216,24 @@ pause_minority_guard() ->
         undefined ->
             {ok, M} = application:get_env(rabbit, cluster_partition_handling),
             case M of
-                pause_minority -> pause_minority_guard([]);
+                pause_minority -> pause_minority_guard([], ok);
                 _              -> put(pause_minority_guard, not_minority_mode),
                                   ok
             end;
-        {minority_mode, Nodes} ->
-            pause_minority_guard(Nodes)
+        {minority_mode, Nodes, LastState} ->
+            pause_minority_guard(Nodes, LastState)
     end.
 
-pause_minority_guard(LastNodes) ->
+pause_minority_guard(LastNodes, LastState) ->
     case nodes() of
-        LastNodes -> ok;
-        _         -> put(pause_minority_guard, {minority_mode, nodes()}),
-                     case majority() of
-                         false -> pausing;
-                         true  -> ok
-                     end
+        LastNodes -> LastState;
+        _         -> NewState = case majority() of
+                                    false -> pausing;
+                                    true  -> ok
+                                end,
+                     put(pause_minority_guard,
+                         {minority_mode, nodes(), NewState}),
+                     NewState
     end.
 
 %%----------------------------------------------------------------------------
