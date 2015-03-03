@@ -2,6 +2,23 @@
 <% if (user_monitor) { %>
 <%= format('partition', {'nodes': nodes}) %>
 <% } %>
+
+<div class="updatable">
+<% if (overview.statistics_db_event_queue > 1000) { %>
+<p class="warning">
+  The management statistics database currently has a queue
+  of <b><%= overview.statistics_db_event_queue %></b> events to
+  process. If this number keeps increasing, so will the memory used by
+  the management plugin.
+
+  <% if (overview.rates_mode != 'none') { %>
+  You may find it useful to set the <code>rates_mode</code> config item
+  to <code>none</code>.
+  <% } %>
+</p>
+<% } %>
+</div>
+
 <div class="section">
 <h2>Totals</h2>
 <div class="hider">
