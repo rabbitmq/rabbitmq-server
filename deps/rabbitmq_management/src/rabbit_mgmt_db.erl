@@ -201,8 +201,13 @@ prioritise_cast({event, #event{type  = Type,
 prioritise_cast(_Msg, _Len, _State) ->
     0.
 
-%% We want timely replies to queries even when overloaded!
-prioritise_call(_Msg, _From, _Len, _State) -> 5.
+%% We want timely replies to queries even when overloaded, so return 5
+%% as priority. Also we only have access to the queue length here, not
+%% in handle_call/3, so stash it in the dictionary. This is a bit ugly
+%% but better than fiddling with gen_server2 even more.
+prioritise_call(_Msg, _From, Len, _State) ->
+    put(last_queue_length, Len),
+    5.
 
 %%----------------------------------------------------------------------------
 %% API
@@ -364,7 +369,8 @@ handle_call({get_overview, User, Ranges}, _From,
          {channels,    F(created_events(channel_stats, Tables))}],
     reply([{message_stats, format_samples(Ranges, MessageStats, State)},
            {queue_totals,  format_samples(Ranges, QueueStats, State)},
-           {object_totals, ObjectTotals}], State);
+           {object_totals, ObjectTotals},
+           {statistics_db_event_queue, get(last_queue_length)}], State);
 
 handle_call({override_lookups, Lookups}, _From, State) ->
     reply(ok, State#state{lookups = Lookups});
