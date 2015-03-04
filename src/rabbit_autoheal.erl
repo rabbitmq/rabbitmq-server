@@ -24,6 +24,8 @@
 
 -define(MNESIA_STOPPED_PING_INTERNAL, 200).
 
+-define(AUTOHEAL_STATE_AFTER_RESTART, rabbit_autoheal_state_after_restart).
+
 %%----------------------------------------------------------------------------
 
 %% In order to autoheal we want to:
@@ -57,17 +59,12 @@
 %%   - we are the winner and are waiting for all losing nodes to stop
 %%   before telling them they can restart
 %%
-%% about_to_heal
-%%   - we are the leader, and have already assigned the winner and
-%%   losers. We are part of the losers and we wait for the winner_is
-%%   announcement. This leader-specific state differs from not_healing
-%%   (the state other losers are in), because the leader could still
-%%   receive request_start messages: those subsequent requests must be
-%%   ignored.
-%%
-%% {leader_waiting, OutstandingStops}
+%% {leader_waiting, Winner, Notify}
 %%   - we are the leader, and have already assigned the winner and losers.
-%%   We are neither but need to ignore further requests to autoheal.
+%%   We are waiting for a confirmation from the winner that the autoheal
+%%   process has ended. Meanwhile we can ignore autoheal requests.
+%%   Because we may be a loser too, this state is saved to the application
+%%   environment and restored on startup.
 %%
 %% restarting
 %%   - we are restarting. Of course the node monitor immediately dies
@@ -77,11 +74,25 @@
 
 %%----------------------------------------------------------------------------
 
-init() -> not_healing.
+init() ->
+    State = case application:get_env(rabbit, ?AUTOHEAL_STATE_AFTER_RESTART) of
+        {ok, S}   -> S;
+        undefined -> not_healing
+    end,
+    ok = application:unset_env(rabbit, ?AUTOHEAL_STATE_AFTER_RESTART),
+    case State of
+        {leader_waiting, Winner, _} ->
+            rabbit_log:info(
+              "Autoheal: in progress, requesting report from ~p~n", [Winner]),
+            send(Winner, report_autoheal_status);
+        _ ->
+            ok
+    end,
+    State.
 
 maybe_start(not_healing) ->
     case enabled() of
-        true  -> [Leader | _] = lists:usort(rabbit_mnesia:cluster_nodes(all)),
+        true  -> Leader = leader(),
                  send(Leader, {request_start, node()}),
                  rabbit_log:info("Autoheal request sent to ~p~n", [Leader]),
                  not_healing;
@@ -97,6 +108,9 @@ enabled() ->
         _                                      -> false
     end.
 
+leader() ->
+    [Leader | _] = lists:usort(rabbit_mnesia:cluster_nodes(all)),
+    Leader.
 
 %% This is the winner receiving its last notification that a node has
 %% stopped - all nodes can now start again
@@ -107,14 +121,13 @@ rabbit_down(Node, {winner_waiting, [Node], Notify}) ->
 rabbit_down(Node, {winner_waiting, WaitFor, Notify}) ->
     {winner_waiting, WaitFor -- [Node], Notify};
 
-rabbit_down(Node, {leader_waiting, [Node]}) ->
-    not_healing;
-
-rabbit_down(Node, {leader_waiting, WaitFor}) ->
-    {leader_waiting, WaitFor -- [Node]};
+rabbit_down(Winner, {leader_waiting, Winner, Losers}) ->
+    abort([Winner], Losers);
 
 rabbit_down(_Node, State) ->
-    %% ignore, we already cancelled the autoheal process
+    %% Ignore. Either:
+    %%     o  we already cancelled the autoheal process;
+    %%     o  we are still waiting the winner's report.
     State.
 
 node_down(_Node, not_healing) ->
@@ -146,15 +159,10 @@ handle_msg({request_start, Node},
             case node() =:= Winner of
                 true  -> handle_msg({become_winner, Losers},
                                     not_healing, Partitions);
-                false -> send(Winner, {become_winner, Losers}), %% [0]
-                         case lists:member(node(), Losers) of
-                             true  -> about_to_heal;
-                             false -> {leader_waiting, Losers}
-                         end
+                false -> send(Winner, {become_winner, Losers}),
+                         {leader_waiting, Winner, Losers}
             end
     end;
-%% [0] If we are a loser we will never receive this message - but it
-%% won't stick in the mailbox as we are restarting anyway
 
 handle_msg({request_start, Node},
            State, _Partitions) ->
@@ -177,25 +185,53 @@ handle_msg({become_winner, Losers},
 
 handle_msg({winner_is, Winner},
            State, _Partitions)
-           when State =:= not_healing orelse State =:= about_to_heal ->
+           when State =:= not_healing
+           orelse (is_tuple(State) andalso
+                   tuple_size(State) =:= 3 andalso
+                   element(1, State) =:= leader_waiting andalso
+                   element(2, State) =:= Winner) ->
     rabbit_log:warning(
       "Autoheal: we were selected to restart; winner is ~p~n", [Winner]),
     rabbit_node_monitor:run_outside_applications(
       fun () ->
               MRef = erlang:monitor(process, {?SERVER, Winner}),
               rabbit:stop(),
-              receive
-                  {'DOWN', MRef, process, {?SERVER, Winner}, _Reason} -> ok;
-                  autoheal_safe_to_start                              -> ok
+              NextState = receive
+                  {'DOWN', MRef, process, {?SERVER, Winner}, _Reason} ->
+                      not_healing;
+                  autoheal_safe_to_start ->
+                      State
               end,
               erlang:demonitor(MRef, [flush]),
+              application:set_env(rabbit,
+                ?AUTOHEAL_STATE_AFTER_RESTART, NextState),
               rabbit:start()
       end),
     restarting;
 
 handle_msg(_, restarting, _Partitions) ->
     %% ignore, we can contribute no further
-    restarting.
+    restarting;
+
+handle_msg(report_autoheal_status, not_healing, _Partitions) ->
+    send(leader(), {autoheal_finished, node()}),
+    not_healing;
+
+handle_msg(report_autoheal_status, State, _Partitions) ->
+    %% The leader will receive the report later when we're finished.
+    State;
+
+handle_msg({autoheal_finished, Winner},
+           {leader_waiting, Winner, _}, _Partitions) ->
+    rabbit_log:info("Autoheal finished according to winner ~p~n", [Winner]),
+    not_healing;
+
+handle_msg({autoheal_finished, Winner}, not_healing, _Partitions)
+           when Winner =:= node() ->
+    %% We are the leader and the winner. The state already transitioned
+    %% to 'not_healing' at the end of the autoheal process.
+    rabbit_log:info("Autoheal finished according to winner ~p~n", [node()]),
+    not_healing.
 
 %%----------------------------------------------------------------------------
 
@@ -220,6 +256,7 @@ winner_finish(Notify) ->
     %% losing nodes before sending the "autoheal_safe_to_start" signal.
     wait_for_mnesia_shutdown(Notify),
     [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
+    send(leader(), {autoheal_finished, node()}),
     not_healing.
 
 wait_for_mnesia_shutdown([Node | Rest] = AllNodes) ->
