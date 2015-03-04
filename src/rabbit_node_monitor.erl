@@ -26,6 +26,7 @@
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
 -export([partitions/0, partitions/1, status/1, subscribe/1]).
 -export([pause_partition_guard/0]).
+-export([global_sync/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -257,6 +258,71 @@ pause_if_all_down_guard(PreferredNodes, LastNodes, LastState) ->
                           NewState}),
                      NewState
     end.
+
+%%----------------------------------------------------------------------------
+%% "global" hang workaround.
+%%----------------------------------------------------------------------------
+
+%% This code works around a possible inconsistency in the "global"
+%% state, causing global:sync/0 to never return.
+%%
+%%     1. A process is spawned.
+%%     2. If after 15", global:sync() didn't return, the "global"
+%%        state is parsed.
+%%     3. If it detects that a sync is blocked for more than 10",
+%%        the process sends fake nodedown/nodeup events to the two
+%%        nodes involved (one local, one remote).
+%%     4. Both "global" instances restart their synchronisation.
+%%     5. globao:sync() finally returns.
+%%
+%% FIXME: Remove this workaround, once we got rid of the change to
+%% "dist_auto_connect" and fixed the bugs uncovered.
+
+global_sync() ->
+    Pid = spawn(fun workaround_global_hang/0),
+    ok = global:sync(),
+    Pid ! global_sync_done,
+    ok.
+
+workaround_global_hang() ->
+    receive
+        global_sync_done ->
+            ok
+    after 15000 ->
+            find_blocked_global_peers()
+    end.
+
+find_blocked_global_peers() ->
+    {status, _, _, [Dict | _]} = sys:get_status(global_name_server),
+    find_blocked_global_peers1(Dict).
+
+find_blocked_global_peers1([{{sync_tag_his, Peer}, Timestamp} | Rest]) ->
+    Diff = timer:now_diff(erlang:now(), Timestamp),
+    if
+        Diff >= 10000 -> unblock_global_peer(Peer);
+        true          -> ok
+    end,
+    find_blocked_global_peers1(Rest);
+find_blocked_global_peers1([_ | Rest]) ->
+    find_blocked_global_peers1(Rest);
+find_blocked_global_peers1([]) ->
+    ok.
+
+unblock_global_peer(PeerNode) ->
+    ThisNode = node(),
+    PeerState = rpc:call(PeerNode, sys, get_status, [global_name_server]),
+    error_logger:info_msg(
+      "Global hang workaround: global state on ~s seems broken~n"
+      " * Peer global state:  ~p~n"
+      " * Local global state: ~p~n"
+      "Faking nodedown/nodeup between ~s and ~s~n",
+      [PeerNode, PeerState, sys:get_status(global_name_server),
+       PeerNode, ThisNode]),
+    {global_name_server, ThisNode} ! {nodedown, PeerNode},
+    {global_name_server, PeerNode} ! {nodedown, ThisNode},
+    {global_name_server, ThisNode} ! {nodeup, PeerNode},
+    {global_name_server, PeerNode} ! {nodeup, ThisNode},
+    ok.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
