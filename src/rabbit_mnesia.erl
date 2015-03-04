@@ -109,7 +109,7 @@ init() ->
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case -
     %% let's make it so.
-    ok = global:sync(),
+    ok = rabbit_node_monitor:global_sync(),
     ok.
 
 init_from_config() ->
