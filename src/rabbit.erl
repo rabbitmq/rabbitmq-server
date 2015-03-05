@@ -607,13 +607,19 @@ sort_boot_steps(UnsortedSteps) ->
 boot_error({could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}},
            _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
+    Suffix = "~nBACKGROUND~n==========~n~n"
+        "This cluster node was shut down while other nodes were still running.~n"
+        "To avoid losing data, you should start the other nodes first, then~n"
+        "start this one. To force this node to start, first invoke~n"
+        "\"rabbitmqctl force_boot\". If you do so, any changes made on other~n"
+        "cluster nodes after this one was shut down may be lost.~n",
     {Err, Nodes} =
         case AllNodes -- [node()] of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
                    " shut down forcefully~nit cannot determine which nodes"
-                   " are timing out.~n", []};
+                   " are timing out.~n" ++ Suffix, []};
             Ns -> {rabbit_misc:format(
-                     "Timeout contacting cluster nodes: ~p.~n", [Ns]),
+                     "Timeout contacting cluster nodes: ~p.~n" ++ Suffix, [Ns]),
                    Ns}
         end,
     log_boot_error_and_exit(
