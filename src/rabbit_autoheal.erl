@@ -190,7 +190,7 @@ handle_msg({winner_is, Winner},
               end,
               erlang:demonitor(MRef, [flush]),
               rabbit:start()
-      end),
+      end, true),
     restarting;
 
 handle_msg(_, restarting, _Partitions) ->
