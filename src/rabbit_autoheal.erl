@@ -227,40 +227,15 @@ handle_msg({become_winner, Losers},
         _  -> abort(Down, Losers)
     end;
 
-handle_msg({winner_is, Winner},
-           State, _Partitions)
-           when State =:= not_healing
-           orelse (is_tuple(State) andalso
-                   tuple_size(State) =:= 3 andalso
-                   element(1, State) =:= leader_waiting andalso
-                   element(2, State) =:= Winner) ->
-    rabbit_log:warning(
-      "Autoheal: we were selected to restart; winner is ~p~n", [Winner]),
-    rabbit_node_monitor:run_outside_applications(
-      fun () ->
-              MRef = erlang:monitor(process, {?SERVER, Winner}),
-              rabbit:stop(),
-              NextState = receive
-                  {'DOWN', MRef, process, {?SERVER, Winner}, _Reason} ->
-                      not_healing;
-                  autoheal_safe_to_start ->
-                      State
-              end,
-              erlang:demonitor(MRef, [flush]),
-              %% During the restart, the autoheal state is lost so we
-              %% store it in the application environment temporarily so
-              %% init/0 can pick it up.
-              %%
-              %% This is useful to the leader which is a loser at the
-              %% same time: because the leader is restarting, there
-              %% is a great chance it misses the "autoheal finished!"
-              %% notification from the winner. Thanks to the saved
-              %% state, it knows it needs to ask the winner if the
-              %% autoheal process is finished or not.
-              application:set_env(rabbit,
-                ?AUTOHEAL_STATE_AFTER_RESTART, NextState),
-              rabbit:start()
-      end),
+handle_msg({winner_is, Winner}, State = not_healing,
+           _Partitions) ->
+    %% This node is a loser, nothing else.
+    restart_loser(State, Winner),
+    restarting;
+handle_msg({winner_is, Winner}, State = {leader_waiting, Winner, _},
+           _Partitions) ->
+    %% This node is the leader and a loser at the same time.
+    restart_loser(State, Winner),
     restarting;
 
 handle_msg(_, restarting, _Partitions) ->
@@ -337,6 +312,35 @@ wait_for_mnesia_shutdown([Node | Rest] = AllNodes) ->
     end;
 wait_for_mnesia_shutdown([]) ->
     ok.
+
+restart_loser(State, Winner) ->
+    rabbit_log:warning(
+      "Autoheal: we were selected to restart; winner is ~p~n", [Winner]),
+    rabbit_node_monitor:run_outside_applications(
+      fun () ->
+              MRef = erlang:monitor(process, {?SERVER, Winner}),
+              rabbit:stop(),
+              NextState = receive
+                  {'DOWN', MRef, process, {?SERVER, Winner}, _Reason} ->
+                      not_healing;
+                  autoheal_safe_to_start ->
+                      State
+              end,
+              erlang:demonitor(MRef, [flush]),
+              %% During the restart, the autoheal state is lost so we
+              %% store it in the application environment temporarily so
+              %% init/0 can pick it up.
+              %%
+              %% This is useful to the leader which is a loser at the
+              %% same time: because the leader is restarting, there
+              %% is a great chance it misses the "autoheal finished!"
+              %% notification from the winner. Thanks to the saved
+              %% state, it knows it needs to ask the winner if the
+              %% autoheal process is finished or not.
+              application:set_env(rabbit,
+                ?AUTOHEAL_STATE_AFTER_RESTART, NextState),
+              rabbit:start()
+      end).
 
 make_decision(AllPartitions) ->
     Sorted = lists:sort([{partition_value(P), P} || P <- AllPartitions]),
