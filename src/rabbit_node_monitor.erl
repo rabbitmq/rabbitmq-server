@@ -446,12 +446,22 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
               ArgsBase),
             await_cluster_recovery(fun all_nodes_up/0),
             {noreply, State};
+        {ok, {pause_if_all_down, PreferredNodes, _}} ->
+            case in_preferred_partition(PreferredNodes) of
+                true  -> rabbit_log:error(
+                           FmtBase ++ "We will therefore intentionally "
+                           "disconnect from ~s~n", ArgsBase ++ [Proxy]),
+                         upgrade_to_full_partition(Proxy);
+                false -> rabbit_log:info(
+                           FmtBase ++ "We are about to pause, no need "
+                           "for further actions~n", ArgsBase)
+            end,
+            {noreply, State};
         {ok, _} ->
             rabbit_log:error(
               FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
               ArgsBase ++ [Proxy]),
-            cast(Proxy, {partial_partition_disconnect, node()}),
-            disconnect(Proxy),
+            upgrade_to_full_partition(Proxy),
             {noreply, State}
     end;
 
@@ -782,6 +792,10 @@ add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 del_node(Node, Nodes) -> Nodes -- [Node].
 
 cast(Node, Msg) -> gen_server:cast({?SERVER, Node}, Msg).
+
+upgrade_to_full_partition(Proxy) ->
+    cast(Proxy, {partial_partition_disconnect, node()}),
+    disconnect(Proxy).
 
 %% When we call this, it's because we want to force Mnesia to detect a
 %% partition. But if we just disconnect_node/1 then Mnesia won't
