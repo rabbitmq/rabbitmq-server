@@ -246,8 +246,6 @@ with_ldap(_Creds, _Fun, undefined) ->
 
 with_ldap({error, _} = E, _Fun, _State) ->
     E;
-%% TODO - ATM we create and destroy a new LDAP connection on every
-%% call. This could almost certainly be more efficient.
 with_ldap({ok, Creds}, Fun, Servers) ->
     Opts0 = [{port, env(port)}],
     Opts1 = case env(log) of
@@ -266,32 +264,57 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                infinity -> Opts1;
                MS       -> [{timeout, MS} | Opts1]
            end,
-    case eldap_open(Servers, Opts) of
-        {ok, LDAP} ->
-            try Creds of
-                anon ->
-                    ?L1("anonymous bind", []),
-                    Fun(LDAP);
-                {UserDN, Password} ->
-                    case eldap:simple_bind(LDAP, UserDN, Password) of
-                        ok ->
-                            ?L1("bind succeeded: ~s", [UserDN]),
-                            Fun(LDAP);
-                        {error, invalidCredentials} ->
-                            ?L1("bind returned \"invalid credentials\": ~s",
-                                [UserDN]),
-                            {refused, UserDN, []};
-                        {error, E} ->
-                            ?L1("bind error: ~s ~p", [UserDN, E]),
-                            {error, E}
-                    end
-            after
-                eldap:close(LDAP)
-            end;
-        Error ->
-            ?L1("connect error: ~p", [Error]),
-            Error
-    end.
+    rabbit_auth_backend_ldap_pool_coord:do_work(fun (State) ->
+        %% cache up to two connections - one for anonymous use, one for binding
+        %% (re-binding is easy but I couldn't figure out how to un-bind)
+        Anonness = case Creds of
+                     anon -> anon;
+                     _ -> bound
+                   end,
+        {Conn, State1} = get_or_create_conn(Servers, Opts, Anonness, State),
+        Ans = case Conn of
+            {ok, LDAP} ->
+                case Creds of
+                    anon ->
+                        ?L1("anonymous bind", []),
+                        Fun(LDAP);
+                    {UserDN, Password} ->
+                        case eldap:simple_bind(LDAP, UserDN, Password) of
+                            ok ->
+                                ?L1("bind succeeded: ~s", [UserDN]),
+                                Fun(LDAP);
+                            {error, invalidCredentials} ->
+                                ?L1("bind returned \"invalid credentials\": ~s",
+                                    [UserDN]),
+                                {refused, UserDN, []};
+                            {error, E} ->
+                                ?L1("bind error: ~s ~p", [UserDN, E]),
+                                {error, E}
+                        end
+                end;
+            Error ->
+                ?L1("connect error: ~p", [Error]),
+                Error
+        end,
+        {Ans, State1}
+    end,
+    %% wait indefinitely for the worker to finish since the connection has
+    %% its own timeout
+    infinity).
+
+get_or_create_conn(Servers, Opts, Anonness, Conns) ->
+  %% the worker's initial state is undefined
+  Conns1 = case Conns of
+             undefined -> dict:new();
+             Dict -> Dict
+           end,
+  Key = {Servers, Opts, Anonness},
+  case dict:find(Key, Conns1) of
+    {ok, Conn} -> {Conn, Conns1};
+    error ->
+      Conn = eldap_open(Servers, Opts),
+      {Conn, dict:store(Key, Conn, Conns1)}
+  end.
 
 eldap_open(Servers, Opts) ->
     case eldap:open(Servers, ssl_conf() ++ Opts) of
