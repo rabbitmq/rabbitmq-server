@@ -340,7 +340,7 @@ restart_loser(State, Winner) ->
               application:set_env(rabbit,
                 ?AUTOHEAL_STATE_AFTER_RESTART, NextState),
               rabbit:start()
-      end).
+      end, true).
 
 make_decision(AllPartitions) ->
     Sorted = lists:sort([{partition_value(P), P} || P <- AllPartitions]),
