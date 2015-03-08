@@ -17,6 +17,7 @@
 -define(NODE_OPT, "-n").
 -define(QUIET_OPT, "-q").
 -define(VHOST_OPT, "-p").
+-define(TIMEOUT_OPT, "-t").
 
 -define(VERBOSE_OPT, "-v").
 -define(MINIMAL_OPT, "-m").
@@ -33,6 +34,7 @@
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
 -define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+-define(TIMEOUT_DEF, {?TIMEOUT_OPT, {option, "infinity"}}).
 
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
