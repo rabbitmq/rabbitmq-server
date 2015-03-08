@@ -21,11 +21,11 @@
 -export([start/0, stop/0, parse_arguments/2, action/5,
          sync_queue/1, cancel_sync_queue/1, become/1]).
 
--import(rabbit_cli, [rpc_call/4]).
+-import(rabbit_cli, [rpc_call/4, rpc_call/5]).
 
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
 
--define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
+-define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node), ?TIMEOUT_DEF]).
 
 -define(COMMANDS,
         [stop,
@@ -108,6 +108,11 @@
          forget_cluster_node, rename_cluster_node, cluster_status, status,
          environment, eval, force_boot]).
 
+-define(COMMANDS_WITH_TIMEOUT,
+        [list_user_permissions, list_policies, list_queues, list_exchanges,
+        list_bindings, list_connections, list_channels, list_consumers,
+        list_vhosts, list_parameters]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -117,6 +122,11 @@
 -spec(action/5 ::
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
+        -> 'ok').
+
+-spec(action/6 ::
+        (atom(), node(), [string()], [{string(), any()}],
+         fun ((string(), [any()]) -> 'ok'), timeout())
         -> 'ok').
 
 -endif.
@@ -136,7 +146,11 @@ start() ->
                                             io:format(Format ++ " ...~n", Args1)
                                     end
                        end,
-              do_action(Command, Node, Args, Opts, Inform)
+              try
+                  Timeout = get_timeout(Opts),
+                  do_action(Command, Node, Args, Opts, Inform, Timeout)
+              catch _:E -> E
+              end
       end, rabbit_ctl_usage).
 
 parse_arguments(CmdLine, NodeStr) ->
@@ -160,18 +174,48 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
+get_timeout(Opts) ->
+    format_timeout(proplists:get_value(?TIMEOUT_OPT, Opts, ?RPC_TIMEOUT)).
+
+format_timeout("infinity") ->
+    infinity;
+format_timeout(infinity) ->
+    infinity;
+format_timeout(N) when is_list(N) ->
+    list_to_integer(N) * 1000;
+format_timeout(N) ->
+    N.
+
 stop() ->
     ok.
 
 %%----------------------------------------------------------------------------
 
-do_action(Command, Node, Args, Opts, Inform) ->
+do_action(Command, Node, Args, Opts, Inform, Timeout) ->
     case lists:member(Command, ?COMMANDS_NOT_REQUIRING_APP) of
-        false -> case ensure_app_running(Node) of
-                     ok -> action(Command, Node, Args, Opts, Inform);
-                     E  -> E
-                 end;
-        true  -> action(Command, Node, Args, Opts, Inform)
+        false ->
+            case ensure_app_running(Node) of
+                ok ->
+                    case lists:member(Command, ?COMMANDS_WITH_TIMEOUT) of
+                        true  ->
+                            {T, Suffix} =
+                                case Timeout of
+                                    infinity   -> {"infinity", ""};
+                                    "infinity" -> {"infinity", ""};
+                                    N when is_integer(N) ->
+                                        {float_to_list(N / 1000,
+                                                       [{decimals,0}]),
+                                         " seconds"}
+                                end,
+                            Inform("Timeout: ~s~s", [T, Suffix]),
+                            action(Command, Node, Args, Opts, Inform, Timeout);
+                        false ->
+                            action(Command, Node, Args, Opts, Inform)
+                    end;
+                E  -> E
+            end;
+        true  ->
+            action(Command, Node, Args, Opts, Inform)
     end.
 
 action(stop, Node, Args, _Opts, Inform) ->
@@ -313,12 +357,6 @@ action(set_user_tags, Node, [Username | TagsStr], _Opts, Inform) ->
     rpc_call(Node, rabbit_auth_backend_internal, set_tags,
              [list_to_binary(Username), Tags]);
 
-action(list_users, Node, [], _Opts, Inform) ->
-    Inform("Listing users", []),
-    display_info_list(
-      call(Node, {rabbit_auth_backend_internal, list_users, []}),
-      rabbit_auth_backend_internal:user_info_keys());
-
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Creating vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, add, Args});
@@ -326,63 +364,6 @@ action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
 action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Deleting vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, delete, Args});
-
-action(list_vhosts, Node, Args, _Opts, Inform) ->
-    Inform("Listing vhosts", []),
-    ArgAtoms = default_if_empty(Args, [name]),
-    display_info_list(call(Node, {rabbit_vhost, info_all, []}), ArgAtoms);
-
-action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
-    Inform("Listing permissions for user ~p", Args),
-    display_info_list(call(Node, {rabbit_auth_backend_internal,
-                                  list_user_permissions, Args}),
-                      rabbit_auth_backend_internal:user_perms_info_keys());
-
-action(list_queues, Node, Args, Opts, Inform) ->
-    Inform("Listing queues", []),
-    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    ArgAtoms = default_if_empty(Args, [name, messages]),
-    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
-                               [VHostArg, ArgAtoms]),
-                      ArgAtoms);
-
-action(list_exchanges, Node, Args, Opts, Inform) ->
-    Inform("Listing exchanges", []),
-    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    ArgAtoms = default_if_empty(Args, [name, type]),
-    display_info_list(rpc_call(Node, rabbit_exchange, info_all,
-                               [VHostArg, ArgAtoms]),
-                      ArgAtoms);
-
-action(list_bindings, Node, Args, Opts, Inform) ->
-    Inform("Listing bindings", []),
-    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    ArgAtoms = default_if_empty(Args, [source_name, source_kind,
-                                       destination_name, destination_kind,
-                                       routing_key, arguments]),
-    display_info_list(rpc_call(Node, rabbit_binding, info_all,
-                               [VHostArg, ArgAtoms]),
-                      ArgAtoms);
-
-action(list_connections, Node, Args, _Opts, Inform) ->
-    Inform("Listing connections", []),
-    ArgAtoms = default_if_empty(Args, [user, peer_host, peer_port, state]),
-    display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
-                               [ArgAtoms]),
-                      ArgAtoms);
-
-action(list_channels, Node, Args, _Opts, Inform) ->
-    Inform("Listing channels", []),
-    ArgAtoms = default_if_empty(Args, [pid, user, consumer_count,
-                                       messages_unacknowledged]),
-    display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
-                      ArgAtoms);
-
-action(list_consumers, Node, _Args, Opts, Inform) ->
-    Inform("Listing consumers", []),
-    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    display_info_list(rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]),
-                      rabbit_amqqueue:consumer_info_keys());
 
 action(trace_on, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -416,13 +397,6 @@ action(clear_permissions, Node, [Username], Opts, Inform) ->
     call(Node, {rabbit_auth_backend_internal, clear_permissions,
                 [Username, VHost]});
 
-action(list_permissions, Node, [], Opts, Inform) ->
-    VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Listing permissions in vhost \"~s\"", [VHost]),
-    display_info_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]}),
-                      rabbit_auth_backend_internal:vhost_perms_info_keys());
-
 action(set_parameter, Node, [Component, Key, Value], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Setting runtime parameter ~p for component ~p to ~p",
@@ -438,13 +412,6 @@ action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
                                                       list_to_binary(Component),
                                                       list_to_binary(Key)]);
 
-action(list_parameters, Node, [], Opts, Inform) ->
-    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    Inform("Listing runtime parameters", []),
-    display_info_list(
-      rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg]),
-      rabbit_runtime_parameters:info_keys());
-
 action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
     Msg = "Setting policy ~p for pattern ~p to ~p with priority ~p",
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -459,12 +426,6 @@ action(clear_policy, Node, [Key], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Clearing policy ~p", [Key]),
     rpc_call(Node, rabbit_policy, delete, [VHostArg, list_to_binary(Key)]);
-
-action(list_policies, Node, [], Opts, Inform) ->
-    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    Inform("Listing policies", []),
-    display_info_list(rpc_call(Node, rabbit_policy, list_formatted, [VHostArg]),
-                      rabbit_policy:info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
     Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),
@@ -494,6 +455,95 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
         {error, E, _} ->
             {error_string, format_parse_error(E)}
     end.
+
+action(list_users, Node, [], _Opts, Inform, Timeout) ->
+    Inform("Listing users", []),
+    display_info_list(
+      call(Node, {rabbit_auth_backend_internal, list_users, []}, Timeout),
+      rabbit_auth_backend_internal:user_info_keys());
+
+action(list_permissions, Node, [], Opts, Inform, Timeout) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    Inform("Listing permissions in vhost \"~s\"", [VHost]),
+    display_info_list(call(Node, {rabbit_auth_backend_internal,
+                             list_vhost_permissions, [VHost]}, Timeout),
+                      rabbit_auth_backend_internal:vhost_perms_info_keys());
+
+action(list_parameters, Node, [], Opts, Inform, Timeout) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Listing runtime parameters", []),
+    display_info_list(
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg],
+               Timeout),
+      rabbit_runtime_parameters:info_keys());
+
+action(list_policies, Node, [], Opts, Inform, Timeout) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Listing policies", []),
+    display_info_list(rpc_call(Node, rabbit_policy, list_formatted, [VHostArg],
+                              Timeout),
+                      rabbit_policy:info_keys());
+
+action(list_vhosts, Node, Args, _Opts, Inform, Timeout) ->
+    Inform("Listing vhosts", []),
+    ArgAtoms = default_if_empty(Args, [name]),
+    display_info_list(call(Node, {rabbit_vhost, info_all, []}, Timeout),
+                      ArgAtoms);
+
+action(list_user_permissions, Node, Args = [_Username], _Opts, Inform, Timeout) ->
+    Inform("Listing permissions for user ~p", Args),
+    display_info_list(call(Node, {rabbit_auth_backend_internal,
+                                  list_user_permissions, Args}, Timeout),
+                      rabbit_auth_backend_internal:user_perms_info_keys());
+
+action(list_queues, Node, Args, Opts, Inform, Timeout) ->
+    Inform("Listing queues", []),
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    ArgAtoms = default_if_empty(Args, [name, messages]),
+    display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
+                               [VHostArg, ArgAtoms], Timeout),
+                      ArgAtoms);
+
+action(list_exchanges, Node, Args, Opts, Inform, Timeout) ->
+    Inform("Listing exchanges", []),
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    ArgAtoms = default_if_empty(Args, [name, type]),
+    display_info_list(rpc_call(Node, rabbit_exchange, info_all,
+                               [VHostArg, ArgAtoms], Timeout),
+                      ArgAtoms);
+
+action(list_bindings, Node, Args, Opts, Inform, Timeout) ->
+    Inform("Listing bindings", []),
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    ArgAtoms = default_if_empty(Args, [source_name, source_kind,
+                                       destination_name, destination_kind,
+                                       routing_key, arguments]),
+    display_info_list(rpc_call(Node, rabbit_binding, info_all,
+                               [VHostArg, ArgAtoms], Timeout),
+                      ArgAtoms);
+
+action(list_connections, Node, Args, _Opts, Inform, Timeout) ->
+    Inform("Listing connections", []),
+    ArgAtoms = default_if_empty(Args, [user, peer_host, peer_port, state]),
+    display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
+                               [ArgAtoms], Timeout),
+                      ArgAtoms);
+
+action(list_channels, Node, Args, _Opts, Inform, Timeout) ->
+    Inform("Listing channels", []),
+    ArgAtoms = default_if_empty(Args, [pid, user, consumer_count,
+                                       messages_unacknowledged]),
+    display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms],
+                               Timeout),
+                      ArgAtoms);
+
+action(list_consumers, Node, _Args, Opts, Inform, Timeout) ->
+    Inform("Listing consumers", []),
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    display_info_list(rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg],
+                               Timeout),
+                      rabbit_amqqueue:consumer_info_keys()).
+
 
 format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
 
@@ -649,6 +699,9 @@ ensure_app_running(Node) ->
 
 call(Node, {Mod, Fun, Args}) ->
     rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args)).
+
+call(Node, {Mod, Fun, Args}, Timeout) ->
+    rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args), Timeout).
 
 list_to_binary_utf8(L) ->
     B = list_to_binary(L),
