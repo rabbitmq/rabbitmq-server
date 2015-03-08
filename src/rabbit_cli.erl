@@ -18,7 +18,7 @@
 -include("rabbit_cli.hrl").
 
 -export([main/3, start_distribution/0, start_distribution/1,
-         parse_arguments/4, rpc_call/4]).
+         parse_arguments/4, rpc_call/4, rpc_call/5]).
 
 %%----------------------------------------------------------------------------
 
@@ -94,8 +94,13 @@ main(ParseFun, DoFun, UsageMod) ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, Reason} ->
-            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
-            print_badrpc_diagnostics([Node]),
+            case Reason of
+                timeout ->
+                    print_error("operation ~w on node ~w timed out", [Command, Node]);
+                _ ->
+                    print_error("unable to connect to node ~w: ~w", [Node, Reason]),
+                    print_badrpc_diagnostics([Node])
+            end,
             rabbit_misc:quit(2);
         {badrpc_multi, Reason, Nodes} ->
             print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
@@ -210,8 +215,11 @@ print_badrpc_diagnostics(Nodes) ->
 %% a timeout unless we set our ticktime to be the same. So let's do
 %% that.
 rpc_call(Node, Mod, Fun, Args) ->
-    case rpc:call(Node, net_kernel, get_net_ticktime, [], ?RPC_TIMEOUT) of
+    rpc_call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
+
+rpc_call(Node, Mod, Fun, Args, Timeout) ->
+    case rpc:call(Node, net_kernel, get_net_ticktime, [], Timeout) of
         {badrpc, _} = E -> E;
         Time            -> net_kernel:set_net_ticktime(Time, 0),
-                           rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT)
+                           rpc:call(Node, Mod, Fun, Args, Timeout)
     end.
