@@ -732,7 +732,9 @@ handle_dead_rabbit(Node, State = #state{partitions = Partitions,
     %% that we do not attempt to deal with individual (other) partitions
     %% going away. It's only safe to forget anything about partitions when
     %% there are no partitions.
-    Partitions1 = case Partitions -- (Partitions -- alive_rabbit_nodes()) of
+    NotRunningRabbit = Partitions -- alive_rabbit_nodes(),
+    InSync = rabbit_mnesia:cluster_nodes(running),
+    Partitions1 = case Partitions -- NotRunningRabbit -- InSync of
                       [] -> [];
                       _  -> Partitions
                   end,
