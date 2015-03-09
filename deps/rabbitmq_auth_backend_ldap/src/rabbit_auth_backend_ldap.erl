@@ -264,15 +264,14 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                infinity -> Opts1;
                MS       -> [{timeout, MS} | Opts1]
            end,
-    rabbit_auth_backend_ldap_pool_coord:do_work(fun (State) ->
+    worker_pool:submit(ldap_pool, fun () ->
         %% cache up to two connections - one for anonymous use, one for binding
         %% (re-binding is easy but I couldn't figure out how to un-bind)
         Anonness = case Creds of
                      anon -> anon;
                      _ -> bound
                    end,
-        {Conn, State1} = get_or_create_conn(Servers, Opts, Anonness, State),
-        Ans = case Conn of
+        case get_or_create_conn(Servers, Opts, Anonness) of
             {ok, LDAP} ->
                 case Creds of
                     anon ->
@@ -295,25 +294,21 @@ with_ldap({ok, Creds}, Fun, Servers) ->
             Error ->
                 ?L1("connect error: ~p", [Error]),
                 Error
-        end,
-        {Ans, State1}
-    end,
-    %% wait indefinitely for the worker to finish since the connection has
-    %% its own timeout
-    infinity).
+        end
+    end, reuse).
 
-get_or_create_conn(Servers, Opts, Anonness, Conns) ->
-  %% the worker's initial state is undefined
-  Conns1 = case Conns of
+get_or_create_conn(Servers, Opts, Anonness) ->
+  Conns = case get(ldap_conns) of
              undefined -> dict:new();
              Dict -> Dict
            end,
   Key = {Servers, Opts, Anonness},
-  case dict:find(Key, Conns1) of
-    {ok, Conn} -> {Conn, Conns1};
+  case dict:find(Key, Conns) of
+    {ok, Conn} -> Conn;
     error ->
       Conn = eldap_open(Servers, Opts),
-      {Conn, dict:store(Key, Conn, Conns1)}
+      put(ldap_conns, dict:store(Key, Conn, Conns)),
+      Conn
   end.
 
 eldap_open(Servers, Opts) ->

@@ -51,17 +51,11 @@ configured(M,  [_    |T]) -> configured(M, T).
 %%----------------------------------------------------------------------------
 
 init([]) ->
-  CoordSpec = {rabbit_auth_backend_ldap_pool_coord,
-               {rabbit_auth_backend_ldap_pool_coord, start_link, []},
-               permanent,
-               30,
-               worker,
-               [rabbit_auth_backend_ldap_pool_coord]},
-  WorkerSupSpec ={rabbit_auth_backend_ldap_pool_worker_sup,
-                  {rabbit_auth_backend_ldap_pool_worker_sup, start_link, [10, {3, 10}]},
-                  permanent,
-                  infinity,
-                  supervisor,
-                  [rabbit_auth_backend_ldap_pool_worker_sup]},
+  PoolSupSpec = {ldap_pool_sup,
+                 {worker_pool_sup, start_link, [10, ldap_pool]},
+                 permanent,
+                 infinity,
+                 supervisor,
+                 [worker_pool_sup]},
   {ok, {{one_for_all, 3, 10},
-        [CoordSpec, WorkerSupSpec]}}.
+        [PoolSupSpec]}}.

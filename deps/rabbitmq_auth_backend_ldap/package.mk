@@ -7,5 +7,3 @@ WITH_BROKER_TEST_CONFIG:=$(PACKAGE_DIR)/etc/rabbit-test
 else
 $(warning Not running LDAP tests; no LDAP server found on localhost)
 endif
-
-STANDALONE_TEST_COMMANDS:=eunit:test([rabbit_auth_backend_ldap_pool_coord_test,rabbit_auth_backend_ldap_pool_test],[verbose])
