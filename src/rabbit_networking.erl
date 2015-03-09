@@ -394,7 +394,11 @@ node_listeners(Node) ->
     mnesia:dirty_read(rabbit_listener, Node).
 
 on_node_down(Node) ->
-    ok = mnesia:dirty_delete(rabbit_listener, Node).
+    case lists:member(Node, nodes()) of
+        false -> ok = mnesia:dirty_delete(rabbit_listener, Node);
+        true  -> rabbit_log:info(
+                   "Keep ~s listeners: the node is already back~n", [Node])
+    end.
 
 start_client(Sock, SockTransform) ->
     {ok, _Child, Reader} = supervisor:start_child(rabbit_tcp_client_sup, []),
