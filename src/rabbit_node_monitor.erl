@@ -633,13 +633,13 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     %% back.
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
-            case majority() of
+            case majority([Node]) of
                 true  -> ok;
                 false -> await_cluster_recovery(fun majority/0)
             end,
             State;
         {ok, {pause_if_all_down, PreferredNodes, HowToRecover}} ->
-            case in_preferred_partition(PreferredNodes) of
+            case in_preferred_partition(PreferredNodes, [Node]) of
                 true  -> ok;
                 false -> await_cluster_recovery(
                            fun in_preferred_partition/0)
@@ -732,7 +732,9 @@ handle_dead_rabbit(Node, State = #state{partitions = Partitions,
     %% that we do not attempt to deal with individual (other) partitions
     %% going away. It's only safe to forget anything about partitions when
     %% there are no partitions.
-    Partitions1 = case Partitions -- (Partitions -- alive_rabbit_nodes()) of
+    Down = Partitions -- alive_rabbit_nodes(),
+    NoLongerPartitioned = rabbit_mnesia:cluster_nodes(running),
+    Partitions1 = case Partitions -- Down -- NoLongerPartitioned of
                       [] -> [];
                       _  -> Partitions
                   end,
@@ -825,8 +827,12 @@ disconnect(Node) ->
 %% about whether we connect to nodes which are currently disconnected.
 
 majority() ->
+    majority([]).
+
+majority(NodesDown) ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
+    AliveNodes = alive_nodes(Nodes) -- NodesDown,
+    length(AliveNodes) / length(Nodes) > 0.5.
 
 in_preferred_partition() ->
     {ok, {pause_if_all_down, PreferredNodes, _}} =
@@ -834,9 +840,13 @@ in_preferred_partition() ->
     in_preferred_partition(PreferredNodes).
 
 in_preferred_partition(PreferredNodes) ->
+    in_preferred_partition(PreferredNodes, []).
+
+in_preferred_partition(PreferredNodes, NodesDown) ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     RealPreferredNodes = [N || N <- PreferredNodes, lists:member(N, Nodes)],
-    RealPreferredNodes =:= [] orelse alive_nodes(RealPreferredNodes) =/= [].
+    AliveNodes = alive_nodes(RealPreferredNodes) -- NodesDown,
+    RealPreferredNodes =:= [] orelse AliveNodes =/= [].
 
 all_nodes_up() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
