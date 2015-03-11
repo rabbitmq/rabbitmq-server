@@ -18,7 +18,14 @@ dispatcher_add(function(sammy) {
             var num_keys = ['prefetch-count', 'reconnect-delay'];
             var bool_keys = ['add-forward-headers'];
             var arrayable_keys = ['src-uri', 'dest-uri'];
+            var redirect = this.params['redirect'];
+            if (redirect != undefined) {
+                delete this.params['redirect'];
+            }
             put_parameter(this, [], num_keys, bool_keys, arrayable_keys);
+            if (redirect != undefined) {
+                go_to(redirect);
+            }
             return false;
         });
     sammy.del('#/shovel-parameters', function() {
