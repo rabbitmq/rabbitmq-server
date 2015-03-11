@@ -34,7 +34,7 @@
                 <td><%= fmt_string(trace.name) %></td>
                 <td><%= fmt_string(trace.pattern) %></td>
                 <td><%= fmt_string(trace.format) %></td>
-                <td class="c"><%= fmt_string(trace.max_payload_bytes) %></td>
+                <td class="c"><%= fmt_string(trace.max_payload_bytes, 'Unlimited') %></td>
                 <% if (trace.queue) { %>
                 <td class="r">
                   <%= fmt_detail_rate(trace.queue.message_stats, 'deliver_no_ack') %>
@@ -134,7 +134,7 @@
           </td>
         </tr>
         <tr>
-          <th><label>Max payload bytes:</label></th>
+          <th><label>Max payload bytes: <span class="help" id="tracing-max-payload"></span></label></th>
           <td>
             <input type="text" name="max_payload_bytes" value=""/>
           </td>

@@ -36,6 +36,9 @@ dispatcher_add(function(sammy) {
 
 NAVIGATION['Admin'][0]['Tracing'] = ['#/traces', 'administrator'];
 
+HELP['tracing-max-payload'] =
+    'Maximum size of payload to log, in bytes. Payloads larger than this limit will be truncated. Leave blank to prevent truncation. Set to 0 to prevent logging of payload altogether.';
+
 function link_trace(name) {
     return _link_to(name, 'api/trace-files/' + esc(name));
 }
