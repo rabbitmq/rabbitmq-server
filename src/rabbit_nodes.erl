@@ -200,11 +200,10 @@ set_cluster_name(Name) ->
     rabbit_runtime_parameters:set_global(cluster_name, Name).
 
 ensure_epmd() ->
-    {ok, Root} = init:get_argument(root),
     {ok, Prog} = init:get_argument(progname),
     ID = random:uniform(1000000000),
     Port = open_port(
-             {spawn_executable, filename:join([Root, "bin", Prog])},
+             {spawn_executable, os:find_executable(Prog)},
              [{args, ["-sname", rabbit_misc:format("epmd-starter-~b", [ID]),
                       "-noshell", "-eval", "halt()."]},
               exit_status, stderr_to_stdout, use_stdio]),
