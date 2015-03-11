@@ -16,7 +16,7 @@
 
 -module(rabbit_mqtt_processor).
 
--export([info/2, initial_state/1,
+-export([info/2, initial_state/2,
          process_frame/2, amqp_pub/2, amqp_callback/2, send_will/1,
          close_connection/1]).
 
@@ -24,10 +24,11 @@
 -include("rabbit_mqtt_frame.hrl").
 -include("rabbit_mqtt.hrl").
 
+-define(APP, rabbitmq_mqtt).
 -define(FRAME_TYPE(Frame, Type),
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
 
-initial_state(Socket) ->
+initial_state(Socket,SSLLoginName) ->
     #proc_state{ unacked_pubs  = gb_trees:empty(),
                  awaiting_ack  = gb_trees:empty(),
                  message_id    = 1,
@@ -35,7 +36,8 @@ initial_state(Socket) ->
                  consumer_tags = {undefined, undefined},
                  channels      = {undefined, undefined},
                  exchange      = rabbit_mqtt_util:env(exchange),
-                 socket        = Socket }.
+                 socket        = Socket,
+                 ssl_login_name = SSLLoginName }.
 
 info(client_id, #proc_state{ client_id = ClientId }) -> ClientId.
 
@@ -54,7 +56,8 @@ process_request(?CONNECT,
                                           proto_ver  = ProtoVersion,
                                           clean_sess = CleanSess,
                                           client_id  = ClientId0,
-                                          keep_alive = Keepalive} = Var}, PState) ->
+                                          keep_alive = Keepalive} = Var},
+                PState = #proc_state{ ssl_login_name = SSLLoginName }) ->
     ClientId = case ClientId0 of
                    []    -> rabbit_mqtt_util:gen_client_id();
                    [_|_] -> ClientId0
@@ -67,7 +70,7 @@ process_request(?CONNECT,
             {_, true} ->
                 {?CONNACK_INVALID_ID, PState};
             _ ->
-                case creds(Username, Password) of
+                case creds(Username, Password, SSLLoginName) of
                     nocreds ->
                         rabbit_log:error("MQTT login failed - no credentials~n"),
                         {?CONNACK_CREDENTIALS, PState};
@@ -365,23 +368,27 @@ get_vhost_username(UserBin) ->
         [UserBin]         -> {rabbit_mqtt_util:env(vhost), UserBin}
     end.
 
-creds(User, Pass) ->
-    DefaultUser = rabbit_mqtt_util:env(default_user),
-    DefaultPass = rabbit_mqtt_util:env(default_pass),
-    Anon        = rabbit_mqtt_util:env(allow_anonymous),
-    U = case {User =/= undefined, is_binary(DefaultUser), Anon =:= true} of
-             {true,  _,    _   } -> list_to_binary(User);
-             {false, true, true} -> DefaultUser;
-             _                   -> nocreds
+creds(User, Pass, SSLLoginName) ->
+    DefaultUser   = rabbit_mqtt_util:env(default_user),
+    DefaultPass   = rabbit_mqtt_util:env(default_pass),
+    {ok, Anon}    = application:get_env(?APP, allow_anonymous),
+    {ok, TLSAuth} = application:get_env(?APP, ssl_cert_login),
+    U = case {User =/= undefined, is_binary(DefaultUser),
+              Anon =:= true, (TLSAuth andalso SSLLoginName =/= none)} of
+             {true,  _,    _,    _}     -> list_to_binary(User);
+             {false, _,    _,    true}  -> SSLLoginName;
+             {false, true, true, false} -> DefaultUser;
+             _                          -> nocreds
         end,
     case U of
         nocreds ->
             nocreds;
         _ ->
-            case {Pass =/= undefined, is_binary(DefaultPass), Anon =:= true} of
-                 {true,  _,    _   } -> {U, list_to_binary(Pass)};
-                 {false, true, true} -> {U, DefaultPass};
-                 _                   -> {U, none}
+            case {Pass =/= undefined, is_binary(DefaultPass), Anon =:= true, SSLLoginName == U} of
+                 {true,  _,    _,    _} -> {U, list_to_binary(Pass)};
+                 {false, _,    _,    _} -> {U, none};
+                 {false, true, true, _} -> {U, DefaultPass};
+                 _                      -> {U, none}
             end
     end.
 
@@ -514,4 +521,3 @@ close_connection(PState = #proc_state{ connection = Connection,
     catch amqp_connection:close(Connection),
     PState #proc_state{ channels   = {undefined, undefined},
                         connection = undefined }.
-
